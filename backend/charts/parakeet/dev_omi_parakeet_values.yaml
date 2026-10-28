@@ -74,6 +74,9 @@ ingress:
           pathType: Prefix
         - path: /v3/stream
           pathType: Prefix
+        # Spoken-language gate for prerecorded routing (backend shadow/enforce callers).
+        - path: /v2/language
+          pathType: Prefix
         - path: /health
           pathType: Prefix
 
@@ -83,6 +86,10 @@ ingress:
   #      - chart-example.local
 
 env:
+  - name: PARAKEET_PACKING_ENABLED
+    value: "false"
+  - name: PARAKEET_EXPLICIT_CUDA_GRAPHS
+    value: "false"
   - name: HUGGINGFACE_TOKEN
     valueFrom:
       secretKeyRef:

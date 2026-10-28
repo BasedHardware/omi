@@ -157,6 +157,9 @@ async def _run_session(runtime, *, modulate_socket, dg_socket=None):
         _serving_policy(),
         patch.object(provider_resilience, 'STT_FALLBACK_LIVENESS_GRACE_SECONDS', 0.05),
         patch.object(receiver_mod, 'is_gate_enabled', return_value=False),
+        # Deepgram retired 2026-08-27; this ready-payload regression pins the
+        # receiver seam so the #11306 fallback shape stays covered.
+        patch.object(receiver_mod, 'deepgram_fallback_model', lambda language: 'nova-3'),
         patch.object(receiver_mod, 'process_audio_modulate', new=AsyncMock(return_value=modulate_socket)),
         patch.object(receiver_mod, 'process_audio_dg', new=AsyncMock(return_value=dg_socket)),
         patch.object(receiver_mod, 'process_audio_parakeet', new=AsyncMock(return_value=None)),
@@ -242,6 +245,7 @@ def test_ready_provider_is_resolved_at_emission_time_not_at_selection():
 async def test_bootstrap_records_the_selected_provider_for_fallback_comparison(monkeypatch):
     """``_bootstrap`` must keep the selected provider so ``ready`` can spot a fallback."""
     import routers.listen.runtime as runtime_module
+    from config.policy.listen import resolve_listen_policy
     from utils.listen_session_bootstrap import ListenConnectBase
 
     runtime = object.__new__(ListenSessionRuntime)
@@ -264,6 +268,12 @@ async def test_bootstrap_records_the_selected_provider_for_fallback_comparison(m
         raise AssertionError('bootstrap must not close the socket in this test')
 
     monkeypatch.setattr(runtime_module, 'load_listen_connect_base', lambda *_a, **_k: _resolved(base))
+    # Policy storage is outside this provider-selection regression.
+    monkeypatch.setattr(
+        runtime_module,
+        'initialize_session_policy',
+        AsyncMock(return_value=resolve_listen_policy('select-user', flags={})),
+    )
     monkeypatch.setattr(
         runtime_module,
         'get_stt_service_for_language',

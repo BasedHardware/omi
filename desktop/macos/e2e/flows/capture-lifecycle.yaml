@@ -24,6 +24,7 @@ covers:
   - desktop/macos/Desktop/Sources/WakeWord/WakeWordSegmentParser.swift
   - desktop/macos/Desktop/Sources/AppState/LocalTranscriptionDuplicatePolicy.swift
   - desktop/macos/Desktop/Sources/AppState/STTSessionState.swift
+  - desktop/macos/Desktop/Sources/AppState/STTLanguageCapability.swift
   - desktop/macos/Desktop/Sources/LocalTranscriptionService.swift
   - desktop/macos/Desktop/Sources/TranscriptionService.swift
   - desktop/macos/Desktop/Sources/APIClient.swift
@@ -31,6 +32,9 @@ covers:
   - desktop/macos/Desktop/Sources/ConversationFinalizationService.swift
   - desktop/macos/Desktop/Sources/MeetingScreenshots/MeetingScreenEvidencePass.swift
   - desktop/macos/Desktop/Sources/MeetingScreenshots/MeetingEvidenceAuthorization.swift
+  # Capture lifecycle exercises ScreenActivitySyncService, which shares this
+  # rollout policy with the negative-feedback remediation feature.
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/BetaDogfoodRollout.swift
   - desktop/macos/Desktop/Sources/ConversationReconciliationPolicy.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationRowView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Conversations/ConversationRepository.swift
@@ -82,7 +86,6 @@ covers:
   # the live onAudioChunk seam is dogfood-only until a mic-bearing flow exists.
   - desktop/macos/Desktop/Sources/Audio/DictationMicSuppression.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+DictationMicSuppression.swift
-  - desktop/macos/Desktop/Sources/CalendarMeetingContext/SystemCalendarMeetingContextFeature.swift
   - desktop/macos/Desktop/Sources/CalendarMeetingContext/SystemCalendarMeetingContextService.swift
   - desktop/macos/Desktop/Sources/CalendarMeetingContext/DerivedDataEgressPolicy.swift
   - desktop/macos/Desktop/Sources/CalendarMeetingContext/OnDeviceMeetingIdentityService.swift

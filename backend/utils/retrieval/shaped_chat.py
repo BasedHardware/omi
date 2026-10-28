@@ -10,6 +10,7 @@ from utils.llm.shaped_agent import Turn
 from utils.llm.prompt_cache import chat_cache_options, model_supports_explicit_cache
 from utils.retrieval.chat_mount import chat_request_messages
 from utils.retrieval.turn_refs import initialize_turn_refs
+from utils.retrieval.transcript_recall import UNVERIFIED_TRANSCRIPT_ANSWER, transcript_recall_unverified
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ async def run_shaped_chat_stream(
     shadow=False,
 ) -> Optional[str]:
     from utils.retrieval import agentic as a
-    from utils.messaging.context import prepare as prepare_context, assemble, schedule_refresh, degraded
+    from utils.messaging.context import prepare as prepare_context, assemble, schedule_refresh, degraded, take_prepared
 
     if 'turn_refs' not in configurable:
         initialize_turn_refs(configurable)
@@ -46,11 +47,14 @@ async def run_shaped_chat_stream(
     context = {'summary': '', 'digest': ''}
     if not shadow:
         try:
-            context = await prepare_context(
-                configurable['user_id'],
-                configurable.get('chat_session_id'),
-                configurable.get('context_message_ids', ()),
-            )
+            prepared = await take_prepared(configurable['user_id'], configurable.get('chat_session_id'))
+            if prepared is None:
+                prepared = await prepare_context(
+                    configurable['user_id'],
+                    configurable.get('chat_session_id'),
+                    configurable.get('context_message_ids', ()),
+                )
+            context = prepared
         except Exception as error:
             degraded(error)
     evidence = assemble(
@@ -81,15 +85,23 @@ async def run_shaped_chat_stream(
 
         async def model_turn(shape, history):
             chunks, text_parts = [], []
+            hold_unverified_recall = transcript_recall_unverified(configurable)
             async for chunk in model.astream(history):
                 chunks.append(chunk)
                 text = a.openai_content_text(getattr(chunk, 'content', ''))
                 if text:
+                    if hold_unverified_recall:
+                        text_parts.append(text)
+                        continue
                     if not text_parts and full_response:
                         await a.put_answer_text(callback, full_response, '\n\n')
                     text_parts.append(text)
                     await a.put_answer_text(callback, full_response, text)
             calls = a.openai_tool_calls(chunks)
+            if not calls and hold_unverified_recall:
+                text_parts = [UNVERIFIED_TRANSCRIPT_ANSWER]
+                prefix = '\n\n' if full_response else ''
+                await a.put_answer_text(callback, full_response, prefix + UNVERIFIED_TRANSCRIPT_ANSWER)
             assistant = {
                 'role': 'assistant',
                 'content': ''.join(text_parts),

@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import { countFirestoreReads } from "./read-counter";
 
 export type FirebaseAdminCredentialMode =
   | "service-account-key"
@@ -110,7 +111,7 @@ function ensureInitialized() {
 
 export function getDb() {
   ensureInitialized();
-  return admin.firestore();
+  return countFirestoreReads(admin.firestore());
 }
 
 export function getAdminAuth() {
@@ -118,16 +119,35 @@ export function getAdminAuth() {
   return admin.auth();
 }
 
+/**
+ * `verifyIdToken` failure codes that mean the presented token itself is bad
+ * (malformed, bad signature, expired or revoked) rather than the server
+ * failing to check it. `authenticate()` answers these with 401; anything
+ * else is a 500.
+ */
+const BAD_TOKEN_CODES = new Set([
+  "auth/argument-error", // malformed token or signature mismatch
+  "auth/invalid-id-token", // structurally valid JWT that failed verification
+  "auth/id-token-expired",
+  "auth/id-token-revoked",
+]);
+
+export function isFirebaseTokenError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof (error as { code: unknown }).code === "string" &&
+    BAD_TOKEN_CODES.has((error as { code: string }).code)
+  );
+}
+
 export const verifyFirebaseToken = async (token: string) => {
   ensureInitialized();
-  try {
-    const decodedToken = await admin.auth().verifyIdToken(token);
-    return decodedToken;
-  } catch {
-    // SDK verification errors can embed credential input; never log them.
-    console.error("Error verifying Firebase ID token");
-    return null;
-  }
+  // Throws the SDK's FirebaseAuthError on verification failure (never log it:
+  // SDK messages can embed credential input). Callers classify with
+  // isFirebaseTokenError: a bad token is a 401, other faults a 500.
+  return admin.auth().verifyIdToken(token);
 };
 
 export default admin;

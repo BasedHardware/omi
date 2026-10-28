@@ -101,7 +101,7 @@ def _conversation(**overrides) -> Conversation:
                     created=False,
                 )
             ],
-            sections=[Section(heading='Decisions', body_markdown='Public decision', source_segment_ids=['s1'])],
+            sections=[Section(heading='Decisions', body_markdown='Public decision', source_segment_ids=['seg-1'])],
         ),
         transcript_segments=[
             TranscriptSegment(
@@ -228,7 +228,11 @@ def test_structured_and_transcript_drop_internal_nested_fields():
     }
     assert 'meeting_type' not in structured
     assert 'participants' not in structured
-    assert structured['sections'] == [{'heading': 'Decisions', 'body_markdown': 'Public decision', 'kind': 'main'}]
+    # Section evidence maps to IDs already public on this same transcript payload.
+    assert structured['sections'] == [
+        {'heading': 'Decisions', 'body_markdown': 'Public decision', 'kind': 'main', 'source_segment_ids': ['seg-1']}
+    ]
+    assert structured['sections'][0]['source_segment_ids'][0] == payload['transcript_segments'][0]['id']
     assert 'insights' not in structured
     assert structured['action_items'] == [
         {
@@ -260,7 +264,9 @@ def test_rich_meeting_fields_share_without_emails_or_insights():
         emoji='📝',
         meeting_type='one_on_one',
         participants=[
-            Participant(name='Ash Kalb', email='ash@fulcra.com', organization='Fulcra', source='roster'),
+            Participant(
+                name='Ash Kalb', email='ash@fulcra.com', organization='Fulcra', source='roster', evidence='Zoom tile'
+            ),
             Participant(name=None, email='plus-one@fulcra.com', source='roster'),
             Participant(name='Boardy', is_ai_agent=True, source='roster'),
         ],

@@ -22,6 +22,9 @@ routing:
     - ai-chat
     - observability
   # Policy-based Instatus routes are not encoded in repo JSON; Phase 2.
+  # Always-on time interval (live Grafana) that mutes tier=agent rules; only
+  # tier=page rules notify the Telegram receiver.
+  agent_tier_mute_timing: omi-tier-silent
 
 no_data_semantics:
   # Documented classes — individual rules are asserted by existing contract tests

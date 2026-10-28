@@ -3,7 +3,10 @@
 import os
 import stat
 import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 from testing.shell import bash_command, bash_path
 
@@ -14,6 +17,44 @@ TEST_RUNNER = BACKEND_DIR / "test.sh"
 def _write_executable(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8", newline="\n")
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
+
+
+@pytest.mark.parametrize("file_isolation", ["0", "1"])
+def test_runner_blocks_unused_langsmith_plugin_but_keeps_asyncio(tmp_path, file_isolation):
+    probe = tmp_path / "test_plugin_probe.py"
+    probe.write_text(
+        "import sys\n"
+        "import pytest\n"
+        "@pytest.mark.asyncio\n"
+        "async def test_plugins(pytestconfig):\n"
+        "    assert pytestconfig.pluginmanager.is_blocked('langsmith_plugin')\n"
+        "    assert 'langsmith.pytest_plugin' not in sys.modules\n"
+        "    assert pytestconfig.pluginmanager.hasplugin('asyncio')\n"
+        f"    assert pytestconfig.pluginmanager.is_blocked('xdist.looponfail') == {file_isolation == '1'}\n"
+        f"    assert pytestconfig.pluginmanager.is_blocked('pytest_httpserver') == {file_isolation == '1'}\n",
+        encoding="utf-8",
+    )
+    selected_tests = tmp_path / "selected-tests.txt"
+    selected_tests.write_text(bash_path(probe, cwd=BACKEND_DIR) + "\n", encoding="utf-8", newline="\n")
+    result = subprocess.run(
+        bash_command(TEST_RUNNER, cwd=BACKEND_DIR),
+        cwd=BACKEND_DIR,
+        env=os.environ
+        | {
+            "PYTHON": bash_path(Path(sys.executable), cwd=BACKEND_DIR),
+            "BACKEND_UNIT_TEST_FILE_LIST": bash_path(selected_tests, cwd=BACKEND_DIR),
+            "BACKEND_PYTEST_FILE_ISOLATION": file_isolation,
+            "BACKEND_PYTEST_PARALLEL_SESSION": "0",
+            "BACKEND_PYTEST_XDIST": "0",
+            "BACKEND_PYTEST_WORKERS": "1",
+        },
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "1 passed" in result.stdout
 
 
 def test_file_isolation_failure_prints_exact_rerun_guidance(tmp_path):

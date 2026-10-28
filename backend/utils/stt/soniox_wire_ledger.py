@@ -11,6 +11,10 @@ from typing import Any
 
 from utils.observability.fallback import record_fallback
 
+# Outstanding modeled finalize predictions before the clock gives up on
+# association and invalidates (association_lost).
+MAX_PENDING_PREDICTIONS = 64
+
 capture_spans: ContextVar[tuple[tuple[int, int], ...]] = ContextVar('soniox_capture_spans', default=())
 
 
@@ -259,7 +263,7 @@ class OrderedSonioxProviderClock(SonioxProviderClock):
             return 0
         if not self._modeled:
             return 0
-        if len(self._predictions) >= 64:
+        if len(self._predictions) >= MAX_PENDING_PREDICTIONS:
             self.invalidate()
             return 0
         before = self.samples

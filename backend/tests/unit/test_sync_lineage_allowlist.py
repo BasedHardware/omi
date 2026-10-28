@@ -1,16 +1,18 @@
 """Staged rollout of sync lineage binding: ``SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST``.
 
-Every sync-side behavior the kill switch turns on is gated by uid, and a uid
-outside a non-empty allowlist must be indistinguishable from the kill switch
-being off at each site: the per-segment binding request, the pinned live
-origin on a sync append, the live revision fence, and the open-live enrichment
-deferral. Each site test compares the non-admitted outcome against the OFF
-outcome itself, not merely against "not the new behavior". All ids are
+Lineage binding is gated by uid. A uid outside a non-empty allowlist must match
+the kill switch being off at that site. Adopted live targets always pin their
+origin and fence late speech, and open-live enrichment is always deferred.
+Each site test compares the non-admitted outcome against the OFF outcome itself,
+not merely against "not the new behavior". All ids are
 synthetic; ``u`` and ``uid`` are the owners the shared harnesses write under.
 """
 
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import logging
 import os
+import threading
 from copy import deepcopy
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -20,6 +22,7 @@ import yaml
 
 import tests.unit.test_listen_reconnect_continuity as continuity
 from config import sync_lineage
+from utils import rollout_cohorts
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_cross_job_assignment import intake
 from tests.unit.test_sync_recording_lineage import (  # noqa: F401 - fixtures
@@ -80,8 +83,7 @@ def configure(monkeypatch, config, uid):
 def clean_env(monkeypatch):
     monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, raising=False)
     monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, raising=False)
-    monkeypatch.setenv('SYNC_LINEAGE_S1_REQUIRED', 'true')
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true')
+
     monkeypatch.setenv('SYNC_WAL_AUDIO_COVERAGE_ENABLED', 'off')
 
 
@@ -221,8 +223,8 @@ def test_metric_help_names_every_bounded_outcome():
     assert tuple(documented) == OUTCOMES
 
 
-async def _coordinate(module, stubs, monkeypatch, config, *, processed=(), partial=None, s1=False):
-    """One coordinator attempt for harness owner ``uid``; returns (targets, enrichment intents)."""
+def _prepare_coordinate(module, stubs, monkeypatch, config, *, processed=(), partial=None, s1=False):
+    """Construct synthetic input and mocks before running the real coordinator."""
     configure(monkeypatch, config, 'uid')
     chunks = upload_straddling_next_two()
     captured, kwargs = _drive(
@@ -236,10 +238,25 @@ async def _coordinate(module, stubs, monkeypatch, config, *, processed=(), parti
     pipeline._reprocess_merged_conversations = lambda _uid, response, *_a, **_k: enriched.append(
         dict(response.pop('_merged', {}))
     )
-    await module._run_full_pipeline_background_async(
-        'job-lineage', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-lineage', task_mode=True, **vars(kwargs)
-    )
-    return [captured.get(chunk['id'], 'SKIPPED') for chunk in chunks], enriched
+
+    async def run():
+        await module._run_full_pipeline_background_async(
+            'job-lineage', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-lineage', task_mode=True, **vars(kwargs)
+        )
+        return [captured.get(chunk['id'], 'SKIPPED') for chunk in chunks], enriched
+
+    return run
+
+
+async def _coordinate(module, stubs, monkeypatch, config, *, processed=(), partial=None, s1=False):
+    run = _prepare_coordinate(module, stubs, monkeypatch, config, processed=processed, partial=partial, s1=s1)
+    return await run()
+
+
+@pytest.fixture
+def cold_cohort_attempt(coordinator, monkeypatch):
+    module, stubs = coordinator
+    return _prepare_coordinate(module, stubs, monkeypatch, ('', 'OTHER-A'), s1=True)
 
 
 @pytest.mark.asyncio
@@ -333,9 +350,9 @@ def test_admitted_owner_keeps_the_pinned_live_origin(monkeypatch, name):
 
 
 @pytest.mark.parametrize('name', sorted(INACTIVE))
-def test_refused_owner_appends_exactly_as_the_kill_switch(monkeypatch, name):
+def test_live_origin_pin_is_independent_of_lineage_rollout(monkeypatch, name):
     off = _pinned_append(monkeypatch, OFF)
-    assert off[0][0]['started_at'] == at(gen_start(L) - 1)  # OFF rebases on the early WAL
+    assert off[0][0]['started_at'] == at(gen_start(L))
     assert _pinned_append(monkeypatch, INACTIVE[name]) == off
 
 
@@ -400,9 +417,9 @@ def test_admitted_owner_fences_older_processors_on_fresh_live_speech(monkeypatch
 
 
 @pytest.mark.parametrize('name', sorted(INACTIVE))
-def test_refused_owner_live_write_is_the_kill_switch_write(monkeypatch, name):
+def test_live_target_fence_is_independent_of_lineage_rollout(monkeypatch, name):
     off = _live_write(monkeypatch, OFF)
-    assert off['sync_content_revision'] == 1
+    assert off['sync_content_revision'] == 2
     assert _live_write(monkeypatch, INACTIVE[name]) == off
 
 
@@ -553,9 +570,54 @@ def runtime_env_manifest():
     return yaml.load(text, Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader))
 
 
-def test_prod_stages_one_identical_allowlist_on_every_gated_service_and_dev_admits_everyone(runtime_env_manifest):
+def test_all_gated_services_resolve_private_cohorts_without_manifest_allowlists(runtime_env_manifest):
     prod, dev = runtime_env_manifest['environments']['prod'], runtime_env_manifest['environments']['dev']
-    values = {_declared(prod, kind, service) for kind, service in GATED_SERVICES}
-    assert len(values) == 1 and all(values), values
-    assert all(uid.strip() for uid in next(iter(values)).split(','))
+    values = {_declared(prod, kind, service) for kind, service in GATED_SERVICES if kind == 'cloud_run'}
+    assert values == {None}
+    assert sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV not in str(prod['cloud_run'])
+    assert _declared(prod, 'gke', 'backend-listen')
     assert all(_declared(dev, kind, service) in (None, '') for kind, service in GATED_SERVICES)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('membership', [True, False, 'error'])
+@pytest.mark.parametrize('expired', [False, True])
+async def test_oidc_coordinator_awaits_cold_and_expired_cohorts_before_selecting_lineage(
+    cold_cohort_attempt, monkeypatch, membership, expired
+):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    release = threading.Event()
+    reads = []
+
+    def read(uid):
+        reads.append(uid)
+        assert release.wait(1)
+        if membership == 'error':
+            raise RuntimeError('synthetic unavailable store')
+        return {'prod': {'sync-lineage-resolve': membership}}
+
+    rollout_cohorts.configure_rollout_runtime()
+    cache = rollout_cohorts._TTLReads(read)
+    monkeypatch.setattr(rollout_cohorts, '_cache', cache)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        monkeypatch.setattr(rollout_cohorts, '_background_submitter', pool.submit)
+        if expired:
+            release.set()
+            await rollout_cohorts.warm_rollout_cohorts('uid')
+            cache.entries['uid'].expires = 0
+        # The read can only finish after the coordinator yields to warmup.
+        release.clear()
+
+        async def unblock():
+            await asyncio.sleep(0)
+            release.set()
+
+        pulse = asyncio.create_task(unblock())
+        try:
+            targets, _ = await cold_cohort_attempt()
+        finally:
+            release.set()
+            await pulse
+        expected = [gen_id(L + 1)] * 2 + [gen_id(L + 2)] * 2 if membership is True else [None] * 4
+        assert targets == expected
+        assert reads == ['uid'] * (2 if expired else 1)

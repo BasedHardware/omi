@@ -11,15 +11,10 @@ permanent storage ID. A retryable receipt removes the displaced temporary copy.
 
 Requested/claimed/uploaded objects are also removed eagerly by the scheduled
 retention worker after their Firestore row reaches a terminal cleanup state.
-An uploaded request without a conversation remains temporary and is available
-to authenticated JIT vision through its owner- and generation-fenced temporary
-image endpoint; reading it never promotes it or extends its expiry. The backend
-agent's `look_at_frame` consumer accepts only a screen evidence reference
-admitted in that request and reserves both a request-scoped one-frame budget
-and a durable stable-turn invocation receipt before paid vision. A crash after
-reservation returns an honest indeterminate result and cannot pay twice.
-Its telemetry contains only closed outcome and vision-invoked fields, never
-frame IDs, OCR, pixels, or descriptions.
+An uploaded request without a conversation remains temporary. Retired JIT
+vision consumers no longer read or promote these pixels; existing frame-request
+metadata and objects stay subject to the retention, export, and account-deletion
+paths below. Reading a retained request never extends its expiry.
 
 Completed desktop conversations persist a metadata-only keyframe outbox intent
 independently of rollout availability. Finalization, later screen sync, and the
@@ -56,9 +51,8 @@ buckets' exact identity, location, tier-specific lifecycle, soft-delete,
 uniform bucket-level access, public-access prevention, and encryption posture.
 Runtime-env-only validation cannot claim the live bucket gate. The independent
 `frame-request-retention-hourly` Scheduler target is also a deployment gate; it
-does not share the canonical memory-maintenance schedule. Until operators set
-`FRAME_REQUEST_RETENTION_INDEPENDENT_HEALTHY=true` after observing that job,
-memory maintenance retains its legacy cleanup call as a rollback-safe bridge. The
+is the sole retention owner since memory-maintenance-job (whose legacy cleanup
+call once bridged this job) was retired on 2026-10-26. The
 desktop `device_id` is an owner-scoped routing and recovery identifier, not a
 standalone credential: Firebase authentication, account generation, and exact
 device matching remain authoritative. The current product does not claim

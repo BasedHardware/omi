@@ -4,9 +4,10 @@ name: Mobile daily train
 # from here: one Codemagic `mobile-daily-train` run per day on main. The train
 # self-drives the release once the stores approve: iOS submissions use
 # AFTER_APPROVAL with the automatic phased rollout (pausable in App Store
-# Connect), Android starts a staged production rollout at 5% (haltable in Play
-# Console) and promotes it one ladder hop per gate-green day. Store review and
-# the console brakes still gate everything; it never bypasses them.
+# Connect), Android starts a staged production rollout at 1% (haltable in Play
+# Console) and promotes it one ladder hop per 4-hour observation window via
+# mobile_rollout_watch.yml. Store review and the console brakes still gate
+# everything; it never bypasses them.
 # See .github/agent-docs/mobile-release-process.md.
 #
 # Dispatch is owned by the operator-side release gate (Hermes cron
@@ -33,6 +34,10 @@ on:
         description: "Audited Android candidate (X.Y.Z/build, or none = audited no-candidate) from the operator release gate; empty = no pin"
         type: string
         default: ""
+      capture_health_override:
+        description: "Reason to let THIS run's rollout hops past a capture-health HOLD (mobile_capture_health.py); empty = no override"
+        type: string
+        default: ""
 
 concurrency:
   group: mobile-daily-train
@@ -40,6 +45,12 @@ concurrency:
 
 permissions:
   contents: read
+
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
 
 jobs:
   dispatch:
@@ -56,6 +67,7 @@ jobs:
           TRAIN_DRY_RUN: ${{ inputs.dry_run == true && 'true' || 'false' }}
           TRAIN_PIN_IOS: ${{ inputs.pin_ios }}
           TRAIN_PIN_ANDROID: ${{ inputs.pin_android }}
+          TRAIN_CAPTURE_HEALTH_OVERRIDE: ${{ inputs.capture_health_override }}
         run: |
           set -euo pipefail
           PIN_IOS_FLAG=""
@@ -70,7 +82,8 @@ jobs:
             --app-id "$CODEMAGIC_APP_ID" \
             --dry-run "$TRAIN_DRY_RUN" \
             $PIN_IOS_FLAG \
-            $PIN_ANDROID_FLAG | tee "$RUNNER_TEMP/dispatch.txt"
+            $PIN_ANDROID_FLAG \
+            --capture-health-override "$TRAIN_CAPTURE_HEALTH_OVERRIDE" | tee "$RUNNER_TEMP/dispatch.txt"
           {
             echo "### Mobile daily train"
             echo

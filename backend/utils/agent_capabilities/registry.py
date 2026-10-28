@@ -20,6 +20,12 @@ class Kind:
     allowed_fields: tuple[str, ...] = ()
     collections: tuple[str, ...] = ()
     tool: str = 'propose_edit'
+    # Named deterministic checks. Unused until a verifier chain includes them.
+    # None of these kinds are deterministic-sufficient: a passing check cannot
+    # auto-apply on its own.
+    verifier_checks: tuple[str, ...] = ()
+    deterministic_sufficient: bool = False
+    dream_only: bool = False
 
     def validate(self, *args, **kwargs):
         return _call('utils.agent_capabilities.tools', self.validation, *args, **kwargs)
@@ -44,7 +50,9 @@ class Kind:
 
 
 KINDS = {
-    'spelling': Kind('validate_spelling', 'apply_spelling', 'patch_spelling', key_rule='spelling'),
+    'spelling': Kind(
+        'validate_spelling', 'apply_spelling', 'patch_spelling', key_rule='spelling', verifier_checks=('spelling',)
+    ),
     'title': Kind(
         'validate_summary',
         patcher='patch_summary',
@@ -58,6 +66,9 @@ KINDS = {
         collections=('conversations',),
     ),
     'memory': Kind('validate_memory', 'apply_memory', default_policy='suggest', key_rule='memory'),
+    'resolve_required_memory': Kind(
+        'validate_required_intake', 'apply_required_intake', schema_rule='required_intake', dream_only=True
+    ),
     'merge_memories': Kind(
         'validate_memory',
         'apply_memory_merge',
@@ -113,6 +124,7 @@ KINDS = {
         key_rule='merge',
         allowed_fields=('dream_duplicate_of', 'dream_duplicate'),
         collections=('conversations',),
+        verifier_checks=('duplicate_capture',),
     ),
     'set_language': Kind(
         'validate_cleanup',
@@ -120,6 +132,7 @@ KINDS = {
         schema_rule='language',
         allowed_fields=('language',),
         collections=('conversations',),
+        verifier_checks=('language',),
     ),
 }
 KINDS['vocabulary'] = Kind(
@@ -131,7 +144,8 @@ KINDS['vocabulary'] = Kind(
     collections=('dream_vocabulary',),
     tool='learn_term',
 )
-EDIT_KINDS = {name: spec for name, spec in KINDS.items() if spec.tool == 'propose_edit'}
+ALL_EDIT_KINDS = {name: spec for name, spec in KINDS.items() if spec.tool == 'propose_edit'}
+EDIT_KINDS = {name: spec for name, spec in ALL_EDIT_KINDS.items() if not spec.dream_only}
 AUTO = frozenset(name for name, spec in KINDS.items() if spec.default_policy == 'auto')
 
 

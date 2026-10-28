@@ -21,9 +21,13 @@ Keep immutable served images; never use `latest` for a chart-only installation.
 - Current request p99 was 3.25s. No higher per-pod throughput is qualified by this
   snapshot. Ratified scaling targets remain **2 requests/pod and 35% GPU**;
   `PARAKEET_MAX_INFLIGHT=1` is unchanged. A target is not a throughput receipt.
-- Idle Deepgram is not unused Deepgram: prod pusher has self-hosting enabled;
-  serving Cloud Run `backend` and `backend-integration` retain the retired URL.
-  Their caller bindings must be removed before any resource teardown.
+- Deepgram (cloud and self-hosted) retired 2026-08-27. 2026-10-22 audit (P69):
+  30 days of `omi_stt_provider_connect_total{provider="deepgram"}` are zero on
+  every service, no `deepgram` log entries cluster-wide, no deepgram pods or
+  node pools, `DEEPGRAM_SELF_HOSTED_ENABLED=false` on listen and pusher, and the
+  deploy strips both self-hosted env keys. The self-hosted chart is deleted;
+  remaining cloud residue is the Secret Manager key plus one orphan subnet
+  (`omi-deepgram-gke-us-central1-prod-vpc-1-subnet-1`) for the lead.
 
 Read-only refresh (the kubectl default context is prod; never rely on it):
 
@@ -64,7 +68,7 @@ zones still needs Ready probes and the existing load/health qualification. Use
 fallback only for the N4 shortfall; floors are fleet totals, not additive floors
 for primary and fallback. Capacity planning uses requests and allocatable nodes:
 listen requests 1 CPU/1.5Gi (about three pods/N4 node before other workloads),
-pusher 0.7 CPU/4.5Gi (about two pods/node). Include the LLM gateway sharing listen
+pusher 0.45 CPU/2Gi (about three pods/node after DaemonSet requests; memory limits must keep co-located limit sums under allocatable). Include the LLM gateway sharing listen
 labels, kube/system overhead, HPA maxima (listen 60), and one-node loss. Confirm
 actual bin-packing with Pending events before evacuation.
 
@@ -217,6 +221,51 @@ and per-pod `parakeet_active_requests_total`; a missing metric/adapter error blo
 application. Prove scale-out under paced/burst peak traffic, then 900s stabilization
 and active-session-safe scale-down in dev. Merely rendering an HPA is not this proof.
 
+### Dark workload-only HPA option
+
+`autoscaling.workloadOnly: false` preserves the policy above. After mixed-load
+qualification, changing that one production value to `true` omits only
+`parakeet_request_latency_p99`. Request concurrency (Pods AverageValue 2),
+GPU utilization (External Value 35), floor 3/cap 12, and both scaling behaviors
+remain unchanged. This option is independent of packing and of
+`autoscaling.demand.enabled`; it does not activate the demand scaler or change
+its existing queue-age metrics.
+
+The omitted metric combines request durations across callers and audio lengths.
+It includes upload/file work, queuing and response processing; `/v2` can also
+include diarization. An External Value recommendation multiplies the current
+replica count by latency/target, so an intrinsic processing tail can request
+extra GPUs without a backlog. A value below target is not a permanent replica
+floor: tolerance, tail spikes and down stabilization also determine the result.
+Do not simply convert this global percentile to External AverageValue, which
+divides a single fleet percentile across replicas. Preserve the GPU Value type:
+the adapter already returns a fleet average percentage.
+
+Observe live POST p95/p99 (`omi_stt_window_post_seconds_bucket`), lane queue p99
+(`parakeet_batch_lane_queue_wait_seconds_bucket{lane="live"}`), refusals, ready
+capacity, and real DCGM alongside this option. A lane queue percentile is useful
+for diagnosis but is not an additive queue-size metric. First qualify any new
+scaling target and adapter semantics separately. The existing demand scaler's
+queue-age policy is a separate experiment.
+
+Before production activation, demonstrate POST p95 <3s under paced and burst
+live traffic plus legacy sync/recovery traffic at the proposed minimum. Use the
+live routing runbook's stricter sustained 2s warning/abort gate during a trial;
+also verify first text <30s, transcript success and vendor fallback exposure.
+Low current utilization or a read-only counterfactual does not qualify three
+pods, especially while cost routing benches Parakeet and suppresses its demand.
+
+Deploy path: workflow `gcp_parakeet.yml` (Deploy Parakeet ASR to GKE), input
+`environment=prod`, service `parakeet`, Helm release `prod-omi-parakeet` in
+`prod-omi-backend` on `based-hardware/us-central1/prod-omi-gke`. Dispatch the
+approved ref; the workflow checks out the dispatch ref (its `branch` input is
+not used by checkout). It builds an image and upgrades the whole release, so
+review image and chart drift as well as the HPA diff before dispatching.
+Rollback: restore `workloadOnly: false` and deploy the reviewed ref through the
+same workflow; verify all three HPA metrics return. Avoid an unrelated historical
+Helm rollback that could also revert runtime configuration. No deployment or
+flag activation is implied by adding this dark option.
+
 At the baseline's L4 node list price $0.8536/hour, floor 3 is **$61.46/day**
 and cap 12 is **$245.84/day**. The ceiling is headroom, not expected steady spend.
 The 6.2-node baseline mean is $127.02/day list equivalent; reaching three nodes
@@ -290,6 +339,13 @@ hard prerequisite, so a fully automated zero-drop n2rescue exit is **not qualifi
 by this chart PR**. The lead must not mark evacuation complete from preStop alone.
 
 ## Self-hosted Deepgram retirement
+
+**Closed 2026-10-22 (P69):** the post-deploy caller audit came back clean (zero
+traffic 30d, no pods, no node pools), so this runbook's precondition is met and
+the `backend/charts/deepgram-self-hosted` chart is deleted from the repo.
+Cloud Deepgram is retired the same day at the policy layer
+(`config/stt_provider_policy.py`): no surface admits it, `dg-*` slots are
+refused, and the pre-recorded client raises.
 
 Source audit: streaming chooses the self-hosted endpoint only when
 `DEEPGRAM_SELF_HOSTED_ENABLED` is true; default is false. The prerecorded SDK and

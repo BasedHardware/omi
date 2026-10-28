@@ -1,4 +1,7 @@
+from config.stt_cap_dispatch import any_legacy_admission_enabled as stt_cap_dispatch_enabled
+from utils.observability.stt_cap_dispatch import CONFIG_ERRORS
 import os
+from database.fsr_read_cache import fresh_reader
 from dataclasses import dataclass
 import time
 from datetime import datetime, timezone
@@ -7,6 +10,8 @@ from typing import Any, Dict, List, Optional, Set, Tuple, cast
 from fastapi import HTTPException
 from firebase_admin import auth as firebase_auth
 import stripe
+from utils import screen_vector_entitlements
+from utils.observability.fallback import record_fallback
 
 import database.users as users_db
 import database.user_usage as user_usage_db
@@ -14,6 +19,7 @@ from database import redis_db
 from database._client import get_customer_firestore_client
 from database.announcements import compare_versions
 from config.plan_catalog import (
+    configured_ladder_prices,
     DESKTOP_ENTITLED_PLAN_TYPES,
     MOBILE_PLAN_TYPES,
     PAID_PLAN_TYPES,
@@ -28,10 +34,13 @@ from config.plan_catalog import (
 from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits, TrialMetadata
 from utils.byok import get_byok_key, get_byok_uid, get_cached_byok_state, has_validated_byok_keys
 from utils.log_sanitizer import sanitize
+from utils.metrics import OMI_NEW_BUYER_CHECKOUT_REJECTED
 from utils.plan_wire_capabilities import understands_plan_identity
 from utils.transcription_allowance import TranscriptionAllowance
 from utils.observability.fallback import record_fallback
 import logging
+from config import ladder_v1 as ladder_policy
+from utils import ladder_v1
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +75,9 @@ def plan_grants_desktop(plan: PlanType, subscription: Optional[Subscription] = N
     subs without the field set are treated as legacy until their next webhook
     populates the field).
     """
+    if ladder_policy.enabled('LADDER_V1_PRO_GATES_ENABLED') and subscription is not None:
+        if ladder_policy.entitlements(subscription) is not None:
+            return plan != PlanType.basic
     if plan in DESKTOP_ENTITLED_PLAN_TYPES:
         return True
     if plan == PlanType.unlimited and subscription is not None:
@@ -124,40 +136,27 @@ def neo_grandfather_until(subscription: Optional[Subscription]) -> Optional[int]
 #
 # Because the rows are retained, a user who upgrades can have their vectors backfilled from the
 # stored OCR text: this gate defers the cost, it does not destroy the ability to recover.
-_SCREEN_VECTOR_ENTITLEMENT_CACHE_TTL_SECONDS = 300
-_screen_vector_entitlement_cache: Dict[str, Tuple[bool, float]] = {}
-
-
-def grants_cloud_screen_vectors(uid: str) -> bool:
-    """True when this user's synced screen rows should also be written to the vector store.
-
-    Uses the desktop access tier rather than `is_paid_plan`, because screen activity is a
-    desktop capability: a mobile-only paid plan did not buy it. BYOK does NOT grant it either
-    — BYOK means the user supplies their own LLM keys, but the vector store is ours and the
-    cost being avoided here is ours.
-
-    Fails OPEN (writes the vector) on any lookup error, matching
-    `should_defer_desktop_processing`: a Firestore blip must never silently strip a paying
-    user's screen search. The failure mode is a small overspend, not a lost capability.
-    """
-    cached = _screen_vector_entitlement_cache.get(uid)
-    if cached is not None and time.monotonic() - cached[1] < _SCREEN_VECTOR_ENTITLEMENT_CACHE_TTL_SECONDS:
-        return cached[0]
+async def grants_cloud_screen_vectors(uid: str) -> bool:
+    """Return established capability; unknown authority requires a batch retry."""
     try:
-        subscription = users_db.get_user_valid_subscription(
-            uid, firestore_client=get_customer_firestore_client(), provision=False
+        entitlement = await screen_vector_entitlements.resolve_for_uid(uid)
+        return entitlement['capabilities']['cloud_screen_vectors']
+    except Exception as error:
+        record_fallback(
+            component='firestore_read',
+            from_mode='screen_vectors',
+            to_mode='retry',
+            reason='authorization_unavailable',
+            outcome='degraded',
+            log=logger,
         )
-        plan = subscription.plan if subscription else PlanType.basic
-        entitled = effective_desktop_access_tier(plan, subscription) != DESKTOP_ACCESS_TIER_FREE
-    except Exception as e:
-        logger.warning("grants_cloud_screen_vectors lookup failed for uid=%s: %s", uid, e)
-        return True
-    _screen_vector_entitlement_cache[uid] = (entitled, time.monotonic())
-    return entitled
+        raise screen_vector_entitlements.ScreenVectorAuthorityUnavailable(
+            'Screen vector authority unavailable'
+        ) from error
 
 
 def clear_cloud_screen_vector_entitlement_cache(uid: str) -> None:
-    _screen_vector_entitlement_cache.pop(uid, None)
+    screen_vector_entitlements.clear(uid)
 
 
 def should_defer_desktop_processing(uid: str) -> bool:
@@ -603,6 +602,56 @@ _MOBILE_PLATFORM_TOKENS = {'ios', 'android'}
 WEB_PLATFORMS = {'web'}
 
 
+NEW_BUYER_SINGLE_PLAN_ENV = 'NEW_BUYER_SINGLE_PLAN_ENABLED'
+_NEW_BUYER_SINGLE_PLAN_OFF_VALUES = ('false', '0', 'off', 'no')
+
+
+def new_buyer_single_plan_enabled() -> bool:
+    """Kill switch for the new-buyer single-plan catalog. On unless set off.
+
+    Omi Pro (`unlimited_v2`) is the only plan sold, on every platform
+    (2026-10-26: Plus, Pro/Operator, Architect and Neo are retired; a current
+    subscriber still sees and manages their own retired plan). Setting
+    NEW_BUYER_SINGLE_PLAN_ENABLED to false/0/off/no restores the per-platform
+    catalog.
+    """
+    return os.getenv(NEW_BUYER_SINGLE_PLAN_ENV, 'true').strip().lower() not in _NEW_BUYER_SINGLE_PLAN_OFF_VALUES
+
+
+def is_desktop_platform(platform: Optional[str]) -> bool:
+    """True for the X-App-Platform values desktop plan rules key off.
+
+    Anything that is not a real platform string (missing header, FastAPI's
+    Header default under direct invocation) is not desktop.
+    """
+    if not isinstance(platform, str):
+        return False
+    return platform.lower() in DESKTOP_PLATFORMS
+
+
+def new_buyer_single_plan_applies(current_plan: PlanType) -> bool:
+    """True when a caller with no current paid subscription gets only Omi Pro.
+
+    Applies on every platform, desktop included: Omi Pro grants full desktop.
+    """
+    if not new_buyer_single_plan_enabled():
+        return False
+    return current_plan == PlanType.basic
+
+
+def retired_plan_change_error(current_plan: PlanType, target_plan: PlanType) -> Optional[str]:
+    """Error text when a plan change targets a retired plan, else None.
+
+    Omi Pro is the only plan sold. A subscriber on a retired plan may switch
+    interval within it or move to Omi Pro, never onto another retired plan.
+    """
+    if not new_buyer_single_plan_enabled():
+        return None
+    if target_plan in (PlanType.unlimited_v2, current_plan):
+        return None
+    return "This plan is no longer available. Switch to Omi Pro instead."
+
+
 def _platform_hidden_plans(platform: Optional[str]) -> Set[PlanType]:
     """Plans hidden from the purchase catalog per platform.
 
@@ -655,10 +704,15 @@ def filter_plans_for_user(
        from the phone. Desktop and web keep selling both.
     3. Fully churned ex-Neo users are `basic` and receive Plus + Unlimited,
        the replacement catalog, not the deprecated Neo SKU.
-
-    The current-plan escape still applies on desktop/web so a Neo subscriber
-    opening those surfaces can manage/cancel.
+    4. While NEW_BUYER_SINGLE_PLAN_ENABLED is on (default), Omi Pro
+       (`unlimited_v2`) is the only plan sold on every platform. A subscriber
+       on a retired plan also sees their own plan so they can manage it. The
+       rules above apply only when the kill switch restores the old catalog.
     """
+    if new_buyer_single_plan_enabled():
+        visible = {PlanType.unlimited_v2, current_plan}
+        return [d for d in definitions if d.get('plan_type') in visible]
+
     is_mobile = (platform or '').lower() in _MOBILE_PLATFORM_TOKENS
     if is_mobile and current_plan in DESKTOP_ENTITLED_PLAN_TYPES:
         return [d for d in definitions if d.get('plan_type') == current_plan]
@@ -811,7 +865,10 @@ def price_ids_match_plan_and_interval(
     except ValueError:
         return False
 
-    target_interval = RECOGNIZED_STRIPE_PRICE_INTERVALS.get(target_price_id)
+    configured_intervals = {price: row['interval'] for price, row in configured_ladder_prices().items()}
+    target_interval = RECOGNIZED_STRIPE_PRICE_INTERVALS.get(target_price_id) or configured_intervals.get(
+        target_price_id
+    )
     for definition in get_paid_plan_definitions():
         if target_price_id == definition['monthly_price_id']:
             target_interval = 'month'
@@ -823,7 +880,9 @@ def price_ids_match_plan_and_interval(
         return False
 
     if not current_interval:
-        current_interval = RECOGNIZED_STRIPE_PRICE_INTERVALS.get(current_price_id)
+        current_interval = RECOGNIZED_STRIPE_PRICE_INTERVALS.get(current_price_id) or configured_intervals.get(
+            current_price_id
+        )
     if not current_interval:
         for definition in get_paid_plan_definitions():
             if current_price_id == definition['monthly_price_id']:
@@ -854,6 +913,8 @@ def is_purchasable_price_id(price_id: str) -> bool:
     """
     if not price_id:
         return False
+    if price_id in configured_ladder_prices():
+        return os.getenv('STOREFRONT_LADDER_V1_ENABLED', 'false') == 'true'
     for definition in get_paid_plan_definitions():
         if price_id in (definition["monthly_price_id"], definition["annual_price_id"]):
             return True
@@ -1090,10 +1151,19 @@ def get_chat_quota_snapshot(
     desktop callers can be paywalled; mobile callers fall through to the
     real plan logic.
     """
+    # Flagged quota display and admission share the same authority, including
+    # Free accounts whose older desktop trial status is exhausted.
+    enforcing = ladder_policy.budget_enforcement_enabled()
+    subscription = None
+    shared_budget = None
+    if enforcing:
+        subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=provision)
+        shared_budget = ladder_v1.budget_snapshot(uid, subscription, firestore_client=firestore_client)
+
     # Paywall test override — surface as exhausted Free-plan quota so the
     # client renders the same over-limit popup it shows for normal users
     # past 30/mo.
-    if is_trial_paywalled(
+    if shared_budget is None and is_trial_paywalled(
         uid,
         platform,
         firestore_client=firestore_client,
@@ -1113,7 +1183,9 @@ def get_chat_quota_snapshot(
             'reset_at': usage['reset_at'],
         }
 
-    subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=provision)
+    if not enforcing:
+        subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=provision)
+        shared_budget = ladder_v1.budget_snapshot(uid, subscription, firestore_client=firestore_client)
     plan = subscription.plan if subscription else PlanType.basic
     limits = get_plan_limits(plan)
     usage = user_usage_db.get_monthly_chat_usage(uid, firestore_client=firestore_client)
@@ -1134,7 +1206,7 @@ def get_chat_quota_snapshot(
     if limit_value is not None:
         allowed = used < limit_value
 
-    return {
+    result = {
         'plan': plan,
         'unit': unit,
         'used': used,
@@ -1142,6 +1214,17 @@ def get_chat_quota_snapshot(
         'allowed': allowed,
         'reset_at': usage['reset_at'],
     }
+    if shared_budget is not None:
+        # Preserve the installed-client unit enum; the v2 sheet owns the shared meter.
+        result['allowed'] = shared_budget['budget_percent'] < 100
+        result['reset_at'] = shared_budget['reset_at']
+        result['is_overage_plan'] = False
+        result['uses_shared_budget'] = True
+        if not result['allowed']:
+            from utils.storefront_copy import chat_at_cap
+
+            result['chat_at_cap'] = chat_at_cap(shared_budget['plan_id'], shared_budget['reset_at'])
+    return result
 
 
 def enforce_chat_quota(
@@ -1155,20 +1238,42 @@ def enforce_chat_quota(
 ) -> None:
     """Block or allow a chat request based on the user's plan + usage.
 
-    - BYOK users with an LLM key attached: always allowed, no Omi-side cost —
+    - Flagged ladder/Free shared budgets pause chat at 100%, including BYOK.
+    - Shared funded-compute admission also pauses legacy/overage tiers at cap.
+    - Otherwise BYOK users with a validated LLM provider key attached: allowed —
       unless ``byok_exempt`` is False, for surfaces that only ever spend Omi's
       own key regardless of the user's (the realtime hub mints platform tokens).
-    - Plans whose catalog exhaustion policy is overage: ALLOWED — the call is
+    - Below the funded cap, plans whose catalog exhaustion policy is overage
+      are ALLOWED — the call is
       served and the excess accrues a charge. See ``utils.overage``.
     - Hard-capped plans: blocked → 402, which the chat endpoint converts into
       a canned AI reply for mobile UX. Plus and Unlimited-v2 are explicitly
       hard-capped by the catalog.
     """
-    # Release-probe traffic is the deploy gate proving the candidate can chat at
-    # all — never paywall it, or the gate hard-blocks its own deploys once the
-    # probe's turns exhaust the Free cap.
+    # Import at call time: funded_processing imports this module's allowance
+    # resolver, so importing its adapter at module scope would close a cycle.
+    from utils.generated_compute import require_generated_compute
+
+    funded_kwargs = {'firestore_client': firestore_client} if firestore_client is not None else {}
+
+    # Release probes retain their legacy question-quota exemption. The flagged
+    # funded cap still applies, so denial cannot first occur inside their stream.
     if uid == RELEASE_PROBE_UID:
+        require_generated_compute(
+            uid, 'chat_agent', allow_byok=byok_exempt, provider=required_llm_provider, **funded_kwargs
+        )
         return
+
+    # The flagged shared budget pauses chat on every ladder tier, including Free.
+    if ladder_v1.enforce_chat_budget(uid, firestore_client=firestore_client):
+        return
+
+    # Admission must fail before chat persists a turn or constructs an SSE
+    # response, including legacy/overage tiers under funded-seconds enforcement.
+    # Keep ladder's existing chat_at_cap detail above and the both-off path.
+    require_generated_compute(
+        uid, 'chat_agent', allow_byok=byok_exempt, provider=required_llm_provider, **funded_kwargs
+    )
 
     # Paywall test override — bypass BYOK + plan checks so the same 402
     # surfaces that a free user past 30 questions would hit. Desktop only;
@@ -1485,6 +1590,109 @@ def is_pending_cancellation(subscription: Optional[Subscription], now: Optional[
     return subscription.current_period_end > (now or int(time.time()))
 
 
+NEW_BUYER_SINGLE_PLAN_ERROR = (
+    "Omi Pro is the only plan available for new subscriptions. Existing subscribers keep their current plan."
+)
+
+
+def _target_price_is_unlimited_v2(target_price_id: Optional[str]) -> bool:
+    if not target_price_id:
+        return False
+    try:
+        return get_plan_type_from_price_id(target_price_id) == PlanType.unlimited_v2
+    except ValueError:
+        return False
+
+
+# Closed label surfaces for omi_new_buyer_checkout_rejected_total. `reason`:
+# `non_omi_pro_price` — a checkout for a retired plan was rejected. `plan` is
+# the target price's plan id or `unknown`. Never widen these with a uid, price
+# id, or error text.
+NEW_BUYER_CHECKOUT_REJECT_REASONS = ('non_omi_pro_price',)
+NEW_BUYER_CHECKOUT_REJECT_PLANS = tuple(sorted({plan.value for plan in PlanType} | {'unknown'}))
+
+
+def _rejected_price_plan_label(target_price_id: Optional[str]) -> str:
+    if not target_price_id:
+        return 'unknown'
+    try:
+        return get_plan_type_from_price_id(target_price_id).value
+    except ValueError:
+        return 'unknown'
+
+
+def record_new_buyer_checkout_rejection(target_price_id: Optional[str]) -> None:
+    """Count one checkout rejection under the single-plan rule.
+
+    Never raises on the checkout path; the label surfaces are closed by
+    construction (no ids, no exception text). The reason is a literal at the
+    call site — the reason-label contract accepts literals only (a variable
+    needs a reviewed CLOSED_HELPERS helper or debt).
+    """
+    try:
+        OMI_NEW_BUYER_CHECKOUT_REJECTED.labels(
+            reason='non_omi_pro_price', plan=_rejected_price_plan_label(target_price_id)
+        ).inc()
+    except Exception:
+        logger.warning('new-buyer checkout guard metric failed', exc_info=True)
+
+
+def _zero_initialize_rejection_children() -> None:
+    """Create every reachable label child so each series is born at 0.
+
+    A Counter child does not exist until its first ``.inc()``, and then reads
+    as a flat 1, invisible to rate()/increase() on a rare counter. Reasons are
+    literals at each call site (see the recorders above).
+    """
+    for plan in NEW_BUYER_CHECKOUT_REJECT_PLANS:
+        OMI_NEW_BUYER_CHECKOUT_REJECTED.labels(reason='non_omi_pro_price', plan=plan)
+        OMI_NEW_BUYER_CHECKOUT_REJECTED.labels(reason='unknown_platform_allowed', plan=plan)
+
+
+_zero_initialize_rejection_children()
+
+
+def _has_personal_recurring_subscription(subscription: Any) -> bool:
+    """True when this stored entitlement is a personal recurring Stripe subscription.
+
+    Organization grants store a one-time PaymentIntent (`pi_…`) in the legacy
+    `stripe_subscription_id` field (see `_try_reactivate_subscription` and
+    billing_reconciliation's `manual_payment_entitlement` bucket), and some
+    grant shapes carry no id at all. A granted plan without a personal
+    subscription is a new buyer for the single-plan rule: the exemption is
+    only for a current recurring subscriber.
+    """
+    sid = getattr(subscription, 'stripe_subscription_id', None)
+    return bool(sid) and not str(sid).startswith('pi_')
+
+
+@fresh_reader
+def new_buyer_single_plan_violation(uid: str, target_price_id: Optional[str]) -> Optional[str]:
+    """Error text when checkout targets a retired plan, else None.
+
+    Omi Pro (`unlimited_v2`) is the only plan sold, on every platform. Call this
+    AFTER every subscriber escape (same-price reactivation, plan-change
+    deferrals). Only a current *recurring* personal subscription on the target's
+    own plan is exempt — a granted plan (`pi_…` PaymentIntent or no
+    subscription id) is not a personal subscription.
+    """
+    if not target_price_id or not new_buyer_single_plan_enabled():
+        return None
+    if _target_price_is_unlimited_v2(target_price_id):
+        return None
+    subscription = users_db.get_user_valid_subscription(uid)
+    if (
+        subscription is not None
+        and subscription.plan != PlanType.basic
+        and _has_personal_recurring_subscription(subscription)
+        and _rejected_price_plan_label(target_price_id) == subscription.plan.value
+    ):
+        return None
+    record_new_buyer_checkout_rejection(target_price_id)
+    return NEW_BUYER_SINGLE_PLAN_ERROR
+
+
+@fresh_reader
 def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tuple[bool, str]:
     """
     Checks if a user can make a new payment based on their current subscription status.
@@ -1497,6 +1705,9 @@ def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tu
         tuple: (can_pay: bool, reason: str)
     """
     subscription = users_db.get_user_valid_subscription(uid)
+    if target_price_id in configured_ladder_prices() and subscription is not None:
+        if subscription.plan != PlanType.basic and ladder_policy.entitlements(subscription) is None:
+            return False, "Legacy subscriptions keep their current plan"
 
     # If no subscription or basic plan, check Stripe as source of truth
     # to guard against Firestore read-after-write lag
@@ -1582,9 +1793,15 @@ def get_monthly_usage_for_subscription(uid: str) -> Dict[str, Any]:
     """
     Gets the current monthly usage for subscription purposes, considering the launch date from env variables.
     The launch date format is expected to be YYYY-MM-DD.
-    If the launch date is not set, not valid, or in the future, usage is considered zero.
+    Legacy mode treats unset, invalid and future dates as zero usage. Dispatch
+    enforcement rejects missing/invalid configuration; an explicit future date
+    is the intentionally unlaunched policy in both modes.
     """
     subscription_launch_date_str = os.getenv('SUBSCRIPTION_LAUNCH_DATE')
+    if stt_cap_dispatch_enabled(uid) and not subscription_launch_date_str:
+        CONFIG_ERRORS.labels(reason='missing').inc()
+        logger.error('event=stt_cap_launch_config outcome=invalid reason=missing')
+        raise ValueError('missing subscription launch date')
     if not subscription_launch_date_str:
         # Subscription not launched, so no usage is counted against limits.
         return {}
@@ -1593,6 +1810,10 @@ def get_monthly_usage_for_subscription(uid: str) -> Dict[str, Any]:
         # Use strptime to enforce YYYY-MM-DD format
         launch_date = datetime.strptime(subscription_launch_date_str, '%Y-%m-%d').replace(tzinfo=timezone.utc)
     except ValueError:
+        if stt_cap_dispatch_enabled(uid):
+            CONFIG_ERRORS.labels(reason='invalid').inc()
+            logger.error('event=stt_cap_launch_config outcome=invalid reason=invalid')
+            raise
         # Invalid date format, treat as not launched.
         return {}
 
@@ -1666,6 +1887,9 @@ def resolve_transcription_allowance(
     subscription: Any = _UNRESOLVED,
     usage: Any = _UNRESOLVED,
     byok_active: Any = _UNRESOLVED,
+    omi_funded: bool = False,
+    usage_cache: Any = None,
+    provision_subscription: bool = True,
 ) -> TranscriptionAllowance:
     """Resolve the managed-transcription allowance for one uid, once. Never raises.
 
@@ -1679,6 +1903,9 @@ def resolve_transcription_allowance(
     monthly usage and the BYOK enrolment pass them in, so the startup snapshot
     and this answer come from the same reads. (The trial paywall keeps its own
     cached reads; they are not shared.)
+
+    Spend admission passes ``provision_subscription=False``: checking an
+    allowance must not create a subscription or restore an erased user root.
 
     Order: reviewer → paywall → BYOK → plan → unlimited → remaining. A
     subscription the lookup calls invalid (an inactive basic account) has no
@@ -1694,23 +1921,50 @@ def resolve_transcription_allowance(
         # unlimited; resolved first so the paywall cannot contradict that snapshot.
         if is_marketplace_reviewer(uid):
             return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, None, 'marketplace_reviewer', limit_seconds=None)
+        # The fixed non-human release-probe identity exercises the full terminal
+        # desktop path (utils/release_probe.py gate convention). Its Free-plan
+        # account never buys a plan or BYOK keys, so once live STT cap-dispatch
+        # admission covers the whole fleet the strict desktop trial paywall
+        # holds every probe packet and the pusher prod canary finalization
+        # probe times out with zero transcripts (run 40190728003). Resolved
+        # before the paywall for the same reason as marketplace reviewers.
+        if uid == RELEASE_PROBE_UID:
+            return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, None, 'release_probe', limit_seconds=None)
         # A Deepgram BYOK request is exempt from the trial paywall, as it is
         # from the quota: the user pays Deepgram directly. strict: a paywall
         # lookup failure must not open a billed socket for a paywalled account,
         # and only a validated key on this request (not a stored fingerprint)
         # exempts.
-        if is_trial_paywalled(uid, source, required_byok_provider='deepgram', strict=True):
+        paywall_kwargs = {'byok_exempt': False} if omi_funded else {}
+        if not provision_subscription:
+            paywall_kwargs['provision'] = False
+        if is_trial_paywalled(uid, source, required_byok_provider='deepgram', strict=True, **paywall_kwargs):
             return TranscriptionAllowance(TRANSCRIPTION_MODE_BLOCKED, 0, 'trial_paywalled')
         # Require the Deepgram header on this request so a user cannot activate
         # BYOK with fake fingerprints and then omit x-byok-deepgram to ride Omi's key.
+        if omi_funded:
+            byok_active = False
         if byok_active is _UNRESOLVED:
             byok_active = users_db.is_byok_active(uid)
         if byok_active and get_byok_key('deepgram'):
             return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, None, 'byok', limit_seconds=None)
         if subscription is _UNRESOLVED:
-            subscription = users_db.get_user_valid_subscription(uid)
+            subscription_kwargs = {} if provision_subscription else {'provision': False}
+            subscription = users_db.get_user_valid_subscription(uid, **subscription_kwargs)
         if not subscription:
             return _closed('subscription_inactive')
+        budget_kwargs = {'session_cache': usage_cache} if usage_cache is not None else {}
+        ladder_budget = ladder_v1.budget_snapshot(uid, subscription, **budget_kwargs)
+        if ladder_budget is not None:
+            exhausted = ladder_budget['budget_percent'] >= 100
+            return TranscriptionAllowance(
+                TRANSCRIPTION_MODE_ON_DEVICE if exhausted else TRANSCRIPTION_MODE_MANAGED,
+                0 if exhausted else None,
+                'usage_budget_exhausted' if exhausted else 'usage_budget_available',
+                limit_seconds=None,
+                remaining_units=max(0, ladder_budget['budget_units'] - ladder_budget['used_units']),
+                budget_units=ladder_budget['budget_units'],
+            )
         allowance = transcription_allowance_seconds(subscription.plan)
         known_limit_seconds = allowance
         # The catalog's explicit unlimited marker projects to None. A finite
@@ -1816,6 +2070,11 @@ def resolve_conversation_processing_allowance(
             subscription = users_db.get_user_valid_subscription(uid)
         if not subscription:
             return _processing_closed('subscription_inactive')
+        ladder_budget = ladder_v1.budget_snapshot(uid, subscription)
+        if ladder_budget is not None:
+            if ladder_budget['budget_percent'] >= 100:
+                return _processing_closed('usage_budget_exhausted')
+            return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_ALLOWED, None, 'usage_budget_available')
         allowance = transcription_allowance_seconds(subscription.plan)
         if allowance is None:
             return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_ALLOWED, None, 'plan_unlimited')
@@ -1900,43 +2159,66 @@ def get_remaining_transcription_seconds(uid: str, source: Optional[str] = None) 
     return resolve_transcription_allowance(uid, source).remaining_seconds
 
 
+def _stored_paid_period_lapsed(subscription: Subscription) -> bool:
+    end = subscription.current_period_end
+    return not end or datetime.fromtimestamp(end, tz=timezone.utc) < datetime.now(timezone.utc)
+
+
 def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None) -> Subscription | None:
     """
-    If Firestore says `basic` but there is a Stripe subscription with a future period end
-    that actually maps to an unlimited plan, fix it once by reconciling with Stripe.
+    If Firestore says `basic`, or a paid plan whose period has passed, but Stripe holds an
+    active paid subscription, fix it once by reconciling with Stripe.
     """
-    if not subscription or subscription.plan != PlanType.basic:
+    if not subscription:
+        return subscription
+    # A stored paid plan whose period has passed reads as Basic everywhere
+    # (get_user_valid_subscription), so heal it the same way: a missed renewal
+    # webhook otherwise leaves a paying subscriber on Free indefinitely.
+    if subscription.plan != PlanType.basic and not _stored_paid_period_lapsed(subscription):
         return subscription
 
     try:
-        if subscription.stripe_subscription_id and subscription.current_period_end:
-            period_end_dt = datetime.fromtimestamp(subscription.current_period_end, tz=timezone.utc)
-            if period_end_dt >= datetime.now(timezone.utc):
+        if subscription.stripe_subscription_id:
+            try:
                 stripe_sub = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
-                stripe_sub_dict: Optional[Dict[str, Any]] = stripe_sub.to_dict() if stripe_sub else None  # type: ignore[reportDeprecated]  # stripe public serialization API
-                if stripe_sub_dict:
-                    items: List[Dict[str, Any]] = stripe_sub_dict.get('items', {}).get('data') or []
-                    price_id: Optional[str] = None
-                    if items and items[0].get('price'):
-                        price_id = items[0]['price'].get('id')
+            except Exception as e:
+                logger.warning(
+                    f"[reconcile_basic_plan_with_stripe] Could not retrieve sub {subscription.stripe_subscription_id}: {e}"
+                )
+                stripe_sub = None
+            stripe_sub_dict: Optional[Dict[str, Any]] = (
+                stripe_sub.to_dict() if stripe_sub else None  # type: ignore[reportDeprecated]  # stripe public serialization API
+            )
+            if stripe_sub_dict:
+                items: List[Dict[str, Any]] = stripe_sub_dict.get('items', {}).get('data') or []
+                price_id: Optional[str] = None
+                if items and items[0].get('price'):
+                    price_id = items[0]['price'].get('id')
 
-                    stripe_status = stripe_sub_dict.get('status')
-                    if stripe_status in ('active', 'trialing') and price_id:
-                        try:
-                            plan_type = get_plan_type_from_price_id(price_id)
-                        except ValueError:
-                            plan_type = None
+                stripe_status = stripe_sub_dict.get('status')
+                if stripe_status in ('active', 'trialing') and price_id:
+                    try:
+                        plan_type = get_plan_type_from_price_id(price_id)
+                    except ValueError:
+                        plan_type = None
 
-                        if plan_type and is_paid_plan(plan_type):
-                            subscription.plan = plan_type
-                            subscription.status = SubscriptionStatus.active
-                            subscription.current_period_end = stripe_sub_dict.get('current_period_end')
-                            subscription.current_period_start = stripe_sub_dict.get('current_period_start')
-                            subscription.cancel_at_period_end = stripe_sub_dict.get('cancel_at_period_end', False)
-                            subscription.current_price_id = price_id
-                            subscription.limits = get_plan_limits(plan_type)
-                            users_db.update_user_subscription(uid, subscription.model_dump())
-                            return subscription
+                    if plan_type and is_paid_plan(plan_type):
+                        sub_period_end = stripe_sub_dict.get('current_period_end')
+                        if sub_period_end:
+                            period_end_dt = datetime.fromtimestamp(sub_period_end, tz=timezone.utc)
+                            if period_end_dt >= datetime.now(timezone.utc):
+                                subscription.plan = plan_type
+                                subscription.status = SubscriptionStatus.active
+                                subscription.current_period_end = sub_period_end
+                                subscription.current_period_start = stripe_sub_dict.get('current_period_start')
+                                subscription.cancel_at_period_end = stripe_sub_dict.get('cancel_at_period_end', False)
+                                subscription.current_price_id = price_id
+                                subscription.limits = get_plan_limits(plan_type)
+                                customer_id = stripe_sub_dict.get('customer')
+                                if customer_id and isinstance(customer_id, str):
+                                    users_db.set_stripe_customer_id(uid, customer_id)
+                                users_db.update_user_subscription(uid, subscription.model_dump())
+                                return subscription
 
         active = find_active_paid_subscription_for_user(uid)
         if active:
@@ -1948,3 +2230,8 @@ def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None
         logger.error(f"[reconcile_basic_plan_with_stripe] Error reconciling Stripe subscription for user {uid}: {e}")
 
     return subscription
+
+
+def get_usage_units(uid: str) -> dict:
+    """Storefront display projection; enforcement remains separately flagged."""
+    return ladder_v1.usage_snapshot(uid) or {}

@@ -431,29 +431,36 @@ class OmiDeviceConnection extends DeviceConnection {
 
   @override
   Future<BleAudioCodec> performGetAudioCodec() async {
-    try {
-      final codecValue = await transport.readCharacteristic(omiServiceUuid, audioCodecCharacteristicUuid);
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      try {
+        final codecValue = await transport.readCharacteristic(omiServiceUuid, audioCodecCharacteristicUuid);
 
-      var codecId = 1;
-      if (codecValue.isNotEmpty) {
-        codecId = codecValue[0];
+        if (codecValue.isNotEmpty) {
+          final codecId = codecValue[0];
+          switch (codecId) {
+            case 1:
+              return BleAudioCodec.pcm8;
+            case 20:
+              return BleAudioCodec.opus;
+            case 21:
+              return BleAudioCodec.opusFS320;
+            default:
+              Logger.debug('OmiDeviceConnection: Unknown codec id: $codecId, defaulting to pcm8');
+              return BleAudioCodec.pcm8;
+          }
+        } else {
+          Logger.debug('OmiDeviceConnection: Attempt $attempt returned empty codec data');
+        }
+      } catch (e) {
+        Logger.debug('OmiDeviceConnection: Attempt $attempt reading audio codec failed: $e');
       }
 
-      switch (codecId) {
-        case 1:
-          return BleAudioCodec.pcm8;
-        case 20:
-          return BleAudioCodec.opus;
-        case 21:
-          return BleAudioCodec.opusFS320;
-        default:
-          Logger.debug('OmiDeviceConnection: Unknown codec id: $codecId');
-          return BleAudioCodec.pcm8;
+      if (attempt < 3) {
+        await Future<void>.delayed(Duration(milliseconds: 100 * attempt));
       }
-    } catch (e) {
-      Logger.debug('OmiDeviceConnection: Error reading audio codec: $e');
-      return BleAudioCodec.pcm8;
     }
+
+    throw StateError('OmiDeviceConnection: Failed to read valid audio codec from peripheral after retries');
   }
 
   @override
@@ -1112,8 +1119,18 @@ class OmiDeviceConnection extends DeviceConnection {
 
   @override
   Future<bool> performHasPhotoStreamingCharacteristic() async {
+    // Ask the native transport whether the device advertises the image
+    // characteristic. A read cannot tell: the native transport answers a
+    // characteristic the firmware lacks with an empty read rather than an
+    // error, so every pendant counted as having a camera and the capture loop
+    // re-armed photo streaming on each reset. Glass may also read empty until
+    // it has captured, so data in the read is no test either.
+    final t = transport;
+    if (t is NativeBleTransport) {
+      return t.hasCharacteristic(omiServiceUuid, imageDataStreamCharacteristicUuid);
+    }
     try {
-      // Try to read from the image data stream characteristic to see if it exists
+      // Other transports throw for an absent characteristic.
       await transport.readCharacteristic(omiServiceUuid, imageDataStreamCharacteristicUuid);
       return true;
     } catch (e) {

@@ -9,11 +9,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
-import 'package:omi/pages/conversation_capturing/page.dart';
-import 'package:omi/pages/conversations/widgets/processing_capture.dart';
+import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -126,7 +124,7 @@ void main() {
     expect(harness.home.selectedIndex, HomeProvider.homeTab);
     await tester.pump(const Duration(seconds: 1));
     expect(find.text('open-capture'), findsOneWidget);
-    expect(find.byType(ConversationCapturingPage), findsNothing);
+    expect(find.byType(LiveEpisodePage), findsNothing);
   });
 
   // David, 2026-09-25: Finish is the only stop and is explicit, so the "Finished Conversation?"
@@ -156,7 +154,7 @@ void main() {
     expect(harness.capture.forceProcessingCalls, 0, reason: 'no empty Processing row');
     expect(harness.home.selectedIndex, HomeProvider.tasksTab);
     await tester.pump(const Duration(seconds: 1));
-    expect(find.byType(ConversationCapturingPage), findsNothing);
+    expect(find.byType(LiveEpisodePage), findsNothing);
   });
 
   testWidgets('switchHomeToConversationsTab returns to Home, where conversations live', (tester) async {
@@ -180,35 +178,10 @@ void main() {
     await tester.pump();
     expect(home.selectedIndex, HomeProvider.homeTab);
   });
-
-  testWidgets('optimistic processing row renders the skeleton until title and emoji exist', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: ThemeData.dark(),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
-          body: ProcessingConversationWidget(
-            conversation: ServerConversation(
-              id: '0',
-              createdAt: DateTime.utc(2026),
-              structured: Structured('', '', emoji: ''),
-              status: ConversationStatus.processing,
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.pump();
-
-    expect(find.byType(ProcessingConversationWidget), findsOneWidget);
-    expect(find.text('Processing'), findsOneWidget);
-    expect(find.text('Weekly standup'), findsNothing);
-  });
 }
 
 Future<void> _stopFromPage(WidgetTester tester, CaptureProvider capture) async {
-  final dynamic state = tester.state(find.byType(ConversationCapturingPage));
+  final dynamic state = tester.state(find.byType(LiveEpisodePage));
   // Not awaited: with confirmation on, stopping waits for the dialog the test answers next.
   unawaited(state.debugStopConversation(capture) as Future<void>);
   await tester.pump();
@@ -258,7 +231,7 @@ Future<_Harness> _pumpCapturingPage(WidgetTester tester, {bool heard = true}) as
               child: TextButton(
                 onPressed: () {
                   Navigator.of(context).push(
-                    MaterialPageRoute<void>(builder: (_) => const ConversationCapturingPage()),
+                    MaterialPageRoute<void>(builder: (_) => const LiveEpisodePage()),
                   );
                 },
                 child: const Text('open-capture'),
@@ -273,6 +246,6 @@ Future<_Harness> _pumpCapturingPage(WidgetTester tester, {bool heard = true}) as
   await tester.tap(find.text('open-capture'));
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 400));
-  expect(find.byType(ConversationCapturingPage), findsOneWidget);
+  expect(find.byType(LiveEpisodePage), findsOneWidget);
   return _Harness(home: home, capture: capture);
 }

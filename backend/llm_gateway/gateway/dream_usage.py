@@ -25,6 +25,29 @@ def with_dream_usage(response, lane, trace):
     unknown = len(uncertain)
     summary = {
         'attempts': len(trace.attempts),
+        'attempt_usage': [
+            {
+                'provider': attempt.provider,
+                'model': attempt.resolved_model or attempt.configured_model,
+                'prompt_tokens': (
+                    attempt.usage.prompt_tokens + attempt.usage.tool_use_prompt_tokens if attempt.usage else 0
+                ),
+                'cached_tokens': attempt.usage.cached_input_tokens if attempt.usage else 0,
+                'completion_tokens': attempt.usage.billable_output_tokens if attempt.usage else 0,
+                'cache_field_reported': bool(
+                    attempt.usage
+                    and attempt.usage.cache_status not in {CacheStatus.NOT_REPORTED, CacheStatus.NOT_APPLICABLE}
+                ),
+                'usage_complete': attempt.billable_usage_complete,
+                'traffic_type': attempt.traffic_type,
+                'cache_mode': attempt.cache_mode,
+                'cacheable_prefix_tokens': attempt.cacheable_prefix_tokens,
+                'cache_write_tokens': attempt.cache_write_tokens
+                + (attempt.usage.cache_write_tokens if attempt.usage else 0),
+                'cache_storage_token_seconds': attempt.cache_storage_token_seconds,
+            }
+            for attempt in trace.attempts
+        ],
         'unknown_attempts': unknown,
         'unknown_reported_tokens': sum(
             attempt.usage.prompt_tokens + attempt.usage.tool_use_prompt_tokens + attempt.usage.billable_output_tokens

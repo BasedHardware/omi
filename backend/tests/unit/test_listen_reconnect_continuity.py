@@ -75,6 +75,10 @@ class CaptureHarness:
 
     async def call(self, fn: Any, *args: Any, **kwargs: Any) -> Any:
         name = fn.__name__
+        if fn.__module__ in {'utils.episodes.boundaries', 'utils.episodes.boundary_runtime'}:
+            return fn(*args, firestore_client=self.store, **kwargs)
+        if name == 'arm':
+            return fn(*args, firestore_client=self.store, **kwargs)
         if name == 'open_live_recording_session':
             uid, sid, proposed = args
             was_bound = sid in self.bindings
@@ -181,8 +185,6 @@ async def test_live_meeting_stamp_reaches_finalization_and_meeting_aware_summary
     assert pc._stored_meeting_context(conversation) == stamped
     # The stamp must stand on its own even without a subsequent provider read.
     monkeypatch.setattr(pc, '_stored_meeting_lookup_enabled', lambda: False)
-    monkeypatch.setattr(pc, '_calendar_context_read_enabled', lambda: False)
-    monkeypatch.setattr(pc, '_ocr_meeting_context_enabled', lambda: False)
     pc._enrich_meeting_context('u', conversation)
     assert pc._stored_meeting_context(conversation) == stamped
 
@@ -192,9 +194,8 @@ async def test_live_meeting_stamp_reaches_finalization_and_meeting_aware_summary
     monkeypatch.setattr(pc, 'conversation_transcripts_for_llm', lambda *args: (transcript, transcript, {0: 'David'}))
     monkeypatch.setattr(pc, 'track_usage', lambda *args, **kwargs: nullcontext())
     # Isolate the persisted meeting stamp from optional roster/background reads.
-    monkeypatch.setattr(pc, 'rich_notes_inputs', lambda *args, **kwargs: (None, None, False, ()))
+    monkeypatch.setattr(pc, 'rich_notes_inputs', lambda *args, **kwargs: (None, None, False, (), 0))
     monkeypatch.setattr(pc, '_fetch_dedup_candidates_for_query', lambda *args: [])
-    monkeypatch.setattr(pc, 'submit_relevance_shadow', lambda **kwargs: None)
     notes = Mock(return_value=Structured(title='Project launch', overview='Launch next week; review on Friday.'))
     monkeypatch.setattr(pc, 'get_conversation_notes', notes)
     prefix_builder = Mock(wraps=pc.build_conversation_prompt_prefix)
@@ -413,7 +414,7 @@ async def test_calendar_meeting_reconnect_and_lifecycle_continue_until_scheduled
     'empty,device,eligible', [(False, 'phone', False), (False, 'other', False), (True, 'phone', False)]
 )
 def test_meeting_continuation_keeps_device_and_empty_generation_fences(empty, device, eligible):
-    from utils.conversation_continuity import resumable_continuation
+    from models.conversation_continuity import resumable_continuation
 
     now = datetime(2026, 10, 7, tzinfo=timezone.utc)
     row = dict(
@@ -469,7 +470,7 @@ def test_metadata_only_continuation_lookup_reads_stored_calendar_context():
     ],
 )
 def test_missing_or_invalid_calendar_context_keeps_120_second_boundary(context):
-    from utils.conversation_continuity import resumable_continuation
+    from models.conversation_continuity import resumable_continuation
 
     now = datetime(2026, 10, 7, tzinfo=timezone.utc)
     row = dict(
@@ -487,7 +488,7 @@ def test_missing_or_invalid_calendar_context_keeps_120_second_boundary(context):
 
 
 def test_compressed_empty_recording_does_not_extend_meeting_deadline():
-    from utils.conversation_continuity import continuation_timeout
+    from models.conversation_continuity import continuation_timeout
 
     now = datetime(2026, 10, 7, tzinfo=timezone.utc)
     row = dict(
@@ -557,7 +558,7 @@ def test_calendar_id_only_continuation_resolves_exact_users_meeting(identity):
 )
 def test_calendar_id_fallback_does_not_join_a_different_event(record):
     from database.document_ids import calendar_meeting_doc_id
-    from utils.conversation_continuity import resumable_continuation
+    from models.conversation_continuity import resumable_continuation
 
     store = StrictFirestore()
     now = datetime(2026, 10, 7, tzinfo=timezone.utc)
@@ -658,6 +659,43 @@ async def test_live_created_row_honors_active_calendar_window(monkeypatch, meeti
     await controller.lifecycle_loop()
     assert (controller.host.state.current_conversation_id == cid) is (meeting_state == 'active')
     assert harness.creates == (1 if meeting_state == 'active' else 2)
+
+
+@pytest.mark.anyio
+async def test_meeting_that_runs_over_its_scheduled_end_keeps_the_silence_boundary(monkeypatch):
+    harness = CaptureHarness(monkeypatch)
+    end = harness.now + timedelta(minutes=1)
+    harness.meetings = [
+        {
+            'id': 'meeting-doc',
+            'calendar_event_id': 'event-1',
+            'calendar_source': 'system_calendar',
+            'start_time': end - timedelta(minutes=30),
+            'end_time': end,
+            'duration_minutes': 30,
+        }
+    ]
+    controller = harness.connect()
+    await controller.prepare()
+    cid = controller.host.state.current_conversation_id
+    row = harness.rows[cid]
+    assert row['external_data']['calendar_meeting_context']['end_time'] == end
+    # The meeting runs over: its latest speech lands 110 seconds after the scheduled end.
+    last_speech = end + timedelta(seconds=110)
+    row.update(has_content=True, transcript_segments=[{'text': 'kept'}], finished_at=last_speech)
+    controller.process_conversation = AsyncMock(return_value=True)
+    harness.now = last_speech + timedelta(seconds=15)
+    controller.host.wait = AsyncMock(side_effect=[False, True])
+    await controller.lifecycle_loop()
+    assert controller.host.state.current_conversation_id == cid
+    assert harness.creates == 1
+    controller.process_conversation.assert_not_awaited()
+    # The ordinary 120-second silence boundary still ends it.
+    harness.now = last_speech + timedelta(seconds=120)
+    controller.host.wait = AsyncMock(side_effect=[False, True])
+    await controller.lifecycle_loop()
+    assert controller.host.state.current_conversation_id != cid
+    controller.process_conversation.assert_awaited_once_with(cid)
 
 
 @pytest.mark.anyio

@@ -265,6 +265,7 @@ def test_external_text_memory_prompt_receives_hints_as_instructions(sources, mon
         {'label_evidence': {'card_picks': 1}},
         {'label_evidence': {'auto_confirmed': 1}},
         {'aliases': ['Old Synthetic Name']},
+        {'is_user_created': True},
     ],
 )
 def test_stored_user_evidence_admits_mononyms_and_unicode_names(signal):
@@ -295,6 +296,7 @@ def test_junk_names_are_rejected_even_with_stale_evidence(name, signal):
         {'label_evidence': {'card_picks': -1}},
         {'speech_samples': [None, '', '  ', 1]},
         {'speech_samples': 'synthetic/sample.wav'},
+        {'is_user_created': 'true'},
     ],
 )
 def test_unconfirmed_detections_and_guessed_metadata_are_not_authority(signal):
@@ -415,10 +417,16 @@ def test_reused_people_are_capped_and_do_not_leak_between_runs(monkeypatch):
         assert hints._people_spellings('synthetic-owner') == []
 
     fresh_run()
-    read.assert_called_once_with('synthetic-client', 'synthetic-owner', limit=200)
+    read.assert_called_once_with('synthetic-client', 'synthetic-owner', limit=200, memoize=True)
+
+
+def test_trusted_people_spellings_is_public():
+    person = {'name': 'Tala Quill', 'speech_samples': ['synthetic/sample.wav']}
+    assert hints.trusted_people_spellings([person]) == [{'name': 'Tala Quill'}]
+    assert hints.trusted_people_spellings([{'name': 'Spanish', 'speech_samples': ['synthetic/sample.wav']}]) == []
 
 
 def test_person_filter_does_not_filter_deliberately_learned_vocabulary():
-    people = hints._trusted_people_spellings([{'name': 'Spanish'}])
+    people = hints.trusted_people_spellings([{'name': 'Spanish'}])
     block = hints.render_known_spellings([{'spelling': 'Spanish', 'aliases': ['Synthetic Alias']}], people)
     assert 'Spanish' in block and 'Synthetic Alias' in block

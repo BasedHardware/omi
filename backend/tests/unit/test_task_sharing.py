@@ -33,7 +33,7 @@ def _stub_module(name):
 # Stub database package
 database_mod = _stub_module("database")
 if not hasattr(database_mod, '__path__'):
-    database_mod.__path__ = []
+    database_mod.__path__ = [str(Path(__file__).resolve().parents[2] / "database")]
 for sub in [
     "redis_db",
     "memories",
@@ -431,6 +431,26 @@ class TestCompletionNotification:
 
             mock_notify.assert_not_called()
 
+    def test_no_duplicate_notification_when_already_completed(self):
+        """Re-completing an already-completed shared task should NOT notify sender again."""
+        with patch("routers.action_items.action_items_db") as mock_db, patch(
+            "routers.action_items.send_notification"
+        ) as mock_notify:
+            mock_db.get_action_item.side_effect = [
+                {
+                    "id": "t1",
+                    "description": "Review PR #4711",
+                    "completed": True,
+                    "shared_from": {"sender_uid": "uid_alice"},
+                },
+                {"id": "t1", "description": "Review PR #4711", "completed": True},
+            ]
+            mock_db.mark_action_item_completed.return_value = True
+
+            toggle_action_item_completion("t1", completed=True, uid="uid_bob")
+
+            mock_notify.assert_not_called()
+
     def test_no_notification_on_uncomplete(self):
         """Uncompleting a shared task should NOT notify sender."""
         with patch("routers.action_items.action_items_db") as mock_db, patch(
@@ -448,6 +468,26 @@ class TestCompletionNotification:
             mock_db.mark_action_item_completed.return_value = True
 
             toggle_action_item_completion("t1", completed=False, uid="uid_bob")
+
+            mock_notify.assert_not_called()
+
+    def test_no_duplicate_notification_when_already_completed(self):
+        """Repeating completed=True on an already-completed shared task must not notify again."""
+        with patch("routers.action_items.action_items_db") as mock_db, patch(
+            "routers.action_items.send_notification"
+        ) as mock_notify:
+            mock_db.get_action_item.side_effect = [
+                {
+                    "id": "t1",
+                    "description": "Shared task",
+                    "completed": True,
+                    "shared_from": {"sender_uid": "uid_alice"},
+                },
+                {"id": "t1", "description": "Shared task", "completed": True},
+            ]
+            mock_db.mark_action_item_completed.return_value = True
+
+            toggle_action_item_completion("t1", completed=True, uid="uid_bob")
 
             mock_notify.assert_not_called()
 

@@ -6,18 +6,27 @@ import 'package:omi/backend/schema/gen/payments_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
-Future<Map<String, dynamic>?> createCheckoutSession({required String priceId, String? promotionCode}) async {
+Future<Map<String, dynamic>?> createCheckoutSession({
+  required String priceId,
+  String? promotionCode,
+  int? trialDays,
+}) async {
   final body = <String, dynamic>{'price_id': priceId};
   if (promotionCode != null && promotionCode.trim().isNotEmpty) {
     body['promotion_code'] = promotionCode.trim();
   }
+  if (trialDays != null && trialDays > 0) body['trial_days'] = trialDays;
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/payments/checkout-session',
     headers: {},
     method: 'POST',
     body: jsonEncode(body),
   );
-  if (response != null && response.statusCode == 200) {
+  if (response == null) return null;
+  if (response.statusCode == 409 || response.statusCode == 400) {
+    return _paymentError(response);
+  }
+  if (response.statusCode == 200) {
     final jsonResponse = jsonDecode(response.body) as Map<String, dynamic>;
     final generated = wire.GeneratedPaymentCheckoutSessionResponse.fromJson(jsonResponse);
     Logger.debug('createCheckoutSession response: ${response.body}');
@@ -39,6 +48,15 @@ Future<Map<String, dynamic>?> createCheckoutSession({required String priceId, St
   return null;
 }
 
+Map<String, dynamic> _paymentError(dynamic response) {
+  try {
+    final errorBody = misc_wire.GeneratedErrorResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return {'error': true, 'status_code': response.statusCode, 'detail': errorBody.detail};
+  } catch (_) {
+    return {'error': true, 'status_code': response.statusCode};
+  }
+}
+
 Future<bool> cancelSubscription({String? reason, String? reasonDetails}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/payments/subscription',
@@ -53,6 +71,33 @@ Future<bool> cancelSubscription({String? reason, String? reasonDetails}) async {
     return generated.status == 'ok';
   }
   return false;
+}
+
+/// The stay offer on the last cancel step; null when it cannot be read.
+Future<wire.GeneratedRetentionOfferResponse?> getRetentionOffer() async {
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/payments/retention-offer',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null || response.statusCode != 200) return null;
+  try {
+    return wire.GeneratedRetentionOfferResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Applies the stay offer and keeps the subscription renewing.
+Future<bool> acceptRetentionOffer() async {
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/payments/retention-offer',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  return response != null && response.statusCode == 200;
 }
 
 Future<Map<String, dynamic>?> upgradeSubscription({required String priceId, String? promotionCode}) async {
@@ -74,13 +119,8 @@ Future<Map<String, dynamic>?> upgradeSubscription({required String priceId, Stri
     Logger.debug('upgradeSubscription response: ${response.body}');
     return generated.toJson();
   }
-  if (response.statusCode == 400) {
-    try {
-      final errorBody = misc_wire.GeneratedErrorResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-      return {'error': true, 'detail': errorBody.detail};
-    } catch (_) {
-      return {'error': true};
-    }
+  if (response.statusCode == 400 || response.statusCode == 402 || response.statusCode == 409) {
+    return _paymentError(response);
   }
   return null;
 }
@@ -105,7 +145,7 @@ Future<Map<String, dynamic>?> getAppSubscription(String appId) async {
 Future<Map<String, dynamic>?> getAvailablePlans() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/payments/available-plans',
-    headers: {},
+    headers: {'X-Omi-Billing-Currency': '1'},
     method: 'GET',
     body: '',
   );

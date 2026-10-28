@@ -10,6 +10,7 @@ import secrets
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
+from typing import Any
 
 from config.messaging import channel_policy
 from utils.messaging.access import SeatFull, AccessDenied
@@ -18,6 +19,7 @@ from google.cloud import firestore
 from prometheus_client import Counter
 from google.api_core.exceptions import AlreadyExists
 
+from database.messaging_albums import read_album, append_album, seal_album
 from database._client import get_firestore_client
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
@@ -50,6 +52,20 @@ _SETTING_DEFAULTS = {
     'keep_private_memories_in_app': True,
     'insights': False,
 }
+
+
+def can_supersede(message):
+    """A plain user message (text or media) may replace a reply still being written.
+
+    Commands, button callbacks, link proofs and album parts never interrupt a turn.
+    """
+    return (
+        message.command is None
+        and not message.callback_id
+        and not message.link_proof
+        and not message.unlink
+        and not message.media_group_id
+    )
 
 
 class MessagingStore:
@@ -283,58 +299,24 @@ class MessagingStore:
         head = identity.collection('inbound_chat_heads').document(key(message.external_chat_id))
         now = datetime.now(timezone.utc)
         encrypted = encryption.encrypt(json.dumps(payload), identity.id)
-        album = (
-            identity.collection('inbox').document(key(message.external_chat_id, 'album:' + message.media_group_id))
-            if message.media_group_id
-            else None
-        )
 
         @firestore.transactional
         def apply(tx):
-            exists = ref.get(transaction=tx).exists
-            album_row = album.get(transaction=tx).to_dict() if album is not None else None
+            if ref.get(transaction=tx).exists:
+                return None
+            batch = read_album(tx, identity, message)
             identity_row = identity.get(transaction=tx).to_dict() or {}
             if identity_row.get('cleanup_pending'):
                 raise ValueError('Identity cleanup in progress')
             prior = head.get(transaction=tx).to_dict() or {}
-            if exists:
-                return None
             tx.set(identity, {'last_inbound_at': now}, merge=True)
-            if album is not None and (album_row is None or album_row.get('status') == 'pending'):
-                from utils.messaging.albums import merge_album, album_ready_at
-
-                combined = merge_album(
-                    json.loads(encryption.decrypt(album_row['payload'], identity.id)) if album_row else None,
-                    payload,
-                )
-                # Every provider message retains its own dedup tombstone. The encrypted
-                # album row is the one FIFO job; an already-running album admits late parts separately.
-                tx.create(
-                    ref,
-                    {
-                        'status': 'done',
-                        'created_at': now,
-                        'done_at': now,
-                        'channel': message.channel,
-                        'provider': message.provider,
-                    },
-                )
-                tx.set(
-                    album,
-                    {
-                        'payload': encryption.encrypt(json.dumps(combined), identity.id),
-                        'status': 'pending',
-                        'created_at': album_row['created_at'] if album_row else now,
-                        'album_ready_at': album_ready_at(album_row, now),
-                        'channel': message.channel,
-                        'provider': message.provider,
-                    },
-                )
+            if batch is not None:
+                path = append_album(tx, batch, ref, payload, identity.id, now, message.channel, message.provider)
                 if advances_inbound_head(message, prior):
                     tx.set(
                         head, {'provider_message_id': message.provider_message_id, 'received_at': message.received_at}
                     )
-                return album.path
+                return path
             tx.create(
                 ref,
                 {
@@ -343,6 +325,10 @@ class MessagingStore:
                     'created_at': now,
                     'channel': message.channel,
                     'provider': message.provider,
+                    # Content-free: may this row replace a running reply nobody has seen yet,
+                    # and in which conversation (one identity can hold several chats).
+                    'supersedes': can_supersede(message),
+                    'chat': key(message.external_chat_id),
                 },
             )
             if advances_inbound_head(message, prior):
@@ -421,11 +407,17 @@ class MessagingStore:
                 tx.update(candidate.reference, patch)
                 _queue_event(reason, candidate.reference.path, age)
             if payload is not None and head is not None:
-                tx.update(head.reference, {'status': 'running', 'started_at': now})
+                claim_patch: dict[str, Any] = {'status': 'running', 'started_at': now}
+                if payload.get('media_group_id'):
+                    claim_patch['album_appendable'] = True  # Only a generation-aware worker opts in.
+                tx.update(head.reference, claim_patch)
                 return head.reference.path, payload
             return None
 
         return run_with_transaction_contention_retry(self.db.transaction, apply, operation_name='messaging_transaction')
+
+    def seal_album(self, path, attachment_count):
+        return seal_album(self.db, path, attachment_count, stale_seconds=STALE_SECONDS)
 
     def assert_running(self, path):
         row = self.db.document(path).get().to_dict() or {}
@@ -682,7 +674,30 @@ class MessagingStore:
         return claimed
 
     def retry(self, path):
-        self.db.document(path).update({'status': 'pending'})
+        self.db.document(path).update({'status': 'pending', 'album_appendable': firestore.DELETE_FIELD})
+
+    def superseding_pending(self, path):
+        """True when a newer user message is waiting behind the running row at ``path``.
+
+        Uses the same status/created_at query as :meth:`pending` (no new index) and
+        reads only content-free fields.
+        """
+        ref = self.db.document(path)
+        chat = (ref.get(['chat']).to_dict() or {}).get('chat')
+        if not chat:
+            return False  # a row from before this field never gets replaced
+        rows = (
+            ref.parent.where('status', '==', 'pending')
+            .order_by('created_at')
+            .limit(10)
+            .select(['supersedes', 'chat'])
+            .stream()
+        )
+        for row in rows:
+            fields = row.to_dict() or {}
+            if row.reference.path != path and fields.get('supersedes') and fields.get('chat') == chat:
+                return True
+        return False
 
     def pending(self, message):
         """Recovery seam: Stage B's dispatcher periodically scans its owned identities."""
@@ -720,6 +735,7 @@ class MessagingStore:
             link = self.db.collection('channel_identities').document(link_id).get(transaction=tx).to_dict() or {}
             if not link.get('active') or link.get('uid') != uid or link.get('generation') != session['link_generation']:
                 raise PermissionError('Link revoked')
+        return user
 
     def persist_message(self, uid, document, session_id):
         session_ref = self.user(uid).collection('chat_sessions').document(session_id)
@@ -799,6 +815,11 @@ class MessagingStore:
             def revoke(tx):
                 row = identity.reference.get(transaction=tx).to_dict() or {}
                 if row.get('active') or row.get('uid') or row.get('last_inbound_at', now) > cutoff:
+                    return False
+                # Unknown senders can also have ambiguous provider delivery. Never
+                # erase their running reconciliation evidence through a parent purge.
+                running = identity.reference.collection('inbox').where('status', '==', 'running').limit(1)
+                if next(running.stream(transaction=tx), None) is not None:
                     return False
                 tx.update(identity.reference, {'cleanup_pending': True})
                 return True

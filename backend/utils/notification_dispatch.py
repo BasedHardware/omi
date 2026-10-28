@@ -27,6 +27,7 @@ class NotificationKind(str, Enum):
     CAPTURE_RECOVERY = 'capture_recovery'
     IMPORT_JOB = 'import_job'
     ACTION_ITEM_REMINDER = 'action_item_reminder'
+    CONVERSATION_MERGE = 'conversation_merge'
 
 
 class NotificationPolicy(str, Enum):
@@ -314,3 +315,26 @@ def dispatch_action_item_reminder(
         },
     )
     return NotificationDispatcher(sync_delivery=_action_item_reminder_delivery).dispatch(intent)
+
+
+def _merge_completed_delivery(user_id: str, title: str, body: str, data: Optional[dict[str, Any]]) -> Optional[int]:
+    # Retain the existing data-only, high-priority background invalidation.
+    from utils.notifications import send_merge_completed_message
+
+    assert data is not None
+    send_merge_completed_message(user_id, data['merged_conversation_id'], data['removed_conversation_ids'])
+    return None
+
+
+def dispatch_merge_completed(
+    user_id: str, merged_conversation_id: str, removed_conversation_ids: list[str]
+) -> NotificationDispatchOutcome:
+    intent = NotificationIntent(
+        user_id=user_id,
+        title='',
+        body='',
+        source='conversation_merge',
+        kind=NotificationKind.CONVERSATION_MERGE,
+        data={'merged_conversation_id': merged_conversation_id, 'removed_conversation_ids': removed_conversation_ids},
+    )
+    return NotificationDispatcher(sync_delivery=_merge_completed_delivery).dispatch(intent)

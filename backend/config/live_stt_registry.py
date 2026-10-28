@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import math
 import os
@@ -39,31 +38,30 @@ class Target:
 
     def ramp(self) -> float:
         if self.id == 'parakeet-window':
-            return min(self.ramp_percent, percent('PARAKEET_WINDOW_ALLOCATION_PERCENT', 0))
+            from config.policy.listen import window_percent
+
+            return min(self.ramp_percent, window_percent(strict=True))
         return self.ramp_percent
 
     def at_capacity(self) -> bool:
-        return bool(self.capacity_env and os.getenv(self.capacity_env, 'false').lower() == 'true')
+        from config.refactor_switches import default_off
 
-
-def percent(name: str, default: float) -> float:
-    value = float(os.getenv(name, str(default)))
-    if not math.isfinite(value) or not 0 <= value <= 100:
-        raise ValueError(f'invalid {name}')
-    return value
+        return bool(
+            self.capacity_env
+            and default_off(self.capacity_env, os.getenv(self.capacity_env, 'false').lower() == 'true')
+        )
 
 
 def assigned(uid: str | None, salt: str, share: float) -> bool:
-    if not uid:
-        return False
-    bucket = int.from_bytes(hashlib.sha256(f'{salt}:{uid}'.encode()).digest()[:8], 'big')
-    return bucket / 2**64 * 100 < share
+    from config.policy.batch import cohort_bucket
+
+    return bool(uid) and cohort_bucket(uid, salt, bits=64) < share
 
 
 def routing_on(uid: str | None) -> bool:
-    return os.getenv('STT_ROUTING_MODE', 'off').lower() == 'on' and assigned(
-        uid, 'stt-routing-on', percent('STT_ROUTING_ON_PERCENT', 0)
-    )
+    from config.policy.listen import routing_enabled
+
+    return routing_enabled(uid)
 
 
 DEFAULT_TARGETS = (
@@ -75,7 +73,14 @@ DEFAULT_IDS = {target.family: target.id for target in DEFAULT_TARGETS}
 
 
 def registry() -> tuple[Target, ...]:
-    raw = os.getenv('STT_ROUTING_TARGETS_JSON', '').strip()
+    from config.policy.listen import current_listen_policy, routing_targets_json
+
+    policy = current_listen_policy.get()
+    return policy.targets if policy is not None else parse_registry(routing_targets_json())
+
+
+def parse_registry(raw: str) -> tuple[Target, ...]:
+    raw = raw.strip()
     targets: tuple[Target, ...] = DEFAULT_TARGETS
     if raw:
         entries = json.loads(raw)

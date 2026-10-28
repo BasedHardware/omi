@@ -1032,6 +1032,7 @@ class GeneratedReviewChange {
   final String changeId;
   final GeneratedSpellingContext? context;
   final DateTime createdAt;
+  final GeneratedReviewChangeDiff? diff;
   final String? editKind;
   final String kind;
   final String? reason;
@@ -1046,6 +1047,7 @@ class GeneratedReviewChange {
     required this.changeId,
     this.context,
     required this.createdAt,
+    this.diff,
     this.editKind,
     required this.kind,
     this.reason,
@@ -1062,6 +1064,7 @@ class GeneratedReviewChange {
       changeId: _required(_readFieldValue<String>(_readField(json, const ["change_id"]), "change_id", _readString, requiredField: true, nullable: false), "change_id"),
       context: _readFieldValue<GeneratedSpellingContext>(_readField(json, const ["context"]), "context", (value) => _readObject(value, GeneratedSpellingContext.fromJson), requiredField: false, nullable: true),
       createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
+      diff: _readFieldValue<GeneratedReviewChangeDiff>(_readField(json, const ["diff"]), "diff", (value) => _readObject(value, GeneratedReviewChangeDiff.fromJson), requiredField: false, nullable: true),
       editKind: _readFieldValue<String>(_readField(json, const ["edit_kind"]), "edit_kind", _readString, requiredField: false, nullable: true),
       kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
       reason: _readFieldValue<String>(_readField(json, const ["reason"]), "reason", _readString, requiredField: false, nullable: true),
@@ -1079,6 +1082,7 @@ class GeneratedReviewChange {
       'change_id': changeId,
       'context': context?.toJson(),
       'created_at': createdAt.toUtc().toIso8601String(),
+      'diff': diff?.toJson(),
       'edit_kind': editKind,
       'kind': kind,
       'reason': reason,
@@ -1086,6 +1090,62 @@ class GeneratedReviewChange {
       'snippet': snippet,
       'title': title,
       'undone': undone,
+    };
+  }
+}
+
+class GeneratedReviewChangeDiff {
+  final String? after;
+  final String? before;
+  final String? contextAfter;
+  final String? contextBefore;
+  final String? field;
+  final String? groupKey;
+  final int? occurrences;
+  final DateTime? sourceStartedAt;
+  final String? sourceTitle;
+  final String? targetLabel;
+
+  const GeneratedReviewChangeDiff({
+    this.after,
+    this.before,
+    this.contextAfter,
+    this.contextBefore,
+    this.field,
+    this.groupKey,
+    this.occurrences,
+    this.sourceStartedAt,
+    this.sourceTitle,
+    this.targetLabel,
+  });
+
+  factory GeneratedReviewChangeDiff.fromJson(Map<String, dynamic> json) {
+    return GeneratedReviewChangeDiff(
+      after: _readFieldValue<String>(_readField(json, const ["after"]), "after", _readString, requiredField: false, nullable: true),
+      before: _readFieldValue<String>(_readField(json, const ["before"]), "before", _readString, requiredField: false, nullable: true),
+      contextAfter: _readFieldValue<String>(_readField(json, const ["context_after"]), "context_after", _readString, requiredField: false, nullable: true),
+      contextBefore: _readFieldValue<String>(_readField(json, const ["context_before"]), "context_before", _readString, requiredField: false, nullable: true),
+      field: _readFieldValue<String>(_readField(json, const ["field"]), "field", _readString, requiredField: false, nullable: true),
+      groupKey: _readFieldValue<String>(_readField(json, const ["group_key"]), "group_key", _readString, requiredField: false, nullable: true),
+      occurrences: _readFieldValue<int>(_readField(json, const ["occurrences"]), "occurrences", _readInt, requiredField: false, nullable: true),
+      sourceStartedAt: _readFieldValue<DateTime>(_readField(json, const ["source_started_at"]), "source_started_at", _readDateTime, requiredField: false, nullable: true),
+      sourceTitle: _readFieldValue<String>(_readField(json, const ["source_title"]), "source_title", _readString, requiredField: false, nullable: true),
+      targetLabel: _readFieldValue<String>(_readField(json, const ["target_label"]), "target_label", _readString, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'after': after,
+      'before': before,
+      'context_after': contextAfter,
+      'context_before': contextBefore,
+      'field': field,
+      'group_key': groupKey,
+      'occurrences': occurrences,
+      'source_started_at': sourceStartedAt?.toUtc().toIso8601String(),
+      'source_title': sourceTitle,
+      'target_label': targetLabel,
     };
   }
 }
@@ -1110,6 +1170,106 @@ class GeneratedReviewChangesResponse {
     return {
       'changes': changes.map((value) => value.toJson()).toList(),
       'next_cursor': nextCursor,
+    };
+  }
+}
+
+class GeneratedOpenLoopCard {
+  final String cardId;
+  final String contextLine;
+  final String date;
+  final String question;
+
+  const GeneratedOpenLoopCard({
+    required this.cardId,
+    required this.contextLine,
+    required this.date,
+    required this.question,
+  });
+
+  factory GeneratedOpenLoopCard.fromJson(Map<String, dynamic> json) {
+    return GeneratedOpenLoopCard(
+      cardId: _required(_readFieldValue<String>(_readField(json, const ["card_id"]), "card_id", _readString, requiredField: true, nullable: false), "card_id"),
+      contextLine: _required(_readFieldValue<String>(_readField(json, const ["context_line"]), "context_line", _readString, requiredField: true, nullable: false), "context_line"),
+      date: _required(_readFieldValue<String>(_readField(json, const ["date"]), "date", _readString, requiredField: true, nullable: false), "date"),
+      question: _required(_readFieldValue<String>(_readField(json, const ["question"]), "question", _readString, requiredField: true, nullable: false), "question"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'card_id': cardId,
+      'context_line': contextLine,
+      'date': date,
+      'question': question,
+    };
+  }
+}
+
+class GeneratedOpenLoopCardsResponse {
+  final List<GeneratedOpenLoopCard>? cards;
+
+  const GeneratedOpenLoopCardsResponse({
+    this.cards,
+  });
+
+  factory GeneratedOpenLoopCardsResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedOpenLoopCardsResponse(
+      cards: _readFieldValue<List<GeneratedOpenLoopCard>>(_readField(json, const ["cards"]), "cards", (value) => _readObjectList(value, GeneratedOpenLoopCard.fromJson), requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'cards': cards?.map((value) => value.toJson()).toList(),
+    };
+  }
+}
+
+class GeneratedOpenLoopAnswerRequest {
+  final String action;
+
+  const GeneratedOpenLoopAnswerRequest({
+    required this.action,
+  });
+
+  factory GeneratedOpenLoopAnswerRequest.fromJson(Map<String, dynamic> json) {
+    return GeneratedOpenLoopAnswerRequest(
+      action: _required(_readFieldValue<String>(_readField(json, const ["action"]), "action", _readString, requiredField: true, nullable: false), "action"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'action': action,
+    };
+  }
+}
+
+class GeneratedOpenLoopAnswerResponse {
+  final String cardId;
+  final String date;
+  final String state;
+
+  const GeneratedOpenLoopAnswerResponse({
+    required this.cardId,
+    required this.date,
+    required this.state,
+  });
+
+  factory GeneratedOpenLoopAnswerResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedOpenLoopAnswerResponse(
+      cardId: _required(_readFieldValue<String>(_readField(json, const ["card_id"]), "card_id", _readString, requiredField: true, nullable: false), "card_id"),
+      date: _required(_readFieldValue<String>(_readField(json, const ["date"]), "date", _readString, requiredField: true, nullable: false), "date"),
+      state: _required(_readFieldValue<String>(_readField(json, const ["state"]), "state", _readString, requiredField: true, nullable: false), "state"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'card_id': cardId,
+      'date': date,
+      'state': state,
     };
   }
 }

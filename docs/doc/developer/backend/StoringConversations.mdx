@@ -4,6 +4,22 @@ icon: "database"
 description: 'This document outlines how Omi stores conversation data and extracts memories from conversations.'
 ---
 
+
+## Recording metadata and generated output
+
+A stored recording and its generated notes are separate results. A recording can
+remain available in history while generated summaries, memories, or action items
+are absent. Preserve the original transcript and audio when handling that state.
+
+Treat optional content, call, and calendar metadata as unknown when absent. A
+recording's location describes its owner; it does not establish where remote
+participants were. Speaker names require identity evidence or a manual correction:
+a contact name or meeting roster alone does not identify a voice.
+
+Capture groups can present simultaneous recordings as one event while retaining
+each original recording. Matching wall-clock windows alone is not proof of shared
+speech, and unmatched speech must remain available.
+
 ## Overview
 
 Omi uses a **dual-collection architecture** for storing user data:
@@ -18,6 +34,17 @@ Omi uses a **dual-collection architecture** for storing user data:
 </CardGroup>
 
 This separation allows for efficient retrieval of both full conversation context and quick access to key facts about the user.
+
+Offline uploads can finish in a different order from their recording times.
+The sync intake transaction joins compatible adjacent intervals in either
+direction and stores transcript offsets relative to the earliest capture.
+Chunks within an upload assign chronologically; a later-arriving earlier chunk
+can still join the same conversation across uploads. Device/source boundaries,
+user-managed records, explicit live targets and conversation size limits remain
+separate constraints on automatic merging. When a conversation cannot accept
+more speech within its document budget, incoming speech continues in a separate
+conversation. Large inputs split at transcript-segment boundaries in order,
+without truncation. Each resulting conversation can have its own summary.
 
 ## On-device summaries in desktop reads
 
@@ -463,6 +490,12 @@ Vectors are created ONCE during initial processing. Reprocessed conversations do
 </CardGroup>
 
 ### Manual speaker attribution during concurrent writes
+
+Conversation and person IDs are opaque strings: send the exact stored value,
+including valid legacy Unicode or punctuation. Speaker routes validate Firestore
+storage limits before lookup without trimming IDs or adding arbitrary speaker
+number bounds. An integer speaker ID that does not exist retains the existing
+not-found response.
 
 Manual speaker decisions live in a protected sparse receipt alongside the transcript.
 Live STT merging and both processing-result writers read that receipt in their

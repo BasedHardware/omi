@@ -26,6 +26,12 @@ STACKDRIVER_EXPORTER = MONITORING / 'prometheus-stackdriver-exporter' / 'prod_om
 STACKDRIVER_EXPORTER_DEV = MONITORING / 'prometheus-stackdriver-exporter' / 'dev_omi_stackdriver_exporter.yaml'
 CLOUD_RUN_EXPORTER = MONITORING / 'prometheus-stackdriver-exporter' / 'prod_omi_cloud_run_metrics_exporter.yaml'
 CLOUD_RUN_EXPORTER_DEV = MONITORING / 'prometheus-stackdriver-exporter' / 'dev_omi_cloud_run_metrics_exporter.yaml'
+CLOUD_RUN_SYNC_EXPORTER = (
+    MONITORING / 'prometheus-stackdriver-exporter' / 'prod_sync_omi_cloud_run_metrics_exporter.yaml'
+)
+CLOUD_RUN_SYNC_EXPORTER_DEV = (
+    MONITORING / 'prometheus-stackdriver-exporter' / 'dev_sync_omi_cloud_run_metrics_exporter.yaml'
+)
 
 
 def _cpu_millicores(value: object) -> float:
@@ -160,8 +166,91 @@ def test_stackdriver_exporter_ingests_firestore_read_count(path):
 # panel that reads as no traffic. Use one_of() and pin the exact string.
 CLOUD_RUN_EXPORTER_FILTER = (
     'prometheus.googleapis.com/omi_:resource.labels.cluster="__run__" AND '
-    'resource.labels.namespace=one_of("backend","desktop-backend","backend-sync","backend-sync-backfill","notifications-job")'
+    'resource.labels.namespace=one_of("backend","desktop-backend","notifications-job")'
 )
+
+# The sync services run the full backend codebase, so every omi_* family arrives
+# once per instance of each. Importing all of it took a collection from ~52k to
+# ~187k series and OOMKilled the exporter at 2Gi (2026-10-16). A dedicated release
+# imports only consumed families from these namespaces; the main release excludes
+# them. One release cannot do both: the exporter ANDs every filter whose prefix
+# matches, and Cloud Monitoring rejects OR across resource.labels with HTTP 400.
+SYNC_NAMESPACES = ('backend-sync', 'backend-sync-backfill', 'backend-integration')
+# The main release imports only families an in-cluster consumer can read from
+# job=cloud-run-application-metrics: a query with an explicit job match, a job
+# regex that includes it, or no job selector at all. The blanket omi_ prefix
+# imported 188 families / ~54k live series on 2026-10-21, 156 of them read by
+# nothing in-cluster, re-created once per Cloud Run instance replacement
+# (~380k of the 2.27M-series Prometheus head). A trailing slash pins exactly
+# one family. Extend this list only together with the consumer that reads the
+# family from the backend/desktop-backend/notifications-job namespaces, and
+# mirror the change into both <env>_omi_cloud_run_metrics_exporter.yaml files.
+CLOUD_RUN_EXPORTER_PREFIXES = [
+    'prometheus.googleapis.com/omi_capture_finalization_failures_total/',
+    'prometheus.googleapis.com/omi_capture_finalization_reconciliations_total/',
+    'prometheus.googleapis.com/omi_chat_search_tool_outcomes_total/',
+    'prometheus.googleapis.com/omi_client_app_startup_duration_seconds/',
+    'prometheus.googleapis.com/omi_client_events_total/',
+    'prometheus.googleapis.com/omi_client_journey_accepted_total/',
+    'prometheus.googleapis.com/omi_client_journey_duration_seconds/',
+    'prometheus.googleapis.com/omi_client_journey_issues_total/',
+    'prometheus.googleapis.com/omi_client_journey_terminal_total/',
+    'prometheus.googleapis.com/omi_client_telemetry_rejected_total/',
+    'prometheus.googleapis.com/omi_conversation_duration_seconds/',
+    'prometheus.googleapis.com/omi_conversation_summary_vector_upserts_total/',
+    'prometheus.googleapis.com/omi_daily_summary_resumed_cohort_age_seconds/',
+    'prometheus.googleapis.com/omi_fallback_total/',
+    'prometheus.googleapis.com/omi_firestore_documents_per_operation/',
+    'prometheus.googleapis.com/omi_firestore_read_operations_total/',
+    'prometheus.googleapis.com/omi_journey_accepted_total/',
+    'prometheus.googleapis.com/omi_journey_latency_seconds/',
+    'prometheus.googleapis.com/omi_journey_terminal_total/',
+    'prometheus.googleapis.com/omi_listen_audio_decode_failures_total/',
+    'prometheus.googleapis.com/omi_listen_demand_failure_detail_total/',
+    'prometheus.googleapis.com/omi_live_session_transcript_outcome_total/',
+    'prometheus.googleapis.com/omi_owner_recognition_conversations_total/',
+    'prometheus.googleapis.com/omi_product_event_total/',
+    'prometheus.googleapis.com/omi_queue_oldest_ready_age_seconds/',
+    'prometheus.googleapis.com/omi_queue_oldest_ready_sample_unknown/',
+    'prometheus.googleapis.com/omi_stt_chain_exhausted_total/',
+    'prometheus.googleapis.com/omi_stt_provider_circuit_open/',
+    'prometheus.googleapis.com/omi_stt_provider_connect_total/',
+    'prometheus.googleapis.com/omi_stt_provider_retired/',
+    'prometheus.googleapis.com/omi_stt_stream_close_total/',
+    'prometheus.googleapis.com/omi_subscription_events_total/',
+    'prometheus.googleapis.com/omi_translation_cache_ops_total/',
+    'prometheus.googleapis.com/omi_translation_chars_total/',
+    'prometheus.googleapis.com/omi_translation_errors_total/',
+    'prometheus.googleapis.com/omi_translation_latency_seconds/',
+    'prometheus.googleapis.com/omi_translation_requests_total/',
+    'prometheus.googleapis.com/omi_translation_skip_total/',
+    'prometheus.googleapis.com/omi_vertex_managed_25_attempts_total/',
+    'prometheus.googleapis.com/omi_vertex_managed_25_on_demand_responses_total/',
+    'prometheus.googleapis.com/omi_vertex_non_dream_flash_after_cutover_attempts_total/',
+]
+CLOUD_RUN_SYNC_EXPORTER_FILTER = (
+    'prometheus.googleapis.com/omi_:resource.labels.cluster="__run__" AND '
+    'resource.labels.namespace=one_of("backend-sync","backend-sync-backfill","backend-integration")'
+)
+# omi_sync_ is pinned to its consumed families: omi_sync_phase_* (no in-cluster
+# consumer, read from GMP by the rightsizing runbook) alone re-created ~13k live
+# series per backend-sync instance generation through this release.
+CLOUD_RUN_SYNC_EXPORTER_PREFIXES = [
+    'prometheus.googleapis.com/omi_sync_dispatch_attempts_total/',
+    'prometheus.googleapis.com/omi_sync_upload_total/',
+    'prometheus.googleapis.com/omi_sync_transcription_job_total/',
+    'prometheus.googleapis.com/omi_sync_intake',
+    'prometheus.googleapis.com/omi_journey_',
+    'prometheus.googleapis.com/omi_client_journey_',
+    'prometheus.googleapis.com/omi_owner_recognition_conversations_total/',
+    'prometheus.googleapis.com/omi_conversation_duration_seconds/',
+    'prometheus.googleapis.com/omi_conversation_summary_vector_upserts_total/',
+    'prometheus.googleapis.com/omi_firestore_documents_per_operation/',
+    'prometheus.googleapis.com/omi_capture_finalization_',
+    'prometheus.googleapis.com/omi_held_content_',
+    'prometheus.googleapis.com/omi_stt_cap_recovery_reconciliation_total/',
+    'prometheus.googleapis.com/omi_queue_oldest_ready_',
+]
 
 
 @pytest.mark.parametrize(
@@ -179,20 +268,64 @@ def test_cloud_run_metrics_exporter_is_scoped_and_rate_limited(path, project_id,
     values = yaml.safe_load(path.read_text(encoding='utf-8'))
     metrics = values['stackdriver']['metrics']
     assert values['stackdriver']['projectIds'] == [project_id]
-    assert metrics['prefixes'] == ['prometheus.googleapis.com/omi_', 'custom.googleapis.com/omi_sync_phase_']
+    assert metrics['prefixes'] == CLOUD_RUN_EXPORTER_PREFIXES
+    # stackdriver_exporter silently drops a prefix that starts with another listed one.
+    for prefix in metrics['prefixes']:
+        assert not any(other != prefix and prefix.startswith(other) for other in metrics['prefixes'])
+    # The custom-metric omi_sync_phase_ import left with its filter: nothing in-cluster reads it.
+    assert not any(prefix.startswith('custom.googleapis.com/') for prefix in metrics['prefixes'])
     assert metrics['interval'] == '10m'
     assert metrics['offset'] == '1m'
-    assert metrics['filters'] == [
-        CLOUD_RUN_EXPORTER_FILTER,
-        'custom.googleapis.com/omi_sync_phase_:resource.labels.job=one_of("backend-sync","backend-sync-backfill")',
-    ]
+    assert metrics['filters'] == [CLOUD_RUN_EXPORTER_FILTER]
     assert values['serviceAccount'] == {
         'create': False,
         'name': service_account,
     }
+    for namespace in SYNC_NAMESPACES:
+        assert f'"{namespace}"' not in metrics['filters'][0], f'{path.name}: {namespace} belongs to the sync release'
 
 
-@pytest.mark.parametrize('path', (CLOUD_RUN_EXPORTER, CLOUD_RUN_EXPORTER_DEV), ids=('prod', 'dev'))
+@pytest.mark.parametrize(
+    ('path', 'env', 'project_id'),
+    (
+        (CLOUD_RUN_SYNC_EXPORTER, 'prod', 'based-hardware'),
+        (CLOUD_RUN_SYNC_EXPORTER_DEV, 'dev', 'based-hardware-dev'),
+    ),
+    ids=('prod', 'dev'),
+)
+def test_cloud_run_sync_metrics_exporter_imports_only_consumed_families(path, env, project_id):
+    values = yaml.safe_load(path.read_text(encoding='utf-8'))
+    metrics = values['stackdriver']['metrics']
+    assert values['fullnameOverride'] == f'{env}-omi-cloud-run-sync-metrics-exporter'
+    assert values['stackdriver']['projectIds'] == [project_id]
+    assert metrics['prefixes'] == CLOUD_RUN_SYNC_EXPORTER_PREFIXES
+    # stackdriver_exporter silently drops a prefix that starts with another listed one.
+    for prefix in metrics['prefixes']:
+        assert not any(other != prefix and prefix.startswith(other) for other in metrics['prefixes'])
+    assert metrics['filters'] == [CLOUD_RUN_SYNC_EXPORTER_FILTER]
+    assert metrics['interval'] == '10m'
+    assert metrics['offset'] == '1m'
+    assert values['serviceAccount'] == {'create': False, 'name': f'{env}-omi-prometheus-stackdriver-exporter'}
+
+
+@pytest.mark.parametrize('env', ('prod', 'dev'))
+def test_cloud_run_application_job_scrapes_both_exporter_releases(env):
+    text = (MONITORING / 'kube-prometheus-stack' / f'{env}_omi_monitoring_values.yaml').read_text(encoding='utf-8')
+    job = text[text.index('- job_name: cloud-run-application-metrics') :]
+    match = re.search(r'regex: "([^"]+)"', job)
+    assert match
+    pattern = re.compile(match.group(1))
+    for release in (f'{env}-omi-cloud-run-metrics-exporter', f'{env}-omi-cloud-run-sync-metrics-exporter'):
+        assert pattern.fullmatch(release), release
+    # The 1-second LB/Firestore exporter job must not pick either release up.
+    assert not re.fullmatch('(.*)-prometheus-stackdriver-exporter', f'{env}-omi-cloud-run-sync-metrics-exporter')
+
+
+@pytest.mark.parametrize(
+    'path',
+    (CLOUD_RUN_EXPORTER, CLOUD_RUN_EXPORTER_DEV, CLOUD_RUN_SYNC_EXPORTER, CLOUD_RUN_SYNC_EXPORTER_DEV),
+    ids=('prod', 'dev', 'sync-prod', 'sync-dev'),
+)
 def test_cloud_run_metrics_exporter_can_outlast_its_own_scrape(path):
     """The exporter collects from Cloud Monitoring inline, so it must be sized for it.
 
@@ -220,7 +353,11 @@ def test_cloud_run_metrics_exporter_can_outlast_its_own_scrape(path):
         )
 
 
-@pytest.mark.parametrize('path', (CLOUD_RUN_EXPORTER, CLOUD_RUN_EXPORTER_DEV), ids=('prod', 'dev'))
+@pytest.mark.parametrize(
+    'path',
+    (CLOUD_RUN_EXPORTER, CLOUD_RUN_EXPORTER_DEV, CLOUD_RUN_SYNC_EXPORTER, CLOUD_RUN_SYNC_EXPORTER_DEV),
+    ids=('prod', 'dev', 'sync-prod', 'sync-dev'),
+)
 def test_cloud_run_metrics_exporter_filter_has_no_mixed_and_or(path):
     # A narrow static tripwire for the one shape that took the bridge down, not a
     # grammar check: it does not parse the filter language and does not call Cloud
@@ -281,10 +418,11 @@ def test_alert_rules_use_declared_receiver_and_instatus_components():
         canary_sources = {
             'omi-datasource-prometheus': 'prometheus',
             'omi-datasource-cloud-monitoring': 'beuxmaq8oxhq8e',
+            'omi-datasource-gmp': 'gmp-cloud-run',
         }
         if rule.get('uid') in canary_sources:
             # A datasource outage is monitoring infrastructure, not evidence of
-            # an Omi product outage. These two explicit canaries reach Telegram
+            # an Omi product outage. These explicit canaries reach Telegram
             # via the root receiver and must not update a product Instatus page.
             source = canary_sources[rule['uid']]
             assert labels['impact'] == 'infrastructure'
@@ -292,8 +430,32 @@ def test_alert_rules_use_declared_receiver_and_instatus_components():
             assert labels['datasource_uid'] == source
             assert rule['data'][0]['datasourceUid'] == source
             assert component is None
+        elif labels.get('component') == 'mobile-capture':
+            # Device signals come from PostHog fleet telemetry, not a product
+            # service; they never drive a public Instatus component.
+            assert component is None
         else:
             assert component in allowed, f"{rule.get('uid')}: unexpected {label_key}={component!r}"
+
+
+def test_every_alert_rule_declares_tier_owner_and_audience():
+    # Only tier=page reaches the human Telegram channel. Agent-tier rules keep
+    # evaluating (agents read them from the Alertmanager API) but are muted by
+    # the always-on time interval, so a missing label is a page-noise bug.
+    routing = _load_inventory()['routing']
+    silent = routing['agent_tier_mute_timing']
+    for rule in _alert_rules():
+        uid = rule.get('uid')
+        labels = rule.get('labels') or {}
+        settings = rule.get('notification_settings') or {}
+        assert labels.get('owner'), f"{uid}: missing owner label"
+        assert labels.get('tier') in {'page', 'agent'}, f"{uid}: tier must be page or agent"
+        if labels['tier'] == 'page':
+            assert labels.get('audience') == 'human', uid
+            assert silent not in (settings.get('mute_time_intervals') or []), f"{uid}: page rule is muted"
+        else:
+            assert labels.get('audience') == 'agent', uid
+            assert silent in (settings.get('mute_time_intervals') or []), f"{uid}: agent rule would page Telegram"
 
 
 def test_scrape_health_no_data_semantics_match_inventory():

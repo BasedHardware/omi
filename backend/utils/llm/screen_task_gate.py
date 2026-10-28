@@ -8,6 +8,7 @@ import random
 from dataclasses import dataclass
 from typing import Literal
 
+from config.jev_decisions import SCREEN_TASK_JEV_AUTO_LANE_ID, SCREEN_TASK_JEV_MODEL
 from utils.llm.jev_client import ask_jev
 from utils.observability.fallback import record_fallback
 
@@ -56,7 +57,15 @@ def _probability_env(name: str, default: float) -> float:
 
 def decide_screen_task(state: str, *, audit_draw: float | None = None) -> ScreenTaskGateDecision:
     # One attempt: caller latency is bounded and a missing decision must preserve recall.
-    answers = ask_jev(state, QUESTIONS, lane='screen_task', timeout_seconds=2.0, max_attempts=1)
+    answers = ask_jev(
+        state,
+        QUESTIONS,
+        lane='screen_task',
+        model=SCREEN_TASK_JEV_AUTO_LANE_ID,
+        expected_model=SCREEN_TASK_JEV_MODEL,
+        timeout_seconds=2.0,
+        max_attempts=1,
+    )
     if answers is None:
         record_fallback(
             component='screen_task_gate',

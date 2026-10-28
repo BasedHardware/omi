@@ -39,14 +39,9 @@ workflows:
     scripts:
       - name: Verify dispatcher source pin
         script: |
-          set -euo pipefail
-          if [[ -n "${OMI_RELEASE_SOURCE_SHA:-}" ]]; then
-            CHECKED_OUT_SHA="$(git rev-parse HEAD)"
-            [[ "$CHECKED_OUT_SHA" == "$OMI_RELEASE_SOURCE_SHA" ]] || {
-              echo "dispatcher source pin does not match checked-out HEAD" >&2
-              exit 1
-            }
-          fi
+          # Checks out the dispatcher's evaluated commit when main moved past it
+          # after dispatch; fails closed on anything else.
+          bash scripts/checkout_release_source_pin.sh
 
       - name: Installing Opus
         script: |
@@ -147,7 +142,6 @@ workflows:
             --build-number=$BUILD_NUMBER \
             --flavor prod \
             --export-options-plist=$HOME/export_options.plist \
-            --dart-define=CAPTURE_EVIDENCE_V1_DARK_WRITE=true \
             $PROVENANCE_ARGS
 
     artifacts:
@@ -226,14 +220,9 @@ workflows:
     scripts:
       - name: Verify dispatcher source pin
         script: |
-          set -euo pipefail
-          if [[ -n "${OMI_RELEASE_SOURCE_SHA:-}" ]]; then
-            CHECKED_OUT_SHA="$(git rev-parse HEAD)"
-            [[ "$CHECKED_OUT_SHA" == "$OMI_RELEASE_SOURCE_SHA" ]] || {
-              echo "dispatcher source pin does not match checked-out HEAD" >&2
-              exit 1
-            }
-          fi
+          # Checks out the dispatcher's evaluated commit when main moved past it
+          # after dispatch; fails closed on anything else.
+          bash scripts/checkout_release_source_pin.sh
 
       - name: Installing Android SDK
         script: |
@@ -354,7 +343,6 @@ workflows:
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod \
-            --dart-define=CAPTURE_EVIDENCE_V1_DARK_WRITE=true \
             $PROVENANCE_ARGS
 
     artifacts:
@@ -375,6 +363,10 @@ workflows:
         credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
         track: "internal"
         submit_as_draft: false
+        # Play auto-sends changes for review again (2026-10-27) and rejects
+        # any commit that sets changesNotSentForReview ("The query parameter
+        # changesNotSentForReview must not be set"), so the parameter must
+        # not be set.
 
   # ============================================
   # PRODUCTION RELEASE WORKFLOWS (Triggered by tags)
@@ -514,7 +506,6 @@ workflows:
             --build-number=$BUILD_NUMBER \
             --flavor prod \
             --export-options-plist=$HOME/export_options.plist \
-            --dart-define=CAPTURE_EVIDENCE_V1_DARK_WRITE=true \
             $PROVENANCE_ARGS
 
     artifacts:
@@ -791,6 +782,8 @@ workflows:
     scripts:
       - name: Installing Android SDK
         script: |
+          set -euo pipefail
+          rm -f "$HOME/.omi-android-prod-internal-build-identity"
           export ANDROID_HOME="$HOME/opt/android-sdk"
           if [ ! -d "$ANDROID_HOME" ]; then
             echo "$ANDROID_HOME does not exist. Installing..."
@@ -904,6 +897,8 @@ workflows:
           TAG_BUILD_NUMBER="$BUILD_NUMBER"
           BUILD_NUMBER="$(jq -er '.build_number' <<<"$PLAY_PLAN")"
           echo "Android build number $BUILD_NUMBER (tag $TAG_BUILD_NUMBER, source: $(jq -r '.source' <<<"$PLAY_PLAN"))"
+          echo "BUILD_NAME=$BUILD_NAME" >> "$CM_ENV"
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$CM_ENV"
 
           bash scripts/admit_android_source.sh "$CHECKED_OUT_SHA"
 
@@ -917,8 +912,13 @@ workflows:
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod \
-            --dart-define=CAPTURE_EVIDENCE_V1_DARK_WRITE=true \
             $PROVENANCE_ARGS
+
+          # Post-publish scripts also run after a failed build. Persist the exact
+          # identity only after Flutter has completed successfully.
+          printf '%s\n%s\n%s\n%s\n' "$BUILD_NAME" "$BUILD_NUMBER" "${CM_TAG:?CM_TAG is required}" \
+            "${CM_BUILD_ID:?CM_BUILD_ID is required}" \
+            > "$HOME/.omi-android-prod-internal-build-identity"
 
 
     artifacts:
@@ -938,9 +938,35 @@ workflows:
       google_play:
         credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
         track: "internal"
+        # Publishing-block variables are evaluated before build scripts run.
+        # These built-in values bind the release to its tag and Codemagic run.
+        release_name: "$CM_TAG [$CM_BUILD_ID]"
         submit_as_draft: false
-        release_promotion:
-          track: "alpha"
+        # Same Play constraint as the internal auto track: Play auto-sends
+        # changes for review again (2026-10-27) and rejects any commit that
+        # sets changesNotSentForReview, so the parameter must not be set.
+      scripts:
+        - name: Promote the exact internal build to alpha
+          script: |
+            set -euo pipefail
+            IDENTITY="$HOME/.omi-android-prod-internal-build-identity"
+            if [[ ! -f "$IDENTITY" ]]; then
+              echo "Android internal build did not complete; skipping alpha promotion."
+              exit 0
+            fi
+            {
+              read -r PROMOTE_BUILD_NAME
+              read -r PROMOTE_BUILD_NUMBER
+              read -r PROMOTE_BUILD_TAG
+              read -r PROMOTE_BUILD_ID
+            } < "$IDENTITY"
+            python3 scripts/mobile_store_promote.py \
+              --confirm promote-internal-to-alpha \
+              --platform android \
+              --version "${PROMOTE_BUILD_NAME:?missing Android build name}" \
+              --android-build "${PROMOTE_BUILD_NUMBER:?missing Android build number}" \
+              --build-tag "${PROMOTE_BUILD_TAG:?missing Android release tag}" \
+              --build-id "${PROMOTE_BUILD_ID:?missing Codemagic build ID}"
 
   ios-prod-patch:
     name: Patch iOS to Production
@@ -1745,7 +1771,6 @@ workflows:
   #   FIREBASE_PROJECT_ID, FIREBASE_API_KEY
   #   APPLE_CLIENT_ID, APPLE_TEAM_ID, APPLE_KEY_ID, APPLE_PRIVATE_KEY
   #   RESEND_API_KEY
-  #   SENTRY_AUTH_TOKEN, SENTRY_ADMIN_UID, SENTRY_WEBHOOK_SECRET
   #   REDIS_DB_HOST, REDIS_DB_PORT, REDIS_DB_PASSWORD
   #   BETA_PROMOTION_TOKEN             — narrow backend capability for candidate reservation and signed Beta promotion
   #   GITHUB_TOKEN                     — repo-scoped token used for immutable candidate-release publishing
@@ -2674,13 +2699,6 @@ workflows:
           fi
           set -euo pipefail
 
-          # Keep symbol publication repairable: a Sentry credential outage must not
-          # strand an otherwise signed and smoke-tested candidate. The exact,
-          # UUID-verified dSYM is retained as a GitHub release artifact below.
-          scripts/publish-desktop-debug-symbols.sh upload-best-effort \
-            --binary "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" \
-            --dsym "$DSYM_PATH"
-
           CHANGELOG_MD=$(python3 ../../.github/scripts/desktop-changelog.py latest-release --format markdown || echo "- Bug fixes and improvements")
 
           # Build changelog as pipe-separated string for KEY_VALUE_START
@@ -2909,6 +2927,28 @@ workflows:
       - dist/*.dmg
       - dist/*.zip
 
+  # Manual/API only. No build, upload, iOS action, or rollout advancement.
+  android-rollout-brake:
+    name: Android Production Rollout Brake
+    instance_type: mac_mini_m2
+    max_build_duration: 10
+    environment:
+      groups:
+        - google_play
+        - mobile_release_admission  # GITHUB_TOKEN (read-only) for the writer quiescence check
+      vars:
+        BRAKE_ACTION: "unset"
+        BRAKE_VERSION_CODE: "0"
+        BRAKE_USER_FRACTION: "unset"
+        BRAKE_SUPERSEDES_VERSION_CODE: "0"
+        CONFIRM: "not-confirmed"
+    working_directory: app
+    scripts:
+      - name: Read or brake the explicitly selected production rollout
+        script: |
+          set -euo pipefail
+          python3 scripts/mobile_rollout_brake.py
+
   mobile-store-promote:
     name: Promote Existing Mobile Builds to Store Review
     instance_type: mac_mini_m2
@@ -2971,13 +3011,54 @@ workflows:
       - name: Release the newest internal builds through the stores
         script: |
           set -euo pipefail
-          # Dispatched daily by the operator release gate (.github/workflows/mobile_daily_train.yml).
+          # Dispatched daily by the operator release gate (.github/workflows/mobile_daily_train.yml)
+          # and advanced every 4 hours by .github/workflows/mobile_rollout_watch.yml.
           # iOS: submit the newest processed TestFlight build for review with release type
           # AFTER_APPROVAL and the phased rollout enabled (pausable in App Store Connect); one
-          # submission in flight at a time; an approved-but-unreleased version is replaced by a
-          # newer build (its completed submission is resolved via items?include=appStoreVersion).
-          # Android: start a staged production rollout at 5% from the newest internal/alpha build
-          # (haltable in Play Console). Nothing here bypasses store approval.
+          # submission in flight at a time; an approved-but-unreleased version is released via
+          # appStoreVersionReleaseRequests with the phased rollout attached (never rejected);
+          # the live phased rollout jumps to 100% after its 12-hour observation window.
+          # Android: start a staged production rollout at 1% from the newest internal/alpha build
+          # (haltable in Play Console) and hop the ladder (1% -> 10% -> 50% -> 100%) one step per
+          # 4-hour observation window. Nothing here bypasses store approval or the operator brakes.
+          # TRAIN_PIN_IOS / TRAIN_PIN_ANDROID (X.Y.Z/build, or none = audited
+          # no-candidate; optional): the gate's audited verdicts; when set, the
+          # train fails closed if the store moved on after the audit.
+          DRY_RUN_FLAG=""
+          if [ "${TRAIN_DRY_RUN:-false}" = "true" ]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
+          python3 scripts/mobile_daily_train.py --platform both $DRY_RUN_FLAG
+
+  mobile-rollout-advance:
+    name: Mobile Rollout Advance (intraday exposure ladder)
+    instance_type: mac_mini_m2
+    max_build_duration: 20
+    integrations:
+      app_store_connect: codemagic_v4
+    environment:
+      groups:
+        - google_play
+      vars:
+        # Never submits or stages a candidate: advances only already-released
+        # rollouts (iOS phased jump at 12h, Android ladder hop at 4h).
+        TRAIN_ADVANCE_ROLLOUTS: "true"
+        TRAIN_DRY_RUN: "false"
+    working_directory: app
+    scripts:
+      - name: Advance the live rollouts along the exposure ladder
+        script: |
+          set -euo pipefail
+          # Dispatched daily by the operator release gate (.github/workflows/mobile_daily_train.yml)
+          # and advanced every 4 hours by .github/workflows/mobile_rollout_watch.yml.
+          # iOS: submit the newest processed TestFlight build for review with release type
+          # AFTER_APPROVAL and the phased rollout enabled (pausable in App Store Connect); one
+          # submission in flight at a time; an approved-but-unreleased version is released via
+          # appStoreVersionReleaseRequests with the phased rollout attached (never rejected);
+          # the live phased rollout jumps to 100% after its 12-hour observation window.
+          # Android: start a staged production rollout at 1% from the newest internal/alpha build
+          # (haltable in Play Console) and hop the ladder (1% -> 10% -> 50% -> 100%) one step per
+          # 4-hour observation window. Nothing here bypasses store approval or the operator brakes.
           # TRAIN_PIN_IOS / TRAIN_PIN_ANDROID (X.Y.Z/build, or none = audited
           # no-candidate; optional): the gate's audited verdicts; when set, the
           # train fails closed if the store moved on after the audit.

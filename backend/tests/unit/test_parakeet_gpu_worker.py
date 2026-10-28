@@ -7,6 +7,7 @@ import time
 from unittest.mock import MagicMock, patch
 
 import pytest
+from omegaconf import OmegaConf
 
 os.environ.setdefault("PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3")
 os.environ.setdefault("PARAKEET_DEVICE", "cpu")
@@ -14,6 +15,7 @@ os.environ.setdefault("PARAKEET_TORCH_COMPILE", "false")
 os.environ.setdefault("PARAKEET_CUDA_GRAPHS", "false")
 os.environ.setdefault("PARAKEET_GC_INTERVAL", "3")
 os.environ.setdefault("PARAKEET_GPU_POLL_TIMEOUT", "0.01")
+os.environ.setdefault("PARAKEET_LID_MODEL", "off")
 
 _PARAKEET_DIR = os.path.join(os.path.dirname(__file__), "../../parakeet")
 if _PARAKEET_DIR not in sys.path:
@@ -560,6 +562,25 @@ class TestTorchCompile:
 
 
 class TestCUDAGraphConfig:
+    def test_explicit_graph_policy_survives_timestamp_decoder_reconstruction(self, monkeypatch):
+        model = _make_mock_model()
+        model.cfg.decoding = OmegaConf.create({'greedy': {'use_cuda_graph_decoder': True}, 'compute_timestamps': None})
+        nemo_asr = _get_nemo_asr()
+        nemo_asr.models.ASRModel.from_pretrained.return_value = model
+        nemo_asr.models.ASRModel.from_pretrained.side_effect = None
+        monkeypatch.setenv('PARAKEET_EXPLICIT_CUDA_GRAPHS', 'true')
+        monkeypatch.setenv('PARAKEET_CUDA_GRAPHS', 'false')
+        monkeypatch.setenv('PARAKEET_BF16', '0')
+        monkeypatch.setenv('PARAKEET_TORCH_COMPILE', 'false')
+        worker = GPUWorker()
+        worker._load_model()
+        cfg = model.change_decoding_strategy.call_args.args[0]
+        assert cfg.compute_timestamps is True
+        assert cfg.greedy.use_cuda_graph_decoder is False
+        # Rebuilding with this persisted config cannot restore the default true.
+        rebuilt = OmegaConf.create(OmegaConf.to_container(cfg))
+        assert rebuilt.greedy.use_cuda_graph_decoder is False
+
     def test_cuda_graphs_disabled_calls_disable(self):
         nemo_asr = _get_nemo_asr()
         mock_model = _make_mock_model()
@@ -1080,3 +1101,71 @@ class TestDurationPassthroughInGPUWorker:
 
             worker._get_audio_duration_sec.assert_called()
             worker.stop()
+
+
+class TestLanguageGate:
+    def test_language_id_runs_on_the_worker_thread(self):
+        w = _start_worker_with_mock()
+        try:
+            with pytest.raises(RuntimeError, match="Language gate not ready"):
+                w.submit_language_sync([0.0])
+            gate = MagicMock()
+            gate.model_key = "whisper-base"
+            gate.probabilities.side_effect = lambda samples: {"en": 0.99, "thread": threading.current_thread().name}
+            w._language_id = gate
+            assert w.language_id_model == "whisper-base"
+            result = w.submit_language_sync([0.0, 0.1])
+            assert result["en"] == 0.99
+            assert result["thread"] == "gpu-worker"
+        finally:
+            w.stop()
+
+    def test_language_id_jumps_ahead_of_queued_transcription(self):
+        import gpu_worker as gw
+
+        w = GPUWorker()
+        order = []
+        gate = MagicMock()
+        gate.model_key = "whisper-base"
+        gate.probabilities.side_effect = lambda samples: order.append("lid") or {"en": 1.0}
+        w._language_id = gate
+        w._model = MagicMock()
+        w._batch_transcribe = lambda payload: order.append("asr") or []
+        w._ready.set()
+        w._running = True
+        asr = threading.Event()
+        w._queue.put(gw.WorkItem(gw.WorkType.BATCH_TRANSCRIBE, {}, sync_event=asr))
+        result = {}
+        t = threading.Thread(target=lambda: result.update(w.submit_language_sync([0.0])))
+        t.start()
+        while w._priority.empty():
+            time.sleep(0.001)
+        w._thread = threading.Thread(target=w._run_loop, daemon=True, name="gpu-worker")
+        with patch.object(w, "_load_model"):
+            w._thread.start()
+            t.join(timeout=5)
+            asr.wait(timeout=5)
+        w.stop()
+        assert order[:2] == ["lid", "asr"]
+        assert result == {"en": 1.0}
+
+    def test_gate_load_failure_keeps_transcription_serving(self):
+        import gpu_worker as gw_mod
+
+        w = GPUWorker()
+        with patch.object(gw_mod.language_gate, "load", side_effect=OSError("hub unreachable")):
+            w._load_language_id()
+        assert w._language_id is None
+        assert w.language_id_model is None
+        assert w.fatal_cuda_reason is None
+
+    def test_fatal_cuda_during_gate_load_fails_closed(self):
+        import gpu_worker as gw_mod
+
+        w = GPUWorker()
+        with patch.object(
+            gw_mod.language_gate, "load", side_effect=RuntimeError("an illegal memory access was encountered")
+        ):
+            with pytest.raises(RuntimeError):
+                w._load_language_id()
+        assert w.fatal_cuda_reason == "illegal_memory_access"

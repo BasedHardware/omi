@@ -21,6 +21,7 @@ import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/native_link_reconciler.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/devices.dart';
+import 'package:omi/services/devices/discovery/device_locator.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/connectors/omi_connection.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
@@ -63,6 +64,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   BtDevice? connectedDevice;
   BtDevice? pairedDevice;
+
+  /// Whether the app remembers any device, including before [getDeviceInfo] hydrates
+  /// [pairedDevice] on the connect path. A cold start with a pendant that never reconnects
+  /// still has the persisted pairing in `SharedPreferencesUtil().btDevice`.
+  bool get hasRememberedDevice => pairedDevice?.id.isNotEmpty ?? SharedPreferencesUtil().btDevice.id.isNotEmpty;
 
   /// Capability-normalized identity for capture/home restarts.
   ///
@@ -216,6 +222,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   /// is hardware and is not torn down; WAL attach, coordinator wake, and other
   /// account publication from the retired generation must not land.
   void clearUserData() {
+    ServiceManager.instance().device.savedReconnect.stop();
     _sessionGeneration++;
     _admittedLink = null;
     _readoptExpectedPair = null;
@@ -745,6 +752,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       return;
     }
 
+    // Arm recovery even if native restoration connected before the home frame.
+    if (pairedDeviceId.isNotEmpty && SharedPreferencesUtil().btDevice.locator?.kind == TransportKind.bluetooth) {
+      await ServiceManager.instance().device.reconnectSavedDevice('launch');
+      return;
+    }
+
     // Already connected — nothing to do
     if (isConnected || connectedDevice != null) return;
 
@@ -857,6 +870,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   @override
   void dispose() {
+    ServiceManager.instance().device.savedReconnect.stop();
     _isDisposed = true;
     _sessionGeneration++;
     nativeLink.dispose();
@@ -965,6 +979,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     );
   }
 
+  /// The paired device's connection history from the phone's native BLE diagnostics (newest last).
+  /// Best-effort: no device or no history is an empty list.
+  Future<List<BleDisconnectEvent>> disconnectHistory() async {
+    final id = (pairedDevice?.id.isNotEmpty ?? false) ? pairedDevice!.id : connectedDevice?.id;
+    if (id == null || id.isEmpty) return const [];
+    final diagnostics = await _bleDiagnosticsLoader(id);
+    return diagnostics.disconnectHistory;
+  }
+
   Future<(String, bool, String, Map)> shouldUpdateFirmware() async {
     if (pairedDevice == null || connectedDevice == null) {
       return ('No paired device is connected', false, '', {});
@@ -1048,7 +1071,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       _hasLowBatteryAlerted = false;
     }
     updateConnectingStatus(false);
-    if (!syncOnly) await captureProvider?.streamDeviceRecording(device: normalizedDevice);
+    await captureProvider?.streamDeviceRecording(device: normalizedDevice);
     if (!_isCurrent(generation)) return;
 
     await getDeviceInfo();
@@ -1242,10 +1265,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   void _handleDeviceConnected(String deviceId, int generation, {bool requirePersistedPair = false}) async {
-    if (!_isCurrent(generation)) return;
+    if (!_isCurrent(generation) || !ServiceManager.instance().device.canAutoReconnectDevice(deviceId)) return;
     _admittedConnectGeneration = generation;
     var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    if (!_isCurrent(generation)) return;
+    if (!_isCurrent(generation) || !ServiceManager.instance().device.canAutoReconnectDevice(deviceId)) return;
     if (connection == null) {
       return;
     }
@@ -1584,12 +1607,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   // Reset firmware update state when update completes or fails
   void resetFirmwareUpdateState() {
     _isFirmwareUpdateInProgress = false;
+    ServiceManager.instance().device.reconnectPaused = false;
+    unawaited(ServiceManager.instance().device.reconnectSavedDevice('resume'));
     notifyListeners();
   }
 
   // Set firmware update state when starting an update
   void setFirmwareUpdateInProgress(bool inProgress) {
     _isFirmwareUpdateInProgress = inProgress;
+    ServiceManager.instance().device.reconnectPaused = inProgress;
     if (inProgress) {
       _firmwareUpdatePromptCoordinator.invalidatePresentation();
     }

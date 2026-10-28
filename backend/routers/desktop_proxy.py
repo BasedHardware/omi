@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from database import redis_db
 from llm_gateway.gateway.providers import VertexAccessTokenSupplier
-from utils.byok import get_byok_key
+from utils.byok import get_byok_key, get_byok_uid, has_validated_byok_keys
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.http_client import (
     get_desktop_gemini_client,
@@ -30,6 +30,8 @@ from utils.llm.vertex_reservation_response import ReservationResponseEvidence
 from utils.llm.desktop_reservation_policy import should_refuse, refusal_response
 from utils.llm import vertex_direct_attempt as direct_attempt
 from utils.llm import desktop_gemini_gateway
+from utils.llm import desktop_proxy_lifetime as lifetime
+from utils.llm.desktop_proxy_lifetime import ClientDisconnected
 from utils.llm.desktop_gemini_telemetry import (
     ALLOWED_ACTIONS as _ALLOWED_ACTIONS,
     ALLOWED_MODELS as _ALLOWED_MODELS,
@@ -45,7 +47,7 @@ from utils.llm.desktop_llm_stub import (
 )
 from utils.journey_metrics_contract import ClientKind, resolve_client_kind_from_headers
 from utils.observability.journeys import ClientJourneyAttempt
-from utils.free_tier_basic_gates import basic_plan_gate_proxy_embed_enabled
+from utils.screen_vector_entitlements import resolve_for_uid as _cloud_screen_entitlements
 from utils.metrics import SCREEN_TASK_CLIENT_BYPASS_TOTAL
 from utils.managed_compute import Decision, authorize_managed_compute
 from utils.llm.screen_task_admission import enforce_flagged_screen_task_proxy
@@ -134,10 +136,6 @@ class _GeminiRateLimitExceeded(HTTPException):
                 'X-Omi-Retryable': 'true' if retryable else 'false',
             },
         )
-
-
-class ClientDisconnected(Exception):
-    pass
 
 
 # Gemini body sanitization moved to utils/llm/desktop_gemini_gateway.py; these
@@ -514,6 +512,10 @@ def _recovery_plan(
     """
     if get_byok_key('gemini'):
         return []
+    # Paid reservation failures recover through the gateway's Luna route. This
+    # direct adapter must neither spill 2.5 to PayGo nor retry Dream's 3.8 order.
+    if served_model in {ptr.PT_MODEL_CURRENT, ptr.PT_MODEL_TARGET}:
+        return []
     capacity = capacity or ptr.reservation_capacity(
         served_model, _reservation_states(), override=os.getenv(_PT_MODEL_OVERRIDE_ENV, '')
     )
@@ -585,47 +587,12 @@ def _vertex_embedding_response(body: bytes) -> bytes:
     return json.dumps({'embedding': {'values': values}}, separators=(',', ':')).encode()
 
 
-async def _wait_for_disconnect(request: Request) -> None:
-    while not await request.is_disconnected():
-        await asyncio.sleep(_DISCONNECT_POLL_SECONDS)
-
-
-async def _await_value(awaitable: Awaitable[T]) -> T:
-    return await awaitable
-
-
 async def _cancel_on_disconnect(request: Request, awaitable: Awaitable[T]) -> T:
-    upstream_task = asyncio.create_task(_await_value(awaitable), name='desktop-gemini-upstream')
-    disconnect_task = asyncio.create_task(_wait_for_disconnect(request), name='desktop-gemini-disconnect')
-    try:
-        done, _ = await asyncio.wait((upstream_task, disconnect_task), return_when=asyncio.FIRST_COMPLETED)
-        if upstream_task in done:
-            return await upstream_task
-        raise ClientDisconnected
-    finally:
-        upstream_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await upstream_task
-        disconnect_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await disconnect_task
+    return await lifetime.cancel_on_disconnect(request, awaitable)
 
 
 async def _read_request_body(request: Request) -> bytes:
-    content_length = request.headers.get('content-length')
-    if content_length is not None:
-        if not content_length.isascii() or not content_length.isdigit():
-            raise HTTPException(status_code=400, detail='Content-Length must be a non-negative integer')
-        declared_length = int(content_length)
-        if declared_length > _MAX_BODY_BYTES:
-            raise HTTPException(status_code=413, detail='Request body is too large')
-
-    body = bytearray()
-    async for chunk in request.stream():
-        if len(body) + len(chunk) > _MAX_BODY_BYTES:
-            raise HTTPException(status_code=413, detail='Request body is too large')
-        body.extend(chunk)
-    return bytes(body)
+    return await lifetime.read_body(request, max_bytes=_MAX_BODY_BYTES)
 
 
 def _response_headers(
@@ -1187,6 +1154,7 @@ async def _proxy_unobserved(request: Request, path: str, streaming: bool, uid: s
             # The gateway ignores provider-specific query parameters. Reject
             # credential overrides here instead of silently accepting them.
             _safe_provider_query(dict(request.query_params))
+        telemetry.phase = 'reservation'
         if model != LUNA_MODEL and await should_refuse(
             model, action, body, request.headers, byok=bool(get_byok_key('gemini')), refresh=_refresh_reservations
         ):
@@ -1422,35 +1390,35 @@ async def _authorized_desktop_user(request: Request, uid: str = Depends(get_curr
     return uid
 
 
-# Gen-1 Gemini generate/stream is the screen-intelligence spend path (free-tier S14).
-# screen_frame_judge is the configured Gemini-provider feature, so a request-scoped
-# Gemini BYOK key satisfies authorize_managed_compute. Embed actions (TBD-4) are the
-# remaining company-paid surface (Vertex :predict single embed, AI Studio batch):
-# basic non-BYOK gets the same 402 plan_gated. They share screen_frame_judge's
-# Gemini provider binding, so the BYOK exemption stays provider-exact without a
-# second configured feature. desktop_proactivity completions are gated in their own
-# router (S14 proactivity half).
+# Existing generate/stream gates retain their managed-compute authority.
+# Embedding refusal instead uses the catalog capability and exact client opt-in:
+# old clients retain proxy access, and validated Gemini BYOK stays exempt.
 _PLAN_GATED_PROXY_GENERATE_ACTIONS = frozenset({'generateContent', 'streamGenerateContent'})
 _PLAN_GATED_PROXY_EMBED_ACTIONS = frozenset({'embedContent', 'batchEmbedContents'})
 # generate/stream stay gated unconditionally (S14, already live in prod).
 # embed actions join this set so existing membership tests stay meaningful;
-# runtime consults BASIC_PLAN_GATE_PROXY_EMBED_ENABLED before authorizing.
+# runtime additionally requires the exact local-embedding capability header.
 _PLAN_GATED_PROXY_ACTIONS = _PLAN_GATED_PROXY_GENERATE_ACTIONS | _PLAN_GATED_PROXY_EMBED_ACTIONS
 _PLAN_GATED_PROXY_FEATURE = 'screen_frame_judge'
 
 
 def _plan_gate_detail(decision: Decision) -> dict[str, str]:
     plan_type = decision.plan.value if decision.plan is not None else 'basic'
-    return {'error': 'plan_gated', 'plan_type': plan_type, 'reason': decision.reason}
+    detail = {'error': 'plan_gated', 'plan_type': plan_type, 'reason': decision.reason}
+    if decision.reason == 'ladder_pro_required':
+        detail.update(trigger='screen_context', upgrade_plan='operator')
+    elif decision.reason == 'usage_budget_exhausted':
+        detail.update(trigger='usage_budget')
+    return detail
 
 
-async def _enforce_managed_plan_gate(uid: str, path: str) -> None:
+async def _enforce_managed_plan_gate(uid: str, path: str, local_embeddings: str | None = None) -> None:
     try:
         _, model, action = _path_parts(path)
     except HTTPException:
         return
     if action in _PLAN_GATED_PROXY_EMBED_ACTIONS:
-        if not basic_plan_gate_proxy_embed_enabled():
+        if local_embeddings != '1' or os.getenv('CLOUD_SCREEN_VECTORS_EMBED_REFUSAL_ENABLED', 'true') == 'false':
             return
     elif action not in _PLAN_GATED_PROXY_GENERATE_ACTIONS:
         return
@@ -1461,6 +1429,25 @@ async def _enforce_managed_plan_gate(uid: str, path: str) -> None:
     if uid == RELEASE_PROBE_UID:
         return
     funding_owner = 'byok' if get_byok_key('gemini') and model != LUNA_MODEL else 'omi'
+    if action in _PLAN_GATED_PROXY_EMBED_ACTIONS:
+        if funding_owner == 'byok' and has_validated_byok_keys() and get_byok_uid() == uid:
+            return
+        try:
+            entitlement = await _cloud_screen_entitlements(uid)
+        except Exception as error:
+            raise HTTPException(status_code=503, detail='plan authorization is temporarily unavailable') from error
+        if entitlement['capabilities']['cloud_screen_vectors']:
+            return
+        raise HTTPException(
+            status_code=402,
+            detail={
+                'error': 'plan_gated',
+                'plan_type': entitlement['plan_id'],
+                'reason': 'ladder_pro_required',
+                'trigger': 'screen_context',
+                'upgrade_plan': 'operator',
+            },
+        )
     decision = await run_blocking(
         db_executor,
         authorize_managed_compute,
@@ -1480,11 +1467,11 @@ async def gemini_proxy(request: Request, path: str, uid: str = Depends(_authoriz
     if request.headers.get('X-Omi-Screen-Task-Client-Bypass') == 'true':
         SCREEN_TASK_CLIENT_BYPASS_TOTAL.inc()
     enforce_flagged_screen_task_proxy(request.headers)
-    await _enforce_managed_plan_gate(uid, path)
+    await _enforce_managed_plan_gate(uid, path, request.headers.get('X-Omi-Local-Embeddings'))
     return await _proxy(request, path, False, uid)
 
 
 @router.post('/v1/proxy/gemini-stream/{path:path}')
 async def gemini_stream_proxy(request: Request, path: str, uid: str = Depends(_authorized_desktop_user)) -> Response:
-    await _enforce_managed_plan_gate(uid, path)
+    await _enforce_managed_plan_gate(uid, path, request.headers.get('X-Omi-Local-Embeddings'))
     return await _proxy(request, path, True, uid)

@@ -267,6 +267,41 @@ def test_live_window_marker_excludes_request_from_prerecorded_error_metric():
     assert mod.PRERECORDED_REQUESTS.labels(status='error')._value.get() == before + 1
 
 
+@pytest.mark.parametrize('packing,expected', [(False, 'backfill'), (True, 'live')])
+def test_legacy_stream_marker_promoted_only_with_packing(monkeypatch, packing, expected):
+    app, mod, _, engine = _make_app_with_mocks()
+    monkeypatch.setattr(mod, '_packing_enabled', packing)
+    submitted = AsyncMock(return_value={'text': 'ok', 'timestamp': {}})
+    monkeypatch.setattr(mod, 'submit_audio', submitted)
+    response = TestClient(app).post(
+        '/v1/transcribe', files={'file': ('audio.wav', _make_wav_bytes())}, headers={'X-Omi-STT-Surface': 'live-stream'}
+    )
+    assert response.status_code == 200
+    assert submitted.await_args.kwargs['lane'] == expected
+
+
+@pytest.mark.asyncio
+async def test_queue_gauges_refresh_without_batch_metrics_poll():
+    _, mod, _, engine = _make_app_with_mocks()
+    engine.pressure_snapshot.return_value = {
+        'pending_requests': 3,
+        'live_pending_requests': 1,
+        'backfill_pending_requests': 2,
+        'live_oldest_pending_seconds': 0.5,
+        'backfill_oldest_pending_seconds': 12,
+    }
+    task = asyncio.create_task(mod._refresh_pressure_metrics())
+    try:
+        await asyncio.sleep(0)
+        assert mod.LANE_OLDEST.labels(lane='backfill')._value.get() == 12
+        assert mod.LANE_PENDING.labels(lane='live')._value.get() == 1
+        assert mod.PENDING_REQUESTS._value.get() == 3
+    finally:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+
 class TestStreamAdmissionEndpoint:
     def test_unhealthy_gpu_rejects_stream_before_admission(self):
         app, mod, _, _ = _make_app_with_mocks(gpu_ready=False, fatal_cuda_reason="stream_capture")
@@ -921,3 +956,124 @@ class TestMetricsEndpoint:
             "parakeet_requests_total",
         ]:
             assert name in body, f"Missing metric: {name}"
+
+
+def _wav_bytes(seconds: float, sample_rate: int = 16000, channels: int = 1) -> bytes:
+    buf = io.BytesIO()
+    frames = np.zeros((int(seconds * sample_rate), channels), dtype=np.float32)
+    frames[:, :] = 0.01
+    sf.write(buf, frames if channels > 1 else frames[:, 0], sample_rate, format="WAV", subtype="PCM_16")
+    return buf.getvalue()
+
+
+class TestLanguageEndpoint:
+    """POST /v2/language: the spoken-language gate in front of Parakeet-25."""
+
+    def _client(self, probabilities=None, model="whisper-base", side_effect=None):
+        app, mod, gpu, _ = _make_app_with_mocks()
+        gpu.language_id_model = model
+        gpu.submit_language_sync = MagicMock(return_value=probabilities or {}, side_effect=side_effect)
+        return TestClient(app, raise_server_exceptions=False), mod, gpu
+
+    def test_unavailable_when_gate_not_loaded(self):
+        client, _, gpu = self._client(model=None)
+        resp = client.post("/v2/language", files={"file": ("a.wav", _wav_bytes(6), "audio/wav")})
+        assert resp.status_code == 503
+        assert resp.json()["error"] == "lid_unavailable"
+        gpu.submit_language_sync.assert_not_called()
+
+    def test_arabic_canary_routes_multilingual(self):
+        client, mod, _ = self._client({"ar": 0.9963, "en": 0.0002, "fr": 0.0001, "he": 0.0034})
+        before = mod.LID_ROUTES.labels(route="multilingual", bucket="ar")._value.get()
+        resp = client.post("/v2/language", files={"file": ("a.wav", _wav_bytes(5.536), "audio/wav")})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["route"] == "multilingual"
+        assert body["language"] == "ar"
+        assert body["p_supported"] == pytest.approx(0.0003)
+        assert body["threshold"] == 0.985
+        assert mod.LID_ROUTES.labels(route="multilingual", bucket="ar")._value.get() == before + 1
+
+    def test_supported_speech_routes_parakeet(self):
+        client, _, _ = self._client({"en": 0.975, "de": 0.02, "ja": 0.005})
+        resp = client.post("/v2/language", files={"file": ("a.wav", _wav_bytes(12), "audio/wav")})
+        assert resp.json()["route"] == "parakeet"
+        assert resp.json()["p_supported"] == pytest.approx(0.995)
+
+    def test_under_one_second_never_reaches_the_model(self):
+        client, _, gpu = self._client({"en": 1.0})
+        resp = client.post("/v2/language", files={"file": ("a.wav", _wav_bytes(0.5), "audio/wav")})
+        assert resp.status_code == 200
+        assert resp.json()["route"] == "multilingual"
+        gpu.submit_language_sync.assert_not_called()
+
+    def test_input_is_cut_to_30s_mono_16k(self):
+        client, _, gpu = self._client({"en": 1.0})
+        resp = client.post("/v2/language", files={"file": ("a.wav", _wav_bytes(40, 48000, 2), "audio/wav")})
+        assert resp.status_code == 200
+        samples = gpu.submit_language_sync.call_args.args[0]
+        assert samples.ndim == 1 and samples.dtype == np.float32
+        assert len(samples) == 30 * 16000
+        assert resp.json()["audio_seconds"] == 30.0
+
+    def test_unreadable_audio_is_422(self):
+        client, _, gpu = self._client({"en": 1.0})
+        resp = client.post("/v2/language", files={"file": ("a.wav", b"not audio", "audio/wav")})
+        assert resp.status_code == 422
+        gpu.submit_language_sync.assert_not_called()
+
+    def test_worker_failure_is_503_not_500(self):
+        client, _, _ = self._client(side_effect=RuntimeError("GPU queue full"))
+        resp = client.post("/v2/language", files={"file": ("a.wav", _wav_bytes(6), "audio/wav")})
+        assert resp.status_code == 503
+        assert resp.json()["error"] == "lid_error"
+
+
+class TestOutputLanguageAlarm:
+    def test_counts_only_transcripts_with_enough_letters(self):
+        _, mod, _, _ = _make_app_with_mocks()
+        before_ja = mod.OUTPUT_LANGUAGE.labels(bucket="ja")._value.get()
+        before_p25 = mod.OUTPUT_LANGUAGE.labels(bucket="other_p25")._value.get()
+        mod._record_output_language({"text": "short text", "detected_language": "ja"})
+        mod._record_output_language({"text": "a" * 30, "detected_language": "ja"})
+        mod._record_output_language({"text": "b" * 30, "detected_language": "de"})
+        assert mod.OUTPUT_LANGUAGE.labels(bucket="ja")._value.get() == before_ja + 1
+        assert mod.OUTPUT_LANGUAGE.labels(bucket="other_p25")._value.get() == before_p25 + 1
+        assert mod.language_bucket("zh-cn") == "zh"
+        assert mod.language_bucket("sw") == "other"
+
+
+def test_v1_alarm_counts_prerecorded_but_not_live_window():
+    app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+    text = "Das ist ein ziemlich langer deutscher Satz über das Wetter heute."
+
+    async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill", queue_deadline=None):
+        return {"text": text, "timestamp": {"segment": [{"segment": text, "start": 0.0, "end": 1.0}]}}
+
+    engine.submit = AsyncMock(side_effect=fake_submit)
+    recorded = []
+    done = threading.Event()
+    with patch.object(mod, "_record_output_language_quietly", side_effect=lambda r: (recorded.append(r), done.set())):
+        client = TestClient(app, raise_server_exceptions=False)
+        client.post(
+            "/v1/transcribe",
+            files={"file": ("t.wav", b"x", "audio/wav")},
+            headers={"X-Omi-STT-Surface": "live-window"},
+        )
+        assert client.post("/v1/transcribe", files={"file": ("t.wav", b"x", "audio/wav")}).status_code == 200
+        assert done.wait(timeout=5)
+    assert [r["text"] for r in recorded] == [text]
+    before = mod.OUTPUT_LANGUAGE.labels(bucket="other_p25")._value.get()
+    mod._record_output_language({"text": text})  # /v1 body has no detected_language
+    assert mod.OUTPUT_LANGUAGE.labels(bucket="other_p25")._value.get() == before + 1
+
+
+def test_language_probe_upload_is_capped():
+    app, mod, gpu, _ = _make_app_with_mocks()
+    gpu.language_id_model = "whisper-base"
+    gpu.submit_language_sync = MagicMock(return_value={"en": 1.0})
+    client = TestClient(app, raise_server_exceptions=False)
+    big = b"\0" * (mod._LID_MAX_UPLOAD_BYTES + 1)
+    resp = client.post("/v2/language", files={"file": ("a.wav", big, "audio/wav")})
+    assert resp.status_code == 413
+    gpu.submit_language_sync.assert_not_called()

@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import 'package:omi/pages/settings/payment_webview_page.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/pages/settings/widgets/plans/plan_display_name.dart';
+import 'package:omi/utils/cancel_pending_purchase.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -20,20 +22,56 @@ abstract final class PaywallCheckout {
     required String plan,
     required String interval,
     required String source,
+    void Function(String message)? surface,
+    int? trialDays,
   }) async {
     final provider = context.read<UsageProvider>();
     final l10n = context.l10n;
-    final previousPlan = provider.subscription?.subscription.plan.wireName ?? 'basic';
+    final subscription = provider.subscription?.subscription;
+    final previousPlan = subscription?.plan.wireName ?? 'basic';
+    void report(String message, {required bool error}) {
+      surface?.call(message);
+      if (!context.mounted) return;
+      if (error) {
+        OmiFeedback.error(context, message);
+      } else {
+        OmiFeedback.confirm(context, message);
+      }
+    }
+
+    if (cancelPendingPurchase(
+          cancelAtPeriodEnd: subscription?.cancelAtPeriodEnd == true,
+          currentPriceId: subscription?.currentPriceId,
+          priceId: priceId,
+        ) ==
+        CancelPendingPurchase.blocked) {
+      report(l10n.resubscribeFirstToChangePlans, error: true);
+      return PaywallCheckoutOutcome.failed;
+    }
     PlatformManager.instance.analytics.upgradePlanSelected(plan: plan, billingInterval: interval, source: source);
     try {
-      final session = await provider.createUserCheckoutSession(priceId: priceId);
+      final session = await provider.createUserCheckoutSession(priceId: priceId, trialDays: trialDays);
       if (!context.mounted) return PaywallCheckoutOutcome.cancelled;
+      if (session != null && session['error'] == true) {
+        // Checkout's 409 is an existing subscription, not a pending cancellation.
+        report(
+          session['status_code'] == 409
+              ? l10n.checkoutExistingSubscription
+              : session['detail'] as String? ?? l10n.couldNotProcessSubscription,
+          error: true,
+        );
+        return PaywallCheckoutOutcome.failed;
+      }
       if (session == null) {
-        OmiFeedback.error(context, l10n.couldNotLaunchUpgradePage);
+        report(l10n.couldNotLaunchUpgradePage, error: true);
         return PaywallCheckoutOutcome.failed;
       }
       if (session['status'] == 'reactivated') {
-        OmiFeedback.confirm(context, session['message'] as String? ?? l10n.subscriptionReactivatedDefault);
+        final date = billingDateLabel(context, session['next_billing_date']) ??
+            billingDateLabel(context, subscription?.currentPeriodEnd);
+        final planName = currentPlanDisplayName(context, provider.subscription);
+        final message = date == null ? l10n.subscriptionReactivatedDefault : l10n.yourPlanWillRenewOn(planName, date);
+        report(message, error: false);
         PlatformManager.instance.analytics
             .upgradeSucceeded(previousPlan: previousPlan, newPlan: plan, billingInterval: interval);
         await provider.fetchSubscription();
@@ -41,7 +79,7 @@ abstract final class PaywallCheckout {
       }
       final url = session['url'] as String?;
       if (url == null) {
-        OmiFeedback.error(context, l10n.couldNotProcessSubscription);
+        report(l10n.couldNotProcessSubscription, error: true);
         return PaywallCheckoutOutcome.failed;
       }
       final completed = await routeToPage(context, PaymentWebViewPage(checkoutUrl: url));
@@ -49,49 +87,59 @@ abstract final class PaywallCheckout {
         PlatformManager.instance.analytics.upgradeCancelled();
         return PaywallCheckoutOutcome.cancelled;
       }
-      if (context.mounted) OmiFeedback.confirm(context, l10n.subscriptionSuccessfulCharged);
+      if (context.mounted) {
+        // A trial checkout charges nothing today; say so instead of the paid-checkout message.
+        report(
+          trialDays != null && trialDays > 0 ? l10n.paywallTrialStarted(trialDays) : l10n.subscriptionSuccessfulCharged,
+          error: false,
+        );
+      }
       PlatformManager.instance.analytics
           .upgradeSucceeded(previousPlan: previousPlan, newPlan: plan, billingInterval: interval);
       await provider.fetchSubscription();
       await provider.loadAvailablePlans();
       return PaywallCheckoutOutcome.purchased;
     } catch (_) {
-      if (context.mounted) OmiFeedback.error(context, l10n.anErrorOccurredTryAgain);
+      if (context.mounted) report(l10n.anErrorOccurredTryAgain, error: true);
       return PaywallCheckoutOutcome.failed;
     }
   }
 }
 
-/// The tier a free user is offered: the catalog's Unlimited tier, as two prices (month, year).
-/// Null until the catalog has loaded; a catalog without an Unlimited tier yields no offer.
+/// The tier a free user is offered: the catalog's Omi Pro (`unlimited_v2`) tier, as two prices
+/// (month, year). Null until the catalog has loaded; a catalog without Omi Pro yields no offer.
 @immutable
 class PaywallOffer {
-  const PaywallOffer({required this.tierId, required this.monthly, required this.yearly});
+  const PaywallOffer({
+    required this.tierId,
+    required this.monthly,
+    required this.yearly,
+    this.resubscribe = false,
+  });
 
   final String tierId;
   final PaywallPrice? monthly;
   final PaywallPrice? yearly;
 
-  /// Prefers the current Unlimited tier, then legacy Unlimited, then the most expensive tier.
-  static PaywallOffer? fromCatalog(Map<String, dynamic>? catalog) {
+  /// True when this offer is the price already on a cancellation-pending subscription.
+  final bool resubscribe;
+
+  /// Only Omi Pro is offered; a retired tier is never a fallback.
+  /// While a cancellation is pending, the offer is that subscription's current price instead,
+  /// or null when the catalog does not contain it.
+  static PaywallOffer? fromCatalog(
+    Map<String, dynamic>? catalog, {
+    bool cancelAtPeriodEnd = false,
+    String? currentPriceId,
+  }) {
     final raw = catalog?['plans'];
     if (raw is! List) return null;
     final plans = raw.whereType<Map>().map((plan) => Map<String, dynamic>.from(plan)).toList();
     if (plans.isEmpty) return null;
-    final byTier = <String, List<Map<String, dynamic>>>{};
-    for (final plan in plans) {
-      final tier = plan['plan_id'];
-      byTier.putIfAbsent(tier is String && tier.isNotEmpty ? tier : 'unlimited', () => []).add(plan);
-    }
-    String? tierId;
-    for (final preferred in const ['unlimited_v2', 'unlimited']) {
-      if (byTier.containsKey(preferred)) {
-        tierId = preferred;
-        break;
-      }
-    }
-    tierId ??= byTier.keys.reduce((a, b) => _maxAmount(byTier[a]!) >= _maxAmount(byTier[b]!) ? a : b);
-    final tierPlans = byTier[tierId]!;
+    if (cancelAtPeriodEnd) return _currentPriceOffer(plans, currentPriceId);
+    const tierId = 'unlimited_v2';
+    final tierPlans = plans.where((plan) => plan['plan_id'] == tierId).toList();
+    if (tierPlans.isEmpty) return null;
     PaywallPrice? price(String interval) {
       for (final plan in tierPlans) {
         if (plan['interval'] != interval) continue;
@@ -113,8 +161,32 @@ class PaywallOffer {
     return offer.monthly == null && offer.yearly == null ? null : offer;
   }
 
-  static num _maxAmount(List<Map<String, dynamic>> plans) =>
-      plans.map((plan) => plan['unit_amount']).whereType<num>().fold<num>(0, (a, b) => a > b ? a : b);
+  static PaywallOffer? _currentPriceOffer(List<Map<String, dynamic>> plans, String? currentPriceId) {
+    if (currentPriceId == null || currentPriceId.isEmpty) return null;
+    for (final plan in plans) {
+      if (plan['id'] != currentPriceId) continue;
+      final interval = plan['interval'];
+      if (interval != 'month' && interval != 'year') return null;
+      final amount = plan['unit_amount'];
+      if (amount is! num) return null;
+      final tier = plan['plan_id'];
+      if (tier is! String || tier.isEmpty) return null;
+      final currency = plan['currency'];
+      final price = PaywallPrice(
+        priceId: currentPriceId,
+        interval: interval,
+        amountMinor: amount.toInt(),
+        currency: currency is String && currency.isNotEmpty ? currency.toLowerCase() : 'usd',
+      );
+      return PaywallOffer(
+        tierId: tier,
+        monthly: interval == 'month' ? price : null,
+        yearly: interval == 'year' ? price : null,
+        resubscribe: true,
+      );
+    }
+    return null;
+  }
 
   /// Whole-percent saving of the yearly price against twelve monthly payments, or null.
   int? get yearlySavingPercent {

@@ -1,0 +1,1 @@
+{"change":"Merged conversations recover safely from interrupted cleanup and settle without restarting when a notification is missed. Completed merges remove old source rows from the local cache, including when multiple merges finish together."}

@@ -105,8 +105,9 @@ first mutation.
 
 ## Maintenance and Long-term admission
 
-The dedicated `memory-maintenance-job` inventories bounded canonical pending
-work, not users from an allowlist and not an unbounded account scan. Each pass:
+`memory-maintenance-job` (dev-only, never deployed to production) was retired on
+2026-10-26 together with its cron coordinator, dev schedule and deploy workflows.
+Its former pass, preserved here as the historical contract:
 
 1. prioritizes UIDs with items in the final 24 hours of the Short-term TTL via
    a lifecycle-metadata-only query, independently of the registry cursor and
@@ -118,6 +119,14 @@ work, not users from an allowlist and not an unbounded account scan. Each pass:
    promote, archive, review, or reject;
 6. commits each route through canonical apply and drains new outbox work.
 
+Current ownership after the retirement: required submissions normalize inline at
+write time and Dream's scheduled sweep retries pending items and folds in the
+backlog (lane memreq; wiring lands with its PR — merge it with or before this
+retirement, and until then pending items wait as production always has). Steps 1,
+2, 4 and 6 (deterministic TTL settling and committed outbox drains) currently
+have no scheduled owner in any environment; that gap is tracked as follow-up work
+and this section documents the contract they held.
+
 Only consolidation can issue the promotion receipt required for a new
 Short-term to Long-term transition. Invalid/partial model output mutates
 nothing. Revision-scoped attempts, leases, bounded retries, review quarantine,
@@ -127,15 +136,10 @@ default-readable until canonical apply records a terminal disposition. This
 prevents a missed maintenance pass from silently deleting memory while the
 expiry queue continues to prioritize it.
 
-Knowledge-ledger account cutover is not part of this serial maintenance pass.
-`knowledge-ledger-drain-job` reads at most 20 canonical apply-control documents
-per hourly execution with its own generation-fenced cursor, rechecks the shared
-JIT rollout authority before every account and row mutation, and publishes the
-cutover only after the complete-union proof succeeds. A maintenance timeout
-therefore cannot starve writer-mode convergence, and a killed drain execution
-or any account-level failure does not advance its page cursor. The deploy lane
-grants the scheduler service account `run.invoker` on the drain job before it
-creates or resumes the hourly trigger.
+The knowledge-ledger drain and JIT rollout authority were retired on
+2026-10-18. Existing ledger rows remain in storage and continue to follow the
+normal read, export, deletion, and retention contracts; no migration or cleanup
+is performed by this retirement.
 
 The text-free `canonical_memory_decision_path.v1` log joins capture regime and
 grounded attribution to later applied or blocked routes by UID and memory ID.
@@ -198,8 +202,8 @@ separate evidence-backed approval.
 | Canonical adapter | `backend/utils/memory/canonical_memory_adapter.py` |
 | Historical override paths | `backend/database/memory_collections.py` |
 | Atomic persistence | `backend/database/memory_apply_store.py` |
-| Required processing | `backend/utils/memory/canonical_required_processing.py` |
+| Required processing (inline + Dream retry) | `backend/utils/memory/canonical_required_processing.py` |
 | Terminal routing | `backend/utils/memory/canonical_consolidation.py` |
-| Scheduled orchestration | `backend/utils/memory/canonical_short_term_maintenance_cron.py` |
+| Scheduled retry/backlog owner | Dream agent sweep (`backend/docs/runbooks/dream-agent.md`) |
 | Outbox delivery | `backend/database/memory_outbox_worker.py` |
 | Public API | `backend/routers/memories.py` |

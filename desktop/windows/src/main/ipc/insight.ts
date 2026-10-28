@@ -6,10 +6,6 @@ import {
   pauseInsightDismiss,
   resumeInsightDismiss,
   dismissInsightToast,
-  openProactivityToast,
-  acknowledgeProactivityRender,
-  feedbackProactivityToast,
-  getCurrentProactivityToast,
   isInsightToastSender
 } from '../insight/toastWindow'
 import type { ToastDeliveryHooks } from '../insight/deliveryHooks'
@@ -21,10 +17,6 @@ import type { InsightPayload, InsightSettings } from '../../shared/types'
 // assistants' notification throttle (assistants/core/notify.ts) delivers through
 // the same one place, rather than growing a second toast path.
 export function deliverInsight(p: InsightPayload, hooks?: ToastDeliveryHooks): void {
-  if (p.proactivityItemID && hooks) {
-    showInsightToast(p, hooks)
-    return
-  }
   if (getInsightSettings().notificationStyle === 'native') {
     if (hooks) fireNativeInsight(p, hooks)
     else fireNativeInsight(p)
@@ -38,23 +30,7 @@ export function registerInsightHandlers(): void {
     updateInsightSettings(patch)
   )
   ipcMain.on('insight:dismiss', (event) => {
-    if (isInsightToastSender(event.sender.id)) dismissInsightToast('dismissed')
-  })
-  ipcMain.on('insight:proactivity-open', (event, itemID: string) => {
-    if (isInsightToastSender(event.sender.id)) openProactivityToast(itemID)
-  })
-  ipcMain.handle('insight:proactivity-pending', (event) =>
-    isInsightToastSender(event.sender.id) ? getCurrentProactivityToast() : null
-  )
-  ipcMain.on('insight:proactivity-rendered', (event, id: string) => {
-    if (isInsightToastSender(event.sender.id)) acknowledgeProactivityRender(id)
-  })
-  ipcMain.on('insight:proactivity-feedback', (event, id: string, action: string) => {
-    if (
-      isInsightToastSender(event.sender.id) &&
-      (action === 'thumbs_up' || action === 'thumbs_down')
-    )
-      feedbackProactivityToast(id, action)
+    if (isInsightToastSender(event.sender.id)) dismissInsightToast()
   })
   ipcMain.on('insight:hoverStart', () => pauseInsightDismiss())
   ipcMain.on('insight:hoverEnd', () => resumeInsightDismiss())
@@ -70,6 +46,3 @@ export function registerInsightHandlers(): void {
     })
   )
 }
-
-// Public main-process seam for the v2 feed consumer; wire types come from the spine.
-export { presentProactivityNotification } from '../proactivity/notificationAdapter'

@@ -13,6 +13,14 @@ exact-retry pass then drops identical normalized text plus identical absolute
 range or segment id only for a capture-proven segment or one sharing the
 stored line's nonempty ``sync:`` scope; anything ambiguous is kept.
 
+Stored sync donors consolidated into a live target use the same gate at the
+transactional content-transfer boundary, including smart absorb. Committed
+frame coverage also requires lexical safety checks; without it, the bounded lexical
+matcher supplies independent repeat proof, followed by the same exact-retry
+pass. Original donor receipts and the frozen pre-merge live snapshot stay
+separate. Retained timing overlap is observation only. See
+``utils/sync/ARCHITECTURE.md`` for bridge fields and widening gates.
+
 The same switch gates safe strict-overlap deferral in
 ``utils/sync/recording_lineage.py`` (``ambiguous_pending`` instead of guessing
 among overlapping generations, then the existing retryable failed-segment path)
@@ -37,6 +45,8 @@ from __future__ import annotations
 
 import os
 
+from config.refactor_switches import default_on as rollout_default_on
+
 from config.sync_lineage import sync_lineage_resolve_active_for
 
 SYNC_LINEAGE_LIVE_DEDUPE_ENV = 'SYNC_LINEAGE_LIVE_DEDUPE_ENABLED'
@@ -47,7 +57,7 @@ _ON_VALUES = frozenset({'1', 'true', 'on', 'yes', 'enabled'})
 def sync_live_dedupe_enabled() -> bool:
     """Unset or blank is on; only an explicit on-token keeps it on when set."""
     raw = os.getenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, '').strip().lower()
-    return not raw or raw in _ON_VALUES
+    return rollout_default_on(SYNC_LINEAGE_LIVE_DEDUPE_ENV, not raw or raw in _ON_VALUES)
 
 
 def sync_live_dedupe_active_for(uid: object) -> bool:

@@ -1,10 +1,18 @@
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import sys
+import threading
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from starlette.datastructures import UploadFile
 from tests.unit.test_sync_cloud_tasks import _load_sync_router_for_fast_path
+from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+from config.policy import BatchUnitPolicy
+from config.policy.ramp import owner_load
+from database import batch_ramp
+from utils.batch_pipeline import intake as batch_intake
 
 import pytest
 
@@ -13,6 +21,7 @@ from utils.sync.mobile_standard_batch import mobile_standard_batch_enabled
 from utils.other import storage
 from routers.listen import runtime as runtime_module
 from routers.listen.runtime import ListenSessionRuntime
+from utils import rollout_cohorts
 
 
 @pytest.mark.parametrize(
@@ -173,45 +182,91 @@ def test_archive_failure_propagates_for_retry(monkeypatch, tmp_path):
         storage.archive_mobile_batch_raw_files('owner', [str(audio)])
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize('archive_fails', [False, True])
-async def test_upload_acceptance_requires_archive_before_receipt_or_dispatch(archive_fails):
+@pytest.fixture
+def mobile_sync_router():
+    # Router/module loading and dependency stubs are fixture setup, not upload
+    # behavior. Keep their cleanup paired here, including on assertion failure.
     module, saved, jobs, bytes_io, _, _ = _load_sync_router_for_fast_path()
     try:
-        calls = []
-
-        def archive(uid, paths, metadata=None):
-            calls.append(('archive', uid, list(paths)))
-            if archive_fails:
-                raise OSError('archive unavailable')
-
-        module.archive_mobile_batch_raw_files = archive
-        module.start_background_task = MagicMock()
-        uploads = [
-            UploadFile(filename='audio_omimobilebatch001_opus_16000_1_fs160_1000.bin', file=bytes_io(b'original'))
-        ]
-        if archive_fails:
-            with pytest.raises(module.HTTPException) as rejected:
-                await module.sync_local_files_v2(files=uploads, uid='test-uid')
-            assert rejected.value.status_code == 500
-            response = None
-        else:
-            response = await module.sync_local_files_v2(files=uploads, uid='test-uid')
-        assert calls and calls[0][0] == 'archive'
-        if archive_fails:
-            module.enqueue_sync_job.assert_not_called()
-            module.start_background_task.assert_not_called()
-            jobs.mark_job_completed.assert_not_called()
-        else:
-            assert response.status_code == 202
+        yield module, jobs, bytes_io
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved.items():
             if original is None:
                 sys.modules.pop(name, None)
             else:
                 sys.modules[name] = original
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('start,end', [(None, None), (20, 10), (0, float('nan'))])
+async def test_partial_ramp_unknown_incoming_audio_keeps_real_upload_on_legacy(
+    mobile_sync_router, monkeypatch, start, end
+):
+    module, jobs, bytes_io = mobile_sync_router
+    monkeypatch.setenv('BATCH_PIPELINE_RAMP_EXCLUDE_HEAVY_OWNERS', 'on')
+    candidate = BatchUnitPolicy(batch_enabled=True, batch_percent=5)
+    module.resolve_batch_policy = MagicMock(return_value=candidate)
+    module.registered_record_response = AsyncMock(return_value=None)
+    incoming = []
+
+    def classify(uid, policy, *, incoming_audio_seconds, **kwargs):
+        incoming.append(incoming_audio_seconds)
+        return batch_ramp.ramp_admission_policy(uid, policy, incoming_audio_seconds=incoming_audio_seconds)
+
+    module.ramp_admission_policy = classify
+    monkeypatch.setattr(
+        batch_ramp,
+        'read_owner_load',
+        lambda uid, **kwargs: owner_load([], [], 100000, incoming_audio_seconds=kwargs['incoming_audio_seconds']),
+    )
+    store = MemoryStore()
+    monkeypatch.setattr(batch_intake, 'FirestoreStore', lambda *args: store)
+    monkeypatch.setattr(batch_intake, 'current_stage', lambda: 'dev')
+    module.accept_batch_upload = AsyncMock(wraps=batch_intake.accept_upload)
+    response = await module.sync_local_files_v2(
+        files=[UploadFile(filename='synthetic.opus', file=bytes_io(b'synthetic'))],
+        uid='test-uid',
+        audio_start_seconds=start,
+        audio_end_seconds=end,
+    )
+    assert response.status_code == 202
+    assert incoming == [None]
+    assert not module.create_sync_job.call_args.kwargs['policy'].batch_enabled
+    assert not module.accept_batch_upload.call_args.kwargs['policy'].batch_enabled
+    assert not store.rows
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('archive_fails', [False, True])
+async def test_upload_acceptance_requires_archive_before_receipt_or_dispatch(mobile_sync_router, archive_fails):
+    module, jobs, bytes_io = mobile_sync_router
+    calls = []
+
+    def archive(uid, paths, metadata=None):
+        calls.append(('archive', uid, list(paths)))
+        if archive_fails:
+            raise OSError('archive unavailable')
+
+    module.archive_mobile_batch_raw_files = archive
+    module.start_background_task = MagicMock()
+    uploads = [UploadFile(filename='audio_omimobilebatch001_opus_16000_1_fs160_1000.bin', file=bytes_io(b'original'))]
+    if archive_fails:
+        with pytest.raises(module.HTTPException) as rejected:
+            await module.sync_local_files_v2(files=uploads, uid='test-uid')
+        assert rejected.value.status_code == 500
+        response = None
+    else:
+        response = await module.sync_local_files_v2(files=uploads, uid='test-uid')
+    assert calls and calls[0][0] == 'archive'
+    if archive_fails:
+        module.enqueue_sync_job.assert_not_called()
+        module.start_background_task.assert_not_called()
+        jobs.mark_job_completed.assert_not_called()
+    else:
+        assert response.status_code == 202
 
 
 def test_visibility_resume_keeps_the_existing_live_capture_wall_clock_gap():
@@ -233,7 +288,7 @@ async def test_mobile_lease_preserves_shared_live_demand_and_visibility_tracking
     monkeypatch.setattr(
         receiver_module,
         'resolve_ondemand_config',
-        lambda: SimpleNamespace(shadow_enabled=False, gate_enabled=False),
+        lambda: SimpleNamespace(gate_enabled=False),
     )
     receiver = object.__new__(ListenReceiver)
 
@@ -270,3 +325,61 @@ async def test_mobile_lease_preserves_shared_live_demand_and_visibility_tracking
         assert event.mobile_standard_batch is True
     assert receiver.host.state.realtime_demand.reports == 2
     assert receiver.host.refresh_mobile_batch_admission.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_mobile_renewal_awaits_expired_membership_and_warm_packets_cost_zero_reads(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('MOBILE_STANDARD_BATCH_ENABLED', 'true')
+    monkeypatch.setenv('MOBILE_STANDARD_BATCH_UIDS', 'owner')
+    monkeypatch.setenv('MOBILE_STANDARD_BATCH_PERCENT', '0')
+    monkeypatch.setattr(runtime_module.user_db, 'get_user_private_cloud_sync_enabled', lambda uid: True)
+    monkeypatch.setattr(runtime_module, 'get_enabled_apps', lambda uid: [])
+    monkeypatch.setattr(runtime_module, 'get_audio_bytes_webhook_seconds', lambda uid: None)
+    monkeypatch.setattr(runtime_module, 'user_webhook_status_db', lambda uid, kind: False)
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.request = SimpleNamespace(uid='owner')
+    runtime.private_cloud_sync_enabled = True
+    runtime.use_custom_stt = False
+
+    async def call(fn, *args):
+        return fn(*args)
+
+    runtime.persistence = SimpleNamespace(call=call)
+    release = threading.Event()
+    reads = []
+    member = [True]
+
+    def read(uid):
+        reads.append(uid)
+        assert release.wait(1)
+        return {'prod': {'mobile-standard-batch': member[0]}}
+
+    rollout_cohorts.configure_rollout_runtime()
+    cache = rollout_cohorts._TTLReads(read)
+    monkeypatch.setattr(rollout_cohorts, '_cache', cache)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        monkeypatch.setattr(rollout_cohorts, '_background_submitter', pool.submit)
+        for allowed in [True, False]:
+            member[0] = allowed
+            release.clear()
+
+            async def unblock():
+                await asyncio.sleep(0)
+                release.set()
+
+            pulse = asyncio.create_task(unblock())
+            try:
+                await runtime.refresh_mobile_batch_admission()
+            finally:
+                release.set()
+                await pulse
+            assert runtime.mobile_standard_batch is allowed
+            for _ in range(100):
+                await runtime.refresh_mobile_batch_admission()
+                assert runtime.mobile_standard_batch is allowed
+            assert len(reads) == (1 if allowed else 2)
+            cache.entries['owner'].expires = 0
+        monkeypatch.setenv('MOBILE_STANDARD_BATCH_ENABLED', 'false')
+        await runtime.refresh_mobile_batch_admission()
+        assert not runtime.mobile_standard_batch and len(reads) == 2

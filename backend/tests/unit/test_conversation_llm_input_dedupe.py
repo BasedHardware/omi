@@ -11,6 +11,9 @@ from utils.conversations import llm_input_dedupe as dedupe
 
 @pytest.fixture
 def enabled(monkeypatch):
+    # First-use model loading belongs to setup, outside the per-call CPU budget.
+    import models.conversation  # noqa: F401
+
     monkeypatch.setenv('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', 'true')
     monkeypatch.setattr(dedupe, '_stored', lambda *a, **k: {})
     return SimpleNamespace(id='c', sync_content_revision=3)
@@ -70,6 +73,21 @@ def test_l1_only_reuses_successful_exact_hash(enabled, monkeypatch):
         assert changed != digest and not matched
 
 
+def test_memory_l1_route_retarget_alone_invalidates_successful_hash(monkeypatch):
+    monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true')
+    routes = {'memory_l1': 'old-model', 'memories': 'unchanged-model', 'conv_structure': 'notes-model'}
+    monkeypatch.setattr(dedupe, 'get_route_ref', lambda feature: {'feature': feature, 'model': routes[feature]})
+    conversation = SimpleNamespace(id='c', sync_content_revision=1)
+    inputs = {'transcript': 'synthetic input', 'language': 'en'}
+    digest, matched = dedupe.l1_input('u', conversation, inputs)
+    assert digest and not matched
+    conversation.l1_llm_input_hash = digest
+    assert dedupe.l1_input('u', conversation, inputs) == (digest, True)
+    routes['memory_l1'] = 'new-model'
+    changed, matched = dedupe.l1_input('u', conversation, inputs)
+    assert changed != digest and not matched
+
+
 def test_disabled_dedupe_preserves_calls_and_invalidates_only_metadata(monkeypatch):
     monkeypatch.setenv('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', 'false')
     read = Mock(side_effect=AssertionError('must not read'))
@@ -78,7 +96,7 @@ def test_disabled_dedupe_preserves_calls_and_invalidates_only_metadata(monkeypat
     generate = Mock(return_value='same')
     conversation = SimpleNamespace(id='c')
     assert dedupe.notes('u', conversation, 'prefix', generate, {}) == 'same'
-    generate.assert_called_once_with('prefix', uid='u')
+    generate.assert_called_once_with('prefix', uid='u', open_loop_out=None)
     assert dedupe.l1_input('u', conversation, object()) == (None, False)
     invalidation = Mock(return_value=False)
     monkeypatch.setattr(dedupe, 'invalidate_l1', invalidation)
@@ -141,7 +159,6 @@ def memory_stack(memory_module, monkeypatch):
     monkeypatch.setattr(pc, 'conversation_transcript_and_speaker_map', lambda *_: ('Ship Friday', {}))
     monkeypatch.setattr(pc, 'may_attribute_to_owner', lambda *_: True)
     monkeypatch.setattr(pc, '_rejected_memory_examples_for_l1', lambda *_, **__: ())
-    monkeypatch.setattr(pc, 'select_owner_shadow_indices', lambda *_: ([], 0))
     yield pc, conversation, service
 
 
@@ -209,20 +226,38 @@ def test_invalid_checkpoint_output_is_a_cache_miss(enabled, monkeypatch):
     assert generate.call_count == 2
 
 
-def test_owner_adjudication_summary_is_part_of_l1_effective_input(enabled, memory_stack, monkeypatch):
-    pc, conversation, _ = memory_stack
-    row = {}
-    monkeypatch.setattr(pc, 'memory_owner_jev_flip_enabled', lambda: True)
-    monkeypatch.setattr(dedupe, '_stored', lambda *_, **__: row)
-    monkeypatch.setattr(
-        dedupe, 'l1_succeeded', lambda uid, conv, digest, **kwargs: row.update({dedupe.L1_HASH: digest})
-    )
-    extract = Mock(return_value=[])
-    monkeypatch.setattr(pc, 'extract_canonical_l1_memory_candidates', extract)
-    pc._extract_memories_canonical('u', conversation, db_client=Mock())
-    conversation.structured.overview = 'Changed notes context for owner attribution'
-    pc._extract_memories_canonical('u', conversation, db_client=Mock())
-    assert extract.call_count == 2
+def _counter_value(name, feature):
+    from prometheus_client import REGISTRY
+
+    return REGISTRY.get_sample_value(name, {'feature': feature}) or 0
+
+
+def test_evaluation_counters_report_hit_miss_and_checkpoint_error(enabled, monkeypatch):
+    from models.conversation import Structured
+
+    skipped = _counter_value('conversation_llm_input_dedupe_skipped_total', 'notes')
+    misses = _counter_value('conversation_llm_input_dedupe_misses_total', 'notes')
+    errors = _counter_value('conversation_llm_input_dedupe_checkpoint_errors_total', 'notes')
+    l1_misses = _counter_value('conversation_llm_input_dedupe_misses_total', 'l1')
+
+    generate = Mock(return_value=Structured(title='Fresh'))
+    hashes = {}
+    dedupe.notes('u', enabled, 'input', generate, hashes)
+    assert _counter_value('conversation_llm_input_dedupe_misses_total', 'notes') == misses + 1
+    assert _counter_value('conversation_llm_input_dedupe_checkpoint_errors_total', 'notes') == errors
+
+    monkeypatch.setattr(dedupe, '_stored', lambda *a, **k: {**hashes, 'structured': generate.return_value.model_dump()})
+    dedupe.notes('u', enabled, 'input', generate, {})
+    assert _counter_value('conversation_llm_input_dedupe_skipped_total', 'notes') == skipped + 1
+    assert _counter_value('conversation_llm_input_dedupe_misses_total', 'notes') == misses + 1
+
+    monkeypatch.setattr(dedupe, '_stored', lambda *a, **k: {**hashes, 'structured': 'invalid stored shape'})
+    dedupe.notes('u', enabled, 'input', generate, {})
+    assert _counter_value('conversation_llm_input_dedupe_misses_total', 'notes') == misses + 2
+    assert _counter_value('conversation_llm_input_dedupe_checkpoint_errors_total', 'notes') == errors + 1
+
+    dedupe.l1_input('u', enabled, {'text': 'same'})
+    assert _counter_value('conversation_llm_input_dedupe_misses_total', 'l1') == l1_misses + 1
 
 
 @pytest.mark.parametrize('enabled_flag', [False, True])
@@ -272,3 +307,69 @@ def test_route_module_changes_invalidate_both_feature_fingerprints(monkeypatch, 
             assert dedupe.fingerprint(feature, 'same input') != old
     finally:
         dedupe.implementation_digest.cache_clear()
+
+
+@pytest.mark.parametrize('summary_gate', [False, True])
+def test_empty_notes_checkpoint_is_not_first_summary_success(monkeypatch, summary_gate):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    from models.structured import Structured
+    from utils.conversations import llm_input_dedupe as target
+
+    monkeypatch.setenv('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true' if summary_gate else 'false')
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
+    monkeypatch.delenv('FIRST_SUMMARY_UID_ALLOWLIST', raising=False)
+    empty = Structured(title='Server transcript title', overview='')
+    rich = Structured(title='Generated title', overview='A supported synthetic summary')
+    monkeypatch.setattr(target, 'fingerprint', lambda *_: 'same-input')
+    monkeypatch.setattr(
+        target,
+        '_stored',
+        lambda *_: {
+            target.NOTES_HASH: 'same-input',
+            target.NOTES_OUTPUT_HASH: target.output_fingerprint(empty),
+            'structured': empty.model_dump(),
+            'discarded': False,
+        },
+    )
+    monkeypatch.setattr(target, 'record_feature', lambda *_: None)
+    generate = Mock(return_value=rich)
+    output = target.notes('u', SimpleNamespace(id='c'), [], generate, {})
+    if summary_gate:
+        generate.assert_called_once()
+        assert output.overview == rich.overview
+    else:
+        generate.assert_not_called()
+        assert output.overview == ''
+
+
+def test_effective_packet_cohort_and_version_invalidate_notes_checkpoint(enabled, monkeypatch):
+    from utils.llm import notes_packet
+    from config.refactor_modes import uid_digest
+
+    owner = 'synthetic-packet-account'
+    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'shadow')
+    monkeypatch.delenv('NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S', raising=False)
+    monkeypatch.delenv('NOTES_PACKET_V2_MODE_SERVE_PERCENT', raising=False)
+    generate = Mock(return_value='synthetic output')
+
+    def digest():
+        hashes = {}
+        dedupe.notes(owner, enabled, 'synthetic prefix', generate, hashes)
+        return hashes[dedupe.NOTES_HASH]
+
+    legacy = digest()
+    monkeypatch.setenv('NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S', uid_digest(owner))
+    serving = digest()
+    assert serving != legacy
+    monkeypatch.setattr(notes_packet, 'PACKET_VERSION', notes_packet.PACKET_VERSION + 1)
+    assert digest() != serving
+    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
+    assert digest() == legacy
+
+
+def test_implementation_digest_tracks_packet_output_language_and_evidence_modules():
+    # Read the actual dependency closure; a missing/renamed module must invalidate generation.
+    dedupe.implementation_digest.cache_clear()
+    assert len(dedupe.implementation_digest('notes')) == 64

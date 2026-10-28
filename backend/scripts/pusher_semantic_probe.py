@@ -78,9 +78,45 @@ ALIGNMENT_COVERAGE_POLL_SECONDS = 5
 class ProbeError(RuntimeError):
     """A bounded probe stage failed without retaining response or transcript data."""
 
-    def __init__(self, stage: str):
+    def __init__(self, stage: str, *, close_code: int | None = None):
         super().__init__(stage)
         self.stage = stage
+        # The WebSocket close code only; the free-form reason never enters the receipt.
+        self.close_code = close_code
+
+
+def _verify_producer_environment(args: argparse.Namespace) -> None:
+    """Dev identity comes from its authenticated Kubernetes tunnel, not its public hostname.
+
+    The dev workflow owns the port-forward process to
+    dev-omi-backend/service/dev-omi-backend-listen. Its public API hostname
+    intentionally forwards Beta clients to production. Keep the existing
+    isolated production-canary path independent of this dev-only contract.
+    """
+    project, namespace = getattr(args, 'project', None), getattr(args, 'namespace', None)
+    if project != 'based-hardware-dev' and namespace != 'dev-omi-backend':
+        return
+    try:
+        parsed = urllib.parse.urlparse(args.api_url)
+        if not (
+            project == 'based-hardware-dev'
+            and namespace == 'dev-omi-backend'
+            and args.allow_local_http
+            and parsed.scheme == 'http'
+            and parsed.hostname == '127.0.0.1'
+            and parsed.port is not None
+            and 0 < parsed.port <= 65535
+            and parsed.path in ('', '/')
+            and not (parsed.username or parsed.password or parsed.query or parsed.fragment)
+        ):
+            raise ProbeError('producer_environment_mismatch')
+        context = subprocess.run(
+            ['kubectl', 'config', 'current-context'], check=False, capture_output=True, text=True, timeout=10
+        )
+        if context.returncode != 0 or not context.stdout.strip().startswith('gke_based-hardware-dev_'):
+            raise ProbeError('producer_environment_mismatch')
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        raise ProbeError('producer_environment_mismatch') from error
 
 
 @dataclass(frozen=True)
@@ -562,7 +598,6 @@ async def run_alignment_scenario(args: argparse.Namespace) -> tuple[dict[str, An
     live_word_count: int | None = None
     expected_word_count: int | None = None
     try:
-        token = _read_token(args.bearer_token_file)
         fixture = load_fixture()
         deployment_receipt = json.loads(args.deployment_receipt.read_text(encoding="utf-8"))
         if not isinstance(deployment_receipt, dict) or not deployment_receipt.get("source_sha"):
@@ -576,6 +611,8 @@ async def run_alignment_scenario(args: argparse.Namespace) -> tuple[dict[str, An
         )
         if base != "https://api.omiapi.com" and not local_test:
             raise ProbeError("dev_api_url")
+        _verify_producer_environment(args)
+        token = _read_token(args.bearer_token_file)
         status, sync_state = await asyncio.to_thread(_http_json_method, f"{base}/v1/users/private-cloud-sync", token)
         enabled = bool(sync_state and sync_state.get("private_cloud_sync_enabled"))
         if status != 200:
@@ -853,8 +890,8 @@ def _early_listen_failure(task: asyncio.Task[tuple[bool, str]], progress: _Liste
         if error.code == 1011:
             return ProbeError("stt_unavailable")
         if _closed_in_listen_bootstrap(progress):
-            return ProbeError("listen_bootstrap_error")
-        return ProbeError("listen_closed_early")
+            return ProbeError("listen_bootstrap_error", close_code=error.code)
+        return ProbeError("listen_closed_early", close_code=error.code)
     except ProbeError as error:
         return error
     except Exception:
@@ -927,6 +964,7 @@ def _receipt(
     live_word_count: int | None = None,
     expected_word_count: int | None = None,
     consumer_readback_passed: bool = False,
+    listen_close_code: int | None = None,
 ) -> dict[str, Any]:
     image = deployment_receipt.get("image") if isinstance(deployment_receipt.get("image"), dict) else {}
     receipt: dict[str, Any] = {
@@ -958,6 +996,8 @@ def _receipt(
     }
     if failure_stage is not None:
         receipt["failure_stage"] = failure_stage
+    if listen_close_code is not None:
+        receipt["listen_close_code"] = listen_close_code
     return receipt
 
 
@@ -970,9 +1010,8 @@ async def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], bool]:
     live_word_count: int | None = None
     expected_word_count: int | None = None
     consumer_readback_passed = False
+    listen_close_code: int | None = None
     try:
-        token = _read_token(args.bearer_token_file)
-        fixture = load_fixture()
         deployment_receipt = json.loads(args.deployment_receipt.read_text(encoding="utf-8"))
         if not isinstance(deployment_receipt, dict):
             raise ProbeError("deployment_receipt")
@@ -982,6 +1021,9 @@ async def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], bool]:
                 json.dumps(deployment_receipt, sort_keys=True, separators=(",", ":")).encode("utf-8")
             ).hexdigest()
         )
+        _verify_producer_environment(args)
+        token = _read_token(args.bearer_token_file)
+        fixture = load_fixture()
         conversation_id = str(uuid.uuid4())
         probe_socket_hold = asyncio.Event()
         listen_progress = _ListenProgress()
@@ -1039,6 +1081,7 @@ async def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], bool]:
             raise ProbeError("transcript_word_count")
     except (OSError, json.JSONDecodeError, ProbeError) as error:
         failure_stage = error.stage if isinstance(error, ProbeError) else "deployment_receipt"
+        listen_close_code = error.close_code if isinstance(error, ProbeError) else None
         deployment_receipt = locals().get("deployment_receipt", {})
         deployment_receipt_sha256 = locals().get("deployment_receipt_sha256", "")
     finally:
@@ -1059,6 +1102,7 @@ async def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], bool]:
             live_word_count=live_word_count,
             expected_word_count=expected_word_count,
             consumer_readback_passed=consumer_readback_passed,
+            listen_close_code=listen_close_code,
             **receipt_kwargs,
         ),
         passed,
@@ -1099,6 +1143,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(
         f"Pusher semantic probe status={receipt['status']} "
         f"failure_stage={receipt.get('failure_stage', 'none')} "
+        f"listen_close_code={receipt.get('listen_close_code', 'none')} "
         f"word_counts_live={counts['live']} word_counts_expected={counts['expected']} "
         f"consumer_readback={receipt['consumer_readback']['status']} "
         f"candidate_pod_count={receipt['producer_observation']['candidate_pod_count']} "

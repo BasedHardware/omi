@@ -51,10 +51,9 @@ Do not combine this train with 4 GiB memory, concurrency >6, lower minima, GPU a
 | Sync reprocess webhook | `backend/utils/sync/pipeline.py:1085` | Submitted, not awaited; durable task or join within request. |
 | Conversation vectors, action items, goal updates and webhook | `backend/utils/conversations/process_conversation.py:3291`, `:3293`, `:3305`, `:3310`, `:3342` | Conditional non-reprocess effects outlive parent; reprocess paths await some writes, but vectors/webhooks and shared routes still need audit/durable dispatch. |
 | Conversation integration auto-sync | `backend/utils/conversations/process_conversation.py:2246`, `:2251` | Fire-and-forget integrations; queue separately. |
-| Capture/relevance/owner/transcription shadows | `backend/utils/conversations/capture_jev_shadow.py:369`, `backend/utils/conversations/jev_shadow.py:138`, `backend/utils/conversations/transcription_shadow.py:125` | Flag-dependent background work; disable on request-billed worker or use durable jobs. |
+| Transcription shadow | `backend/utils/conversations/transcription_shadow.py:125` | Flag-dependent background work; disable on request-billed worker or use durable jobs. |
 | Live STT fleet-health refresh and result/bench writes | `backend/main.py:356`, `backend/utils/stt/live_health.py:394`, `:545`, `:750` | Recurring/background; separate service role or scheduled durable refresh. |
 | Batch-pressure refresh | `backend/main.py:357`, `backend/utils/stt/batch_pressure.py:73` | Periodic async task, env-dependent; move/disable by service role. |
-| Soniox runway poller | `backend/main.py:359` | Conditional recurring task; disable on sync role or move owner. |
 | Executor health loop | `backend/main.py:362` | Periodic reporting; use request-bound metrics or worker role gating. |
 | Startup deletion, finalization, stale processing/in-progress, BYOK and meeting receipt reconciles | `backend/main.py:365`, `:372`, `:376`, `:380`, `:384`, `:388` | Startup tasks are scheduled without waiting and can exceed startup CPU window; move to durable scheduler/worker. |
 | Periodic deletion/finalization reconciles | `backend/main.py:371`, `:392` | Recurring repair work; move to durable scheduled requests first. |

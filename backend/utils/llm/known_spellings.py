@@ -140,11 +140,12 @@ def conversation_known_spellings(uid: str) -> str:
 
 def _people_spellings(uid: str):
     # Names need no voice-learning ledger projection (which can perform extra
-    # transactions). Reuse the active-People reader without that projection.
+    # transactions). Reuse only spelling hints inside a sync attempt; list_people
+    # revalidates every memo hit against the cross-request generation fence.
     cache = _run_people.get()
     if cache is not None and uid in cache:
         return cache[uid]
-    people = list_people(get_firestore_client(), uid, limit=MAX_PEOPLE_READ)
+    people = list_people(get_firestore_client(), uid, limit=MAX_PEOPLE_READ, memoize=True)
     spellings = _trusted_people_spellings(people)
     if cache is not None:
         cache[uid] = spellings
@@ -156,6 +157,11 @@ def reuse_people_for_spellings(uid: str, people) -> None:
     cache = _run_people.get()
     if enabled() and cache is not None and uid not in cache:
         cache[uid] = _trusted_people_spellings(people)
+
+
+def trusted_people_spellings(people) -> list[dict[str, Any]]:
+    """Names with stored user evidence. The verifier and the spelling prompt share this filter."""
+    return _trusted_people_spellings(people)
 
 
 def _trusted_people_spellings(people) -> list[dict[str, Any]]:
@@ -183,10 +189,17 @@ def _trusted_people_spellings(people) -> list[dict[str, Any]]:
         renamed = isinstance(aliases, list) and any(
             (alias := _name(value)) and alias.casefold() != name.casefold() for value in aliases
         )
-        if backed_label or has_sample or renamed:
+        # create_person and the rename transaction stamp this; automatic detection never creates people.
+        user_created = person.get('is_user_created') is True
+        if backed_label or has_sample or renamed or user_created:
             # Old detected names retained during rename are not prompt aliases:
             # mapping a filler word to a person could invent a reference.
             spellings.append({'name': name})
             if len(spellings) == MAX_TERMS:
                 break
     return spellings
+
+
+def conversation_people_names(uid: str) -> list[dict[str, Any]]:
+    """Share the bounded trusted contact read with the v2 notes spelling packet."""
+    return _people_spellings(uid)

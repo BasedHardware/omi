@@ -25,8 +25,15 @@ google-cloud-tasks==2.16.4
 google-auth==2.32.0
 google-api-python-client==2.139.0
 
+# Localized storefront copy (utils/storefront_copy.py is in the pusher import closure via utils/subscription + utils/ladder_v1)
+babel==2.18.0
+
 # Cache & rate limiting
 redis==5.0.8
+
+# Job-store shadow (database.jobstore via database.users -> batch_pipeline_purge -> batch_pipeline_shadow_hook;
+# imported lazily, but the role-image dependency probe requires every reachable module installed)
+psycopg[binary]==3.2.10
 
 # HTTP
 requests~=2.33.0

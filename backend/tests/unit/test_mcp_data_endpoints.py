@@ -181,7 +181,10 @@ NOW = datetime(2026, 6, 11, tzinfo=timezone.utc)
 UID = "user-1"
 
 
-def test_memory_list_has_one_auth_dependency_and_uses_its_authorized_uid():
+@pytest.mark.parametrize('budget_enabled', [True, False])
+@pytest.mark.parametrize('sort', ['created_desc', 'scoring_desc'])
+def test_memory_list_has_one_auth_dependency_and_uses_its_authorized_uid(monkeypatch, budget_enabled, sort):
+    monkeypatch.setenv('OMI_MCP_MEMORY_LIST_BUDGET_ENABLED', 'true' if budget_enabled else 'false')
     route = next(
         route
         for route in rest.router.routes
@@ -195,16 +198,36 @@ def test_memory_list_has_one_auth_dependency_and_uses_its_authorized_uid():
     authorization = SimpleNamespace(allowed=True)
     memory_service = MagicMock()
     memory_service.read.return_value = []
+    memory_service.read_mcp_filtered.return_value = ([], 0)
+    memory_service.read_page.return_value = SimpleNamespace(memories=[], next_cursor=None, truncated=False)
+    shared_budget = rest.list_read_budget_for_request(None, route='mcp-memories')
     with (
+        patch.object(rest, 'list_read_budget_for_request', return_value=shared_budget) as make_budget,
         patch.object(rest, "authorize_memory_external_default_memory_read", return_value=authorization) as authorize,
         # The list now reads through the shared handler core, which binds
         # MemoryService in the handler module rather than the router.
         patch.object(sse_memories, "MemoryService", return_value=memory_service),
     ):
-        assert rest.get_memories(SimpleNamespace(headers={}), auth_context=auth_context) == []
+        assert (
+            rest.get_memories(
+                SimpleNamespace(headers={}),
+                auth_context=auth_context,
+                sort=sort,
+                offset=1 if sort == 'scoring_desc' else 0,
+            )
+            == []
+        )
 
     authorize.assert_called_once_with(auth_context, db_client=rest.db)
-    memory_service.read.assert_called_once_with("auth-user", limit=100, offset=0)
+    reader = memory_service.read if sort == 'created_desc' else memory_service.read_page
+    assert reader.call_args.args == ('auth-user',)
+    if budget_enabled and sort == 'created_desc':
+        make_budget.assert_called_once_with(None, route='mcp-memories', owner_uid='auth-user', context=auth_context)
+        assert memory_service.read.call_args.kwargs['budget'] is shared_budget
+    else:
+        make_budget.assert_not_called()
+        assert 'budget' not in reader.call_args.kwargs
+    memory_service.read_mcp_filtered.assert_not_called()
 
 
 async def _run_blocking_inline(_executor, func, *args, **kwargs):
@@ -298,6 +321,7 @@ def test_oauth_authentication_carries_memory_identity_into_advertised_memory_too
     }
     service = MagicMock()
     service.read.return_value = []
+    service.read_mcp_filtered.return_value = ([], 0)
     service.search_mcp.return_value = []
     grant_state = {
         'grants': {
@@ -433,6 +457,7 @@ def test_get_memories_advertises_and_executes_default_limit_20():
 
     service = MagicMock()
     service.read.return_value = []
+    service.read_mcp_filtered.return_value = ([], 0)
     with (
         patch.object(
             sse_memories, 'authorize_memory_external_default_memory_read', return_value=_allowed_empty_result()
@@ -445,32 +470,23 @@ def test_get_memories_advertises_and_executes_default_limit_20():
     assert result['scanned_count'] == 0
 
 
-def test_get_memories_created_desc_scan_is_capped_for_hosted_mcp():
+def test_get_memories_filtered_created_desc_never_trusts_an_incomplete_service_prefix():
     service = MagicMock()
-
-    def _read(_uid, *, limit, offset):
-        return [
-            SimpleNamespace(
-                model_dump=lambda mode, memory_id=offset + index: {
-                    'id': f'memory-{memory_id}',
-                    'content': 'Durable fact',
-                }
-            )
-            for index in range(limit)
-        ]
-
-    service.read.side_effect = _read
+    service.read.return_value = []
+    service.read_mcp_filtered.side_effect = sse.ToolExecutionError(
+        'memory_filter_window_exceeded: narrow the filter', code=-32009, http_status=413
+    )
     with (
         patch.object(
             sse_memories, 'authorize_memory_external_default_memory_read', return_value=_allowed_empty_result()
         ),
         patch.object(sse_memories, 'MemoryService', return_value=service),
+        pytest.raises(sse.ToolExecutionError, match='memory_filter_window_exceeded'),
     ):
-        result = sse.execute_tool(UID, 'get_memories', {}, auth_context=_sse_auth_context())
-
-    assert result['scanned_count'] == 200
-    assert result['scan_truncated'] is True
-    assert service.read.call_count == 2
+        sse.execute_tool(
+            UID, 'get_memories', {'updated_after': '2026-10-01T00:00:00Z'}, auth_context=_sse_auth_context()
+        )
+    service.read.assert_not_called()
 
 
 def test_get_memories_locked_null_content_does_not_crash():
@@ -484,6 +500,7 @@ def test_get_memories_locked_null_content_does_not_crash():
             }
         )
     ]
+    service.read_mcp_filtered.return_value = ([row.model_dump(mode='json') for row in service.read.return_value], 1)
     with (
         patch.object(
             sse_memories, 'authorize_memory_external_default_memory_read', return_value=_allowed_empty_result()
@@ -508,6 +525,7 @@ def test_rest_get_memories_locked_null_content_does_not_crash():
             }
         )
     ]
+    service.read_mcp_filtered.return_value = ([row.model_dump(mode='json') for row in service.read.return_value], 1)
     with (
         patch.object(rest, 'authorize_memory_external_default_memory_read', return_value=_allowed_empty_result()),
         patch.object(sse_memories, 'MemoryService', return_value=service),
@@ -776,37 +794,6 @@ def test_authorize_request_rejects_legacy_omi_client_id():
                 'a' * 64,
                 'S256',
             )
-
-
-def test_mcp_oauth_authorize_rejects_non_qa_uid_before_grant_write(monkeypatch):
-    monkeypatch.setenv('OMI_JIT_QA_AUTH_ONLY', 'true')
-    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
-    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'based-hardware-dev')
-    monkeypatch.setenv('OMI_JIT_QA_UID_ALLOWLIST', 'qa-user')
-
-    async def inline_run_blocking(_executor, function, *args, **kwargs):
-        return function(*args, **kwargs)
-
-    with (
-        patch.object(sse_oauth, '_validate_authorize_request', return_value=({}, ['memories.read'])),
-        patch.object(sse.firebase_admin.auth, 'verify_id_token', return_value={'uid': 'other-user'}),
-        patch.object(sse_oauth, 'run_blocking', inline_run_blocking),
-    ):
-        with pytest.raises(HTTPException) as exc:
-            asyncio.run(
-                sse.mcp_authorize_consent(
-                    response_type='code',
-                    client_id='omi-chatgpt-prod',
-                    redirect_uri='https://chatgpt.com/connector_platform_oauth_redirect',
-                    resource=sse.MCP_RESOURCE_URL,
-                    firebase_id_token='token',
-                    state='state',
-                    scope='memories.read',
-                    code_challenge='a' * 64,
-                    code_challenge_method='S256',
-                )
-            )
-        assert exc.value.status_code == 403
 
 
 def test_legacy_api_key_helper_rejects_oauth_tokens():
@@ -1099,8 +1086,9 @@ class TestScreenActivity:
         with TestClient(app) as client:
             response = client.get('/v1/mcp/screen-activity?summary=true')
         assert response.status_code == 200
-        assert response.json()['coverage'] == coverage
-        assert sse.execute_tool(UID, 'get_screen_activity', {'summary': True})['coverage'] == coverage
+        expected = coverage
+        assert response.json()['coverage'] == expected
+        assert sse.execute_tool(UID, 'get_screen_activity', {'summary': True})['coverage'] == expected
 
     def _row(self):
         return {
@@ -1254,6 +1242,7 @@ def _allowed_empty_result():
 def _rest_universal_patches(result):
     service = MagicMock()
     service.read.return_value = []
+    service.read_mcp_filtered.return_value = ([], 0)
     service.search_mcp.return_value = []
     return (
         patch.object(rest, 'authorize_memory_external_default_memory_read', return_value=result),
@@ -1268,6 +1257,7 @@ def _rest_universal_patches(result):
 def _sse_universal_patches(result):
     service = MagicMock()
     service.read.return_value = []
+    service.read_mcp_filtered.return_value = ([], 0)
     service.search_mcp.return_value = []
     return (
         patch.object(sse_memories, 'authorize_memory_external_default_memory_read', return_value=result),
@@ -1462,3 +1452,32 @@ async def test_action_item_index_failure_is_json_rpc_http_200():
     assert response.status_code == 200
     assert payload['result']['isError'] is True
     assert payload['result']['structuredContent']['error']['code'] == 'unavailable'
+
+
+@pytest.mark.parametrize(
+    'query,expected',
+    [
+        ('', '2026-10-22T02:15:00'),
+        ('?timestamp_format=iso_offset', '2026-10-22T02:15:00Z'),
+        ('?timezone=UTC', '2026-10-22T02:15:00Z'),
+        ('?timezone=Asia%2FHo_Chi_Minh', '2026-10-22T09:15:00+07:00'),
+    ],
+)
+def test_rest_screen_timestamp_opt_in_survives_response_model(monkeypatch, query, expected):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setattr(
+        rest.mcp_other_handlers.screen_activity_db,
+        'get_screen_activity_page',
+        lambda *a, **k: ([{'timestamp': '2026-10-22 02:15:00.000'}], False),
+    )
+    app = FastAPI()
+    app.include_router(rest.router)
+    app.dependency_overrides[rest.get_uid_with_mcp_screen_activity_read] = lambda: UID
+    with TestClient(app) as client:
+        response = client.get('/v1/mcp/screen-activity' + query)
+    assert response.status_code == 200
+    # The released REST datetime model normalizes separators and zero fractions;
+    # the MCP tool preserves the exact stored string. Neither adds an offset by default.
+    assert response.json()[0]['timestamp'] == expected

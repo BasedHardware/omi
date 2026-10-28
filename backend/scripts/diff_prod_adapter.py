@@ -21,7 +21,36 @@ DIARIZER_BATCH_RULE: dict[str, Any] = {
     'name': {'as': 'omi_diarization_v2_queue_depth'},
     'metricsQuery': 'max(omi_diarization_v2_queue_depth{<<.LabelMatchers>>,job="diarizer-batch-metrics"}) by (<<.GroupBy>>)',
 }
+BATCH_PIPELINE_RULE: dict[str, Any] = {
+    'seriesQuery': 'omi_batch_pipeline_ready_age_seconds{namespace!="",worker_release!="",priority!=""}',
+    'resources': {'overrides': {'namespace': {'resource': 'namespace'}}},
+    'name': {'matches': '^omi_batch_pipeline_ready_age_seconds$', 'as': 'omi_batch_pipeline_ready_age_seconds'},
+    'metricsQuery': 'max by (namespace, worker_release, priority) (\n'
+    '  omi_batch_pipeline_ready_age_seconds{<<.LabelMatchers>>}\n'
+    '  and on (namespace, worker_release, pod)\n'
+    '  (time() - omi_batch_pipeline_metrics_refreshed_at_seconds < 60)\n)',
+}
+BATCH_PIPELINE_CAPACITY_RULE: dict[str, Any] = {
+    'seriesQuery': 'omi_batch_pipeline_admissible_ready_units{namespace!="",worker_release!="",priority=~"fresh|recent|deep"}',
+    'resources': {'overrides': {'namespace': {'resource': 'namespace'}}},
+    'name': {
+        'matches': '^omi_batch_pipeline_admissible_ready_units$',
+        'as': 'omi_batch_pipeline_admissible_ready_units',
+    },
+    'metricsQuery': 'sum by (namespace, worker_release) (\n  max by (namespace, worker_release, priority) (\n    omi_batch_pipeline_admissible_ready_units{<<.LabelMatchers>>}\n    and on (namespace, worker_release, pod)\n    (time() - omi_batch_pipeline_capacity_refreshed_at_seconds < 60)\n  )\n)\nand on (namespace, worker_release) (\n  count by (namespace, worker_release) (\n    max by (namespace, worker_release, priority) (\n      omi_batch_pipeline_admissible_ready_units{<<.LabelMatchers>>}\n      and on (namespace, worker_release, pod)\n      (time() - omi_batch_pipeline_capacity_refreshed_at_seconds < 60)\n    )\n  ) == 3\n)',
+}
 API_SERVICES = {'v1beta1.custom.metrics.k8s.io', 'v1beta1.external.metrics.k8s.io'}
+PARAKEET_QUEUE_RULES = [
+    {
+        'seriesQuery': f'parakeet_batch_lane_oldest_pending_seconds{{namespace!="",pod!="",lane="{lane}"}}',
+        'resources': {'overrides': {'namespace': {'resource': 'namespace'}, 'pod': {'resource': 'pod'}}},
+        'name': {'as': f'parakeet_{lane}_queue_age_seconds'},
+        'metricsQuery': 'max(parakeet_batch_lane_oldest_pending_seconds{<<.LabelMatchers>>,lane="'
+        + lane
+        + '"}) by (<<.GroupBy>>)',
+    }
+    for lane in ('live', 'backfill')
+]
 
 
 def normalized_config(config):
@@ -77,11 +106,29 @@ def expected_config(live):
         raise ValueError('Unexpected live NLLB rule: reconcile and review first')
     if not nllb:
         expected['externalRules'].append(copy.deepcopy(NLLB_RULE))
+    pipeline = [rule for rule in expected['externalRules'] if rule['name']['as'] == BATCH_PIPELINE_RULE['name']['as']]
+    if pipeline and pipeline != [BATCH_PIPELINE_RULE]:
+        raise ValueError('Unexpected live batch pipeline queue rule: reconcile and review first')
+    if not pipeline:
+        expected['externalRules'].append(copy.deepcopy(BATCH_PIPELINE_RULE))
+    capacity = [
+        rule for rule in expected['externalRules'] if rule['name']['as'] == BATCH_PIPELINE_CAPACITY_RULE['name']['as']
+    ]
+    if capacity and capacity != [BATCH_PIPELINE_CAPACITY_RULE]:
+        raise ValueError('Unexpected live batch pipeline capacity rule: reconcile and review first')
+    if not capacity:
+        expected['externalRules'].append(copy.deepcopy(BATCH_PIPELINE_CAPACITY_RULE))
     batch = [rule for rule in expected['rules'] if rule['name']['as'] == DIARIZER_BATCH_RULE['name']['as']]
     if batch and batch != [DIARIZER_BATCH_RULE]:
         raise ValueError('Unexpected live batch queue rule: reconcile and review first')
     if not batch:
         expected['rules'].append(copy.deepcopy(DIARIZER_BATCH_RULE))
+    for queue_rule in PARAKEET_QUEUE_RULES:
+        existing = [r for r in expected['rules'] if r['name']['as'] == queue_rule['name']['as']]
+        if existing and existing != [queue_rule]:
+            raise ValueError('Unexpected live Parakeet queue rule: reconcile and review first')
+        if not existing:
+            expected['rules'].append(copy.deepcopy(queue_rule))
     return normalized_config(expected)
 
 

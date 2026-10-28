@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/pages/paywall/outline_paywall_page.dart';
+import 'package:omi/pages/paywall/trial_paywall_page.dart';
 import 'package:omi/pages/paywall/web_paywall_page.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/experiments/paywall_experiment.dart';
@@ -24,6 +25,7 @@ abstract final class PaywallRouter {
     bool trackOpen = true,
     PaywallExperimentConfig? config,
     bool Function(String key, String variant)? record,
+    void Function(Object? result)? onResult,
   }) async {
     final usage = context.read<UsageProvider>();
     if (!usage.showSubscriptionUI) return false;
@@ -31,12 +33,17 @@ abstract final class PaywallRouter {
     final resolved = config ?? await PaywallExperiment.resolve();
     if (!context.mounted) return false;
     if (!context.read<UsageProvider>().showSubscriptionUI) return false;
+    // The trial page promises a free trial; only a reader the backend says can still get one sees
+    // it. Anyone else in that arm (a former subscriber, or a subscription not loaded yet) gets the
+    // shipped sheet from the opener, exactly like control.
+    final trialBlocked =
+        resolved.variant == PaywallVariant.trial && context.read<UsageProvider>().subscription?.trialEligible != true;
 
     // The reader is about to see a paywall: the variant page below, or the sheet the opener shows
     // right after a false return. Either way they count for their arm.
     PaywallExperiment.recordExposure(resolved, record: record);
     const TypedEvents().emit(PaywallVariantShown(variant: variantWire(resolved.variant), source: sourceWire(source)));
-    if (resolved.isControl) return false;
+    if (resolved.isControl || trialBlocked) return false;
 
     if (trackOpen) {
       final plan = usage.subscription?.subscription.plan.wireName ?? 'unknown';
@@ -45,10 +52,12 @@ abstract final class PaywallRouter {
     final page = switch (resolved.variant) {
       PaywallVariant.outline => OutlinePaywallPage(source: source),
       PaywallVariant.web => WebPaywallPage(source: source, url: resolved.webUrl!),
+      PaywallVariant.trial => TrialPaywallPage(source: source),
       PaywallVariant.control => null,
     };
     if (page == null) return false;
-    await routeToPage(context, page);
+    final result = await routeToPage(context, page);
+    onResult?.call(result);
     return true;
   }
 
@@ -56,6 +65,7 @@ abstract final class PaywallRouter {
         PaywallVariant.control => PaywallVariantShownVariant.control,
         PaywallVariant.outline => PaywallVariantShownVariant.outline,
         PaywallVariant.web => PaywallVariantShownVariant.web,
+        PaywallVariant.trial => PaywallVariantShownVariant.trial,
       };
 
   static PaywallVariantShownSource sourceWire(String source) {

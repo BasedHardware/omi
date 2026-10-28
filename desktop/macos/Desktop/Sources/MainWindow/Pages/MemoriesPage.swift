@@ -98,30 +98,6 @@ enum MemoryLayerFilter: String, CaseIterable, Identifiable {
   var allowedLayers: [MemoryLayer] { layerScope.tiers }
 }
 
-/// Server-owned currency projection. The desktop does not calculate this from
-/// timestamps; missing classifications remain visible as Unknown in Useful now.
-enum MemoryTemporalFilter: String, CaseIterable, Identifiable {
-  case usefulNow
-  case history
-  case all
-
-  var id: String { rawValue }
-  var displayName: String {
-    switch self {
-    case .usefulNow: return "Useful now"
-    case .history: return "History"
-    case .all: return "All"
-    }
-  }
-  var description: String {
-    switch self {
-    case .usefulNow: return "Memories Omi is using now"
-    case .history: return "Dated memories from the server history"
-    case .all: return "Useful now and history"
-    }
-  }
-}
-
 /// Reversible alias during WS-G client rename (Wave 36).
 typealias MemoryTierFilter = MemoryLayerFilter
 
@@ -139,8 +115,7 @@ enum MemoryPageProjection {
     cachedMemories: [ServerMemory],
     serverMemories: [ServerMemory],
     source: Source,
-    lifecycleExposed: Bool,
-    temporalFilter: MemoryTemporalFilter = .usefulNow
+    lifecycleExposed: Bool
   ) -> [ServerMemory] {
     let values: [ServerMemory]
     switch source {
@@ -149,17 +124,7 @@ enum MemoryPageProjection {
     case .authoritativeServer:
       values = serverMemories
     }
-    return values.filter {
-      guard $0.tierIsExplicit == lifecycleExposed else { return false }
-      switch temporalFilter {
-      case .usefulNow: return $0.isUsefulNow
-      case .history:
-        // Suppressed rows remain discoverable so the owner can explicitly
-        // Allow use again; they are part of history regardless of currency.
-        return $0.isHistory || $0.memoryUseSuppressed == true
-      case .all: return true
-      }
-    }
+    return values.filter { $0.tierIsExplicit == lifecycleExposed }
   }
 }
 
@@ -206,24 +171,6 @@ class MemoriesViewModel: ObservableObject {
       Task { await reloadForCurrentLayerFilter() }
     }
   }
-
-  @Published var selectedTemporalFilter: MemoryTemporalFilter = .usefulNow {
-    didSet {
-      guard oldValue != selectedTemporalFilter else { return }
-      bumpScopeGeneration()
-      displayLimit = pageSize
-      memories = []
-      currentOffset = 0
-      rawBackendOffset = 0
-      hasMoreMemories = true
-      Task { await loadMemories() }
-    }
-  }
-
-  /// Session-scoped server capability. It is deliberately not persisted:
-  /// capability can differ by owner and environment and must be re-established
-  /// from the current response headers.
-  @Published private(set) var beliefCapabilityEnabled: Bool?
 
   /// Whether the lifecycle capability is known at all yet.
   ///
@@ -301,7 +248,6 @@ class MemoriesViewModel: ObservableObject {
   /// load (the backend drops it from default reads), so the card needs somewhere to
   /// show the verdict immediately while triaging a screenful.
   @Published var reviewVerdicts: [String: Bool] = [:]
-  private var pendingMemoryUseFeedbackIDs: [String: String] = [:]
 
   @Published var showingAddMemory = false
   @Published var newMemoryText = ""
@@ -320,9 +266,6 @@ class MemoriesViewModel: ObservableObject {
   /// pages only. This prevents a newer/stale SQLite row from being appended as
   /// though it were part of the account projection.
   private var hasAuthoritativeServerProjection = false
-  /// Monotonic proof that a server page committed after a memory-use mutation.
-  /// A successful mutation response alone is not enough to clear its retry id.
-  private var authoritativeProjectionGeneration = 0
 
   /// A cache-first initial load can clear `isLoading` while its authoritative
   /// API projection is still syncing. Automation search must wait for that
@@ -401,7 +344,6 @@ class MemoriesViewModel: ObservableObject {
     let layerFilter: MemoryLayerFilter
     let searchText: String
     let selectedTags: Set<MemoryTag>
-    let temporalFilter: MemoryTemporalFilter
   }
 
   private var scopeGeneration = 0
@@ -415,7 +357,6 @@ class MemoriesViewModel: ObservableObject {
       layerFilter: selectedLayerFilter,
       searchText: searchText.trimmingCharacters(in: .whitespacesAndNewlines),
       selectedTags: selectedTags,
-      temporalFilter: selectedTemporalFilter
     )
   }
 
@@ -448,8 +389,7 @@ class MemoriesViewModel: ObservableObject {
       cachedMemories: [],
       serverMemories: values,
       source: .authoritativeServer,
-      lifecycleExposed: lifecycleExposed,
-      temporalFilter: selectedTemporalFilter)
+      lifecycleExposed: lifecycleExposed)
   }
 
   private struct MemoryPageFetchResult {
@@ -495,12 +435,6 @@ class MemoriesViewModel: ObservableObject {
     canonicalLifecycleCapabilityEstablished = true
     defaultMemoryDeleteSupported = page.defaultMemoryDeleteSupported
     persistCanonicalLifecycleExposure(page.canonicalLifecycleExposed)
-    beliefCapabilityEnabled = page.beliefEnabled
-    if page.beliefEnabled != true && selectedTemporalFilter != .usefulNow {
-      // A missing/false header is an unknown or disabled capability for this
-      // response. Do not leave a stale History selection mounted.
-      selectedTemporalFilter = .usefulNow
-    }
     if let deviceScopeCapability = deviceScopeSupportedOverride ?? page.deviceScopeSupported {
       deviceScopeSupported = deviceScopeCapability
     }
@@ -541,8 +475,7 @@ class MemoriesViewModel: ObservableObject {
           cachedMemories: loaded,
           serverMemories: [],
           source: .cache,
-          lifecycleExposed: canonicalLifecycleExposed,
-          temporalFilter: selectedTemporalFilter
+          lifecycleExposed: canonicalLifecycleExposed
         )
         currentOffset = loaded.count
         hasMoreMemories = ServerPaging.hasMore(received: loaded.count)
@@ -571,16 +504,19 @@ class MemoriesViewModel: ObservableObject {
 
   private let deleteMemoryRequest: (String) async throws -> Void
   private(set) var deferredDeleteRetry: MemoryDeleteRetryScheduler
+  private(set) var reconcileRetry: MemoryReconcileRetryScheduler
 
   init(
     deleteMemoryRequest: ((String) async throws -> Void)? = nil,
-    deferredRetrySleeper: MemoryDeleteRetryScheduler.Sleeper? = nil
+    deferredRetrySleeper: MemoryDeleteRetryScheduler.Sleeper? = nil,
+    reconcileRetrySleeper: MemoryReconcileRetryScheduler.Sleeper? = nil
   ) {
     self.deleteMemoryRequest =
       deleteMemoryRequest ?? { id in
         try await APIClient.shared.deleteMemory(id: id)
       }
     deferredDeleteRetry = MemoryDeleteRetryScheduler(sleeper: deferredRetrySleeper)
+    reconcileRetry = MemoryReconcileRetryScheduler(sleeper: reconcileRetrySleeper)
     // Owner fencing: an in-place account switch posts only
     // .runtimeOwnerDidChange (never .userDidSignOut), so without this reset the
     // previous owner's memories keep rendering until the container's deferred
@@ -681,13 +617,11 @@ class MemoriesViewModel: ObservableObject {
         guard isCurrentScope(token) else { return }
       }
       hasAuthoritativeServerProjection = true
-      authoritativeProjectionGeneration += 1
       memories = MemoryPageProjection.visibleMemories(
         cachedMemories: [],
         serverMemories: allFetched,
         source: .authoritativeServer,
-        lifecycleExposed: canonicalLifecycleExposed,
-        temporalFilter: selectedTemporalFilter
+        lifecycleExposed: canonicalLifecycleExposed
       )
       currentOffset = allFetched.count
       rawBackendOffset = allFetched.count
@@ -706,6 +640,13 @@ class MemoriesViewModel: ObservableObject {
     // A retry armed under the previous owner must never delete the next
     // owner's server rows after the switch reopens the session.
     deferredDeleteRetry.cancelAll()
+    // Same fence for a truncated-reconcile retry: it re-checks the owner
+    // anyway, but the new owner's own reconcile owns the next run. The dying
+    // run still reports `aborted_owner_changed` — with its pre-reset token and
+    // attempt count, before the reset invalidates them — so real owner
+    // switches stay visible on the reconcile telemetry instead of vanishing
+    // when the reset drops the run without a terminal report.
+    endRunReportingOwnerChange()
     // Fence late cache/API completions from the previous signed-in owner.
     bumpScopeGeneration()
     memories = []
@@ -720,8 +661,6 @@ class MemoriesViewModel: ObservableObject {
     canonicalLifecycleCapabilityEstablished = false
     defaultMemoryDeleteSupported = false
     selectedLayerFilter = .defaultAccess
-    selectedTemporalFilter = .usefulNow
-    beliefCapabilityEnabled = nil
     selectedTags = []
     filteredFromDatabase = []
     isLoadingFiltered = false
@@ -735,8 +674,6 @@ class MemoriesViewModel: ObservableObject {
     undoTimeRemaining = 0
     hasLoadedInitially = false
     hasAuthoritativeServerProjection = false
-    authoritativeProjectionGeneration = 0
-    pendingMemoryUseFeedbackIDs.removeAll()
     isActive = false
     currentOffset = 0
     rawBackendOffset = 0
@@ -778,12 +715,6 @@ class MemoriesViewModel: ObservableObject {
     do {
       let reloadLimit = max(pageSize, memories.count)
       // Route through the same device-scope-aware funnel as the initial load.
-      // It fetches the selected temporal view once the capability is
-      // established (refresh only runs after `hasLoadedInitially`), so the
-      // committed cursor stays valid for the view being paginated — a bare
-      // released-view page here would donate a cursor that loadMore() then
-      // pages as the temporal view. The funnel also restores device-scope
-      // and its 400-retry, which the direct call bypassed.
       let fetchResult = try await fetchMemoriesPageDeviceScopeAware(
         limit: reloadLimit,
         offset: 0,
@@ -799,7 +730,6 @@ class MemoriesViewModel: ObservableObject {
         )
       else { return }
       hasAuthoritativeServerProjection = true
-      authoritativeProjectionGeneration += 1
 
       // Sync API results to local cache
       try await MemoryStorage.shared.syncServerMemories(apiMemories)
@@ -812,8 +742,7 @@ class MemoriesViewModel: ObservableObject {
         cachedMemories: [],
         serverMemories: apiMemories,
         source: .authoritativeServer,
-        lifecycleExposed: page.canonicalLifecycleExposed,
-        temporalFilter: selectedTemporalFilter
+        lifecycleExposed: page.canonicalLifecycleExposed
       )
       currentOffset = memories.count
       rawBackendOffset = apiMemories.count
@@ -997,8 +926,8 @@ class MemoriesViewModel: ObservableObject {
           selectedTags.contains { tag in tag.matches(memory) }
         }
       }
-    } else if !filteredFromDatabase.isEmpty {
-      // Tag filters applied: use SQLite filtered results
+    } else if !selectedTags.isEmpty {
+      // Tag filters applied: use SQLite filtered results, even when none match
       result = filteredFromDatabase
     } else {
       // No filters: use loaded memories
@@ -1073,21 +1002,13 @@ class MemoriesViewModel: ObservableObject {
 
   // MARK: - API Actions
 
-  private var selectedMemoryTemporalView: APIClient.MemoryTemporalView {
-    switch selectedTemporalFilter {
-    case .usefulNow: return .usefulNow
-    case .history: return .history
-    case .all: return .all
-    }
-  }
-
   /// The single server-page read behind the browse surface (initial load,
   /// refresh, load-more). Tests replace this; production uses the shared client.
   var memoriesPageFetch:
     (
       @MainActor (
         _ limit: Int, _ offset: Int, _ cursor: String?, _ includeArchive: Bool,
-        _ deviceScope: String?, _ view: APIClient.MemoryTemporalView?,
+        _ deviceScope: String?,
         _ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
       ) async throws -> APIClient.MemoryListPage
     )? = nil
@@ -1103,13 +1024,9 @@ class MemoriesViewModel: ObservableObject {
     offset: Int,
     cursor: String? = nil,
     includeArchive: Bool,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
-    viewOverride: APIClient.MemoryTemporalView? = nil
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> MemoryPageFetchResult {
     let scope = (filterThisDeviceOnly && deviceScopeSupported) ? "current" : nil
-    let requestedView: APIClient.MemoryTemporalView? =
-      viewOverride
-      ?? (beliefCapabilityEnabled == true ? selectedMemoryTemporalView : nil)
     do {
       let page = try await performMemoriesPageFetch(
         limit: limit,
@@ -1117,7 +1034,6 @@ class MemoriesViewModel: ObservableObject {
         cursor: cursor,
         includeArchive: includeArchive,
         deviceScope: scope,
-        view: requestedView,
         authorizationSnapshot: authorizationSnapshot)
       return MemoryPageFetchResult(page: page, deviceScopeSupportedOverride: nil)
     } catch APIError.httpError(let statusCode, _) where statusCode == 400 && scope != nil {
@@ -1137,7 +1053,6 @@ class MemoriesViewModel: ObservableObject {
         cursor: cursor,
         includeArchive: includeArchive,
         deviceScope: nil,
-        view: requestedView,
         authorizationSnapshot: authorizationSnapshot)
       return MemoryPageFetchResult(page: page, deviceScopeSupportedOverride: false)
     }
@@ -1151,12 +1066,11 @@ class MemoriesViewModel: ObservableObject {
     cursor: String?,
     includeArchive: Bool,
     deviceScope: String?,
-    view: APIClient.MemoryTemporalView?,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
   ) async throws -> APIClient.MemoryListPage {
     if let memoriesPageFetch {
       return try await memoriesPageFetch(
-        limit, offset, cursor, includeArchive, deviceScope, view, authorizationSnapshot)
+        limit, offset, cursor, includeArchive, deviceScope, authorizationSnapshot)
     }
     return try await APIClient.shared.getMemoriesPage(
       limit: limit,
@@ -1164,8 +1078,7 @@ class MemoriesViewModel: ObservableObject {
       cursor: cursor,
       includeArchive: includeArchive,
       deviceScope: deviceScope,
-      authorizationSnapshot: authorizationSnapshot,
-      view: view)
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   /// Load memories using local-first pattern:
@@ -1209,8 +1122,7 @@ class MemoriesViewModel: ObservableObject {
     // cached rows may be newer local edits or a stale projection and cannot be
     // presented as the signed-in account's complete memory set.
     let canRenderCacheBeforeAuthoritativeFetch =
-      selectedTemporalFilter == .usefulNow
-      && hasRememberedLifecycleExposure && !canonicalLifecycleExposed && !hasAuthoritativeServerProjection
+      hasRememberedLifecycleExposure && !canonicalLifecycleExposed && !hasAuthoritativeServerProjection
     if canRenderCacheBeforeAuthoritativeFetch {
       do {
         let cachedMemories = try await withThrowingTaskGroup(of: [ServerMemory].self) { group in
@@ -1248,17 +1160,14 @@ class MemoriesViewModel: ObservableObject {
 
     // Step 2: Fetch from API in background and sync to local cache
     do {
-      let initialRequestedView: APIClient.MemoryTemporalView? =
-        beliefCapabilityEnabled == true ? selectedMemoryTemporalView : nil
       let fetchResult = try await fetchMemoriesPageDeviceScopeAware(
         limit: pageSize,
         offset: 0,
         includeArchive: token.layerFilter.layerScope.includesArchive,
-        authorizationSnapshot: authorizationSnapshot,
-        viewOverride: initialRequestedView
+        authorizationSnapshot: authorizationSnapshot
       )
-      var page = fetchResult.page
-      var fetchedMemories = page.memories
+      let page = fetchResult.page
+      let fetchedMemories = page.memories
       guard isCurrentScope(token) else {
         // Scope changed mid-load; reset loading state so the replacement load
         // (gated by `guard !isLoading`) is not permanently blocked.
@@ -1276,38 +1185,7 @@ class MemoriesViewModel: ObservableObject {
         return
       }
 
-      // The first request cannot know whether the temporal-view capability is
-      // enabled, so it may have returned the legacy released/default view.
-      // Once the response advertises the capability, restart at offset zero
-      // with the explicit view before retaining its cursor. A cursor issued
-      // for the released view must never feed useful-now/history pagination.
-      if page.beliefEnabled == true && initialRequestedView == nil {
-        let explicitFetchResult = try await fetchMemoriesPageDeviceScopeAware(
-          limit: pageSize,
-          offset: 0,
-          includeArchive: token.layerFilter.layerScope.includesArchive,
-          authorizationSnapshot: authorizationSnapshot,
-          viewOverride: selectedMemoryTemporalView
-        )
-        guard isCurrentScope(token) else {
-          isLoading = false
-          return
-        }
-        guard
-          commitMemoryPageCapabilities(
-            explicitFetchResult.page,
-            for: token,
-            deviceScopeSupportedOverride: explicitFetchResult.deviceScopeSupportedOverride
-          )
-        else {
-          isLoading = false
-          return
-        }
-        page = explicitFetchResult.page
-        fetchedMemories = page.memories
-      }
       hasAuthoritativeServerProjection = true
-      authoritativeProjectionGeneration += 1
       hasLoadedInitially = true
       log("MemoriesViewModel: Fetched \(fetchedMemories.count) memories from API")
 
@@ -1321,8 +1199,7 @@ class MemoriesViewModel: ObservableObject {
           cachedMemories: [],
           serverMemories: fetchedMemories,
           source: .authoritativeServer,
-          lifecycleExposed: page.canonicalLifecycleExposed,
-          temporalFilter: selectedTemporalFilter
+          lifecycleExposed: page.canonicalLifecycleExposed
         )
         guard isCurrentScope(token) else {
           // Scope changed mid-merge; reset loading state so the replacement
@@ -1353,8 +1230,7 @@ class MemoriesViewModel: ObservableObject {
           cachedMemories: [],
           serverMemories: fetchedMemories,
           source: .authoritativeServer,
-          lifecycleExposed: page.canonicalLifecycleExposed,
-          temporalFilter: selectedTemporalFilter
+          lifecycleExposed: page.canonicalLifecycleExposed
         )
         currentOffset = memories.count
         rawBackendOffset = fetchedMemories.count
@@ -1416,10 +1292,20 @@ class MemoriesViewModel: ObservableObject {
   /// Runs once per launch rather than once per user: a delete on another device
   /// can happen at any time, so a permanent one-shot latch would converge the
   /// cache once and then let it drift again for the life of the install.
+  ///
+  /// A truncated pull no longer parks the prune until the next launch: the run
+  /// schedules a bounded in-launch retry (see
+  /// `MemoriesViewModel+ReconcileRetry.swift`) that re-enters this function, so
+  /// every guard — latch, fresh cursor, owner fencing — runs again per attempt.
+  /// Only a complete run latches; an exhausted run is held until next launch.
   func reconcileCacheIfNeeded() async {
     let userId = UserDefaults.standard.string(forKey: "auth_userId") ?? "unknown"
 
     guard !Self.reconciledUserIDsThisLaunch.contains(userId) else { return }
+    // Single-flight admission: nil while another attempt is in flight or a
+    // bounded retry is pending (see beginReconcileAttempt). The returned token
+    // fences every terminal report of this attempt to the run that started it.
+    guard let run = beginReconcileAttempt(userId: userId) else { return }
 
     log("MemoriesViewModel: Starting cache reconcile for user \(userId)")
 
@@ -1454,6 +1340,7 @@ class MemoriesViewModel: ObservableObject {
         // new owner's reopened store.
         guard ownerStillAuthorized() else {
           log("MemoriesViewModel: Cache reconcile aborted because the signed-in owner changed mid-pull")
+          reconcileRunAbortedByOwnerChange(run: run)
           return
         }
         try await MemoryStorage.shared.syncServerMemories(batch)
@@ -1464,9 +1351,11 @@ class MemoriesViewModel: ObservableObject {
       }
 
       // A truncated pull saw only part of the backend, so absence proves nothing.
-      // Leave the cache alone and retry on the next launch.
+      // Leave the cache alone this attempt; the bounded in-launch retry
+      // re-runs the reconcile, and only an exhausted run waits for next launch.
       guard !truncated else {
         log("MemoriesViewModel: Cache reconcile skipped pruning because the list was truncated")
+        reconcileAttemptTruncated(run: run)
         return
       }
 
@@ -1476,6 +1365,7 @@ class MemoriesViewModel: ObservableObject {
       // account still has.
       guard ownerStillAuthorized() else {
         log("MemoriesViewModel: Cache reconcile aborted before pruning because the signed-in owner changed")
+        reconcileRunAbortedByOwnerChange(run: run)
         return
       }
       let pruned = try await MemoryStorage.shared.softDeleteSyncedOrphans(
@@ -1488,11 +1378,13 @@ class MemoriesViewModel: ObservableObject {
       } else if pruned > 0 {
         log("MemoriesViewModel: Cache reconcile pruned \(pruned) memories deleted on another device")
       }
+      reconcileRunCompleted(run: run, pruned: pruned)
 
       await loadTagCountsFromDatabase()
       await loadMemories()
     } catch {
       logError("MemoriesViewModel: Cache reconcile failed (will retry next launch)", error: error)
+      reconcileRunFailed(run: run)
     }
   }
 
@@ -1676,8 +1568,6 @@ class MemoriesViewModel: ObservableObject {
         )
       else { return }
       hasAuthoritativeServerProjection = true
-      authoritativeProjectionGeneration += 1
-
       // Sync to local cache first
       try await MemoryStorage.shared.syncServerMemories(newMemories)
 
@@ -1729,59 +1619,6 @@ class MemoriesViewModel: ObservableObject {
     }
   }
 
-  /// Sends the reversible owner use preference. Feedback ids stay stable while
-  /// a request is retried and are cleared only after a canonical refresh
-  /// confirms the acknowledged action.
-  func recordMemoryUse(_ memory: ServerMemory, keep: Bool) async {
-    // The use route is a beta capability. A stale hover closure must not write
-    // after a response has withdrawn that capability for this owner/session.
-    guard beliefCapabilityEnabled == true, memory.isUseControlEligible else { return }
-
-    let action: APIClient.MemoryUseAction
-    if keep {
-      // A positive signal must not accidentally preserve an existing veto:
-      // re-enabling a suppressed row is always the explicit `allow` action.
-      action =
-        memory.memoryUseSuppressed == true
-        ? .allow
-        : (memory.reviewed && memory.userReview == true ? .useful : .allow)
-    } else {
-      action = .suppress
-    }
-    let key = "\(memory.id):\(action.rawValue)"
-    let feedbackID = pendingMemoryUseFeedbackIDs[key] ?? UUID().uuidString
-    pendingMemoryUseFeedbackIDs[key] = feedbackID
-    do {
-      try await APIClient.shared.recordMemoryUse(id: memory.id, action: action, feedbackId: feedbackID)
-      // Re-read the canonical projection after the acknowledged mutation. The
-      // preference can change default/history membership, and a local row must
-      // never stand in for the server's authoritative result.
-      let projectionBeforeRefresh = authoritativeProjectionGeneration
-      await loadMemories()
-      await waitForMemoryLoadLifecycleToSettle()
-
-      guard authoritativeProjectionGeneration > projectionBeforeRefresh else { return }
-
-      // Keep the id stable until a fresh server projection reflects the action.
-      // This covers a successful receipt followed by a transient refresh
-      // failure or an eventually consistent list response.
-      let canonicalState = memories.first(where: { $0.id == memory.id })
-      let confirmed: Bool
-      switch action {
-      case .suppress:
-        confirmed = canonicalState == nil || canonicalState?.memoryUseSuppressed == true
-      case .allow, .useful:
-        confirmed = canonicalState?.memoryUseSuppressed != true
-      }
-      if confirmed {
-        pendingMemoryUseFeedbackIDs.removeValue(forKey: key)
-      }
-    } catch {
-      errorMessage = UserFacingErrorPresentation.message(for: error, while: .memories)
-      logError("MemoriesViewModel: Failed to record memory use preference", error: error)
-    }
-  }
-
   func deleteMemory(_ memory: ServerMemory) async {
     // Cancel any existing pending delete
     deleteTask?.cancel()
@@ -1800,13 +1637,14 @@ class MemoriesViewModel: ObservableObject {
       logError("Failed to soft-delete memory locally", error: error)
     }
 
-    // Remove from UI immediately (optimistic) — must also remove from filter source arrays
-    // so recomputeFilteredMemories() doesn't resurrect the deleted memory.
+    // Remove from UI immediately (optimistic) from every filter source array, then recompute:
+    // the `memories` didSet ran before the search/category sources were pruned.
     OmiMotion.withGated(.easeInOut(duration: 0.2)) {
       memories.removeAll { $0.id == memory.id }
       filteredFromDatabase.removeAll { $0.id == memory.id }
       allFilteredResults.removeAll { $0.id == memory.id }
       searchResults.removeAll { $0.id == memory.id }
+      recomputeFilteredMemories()
       pendingDeleteMemory = memory
       undoTimeRemaining = OmiFeedbackTiming.undo
     }
@@ -2490,24 +2328,6 @@ struct MemoriesPage: View {
         }
       }
 
-      if viewModel.beliefCapabilityEnabled == true {
-        Section("Memory view") {
-          ForEach(MemoryTemporalFilter.allCases) { filter in
-            Button {
-              viewModel.selectedTemporalFilter = filter
-            } label: {
-              HStack {
-                Text(filter.displayName)
-                if viewModel.selectedTemporalFilter == filter {
-                  Image(systemName: "checkmark")
-                }
-              }
-            }
-            .help(filter.description)
-          }
-        }
-      }
-
       Section("Source") {
         Button {
           viewModel.filterThisDeviceOnly.toggle()
@@ -2557,8 +2377,7 @@ struct MemoriesPage: View {
   private var memoryActiveFilterCount: Int {
     let lifecycle =
       viewModel.canonicalLifecycleExposed && viewModel.selectedLayerFilter != .defaultAccess ? 1 : 0
-    let temporal = viewModel.selectedTemporalFilter == .usefulNow ? 0 : 1
-    return lifecycle + temporal + (viewModel.filterThisDeviceOnly ? 1 : 0) + viewModel.selectedTags.count
+    return lifecycle + (viewModel.filterThisDeviceOnly ? 1 : 0) + viewModel.selectedTags.count
   }
 
   private var activeMemoryFilters: [PageActiveFilter] {
@@ -2572,13 +2391,6 @@ struct MemoriesPage: View {
         PageActiveFilter(
           id: "lifecycle", title: viewModel.selectedLayerFilter.displayName,
           onRemove: { viewModel.selectedLayerFilter = .defaultAccess }))
-    }
-
-    if viewModel.selectedTemporalFilter != .usefulNow {
-      filters.append(
-        PageActiveFilter(
-          id: "temporal", title: viewModel.selectedTemporalFilter.displayName,
-          onRemove: { viewModel.selectedTemporalFilter = .usefulNow }))
     }
 
     if viewModel.filterThisDeviceOnly {
@@ -2602,9 +2414,6 @@ struct MemoriesPage: View {
     if viewModel.canonicalLifecycleExposed {
       viewModel.selectedLayerFilter = .defaultAccess
     }
-    if viewModel.selectedTemporalFilter != .usefulNow {
-      viewModel.selectedTemporalFilter = .usefulNow
-    }
     if viewModel.filterThisDeviceOnly {
       viewModel.filterThisDeviceOnly = false
     }
@@ -2619,7 +2428,6 @@ struct MemoriesPage: View {
   private var hasActiveMemoryQueryScope: Bool {
     !viewModel.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
       || viewModel.selectedLayerFilter != .defaultAccess
-      || viewModel.selectedTemporalFilter != .usefulNow
       || viewModel.filterThisDeviceOnly
       || !viewModel.selectedTags.isEmpty
   }
@@ -2842,11 +2650,6 @@ struct MemoriesPage: View {
               onReview: { keep in
                 Task { await viewModel.reviewMemory(memory, keep: keep) }
               },
-              onUse: { keep in
-                guard viewModel.beliefCapabilityEnabled == true, memory.isUseControlEligible else { return }
-                Task { await viewModel.recordMemoryUse(memory, keep: keep) }
-              },
-              showUseControls: viewModel.beliefCapabilityEnabled == true && memory.isUseControlEligible,
               categoryIcon: categoryIcon,
               categoryColor: categoryColor,
               tagColorFor: tagColorFor,
@@ -2990,7 +2793,6 @@ struct MemoriesPage: View {
 
   private var hasActiveMemoryFilterScope: Bool {
     viewModel.selectedLayerFilter != .defaultAccess
-      || viewModel.selectedTemporalFilter != .usefulNow
       || viewModel.filterThisDeviceOnly
       || !viewModel.selectedTags.isEmpty
   }
@@ -3072,8 +2874,6 @@ private struct MemoryCardView: View {
   /// reflects the click immediately instead of waiting for the next load.
   let verdict: Bool?
   let onReview: (Bool) -> Void
-  let onUse: (Bool) -> Void
-  let showUseControls: Bool
   let categoryIcon: (MemoryCategory) -> String
   let categoryColor: (MemoryCategory) -> Color
   let tagColorFor: (String) -> Color
@@ -3145,13 +2945,6 @@ private struct MemoryCardView: View {
             isRevealed: isHovered || verdict != nil,
             onReview: onReview
           )
-
-          if showUseControls {
-            MemoryUseControls(
-              isRevealed: isHovered,
-              onUse: onUse
-            )
-          }
 
           // Opens the side panel, so it points to the side — not the external-link glyph.
           if isHovered {
@@ -3237,48 +3030,6 @@ private struct MemoryReviewControls: View {
   {
     Button {
       onReview(keep)
-    } label: {
-      Image(systemName: symbol)
-        .scaledFont(size: OmiType.micro, weight: .medium)
-        .foregroundColor(tint)
-        .frame(width: 18, height: 18)
-        .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
-    .help(label)
-    .accessibilityLabel(label)
-  }
-}
-
-/// Reversible use preference for one memory. This is separate from truth
-/// review: an owner may recognize a memory as true while still asking the
-/// assistant not to use it, or allow a previously suppressed true memory.
-private struct MemoryUseControls: View {
-  let isRevealed: Bool
-  let onUse: (Bool) -> Void
-
-  var body: some View {
-    HStack(spacing: OmiSpacing.xs) {
-      useButton(
-        keep: true,
-        symbol: "checkmark.circle",
-        tint: Ink.secondary,
-        label: "Allow use of this memory"
-      )
-      useButton(
-        keep: false,
-        symbol: "nosign",
-        tint: Ink.secondary,
-        label: "Don't use this memory"
-      )
-    }
-    .opacity(isRevealed ? 1 : 0)
-    .allowsHitTesting(isRevealed)
-  }
-
-  private func useButton(keep: Bool, symbol: String, tint: Color, label: String) -> some View {
-    Button {
-      onUse(keep)
     } label: {
       Image(systemName: symbol)
         .scaledFont(size: OmiType.micro, weight: .medium)

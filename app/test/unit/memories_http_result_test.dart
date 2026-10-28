@@ -26,13 +26,11 @@ void main() {
       statusCode: 200,
       body: '[]',
       nextCursor: 'cursor-2',
-      beliefEnabled: true,
     );
 
     expect(result.ok, isTrue);
     expect(result.memories, isEmpty);
     expect(result.nextCursor, 'cursor-2');
-    expect(result.beliefEnabled, isTrue);
   });
 
   test('memory cursor URL omits offset and preserves the server paging contract', () {
@@ -43,7 +41,6 @@ void main() {
         offset: 500,
         cursor: 'cursor-2',
         thisDeviceOnly: true,
-        view: MemoryReadView.usefulNow,
       ),
     );
 
@@ -52,7 +49,6 @@ void main() {
       'limit': '100',
       'cursor': 'cursor-2',
       'device_scope': 'current',
-      'view': 'useful_now',
     });
   });
 

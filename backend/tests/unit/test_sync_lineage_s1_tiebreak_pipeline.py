@@ -364,7 +364,7 @@ async def test_adjoining_committed_run_binds_the_merged_survivor_and_saves_speec
     pipeline = real_pipeline
     wal_pipeline_harness._coverage_env(monkeypatch)
     monkeypatch.setenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, 'true')
-    monkeypatch.delenv('SYNC_LINEAGE_S1_REQUIRED', raising=False)
+
     rows = _incident_rows(merged_evidence=_merged_evidence(20, 40, WAL_TS - 10.0))
     _assert_incident_fixture(rows)
     store = _seed_and_intake(monkeypatch, rows)
@@ -398,7 +398,7 @@ async def test_single_visible_survivor_binds_when_discard_flag_survives_projecti
     pipeline = real_pipeline
     wal_pipeline_harness._coverage_env(monkeypatch)
     monkeypatch.setenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, 'true')
-    monkeypatch.delenv('SYNC_LINEAGE_S1_REQUIRED', raising=False)
+
     rows = [row for row in _incident_rows() if row['id'] != 'GEN-BACK']
     store = _seed_and_intake(monkeypatch, rows)
     state = _wire_incident(pipeline, monkeypatch, tmp_path, rows=rows)
@@ -417,7 +417,7 @@ async def test_coverage_trimmed_derivative_binds_the_merged_survivor(real_pipeli
     pipeline = real_pipeline
     wal_pipeline_harness._coverage_env(monkeypatch)
     monkeypatch.setenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, 'true')
-    monkeypatch.delenv('SYNC_LINEAGE_S1_REQUIRED', raising=False)
+
     rows = _incident_rows(merged_evidence=_merged_evidence(40, 45, WAL_TS))
     store = _seed_and_intake(monkeypatch, rows)
     state = _wire_incident(pipeline, monkeypatch, tmp_path, rows=rows)
@@ -445,7 +445,7 @@ async def test_fully_committed_wal_skips_provider_writes_and_enrichment(real_pip
     pipeline = real_pipeline
     wal_pipeline_harness._coverage_env(monkeypatch)
     monkeypatch.setenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, 'true')
-    monkeypatch.delenv('SYNC_LINEAGE_S1_REQUIRED', raising=False)
+
     rows = _incident_rows(merged_evidence=_merged_evidence(40, 50, WAL_TS))
     store = _seed_and_intake(monkeypatch, rows)
     state = _wire_incident(pipeline, monkeypatch, tmp_path, rows=rows)
@@ -470,7 +470,7 @@ async def test_committed_proof_reaches_intake_dedupe_but_abstains_without_wal_co
     pipeline = real_pipeline
     wal_pipeline_harness._coverage_env(monkeypatch, coverage_flag='off')
     monkeypatch.setenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, 'true')
-    monkeypatch.delenv('SYNC_LINEAGE_S1_REQUIRED', raising=False)
+
     live_texts = [f'the quiet river carried leaf {v} downstream past the mill' for v in range(7)]
     merged_evidence = _merged_evidence(40, 50, WAL_TS)
     rows = _incident_rows(merged_evidence=merged_evidence)
@@ -525,7 +525,7 @@ async def test_adjoining_only_proof_never_suppresses_identical_unreceived_speech
     pipeline = real_pipeline
     wal_pipeline_harness._coverage_env(monkeypatch, coverage_flag='off')
     monkeypatch.setenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, 'true')
-    monkeypatch.delenv('SYNC_LINEAGE_S1_REQUIRED', raising=False)
+
     live_texts = [f'the quarterly planning review covered agenda item {v} in detail' for v in range(10)]
     rows = _incident_rows(merged_evidence=_merged_evidence(20, 40, WAL_TS - 10.0))
     merged = next(row for row in rows if row['id'] == 'GEN-MERGED')
@@ -551,13 +551,13 @@ async def test_adjoining_only_proof_never_suppresses_identical_unreceived_speech
 
 @pytest.mark.asyncio
 async def test_default_s1_admission_without_claims_keeps_whole_batch_resolution(real_pipeline, monkeypatch, tmp_path):
-    """Default SYNC_LINEAGE_S1_REQUIRED refuses an upload with no claims before
+    """The permanent S1 requirement refuses an upload with no claims before
     per-segment planning — the whole-batch resolver runs and no frame planner,
     projection or pending token appears."""
     pipeline = real_pipeline
     wal_pipeline_harness._coverage_env(monkeypatch)
     monkeypatch.setenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, 'true')
-    monkeypatch.delenv('SYNC_LINEAGE_S1_REQUIRED', raising=False)
+
     rows = _incident_rows(merged_evidence=_merged_evidence(20, 40, WAL_TS - 10.0))
     store = _seed_and_intake(monkeypatch, rows)
     state = _wire_incident(pipeline, monkeypatch, tmp_path, rows=rows)
@@ -575,34 +575,13 @@ async def test_default_s1_admission_without_claims_keeps_whole_batch_resolution(
 
 
 @pytest.mark.asyncio
-async def test_s1_gate_off_without_maps_leaves_two_visible_rows_pending(real_pipeline, monkeypatch, tmp_path):
-    """SYNC_LINEAGE_S1_REQUIRED=off admits the claimless upload to per-segment
-    binding, but with no decoded maps the two visible rows stay pending before
-    STT and no new words are saved."""
-    pipeline = real_pipeline
-    wal_pipeline_harness._coverage_env(monkeypatch)
-    monkeypatch.setenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, 'true')
-    monkeypatch.setenv('SYNC_LINEAGE_S1_REQUIRED', 'off')
-    rows = _incident_rows(merged_evidence=_merged_evidence(20, 40, WAL_TS - 10.0))
-    store = _seed_and_intake(monkeypatch, rows)
-    state = _wire_incident(pipeline, monkeypatch, tmp_path, rows=rows)
-    await _run_incident(pipeline, tmp_path, claims=None)
-    assert state.plan_results
-    assert all(set(targets.values()) == {None} for targets, _maps in state.plan_results)
-    assert all(not maps for _targets, maps in state.plan_results)
-    assert state.prerecorded_calls == []
-    assert _texts(store, 'GEN-MERGED') == ['merged live speech']
-    assert _texts(store, 'GEN-BACK') == ['backdated live speech']
-
-
-@pytest.mark.asyncio
 async def test_compatible_visible_stamp_binds_ahead_of_frame_evidence(real_pipeline, monkeypatch, tmp_path):
     """A phone stamp naming the visible competitor still decides first: the
     segment binds GEN-BACK even though the committed run adjoins GEN-MERGED."""
     pipeline = real_pipeline
     wal_pipeline_harness._coverage_env(monkeypatch)
     monkeypatch.setenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, 'true')
-    monkeypatch.delenv('SYNC_LINEAGE_S1_REQUIRED', raising=False)
+
     rows = _incident_rows(merged_evidence=_merged_evidence(20, 40, WAL_TS - 10.0))
     store = _seed_and_intake(monkeypatch, rows)
     state = _wire_incident(pipeline, monkeypatch, tmp_path, rows=rows)

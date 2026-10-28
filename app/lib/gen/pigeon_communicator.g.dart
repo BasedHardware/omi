@@ -1128,6 +1128,25 @@ class BleHostApi {
     ;
   }
 
+  /// Saved pairing authorizes cold-start retries; false restores legacy policy.
+  Future<void> configureSavedReconnect(String uuid, bool enabled) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.configureSavedReconnect$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[uuid, enabled]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
   Future<void> unmanageDevice(String uuid) async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.unmanageDevice$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
@@ -1456,6 +1475,8 @@ abstract class BleFlutterApi {
 
   void onBluetoothStateChanged(String state);
 
+  void onSavedReconnect(String peripheralUuid, int attempt, String result, int disconnectedMs);
+
   void onPeripheralDiscovered(BlePeripheral peripheral);
 
   void onDeviceReady(String peripheralUuid, List<BleService> services);
@@ -1493,6 +1514,30 @@ abstract class BleFlutterApi {
           final String arg_state = args[0]! as String;
           try {
             api.onBluetoothStateChanged(arg_state);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onSavedReconnect$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          final List<Object?> args = message! as List<Object?>;
+          final String arg_peripheralUuid = args[0]! as String;
+          final int arg_attempt = args[1]! as int;
+          final String arg_result = args[2]! as String;
+          final int arg_disconnectedMs = args[3]! as int;
+          try {
+            api.onSavedReconnect(arg_peripheralUuid, arg_attempt, arg_result, arg_disconnectedMs);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

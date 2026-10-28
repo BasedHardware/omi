@@ -87,7 +87,8 @@ def test_notes_routing_calls_only_shaped_entrypoint(monkeypatch, mode, uid):
 
     monkeypatch.setattr(notes, '_get_shaped_conversation_notes', write)
     assert notes.get_conversation_notes(prefix, uid=uid, language_code='en') is result
-    assert calls == [(prefix, {'language_code': 'en'})]
+    # The owner uid reaches the writer so the agentic notes tools can be bound to that owner.
+    assert calls == [(prefix, {'uid': uid, 'open_loop_out': None, 'language_code': 'en'})]
 
 
 @pytest.mark.parametrize('route', ['off', 'cohort', 'on'])
@@ -166,9 +167,9 @@ def test_notes_evidence_after_breakpoint_and_roster_unbound(monkeypatch):
         transcript_segment_ids=['s1'],
         uid='anyone',
     )
-    assert 'spk 0 Expected Alice' in prefix.context  # Legacy behavior still intact.
+    assert 'spk c0 Expected Alice' in prefix.context  # Legacy behavior still intact.
     packet = json.loads(prefix.shaped_context.split('\nFULL TRANSCRIPT\n')[0])
-    assert packet['speaker_map'] == {'0': None}
+    assert packet['speaker_map'] == {'c0': None}
     assert packet['expected_calendar']['participants'][0]['name'] == 'Expected Alice'
     assert packet['observed_screen_listing'] is None
     messages = notes_mount().messages([{'role': 'user', 'content': prefix.shaped_context}], explicit_cache=True)
@@ -331,7 +332,12 @@ def test_chat_real_shared_loop_with_tools(monkeypatch, shadow):
     assert 'suppressed' in captured[1][-1]['content'] if shadow else 'Retrieved evidence' in captured[1][-1]['content']
     assert 'OLD CHAT PROMPT' not in str(captured)
     assert 'Find something' not in str(captured[0][0])
-    assert 'prompt_cache_breakpoint' in captured[0][0]['content'][0]
+    assert any(
+        'prompt_cache_breakpoint' in part
+        for message in captured[0]
+        if isinstance(message.get('content'), list)
+        for part in message['content']
+    )
 
 
 @pytest.mark.parametrize(
@@ -341,7 +347,6 @@ def test_execute_chat_stream_mount_wiring_and_off_bytes(monkeypatch, mode, opt_i
     if mode:
         monkeypatch.setenv(shaped.FLAG, mode)
     monkeypatch.setattr(agentic, '_get_agentic_qa_prompt', lambda *a, **k: 'Original prompt bytes')
-    monkeypatch.setattr(agentic, '_resolve_jit_conversation_retrieval', AsyncMock(return_value=False))
     monkeypatch.setattr(agentic, 'load_app_tools', lambda *a: [])
     captured = []
 
@@ -654,4 +659,4 @@ def test_merged_notes_keep_calendar_and_screen_participants_separate(monkeypatch
     packet = json.loads(prefix.shaped_context.split('\nFULL TRANSCRIPT\n')[0])
     assert [p['name'] for p in packet['expected_calendar']['participants']] == ['Expected Alice', 'Shared Sam']
     assert [p['name'] for p in packet['observed_screen_listing']['participants']] == ['Observed Bob', 'Shared Sam']
-    assert packet['speaker_map'] == {'0': None}
+    assert packet['speaker_map'] == {'c0': None}

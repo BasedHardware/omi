@@ -133,20 +133,47 @@ def test_new_listen_only_key_fails(gate: SimpleNamespace, chart_fixture: Path) -
     assert any("unexplained listen-only env OMI_ENV_DIFF_PROBE" in error for error in errors)
 
 
-def test_missing_required_flag_on_pusher_fails(gate: SimpleNamespace, chart_fixture: Path) -> None:
-    values = chart_fixture / "backend/charts/pusher/prod_omi_pusher_values.yaml"
-    replace_once(
-        values,
-        '  - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED\n    value: "true"\n',
-        "",
-    )
+@pytest.mark.parametrize("env", ("dev", "prod"))
+def test_queue_age_publisher_is_listener_only_with_precise_values(gate: SimpleNamespace, env: str) -> None:
+    pusher, _ = gate._read_values(REPO_ROOT, "pusher", env)
+    listen, _ = gate._read_values(REPO_ROOT, "listen", env)
+
+    assert pusher["FSR_QUEUE_AGE_PUBLISHER"].value == "0"
+    assert listen["FSR_QUEUE_AGE_PUBLISHER"].value == "1"
+    assert "FSR_QUEUE_AGE_PUBLISHER" in gate.SHARED_VALUE_DIFF_ALLOWED[env]
+    assert gate.validate_preflight(REPO_ROOT) == []
+
+
+def test_queue_age_publisher_may_be_absent_on_pusher(gate: SimpleNamespace, chart_fixture: Path) -> None:
+    values = chart_fixture / "backend/charts/pusher/dev_omi_pusher_values.yaml"
+    replace_once(values, '  - name: FSR_QUEUE_AGE_PUBLISHER\n    value: "0"\n', "")
 
     errors = gate.validate_preflight(chart_fixture)
 
-    assert any(
-        "required identical flag CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED is missing on pusher" in error
-        for error in errors
+    assert not any("FSR_QUEUE_AGE_PUBLISHER" in error for error in errors)
+
+
+@pytest.mark.parametrize(
+    ("service", "expected", "changed", "error"),
+    (
+        ("pusher", 'value: "0"', 'value: "1"', "must be '0' or absent on pusher"),
+        ("listen", 'value: "1"', 'value: "0"', "must be '1' on backend-listen"),
+    ),
+)
+def test_queue_age_publisher_rejects_unexpected_values(
+    gate: SimpleNamespace, chart_fixture: Path, service: str, expected: str, changed: str, error: str
+) -> None:
+    values = (
+        chart_fixture
+        / f"backend/charts/{'backend-listen' if service == 'listen' else 'pusher'}/prod_omi_{'backend_listen' if service == 'listen' else 'pusher'}_values.yaml"
     )
+    replace_once(
+        values,
+        f"  - name: FSR_QUEUE_AGE_PUBLISHER\n    {expected}\n",
+        f"  - name: FSR_QUEUE_AGE_PUBLISHER\n    {changed}\n",
+    )
+
+    assert any(error in message for message in gate.validate_preflight(chart_fixture))
 
 
 @pytest.mark.parametrize("env", ("dev", "prod"))
@@ -184,21 +211,6 @@ def test_ledger_switch_off_on_pusher_fails(gate: SimpleNamespace, chart_fixture:
     errors = gate.validate_preflight(chart_fixture)
 
     assert any(f"[{env}] required identical flag LLM_GATEWAY_ACCOUNTING_ENABLED disagrees" in error for error in errors)
-
-
-def test_required_flag_value_disagreement_fails(gate: SimpleNamespace, chart_fixture: Path) -> None:
-    values = chart_fixture / "backend/charts/pusher/prod_omi_pusher_values.yaml"
-    replace_once(
-        values,
-        '  - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED\n    value: "true"\n',
-        '  - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED\n    value: "false"\n',
-    )
-
-    errors = gate.validate_preflight(chart_fixture)
-
-    assert any(
-        "required identical flag CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED disagrees" in error for error in errors
-    )
 
 
 def test_stale_listen_only_allowlist_entry_fails(gate: SimpleNamespace, chart_fixture: Path) -> None:
@@ -272,3 +284,45 @@ def test_partial_sync_authority_stage_is_rejected(gate, chart_fixture, stage, na
     expected = stages[stage][name]
     replace_once(path, f'  - name: {name}\n    value: "{expected}"\n', f'  - name: {name}\n    value: "{value}"\n')
     assert gate.validate_preflight(chart_fixture)
+
+
+@pytest.mark.parametrize('env', ('dev', 'prod'))
+def test_batch_intake_and_worker_settings_are_explained_listen_only(gate: SimpleNamespace, env: str) -> None:
+    batch_listen_only = gate._BATCH_PIPELINE_LISTEN_ONLY
+    if env == 'prod':
+        batch_listen_only = batch_listen_only - {'BATCH_PIPELINE_UID_ALLOWLIST'}
+    assert batch_listen_only <= gate.LISTEN_ONLY_ALLOWED[env]
+    assert ('BATCH_PIPELINE_UID_ALLOWLIST' in gate.LISTEN_ONLY_ALLOWED[env]) == (env == 'dev')
+    assert 'BATCH_PIPELINE_ENABLED' in gate._BATCH_PIPELINE_LISTEN_ONLY
+    assert 'BATCH_PIPELINE_UID_ALLOWLIST' in gate._BATCH_PIPELINE_LISTEN_ONLY
+    assert 'BATCH_PIPELINE_LIVE_ADMISSION_ENABLED' not in gate._BATCH_PIPELINE_LISTEN_ONLY
+    assert 'BUCKET_BATCH_PIPELINE' in gate._BATCH_PIPELINE_LISTEN_ONLY
+    assert 'BATCH_PIPELINE_RECOVERY_MODE' in gate._BATCH_PIPELINE_LISTEN_ONLY
+    assert 'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST' in gate._BATCH_PIPELINE_LISTEN_ONLY
+    assert gate.validate_preflight(REPO_ROOT) == []
+
+
+def test_copying_batch_admission_to_pusher_is_not_silently_allowed(gate: SimpleNamespace, chart_fixture: Path) -> None:
+    path = chart_fixture / 'backend/charts/pusher/prod_omi_pusher_values.yaml'
+    text = path.read_text()
+    path.write_text(text.replace('env:\n', 'env:\n  - name: BATCH_PIPELINE_ENABLED\n    value: "true"\n', 1))
+    assert any(
+        'BATCH_PIPELINE_ENABLED is no longer listen-only' in error for error in gate.validate_preflight(chart_fixture)
+    )
+
+
+@pytest.mark.parametrize('env', ('dev', 'prod'))
+def test_reconnect_recovery_switch_belongs_only_to_listen(gate: SimpleNamespace, env: str) -> None:
+    assert 'STALE_IN_PROGRESS_RECOVERY_ENABLED' in gate.LISTEN_ONLY_ALLOWED[env]
+    assert gate.validate_preflight(REPO_ROOT) == []
+
+
+def test_reconnect_recovery_switch_copied_to_pusher_is_rejected(gate: SimpleNamespace, chart_fixture: Path) -> None:
+    path = chart_fixture / 'backend/charts/pusher/prod_omi_pusher_values.yaml'
+    path.write_text(
+        path.read_text().replace('env:\n', 'env:\n  - name: STALE_IN_PROGRESS_RECOVERY_ENABLED\n    value: "true"\n', 1)
+    )
+    assert any(
+        'STALE_IN_PROGRESS_RECOVERY_ENABLED is no longer listen-only' in error
+        for error in gate.validate_preflight(chart_fixture)
+    )

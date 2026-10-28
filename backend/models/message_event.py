@@ -21,6 +21,18 @@ class MessageEvent(BaseModel):
         return j
 
 
+class AudioCustodyEvent(MessageEvent):
+    """Audio-only immutable custody, independent of transcript coverage.
+
+    An absent/unknown source mapping never authorizes release of a device WAL.
+    """
+
+    capture_root: str
+    channel: str
+    frames: List[dict]
+    receipt: dict
+
+
 class ConversationEvent(MessageEvent):
     memory: Conversation
     messages: Optional[List[Message]] = []
@@ -101,6 +113,9 @@ class MessageServiceStatusEvent(MessageEvent):
 
     # Additive capability: absent on old servers means live-only on new clients.
     mobile_standard_batch: Optional[bool] = None
+    # Mobile local-preview lane: journal ALL pendant audio for batch (visible or
+    # not) and render the on-device preview. Absent means today's live transcript.
+    local_preview: Optional[bool] = None
 
     def to_json(self):
         # The outcome fields are an additive terminal-failure contract, not
@@ -192,6 +207,7 @@ class SpeakerLabelSuggestionEvent(MessageEvent):
     person_id: str
     person_name: str
     segment_id: str
+    is_user: bool = False
     # Set only with an empty person_id: a pinned person this voice nearly matched (a question, never a label).
     suggested_person_id: Optional[str] = None
     retracted: bool = False
@@ -204,6 +220,22 @@ class SpeakerLabelSuggestionEvent(MessageEvent):
             j.pop("suggested_person_id", None)
         if not self.retracted:
             j.pop("retracted", None)
+        return j
+
+
+class SttCapLiveHeldEvent(MessageEvent):
+    """Session-scoped UI receipt. Seconds count only durably held live PCM."""
+
+    event_type: str = "stt_cap_live_held"
+    session_id: str
+    held_seconds: int
+    paused: bool
+    reset_at: int
+
+    def to_json(self):
+        j = self.model_dump(mode="json")
+        j["type"] = self.event_type
+        del j["event_type"]
         return j
 
 

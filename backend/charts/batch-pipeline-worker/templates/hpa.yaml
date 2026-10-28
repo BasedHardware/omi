@@ -1,0 +1,48 @@
+{{- define "batch-pipeline-worker.hpa" -}}
+{{- if and .Values.enabled .Values.autoscaling.enabled }}
+{{- if lt (int .instance.minReplicas) 1 }}
+{{- fail "queue sampling runs in workers: minReplicas must be >=1; scale-to-zero needs an independent sampler" }}
+{{- end }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .instance.name }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .instance.name }}
+  minReplicas: {{ .instance.minReplicas }}
+  maxReplicas: {{ .instance.maxReplicas }}
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - {type: Pods, value: 2, periodSeconds: 60}
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - {type: Pods, value: 1, periodSeconds: 120}
+  metrics:
+    - type: External
+      external:
+        metric:
+          name: omi_batch_pipeline_admissible_ready_units
+          selector:
+            matchLabels:
+              worker_release: {{ .Release.Name }}
+              namespace: {{ .Release.Namespace }}
+        target:
+          # Each pool sees the same total. Doubling the per-worker target in
+          # balanced mode divides demand, instead of buying it twice.
+          type: AverageValue
+          averageValue: {{ .instance.capacityTarget | quote }}
+{{- end }}
+{{- end }}
+{{- if and .Values.enabled .Values.autoscaling.enabled }}
+{{- $root := . }}
+{{- range $instance := (include "batch-pipeline-worker.instances" . | fromYamlArray) }}
+{{ include "batch-pipeline-worker.hpa" (dict "Values" $root.Values "Release" $root.Release "instance" $instance) }}
+---
+{{- end }}
+{{- end }}

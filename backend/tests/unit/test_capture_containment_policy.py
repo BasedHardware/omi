@@ -20,12 +20,12 @@ import pytest
 import yaml
 
 from database import capture_groups as groups_db
+from database import capture_speech as speech_db
 from database import conversations as conversations_db
 from models.conversation import Conversation
 from tests.unit.fixtures import containment_long_pair as long_pair
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.conversations import capture_containment as containment_module
-from utils.conversations import capture_jev_shadow as shadow
 from utils.conversations import duplicate_capture as policy
 from utils.conversations.shared_speech import SharedSpeech, measure_shared_speech
 
@@ -108,6 +108,8 @@ def seam(monkeypatch):
     store = StrictFirestore()
     monkeypatch.setattr(conversations_db, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(groups_db, 'get_firestore_client', lambda: store)
+    # Keep the new coverage observer in default shadow against the same store.
+    monkeypatch.setattr(speech_db, 'get_firestore_client', lambda: store)
 
     def query(uid, *, status, finished_after, limit):
         rows = [
@@ -120,8 +122,6 @@ def seam(monkeypatch):
     monkeypatch.setattr(conversations_db, 'get_conversations_finished_after', query)
     events = []
     monkeypatch.setattr(policy, 'record_product_event', lambda event, **kw: events.append((event, kw.get('outcome'))))
-    monkeypatch.setattr(policy, 'submit_same_scene', lambda *args: None)
-    monkeypatch.setattr(policy, 'submit_resummary', lambda *args: None)
     return {'store': store, 'events': events}
 
 
@@ -154,7 +154,7 @@ def test_on_mode_joins_the_complementary_pair_with_containment_evidence(seam, mo
     assert len(lines) == 1
     assert lines[0] == (
         'event=capture_group_containment mode=on phase=rule would_join=true '
-        'reason=contained jev_p=unavailable basis=full dropped_segments=0'
+        'reason=contained basis=full dropped_segments=0'
     )
     for cid in ('pendant', 'laptop'):
         strip = {k: v for k, v in seam['store'].rows[path(cid)].items() if k != 'capture_group'}
@@ -334,69 +334,6 @@ def test_detector_fault_never_leaks_or_inhibits(seam, monkeypatch, caplog):
     assert ('capture_group_joined', 'none') in seam['events']
     assert all('capture_group' not in r for r in seam['store'].rows.values())
     assert all('PRIVATE-SENTINEL' not in r.message for r in caplog.records)
-
-
-def test_jev_success_logs_content_free_companion(seam, monkeypatch, caplog):
-    monkeypatch.setenv(containment_module.MODE_ENV, 'shadow')
-    monkeypatch.setenv('CAPTURE_JEV_SHADOW_ENABLED', 'true')
-    monkeypatch.setenv('CAPTURE_JEV_SHADOW_UID_ALLOWLIST', UID)
-    monkeypatch.setattr(shadow, 'submit_with_context', lambda _executor, fn, *args: fn(*args))
-    pendant, laptop = complementary_rows()
-    rows = {'pendant': pendant, 'laptop': laptop}
-    monkeypatch.setattr(
-        shadow.conversations_db, 'get_conversation_for_capture_check', lambda uid, cid: (rows[cid], 'fingerprint')
-    )
-    monkeypatch.setattr(shadow, '_cap', lambda *args: 'admitted')
-    calls = []
-
-    class Answer:
-        served_model = 'typesafe/jev-1.13'
-
-        def noul(self, name):
-            return 0.75
-
-    monkeypatch.setattr(shadow, 'ask_jev', lambda *args, **kwargs: calls.append(args) or Answer())
-    emitted = []
-    monkeypatch.setattr(shadow, '_record', lambda record: emitted.append(record))
-    with caplog.at_level(logging.INFO, logger=containment_module.logger.name):
-        shadow.submit_same_scene(UID, 'pendant', 'laptop')
-    assert len(calls) == 1
-    assert emitted[-1]['outcome'] == 'success' and emitted[-1]['p'] == 0.75
-    lines = containment_lines(caplog)
-    assert len(lines) == 1
-    assert lines[0] == (
-        'event=capture_group_containment mode=shadow phase=jev would_join=true '
-        'reason=contained jev_p=0.750000 basis=full dropped_segments=0'
-    )
-    assert UID not in lines[0] and 'pendant' not in lines[0]
-
-
-def test_jev_companion_is_omitted_when_off(seam, monkeypatch, caplog):
-    monkeypatch.setenv(containment_module.MODE_ENV, 'off')
-    monkeypatch.setenv('CAPTURE_JEV_SHADOW_ENABLED', 'true')
-    monkeypatch.setenv('CAPTURE_JEV_SHADOW_UID_ALLOWLIST', UID)
-    monkeypatch.setattr(shadow, 'submit_with_context', lambda _executor, fn, *args: fn(*args))
-    pendant, laptop = complementary_rows()
-    rows = {'pendant': pendant, 'laptop': laptop}
-    monkeypatch.setattr(
-        shadow.conversations_db, 'get_conversation_for_capture_check', lambda uid, cid: (rows[cid], 'fingerprint')
-    )
-    monkeypatch.setattr(shadow, '_cap', lambda *args: 'admitted')
-    detector = MagicMock(side_effect=AssertionError('detector must not run'))
-    monkeypatch.setattr(shadow, 'measure_capture_containment', detector)
-
-    class Answer:
-        served_model = 'typesafe/jev-1.13'
-
-        def noul(self, name):
-            return 0.75
-
-    monkeypatch.setattr(shadow, 'ask_jev', lambda *args, **kwargs: Answer())
-    monkeypatch.setattr(shadow, '_record', lambda record: None)
-    with caplog.at_level(logging.INFO, logger=containment_module.logger.name):
-        shadow.submit_same_scene(UID, 'pendant', 'laptop')
-    detector.assert_not_called()
-    assert not containment_lines(caplog)
 
 
 @pytest.mark.parametrize('mode', ['shadow', 'on'])
@@ -599,47 +536,16 @@ def test_shadow_sampled_budget_abstention_logs_sampled_basis(seam, monkeypatch, 
     assert 'basis=sampled' in lines[0]
 
 
-@pytest.mark.parametrize('mode', ['shadow', 'on'])
-def test_jev_companion_reports_detector_basis(seam, monkeypatch, caplog, mode):
-    monkeypatch.setenv(containment_module.MODE_ENV, mode)
-    monkeypatch.setenv('CAPTURE_JEV_SHADOW_ENABLED', 'true')
-    monkeypatch.setenv('CAPTURE_JEV_SHADOW_UID_ALLOWLIST', UID)
-    monkeypatch.setattr(shadow, 'submit_with_context', lambda _executor, fn, *args: fn(*args))
-    pendant, desktop = _favorable_rows()
-    rows = {'pendant': pendant, 'desktop': desktop}
-    monkeypatch.setattr(
-        shadow.conversations_db, 'get_conversation_for_capture_check', lambda uid, cid: (rows[cid], 'fingerprint')
-    )
-    monkeypatch.setattr(shadow, '_cap', lambda *args: 'admitted')
-
-    class Answer:
-        served_model = 'typesafe/jev-1.13'
-
-        def noul(self, name):
-            return 0.75
-
-    monkeypatch.setattr(shadow, 'ask_jev', lambda *args, **kwargs: Answer())
-    monkeypatch.setattr(shadow, '_record', lambda record: None)
-    with caplog.at_level(logging.INFO, logger=containment_module.logger.name):
-        shadow.submit_same_scene(UID, 'pendant', 'desktop')
-    lines = containment_lines(caplog)
-    assert len(lines) == 1
-    assert 'phase=jev' in lines[0] and 'jev_p=0.750000' in lines[0]
-    if mode == 'shadow':
-        assert 'would_join=true' in lines[0] and 'basis=sampled' in lines[0]
-    else:
-        assert 'would_join=false' in lines[0] and 'reason=insufficient_coverage' in lines[0]
-        assert 'basis=full' in lines[0]
-
-
 REPO = Path(__file__).resolve().parents[3]
 MODE_KEY = 'CAPTURE_GROUP_CONTAINMENT_MODE'
 GKE_HOSTS = ('backend-listen', 'pusher')
 CLOUD_RUN_HOSTS = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
+# Keep the same safe constructors without spending the test's CPU budget in the Python scanner.
+SAFE_YAML_LOADER = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
 
 
 def test_composed_manifest_declares_shadow_on_all_six_hosts_per_environment():
-    manifest = yaml.safe_load((REPO / 'backend/deploy/runtime_env.yaml').read_text())
+    manifest = yaml.load((REPO / 'backend/deploy/runtime_env.yaml').read_text(), Loader=SAFE_YAML_LOADER)
     for env_name in ('dev', 'prod'):
         env = manifest['environments'][env_name]
         for host in GKE_HOSTS:
@@ -657,50 +563,19 @@ def test_gke_chart_values_match_the_composed_manifest():
         'pusher/dev_omi_pusher_values.yaml',
         'pusher/prod_omi_pusher_values.yaml',
     ):
-        values = yaml.safe_load((REPO / 'backend/charts' / chart).read_text())
+        values = yaml.load((REPO / 'backend/charts' / chart).read_text(), Loader=SAFE_YAML_LOADER)
         entries = {item['name']: item.get('value') for item in values['env']}
         assert entries[MODE_KEY] == 'shadow', chart
 
 
 def test_registry_and_classification_declare_the_mode():
-    registry = yaml.safe_load((REPO / 'config/feature-flags.yaml').read_text())
+    registry = yaml.load((REPO / 'config/feature-flags.yaml').read_text(), Loader=SAFE_YAML_LOADER)
     rows = [row for row in registry['flags'] if row.get('key') == MODE_KEY]
     assert len(rows) == 1
     assert rows[0]['lifecycle'] == 'rollout' and rows[0]['fail'] == 'closed'
     assert rows[0]['surfaces'] == ['backend'] and rows[0]['decision'] == 'pending'
     classification = json.loads((REPO / 'config/deployment-setting-classification.json').read_text())
     assert MODE_KEY in classification['kinds']['config']
-
-
-def test_jev_companion_fault_preserves_legacy_record_and_skips(seam, monkeypatch, caplog):
-    monkeypatch.setenv(containment_module.MODE_ENV, 'shadow')
-    monkeypatch.setenv('CAPTURE_JEV_SHADOW_ENABLED', 'true')
-    monkeypatch.setenv('CAPTURE_JEV_SHADOW_UID_ALLOWLIST', UID)
-    monkeypatch.setattr(shadow, 'submit_with_context', lambda _executor, fn, *args: fn(*args))
-    pendant, laptop = complementary_rows()
-    rows = {'pendant': pendant, 'laptop': laptop}
-    monkeypatch.setattr(
-        shadow.conversations_db, 'get_conversation_for_capture_check', lambda uid, cid: (rows[cid], 'fingerprint')
-    )
-    monkeypatch.setattr(shadow, '_cap', lambda *args: 'admitted')
-    monkeypatch.setattr(shadow, 'measure_capture_containment', MagicMock(side_effect=RuntimeError('PRIVATE-SENTINEL')))
-
-    class Answer:
-        served_model = 'typesafe/jev-1.13'
-
-        def noul(self, name):
-            return 0.75
-
-    monkeypatch.setattr(shadow, 'ask_jev', lambda *args, **kwargs: Answer())
-    emitted = []
-    monkeypatch.setattr(shadow, '_record', lambda record: emitted.append(record))
-    skip = shadow.CAPTURE_JEV_SHADOW_SKIPS.labels('same_scene', 'error')
-    before = skip._value.get()
-    with caplog.at_level(logging.INFO):
-        shadow.submit_same_scene(UID, 'pendant', 'laptop')
-    assert emitted[-1]['outcome'] == 'success' and emitted[-1]['p'] == 0.75
-    assert skip._value.get() == before
-    assert all('PRIVATE-SENTINEL' not in r.message for r in caplog.records)
 
 
 BASE_COMMIT = 'cd3326b3a58d88338fc6219eb767c36f581fc106'
@@ -715,9 +590,14 @@ def _baseline_policy():
         capture_output=True,
         text=True,
     ).stdout
+    # This historical baseline imported log-only callbacks; remove that import
+    # and provide no-ops so the comparison exercises only grouping behavior.
+    source = '\n'.join(line for line in source.splitlines() if 'submit_resummary, submit_same_scene' not in line)
     name = 'duplicate_capture_baseline'
     module = ModuleType(name)
     module.__file__ = str(REPO / 'backend/utils/conversations/duplicate_capture.py')
+    module.submit_same_scene = lambda *args: None
+    module.submit_resummary = lambda *args: None
     sys.modules[name] = module
     try:
         exec(compile(source, module.__file__, 'exec'), module.__dict__)
@@ -730,6 +610,8 @@ def _run_capture_flow(module, rows, last_id, monkeypatch, caplog):
     store = StrictFirestore()
     monkeypatch.setattr(conversations_db, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(groups_db, 'get_firestore_client', lambda: store)
+    # Keep the new coverage observer in default shadow against the same store.
+    monkeypatch.setattr(speech_db, 'get_firestore_client', lambda: store)
 
     def query(uid, *, status, finished_after, limit):
         found = [
@@ -743,12 +625,15 @@ def _run_capture_flow(module, rows, last_id, monkeypatch, caplog):
     store.rows.update({path(key): deepcopy(value) for key, value in rows.items()})
     events = []
     monkeypatch.setattr(module, 'record_product_event', lambda event, **kw: events.append((event, kw.get('outcome'))))
-    monkeypatch.setattr(module, 'submit_same_scene', lambda *args: None)
-    monkeypatch.setattr(module, 'submit_resummary', lambda *args: None)
     caplog.clear()
     with caplog.at_level(logging.INFO):
         module.link_duplicate_captures(UID, Conversation(**deepcopy(rows[last_id])))
-    return store, events, [record.message for record in caplog.records]
+    # Refactor shadow observations are additive telemetry, not serving output.
+    return (
+        store,
+        events,
+        [record.message for record in caplog.records if not record.message.startswith('event=refactor_shadow ')],
+    )
 
 
 def _snapshot(store):
@@ -850,7 +735,7 @@ def test_realistic_layout_joins_only_in_on_mode(seam, monkeypatch, caplog, mode,
         assert ('capture_group_joined', 'applied') in seam['events']
         assert lines[0] == (
             'event=capture_group_containment mode=on phase=rule would_join=true '
-            'reason=contained jev_p=unavailable basis=full dropped_segments=0'
+            'reason=contained basis=full dropped_segments=0'
         )
         for cid in ('pendant', 'laptop'):
             strip = {k: v for k, v in seam['store'].rows[path(cid)].items() if k != 'capture_group'}

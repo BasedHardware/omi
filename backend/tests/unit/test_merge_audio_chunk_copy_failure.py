@@ -29,18 +29,23 @@ import utils.conversations.merge_conversations as merge
 class _FakeBucket:
     """copy_blob raises when the source path belongs to a conversation in fail_for."""
 
-    def __init__(self, fail_for=()):
+    def __init__(self, fail_for=(), existing=()):
         self._fail_for = set(fail_for)
+        self._existing = list(existing)
 
     def blob(self, path):
         b = MagicMock()
         b.path = path
         return b
 
-    def copy_blob(self, source_blob, _bucket, _new_path):
+    def copy_blob(self, source_blob, _bucket, _new_path, **kwargs):
         for conv_id in self._fail_for:
             if f'/{conv_id}/' in getattr(source_blob, 'path', ''):
                 raise Exception(f"simulated transient GCS copy error for {conv_id}")
+
+    def list_blobs(self, prefix, **kwargs):
+        # skip_existing lists the destination prefix once per merge.
+        return iter(self._existing)
 
 
 def _install(monkeypatch, *, chunks_by_conv, bucket, list_raises_for=()):
@@ -48,7 +53,10 @@ def _install(monkeypatch, *, chunks_by_conv, bucket, list_raises_for=()):
     storage_client.bucket.return_value = bucket
     monkeypatch.setattr(merge, "_get_storage_client", lambda: storage_client)
 
-    def _list_audio_chunks(uid, conv_id):
+    def _list_audio_chunks(uid, conv_id, **kwargs):
+        # Source deletion follows the copy: only a complete listing may drive it.
+        assert kwargs.get('require_archive') is True
+        assert set(kwargs) <= {'require_archive', 'source_identity'}
         if conv_id in list_raises_for:
             raise Exception(f"simulated transient GCS listing error for {conv_id}")
         return chunks_by_conv.get(conv_id, [])
@@ -159,3 +167,62 @@ def test_merge_propagates_custom_stt_marker_from_any_source(monkeypatch):
     assert (
         created['data']['uses_custom_stt'] is True
     ), f"merged conversation lost the custom-STT marker: {created['data'].get('uses_custom_stt')}"
+
+
+def test_perform_merge_copies_skip_existing(monkeypatch):
+    """GCS-6: the merge path copies idempotently.
+
+    An unconditional re-copy (merge retries, re-processing campaigns) creates
+    one superseded generation per destination object per run; the bridge copy
+    skips a destination already holding the same bytes and preconditions
+    concurrent writers, so the merge path must pass skip_existing=True.
+    """
+    captured = {}
+
+    def _capture_copy(uid, convs, new_id, **kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr(merge, '_copy_audio_chunks_for_merge', _capture_copy)
+
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    sources = [
+        {
+            'id': 'conv_a',
+            'created_at': now,
+            'started_at': now,
+            'finished_at': now,
+            'language': 'en',
+            'source': 'omi',
+            'transcript_segments': [],
+        },
+        {
+            'id': 'conv_b',
+            'created_at': now,
+            'started_at': now,
+            'finished_at': now,
+            'language': 'en',
+            'source': 'omi',
+            'transcript_segments': [],
+        },
+    ]
+    monkeypatch.setattr(
+        merge.conversations_db,
+        'get_conversation',
+        lambda _uid, conv_id: next(c for c in sources if c['id'] == conv_id),
+    )
+    monkeypatch.setattr(merge, '_collect_all_photos', lambda *_a, **_k: [])
+    monkeypatch.setattr(merge, 'is_audio_merge_dispatch_enabled', lambda: False)
+    monkeypatch.setattr(merge.lifecycle_service, 'complete', lambda *_a, **_k: None)
+    monkeypatch.setattr(merge.lifecycle_service, 'create_processing_conversation', lambda uid, data: None)
+    monkeypatch.setattr(merge, '_delete_conversation_and_related_data', lambda *_a, **_k: None)
+
+    import utils.notifications as notifications
+
+    monkeypatch.setattr(notifications, 'send_merge_completed_message', lambda *_a, **_k: None)
+
+    merge.perform_merge_async('u1', ['conv_a', 'conv_b'], reprocess=False)
+
+    assert captured.get('skip_existing') is True, 'the merge copy must be idempotent'

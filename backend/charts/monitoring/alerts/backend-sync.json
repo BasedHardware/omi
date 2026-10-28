@@ -158,7 +158,15 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -166,7 +174,10 @@
       "instatus_component": "api",
       "alert_identity": "cew97rzyegdtsa",
       "component": "api",
-      "impact": "product"
+      "impact": "product",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     }
   },
   {
@@ -330,12 +341,23 @@
       "severity": "critical",
       "alert_identity": "cew97uqu791q8a",
       "component": "api",
-      "impact": "product"
+      "impact": "product",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null
   },
@@ -357,7 +379,7 @@
         },
         "datasourceUid": "beuxmaq8oxhq8e",
         "model": {
-          "aliasBy": "{{metric.label.state}}",
+          "aliasBy": "Instances",
           "datasource": {
             "type": "stackdriver",
             "uid": "beuxmaq8oxhq8e"
@@ -370,7 +392,7 @@
           "refId": "A",
           "timeSeriesList": {
             "alignmentPeriod": "cloud-monitoring-auto",
-            "crossSeriesReducer": "REDUCE_MAX",
+            "crossSeriesReducer": "REDUCE_SUM",
             "filters": [
               "resource.label.service_name",
               "=",
@@ -380,9 +402,7 @@
               "=",
               "run.googleapis.com/container/instance_count"
             ],
-            "groupBys": [
-              "metric.label.state"
-            ],
+            "groupBys": [],
             "perSeriesAligner": "ALIGN_MEAN",
             "preprocessor": "none",
             "projectName": "based-hardware",
@@ -445,7 +465,7 @@
             {
               "evaluator": {
                 "params": [
-                  48
+                  72
                 ],
                 "type": "gte"
               },
@@ -484,7 +504,7 @@
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "36",
-      "threshold": ">=48 instances for 30m (max_instances - 2). Supplied production Prometheus/Cloud Monitoring triage, 2026-09-28..2026-10-12 at 1h steps: p50 18.8 / p90 34 / max 49.5; .github/actions/deploy-backend-stack/action.yml sets backend-sync --max-instances=50.",
+      "threshold": ">=72 total instances for 30m (90% of service-level maxScale=80; source: Cloud Run backend-sync metadata.annotations[\"run.googleapis.com/maxScale\"], read with gcloud run services describe). Re-read after each deploy/restore.",
       "summary": "Omi API alert: Backend-sync instance count is high.",
       "user_impact": "No confirmed user impact yet; Omi capacity or reliability headroom is reduced.",
       "scope": "The Omi API production service path.",
@@ -494,7 +514,15 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -502,7 +530,10 @@
       "instatus_component": "api",
       "alert_identity": "cew97x299of7kb",
       "component": "api",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     }
   },
   {
@@ -668,7 +699,15 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -676,7 +715,10 @@
       "instatus_component": "api",
       "alert_identity": "dew97fqr33oxsd",
       "component": "api",
-      "impact": "infrastructure"
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     }
   },
   {
@@ -791,7 +833,15 @@
     "isPaused": false,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
     },
     "record": null,
     "labels": {
@@ -799,7 +849,10 @@
       "instatus_component": "api",
       "alert_identity": "bfobs1syncenq01",
       "component": "api",
-      "impact": "product"
+      "impact": "product",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     }
   },
   {
@@ -978,12 +1031,481 @@
       "component": "speech-processing",
       "impact": "user-experience",
       "severity": "warning",
-      "instatus_component": "speech-processing"
+      "instatus_component": "speech-processing",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
     },
     "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
-      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-sync-failure-reason-step",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backend-sync",
+    "title": "Sync jobs - a failure reason is running above 3x its 7-day rate",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "sum by (namespace, outcome) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome!=\"success\",outcome!=\"expected_silence\"}[60m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "(sum by (namespace, outcome) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome!=\"success\",outcome!=\"expected_silence\"}[60m])) / on (namespace) group_left () sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\"}[60m]))) / clamp_min((sum by (namespace, outcome) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome!=\"success\",outcome!=\"expected_silence\"}[7d] offset 60m)) / on (namespace) group_left () sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\"}[7d] offset 60m))) or ((sum by (namespace, outcome) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome!=\"success\",outcome!=\"expected_silence\"}[60m])) / on (namespace) group_left () sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\"}[60m]))) * 0), 0.0001)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "G",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "((sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome!=\"success\",outcome!=\"expected_silence\"}[60m])) / sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\"}[60m])))) / on (namespace) clamp_min((min by (namespace) (label_replace((sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome!=\"success\",outcome!=\"expected_silence\"}[7d] offset 60m)) / sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\"}[7d] offset 60m))), \"baseline\", \"rolling\", \"\", \"\") or label_replace(label_replace(vector(0.0064), \"namespace\", \"backend-sync-backfill\", \"\", \"\"), \"baseline\", \"pinned\", \"\", \"\"))) or (((sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome!=\"success\",outcome!=\"expected_silence\"}[60m])) / sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\"}[60m])))) * 0), 0.0001)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "G"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 50 && $B > 3 && $G > 1.5",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-19T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "15m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "evidence": "omi-workspace:data/run-2026-10-13-two-lane-nemotron/sync-upstream-error-2026-10-21.md",
+      "dashboard_url": "https://monitor.omi.me/d/6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "summary": "A sync job failure reason (outcome) on one sync service is more than 3x its 7-day share of jobs, with at least 50 such jobs in the last 60m",
+      "threshold": "per (service, outcome != success|expected_silence): 60m share of jobs > 3x the 7-day share (the 7 days before the window), with >= 50 jobs of that outcome in 60m, AND the service's total failure share in 60m > 1.5x its baseline, for 15m. Total-failure baseline = the lower of the rolling 7 days before the window and backfill's pinned pre-regression share 0.64% (the 7 days ending 2026-10-16T16:00Z, as a constant so evaluation stays under the 30s limit); the pin keeps backfill's post-#22977 leftover visible until the backfill assignment_conflict fix lands, then is removed. A reason or service with no baseline counts as new (floor 0.01%). The guard means a relabel or split of failures between reasons (no rise in total failures) does not page.",
+      "user_impact": "Uploaded recordings on that service are failing to finalize at a new, higher rate; users see missing or late conversations from offline sync.",
+      "scope": "omi_sync_transcription_job_total from Managed Prometheus (datasource gmp-cloud-run, job omi-cloud-run-application-metrics; the in-cluster Prometheus could not scan 7 days of raw samples within the 30s evaluation limit), namespaces backend-sync and backend-sync-backfill (backend-integration emits no omi_sync_transcription_job_total series and is out of scope until it does), keyed by the outcome label so new reasons (the sync-fresh-fix split of upstream_error) are covered automatically. The counter records terminal attempt outcomes, not finalized jobs, so it is compared only with its own baseline; the finalized-job count is event=sync_transcription_job_finalized in Cloud Logging.",
+      "verification": "Backtest 2026-10-14..10-21 (15m steps, prod Prometheus via the Grafana proxy). Without the total-failure guard: 24 sustained episodes, including backend-sync internal_error at 09:00Z right after #22977 split internal failures out of upstream_error (a relabel: backend-sync total failures fell 7.35% -> 1.19%). With the guard: 22 episodes; every 10-16..10-21 regression episode is kept, backend-sync internal_error is dropped, and backfill internal_error (total 4.76% vs pinned 0.64%) still fires. Rolling-only baseline would have hidden backfill after 60m (23 episodes). Re-run on Managed Prometheus after moving off the in-cluster Prometheus (2026-10-21 11Z, which timed out at 30s): 25 episodes, same shape (10-16..10-21 regression kept; backend-sync internal_error quiet; backfill internal_error fires). Instant evaluation 4.6s.",
+      "evaluated_bad": "backend-sync upstream_error onset 2026-10-16 (episodes from 14:38Z)",
+      "evaluated_good": "backend-sync upstream_error 2.44x (2026-10-21 05Z)",
+      "safe_next_action": "Run the two-lane sentinel scripts/sync_failure_reasons.sh for the failure_phase / failure_class split of finalized jobs, then check the sync_finalize_exception and sync_persistence_exception site fields before changing lanes or flags.",
+      "runbook": "backend/docs/runbooks/real-traffic-journeys.md"
+    },
+    "labels": {
+      "component": "sync",
+      "impact": "user-experience",
+      "severity": "critical",
+      "instatus_component": "api",
+      "alert_identity": "omi-sync-failure-reason-step",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-sync-total-failure-share-ceiling",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backend-sync",
+    "title": "Sync jobs - a sync service is failing more than 8% of jobs",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (namespace) (increase(omi_sync_transcription_job_total{job=\"cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome!=\"success\",outcome!=\"expected_silence\"}[60m])) / sum by (namespace) (increase(omi_sync_transcription_job_total{job=\"cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\"}[60m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (namespace) (increase(omi_sync_transcription_job_total{job=\"cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\"}[60m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0.08 && $B >= 200",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-19T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "evidence": "omi-workspace:data/run-2026-10-13-two-lane-nemotron/sync-upstream-error-2026-10-21.md",
+      "dashboard_url": "https://monitor.omi.me/d/6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "summary": "A sync service is failing more than 8% of sync job attempts over 60m, regardless of its baseline",
+      "threshold": "per service: (attempts with outcome != success|expected_silence) / all attempts over 60m > 8%, with >= 200 attempts in 60m, for 30m. Absolute ceiling: it does not move with the 7-day baseline, so a regression that has become the baseline still warns.",
+      "user_impact": "More than 1 in 12 sync attempts on that service fail; offline recordings finalize late or not at all.",
+      "scope": "omi_sync_transcription_job_total via the cloud-run-application-metrics bridge, namespaces backend-sync and backend-sync-backfill (backend-integration emits no series). Counts terminal attempt outcomes, not finalized jobs. Pairs with omi-sync-failure-reason-step, which catches relative steps per reason; this rule catches a level that stays high.",
+      "verification": "2026-10-21 (Grafana proxy, attempt counter): backfill total failure share 0.58-0.87% before 10-16, 7.1% over 10-17..10-20, 8.92% in the 6h to 08:25Z, 4.76% after #22977; backend-sync 3.6% (10-17..20), 7.35% (6h to 08:25Z), 1.19% after #22977. Set at 8% with the two-lane lead while backfill internal_error (assignment_conflict) is silenced as known and owned by the backfill-conflict lane: a rise past 8% still warns. Backtest 10-14..10-21 (15m steps): 10 sustained episodes, all in the 10-17..10-21 regression (backfill 9x, backend-sync 1x), none after #22977.",
+      "evaluated_bad": "backend-sync upstream_error onset 2026-10-16 (episodes from 14:38Z)",
+      "evaluated_good": "backend-sync upstream_error 2.44x (2026-10-21 05Z)",
+      "safe_next_action": "Run the two-lane sentinel scripts/sync_failure_reasons.sh for the failure_phase / failure_class split of finalized jobs, then check the sync_finalize_exception and sync_persistence_exception site fields before changing lanes or flags.",
+      "runbook": "backend/docs/runbooks/real-traffic-journeys.md"
+    },
+    "labels": {
+      "component": "sync",
+      "impact": "user-experience",
+      "severity": "warning",
+      "instatus_component": "api",
+      "alert_identity": "omi-sync-total-failure-share-ceiling",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-sync-provider-budget-exhausted",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backend-sync",
+    "title": "Sync STT - provider out of credits/budget (top up)",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome=\"provider_budget_exhausted\"}[15m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 3",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-22T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Sync/prerecorded transcription jobs are failing because an STT vendor says the account is out of credits or budget",
+      "threshold": "sum by (namespace) increase(omi_sync_transcription_job_total{outcome=provider_budget_exhausted}[15m]) >= 3, for 5m",
+      "user_impact": "Offline sync, prerecorded and voice-message transcription fail for everyone routed to that vendor until the account is topped up; live sessions may also lose the vendor as a fallback.",
+      "scope": "gmp-cloud-run omi_sync_transcription_job_total{outcome=provider_budget_exhausted} on backend-sync and backend-sync-backfill. The outcome comes from #23234 (Modulate 402, or 429 'Insufficient credits'). Sibling of omi-stt-provider-budget (live). Silent until #23234 is deployed to Cloud Run.",
+      "verification": "No history: the outcome value is new in #23234. The 2026-10-22 02:00Z Modulate credits outage produced ~200 upstream_error jobs per 30m that would have carried this outcome; at >= 3 per 15m it would have paged within ~20m instead of the ~60m the generic sync failure-rate rules took.",
+      "evaluated_bad": "Modulate 429 'Insufficient credits' 2026-10-22 from ~02:00Z (classified as upstream_error at the time)",
+      "evaluated_good": "0 provider_budget_exhausted jobs (normal operation)",
+      "safe_next_action": "Top up the named vendor account (owner: David). Do not rotate keys. Check the live page omi-stt-provider-budget for the same vendor and the kind=account circuit.",
+      "dashboard_url": "https://monitor.omi.me/d/6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "runbook": "backend/docs/runbooks/real-traffic-journeys.md"
+    },
+    "labels": {
+      "component": "sync",
+      "impact": "user-experience",
+      "severity": "critical",
+      "instatus_component": "api",
+      "alert_identity": "omi-sync-provider-budget-exhausted",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
     },
     "record": null
   }

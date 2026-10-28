@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/pages/paywall/trial_paywall_page.dart';
 
 import 'package:url_launcher/url_launcher.dart';
 
@@ -12,6 +15,7 @@ import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/pages/payments/payments_page.dart';
 import 'package:omi/pages/referral/referral_page.dart';
+import 'package:omi/pages/settings/connect_agent/connect_agent_page.dart';
 import 'package:omi/pages/settings/conversation_display_settings.dart';
 import 'package:omi/pages/settings/conversation_timeout_dialog.dart';
 import 'package:omi/pages/settings/custom_vocabulary_page.dart';
@@ -22,6 +26,7 @@ import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/pages/settings/import_history_page.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
+import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/pages/settings/language_settings_page.dart';
 import 'package:omi/pages/settings/notifications_settings_page.dart';
 import 'package:omi/pages/settings/people.dart';
@@ -66,6 +71,14 @@ Future<void> openSettingsDestination(BuildContext context, SettingsDestination d
       await routeToPage(context, const NotificationsSettingsPage());
     case SettingsDestination.planAndUsage:
       await routeToPage(context, const UsagePage());
+    case SettingsDestination.upgrade:
+      PlatformManager.instance.analytics.track('Settings Upgrade Row Tapped');
+      final usage = context.read<UsageProvider>();
+      if (usage.subscription?.trialEligible == true && usage.subscription?.subscription.plan.isPaid != true) {
+        await routeToPage(context, const TrialPaywallPage(source: 'settings'));
+      } else {
+        await routeToPage(context, const UsagePage());
+      }
     case SettingsDestination.offlineSync:
       final page = SharedPreferencesUtil().deviceSupportsMultiFileSync ? const AutoSyncPage() : const SyncPage();
       await routeToPage(context, page);
@@ -73,6 +86,8 @@ Future<void> openSettingsDestination(BuildContext context, SettingsDestination d
       await routeToPage(context, const DeviceSettings());
     case SettingsDestination.integrations:
       await routeToPage(context, const IntegrationsPage());
+    case SettingsDestination.taskIntegrations:
+      await routeToPage(context, const TaskIntegrationsPage());
     case SettingsDestination.permissions:
       PlatformManager.instance.analytics.permissionsSettingsOpened();
       await routeToPage(context, const PermissionsPage());
@@ -112,7 +127,7 @@ Future<void> openSettingsDestination(BuildContext context, SettingsDestination d
     case SettingsDestination.developer:
       await routeToPage(context, const DeveloperSettingsPage());
     case SettingsDestination.connectAgent:
-      await openDeveloperHome();
+      await openConnectAgent(context);
     case SettingsDestination.feedback:
       final url = Uri.parse('https://feedback.omi.me/');
       if (await canLaunchUrl(url)) await launchUrl(url, mode: LaunchMode.inAppBrowserView);
@@ -128,14 +143,16 @@ Future<void> openSettingsDestination(BuildContext context, SettingsDestination d
   }
 }
 
-/// The web developer home: copy-paste agent setup prompts plus MCP and Developer API keys. Every
-/// client sends people here rather than keeping its own copy of agent setup.
-final developerHomeUrl = Uri.parse('https://app.omi.me/developers');
-
-Future<void> openDeveloperHome() async {
+/// Connect an Agent: ChatGPT in one tap, and agents with their own computer through a prompt that
+/// carries a one-time key link.
+Future<void> openConnectAgent(BuildContext context) async {
   PlatformManager.instance.analytics.settingsPageOpened(pageName: 'connect_agent');
-  await launchUrl(developerHomeUrl, mode: LaunchMode.externalApplication);
+  await routeToPage(context, const ConnectAgentPage());
 }
+
+/// The web developer home: MCP and Developer API keys and their setup prompts, linked from the
+/// bottom of Connect an Agent.
+final developerHomeUrl = Uri.parse('https://app.omi.me/developers');
 
 /// The one voice-profile flow: the guided introduction (#14514), where sentence starters become
 /// the voice sample, memories and a goal. Every entry point opens it, with or without an existing

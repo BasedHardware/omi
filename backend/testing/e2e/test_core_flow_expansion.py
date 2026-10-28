@@ -164,7 +164,7 @@ def test_transcribe_reconnect_then_finalize_conversation_lifecycle(client, auth_
     assert persisted_body["transcript_segments"] == emitted_segments
 
 
-def test_sync_v2_job_runs_pipeline_and_polls_completed_result(client, auth_headers, monkeypatch):
+def test_sync_v2_job_runs_pipeline_and_polls_completed_result(client, auth_headers, monkeypatch, live_user):
     """The v2 sync API should create, run, and expose a completed job against hermetic fakes."""
     patch_fresh_sync_lane(monkeypatch)
     scheduled = []

@@ -45,6 +45,9 @@ generated_route_overrides:
   - feature: daily_summary_simple
     primary: {provider: openai, model: gpt-5-nano}
     provider_options: {reasoning_effort: minimal}
+  - feature: episode_incremental
+    primary: {provider: openai, model: gpt-5-nano}
+    provider_options: {reasoning_effort: minimal}
   - feature: external_structure
     primary: {provider: openai, model: gpt-6-luna}
     provider_options: {reasoning_effort: low}
@@ -83,13 +86,6 @@ generated_route_overrides:
   - feature: memory_category
     primary: {provider: openai, model: gpt-5-nano}
     provider_options: {reasoning_effort: minimal}
-  - feature: memory_conflict
-    primary: {provider: openai, model: gpt-6-luna}
-    provider_options: {reasoning_effort: low}
-  - feature: memory_conflict_flex
-    primary: {provider: openai, model: gpt-6-luna}
-    provider_options: {reasoning_effort: low}
-    request_timeout_ms: 900000
   - feature: memory_l2_flex
     primary: {provider: openai, model: gpt-6-luna}
     provider_options: {reasoning_effort: medium}
@@ -108,6 +104,12 @@ generated_route_overrides:
     primary: {provider: openai, model: gpt-6-luna}
     provider_options: {reasoning_effort: none}
   - feature: notifications
+    primary: {provider: openai, model: gpt-6-luna}
+    provider_options: {reasoning_effort: low}
+  - feature: open_loop_card
+    primary: {provider: openai, model: gpt-5-nano}
+    provider_options: {reasoning_effort: minimal}
+  - feature: open_loop_daily
     primary: {provider: openai, model: gpt-6-luna}
     provider_options: {reasoning_effort: low}
   - feature: openglass
@@ -132,6 +134,9 @@ generated_route_overrides:
     primary: {provider: openai, model: gpt-6-luna}
     provider_options: {reasoning_effort: none}
   - feature: smart_glasses
+    primary: {provider: openai, model: gpt-5-nano}
+    provider_options: {reasoning_effort: minimal}
+  - feature: sync_redrive_title
     primary: {provider: openai, model: gpt-5-nano}
     provider_options: {reasoning_effort: minimal}
   - feature: trends

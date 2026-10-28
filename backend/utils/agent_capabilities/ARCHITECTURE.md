@@ -13,7 +13,7 @@ turn a shared session into an unbounded write loop.
 
 | Module | Responsibility |
 | --- | --- |
-| `session.py` | Seen refs, budgets, precise tool results, resubmission and the sanctioned shaped-agent loop |
+| `session.py` | Seen refs, budgets, precise tool results, resubmission and the sanctioned shaped-agent loop; applies the harness tool design rules (`utils/llm/ARCHITECTURE.md`): context-window default for temporal search, `Z` times, declared argument aliases |
 | `limits.py` | Caller-supplied bounded resource limits (Dream bucket policy lives in `config/dream_session.py`) |
 | `search.py` | Owner-scoped lexical, semantic and temporal discovery with opaque cursors |
 | `reads.py` | Decrypted records behind visibility, lock and source-generation boundaries |
@@ -45,7 +45,7 @@ also checks its live owner lease and global kill switch inside that transaction.
 
 `database/review_transcript_changes.py` commits overlay entries and any generated
 summary patch with the journal. The conversation read boundary renders active
-corrections from an encrypted inline copy and exposes original text alongside the projection. Reads fall back to captured speech with a counter on unavailable or invalid overlays; transactional mutation paths remain strict. Storage encoding
+corrections from an encrypted inline copy and exposes original text alongside the projection. Reads fall back to captured speech with a counter on unavailable or invalid overlays; transactional mutation paths remain strict. Bounded transcript recall passes its remaining read budget into overlay projection and propagates deadline exhaustion, preventing a timed-out correction from becoming captured-text evidence. Storage encoding
 restores captured text. Undo marks overlay entries inactive and checks speech
 anchors and newer dependent edits; historical in-place receipts retain their
 existing reversal path. The existing manual segment-edit API creates a user

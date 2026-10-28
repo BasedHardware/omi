@@ -16,9 +16,13 @@ enum SettingsDestination {
   helpGroup,
   notifications,
   planAndUsage,
+
+  /// The trial paywall, from the Upgrade row shown to free readers who can still start a trial.
+  upgrade,
   offlineSync,
   device,
   integrations,
+  taskIntegrations,
   permissions,
   memories,
   goals,
@@ -49,10 +53,19 @@ enum SettingsDestination {
 
 /// Which conditional rows are on screen right now. A search result only exists while its row does.
 class SettingsSearchScope {
-  const SettingsSearchScope({required this.deviceConnected, required this.supportLinks, required this.android});
+  const SettingsSearchScope({
+    required this.deviceConnected,
+    required this.supportLinks,
+    required this.android,
+    this.rememberedDevice = false,
+  });
 
   /// The Device row is shown only while a device is connected.
   final bool deviceConnected;
+
+  /// Whether the app remembers a device, connected or not; the Device Settings row stays
+  /// reachable (and searchable) while the pendant is only remembered.
+  final bool rememberedDevice;
 
   /// Feedback and Help Center are shown only where Intercom is supported.
   final bool supportLinks;
@@ -97,6 +110,7 @@ const _permissions = 'lib/pages/settings/permissions_page.dart';
 const _developer = 'lib/pages/settings/developer.dart';
 
 bool _whenDeviceConnected(SettingsSearchScope s) => s.deviceConnected;
+bool _whenDeviceConnectedOrRemembered(SettingsSearchScope s) => s.deviceConnected || s.rememberedDevice;
 bool _whenSupportLinks(SettingsSearchScope s) => s.supportLinks;
 bool _whenAndroid(SettingsSearchScope s) => s.android;
 
@@ -115,6 +129,7 @@ final List<SettingsSearchEntry> settingsSearchEntries = [
 
   // Plan, referrals (on the sheet)
   SettingsSearchEntry('planAndUsage', (l) => l.planAndUsage, SettingsDestination.planAndUsage, _drawer),
+  SettingsSearchEntry('upgrade', (l) => l.upgrade, SettingsDestination.upgrade, _drawer),
   SettingsSearchEntry('referralProgram', (l) => l.referralProgram, SettingsDestination.referral, _drawer),
 
   // Device group
@@ -123,7 +138,7 @@ final List<SettingsSearchEntry> settingsSearchEntries = [
     (l) => l.deviceSettings,
     SettingsDestination.device,
     _groups,
-    visible: _whenDeviceConnected,
+    visible: _whenDeviceConnectedOrRemembered,
   ),
   SettingsSearchEntry('offlineSync', (l) => l.offlineSync, SettingsDestination.offlineSync, _groups),
   SettingsSearchEntry('phoneCalls', (l) => l.phoneCalls, SettingsDestination.phoneCalls, _groups,
@@ -190,6 +205,8 @@ final List<SettingsSearchEntry> settingsSearchEntries = [
 
   // Integrations (opens the Integrations page directly)
   SettingsSearchEntry('integrations', (l) => l.integrations, SettingsDestination.integrations, _drawer),
+  SettingsSearchEntry('taskIntegrations', (l) => l.taskIntegrations, SettingsDestination.taskIntegrations,
+      'lib/pages/settings/integrations_page.dart'),
 
   // Data & Privacy group
   SettingsSearchEntry('dataProtection', (l) => l.dataProtection, SettingsDestination.dataPrivacy, _groups),

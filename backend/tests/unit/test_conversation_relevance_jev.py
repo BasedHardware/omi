@@ -1,9 +1,10 @@
 """The Jev model tier of conversation relevance (relevance.py + relevance_jev.py, #14835).
 
 Pins: flag default off; the tier order (restore -> rules -> model -> calendar)
-is unchanged; Jev replaces conv_discard only when supplied; discard strictly
-above the threshold; Jev failures advance to cheaper arms; the stored record and metric say
-which tier decided. All transcripts are synthetic.
+is unchanged; Jev replaces conv_discard only when supplied; its comparison is
+strict above the threshold by default, with inclusive comparison opt-in; Jev
+failures advance to cheaper arms; the stored record and metric say which tier
+decided. All transcripts are synthetic.
 """
 
 from __future__ import annotations
@@ -20,7 +21,9 @@ from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.relevance import JEV_DISCARD_THRESHOLD, RelevanceDecision, decide_relevance
 from utils.llm.jev_client import JevAnswers
 
-AMBIGUOUS = ('Coming over there in a second.',)
+# Meets the short-clip floor (the quiet minimum owns anything shorter) while the
+# deterministic tier still cannot settle it, so Jev decides.
+AMBIGUOUS = ('Coming over there in a second, and I will bring the blue folder with the signed form.',)
 TRIGGER = ProcessingTrigger.CAPTURE_END
 
 
@@ -33,13 +36,19 @@ def isolated_relevance_circuits():
     get_relevance_circuit.cache_clear()
 
 
+@pytest.fixture(autouse=True)
+def default_jev_discard_policy(monkeypatch):
+    monkeypatch.delenv('CONVERSATION_RELEVANCE_JEV_DISCARD_THRESHOLD', raising=False)
+    monkeypatch.delenv('CONVERSATION_RELEVANCE_JEV_DISCARD_INCLUSIVE', raising=False)
+
+
 def _decide(*, jev=None, model=None, calendar=None, texts=AMBIGUOUS, user_kept=False):
     model = model if model is not None else MagicMock(return_value=True)
     calendar = calendar or MagicMock(return_value=False)
     decision = decide_relevance(
         trigger=TRIGGER,
         texts=list(texts),
-        speech_seconds=2.0,
+        speech_seconds=60.0,
         has_photos=False,
         user_kept=user_kept,
         exempt=False,
@@ -51,14 +60,11 @@ def _decide(*, jev=None, model=None, calendar=None, texts=AMBIGUOUS, user_kept=F
     return decision, model, calendar
 
 
-def test_flags_default_off(monkeypatch):
-    monkeypatch.delenv(jev_decisions.CONVERSATION_RELEVANCE_JEV_ENABLED_ENV, raising=False)
-    monkeypatch.delenv(jev_decisions.MEMORY_OWNER_JEV_FLIP_ENABLED_ENV, raising=False)
-    assert jev_decisions.conversation_relevance_jev_enabled() is False
-    assert jev_decisions.memory_owner_jev_flip_enabled() is False
-
-    monkeypatch.setenv(jev_decisions.CONVERSATION_RELEVANCE_JEV_ENABLED_ENV, 'true')
-    assert jev_decisions.conversation_relevance_jev_enabled() is True
+def test_percentage_cohort_defaults_off(monkeypatch):
+    monkeypatch.delenv(jev_decisions.CONVERSATION_RELEVANCE_JEV_PERCENT_ENV, raising=False)
+    assert jev_decisions.relevance_arm('conversation') == 'nano'
+    monkeypatch.setenv(jev_decisions.CONVERSATION_RELEVANCE_JEV_PERCENT_ENV, '100')
+    assert jev_decisions.relevance_arm('conversation') == 'jev'
 
 
 def test_without_a_jev_thunk_the_model_tier_and_record_are_unchanged():
@@ -76,7 +82,51 @@ def test_jev_above_threshold_discards_without_calling_conv_discard():
     assert (decision.verdict, decision.decided_by, decision.reason) == ('discard', 'jev', 'jev_discard')
     record = decision.as_record()
     assert record['decided_by'] == 'jev'
-    assert record['jev'] == {'p_discard': 0.97, 'threshold': JEV_DISCARD_THRESHOLD, 'model': 'typesafe/jev-1.13'}
+    assert record['jev'] == {
+        'p_discard': 0.97,
+        'threshold': JEV_DISCARD_THRESHOLD,
+        'comparison': '>',
+        'model': 'typesafe/jev-1.13',
+    }
+
+
+def test_jev_unset_cutoff_keeps_exactly_at_default_threshold():
+    decision, _, _ = _decide(jev=lambda: 0.80)
+
+    assert JEV_DISCARD_THRESHOLD == 0.80
+    assert (decision.verdict, decision.decided_by, decision.reason) == ('keep', 'jev', 'jev_keep')
+    assert decision.as_record()['jev'] == {
+        'p_discard': 0.8,
+        'threshold': 0.8,
+        'comparison': '>',
+        'model': 'typesafe/jev-1.13',
+    }
+
+
+def test_jev_inclusive_cutoff_discards_at_threshold(monkeypatch):
+    monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_DISCARD_INCLUSIVE', 'true')
+    decision, _, _ = _decide(jev=lambda: 0.80)
+
+    assert (decision.verdict, decision.decided_by, decision.reason) == ('discard', 'jev', 'jev_discard')
+    assert decision.as_record()['jev']['threshold'] == 0.8
+    assert decision.as_record()['jev']['comparison'] == '>='
+
+
+def test_jev_out_of_range_cutoff_falls_back_to_default(monkeypatch):
+    monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_DISCARD_THRESHOLD', '0.96')
+    decision, _, _ = _decide(jev=lambda: 0.90)
+
+    assert (decision.verdict, decision.decided_by, decision.reason) == ('discard', 'jev', 'jev_discard')
+    assert decision.as_record()['jev']['threshold'] == JEV_DISCARD_THRESHOLD
+    assert decision.as_record()['jev']['comparison'] == '>'
+
+
+def test_jev_invalid_inclusive_value_defaults_to_strict(monkeypatch):
+    monkeypatch.setenv('CONVERSATION_RELEVANCE_JEV_DISCARD_INCLUSIVE', 'sometimes')
+    decision, _, _ = _decide(jev=lambda: 0.80)
+
+    assert (decision.verdict, decision.decided_by, decision.reason) == ('keep', 'jev', 'jev_keep')
+    assert decision.as_record()['jev']['comparison'] == '>'
 
 
 @pytest.mark.parametrize('p_discard', [JEV_DISCARD_THRESHOLD, 0.5, 0.0])
@@ -161,7 +211,7 @@ def test_state_is_the_shipped_transcript_and_word_count_without_the_duration_cla
     transcript = relevance_jev.relevance_transcript(_segments())
     state = relevance_jev.relevance_state(transcript)
 
-    assert transcript == 'User: Remind me to call the plumber\n\nSpeaker 1: Tomorrow at nine.'
+    assert transcript == 'You: Remind me to call the plumber\n\nSpeaker A: Tomorrow at nine.'
     assert state == f'Transcript:\n```\n{transcript}\n```\nWord count: 12 words.'
     assert 'duration' not in state.lower() and '2 minutes' not in state
 
@@ -226,8 +276,13 @@ def test_oct14_shape_benchmark(oct14_shape):
         decision, _, _ = _decide(jev=lambda: None, model=_failed_model, texts=texts)
         assert decision.verdict == expected, texts
         assert decision.decided_by == ('rule' if len(texts) == 120 else 'deterministic')
-        if len(texts) == 7 or expected == 'keep':
+        if len(texts) == 7:
             assert decision.reason in {'jev_fallback_deterministic', 'circuit_open'}
+        elif expected == 'keep':
+            # The sparse short keeps sit below the short-clip floor, so Jev is
+            # never asked about them; the failed model falls straight through
+            # (or the latched circuit answers for it).
+            assert decision.reason in {'model_fallback_deterministic', 'circuit_open'}
 
 
 @pytest.mark.parametrize('with_jev', [False, True])
@@ -260,14 +315,14 @@ def test_failed_model_advances_to_deterministic(with_jev, raises, monkeypatch):
 
 
 @pytest.mark.parametrize('discard', [False, True])
-def test_model_fallback_preserves_counterfactual_and_transition(discard, monkeypatch):
+def test_model_fallback_preserves_transition(discard, monkeypatch):
     from utils.conversations import relevance
 
     transitions = MagicMock()
     monkeypatch.setattr(relevance, 'record_fallback', transitions)
     decision, _, _ = _decide(jev=lambda: None, model=MagicMock(return_value=discard))
     assert decision.reason == 'jev_fallback_model'
-    assert decision.nano_verdict == ('discard' if discard else 'keep')
+    assert decision.verdict == ('discard' if discard else 'keep')
     transitions.assert_called_once_with(
         component='conversation_relevance',
         from_mode='jev',
@@ -337,7 +392,6 @@ def test_withheld_models_keep_ambiguous_band_without_paid_calls(monkeypatch):
         jev_discard_probability=jev,
     )
     assert (decision.verdict, decision.decided_by, decision.reason) == ('keep', 'policy', 'model_withheld')
-    assert not decision.model_tier_reached
     jev.assert_not_called()
     transitions.assert_not_called()
 

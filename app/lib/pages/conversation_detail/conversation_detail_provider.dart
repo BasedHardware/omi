@@ -1,3 +1,4 @@
+import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -6,7 +7,6 @@ import 'package:clock/clock.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 
-import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/audio.dart';
 import 'package:omi/backend/http/api/conversations.dart'
     hide unlinkCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
@@ -23,21 +23,24 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/services/siri_integration.dart';
+import 'package:omi/pages/conversation_detail/conversation_summary_generation.dart';
 import 'package:omi/pages/conversation_detail/conversation_summary_selection.dart';
+
+export 'package:omi/pages/conversation_detail/conversation_summary_generation.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 typedef SpeakerAssignmentCall = Future<bool> Function(String, List<String>,
     {bool? isUser, String? personId, int? speakerId});
-typedef ConversationReprocessCall = Future<ServerConversation?> Function(String,
-    {String? appId, bool requireSpeakerReceipt});
+typedef ConversationReprocessCall = Future<ReprocessResult> Function(String,
+    {String? appId, bool requireSpeakerReceipt, bool forceOmi});
 typedef ConversationDetailFetchCall = Future<ServerConversation?> Function(String);
 
 /// Where the open conversation's full detail fetch stands. The page renders the list's copy first;
 /// a tab with nothing to show yet uses this to say "loading" or "couldn't load" instead of blank.
 enum ConversationDetailLoad { idle, loading, failed }
 
-class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixin {
+class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixin, ConversationSummaryGeneration {
   static final RegExp _syncConversationId = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-');
   static const Duration _speakerSummaryQuietPeriod = Duration(seconds: 4);
   ConversationDetailProvider({
@@ -45,12 +48,24 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     ConversationReprocessCall? reprocess,
     ConversationDetailFetchCall? fetchConversation,
     SpeakerRejectionCall? rejectSpeaker,
+    EnabledSummaryAppsFetch? fetchEnabledSummaryApps,
+    SuggestedSummaryAppsFetch? fetchSuggestedSummaryApps,
+    PreferredSummaryAppWrite? writePreferredSummaryApp,
   })  : _assignSpeaker = assignSpeaker ?? assignBulkConversationTranscriptSegments,
         _rejectSpeaker = rejectSpeaker ?? rejectConversationSpeaker,
         _reprocess = reprocess ?? reProcessConversationServer,
-        _fetchConversation = fetchConversation ?? getConversationById;
+        _fetchConversation = fetchConversation ?? getConversationById,
+        enabledSummaryAppsFetch = fetchEnabledSummaryApps ?? fetchInstalledSummaryApps,
+        suggestedSummaryAppsFetch = fetchSuggestedSummaryApps ?? fetchConversationSuggestedSummaryApps,
+        preferredSummaryAppWrite = writePreferredSummaryApp ?? writeServerPreferredSummaryApp;
   final SpeakerAssignmentCall _assignSpeaker;
   final ConversationReprocessCall _reprocess;
+  @override
+  final EnabledSummaryAppsFetch enabledSummaryAppsFetch;
+  @override
+  final SuggestedSummaryAppsFetch suggestedSummaryAppsFetch;
+  @override
+  final PreferredSummaryAppWrite preferredSummaryAppWrite;
   final ConversationDetailFetchCall _fetchConversation;
   final SpeakerRejectionCall _rejectSpeaker;
   String? _speakerSummaryConversationId;
@@ -641,6 +656,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     onFailed?.call();
   }
 
+  @override
   AppProvider? appProvider;
   ConversationProvider? conversationProvider;
 
@@ -670,6 +686,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   /// The conversation the last successful reprocess replaced.
   String? reprocessedConversationId;
 
+  /// The template the running reprocess asked for; null while it runs Omi's own summary.
+  String? reprocessingAppId;
+
   /// Bumped by every detail read, by opening another conversation and by a reprocess landing. A
   /// read applies only while it is still the latest, so a slow earlier response (an older poll, the
   /// previous conversation's fetch) can never replace newer data or another conversation's state.
@@ -678,19 +697,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
-  // Cache enabled conversation apps and suggested apps
-  final List<App> _cachedEnabledConversationApps = [];
-  final List<App> _cachedSuggestedApps = [];
-  // Track locally added apps (e.g., from quick template creator) to preserve during refetch
-  final Set<String> _locallyAddedAppIds = {};
-
   List<App> get appsList => appProvider?.apps ?? [];
-
-  /// Returns cached enabled conversation apps
-  List<App> get cachedEnabledConversationApps => _cachedEnabledConversationApps;
-
-  /// Returns cached suggested apps for current conversation
-  List<App> get cachedSuggestedApps => _cachedSuggestedApps;
 
   Structured get structured {
     return conversation.structured;
@@ -706,6 +713,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   /// Substituting another conversation would silently retarget the page, and
   /// destructive actions (delete, visibility, rename) act on whatever this
   /// returns.
+  @override
   ServerConversation? get conversationOrNull {
     final list = conversationProvider?.groupedConversations[selectedDate];
     final id = _cachedConversationId;
@@ -742,6 +750,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   /// Non-null accessor for call sites that already know the conversation is
   /// valid (gestures, async handlers). Build paths use [conversationOrNull].
+  @override
   ServerConversation get conversation {
     final c = conversationOrNull;
     if (c == null) throw StateError("No valid conversation found");
@@ -897,14 +906,6 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
   }
 
-  updateReprocessConversationLoadingState(bool loading) {
-    loadingReprocessConversation = loading;
-    if (!loading) {
-      selectedAppForReprocessing = null;
-    }
-    notifyListeners();
-  }
-
   void setSelectedAppForReprocessing(App app) {
     selectedAppForReprocessing = app;
     notifyListeners();
@@ -915,16 +916,12 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
   }
 
-  void updateReprocessConversationId(String id) {
-    reprocessConversationId = id;
-    notifyListeners();
-  }
-
   void updateConversation(String conversationId, DateTime date) {
     final list = conversationProvider?.groupedConversations[date];
     if (list != null) {
       final conv = list.firstWhereOrNull((c) => c.id == conversationId);
       if (conv != null) {
+        if (_cachedConversationId != conv.id) resetSuggestedSummaryApps();
         selectedDate = date;
         _cachedConversationId = conv.id;
         _cachedConversation = conv;
@@ -1040,8 +1037,18 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
   }
 
-  Future<bool> reprocessConversation({String? appId}) async {
-    if (loadingReprocessConversation || _savingSpeaker) return false;
+  /// Regenerates the open conversation's summary, with [appId]'s template or Omi's own. Resolves
+  /// false without doing anything while another reprocess or a speaker save is in flight.
+  ///
+  /// A failure is kept in [summaryFailure] (and announced as `REPROCESS_FAILED`): busy (409), the
+  /// hourly limit (429), the template returning nothing — including a 200 whose conversation still
+  /// has no summary for the request, which an older backend sends when another writer held the
+  /// claim — or anything else.
+  ///
+  /// [forceOmi] (with a null [appId]) asks for Omi's own notes only: the server runs neither the
+  /// preferred template nor a suggestion. Without it a null [appId] keeps the legacy meaning.
+  Future<bool> reprocessConversation({String? appId, bool forceOmi = false}) async {
+    if (conversation.id.startsWith('ondevice-') || loadingReprocessConversation || _savingSpeaker) return false;
     _speakerSummaryRefreshTimer?.cancel();
     _speakerSummaryRefreshTimer = null;
     final target = conversation;
@@ -1054,24 +1061,35 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     Logger.debug('_reProcessConversation with appId: $appId');
     lastFailedReprocessConversationId = null;
     lastFailedReprocessAppId = null;
-    updateReprocessConversationLoadingState(true);
-    updateReprocessConversationId(conversation.id);
-    notifyInfo('REPROCESS_STARTED');
+    recordSummaryFailure(null);
+    reprocessingAppId = appId;
+    loadingReprocessConversation = true;
+    reprocessConversationId = target.id;
+    notifyListeners();
     try {
-      var updatedConversation = await _reprocess(target.id, appId: appId, requireSpeakerReceipt: requireSpeakerReceipt);
+      final result = await _reprocess(
+        target.id,
+        appId: appId,
+        requireSpeakerReceipt: requireSpeakerReceipt,
+        forceOmi: forceOmi && appId == null,
+      );
       if (_isDisposed) return false;
-      PlatformManager.instance.analytics.reProcessConversation(conversation);
-      updateReprocessConversationLoadingState(false);
-      updateReprocessConversationId('');
-      if (updatedConversation == null) {
-        lastFailedReprocessConversationId = target.id;
-        lastFailedReprocessAppId = appId;
-        notifyError('REPROCESS_FAILED');
-        notifyListeners();
+      PlatformManager.instance.analytics.reProcessConversation(target);
+      final updatedConversation = result.conversation;
+      if (updatedConversation == null || !conversationHasRequestedSummary(updatedConversation, appId)) {
+        _failReprocess(
+          target,
+          appId,
+          switch (result) {
+            ReprocessBusy() => SummaryFailureKind.busy,
+            ReprocessRateLimited() => SummaryFailureKind.rateLimited,
+            _ when appId != null => SummaryFailureKind.template,
+            _ => SummaryFailureKind.generic,
+          },
+        );
         return false;
       }
 
-      // else
       conversationProvider?.updateConversation(updatedConversation);
       SharedPreferencesUtil().modifiedConversationDetails = updatedConversation;
 
@@ -1084,10 +1102,14 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       if (generation == _speakerEditGeneration && _speakerSummaryConversationId == target.id) {
         _speakerSummaryConversationId = null;
       }
+      _finishReprocessLoading();
+      // Show what the reader asked for, even when the server kept other templates' results first.
+      showRequestedSummarySource(target.id, appId);
+      notifyListeners();
 
       // Check if the selected app summary is in the apps list.
-      final summarySelection = getSummarySelection();
-      if (summarySelection.isApp && summarySelection.appId != null && appProvider != null) {
+      final summarySelection = conversationOrNull == null ? null : getSummarySelection();
+      if (summarySelection != null && summarySelection.isApp && summarySelection.appId != null && appProvider != null) {
         String appId = summarySelection.appId!;
         bool appExists = appProvider!.apps.any((app) => app.id == appId);
         if (!appExists) {
@@ -1100,24 +1122,48 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       notifyListeners();
       return true;
     } catch (err, stacktrace) {
-      print(err);
-      var conversationReporting = PlatformManager.instance.analytics.getConversationEventProperties(conversation);
-      await PlatformManager.instance.crashReporter.reportCrash(
-        err,
-        stacktrace,
-        userAttributes: {
-          'conversation_transcript_length': conversationReporting['transcript_length'].toString(),
-          'conversation_transcript_word_count': conversationReporting['transcript_word_count'].toString(),
-        },
-      );
-      lastFailedReprocessConversationId = target.id;
-      lastFailedReprocessAppId = appId;
-      notifyError('REPROCESS_FAILED');
-      updateReprocessConversationLoadingState(false);
-      updateReprocessConversationId('');
-      notifyListeners();
+      Logger.debug('reprocessConversation failed: ${err.runtimeType}');
+      // Settle the page first: crash reporting is best effort and must never leave it loading.
+      if (!_isDisposed && loadingReprocessConversation && reprocessConversationId == target.id) {
+        _failReprocess(target, appId, appId != null ? SummaryFailureKind.template : SummaryFailureKind.generic);
+      }
+      try {
+        await reportReprocessCrash(err, stacktrace, target);
+      } catch (reportError) {
+        Logger.debug('reprocess crash report failed: ${reportError.runtimeType}');
+      }
       return false;
     }
+  }
+
+  /// Crash-reporting seam for [reprocessConversation]; tests override it.
+  @visibleForTesting
+  Future<void> reportReprocessCrash(Object error, StackTrace stackTrace, ServerConversation target) async {
+    final conversationReporting = PlatformManager.instance.analytics.getConversationEventProperties(target);
+    await PlatformManager.instance.crashReporter.reportCrash(
+      error,
+      stackTrace,
+      userAttributes: {
+        'conversation_transcript_length': conversationReporting['transcript_length'].toString(),
+        'conversation_transcript_word_count': conversationReporting['transcript_word_count'].toString(),
+      },
+    );
+  }
+
+  void _finishReprocessLoading() {
+    loadingReprocessConversation = false;
+    selectedAppForReprocessing = null;
+    reprocessingAppId = null;
+    reprocessConversationId = '';
+  }
+
+  void _failReprocess(ServerConversation target, String? appId, SummaryFailureKind kind) {
+    _finishReprocessLoading();
+    lastFailedReprocessConversationId = target.id;
+    lastFailedReprocessAppId = appId;
+    recordSummaryFailure(SummaryFailure(conversationId: target.id, kind: kind, appId: appId));
+    notifyError('REPROCESS_FAILED');
+    notifyListeners();
   }
 
   /// Returns the explicit source and body used by every summary surface.
@@ -1140,144 +1186,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         .toList();
   }
 
-  /// Returns the list of suggested apps from the API (includes unavailable apps)
-  Future<List<App>> getSuggestedAppsFromAPI() async {
-    try {
-      return await getConversationSuggestedApps(conversation.id);
-    } catch (e) {
-      Logger.debug('Error fetching suggested apps: $e');
-      return [];
-    }
-  }
-
-  /// Returns the list of enabled apps that support conversations from the API
-  Future<List<App>> getEnabledConversationAppsFromAPI() async {
-    try {
-      final result = await retrieveAppsSearch(installedApps: true, limit: 100);
-      return result.apps.where((app) => app.worksWithMemories() && app.enabled).toList();
-    } catch (e) {
-      Logger.debug('Error fetching enabled conversation apps: $e');
-      return [];
-    }
-  }
-
-  /// Fetches and caches enabled conversation apps
-  /// Preserves locally added apps that may not yet be returned by the API
-  Future<void> fetchAndCacheEnabledConversationApps() async {
-    try {
-      final apps = await getEnabledConversationAppsFromAPI();
-      if (_isDisposed) return;
-
-      // Preserve locally added apps that aren't in the API response yet
-      final locallyAddedApps =
-          _cachedEnabledConversationApps.where((app) => _locallyAddedAppIds.contains(app.id)).toList();
-
-      _cachedEnabledConversationApps.clear();
-      _cachedEnabledConversationApps.addAll(apps);
-
-      // Add back locally added apps if they weren't returned by the API
-      for (final localApp in locallyAddedApps) {
-        if (!apps.any((app) => app.id == localApp.id)) {
-          _cachedEnabledConversationApps.add(localApp);
-        } else {
-          // If API returned the app, remove from locally tracked set
-          _locallyAddedAppIds.remove(localApp.id);
-        }
-      }
-
-      notifyListeners();
-    } catch (e) {
-      Logger.debug('Error fetching and caching enabled conversation apps: $e');
-    }
-  }
-
-  /// Fetches and caches suggested apps for the current conversation
-  Future<void> fetchAndCacheSuggestedApps() async {
-    try {
-      final apps = await getSuggestedAppsFromAPI();
-      if (_isDisposed) return;
-      _cachedSuggestedApps.clear();
-      _cachedSuggestedApps.addAll(apps);
-      notifyListeners();
-    } catch (e) {
-      Logger.debug('Error fetching and caching suggested apps: $e');
-    }
-  }
-
-  /// Finds an app by ID from cached apps
-  App? findAppById(String? appId) {
-    if (appId == null) return null;
-
-    final enabledApp = _cachedEnabledConversationApps.firstWhereOrNull((app) => app.id == appId);
-    if (enabledApp != null) return enabledApp;
-
-    final suggestedApp = _cachedSuggestedApps.firstWhereOrNull((app) => app.id == appId);
-    if (suggestedApp != null) return suggestedApp;
-
-    // The two caches above only fill after the summary sheet fetches. The durable
-    // app catalog (appProvider.apps) is loaded at startup, so a real app_id must
-    // resolve here instead of rendering "Unknown App" until the sheet is opened
-    // (SCA-359).
-    final providerApp = appProvider?.apps.firstWhereOrNull((app) => app.id == appId);
-    return providerApp;
-  }
-
-  /// Enables an app and updates the cached enabled apps list
-  /// Returns true if successful, false otherwise
-  Future<bool> enableApp(App app) async {
-    try {
-      // Make the server call to enable the app
-      final (success, _) = await enableAppServer(app.id);
-      if (_isDisposed) return false;
-
-      if (success) {
-        // Update SharedPreferences
-        SharedPreferencesUtil().enableApp(app.id);
-
-        // Update the app's enabled state
-        app.enabled = true;
-
-        // Add to cached enabled apps if not already there
-        final existingIndex = _cachedEnabledConversationApps.indexWhere((a) => a.id == app.id);
-        if (existingIndex == -1) {
-          _cachedEnabledConversationApps.add(app);
-        } else {
-          _cachedEnabledConversationApps[existingIndex] = app;
-        }
-
-        notifyListeners();
-      }
-
-      return success;
-    } catch (e) {
-      Logger.debug('Error enabling app ${app.id}: $e');
-      return false;
-    }
-  }
-
-  /// Adds an app to the cached enabled conversation apps list
-  /// Used when a new app is created and installed from the quick template creator
-  void addToEnabledConversationApps(App app) {
-    final existingIndex = _cachedEnabledConversationApps.indexWhere((a) => a.id == app.id);
-    if (existingIndex == -1) {
-      _cachedEnabledConversationApps.add(app);
-    } else {
-      _cachedEnabledConversationApps[existingIndex] = app;
-    }
-    // Track this as a locally added app so it's preserved during refetch
-    _locallyAddedAppIds.add(app.id);
-    notifyListeners();
-  }
-
   /// Checks if an app is in the suggested apps list
   bool isAppSuggested(String appId) {
     return getSuggestedApps().contains(appId);
-  }
-
-  /// Checks if a suggested app is available/enabled for the user
-  bool isSuggestedAppAvailable(String appId) {
-    if (appProvider == null) return false;
-    return appProvider!.apps.any((app) => app.id == appId && app.worksWithMemories() && app.enabled);
   }
 
   void setCachedConversation(ServerConversation conversation) {
@@ -1288,6 +1199,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     if (_cachedConversationId != conversation.id) {
       detailLoad = ConversationDetailLoad.idle;
       _refreshGeneration++;
+      resetSuggestedSummaryApps();
     }
     _cachedConversation = conversation;
     _cachedConversationId = conversation.id;
@@ -1298,9 +1210,14 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   /// Re-reads the open conversation. With [trackLoad] the outcome is kept in [detailLoad] so a tab
   /// with nothing to show can say it is loading or offer Try Again; untracked refreshes stay
   /// silent and never overwrite a tracked failure with "loading".
-  Future<void> refreshConversation({bool trackLoad = false}) async {
+  Future<bool> refreshConversation({bool trackLoad = false}) async {
     final openedId = conversationOrNull?.id;
-    if (openedId == null) return;
+    if (openedId == null) return false;
+    if (openedId.startsWith('ondevice-')) {
+      detailLoad = ConversationDetailLoad.idle;
+      notifyListeners();
+      return false;
+    }
     final generation = ++_refreshGeneration;
     if (trackLoad) {
       detailLoad = ConversationDetailLoad.loading;
@@ -1309,15 +1226,18 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     ServerConversation? updatedConversation;
     try {
       updatedConversation = await _fetchConversation(openedId);
+      if (updatedConversation != null) {
+        updatedConversation = OnDeviceTranscriptionController.instance.displayConversation(updatedConversation);
+      }
     } catch (e) {
       Logger.debug('Error refreshing conversation: $e');
     }
     // A newer read, another conversation or a reprocess result superseded this one: it owns the
     // page now, including [detailLoad].
-    if (_isDisposed || generation != _refreshGeneration || conversationOrNull?.id != openedId) return;
+    if (_isDisposed || generation != _refreshGeneration || conversationOrNull?.id != openedId) return false;
     if (updatedConversation != null) {
       if (updatedConversation.id != openedId) {
-        if (!_syncConversationId.hasMatch(openedId)) return;
+        if (!_syncConversationId.hasMatch(openedId)) return false;
         _adoptBridgedConversation(openedId, updatedConversation);
       } else {
         conversationProvider?.updateConversation(updatedConversation);
@@ -1330,6 +1250,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       detailLoad = ConversationDetailLoad.idle;
     }
     notifyListeners();
+    // True only when a fresh read actually landed, so callers (the busy failure card's
+    // "Check Again") can keep their retry action instead of dismissing on a failed read.
+    return updatedConversation != null;
   }
 
   /// The open sync donor was bridged into [survivor]: it becomes the open conversation, and every
@@ -1499,6 +1422,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   }
 
   bool _isDisposed = false;
+
+  @override
+  bool get summaryGenerationDisposed => _isDisposed;
 
   @override
   void dispose() {

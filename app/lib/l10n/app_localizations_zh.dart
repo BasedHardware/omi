@@ -701,7 +701,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get remembering => '记忆';
 
   @override
-  String get unlimitedPlan => '无限套餐';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => '管理套餐';
@@ -723,7 +723,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get upgrade => '升级';
 
   @override
-  String get upgradeToUnlimited => '升级至无限制';
+  String get upgradeToUnlimited => '升级至Omi Pro';
 
   @override
   String basicPlanDesc(int limit) {
@@ -1952,12 +1952,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get memoryHistory => '历史';
 
   @override
-  String get memoryAllowUse => '允许使用';
-
-  @override
-  String get memoryDontUse => '不使用';
-
-  @override
   String get undo => '撤销';
 
   @override
@@ -3108,7 +3102,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get pro => '专业版';
 
   @override
-  String get upgradeToPro => '升级至Pro';
+  String get upgradeToPro => '升级至Omi Pro';
 
   @override
   String get getOmiDevice => '获取 Omi 设备';
@@ -4212,7 +4206,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get trainingDataProgram => '训练数据计划';
 
   @override
-  String get getOmiUnlimitedFree => '通过贡献数据来训练AI模型，免费获得Omi无限版。';
+  String get getOmiUnlimitedFree => '通过贡献数据来训练AI模型，免费获得Omi Pro。';
 
   @override
   String get trainingDataBullets => '• 你的数据有助于改进 AI 模型\n• 仅共享非敏感数据';
@@ -4300,12 +4294,27 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String yourPlanEndsOn(String plan, String date) {
+    return '您的 $plan 套餐将于 $date 结束。';
+  }
+
+  @override
+  String resubscribeNowNoChargeUntil(String date) {
+    return '立即重新订阅以保留您的权益 - $date之前不收费。';
+  }
+
+  @override
   String planSetToCancelOn(String date) {
     return '您的计划将于$date取消。\n立即重新订阅以保留您的权益 - $date之前不收费。';
   }
 
   @override
   String get annualPlanStartsAutomatically => '您的年度计划将在月度计划结束时自动开始。';
+
+  @override
+  String yourPlanWillRenewOn(String plan, String date) {
+    return '您的 $plan 套餐将于 $date 续订。';
+  }
 
   @override
   String planRenewsOn(String date) {
@@ -4338,6 +4347,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get continueText => '继续';
+
+  @override
+  String get checkoutExistingSubscription => '您已有订阅。请管理现有订阅，而不要开始新的订阅。';
+
+  @override
+  String get resubscribeFirstToChangePlans => '请先重新订阅再更改套餐。';
 
   @override
   String get resubscribe => '重新订阅';
@@ -4936,9 +4951,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get content => '内容';
-
-  @override
-  String get noContentToDisplay => '没有可显示的内容';
 
   @override
   String get noSummary => '无摘要';
@@ -8453,6 +8465,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcriptionUnavailableRecordingSaved => '转录不可用 — 录音仍在继续，你的音频已保存。';
 
   @override
+  String get captureNoAudioFromPendant => '挂件没有音频';
+
+  @override
   String get capturing => '正在捕获';
 
   @override
@@ -9160,6 +9175,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceOnboardingIntroDuration => '大约 1 分钟';
 
   @override
+  String quoteJumpToTime(String duration) {
+    return '跳转到$duration';
+  }
+
+  @override
+  String get quoteShowSources => '显示来源';
+
+  @override
   String get jumpToLatestMessage => '跳转到最新消息';
 
   @override
@@ -9479,7 +9502,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get downgradeToFreemiumAction => '降级到免费版';
 
   @override
-  String get getFreeUnlimitedAccess => '免费获取无限访问权限';
+  String get getFreeUnlimitedAccess => '免费获取 Omi Pro';
 
   @override
   String get shareDataForTraining => '共享数据用于训练';
@@ -9641,9 +9664,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get speechToTextUnavailableDesc => '目前无法将语音转换为文字。请检查网络连接和设备的语音识别设置，然后重试。';
-
-  @override
-  String get processingTakingLonger => '仍在处理中——比平时耗时更长。';
 
   @override
   String get speechProfileEnrollmentPrompt => '让 Omi 知道哪个声音是你的——随便聊点什么，说大约 5 秒就好。';
@@ -10869,7 +10889,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get openCall => '打开通话';
 
   @override
-  String get captureRecoveryBanner => 'Omi 未发送音频 — 轻点以重新连接';
+  String get captureRecoveryBannerTitle => 'Omi 未发送音频';
 
   @override
   String get phoneRecordingBlockedByPendantBatch => '在用手机录音之前，请先停止吊坠上的“稍后转录”。';
@@ -10879,6 +10899,29 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get captureAudioSavedTranscribesLater => '音频已保存，稍后转录';
+
+  @override
+  String get captureBannerTryReconnect => '尝试重新连接';
+
+  @override
+  String get captureBannerRetrySync => '重试同步';
+
+  @override
+  String get captureWedgeBleExplanation =>
+      '与 Omi 的蓝牙连接已中断，因此音频无法传输到应用。Omi 会继续在设备上录音，并在连接恢复后同步。重试会重新建立连接；如果仍然失败，请在“设置 > 设备”中检查你的设备。';
+
+  @override
+  String get captureConnecting => '正在连接…';
+
+  @override
+  String get captureNoAudioDetail => '挂件已连接，但没有音频传输到您的手机';
+
+  @override
+  String get captureIngressNeedsReconnect => '音频未送达应用 — 请重新连接您的 Omi';
+
+  @override
+  String get captureIngressNeedsReconnectExplanation =>
+      '应用已无法再从 Omi 设备接收音频，且未能自动恢复连接。请断开并重新连接设备 — 在设备设置中操作，或将设备关机后重启。设备上已保存的音频稍后会同步。';
 
   @override
   String get captureStillRecording => '仍在录音';
@@ -10900,12 +10943,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => '存储空间即将用完';
-
-  @override
-  String get capturePendantDisconnectedDetail => '吊坠与这部手机的连接已断开。吊坠开机并在附近时，Omi 会自动重新连接。此前录下的内容都已保存。';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi 会自动重新连接';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12038,12 +12075,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get playbackAudioNetworkFailed => '请检查网络连接';
 
   @override
-  String get forYou => '为你推荐';
-
-  @override
-  String get stopThese => '停止此类推荐';
-
-  @override
   String get dismiss => '忽略';
 
   @override
@@ -12244,6 +12275,59 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get reviewNoChangesBody => 'Omi 整理你的笔记后，更改会显示在这里。';
+
+  @override
+  String get reviewChangesSectionTerms => '名称和术语';
+
+  @override
+  String get reviewChangesSectionTitles => '标题和摘要';
+
+  @override
+  String get reviewChangesSectionOther => '其他更改';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 段对话',
+      one: '1 段对话',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 处',
+      one: '1 处',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return '显示全部 $count 处';
+  }
+
+  @override
+  String get reviewChangeUndoAll => '全部撤销';
+
+  @override
+  String get reviewChangeSeeEvidence => '查看依据';
+
+  @override
+  String get reviewChangeViewConversation => '查看对话';
+
+  @override
+  String get reviewChangeViewTask => '查看任务';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return '无法撤销 $failed/$total 项，请重试。';
+  }
 
   @override
   String get reviewShowMore => '显示更多';
@@ -12584,7 +12668,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => '发送语音备忘，Omi 会回复。';
 
   @override
-  String get chatAppsPartOfPro => '聊天应用是 Pro 的一部分';
+  String get chatAppsPartOfPro => '聊天应用是 Omi Pro 的一部分';
 
   @override
   String get chatAppsMessagesApp => '信息';
@@ -12844,6 +12928,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reviewProposalSuggested => '建议';
 
   @override
+  String get reviewQuestionOutOfDate => '此问题已过时，因此未做任何更改。';
+
+  @override
   String get reviewProposalConflict => 'Dream 提出建议后内容已有变化，因此未应用任何更改。';
 
   @override
@@ -12859,22 +12946,22 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get paywallRecommended => 'Recommended';
+  String get paywallRecommended => '推荐';
 
   @override
   String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'See all plans';
+  String get paywallOtherPlans => '查看所有套餐';
 
   @override
-  String get paywallComparePlans => 'See plans';
+  String get paywallComparePlans => '查看方案';
 
   @override
-  String get paywallYourPlan => 'Your plan';
+  String get paywallYourPlan => '你的套餐';
 
   @override
-  String get paywallNotNow => 'Not now';
+  String get paywallNotNow => '以后再说';
 
   @override
   String get paywallTryAgain => 'Try again';
@@ -12902,6 +12989,18 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get firstCaptureWatch => 'Apple Watch';
+
+  @override
+  String get firstCaptureConnectTitle => '连接你的 Omi';
+
+  @override
+  String get firstCaptureConnectDescription => '配对你的 Omi，全天候免提记录对话。';
+
+  @override
+  String get firstCaptureConnect => '连接我的 Omi';
+
+  @override
+  String get firstCaptureNoDevice => '我还没有 Omi';
 
   @override
   String get firstCaptureSkip => 'Skip for Now';
@@ -13012,6 +13111,108 @@ class AppLocalizationsZh extends AppLocalizations {
   String get paywallOutlineHeadline => '再也不错过任何一句话。';
 
   @override
+  String get paywallTrialBrand => 'Omi Pro';
+
+  @override
+  String get paywallTrialHeadline => '您的免费试用这样运作。';
+
+  @override
+  String get paywallTrialSlideSummariesTitle => '无限摘要，永久保存';
+
+  @override
+  String get paywallTrialSlideSummariesBody => '每次对话都将生成清晰的摘要和后续步骤，确保万无一失。';
+
+  @override
+  String get paywallTrialSlideTranscriptionTitle => '顶尖转录技术';
+
+  @override
+  String get paywallTrialChipDetails => '捕捉更多细节';
+
+  @override
+  String get paywallTrialChipSpeakers => '区分不同发言人';
+
+  @override
+  String get paywallTrialChipNoise => '嘈杂环境中也能使用';
+
+  @override
+  String get paywallTrialChipAccents => '处理各种口音';
+
+  @override
+  String get paywallTrialChipJargon => '了解您的术语和名称';
+
+  @override
+  String get paywallTrialSlideSpeakersTitle => '自动识别发言人姓名';
+
+  @override
+  String get paywallTrialSlideAskTitle => '无限提问，贯穿每次对话';
+
+  @override
+  String get paywallTrialBubbleFollowUp => '根据本次会议起草一封后续邮件。';
+
+  @override
+  String get paywallTrialBubbleConflicts => '与约翰周二所说有冲突吗？';
+
+  @override
+  String get paywallTrialBubbleBlockers => '找出任何可能阻碍我们的因素。';
+
+  @override
+  String get paywallTrialSlideAppsTitle => '与您喜爱的应用协同工作';
+
+  @override
+  String get paywallTrialTodayTitle => '今天';
+
+  @override
+  String get paywallTrialTodayBody => 'Pro 中的所有功能均已解锁。';
+
+  @override
+  String paywallTrialFreeDaysTitle(int days) {
+    return '+ $days 天免费';
+  }
+
+  @override
+  String paywallTrialFreeDaysBody(int days) {
+    return '我们为您提供 $days 天 Omi Pro 免费试用。';
+  }
+
+  @override
+  String paywallTrialInDaysTitle(int days) {
+    return '$days 天后';
+  }
+
+  @override
+  String get paywallTrialEndsBody => '试用期结束。除非您取消，否则将开始收费。';
+
+  @override
+  String get paywallTrialFeatureModels => '最新 AI 模型';
+
+  @override
+  String get paywallTrialFeatureAsk => '无限 Ask Omi';
+
+  @override
+  String get paywallTrialBilledMonthly => '按月计费';
+
+  @override
+  String get paywallTrialBilledYearly => '按年计费';
+
+  @override
+  String paywallTrialSaveAmount(String amount) {
+    return '节省 $amount';
+  }
+
+  @override
+  String paywallTrialCta(String price) {
+    return '以 $price 开始';
+  }
+
+  @override
+  String get paywallTrialCancelNote => '随时取消。无费用，无罚款。';
+
+  @override
+  String paywallTrialStarted(int days) {
+    return '您的 Omi Pro $days 天免费试用已开始。';
+  }
+
+  @override
   String get paywallCancelAnytime => '随时取消。';
 
   @override
@@ -13096,7 +13297,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncDetailsCopy => '复制详情以供支持团队使用';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Operator 和 Architect 套餐可用';
+  String get chatAppsChannelPlanRequired => 'Omi Pro 套餐可用';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -13223,6 +13424,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onTheWayAlmostReady => '即将完成';
 
   @override
+  String onTheWayRecordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 条录音',
+      one: '1 条录音',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get activityEmpty => '暂无活动';
 
   @override
@@ -13233,4 +13445,1007 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get activityNewItem => '新';
+
+  @override
+  String get activityNeedsAttention => '需要处理';
+
+  @override
+  String get activityRetryAll => '全部重试';
+
+  @override
+  String get activityAttentionStorageUnknownTitle => '无法检查存储空间';
+
+  @override
+  String get activityAttentionStorageSubtitle => '录音已暂停';
+
+  @override
+  String get activityAttentionUploadStalledTitle => '上传停滞';
+
+  @override
+  String activityAttentionUploadRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 条录音等待中',
+      one: '1 条录音等待中',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get attentionSummaryFailed => '无法总结这段对话';
+
+  @override
+  String get activityAttentionSemantics => '活动，需要关注';
+
+  @override
+  String get connectAgentHeadline => '在 ChatGPT 和你的 AI 智能体中使用 Omi 记忆';
+
+  @override
+  String get connectAgentIntro => '只需连接一次，之后就能向它们询问你的对话、回忆和任务。';
+
+  @override
+  String get connectAgentOneTap => '一键连接';
+
+  @override
+  String get connectAgentComputerAgents => '拥有自己电脑的智能体';
+
+  @override
+  String get connectAgentComputerAgentsSubtitle => '复制一条提示词。Omi 会为该智能体单独生成密钥并安全发送。';
+
+  @override
+  String get connectAgentOtherAgent => '其他智能体';
+
+  @override
+  String get connectAgentKeyActive => '密钥有效';
+
+  @override
+  String connectAgentLastUsed(String time) {
+    return '上次使用：$time';
+  }
+
+  @override
+  String get connectAgentDevelopers => '面向开发者的 MCP 和 API 密钥';
+
+  @override
+  String get connectAgentLoadFailed => '无法加载你的连接。';
+
+  @override
+  String get connectAgentActionFailed => '出了点问题，请重试。';
+
+  @override
+  String get connectChatGptTitle => '连接 ChatGPT';
+
+  @override
+  String get connectChatGptSubtitle => '大约需要 30 秒。你在 ChatGPT 中批准后，手机和电脑上都能使用。';
+
+  @override
+  String get connectChatGptStepOpen => '我们会在 ChatGPT 中打开 Omi';
+
+  @override
+  String get connectChatGptStepOpenBody => 'ChatGPT 会直接打开 Omi 应用页面。';
+
+  @override
+  String get connectChatGptStepApprove => '点按“连接”，然后登录 Omi';
+
+  @override
+  String get connectChatGptStepApproveBody => '请使用与此处相同的账号。';
+
+  @override
+  String get connectChatGptStepReturn => '返回 Omi';
+
+  @override
+  String get connectChatGptStepReturnBody => '我们会自动检查连接。';
+
+  @override
+  String get openChatGpt => '打开 ChatGPT';
+
+  @override
+  String get chatGptConnectedEverywhere => '已在手机和电脑上连接';
+
+  @override
+  String get tryAskingChatGpt => '试着问问 ChatGPT';
+
+  @override
+  String get tryAskingChatGptFooter => '点按其中一个，即可打开已填好问题的 ChatGPT。';
+
+  @override
+  String get chatGptExampleMeetings => '我在昨天的会议上答应了什么？';
+
+  @override
+  String get chatGptExampleTasks => '把我在 Omi 里未完成的任务整理成本周计划。';
+
+  @override
+  String get chatGptExampleGoals => 'Omi 对我的目标了解多少？';
+
+  @override
+  String get disconnectChatGpt => '断开 ChatGPT';
+
+  @override
+  String get disconnectChatGptQuestion => '要断开 ChatGPT 吗？';
+
+  @override
+  String get disconnectChatGptMessage => 'ChatGPT 将无法再读取你在 Omi 中的回忆、对话和任务。';
+
+  @override
+  String connectAgentNamed(String name) {
+    return '连接 $name';
+  }
+
+  @override
+  String connectAgentPromptSubtitle(String name) {
+    return '粘贴一条提示词，$name 会在自己的电脑上设置好 Omi。';
+  }
+
+  @override
+  String get connectAgentGenericPromptSubtitle => '粘贴一条提示词，你的智能体会在自己的电脑上设置好 Omi。';
+
+  @override
+  String connectAgentKeyCreated(String name) {
+    return '已创建密钥“$name”';
+  }
+
+  @override
+  String get connectAgentKeyCreatedBody => '提示词里是一次性链接，而不是密钥本身。链接只能打开一次，1 小时后失效。你可以随时在这里撤销密钥。';
+
+  @override
+  String get connectAgentPreparing => '正在生成密钥和安全链接…';
+
+  @override
+  String get connectAgentPrepareFailed => '无法生成密钥。请检查网络连接后重试。';
+
+  @override
+  String get copyPrompt => '复制提示词';
+
+  @override
+  String get connectAgentNewLink => '链接已过期？重新生成';
+
+  @override
+  String connectAgentActiveTitle(String name) {
+    return '$name 已连接';
+  }
+
+  @override
+  String connectAgentActiveBody(String name) {
+    return '$name 持有一个 Omi 密钥。撤销它即可切断访问，之后随时可以重新连接。';
+  }
+
+  @override
+  String revokeAgentKeyQuestion(String name) {
+    return '要撤销 $name 的密钥吗？';
+  }
+
+  @override
+  String revokeAgentKeyMessage(String name) {
+    return '$name 将立即失去对你 Omi 记忆的访问权限。';
+  }
+
+  @override
+  String get askAboutConversation => '询问这段对话';
+
+  @override
+  String get askAboutConversationSubtitle => '打开 ChatGPT 并填好你的问题。它会通过 Omi 查找这段对话，无需粘贴转录内容。';
+
+  @override
+  String get askYourQuestion => '你的问题';
+
+  @override
+  String get askSuggestFollowUp => '根据这段对话起草一封跟进邮件。';
+
+  @override
+  String get askSuggestCommitments => '我在这段对话中承诺了什么？';
+
+  @override
+  String get askSuggestDoc => '把这段对话整理成一份简短文档。';
+
+  @override
+  String get askInChatGpt => '问 ChatGPT';
+
+  @override
+  String get copyForAnyApp => '复制到任意应用';
+
+  @override
+  String get askConnectChatGptFirst => '只需连接一次 ChatGPT，即可询问你的对话。';
+
+  @override
+  String get reconnect => '重新连接';
+
+  @override
+  String get chatGptNeedsReconnect => '需要更多权限。重新连接以修复。';
+
+  @override
+  String get connectAgentWaiting => '正在等待 Agent 使用其密钥';
+
+  @override
+  String connectAgentWaitingTitle(String name) {
+    return '$name 尚未连接';
+  }
+
+  @override
+  String get summaryNotSummarizedYet => '尚未生成摘要';
+
+  @override
+  String get summaryEmptyStateBody => 'Omi 可以将这段对话整理为概览、要点和待办事项。';
+
+  @override
+  String get summaryWithOmi => '用 Omi 总结';
+
+  @override
+  String summaryWithTemplate(String name) {
+    return '用 $name 总结';
+  }
+
+  @override
+  String get summaryUseDifferentTemplate => '使用其他模板';
+
+  @override
+  String get summaryFromTheTranscript => '摘自转录';
+
+  @override
+  String get summaryReadFullTranscript => '阅读完整转录';
+
+  @override
+  String get summarySheetTitle => '总结方式';
+
+  @override
+  String get summaryOmiTemplateSubtitle => '概览、要点和待办事项';
+
+  @override
+  String get summaryYourTemplates => '你的模板';
+
+  @override
+  String get summarySuggestedTemplates => '为此对话推荐';
+
+  @override
+  String get summaryBrowseTemplates => '浏览模板';
+
+  @override
+  String get summaryCreateYourOwn => '自己创建';
+
+  @override
+  String get summaryUseForNewConversations => '设为我的默认';
+
+  @override
+  String get summaryTemplatesLoadFailed => '无法加载你的模板。Omi 仍可正常使用。';
+
+  @override
+  String get summaryNoTemplatesYet => '你还没有添加任何模板。浏览一些模板，或自己创建一个。';
+
+  @override
+  String summarySummarizingWith(String name) {
+    return '正在用 $name 总结…';
+  }
+
+  @override
+  String summaryTemplateFailedTitle(String name) {
+    return '$name 未能完成';
+  }
+
+  @override
+  String get summaryTemplateFailedBody => '该模板未为此对话返回摘要。';
+
+  @override
+  String get summaryWithOmiInstead => '改用 Omi 总结';
+
+  @override
+  String get summaryBusyTitle => '仍在处理中';
+
+  @override
+  String get summaryBusyBody => 'Omi 已在处理此对话。完成后，摘要将显示在这里。';
+
+  @override
+  String get summaryCheckAgain => '再次检查';
+
+  @override
+  String get summaryLimitTitle => '已达到摘要次数上限';
+
+  @override
+  String get summaryLimitBody => '你在过去一小时内多次重新生成了摘要。请稍后再试。';
+
+  @override
+  String get summaryFailedTitle => '无法生成摘要';
+
+  @override
+  String get summaryFailedBody => '总结此对话时出了点问题。';
+
+  @override
+  String get noContentToDisplay => '没有可显示的内容';
+
+  @override
+  String get processingTakingLonger => '仍在处理中——比平时耗时更长。';
+
+  @override
+  String get onDeviceAtCapTitle => '你已达到本月的用量上限';
+
+  @override
+  String get onDeviceAtCapBody => 'Omi 仍在录音。请选择本月剩余时间的转录方式。';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return '你的用量将于 $date 重置。';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => '在本机转录';
+
+  @override
+  String get onDeviceIncluded => '已包含';
+
+  @override
+  String get onDeviceOptionChargingBody => '在手机充电时运行。';
+
+  @override
+  String get onDeviceUpgradeBody => '升级到 Omi Pro，获得说话人分离和更高准确度';
+
+  @override
+  String get onDeviceAtCapFooter => '无论选哪种都不会丢失内容。你可以在 设置 › 转录 中更改。';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return '第 $step 步，共 $total 步';
+  }
+
+  @override
+  String get onDeviceSetupBody => 'Omi 只需下载一次语音模型。之后，你的录音会直接在本机转为文字，不计入用量。';
+
+  @override
+  String get onDeviceSpeechModel => '语音模型';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size MB';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return '正在通过 Wi-Fi 下载 · $percent%';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return '正在下载 · $percent%';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return '约剩 $time';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => '正在等待 Wi-Fi';
+
+  @override
+  String get onDeviceDownloadFailed => '下载未完成';
+
+  @override
+  String get onDeviceModelNotDownloaded => '未下载';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return '已安装 · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => '本机暂不支持';
+
+  @override
+  String get onDeviceSetupKeepRecording => '下载期间可继续录音，不会耽误任何事情。';
+
+  @override
+  String get onDeviceSetupAudioStays => '音频会保留在你的手机上，直到转录完成。';
+
+  @override
+  String get onDeviceWifiOnly => '仅通过 Wi-Fi 下载';
+
+  @override
+  String get onDeviceDownloadModel => '下载语音模型';
+
+  @override
+  String get onDeviceScheduleTitle => '转录时间';
+
+  @override
+  String get onDeviceScheduleHeadline => 'Omi 应在何时转录？';
+
+  @override
+  String get onDeviceScheduleBody => '你可以随时更改。';
+
+  @override
+  String get onDeviceScheduleCharging => '充电时';
+
+  @override
+  String get onDeviceScheduleChargingBody => '接上充电器后显示文字记录，通常在夜间完成。';
+
+  @override
+  String get onDeviceBatteryAlmostNone => '电量：几乎不耗电';
+
+  @override
+  String get onDeviceScheduleHours => '每隔几小时';
+
+  @override
+  String get onDeviceScheduleHoursBody => '使用电池时分小段补齐，文字记录很少会延迟超过几小时。';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return '电量：每天约 $percent%';
+  }
+
+  @override
+  String get onDeviceScheduleLive => '边说边转';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'Omi打开时定期转录。';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return '电量：每小时对话约 $percent%';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration 等待转录';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody => '手机接上充电器后即可完成。录音照常进行。';
+
+  @override
+  String get onDeviceQueueHoursBody => 'Omi 每隔几小时补齐一次。录音照常进行。';
+
+  @override
+  String get onDeviceQueueLowBatteryBody => '电量不足，正在等待充电。录音照常进行。';
+
+  @override
+  String get onDeviceTranscribeNow => '立即转录';
+
+  @override
+  String get onDeviceUsesBattery => '会耗电';
+
+  @override
+  String get onDeviceTranscribing => '正在转录…';
+
+  @override
+  String get onDeviceWaitingForCharger => '等待充电';
+
+  @override
+  String get onDeviceWaitingToTranscribe => '等待转录';
+
+  @override
+  String get onDeviceWaitingForSetup => '已保存，等待设置';
+
+  @override
+  String get onDeviceTranscribedOnIphone => '已在本 iPhone 上转录';
+
+  @override
+  String get onDeviceTranscribedOnPhone => '已在本机转录';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => '已在本 iPhone 上转录并生成摘要';
+
+  @override
+  String get onDeviceSummarizedByCloud => '由 Omi Cloud 生成摘要';
+
+  @override
+  String get onDeviceWhyPhoneTitle => '为什么在你的手机上处理';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed => '你已达到本月上限，所以 Omi 在你的手机上转录了这段内容。';
+
+  @override
+  String get onDeviceWhySavingLiveHours => '你选择在本机转录以节省用量。';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => '摘要也是在本 iPhone 上生成的，所有内容都未离开设备。';
+
+  @override
+  String get onDeviceWhyNoSummary => '你选择将所有内容保留在本机，因此没有摘要。';
+
+  @override
+  String get onDeviceWhyCloudTitle => '为什么由 Omi Cloud 生成此摘要';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      '这台 iPhone 无法自行生成摘要（需要 iPhone 15 Pro 或更新机型）。文字记录在你的手机上生成，仅将其文本发送给 Omi 生成摘要。不计入你的用量。';
+
+  @override
+  String get onDeviceWhyCloudPhone => '这部手机无法自行生成摘要。文字记录在你的手机上生成，仅将其文本发送给 Omi 生成摘要。不计入你的用量。';
+
+  @override
+  String get onDeviceRedoWithCloud => '用 Omi Cloud 重新处理';
+
+  @override
+  String get onDeviceRedoHint => '升级到 Omi Pro，获得说话人分离和更高准确度';
+
+  @override
+  String get onDeviceKeepEverything => '所有内容保留在本机';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => '仅文字记录，不生成摘要';
+
+  @override
+  String get onDeviceAfterLiveHours => '达到用量上限时';
+
+  @override
+  String get onDeviceWhen => '时间';
+
+  @override
+  String get onDeviceSummaries => '摘要';
+
+  @override
+  String get onDeviceSummariesOnIphone => '在本 iPhone 上';
+
+  @override
+  String get onDeviceSummariesCloud => '由 Omi Cloud 生成';
+
+  @override
+  String get onDeviceSaveLiveHours => '始终在本机转录';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle => '节省用量。没有说话人标签。';
+
+  @override
+  String get onDeviceOnThisPhone => '本机';
+
+  @override
+  String get onDeviceAudioWaiting => '手机上待处理的音频';
+
+  @override
+  String get onDeviceRemoveModel => '移除语音模型';
+
+  @override
+  String get onDeviceRemoveModelTitle => '要移除语音模型吗？';
+
+  @override
+  String get onDeviceRemoveModelMessage => '录音会留在这台手机上，直到你再次下载，或用量重置。';
+
+  @override
+  String get onDeviceRemove => '移除';
+
+  @override
+  String get onDeviceFinishSetupTitle => '完成设置即可查看文字记录';
+
+  @override
+  String get onDeviceFinishSetupBody => '你已达到本月上限。Omi 仍在你的手机上录音并保存音频。下载语音模型后，它会补上之前的内容。';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return '需下载 $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody => '这台手机还不能运行语音模型。音频会一直保存，直到用量重置或你升级。';
+
+  @override
+  String get onDeviceEntrySubtitle => '达到用量上限后，在本机转录';
+
+  @override
+  String onDeviceMeterLineShort(int percent, String reset) {
+    return '已用 $percent% · $reset';
+  }
+
+  @override
+  String onDeviceMeterLineHours(int percent, int hours, String reset) {
+    return '已用 $percent% · 大约还可录音 $hours 小时 · $reset';
+  }
+
+  @override
+  String get onDeviceGetMoreUsage => '获取更多用量';
+
+  @override
+  String onDeviceGettingSpeechReady(int percent) {
+    return '正在准备语音 · $percent%';
+  }
+
+  @override
+  String heldAudioSavedBody(String date) {
+    return '你已达到本月的用量上限。录音已保存，将在你的用量于 $date 重置后转写。';
+  }
+
+  @override
+  String heldAudioPhoneChosenBody(String date) {
+    return '新的录音将在这台手机上转写。等待中的录音将在你的用量于 $date 重置后转写。';
+  }
+
+  @override
+  String heldAudioRecordingTitle(String time) {
+    return '录音，$time';
+  }
+
+  @override
+  String heldAudioRecordingSubtitle(String duration) {
+    return '$duration · 等待转写';
+  }
+
+  @override
+  String get heldAudioLiveTitle => '云端转写已暂停';
+
+  @override
+  String get heldAudioLiveBody => '你已达到本月的用量上限。Omi 会继续录音。';
+
+  @override
+  String heldAudioRecordedSinceLimit(int minutes) {
+    return '达到上限后已录制 $minutes 分钟';
+  }
+
+  @override
+  String heldAudioTranscribesOn(String date) {
+    return '将在用量于 $date 重置后转写';
+  }
+
+  @override
+  String heldAudioWaiting(String duration) {
+    return '$duration 等待中';
+  }
+
+  @override
+  String heldAudioWaitingOn(String date) {
+    return '将在用量于 $date 重置后转写';
+  }
+
+  @override
+  String heldAudioCardTitle(String duration) {
+    return '$duration 等待转录';
+  }
+
+  @override
+  String heldAudioAndMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '另有 $count 条',
+      one: '另有 1 条',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get heldAudioRecovering => '正在转写等待中的录音';
+
+  @override
+  String get processingPaused => '处理已暂停。你已达到本月上限。';
+
+  @override
+  String get processingStored => '你的录音和转录文本已保存。等待中的录音会继续等待，直到你选择处理。';
+
+  @override
+  String processingWaiting(String duration, String percent) {
+    return '$duration等待中 · 立即处理将使用本月约$percent%的额度';
+  }
+
+  @override
+  String processingEstimate(String hours, String percent) {
+    return '约$hours小时的处理 · 本月额度的$percent%。';
+  }
+
+  @override
+  String get processingNewestFirst => '我们会在剩余额度内优先处理最新的录音，其余录音将继续等待。';
+
+  @override
+  String get processingAction => '处理等待中的录音';
+
+  @override
+  String get processingProgress => '正在处理等待中的录音…';
+
+  @override
+  String get processingDeferred => '等待处理';
+
+  @override
+  String processingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count段对话等待中',
+      one: '1段对话等待中',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String playbackPartialAudioSaved(String saved, String total) {
+    return '已保存 $saved / $total 的音频';
+  }
+
+  @override
+  String get activityAttentionLinkStalledSubtitle => 'Omi 仍在录音';
+
+  @override
+  String get episodeNow => '现在';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return '直播中 · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个片段',
+      one: '1 个片段',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => '片段';
+
+  @override
+  String get episodeSoFar => '目前为止';
+
+  @override
+  String get episodeUpdatedJustNow => '刚刚更新 · 结束后生成完整笔记';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return '$minutes 分钟前更新 · 结束后生成完整笔记';
+  }
+
+  @override
+  String get episodeNotesUnavailable => '实时笔记未在更新。请暂时查看转录文本。';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return '录音中 · $duration';
+  }
+
+  @override
+  String get episodePrevious => '上一段记录';
+
+  @override
+  String captureChunksPending(int pending) {
+    return '待处理音频块: $pending';
+  }
+
+  @override
+  String get episodeNotesSoon => '交谈几分钟后会显示笔记。';
+
+  @override
+  String get episodeWrapUpNow => '立即结束';
+
+  @override
+  String get episodeWrapsUpHint => '你转去做别的事时，Omi 会自动结束';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return '发现任务：$text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return '发现提醒：$text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return '任务已保存：$text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return '正在从 Omi 添加 $duration';
+  }
+
+  @override
+  String get episodeListeningNow => '正在聆听';
+
+  @override
+  String get deviceHeardToday => '今日收听';
+
+  @override
+  String get deviceToSync => '待同步';
+
+  @override
+  String get deviceRightNow => '当前';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return '直播片段 · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => '正在补齐';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done/$total 分钟';
+  }
+
+  @override
+  String get deviceRecently => '最近';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return '断开连接 $duration';
+  }
+
+  @override
+  String get deviceControls => '控制';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return '另外：$items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => '按一下 Omi 上的按钮';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => '短按一下，然后随便问。';
+
+  @override
+  String get deviceOnboardingAskNowTitle => '说出你的问题';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => '大声说出来，Omi 正在听。';
+
+  @override
+  String get deviceOnboardingPressAgainHint => '说完了？再按一下按钮发送。';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return '已升级为 $days 天免费';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return 'Omi Pro 免费 $days 天。扣费前会提醒你。随时可取消。';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return '领取 $days 天试用';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return '开始 $days 天免费试用';
+  }
+
+  @override
+  String get pairingPowerOnTitle => '打开 Omi 电源';
+
+  @override
+  String get pairingPowerOnSubtitle => '按一下按钮，并放在手机附近。';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => '就这样。Omi 会在后台继续记录你的对话。';
+
+  @override
+  String get noThanks => '不用了，谢谢';
+
+  @override
+  String get recapInTheBackground => '背景中';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return '享受 $percent% 折扣继续使用';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return '继续使用，每月只需 $price，持续 $months 个月。';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return '完成。$percent% 折扣，持续 $months 个月。';
+  }
+
+  @override
+  String get othersSpeakerLabel => '其他人';
+
+  @override
+  String get livePreviewListening => 'Listening… words appear here as you speak.';
+
+  @override
+  String get livePreviewStarting => 'Starting live preview…';
+
+  @override
+  String get openLoopAnswerDone => '完成';
+
+  @override
+  String get openLoopAnswerRemind => '稍后提醒';
+
+  @override
+  String get openLoopAnswerDrop => '放弃';
+
+  @override
+  String get syncRejectionInvalidDate => '录音日期无效';
+
+  @override
+  String get syncDeleteKeptUploading => '部分内容仍在上传中，已保留';
+
+  @override
+  String get syncRejectionServer => '被服务器拒绝';
+
+  @override
+  String get syncRejectionTooLarge => '过大';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '手机上还有$duration';
+  }
+
+  @override
+  String get syncCardUploadsPaused => '上传已暂停片刻 — 将自动恢复';
+
+  @override
+  String episodeContinues(Object title) {
+    return '继续“$title”';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· 始于$time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => '最终转写到达后即开始生成笔记。';
+
+  @override
+  String get episodeOnDeviceNotesFootnote => '在你说话时于本机起草。完整笔记将随最终转写一同生成。';
+
+  @override
+  String get episodeOnThisPhone => '在本机';
+
+  @override
+  String get episodeOpenTranscript => '打开转写';
+
+  @override
+  String get liveCardTitle => '实时';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return '最终转写滞后约$duration';
+  }
+
+  @override
+  String get livePreviewCatchingUp => '最终转写正在补齐';
+
+  @override
+  String get livePreviewNoEngineBody => '你说的话会在一到两分钟后显示在这里。';
+
+  @override
+  String get livePreviewNoEngineTitle => '正在安全录制';
+
+  @override
+  String get livePreviewOnPhoneDivider => '在本机实时显示';
+
+  @override
+  String get livePreviewTurnOnLiveText => '打开实况文本';
+
+  @override
+  String get deviceCatchUpOnItsWay => '在路上';
+
+  @override
+  String get deviceCatchUpWhenOnline => '联网后';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '还有 $duration 的录音待处理';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => '自动上传。录音到达后，对话会自动补全。';
+
+  @override
+  String get onTheWayUploadsWhenOnline => '恢复网络后自动上传。录音到达后，对话会自动补全。';
+
+  @override
+  String get onTheWayDayUploading => '上传中';
+
+  @override
+  String get onTheWayDayNext => '下一个';
+
+  @override
+  String get onTheWayDayQueued => '排队中';
+
+  @override
+  String get onTheWayNoDate => '无日期';
+
+  @override
+  String get onTheWayFootnote => '失败的录音会在后台持续重试。我们无法转录的内容会自动报告给我们。';
+
+  @override
+  String get onTheWayDetailsForSupport => '支持详情';
 }

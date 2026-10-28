@@ -7,7 +7,7 @@ from typing import Any, Literal, Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 import stripe
 
-import config.plan_catalog_generated as catalog
+import config.plan_catalog as catalog
 from database import redis_db, users as users_db
 from database.app_review_config import should_hide_subscription_ui
 from models.users import Subscription
@@ -15,7 +15,7 @@ from models.storefront import StorefrontResponse, StorefrontUsage
 from utils.other import endpoints as auth
 from utils import storefront_flags, subscription as subscription_utils
 from utils.observability.fallback import record_fallback
-from utils.storefront import build_storefront, load_ladder
+from utils.storefront import build_single_plan_storefront, build_storefront, load_ladder
 from utils.storefront_copy import present_usage
 
 router = APIRouter()
@@ -34,6 +34,9 @@ def _retrieve_price(price_id: str) -> dict[str, Any]:
         if not price_data:
             price_data = stripe.Price.retrieve(price_id).to_dict_recursive()
             redis_db.set_generic_cache(cache_key, price_data, ttl=3600 * 24)
+        binding = catalog.configured_ladder_prices().get(price_id)
+        if binding:
+            catalog.validate_ladder_price(price_id, price_data, allow_archived=True)
         return price_data
     except Exception:
         _degraded('storefront_price', 'hidden_price')
@@ -55,7 +58,9 @@ def _usage(uid: str, subscription: Subscription, locale: str | None = None) -> S
         ladder_subscriber = subscription.plan.value not in {
             'unlimited',
             'unlimited_v2',
-        } and subscription.current_price_id in getattr(catalog, 'LADDER_V1_STRIPE_PRICES', [])
+        } and subscription.current_price_id in (
+            set(catalog.LADDER_V1_STRIPE_PRICES) | set(catalog.configured_ladder_prices())
+        )
         if callable(projection) and (subscription.plan.value == 'basic' or ladder_subscriber):
             snapshot = projection(uid)
             percent = snapshot.get('budget_percent') if isinstance(snapshot, dict) else None
@@ -105,9 +110,23 @@ def get_storefront(
     subscription = users_db.get_user_valid_subscription(uid, provision=False)
     if subscription is None:
         subscription = subscription_utils.get_default_basic_subscription()
+    # Omi Pro is the only plan sold: a buyer with no current paid subscription
+    # gets a single-tier Omi Pro sheet on every platform (the ladder sheet has
+    # no Omi Pro card). NEW_BUYER_SINGLE_PLAN_ENABLED=false restores the ladder.
+    usage = _usage(uid, subscription, locale)
+    if subscription_utils.new_buyer_single_plan_applies(subscription.plan):
+        return build_single_plan_storefront(
+            catalog_revision=catalog.CATALOG_REVISION,
+            subscription=subscription,
+            usage=usage,
+            retrieve_price=_retrieve_price,
+            trigger=trigger,
+            locale=locale,
+        )
     # W3's generated declaration is absent until #21351 merges. No env prices
     # can accidentally become ladder-v1 just because they exist.
-    bindings = getattr(catalog, 'LADDER_V1_STRIPE_PRICES', [])
+    configured = catalog.configured_ladder_prices()
+    bindings = list(set(catalog.LADDER_V1_STRIPE_PRICES) | set(configured))
     recognized = [
         {
             'price_id': price_id,
@@ -119,6 +138,26 @@ def get_storefront(
         }
         for price_id, plan in catalog.RECOGNIZED_STRIPE_PRICE_PLAN_TYPES.items()
     ]
+    recognized.extend(configured.values())
+    from config import ladder_v1 as policy
+    from utils.ladder_v1 import account
+
+    entitlement = account(uid, subscription)
+    if (
+        not policy.enabled('LADDER_V1_PRO_GATES_ENABLED')
+        or entitlement is None
+        or entitlement['plan_id'] in ('operator', 'architect')
+    ):
+        usage.pro_gates = []
+    if trigger == 'mcp_daily_cap' and policy.mcp_daily_caps_enabled() and entitlement is not None:
+        from database.ladder_v1 import daily_cap_reached
+
+        try:
+            usage.mcp_cap_reached = daily_cap_reached(
+                uid, catalog.ENTITLEMENT_VERSIONS['ladder_v1']['mcp_daily_caps'][entitlement['plan_id']]
+            )
+        except Exception:
+            _degraded('storefront_daily_cap', 'unavailable_usage')
     return build_storefront(
         catalog_revision=catalog.CATALOG_REVISION,
         ladder=load_ladder(),
@@ -127,7 +166,7 @@ def get_storefront(
         subscription=subscription,
         retrieve_price=_retrieve_price,
         purchasable=subscription_utils.is_purchasable_price_id,
-        usage=_usage(uid, subscription, locale),
+        usage=usage,
         source=source,
         trigger=trigger,
         locale=locale,

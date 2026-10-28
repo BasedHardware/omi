@@ -219,13 +219,6 @@ actor ConversationFinalizationService {
       await meetingContextSyncForTesting(Self.captureInterval(of: session))
       return
     }
-    let enabled = await MainActor.run {
-      (
-        systemCalendar: SystemCalendarMeetingContextFeature.isEnabled,
-        onDeviceIdentity: OnDeviceMeetingIdentityFeature.isEnabled
-      )
-    }
-    guard enabled.systemCalendar || enabled.onDeviceIdentity else { return }
     let end = max(session.finishedAt ?? Date(), session.startedAt.addingTimeInterval(1))
     let interval = DateInterval(start: session.startedAt, end: end)
 
@@ -235,15 +228,11 @@ actor ConversationFinalizationService {
     await withTaskGroup(of: Void.self) { group in
       group.addTask {
         await withTaskGroup(of: Void.self) { syncGroup in
-          if enabled.systemCalendar {
-            syncGroup.addTask {
-              await SystemCalendarMeetingContextService.shared.syncAuthorizedEvents(overlapping: interval)
-            }
+          syncGroup.addTask {
+            await SystemCalendarMeetingContextService.shared.syncAuthorizedEvents(overlapping: interval)
           }
-          if enabled.onDeviceIdentity {
-            syncGroup.addTask {
-              await OnDeviceMeetingIdentityService.shared.syncIdentity(overlapping: interval)
-            }
+          syncGroup.addTask {
+            await OnDeviceMeetingIdentityService.shared.syncIdentity(overlapping: interval)
           }
           await syncGroup.waitForAll()
         }
@@ -264,6 +253,7 @@ actor ConversationFinalizationService {
   }
 
   private func uploadLocalSegments(sessionId: Int64, allowBackendIdOverride: Bool = false) async throws -> Bool {
+    let uploadAuthorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
     let uploadGeneration = await RewindDatabase.shared.poolGeneration()
     guard let bundle = try await TranscriptionStorage.shared.getSessionWithSegments(id: sessionId) else {
       throw TranscriptionStorageError.sessionNotFound
@@ -280,9 +270,11 @@ actor ConversationFinalizationService {
         captureInterval: Self.captureInterval(of: bundle.session), conversationID: nil, fetchSelectionWindow: nil)
     }
 
-    var merged: [APIClient.UploadSegment] = []
-    for seg in bundle.segments {
-      let upload = APIClient.UploadSegment(
+    // Keep timed utterances even when a local source uses one speaker throughout.
+    // Merging by identity alone turns an entire recording (including silence)
+    // into one segment and loses the windows used by transcript reads/evidence.
+    let segments = bundle.segments.map { seg in
+      APIClient.UploadSegment(
         text: seg.text,
         speaker: seg.speakerLabel ?? String(format: "SPEAKER_%02d", seg.speaker),
         speaker_id: seg.speaker,
@@ -291,30 +283,15 @@ actor ConversationFinalizationService {
         start: seg.startTime,
         end: seg.endTime
       )
-      if let last = merged.last,
-        last.speaker_id == upload.speaker_id,
-        last.speaker == upload.speaker,
-        last.is_user == upload.is_user,
-        last.person_id == upload.person_id
-      {
-        merged[merged.count - 1] = APIClient.UploadSegment(
-          text: last.text + " " + upload.text,
-          speaker: last.speaker,
-          speaker_id: last.speaker_id,
-          is_user: last.is_user,
-          person_id: last.person_id,
-          start: last.start,
-          end: upload.end
-        )
-      } else {
-        merged.append(upload)
-      }
     }
 
-    let uploadSegments = Self.compactSegmentsForBackendLimit(merged)
-    if uploadSegments.count != merged.count {
+    let chunked = await ClientRefactorFlags.chunks
+    // refactor: superseded by SegmentContinuationUpload when clients_from_segments_chunks=serve
+    let uploadSegments = chunked ? segments : Self.compactSegmentsForBackendLimit(segments)
+    if uploadSegments.count != segments.count {
+      log("event=refactor_shadow lane=L5 check=segment_compaction outcome=disagree")
       log(
-        "ConversationFinalization: Compacted local session \(sessionId) from \(merged.count) to \(uploadSegments.count) segments for backend upload"
+        "ConversationFinalization: Compacted local session \(sessionId) from \(segments.count) to \(uploadSegments.count) segments for backend upload"
       )
     }
 
@@ -324,39 +301,26 @@ actor ConversationFinalizationService {
       uploadSegments: uploadSegments,
       startedAt: bundle.session.startedAt
     )
-    let captureEvidence: APIClient.CaptureEvidenceLineage?
-    if ProcessInfo.processInfo.environment["CAPTURE_EVIDENCE_V1_DARK_WRITE"] == "1" {
-      let units = bundle.segments.compactMap { segment -> APIClient.CaptureEvidenceLineage.Unit? in
-        guard let id = segment.id, segment.startTime.isFinite, segment.endTime.isFinite,
-          segment.startTime >= 0, segment.endTime > segment.startTime
-        else { return nil }
-        return .init(
-          id: String(id),
-          startMs: Int64((segment.startTime * 1000).rounded()),
-          endMs: Int64((segment.endTime * 1000).rounded()))
-      }
-      let root = Self.localClientConversationId(session: bundle.session, sessionId: sessionId)
-      let complete = units.count == bundle.segments.count && units.count <= 64
-      captureEvidence = .init(
-        version: 1, capability: "stable_artifact", captureRoot: root,
-        clockDomain: "desktop_session_ms", lineage: complete ? "complete" : "incomplete",
-        units: complete ? units : [])
-    } else {
-      captureEvidence = nil
-    }
     let request = APIClient.CreateConversationFromSegmentsRequest(
       transcript_segments: uploadSegments,
       source: bundle.session.source,
       started_at: iso.string(from: bundle.session.startedAt),
-      finished_at: bundle.session.finishedAt.map { iso.string(from: $0) },
+      finished_at: (chunked
+        ? SegmentContinuationUpload.finishedAt(
+          startedAt: bundle.session.startedAt,
+          finishedAt: bundle.session.finishedAt, segmentEnds: uploadSegments.map(\.end))
+        : bundle.session.finishedAt).map { iso.string(from: $0) },
       language: bundle.session.language,
       client_conversation_id: Self.localClientConversationId(session: bundle.session, sessionId: sessionId),
       conversation_role: bundle.session.conversationRole.rawValue,
       conversation_finalization_reason: bundle.session.finalizationReason?.rawValue,
       client_processing: clientProcessing,
-      captureEvidence: captureEvidence
+      captureEvidence: nil
     )
-    let response = try await apiClient.createConversationFromSegments(request)
+    let response =
+      chunked
+      ? try await apiClient.createConversationFromSegmentChunks(request, authorization: uploadAuthorization)
+      : try await apiClient.createConversationFromSegments(request)
     if response.status == "deleted" {
       // A terminal deletion ack resolves this exact upload; never hydrate or retry it.
       try await TranscriptionStorage.shared.deleteSession(id: sessionId, expectedGeneration: uploadGeneration)
@@ -401,7 +365,11 @@ actor ConversationFinalizationService {
     if let pinned = localProjectionHooks?.entitlement {
       entitlement = pinned
     } else {
-      entitlement = await SubscriptionEntitlementService.shared.decisionForManagedProactivity()
+      let subscription = await SubscriptionEntitlementService.shared.snapshot()
+      entitlement =
+        LocalProjectionFinalization.fundingUnavailable(
+          subscription: subscription, isByokActive: APIKeyService.isByokActive
+        ) ? .planGated : .allowManagedProactivity
     }
     let thermalState = localProjectionHooks?.thermalState ?? ProcessInfo.processInfo.thermalState
     let decision = LocalProjectionFinalization.decision(
@@ -531,41 +499,6 @@ actor ConversationFinalizationService {
       }
     }
     return false
-  }
-
-  static func compactSegmentsForBackendLimit(
-    _ segments: [APIClient.UploadSegment],
-    maxSegments: Int = 500
-  ) -> [APIClient.UploadSegment] {
-    guard maxSegments > 0, segments.count > maxSegments else { return segments }
-
-    var compacted: [APIClient.UploadSegment] = []
-    compacted.reserveCapacity(maxSegments)
-    for index in 0..<maxSegments {
-      let startIndex = index * segments.count / maxSegments
-      let endIndex = (index + 1) * segments.count / maxSegments
-      let group = Array(segments[startIndex..<endIndex])
-      guard let first = group.first, let last = group.last else { continue }
-
-      let sameSpeaker = group.allSatisfy { segment in
-        segment.speaker == first.speaker
-          && segment.speaker_id == first.speaker_id
-          && segment.is_user == first.is_user
-          && segment.person_id == first.person_id
-      }
-      compacted.append(
-        APIClient.UploadSegment(
-          text: group.map(\.text).joined(separator: " "),
-          speaker: sameSpeaker ? first.speaker : "MIXED",
-          speaker_id: sameSpeaker ? first.speaker_id : nil,
-          is_user: sameSpeaker ? first.is_user : false,
-          person_id: sameSpeaker ? first.person_id : nil,
-          start: first.start,
-          end: last.end
-        )
-      )
-    }
-    return compacted
   }
 
   private func finalizeCloudSession(

@@ -2,6 +2,9 @@
 
 import json
 import os
+
+from config.rollout_cohorts import in_rollout_cohort
+from config.refactor_switches import default_off as rollout_default_off
 from urllib.parse import quote
 
 
@@ -10,7 +13,9 @@ def channel_policy(channel):
     raw = os.getenv('OMI_MESSAGING_CHANNEL_POLICY')
     if raw is None:
         return {
-            'enabled': os.getenv('OMI_MESSAGING_CHANNELS', 'off').lower() == 'on',
+            'enabled': rollout_default_off(
+                'OMI_MESSAGING_CHANNELS', os.getenv('OMI_MESSAGING_CHANNELS', 'off').lower() == 'on'
+            ),
             'cohort': [v.strip() for v in os.getenv('OMI_MESSAGING_CHANNELS_UIDS', '').split(',') if v.strip()],
         }
     try:
@@ -45,7 +50,12 @@ def cohort_enabled(uid, channel=None):
     if channel is None:
         return any(cohort_enabled(uid, name) for name in ('telegram', 'imessage'))
     policy = channel_policy(channel)
-    return policy['enabled'] and (policy['cohort'] == '*' or uid in policy['cohort'])
+    cohort = policy['cohort']
+    return policy['enabled'] and (
+        cohort == '*'
+        or isinstance(cohort, list)
+        and in_rollout_cohort(uid, 'messaging-' + channel, legacy_members=tuple(cohort))
+    )
 
 
 def channel_enabled(channel):

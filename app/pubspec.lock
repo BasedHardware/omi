@@ -210,7 +210,7 @@ packages:
     source: hosted
     version: "2.0.1"
   characters:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: characters
       sha256: faf38497bda5ead2a8c7615f4f7939df04333478bf32e4173fcb06d428b5716b
@@ -305,6 +305,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.7"
+  cryptography:
+    dependency: "direct main"
+    description:
+      name: cryptography
+      sha256: "3eda3029d34ec9095a27a198ac9785630fe525c0eb6a49f3d575272f8e792ef0"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.9.0"
   csslib:
     dependency: transitive
     description:
@@ -615,7 +623,7 @@ packages:
     source: hosted
     version: "2.3.1"
   flutter_driver:
-    dependency: transitive
+    dependency: "direct dev"
     description: flutter
     source: sdk
     version: "0.0.0"

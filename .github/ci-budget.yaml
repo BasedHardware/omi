@@ -1,22 +1,23 @@
 {
   "caps": {
     "internal_time_to_signal_minutes": 49,
-    "pr_linux_minutes_per_day": 13620,
+    "pr_linux_minutes_per_day": 13660,
     "pr_macos_minutes_per_day": 1600
   },
-  "caps_rationale": "#21237 six-shard rebalance follows run 38168319908: 1727 files, four shard contract walls 710/472/772/651s, and only 17s of Dream file spans on the failing shard. The 720-second per-shard regression budget stays unchanged. Forecast 8 minutes per runner over six runners versus the prior 9 over four adds 1428 Linux minutes/day at the existing 119 runs/day, yielding 13506.2 Linux minutes/day before fork Dart coverage. The 2026-10-13 contributor audit adds four fork Dart PR runs/day at the retained 17-minute p50 (+68), yielding 13574.2 Linux minutes/day. Set the Linux cap to 13620 to cover that forecast. The conservative matrix-multiplied dependency-path forecast and cap remain 49 minutes; actual shards execute in parallel. The macOS cap remains 1600 minutes/day. Nightly Dart is outside the PR cap. Re-seed from terminal executions in the next weekly audit.",
+  "caps_rationale": "#21237 six-shard rebalance follows run 38168319908: 1727 files, four shard contract walls 710/472/772/651s, and only 17s of Dream file spans on the failing shard. The 720-second per-shard regression budget stays unchanged. Forecast 8 minutes per runner over six runners versus the prior 9 over four adds 1428 Linux minutes/day at the existing 119 runs/day, yielding 13506.2 Linux minutes/day before fork Dart coverage. The 2026-10-13 contributor audit adds four fork Dart PR runs/day at the retained 17-minute p50 (+68), yielding 13574.2 Linux minutes/day. Set the Linux cap to 13620 to cover that forecast. The conservative matrix-multiplied dependency-path forecast and cap remain 49 minutes; actual shards execute in parallel. The macOS cap remains 1600 minutes/day. Nightly Dart is outside the PR cap. Re-seed from terminal executions in the next weekly audit. 2026-10-21 plan B B2 (named by David) adds role_images.yml: about one path-filtered PR run a day of the roles (25 min) and edge (12 min) jobs, +37 Linux minutes/day (13637.4 forecast); Linux cap 13660.",
   "jobs": {
     "backend-checks.yml/changes": {
       "budget_p50_minutes": 2,
       "display_name": "Detect Changes",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 211,
+      "expected_runs_per_day": 212,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -27,14 +28,34 @@
     "backend-checks.yml/static-contracts": {
       "budget_p50_minutes": 3,
       "display_name": "Static Contracts",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 9,
+      "expected_runs_per_day": 10,
       "if": "needs.changes.outputs.has_backend_runtime_env == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "backend-edge.yml/edge": {
+      "budget_p50_minutes": 5,
+      "display_name": "edge",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 2,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "Backend realtime (plan D listen-edge)",
+      "rationale": "2026-10-21 D1 listen-edge crate, named by David 2026-10-20: path-filtered to backend/edge/**, about one PR run per day during D1-D5; cold build+clippy+test measured 85s locally (expect 2-3 min on ubuntu-latest), cached runs well under that; 5-minute p50 budget P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -43,16 +64,17 @@
       "runs_on": "ubuntu-latest"
     },
     "backend-emulator-proofs.yml/emulator-proofs": {
-      "budget_p50_minutes": 3,
+      "budget_p50_minutes": 4,
       "display_name": "Backend emulator proofs",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 18,
+      "expected_runs_per_day": 19,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Retain the existing standard Linux runner and 18 expected daily runs; allow one extra p50 minute above the prior three for 26 summary recovery/expiry checks (11 seconds locally) and their test imports. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -63,14 +85,15 @@
     "backend-hermetic-e2e.yml/hermetic-e2e": {
       "budget_p50_minutes": 3,
       "display_name": "Hermetic Backend E2E",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 61,
+      "expected_runs_per_day": 62,
       "if": "needs.scope.outputs.applies == 'true' && needs.scope.outputs.full_ci == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "scope",
       "owner": "CI maintainers",
-      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05 P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -81,14 +104,15 @@
     "backend-hermetic-e2e.yml/listen-pusher-stack-gauntlet": {
       "budget_p50_minutes": 11,
       "display_name": "Listen Pusher Stack Gauntlet",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 18,
+      "expected_runs_per_day": 19,
       "if": "needs.scope.outputs.applies == 'true' && needs.scope.outputs.full_ci == 'true' && needs.scope.outputs.run_listen == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "scope",
       "owner": "CI maintainers",
-      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05 P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -99,8 +123,9 @@
     "backend-hermetic-e2e.yml/merge-gate": {
       "budget_p50_minutes": 1,
       "display_name": "Backend Hermetic Merge Gate",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 206,
+      "expected_runs_per_day": 207,
       "if": "${{ !cancelled() }}",
       "matrix": {},
       "matrix_size": 1,
@@ -111,7 +136,7 @@
         "sync-cloud-tasks-stack-gauntlet"
       ],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -122,9 +147,10 @@
     "backend-hermetic-e2e.yml/post-merge-failure-issues": {
       "budget_p50_minutes": 5,
       "display_name": "Post-merge hermetic failure issues",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 1,
-      "if": "${{ always() && (github.event_name == 'push' || github.event_name == 'schedule') }}",
+      "expected_runs_per_day": 2,
+      "if": "${{ always() && inputs.nightly_main_sha == '' && (github.event_name == 'push' || github.event_name == 'schedule') }}",
       "matrix": {},
       "matrix_size": 1,
       "needs": [
@@ -135,7 +161,7 @@
         "replay-harness-phase0a-gauntlet"
       ],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -146,14 +172,15 @@
     "backend-hermetic-e2e.yml/replay-harness-phase0a-gauntlet": {
       "budget_p50_minutes": 3,
       "display_name": "Replay Harness Phase 0A Feasibility (advisory)",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 1,
-      "if": "needs.scope.outputs.applies == 'true' && (github.event_name == 'push' || github.event_name == 'schedule')",
+      "expected_runs_per_day": 2,
+      "if": "needs.scope.outputs.applies == 'true' && (inputs.nightly_main_sha != '' || github.event_name == 'push' || github.event_name == 'schedule')",
       "matrix": {},
       "matrix_size": 1,
       "needs": "scope",
       "owner": "CI maintainers",
-      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05 P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -164,14 +191,15 @@
     "backend-hermetic-e2e.yml/scope": {
       "budget_p50_minutes": 1,
       "display_name": "Detect Hermetic Backend Scope",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 211,
+      "expected_runs_per_day": 212,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -182,14 +210,15 @@
     "backend-hermetic-e2e.yml/sync-cloud-tasks-stack-gauntlet": {
       "budget_p50_minutes": 5,
       "display_name": "Sync Cloud Tasks Stack Gauntlet",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 12,
+      "expected_runs_per_day": 13,
       "if": "needs.scope.outputs.applies == 'true' && needs.scope.outputs.full_ci == 'true' && needs.scope.outputs.run_sync == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "scope",
       "owner": "CI maintainers",
-      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05 P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -200,14 +229,15 @@
     "backend-unit-tests.yml/backend-unit-guardrails": {
       "budget_p50_minutes": 3,
       "display_name": "Backend unit guardrails",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 73,
+      "expected_runs_per_day": 74,
       "if": "needs.ci-tier.outputs.full_ci == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "ci-tier",
       "owner": "CI maintainers",
-      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily run over the PR M forecast of 72 until the next weekly audit",
+      "rationale": "#21780 runs 38823920783/38827426342 hit the 10m whole-job ceiling; the second completed all 2040 assertions in 535.44s before setup/cleanup pushed it over. A bounded 15m ceiling admits the complete suite. Retain the 3m p50 improvement target and existing runner, triggers, matrix and daily forecast. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). 2026-10-26 memory-maintenance-job retirement removes the deleted gcp_memory_maintenance_job*.yml paths from this trigger.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -218,8 +248,9 @@
     "backend-unit-tests.yml/backend-unit-shard": {
       "budget_p50_minutes": 8,
       "display_name": "Backend unit shard ${{ matrix.shard }}/6",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 119,
+      "expected_runs_per_day": 120,
       "if": null,
       "matrix": {
         "shard": [
@@ -234,7 +265,7 @@
       "matrix_size": 6,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "#21237: run 38168319908 selected 1727 files; four shard contract walls were 710/472/772/651s. Six shards reduce 432 files to at most 288, forecasting about 8 minutes per runner including fixed preflight/typecheck work. The 720-second regression gate is unchanged; fanout raises aggregate forecast from 36 to 48 Linux runner-minutes per run without relaxing coverage or isolation.",
+      "rationale": "#21237: run 38168319908 selected 1727 files; four shard contract walls were 710/472/772/651s. Six shards reduce 432 files to at most 288, forecasting about 8 minutes per runner including fixed preflight/typecheck work. The 720-second regression gate is unchanged; fanout raises aggregate forecast from 36 to 48 Linux runner-minutes per run without relaxing coverage or isolation. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). 2026-10-26 memory-maintenance-job retirement removes the deleted gcp_memory_maintenance_job*.yml paths from this trigger.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -245,8 +276,9 @@
     "backend-unit-tests.yml/backend-unit-suite": {
       "budget_p50_minutes": 1,
       "display_name": "Backend unit suite",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 117,
+      "expected_runs_per_day": 118,
       "if": "${{ always() && !cancelled() }}",
       "matrix": {},
       "matrix_size": 1,
@@ -256,7 +288,7 @@
         "backend-unit-guardrails"
       ],
       "owner": "CI maintainers",
-      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily run over the PR M forecast of 116 until the next weekly audit",
+      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily run over the PR M forecast of 116 until the next weekly audit P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). 2026-10-26 memory-maintenance-job retirement removes the deleted gcp_memory_maintenance_job*.yml paths from this trigger.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -267,14 +299,15 @@
     "backend-unit-tests.yml/ci-tier": {
       "budget_p50_minutes": 1,
       "display_name": "Resolve CI Tier",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 119,
+      "expected_runs_per_day": 120,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily label read over the PR M forecast of 118 until the next weekly audit",
+      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily label read over the PR M forecast of 118 until the next weekly audit P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). 2026-10-26 memory-maintenance-job retirement removes the deleted gcp_memory_maintenance_job*.yml paths from this trigger.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -300,17 +333,36 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "config_train.yml/config-train": {
+      "budget_p50_minutes": 5,
+      "display_name": "config-train",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "backend deploy (two-lane lead)",
+      "rationale": "B4 config-train: manual dispatch only, no build; plan/apply of backend/deploy/ops in about 5 minutes",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "desktop-backend-contracts.yml/contracts": {
       "budget_p50_minutes": 1,
       "display_name": "contracts",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 31,
+      "expected_runs_per_day": 32,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -321,14 +373,15 @@
     "desktop-backend-contracts.yml/desktop-core-e2e-t0": {
       "budget_p50_minutes": 1,
       "display_name": "desktop-core-e2e-t0",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 31,
+      "expected_runs_per_day": 32,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -339,14 +392,15 @@
     "desktop-checks.yml/agent-runtime": {
       "budget_p50_minutes": 3,
       "display_name": "Agent Runtime",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 10,
+      "expected_runs_per_day": 11,
       "if": "needs.changes.outputs.has_desktop_agent_runtime == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -357,14 +411,15 @@
     "desktop-checks.yml/changes": {
       "budget_p50_minutes": 2,
       "display_name": "Detect Changes",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 211,
+      "expected_runs_per_day": 212,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -375,14 +430,15 @@
     "desktop-swift-ci.yml/changes": {
       "budget_p50_minutes": 2,
       "display_name": "Detect Desktop Swift Changes",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 211,
+      "expected_runs_per_day": 212,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -393,14 +449,15 @@
     "desktop-swift-ci.yml/desktop-siri-xcode27-advisory": {
       "budget_p50_minutes": 31,
       "display_name": "Desktop Siri Xcode 27 Advisory",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 1,
+      "expected_runs_per_day": 2,
       "if": "${{ needs.changes.outputs.full_ci == 'true' && ((github.event_name == 'pull_request' && needs.changes.outputs.should_siri_advisory == 'true') || (github.event_name != 'pull_request' && (needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true'))) }}",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "PRs select Siri/App Intents or their selector inputs only; main/health selection is unchanged. Run 38131335528 measured 30m44s, avoided on ordinary API PRs. Budget now reflects that observed job; keep one expected Siri PR/day until post-merge reseed",
+      "rationale": "PRs select Siri/App Intents or their selector inputs only; main/health selection is unchanged. Run 38131335528 measured 30m44s, avoided on ordinary API PRs. Budget now reflects that observed job; keep one expected Siri PR/day until post-merge reseed P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "macos",
       "runner_counts": {
@@ -411,8 +468,9 @@
     "desktop-swift-ci.yml/desktop-swift": {
       "budget_p50_minutes": 1,
       "display_name": "Desktop Swift Build & Tests",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 29,
+      "expected_runs_per_day": 30,
       "if": "${{ always() && needs.changes.outputs.should_run == 'true' }}",
       "matrix": {},
       "matrix_size": 1,
@@ -422,7 +480,7 @@
         "desktop-swift-release-compile"
       ],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -433,14 +491,15 @@
     "desktop-swift-ci.yml/desktop-swift-release-compile": {
       "budget_p50_minutes": 34,
       "display_name": "Desktop Swift Release Compile",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 4,
+      "expected_runs_per_day": 5,
       "if": "${{ needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.should_release_compile == 'true' }}",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05 P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "macos",
       "runner_counts": {
@@ -451,14 +510,15 @@
     "desktop-swift-ci.yml/desktop-swift-verify": {
       "budget_p50_minutes": 29,
       "display_name": "Desktop Swift Static & Test Contracts",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 30,
+      "expected_runs_per_day": 31,
       "if": "${{ needs.changes.outputs.full_ci == 'true' && (needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true' || needs.changes.outputs.should_test_compile == 'true') }}",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up; generated-only PRs now retain static checks and a measured 502.55s app+test prebuild instead of suites/launchers. Budget rounded to 29 min with one minute headroom for compile selection; actual mixed-lane p50 requires post-merge reseed",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up; generated-only PRs now retain static checks and a measured 502.55s app+test prebuild instead of suites/launchers. Budget rounded to 29 min with one minute headroom for compile selection; actual mixed-lane p50 requires post-merge reseed P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "macos",
       "runner_counts": {
@@ -469,9 +529,10 @@
     "desktop-swift-ci.yml/post-merge-failure-issue": {
       "budget_p50_minutes": 5,
       "display_name": "Post-merge Desktop Swift Release Compile failure issue",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 1,
-      "if": "${{ always() && (github.event_name == 'push' || github.event_name == 'schedule') }}",
+      "expected_runs_per_day": 2,
+      "if": "${{ always() && inputs.nightly_main_sha == '' && (github.event_name == 'push' || github.event_name == 'schedule') }}",
       "matrix": {},
       "matrix_size": 1,
       "needs": [
@@ -479,7 +540,7 @@
         "desktop-swift-release-compile"
       ],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -490,14 +551,15 @@
     "desktop-windows-ci.yml/build-linux": {
       "budget_p50_minutes": 9,
       "display_name": "Linux package \u00b7 helper smoke",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 5,
+      "expected_runs_per_day": 6.2,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Account for upstream desktop_windows_release.yml trigger already present but absent from the inventory: prior 4 executions/day plus one forecast release-path execution. Workflow, runner, matrix, and 9-minute p50 budget are unchanged.",
+      "rationale": "Account for upstream desktop_windows_release.yml trigger already present but absent from the inventory: prior 4 executions/day plus one forecast release-path execution. Workflow, runner, matrix, and 9-minute p50 budget are unchanged. Plus ~0.2/day for the web/packages/note-shared and note citation contract triggers: the Windows renderer bundles that package from source, so its tests must run when it changes (rare; a few PRs a month). P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -508,14 +570,15 @@
     "desktop-windows-ci.yml/build-windows": {
       "budget_p50_minutes": 8,
       "display_name": "Windows build smoke",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 5,
+      "expected_runs_per_day": 6.2,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Account for upstream desktop_windows_release.yml trigger already present but absent from the inventory: prior 4 executions/day plus one forecast release-path execution. Workflow, runner, matrix, and 8-minute p50 budget are unchanged.",
+      "rationale": "Account for upstream desktop_windows_release.yml trigger already present but absent from the inventory: prior 4 executions/day plus one forecast release-path execution. Workflow, runner, matrix, and 8-minute p50 budget are unchanged. Plus ~0.2/day for the web/packages/note-shared and note citation contract triggers: the Windows renderer bundles that package from source, so its tests must run when it changes (rare; a few PRs a month). P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "windows",
       "runner_counts": {
@@ -526,14 +589,15 @@
     "desktop-windows-ci.yml/checks": {
       "budget_p50_minutes": 7,
       "display_name": "Typecheck \u00b7 Lint \u00b7 Test",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 5,
+      "expected_runs_per_day": 6.2,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Account for upstream desktop_windows_release.yml trigger already present but absent from the inventory: prior 4 executions/day plus one forecast release-path execution. Workflow, runner, matrix, and 7-minute p50 budget are unchanged.",
+      "rationale": "Account for upstream desktop_windows_release.yml trigger already present but absent from the inventory: prior 4 executions/day plus one forecast release-path execution. Workflow, runner, matrix, and 7-minute p50 budget are unchanged. Plus ~0.2/day for the web/packages/note-shared and note citation contract triggers: the Windows renderer bundles that package from source, so its tests must run when it changes (rare; a few PRs a month). P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -688,14 +752,15 @@
     "desktop_promote_beta.yml/promote": {
       "budget_p50_minutes": 5,
       "display_name": "promote",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 1,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -960,14 +1025,58 @@
     "gcp_app.yml/deploy": {
       "budget_p50_minutes": 5,
       "display_name": "deploy",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_class": "estimated-non-pr-push-day",
+      "expected_runs_per_day": 1,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Keep the 5-minute p50; estimate one path-matched main/development push run per day as a non-PR deployment.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_backend.yml/build-image": {
+      "budget_p50_minutes": 7,
+      "display_name": "build-image",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 1,
+      "if": "always() && !cancelled() && github.ref == 'refs/heads/main' && github.event.inputs.mode == 'build-only' && needs.validate-production-boundary.result == 'success' && needs.firestore_readiness.result == 'success' && (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [
+        "validate-production-boundary",
+        "firestore_readiness",
+        "record_break_glass"
+      ],
+      "owner": "CI maintainers",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Builds and pushes backend:<sha7> without deploying so listen-only fixes skip the backend train; estimate one per day, 5-minute placeholder p50.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change B5 (legacy-sync retirement M3) widens the trigger with the break_glass_lock input and prod-train concurrency; manual-only, no PR runs; the one-minute bump records the trigger change.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_backend.yml/build-role-images": {
+      "budget_p50_minutes": 41,
+      "display_name": "build-role-images",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 1,
+      "if": "always() && !cancelled() && github.ref == 'refs/heads/main' && github.event.inputs.mode == 'build-only' && needs.validate-production-boundary.result == 'success' && needs.firestore_readiness.result == 'success' && (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [
+        "validate-production-boundary",
+        "firestore_readiness",
+        "record_break_glass"
+      ],
+      "owner": "Backend platform (plan B role images)",
+      "rationale": "2026-10-21 plan B B2 release train: runs only on a manual gcp_backend.yml mode=build-only dispatch from main (no PR runs); builds, probes and publishes the role images plus listen-edge and a fat-image baseline on the private base; 40-minute p50 budget; forecast at build-image's manual rate because every build-only dispatch runs both jobs B5 (legacy-sync retirement M3) widens the trigger with the break_glass_lock input and prod-train concurrency; manual-only, no PR runs; the one-minute bump records the trigger change.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -976,10 +1085,10 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend.yml/deploy": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 1.1,
       "if": "always() && github.ref == 'refs/heads/main' && github.event.inputs.mode == 'deploy' && needs.validate-production-boundary.result == 'success' && needs.firestore_readiness.result == 'success' && (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')",
       "matrix": {},
       "matrix_size": 1,
@@ -989,7 +1098,7 @@
         "record_break_glass"
       ],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Deploy job itself is unchanged; estimate one manual backend train per day.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -998,16 +1107,16 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend.yml/firestore_readiness": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "firestore_readiness",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": "github.ref == 'refs/heads/main' && github.event.inputs.mode == 'deploy'",
+      "expected_runs_per_day": 1.1,
+      "if": "github.ref == 'refs/heads/main' && (github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only')",
       "matrix": {},
       "matrix_size": 1,
       "needs": "validate-production-boundary",
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Shared Release Eligibility admission for deploy and build-only; estimate one per day across both.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1016,16 +1125,16 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend.yml/record_break_glass": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 7,
       "display_name": "record_break_glass",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 0.1,
       "if": "${{ needs.firestore_readiness.outputs.break_glass == 'true' }}",
       "matrix": {},
       "matrix_size": 1,
       "needs": "firestore_readiness",
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Audit job runs only on a break-glass dispatch of either mode; estimate one per ten days.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input. B5 (legacy-sync retirement M3) widens the trigger with the break_glass_lock input and prod-train concurrency; manual-only, no PR runs; the one-minute bump records the trigger change.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1034,16 +1143,16 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend.yml/repair-traffic": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 7,
       "display_name": "repair-traffic",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 0.1,
       "if": "github.ref == 'refs/heads/main' && github.event.inputs.mode == 'repair-traffic-only'",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Traffic repair is unchanged and rare; estimate one per ten days.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input. B5 (legacy-sync retirement M3) widens the trigger with the break_glass_lock input and prod-train concurrency; manual-only, no PR runs; the one-minute bump records the trigger change.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1052,16 +1161,16 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend.yml/validate-production-boundary": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "validate-production-boundary",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": "github.event.inputs.mode == 'deploy'",
+      "expected_runs_per_day": 1.1,
+      "if": "github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only'",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Runs for deploy and build-only dispatches; estimate one per day across both.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1123,17 +1232,35 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "gcp_backend_listen_helm.yml/deploy-neg-coverage-exporter": {
+      "budget_p50_minutes": 11,
+      "display_name": "Deploy NEG coverage exporter",
+      "expected_runs_class": "non-pr-or-unsampled",
+      "expected_runs_per_day": 1,
+      "if": "${{ github.event.inputs.environment == 'prod' && needs.helm-upgrade.outputs.neg_coverage_exporter_image_tag != '' }}",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "helm-upgrade",
+      "owner": "Omi backend maintainers",
+      "rationale": "Production-only follow-up after a successful listen rollout; the resolver emits its image-tag output only for explicit deploys, while kept-tag and rollback paths leave it empty. Budget covers WIF setup and the exporter Helm rollout capped at five minutes, with no PR-run cost. B5 (2026-10-19) adds the break_glass_lock dispatch input, no new trigger. 2026-10-22 plan D D2 adds the listen_edge_image_digest dispatch input; this job is unchanged and stays manual-only with no PR runs, and the one-minute bump records the trigger change",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "gcp_backend_listen_helm.yml/helm-upgrade": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 15,
       "display_name": "helm-upgrade",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 1,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. B5 (2026-10-19) adds the break_glass_lock dispatch input, no new trigger. 2026-10-22 plan D D2 adds the listen_edge_image_digest dispatch input: when set, the job also admits the digest (one image-config read) and helm-upgrades backend/charts/listen-edge with a 600-second rollout wait after the listen rollout; manual-only, no PR runs, 15-minute placeholder p50",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1142,16 +1269,16 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend_pusher.yml/deploy": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 1,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger. 2026-10-22 plan B B3 adds the pusher_role_image_digest dispatch input (development-only backend-pusher role-image opt-in, blank by default) and admits backend-pusher qualifications; the job stays manual-only with no PR runs, and the one-minute bump records the trigger change",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1160,7 +1287,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend_pusher_auto_deploy.yml/deploy": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 7,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -1169,7 +1296,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. 2026-10-21 plan B B2: pusher/Dockerfile now copies backend/omi_logging.py, so that file joins the qualification trigger closure; main-push only, the one-minute bump records the trigger change. 2026-10-22 plan B B3: a qualification may name the backend-pusher role image, so backend/Dockerfile.roles joins the trigger closure; expected runs stay main-push-driven with no PR runs, and the one-minute bump records the trigger change",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1178,7 +1305,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_cloud_run_metrics_egress.yml/deploy": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 16,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -1187,7 +1314,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Planning budget increased from 15 to 16 minutes: the trigger now also spans verify_pusher_live_alert_route.py and mute-timings.json so import-path fixes re-provision alerts on main; pinned base/candidate render verification, operator-created replica validation, frontend rollout and authenticated query probes unchanged; main/dev or explicit prod only, not a measured p50.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1196,7 +1323,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_cloud_run_metrics_egress.yml/provision-live-alerts": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 8,
       "display_name": "provision-live-alerts",
       "expected_runs_class": "non-pr",
       "expected_runs_per_day": 0,
@@ -1205,43 +1332,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "gcp_daily_memory_sweep_job.yml/deploy": {
-      "budget_p50_minutes": 5,
-      "display_name": "deploy",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": null,
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": [],
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "gcp_daily_memory_sweep_job_auto_dev.yml/deploy": {
-      "budget_p50_minutes": 5,
-      "display_name": "deploy",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": "github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.run_attempt == 1 && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository",
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": [],
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Planning budget increased from 7 to 8 minutes: the import now ensures referenced mute timings exist before any rule write (dev Grafana froze qualification on 2026-10-25 without it) and the trigger spans verify_pusher_live_alert_route.py and mute-timings.json; canary-first import/readback and live-STT coverage unchanged; no PR execution and no new runner.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1286,16 +1377,16 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_diarizer.yml/deploy": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 21,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 1,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger. 2026-10-24 adds the diarizer-batch service option (W1: a CI path for the prod-omi-diarizer-batch Helm release, still manual-only dispatch); the one-minute bump records the trigger change",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1325,13 +1416,67 @@
       "budget_p50_minutes": 5,
       "display_name": "apply_field_exemptions",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 0.1,
       "if": "github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && github.event.inputs.operation == 'field-exemptions' && github.event.inputs.environment == 'prod'",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "No executable PR path: existing event/ref conditions remain main/manual-only. The workflow-level budget validator requires a positive PR sentinel for every job once a PR trigger exists; 0.1/day conservatively accounts for these skipped jobs.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_firestore_indexes.yml/plan_pr_indexes": {
+      "budget_p50_minutes": 1,
+      "display_name": "plan_pr_indexes",
+      "expected_runs_class": "planned-index-prs",
+      "expected_runs_per_day": 2,
+      "if": "github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.base.ref == 'main'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "Backend schema maintainers",
+      "rationale": "Credential-free JSON diff on registry/manifest PR events; two index PR updates/day budget.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_firestore_indexes.yml/prebuild_pr_development_indexes": {
+      "budget_p50_minutes": 2,
+      "display_name": "prebuild_pr_development_indexes",
+      "expected_runs_class": "planned-index-prs",
+      "expected_runs_per_day": 2,
+      "if": "needs.plan_pr_indexes.outputs.eligible == 'true'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "plan_pr_indexes",
+      "owner": "Backend schema maintainers",
+      "rationale": "P65: start only additive PR index builds asynchronously, two updates/day; no runner polling for READY. Existing deploy readiness enforces READY after merge. Automatic development schema writer.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_firestore_indexes.yml/prebuild_pr_prod_indexes": {
+      "budget_p50_minutes": 2,
+      "display_name": "prebuild_pr_prod_indexes",
+      "expected_runs_class": "planned-index-prs",
+      "expected_runs_per_day": 2,
+      "if": "needs.plan_pr_indexes.outputs.eligible == 'true'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "plan_pr_indexes",
+      "owner": "Backend schema maintainers",
+      "rationale": "P65: start only additive PR index builds asynchronously, two updates/day; no runner polling for READY. Existing deploy readiness enforces READY after merge. Required prod Environment approval.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1343,13 +1488,13 @@
       "budget_p50_minutes": 5,
       "display_name": "reconcile_composite_indexes",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 0.1,
       "if": "github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event.inputs.operation == 'composite-indexes')",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "No executable PR path: existing event/ref conditions remain main/manual-only. The workflow-level budget validator requires a positive PR sentinel for every job once a PR trigger exists; 0.1/day conservatively accounts for these skipped jobs.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1361,13 +1506,13 @@
       "budget_p50_minutes": 5,
       "display_name": "reconcile_development_composite_indexes",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 0.1,
       "if": "github.ref == 'refs/heads/main' && github.event_name == 'push'",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "No executable PR path: existing event/ref conditions remain main/manual-only. The workflow-level budget validator requires a positive PR sentinel for every job once a PR trigger exists; 0.1/day conservatively accounts for these skipped jobs.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1379,13 +1524,13 @@
       "budget_p50_minutes": 5,
       "display_name": "reject_nonprod_field_exemptions",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 0.1,
       "if": "github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && github.event.inputs.operation == 'field-exemptions' && github.event.inputs.environment != 'prod'",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "No executable PR path: existing event/ref conditions remain main/manual-only. The workflow-level budget validator requires a positive PR sentinel for every job once a PR trigger exists; 0.1/day conservatively accounts for these skipped jobs.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1412,7 +1557,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_frontend.yml/deploy": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -1421,7 +1566,25 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Plan 6-minute p50 (previously 5) for the local package install and consumer rebuild. Package-only note-shared edits now trigger the existing main/development or manual frontend deployment; expected PR runs/day stays zero, with no new runner.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_incluster_guards.yml/deploy": {
+      "budget_p50_minutes": 5,
+      "display_name": "deploy",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 0,
+      "if": "inputs.environment != 'prod' || github.ref == 'refs/heads/main'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "Backend infrastructure",
+      "rationale": "Manual independent guard-only Helm release; no image build or serving rollout; zero PR runs.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1430,16 +1593,16 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_llm_gateway.yml/deploy": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 1,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger. 2026-10-22 plan B B3 adds the gateway_image_digest dispatch input (backend-gateway role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1448,52 +1611,16 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_llm_gateway.yml/record_break_glass": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "record_break_glass",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 1,
       "if": "${{ needs.deploy.outputs.break_glass == 'true' }}",
       "matrix": {},
       "matrix_size": 1,
       "needs": "deploy",
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "gcp_memory_maintenance_job.yml/deploy": {
-      "budget_p50_minutes": 5,
-      "display_name": "deploy",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": null,
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": [],
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "gcp_memory_maintenance_job_auto_dev.yml/deploy": {
-      "budget_p50_minutes": 5,
-      "display_name": "deploy",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": null,
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": [],
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger. 2026-10-22 plan B B3 adds the gateway_image_digest dispatch input (backend-gateway role-image opt-in, blank by default); the audit job still runs only on a break-glass dispatch with no PR runs, and the one-minute bump records the trigger change",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1523,13 +1650,13 @@
       "budget_p50_minutes": 5,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 2,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Manual logging rollout and one recorded-image recovery per day; no automatic triggers or new runners; retains the 5-minute placeholder",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1559,13 +1686,13 @@
       "budget_p50_minutes": 5,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 1,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1664,36 +1791,29 @@
       "runs_on": "ubuntu-latest"
     },
     "grafana_dashboard_provisioning.yml/provision": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "provision",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
-      "if": null,
+      "if": "github.ref == 'refs/heads/main'",
       "matrix": {
-        "include": [
-          {
-            "environment": "prod",
-            "url": "https://monitor.omi.me"
-          },
-          {
-            "environment": "dev",
-            "url": "https://monitor.omiapi.com"
-          }
+        "environment": [
+          "${{ github.event.inputs.environment || 'dev' }}"
         ]
       },
-      "matrix_size": 2,
+      "matrix_size": 1,
       "needs": "validate",
       "owner": "CI maintainers",
-      "rationale": "Provision runs a 2-env matrix only when dashboard JSON changes on main; API POST + read-back per board.",
+      "rationale": "Planning budget raised to 6 minutes for exclusive dashboard/alert backups with complete readback plus the prod-only Business board and ACL step; matrix narrows to one selected environment, main auto-dev and explicit protected prod only.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
-        "linux": 2
+        "linux": 1
       },
       "runs_on": "ubuntu-latest"
     },
     "grafana_dashboard_provisioning.yml/validate": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "validate",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -1702,266 +1822,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Register the Grafana provisioning workflow added with auto-provision; validate is a JSON lint.",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "jit_qa_cloud_run.yml/admit": {
-      "budget_p50_minutes": 5,
-      "display_name": "Admit exact proven main source",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": null,
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": [],
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "jit_qa_cloud_run.yml/build": {
-      "budget_p50_minutes": 5,
-      "display_name": "Build immutable isolated QA images",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": null,
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": "admit",
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "jit_qa_cloud_run.yml/deploy": {
-      "budget_p50_minutes": 5,
-      "display_name": "Deploy gates-closed isolated QA resources",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": null,
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": [
-        "admit",
-        "build",
-        "provision"
-      ],
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "jit_qa_cloud_run.yml/execute": {
-      "budget_p50_minutes": 5,
-      "display_name": "Execute explicit drain after durable-proof admission",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": "inputs.run_once == true",
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": [
-        "admit",
-        "provision",
-        "deploy",
-        "verify"
-      ],
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "jit_qa_cloud_run.yml/provision": {
-      "budget_p50_minutes": 5,
-      "display_name": "Provision only named development QA dependencies",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": null,
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": "admit",
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "jit_qa_cloud_run.yml/verify": {
-      "budget_p50_minutes": 5,
-      "display_name": "Verify exact QA resources and readiness candidate",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": null,
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": [
-        "admit",
-        "build",
-        "provision",
-        "deploy"
-      ],
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "jit_qa_manual_operator.yml/operate": {
-      "budget_p50_minutes": 15,
-      "display_name": "Run isolated JIT QA operator",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": "${{ github.ref == 'refs/heads/main' }}",
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": [],
-      "owner": "CI maintainers",
-      "rationale": "Manual-only unsampled placeholder, not a measured p50: retain 5 minutes for setup and reserve 10 for the oracle's default 540-second query budget plus live inventory reads; PR frequency and global caps unchanged",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "jit_qa_typesense_projection.yml/admit": {
-      "budget_p50_minutes": 5,
-      "display_name": "Admit exact proven main source",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": null,
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": [],
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "jit_qa_typesense_projection.yml/bootstrap": {
-      "budget_p50_minutes": 5,
-      "display_name": "Bootstrap an intentionally unready Typesense service",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": "${{ inputs.mode == 'bootstrap' }}",
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": [
-        "admit",
-        "deploy"
-      ],
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "jit_qa_typesense_projection.yml/build": {
-      "budget_p50_minutes": 5,
-      "display_name": "Build immutable Typesense and projection runner images",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": null,
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": "admit",
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "jit_qa_typesense_projection.yml/deploy": {
-      "budget_p50_minutes": 5,
-      "display_name": "Deploy one bounded ephemeral Typesense service",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": null,
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": [
-        "admit",
-        "build",
-        "provision"
-      ],
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "jit_qa_typesense_projection.yml/provision": {
-      "budget_p50_minutes": 5,
-      "display_name": "Verify named QA Firestore and provision dedicated key metadata",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": null,
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": "admit",
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "jit_qa_typesense_projection.yml/rehydrate": {
-      "budget_p50_minutes": 5,
-      "display_name": "Rehydrate and prove real current-ledger keyword retrieval",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": "${{ inputs.mode == 'prove' }}",
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": [
-        "admit",
-        "build",
-        "deploy"
-      ],
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Planning budget increased to 6 minutes for dashboard JSON plus combined/split alert lint; triggers now also cover the Business board JSON and both dashboard provisioners; no PR execution or new runner.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1987,17 +1848,498 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "main_nightly_full.yml/backend-checks": {
+      "budget_p50_minutes": 5,
+      "display_name": "backend-checks",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "daily-main-health",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "source",
+      "owner": "CI maintainers",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu.",
+      "reusable": "./.github/workflows/backend-checks.yml",
+      "runner": "reusable",
+      "runner_counts": {
+        "reusable": 1
+      },
+      "runs_on": null
+    },
+    "main_nightly_full.yml/backend-edge": {
+      "budget_p50_minutes": 5,
+      "display_name": "backend-edge",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "daily-main-health",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "source",
+      "owner": "CI maintainers",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu.",
+      "reusable": "./.github/workflows/backend-edge.yml",
+      "runner": "reusable",
+      "runner_counts": {
+        "reusable": 1
+      },
+      "runs_on": null
+    },
+    "main_nightly_full.yml/backend-emulator-proofs": {
+      "budget_p50_minutes": 5,
+      "display_name": "backend-emulator-proofs",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "daily-main-health",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "source",
+      "owner": "CI maintainers",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu.",
+      "reusable": "./.github/workflows/backend-emulator-proofs.yml",
+      "runner": "reusable",
+      "runner_counts": {
+        "reusable": 1
+      },
+      "runs_on": null
+    },
+    "main_nightly_full.yml/backend-hermetic-e2e": {
+      "budget_p50_minutes": 5,
+      "display_name": "backend-hermetic-e2e",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "daily-main-health",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "source",
+      "owner": "CI maintainers",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu.",
+      "reusable": "./.github/workflows/backend-hermetic-e2e.yml",
+      "runner": "reusable",
+      "runner_counts": {
+        "reusable": 1
+      },
+      "runs_on": null
+    },
+    "main_nightly_full.yml/backend-unit-tests": {
+      "budget_p50_minutes": 5,
+      "display_name": "backend-unit-tests",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "daily-main-health",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "source",
+      "owner": "CI maintainers",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu.",
+      "reusable": "./.github/workflows/backend-unit-tests.yml",
+      "runner": "reusable",
+      "runner_counts": {
+        "reusable": 1
+      },
+      "runs_on": null
+    },
+    "main_nightly_full.yml/desktop-backend-contracts": {
+      "budget_p50_minutes": 5,
+      "display_name": "desktop-backend-contracts",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "daily-main-health",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "source",
+      "owner": "CI maintainers",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu.",
+      "reusable": "./.github/workflows/desktop-backend-contracts.yml",
+      "runner": "reusable",
+      "runner_counts": {
+        "reusable": 1
+      },
+      "runs_on": null
+    },
+    "main_nightly_full.yml/desktop-checks": {
+      "budget_p50_minutes": 5,
+      "display_name": "desktop-checks",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "daily-main-health",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "source",
+      "owner": "CI maintainers",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu.",
+      "reusable": "./.github/workflows/desktop-checks.yml",
+      "runner": "reusable",
+      "runner_counts": {
+        "reusable": 1
+      },
+      "runs_on": null
+    },
+    "main_nightly_full.yml/desktop-swift-ci": {
+      "budget_p50_minutes": 5,
+      "display_name": "desktop-swift-ci",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "daily-main-health",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "source",
+      "owner": "CI maintainers",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu.",
+      "reusable": "./.github/workflows/desktop-swift-ci.yml",
+      "runner": "reusable",
+      "runner_counts": {
+        "reusable": 1
+      },
+      "runs_on": null
+    },
+    "main_nightly_full.yml/desktop-windows-ci": {
+      "budget_p50_minutes": 5,
+      "display_name": "desktop-windows-ci",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "daily-main-health",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "source",
+      "owner": "CI maintainers",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu.",
+      "reusable": "./.github/workflows/desktop-windows-ci.yml",
+      "runner": "reusable",
+      "runner_counts": {
+        "reusable": 1
+      },
+      "runs_on": null
+    },
+    "main_nightly_full.yml/mobile-app-checks": {
+      "budget_p50_minutes": 5,
+      "display_name": "mobile-app-checks",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "daily-main-health",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "source",
+      "owner": "CI maintainers",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu.",
+      "reusable": "./.github/workflows/mobile-app-checks.yml",
+      "runner": "reusable",
+      "runner_counts": {
+        "reusable": 1
+      },
+      "runs_on": null
+    },
+    "main_nightly_full.yml/openapi-contract": {
+      "budget_p50_minutes": 5,
+      "display_name": "openapi-contract",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "daily-main-health",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "source",
+      "owner": "CI maintainers",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu.",
+      "reusable": "./.github/workflows/openapi-contract.yml",
+      "runner": "reusable",
+      "runner_counts": {
+        "reusable": 1
+      },
+      "runs_on": null
+    },
+    "main_nightly_full.yml/opentofu-development-wif-pilot-validate": {
+      "budget_p50_minutes": 5,
+      "display_name": "opentofu-development-wif-pilot-validate",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "daily-main-health",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "source",
+      "owner": "CI maintainers",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu.",
+      "reusable": "./.github/workflows/opentofu-development-wif-pilot-validate.yml",
+      "runner": "reusable",
+      "runner_counts": {
+        "reusable": 1
+      },
+      "runs_on": null
+    },
+    "main_nightly_full.yml/opentofu-foundation-validate": {
+      "budget_p50_minutes": 5,
+      "display_name": "opentofu-foundation-validate",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "daily-main-health",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "source",
+      "owner": "CI maintainers",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu.",
+      "reusable": "./.github/workflows/opentofu-foundation-validate.yml",
+      "runner": "reusable",
+      "runner_counts": {
+        "reusable": 1
+      },
+      "runs_on": null
+    },
+    "main_nightly_full.yml/public-build-config-preflight": {
+      "budget_p50_minutes": 5,
+      "display_name": "public-build-config-preflight",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "daily-main-health",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "source",
+      "owner": "CI maintainers",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu.",
+      "reusable": "./.github/workflows/public-build-config-preflight.yml",
+      "runner": "reusable",
+      "runner_counts": {
+        "reusable": 1
+      },
+      "runs_on": null
+    },
+    "main_nightly_full.yml/python-cli-ci": {
+      "budget_p50_minutes": 5,
+      "display_name": "python-cli-ci",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "daily-main-health",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "source",
+      "owner": "CI maintainers",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu.",
+      "reusable": "./.github/workflows/python-cli-ci.yml",
+      "runner": "reusable",
+      "runner_counts": {
+        "reusable": 1
+      },
+      "runs_on": null
+    },
+    "main_nightly_full.yml/repo-checks": {
+      "budget_p50_minutes": 5,
+      "display_name": "repo-checks",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "daily-main-health",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "source",
+      "owner": "CI maintainers",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu.",
+      "reusable": "./.github/workflows/repo-checks.yml",
+      "runner": "reusable",
+      "runner_counts": {
+        "reusable": 1
+      },
+      "runs_on": null
+    },
+    "main_nightly_full.yml/report": {
+      "budget_p50_minutes": 5,
+      "display_name": "Nightly failure summary",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "daily-main-health",
+      "expected_runs_per_day": 1,
+      "if": "${{ always() && !cancelled() && needs.source.result == 'success' }}",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [
+        "source",
+        "backend-checks",
+        "backend-edge",
+        "backend-emulator-proofs",
+        "backend-hermetic-e2e",
+        "backend-unit-tests",
+        "desktop-backend-contracts",
+        "desktop-checks",
+        "desktop-swift-ci",
+        "desktop-windows-ci",
+        "mobile-app-checks",
+        "openapi-contract",
+        "opentofu-development-wif-pilot-validate",
+        "opentofu-foundation-validate",
+        "public-build-config-preflight",
+        "python-cli-ci",
+        "repo-checks",
+        "role_images",
+        "runtime_image_contracts",
+        "sdk-cpp",
+        "sdk-rust",
+        "web-checks",
+        "windows-preflight-portability"
+      ],
+      "owner": "CI maintainers",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "main_nightly_full.yml/role_images": {
+      "budget_p50_minutes": 5,
+      "display_name": "role_images",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "daily-main-health",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "source",
+      "owner": "CI maintainers",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu.",
+      "reusable": "./.github/workflows/role_images.yml",
+      "runner": "reusable",
+      "runner_counts": {
+        "reusable": 1
+      },
+      "runs_on": null
+    },
+    "main_nightly_full.yml/runtime_image_contracts": {
+      "budget_p50_minutes": 5,
+      "display_name": "runtime_image_contracts",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "daily-main-health",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "source",
+      "owner": "CI maintainers",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu.",
+      "reusable": "./.github/workflows/runtime_image_contracts.yml",
+      "runner": "reusable",
+      "runner_counts": {
+        "reusable": 1
+      },
+      "runs_on": null
+    },
+    "main_nightly_full.yml/sdk-cpp": {
+      "budget_p50_minutes": 5,
+      "display_name": "sdk-cpp",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "daily-main-health",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "source",
+      "owner": "CI maintainers",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu.",
+      "reusable": "./.github/workflows/sdk-cpp.yml",
+      "runner": "reusable",
+      "runner_counts": {
+        "reusable": 1
+      },
+      "runs_on": null
+    },
+    "main_nightly_full.yml/sdk-rust": {
+      "budget_p50_minutes": 5,
+      "display_name": "sdk-rust",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "daily-main-health",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "source",
+      "owner": "CI maintainers",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu.",
+      "reusable": "./.github/workflows/sdk-rust.yml",
+      "runner": "reusable",
+      "runner_counts": {
+        "reusable": 1
+      },
+      "runs_on": null
+    },
+    "main_nightly_full.yml/source": {
+      "budget_p50_minutes": 5,
+      "display_name": "Pin main source",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "daily-main-health",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "main_nightly_full.yml/web-checks": {
+      "budget_p50_minutes": 5,
+      "display_name": "web-checks",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "daily-main-health",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "source",
+      "owner": "CI maintainers",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu.",
+      "reusable": "./.github/workflows/web-checks.yml",
+      "runner": "reusable",
+      "runner_counts": {
+        "reusable": 1
+      },
+      "runs_on": null
+    },
+    "main_nightly_full.yml/windows-preflight-portability": {
+      "budget_p50_minutes": 5,
+      "display_name": "windows-preflight-portability",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "daily-main-health",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "source",
+      "owner": "CI maintainers",
+      "rationale": "P18 daily orchestration only; called test workflows retain their own runner/time caps and account for one extra daily invocation. Source and report use standard Ubuntu.",
+      "reusable": "./.github/workflows/windows-preflight-portability.yml",
+      "runner": "reusable",
+      "runner_counts": {
+        "reusable": 1
+      },
+      "runs_on": null
+    },
     "mobile-app-checks.yml/analyze-and-test": {
       "budget_p50_minutes": 17,
       "display_name": "Dart Analyze & Tests",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 29.1,
+      "expected_runs_per_day": 30.1,
       "if": "github.event_name == 'schedule' || needs.changes.outputs.has_app_dart == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "2026-10-13 contributor audit: 59 fork app PRs in 15 days, about four/day. Run secret-free analyzer and Flutter tests without ci:full; retain 17-minute p50, add four PR runs/day (68 Linux minutes/day; 120 at the 30-minute timeout). Nightly adds one regular suite run/day outside PR caps.",
+      "rationale": "2026-10-13 contributor audit: 59 fork app PRs in 15 days, about four/day. Run secret-free analyzer and Flutter tests without ci:full; retain 17-minute p50, add four PR runs/day (68 Linux minutes/day; 120 at the 30-minute timeout). Nightly adds one regular suite run/day outside PR caps. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2008,14 +2350,15 @@
     "mobile-app-checks.yml/android-compile-smoke": {
       "budget_p50_minutes": 13,
       "display_name": "Android Compile Smoke",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 12,
+      "expected_runs_per_day": 13,
       "if": "github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_compile_smoke == 'true') || (needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_android_pr == 'true')",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "Expand PR selection from native build inputs to startup/capture/WAL and acceptance runners after #20437. Forecast four extra runs/day over the prior eight-run budget; retain duration budgets and re-seed next weekly audit.. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
+      "rationale": "Expand PR selection from native build inputs to startup/capture/WAL and acceptance runners after #20437. Forecast four extra runs/day over the prior eight-run budget; retain duration budgets and re-seed next weekly audit.. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2026,14 +2369,15 @@
     "mobile-app-checks.yml/android-emulator-checks": {
       "budget_p50_minutes": 20,
       "display_name": "Android Emulator Acceptance",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "forecast-selected-pr",
-      "expected_runs_per_day": 12,
+      "expected_runs_per_day": 13,
       "if": "github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_compile_smoke == 'true') || (needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_android_pr == 'true')",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "Mobile maintainers",
-      "rationale": "PR #20437 reproduced a native Android 16 startup cancellation race missed by host tests. Add native stress plus one-ABI minified AOT startup acceptance on Linux; forecast 12 selected full-tier PR runs/day including startup/WAL inputs. Re-seed after first weekly sample.. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
+      "rationale": "PR #20437 reproduced a native Android 16 startup cancellation race missed by host tests. Add native stress plus one-ABI minified AOT startup acceptance on Linux; forecast 12 selected full-tier PR runs/day including startup/WAL inputs. Re-seed after first weekly sample.. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2044,14 +2388,15 @@
     "mobile-app-checks.yml/android-unit-tests": {
       "budget_p50_minutes": 7,
       "display_name": "Android JVM Unit Tests",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 12,
+      "expected_runs_per_day": 13,
       "if": "github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_compile_smoke == 'true') || (needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_android_pr == 'true')",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "Expand PR selection from native build inputs to startup/capture/WAL and acceptance runners after #20437. Forecast four extra runs/day over the prior eight-run budget; retain duration budgets and re-seed next weekly audit.. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
+      "rationale": "Expand PR selection from native build inputs to startup/capture/WAL and acceptance runners after #20437. Forecast four extra runs/day over the prior eight-run budget; retain duration budgets and re-seed next weekly audit.. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2062,14 +2407,15 @@
     "mobile-app-checks.yml/changes": {
       "budget_p50_minutes": 1,
       "display_name": "Detect Changes",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 216.1,
+      "expected_runs_per_day": 217.1,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2080,14 +2426,15 @@
     "mobile-app-checks.yml/dart-tests-kiritimati": {
       "budget_p50_minutes": 25,
       "display_name": "Dart Tests (Pacific/Kiritimati)",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 1.1,
-      "if": "github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_dart == 'true')",
+      "expected_runs_per_day": 2.1,
+      "if": "inputs.nightly_main_sha != '' || github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_dart == 'true')",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2098,14 +2445,15 @@
     "mobile-app-checks.yml/generated-files": {
       "budget_p50_minutes": 4,
       "display_name": "Generated Files",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 21.1,
+      "expected_runs_per_day": 22.1,
       "if": "needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_flutter_generated == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2116,14 +2464,15 @@
     "mobile-app-checks.yml/ios-compile-check": {
       "budget_p50_minutes": 19,
       "display_name": "iOS Compile Check",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 24.1,
+      "expected_runs_per_day": 25.1,
       "if": "needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_ios_compile == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "macos",
       "runner_counts": {
@@ -2134,14 +2483,15 @@
     "mobile-app-checks.yml/journeys-hermetic": {
       "budget_p50_minutes": 9,
       "display_name": "Seeded Journeys (hermetic)",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 5.1,
+      "expected_runs_per_day": 6.1,
       "if": "github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_journeys == 'true') || (needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_journeys_pr == 'true')",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
+      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2152,8 +2502,9 @@
     "mobile-app-checks.yml/mobile-release-eligibility": {
       "budget_p50_minutes": 1,
       "display_name": "Mobile Release Eligibility",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 216.1,
+      "expected_runs_per_day": 217.1,
       "if": "${{ always() }}",
       "matrix": {},
       "matrix_size": 1,
@@ -2169,7 +2520,7 @@
         "dart-tests-kiritimati"
       ],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up Include required native/AOT emulator acceptance; reject an unexpectedly skipped selected lane.. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up Include required native/AOT emulator acceptance; reject an unexpectedly skipped selected lane.. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2180,9 +2531,10 @@
     "mobile-app-checks.yml/post-merge-failure-issues": {
       "budget_p50_minutes": 5,
       "display_name": "Post-merge mobile failure issues",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 1.1,
-      "if": "${{ always() && (github.event_name == 'push' || github.event_name == 'schedule') }}",
+      "expected_runs_per_day": 2.1,
+      "if": "${{ always() && inputs.nightly_main_sha == '' && (github.event_name == 'push' || github.event_name == 'schedule') }}",
       "matrix": {},
       "matrix_size": 1,
       "needs": [
@@ -2195,7 +2547,7 @@
         "dart-tests-kiritimati"
       ],
       "owner": "CI maintainers",
-      "rationale": "Reconcile regular Dart analyzer/tests alongside existing main/nightly suites, closing each matching failure issue on success. Existing five-minute budget and non-PR execution frequency remain sufficient; PR sentinel retained for inventory accounting.",
+      "rationale": "Reconcile regular Dart analyzer/tests alongside existing main/nightly suites, closing each matching failure issue on success. Existing five-minute budget and non-PR execution frequency remain sufficient; PR sentinel retained for inventory accounting. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2207,13 +2559,13 @@
       "budget_p50_minutes": 5,
       "display_name": "dispatch",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 1,
+      "expected_runs_per_day": 2,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Register the daily mobile train workflow that landed on main without an inventory row. 2026-10-14: optional pin_ios/pin_android dispatch inputs carry the gate's audited candidate identifiers; dispatch-only, no extra runs.",
+      "rationale": "Register the daily mobile train workflow that landed on main without an inventory row. 2026-10-14: optional pin_ios/pin_android dispatch inputs carry the gate's audited candidate identifiers; dispatch-only, no extra runs. 2026-10-20: optional capture_health_override input lets one run's rollout hops past a capture-health HOLD; allow one extra manual dispatch a day.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2232,6 +2584,24 @@
       "needs": [],
       "owner": "CI maintainers",
       "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "mobile_rollout_watch.yml/dispatch": {
+      "budget_p50_minutes": 5,
+      "display_name": "dispatch",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 7,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "4-hourly intraday rollout advance (cron 0 1,5,9,13,17,21 UTC = 6 dispatches/day, seconds each): python POST to the Codemagic builds API for the mobile-rollout-advance workflow. Advances only already-released rollouts; never builds or submits. 2026-10-20: a manual workflow_dispatch with capture_health_override (one-shot reason to advance past a capture-health HOLD) adds at most about one run a day.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2260,14 +2630,15 @@
     "openapi-contract.yml/openapi-contract": {
       "budget_p50_minutes": 3,
       "display_name": "Public Developer API contract",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 115,
+      "expected_runs_per_day": 116,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2278,14 +2649,15 @@
     "opentofu-development-wif-pilot-validate.yml/validate-development-pilot": {
       "budget_p50_minutes": 5,
       "display_name": "validate-development-pilot",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 1,
+      "expected_runs_per_day": 2,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2314,14 +2686,15 @@
     "opentofu-foundation-validate.yml/validate-no-mutation-slice": {
       "budget_p50_minutes": 5,
       "display_name": "validate-no-mutation-slice",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 1,
+      "expected_runs_per_day": 2,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2350,8 +2723,9 @@
     "public-build-config-preflight.yml/preflight": {
       "budget_p50_minutes": 1,
       "display_name": "${{ matrix.environment }} configuration",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 8,
+      "expected_runs_per_day": 9,
       "if": null,
       "matrix": {
         "environment": [
@@ -2362,7 +2736,7 @@
       "matrix_size": 2,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2409,14 +2783,15 @@
     "python-cli-ci.yml/ci-tier": {
       "budget_p50_minutes": 1,
       "display_name": "Resolve CI Tier",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 67,
+      "expected_runs_per_day": 68,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "One label read; 2026-09-28 PR run took 23s. Expected volume adds one daily run for the PyPI publish gate path.",
+      "rationale": "One label read; 2026-09-28 PR run took 23s. Expected volume adds one daily run for the PyPI publish gate path. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2427,8 +2802,9 @@
     "python-cli-ci.yml/install-smoke": {
       "budget_p50_minutes": 5,
       "display_name": "Clean install smoke (Python ${{ matrix.python-version }})",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 2,
+      "expected_runs_per_day": 3,
       "if": null,
       "matrix": {
         "python-version": [
@@ -2440,7 +2816,7 @@
       "matrix_size": 3,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Path-filtered clean-install smoke (Python 3.10, 3.11, and 3.12), secret-free and ungated like the tests job. Sentinel until sampled: 5-minute p50 and 2 runs/day (30 linux-minutes/day), including one daily run for the PyPI publish gate path. A tests-rate re-seed (~50/day) would exceed the linux cap and needs a cap review.",
+      "rationale": "Path-filtered clean-install smoke (Python 3.10, 3.11, and 3.12), secret-free and ungated like the tests job. Sentinel until sampled: 5-minute p50 and 2 runs/day (30 linux-minutes/day), including one daily run for the PyPI publish gate path. A tests-rate re-seed (~50/day) would exceed the linux cap and needs a cap review. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2451,8 +2827,9 @@
     "python-cli-ci.yml/tests": {
       "budget_p50_minutes": 3,
       "display_name": "${{ matrix.label }}",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 51,
+      "expected_runs_per_day": 52,
       "if": null,
       "matrix": {
         "include": [
@@ -2471,7 +2848,7 @@
       "matrix_size": 2,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up; expected volume adds one daily run for the PyPI publish gate path.",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up; expected volume adds one daily run for the PyPI publish gate path. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "dynamic",
       "runner_counts": {
@@ -2482,20 +2859,39 @@
     "python-cli-ci.yml/windows-acl": {
       "budget_p50_minutes": 5,
       "display_name": "Windows ACL / Python 3.12",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 2,
+      "expected_runs_per_day": 3,
       "if": "needs.ci-tier.outputs.full_ci == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "ci-tier",
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. Expected volume adds one daily run for the PyPI publish gate path.",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. Expected volume adds one daily run for the PyPI publish gate path. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "windows",
       "runner_counts": {
         "windows": 1
       },
       "runs_on": "windows-latest"
+    },
+    "reid_onboarding_vercel.yml/deploy": {
+      "budget_p50_minutes": 8,
+      "display_name": "Build web and deploy",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 0,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "kodjima33",
+      "rationale": "Flutter SDK setup plus a release web build of a small prototype and one Vercel CLI upload; runs only on main pushes touching the prototype, roughly a few times a month",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
     },
     "release-eligibility.yml/release-eligibility": {
       "budget_p50_minutes": 7,
@@ -2518,14 +2914,15 @@
     "repo-checks.yml/changes": {
       "budget_p50_minutes": 2,
       "display_name": "Detect Changes",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 211,
+      "expected_runs_per_day": 212,
       "if": "github.event_name != 'pull_request' || !contains(fromJSON('[\"edited\", \"labeled\", \"unlabeled\"]'), github.event.action)",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2536,14 +2933,15 @@
     "repo-checks.yml/formatting": {
       "budget_p50_minutes": 2,
       "display_name": "Formatting",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 127,
+      "expected_runs_per_day": 128,
       "if": "needs.changes.outputs.has_format == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2554,14 +2952,15 @@
     "repo-checks.yml/hygiene": {
       "budget_p50_minutes": 5,
       "display_name": "Hygiene",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 210,
+      "expected_runs_per_day": 211,
       "if": "github.event_name != 'pull_request' || !contains(fromJSON('[\"edited\", \"labeled\", \"unlabeled\"]'), github.event.action)",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "Firestore index guard adds a diff-scoped cold environment plus seven hermetic test files (local cold setup 16s + tests 52s; reserve 2 minutes). Reuses pinned uv and OpenAPI import dependencies; no whole backend suite. 2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Firestore index guard adds a diff-scoped cold environment plus seven hermetic test files (local cold setup 16s + tests 52s; reserve 2 minutes). Reuses pinned uv and OpenAPI import dependencies; no whole backend suite. 2026-09-26 PR sample p50 x 1.25, rounded up P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2572,14 +2971,15 @@
     "repo-checks.yml/metadata-preflight": {
       "budget_p50_minutes": 2,
       "display_name": "PR Metadata Preflight",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 225,
+      "expected_runs_per_day": 226,
       "if": "github.event_name == 'pull_request' && contains(fromJSON('[\"edited\", \"labeled\", \"unlabeled\"]'), github.event.action)",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2605,17 +3005,56 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "role_images.yml/edge": {
+      "budget_p50_minutes": 12,
+      "display_name": "listen-edge image",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 2,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "Backend platform (plan B role images)",
+      "rationale": "2026-10-21 plan B B2 / plan D D2: release build of the listen-edge Rust image (cargo build --release, thin LTO) plus an HTTP health, identity and drain probe; same path filter as the roles job, about one PR run a day; 12-minute p50 budget P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "role_images.yml/roles": {
+      "budget_p50_minutes": 25,
+      "display_name": "python role images",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 2,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "Backend platform (plan B role images)",
+      "rationale": "2026-10-21 plan B B2, workflow change named by David 2026-10-21: builds the five backend/Dockerfile.roles targets sequentially on one runner (the four app targets share every layer, so this is about two cold builds: the runtime venv and the pusher venv), runs the offline dependency probe and a timed cold-start import per image. PR runs only when an image-definition input changes (Dockerfile.roles, locks, registry, contract scripts), about one a day; estimate 15-20 min cold, 25-minute p50 budget P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "runtime_image_contracts.yml/image-smoke": {
       "budget_p50_minutes": 5,
       "display_name": "image-smoke",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 1,
-      "if": "github.event_name == 'workflow_dispatch'",
+      "expected_runs_per_day": 2,
+      "if": "inputs.nightly_main_sha == '' && github.event_name == 'workflow_dispatch'",
       "matrix": "${{ fromJSON(needs.source-closure.outputs.matrix) }}",
       "matrix_size": 1,
       "needs": "source-closure",
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2626,14 +3065,15 @@
     "runtime_image_contracts.yml/source-closure": {
       "budget_p50_minutes": 2,
       "display_name": "source-closure",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 108,
+      "expected_runs_per_day": 109,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2644,14 +3084,15 @@
     "sdk-cpp.yml/cpp": {
       "budget_p50_minutes": 5,
       "display_name": "cpp",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 1,
+      "expected_runs_per_day": 2,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2662,14 +3103,15 @@
     "sdk-rust.yml/rust": {
       "budget_p50_minutes": 5,
       "display_name": "rust",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 1,
+      "expected_runs_per_day": 2,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2696,7 +3138,7 @@
       "runs_on": "ubuntu-latest"
     },
     "sync_ledger_fence_cutover.yml/activate": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "activate",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -2705,7 +3147,7 @@
       "matrix_size": 1,
       "needs": "stage",
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. B5 (M3 review): break_glass_lock dispatch input added so the prod cutover shares the prod-train lock; manual-only, no PR runs; the one-minute bump records the trigger change.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2714,7 +3156,7 @@
       "runs_on": "ubuntu-latest"
     },
     "sync_ledger_fence_cutover.yml/stage": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "stage",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -2723,7 +3165,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. B5 (M3 review): break_glass_lock dispatch input added so the prod cutover shares the prod-train lock; manual-only, no PR runs; the one-minute bump records the trigger change.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2752,14 +3194,15 @@
     "web-checks.yml/build": {
       "budget_p50_minutes": 1,
       "display_name": "Build",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 13,
+      "expected_runs_per_day": 14,
       "if": "needs.changes.outputs.has_web_build == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Retain 1-minute p50 and 13 PR runs/day: note-shared changes select the existing app build after the source move; package edits previously lived under consumer paths, so no additional job or steady-state run volume is expected. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2770,14 +3213,15 @@
     "web-checks.yml/changes": {
       "budget_p50_minutes": 1,
       "display_name": "Detect Changes",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 211,
+      "expected_runs_per_day": 212,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2788,14 +3232,15 @@
     "web-checks.yml/frontend-lint": {
       "budget_p50_minutes": 2,
       "display_name": "Frontend Lint",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 4,
+      "expected_runs_per_day": 5,
       "if": "needs.changes.outputs.has_web_lint == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "Retain 2-minute p50 and 4 PR runs/day: note-shared changes select the existing frontend consumer after the source move; no new job or steady-state run volume is expected. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2806,14 +3251,15 @@
     "windows-preflight-portability.yml/portability": {
       "budget_p50_minutes": 1,
       "display_name": "Native Windows process and launcher contracts",
+      "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 11,
+      "expected_runs_per_day": 12,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "windows",
       "runner_counts": {
@@ -2828,20 +3274,62 @@
     "backend-checks.yml": {
       "name": "Backend Checks",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Initial workflow inventory P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged.",
       "triggers": {
         "pull_request": {
           "branches": "main"
         },
         "push": {
           "branches": "main"
+        },
+        "workflow_call": {
+          "inputs": {
+            "nightly_main_sha": {
+              "default": "",
+              "description": "Main SHA pinned by the unfiltered nightly caller",
+              "required": "false",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "backend-edge.yml": {
+      "name": "Backend Edge (Rust)",
+      "owner": "Backend realtime (plan D listen-edge)",
+      "rationale": "2026-10-21 D1: build, clippy and test for the listen-edge Rust crate only on backend/edge/** changes; workflow change named by David 2026-10-20 P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged.",
+      "triggers": {
+        "pull_request": {
+          "paths": [
+            "backend/edge/**",
+            ".github/workflows/backend-edge.yml"
+          ]
+        },
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "backend/edge/**",
+            ".github/workflows/backend-edge.yml"
+          ]
+        },
+        "workflow_call": {
+          "inputs": {
+            "nightly_main_sha": {
+              "default": "",
+              "description": "Main SHA pinned by the unfiltered nightly caller",
+              "required": "false",
+              "type": "string"
+            }
+          }
         }
       }
     },
     "backend-emulator-proofs.yml": {
       "name": "Backend Emulator Proofs",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Run canonical-memory and task recovery proofs when their production owners, runner or direct emulator tests change; the two task-test paths close the unexecuted recovery/expiry guard gap. P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged.",
       "triggers": {
         "pull_request": {
           "paths": [
@@ -2853,6 +3341,8 @@
             "backend/models/product_memory.py",
             "backend/scripts/*_emulator_test.py",
             "backend/scripts/run-emulator-proofs.sh",
+            "backend/tests/integration/test_summary_task_promotion_emulator.py",
+            "backend/tests/integration/test_candidate_accept_expiry_emulator.py",
             "backend/pylock.toml",
             "firebase.json",
             "firestore.rules",
@@ -2872,18 +3362,30 @@
             "backend/models/product_memory.py",
             "backend/scripts/*_emulator_test.py",
             "backend/scripts/run-emulator-proofs.sh",
+            "backend/tests/integration/test_summary_task_promotion_emulator.py",
+            "backend/tests/integration/test_candidate_accept_expiry_emulator.py",
             "backend/pylock.toml",
             "firebase.json",
             "firestore.rules",
             ".github/workflows/backend-emulator-proofs.yml"
           ]
+        },
+        "workflow_call": {
+          "inputs": {
+            "nightly_main_sha": {
+              "default": "",
+              "description": "Main SHA pinned by the unfiltered nightly caller",
+              "required": "false",
+              "type": "string"
+            }
+          }
         }
       }
     },
     "backend-hermetic-e2e.yml": {
       "name": "Backend Hermetic E2E",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Initial workflow inventory P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged.",
       "triggers": {
         "merge_group": {
           "types": [
@@ -2901,13 +3403,23 @@
             "cron": "53 4 * * *"
           }
         ],
+        "workflow_call": {
+          "inputs": {
+            "nightly_main_sha": {
+              "default": "",
+              "description": "Main SHA pinned by the unfiltered nightly caller",
+              "required": "false",
+              "type": "string"
+            }
+          }
+        },
         "workflow_dispatch": ""
       }
     },
     "backend-unit-tests.yml": {
       "name": "Backend Unit Tests",
       "owner": "CI maintainers",
-      "rationale": "#11183 includes the manual X connector job deployment workflow in backend contract CI; one additional daily run over the PR M forecast is budgeted conservatively",
+      "rationale": "#11183 includes the manual X connector job deployment workflow in backend contract CI; one additional daily run over the PR M forecast is budgeted conservatively. The 2026-10-18 JIT retirement removes the deleted local QA harness from this workflow's path filter. P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged. The 2026-10-26 memory-maintenance-job retirement drops the deleted gcp_memory_maintenance_job*.yml paths from this trigger.",
       "triggers": {
         "pull_request": {
           "paths": [
@@ -2944,8 +3456,6 @@
             ".github/workflows/gcp_firestore_indexes.yml",
             ".github/workflows/gcp_backend*.yml",
             ".github/workflows/gcp_llm_gateway.yml",
-            ".github/workflows/gcp_memory_maintenance_job.yml",
-            ".github/workflows/gcp_memory_maintenance_job_auto_dev.yml",
             ".github/workflows/gcp_notifications_job.yml",
             ".github/workflows/gcp_x_connector_sync_job.yml",
             ".github/scripts/check_backend_deploy_source_admission.py",
@@ -2958,7 +3468,6 @@
             "scripts/install-git-hooks.sh",
             "scripts/pre-push",
             "scripts/pre-push-singleflight",
-            "scripts/dev-harness/dev_harness/jit_vertex_gateway.py",
             "scripts/voice-provider-probe.sh"
           ]
         },
@@ -3000,8 +3509,6 @@
             ".github/workflows/gcp_firestore_indexes.yml",
             ".github/workflows/gcp_backend*.yml",
             ".github/workflows/gcp_llm_gateway.yml",
-            ".github/workflows/gcp_memory_maintenance_job.yml",
-            ".github/workflows/gcp_memory_maintenance_job_auto_dev.yml",
             ".github/workflows/gcp_notifications_job.yml",
             ".github/workflows/gcp_x_connector_sync_job.yml",
             ".github/scripts/check_backend_deploy_source_admission.py",
@@ -3014,9 +3521,18 @@
             "scripts/install-git-hooks.sh",
             "scripts/pre-push",
             "scripts/pre-push-singleflight",
-            "scripts/dev-harness/dev_harness/jit_vertex_gateway.py",
             "scripts/voice-provider-probe.sh"
           ]
+        },
+        "workflow_call": {
+          "inputs": {
+            "nightly_main_sha": {
+              "default": "",
+              "description": "Main SHA pinned by the unfiltered nightly caller",
+              "required": "false",
+              "type": "string"
+            }
+          }
         },
         "workflow_dispatch": ""
       }
@@ -3034,10 +3550,52 @@
         "workflow_dispatch": ""
       }
     },
+    "config_train.yml": {
+      "name": "Config Train (ops file)",
+      "owner": "backend deploy (two-lane lead)",
+      "rationale": "B4 config-train (named by David 2026-10-19); manual dispatch only",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "break_glass_lock": {
+              "default": "false",
+              "description": "Break-glass: skip the shared prod-train lock (still serialized per target; the actor is recorded)",
+              "required": "false",
+              "type": "boolean"
+            },
+            "environment": {
+              "default": "staging",
+              "description": "Target environment",
+              "options": [
+                "staging",
+                "prod"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "mode": {
+              "default": "plan",
+              "description": "plan (read-only diff) or apply (plan, apply, verify)",
+              "options": [
+                "plan",
+                "apply"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "ref": {
+              "default": "main",
+              "description": "Source: main or a full SHA on main (prod); any branch or SHA (staging)",
+              "required": "true"
+            }
+          }
+        }
+      }
+    },
     "desktop-backend-contracts.yml": {
       "name": "Desktop Backend Contracts",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Initial workflow inventory P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged.",
       "triggers": {
         "pull_request": {
           "paths": [
@@ -3061,26 +3619,61 @@
             "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift",
             "desktop/macos/Desktop/Sources/Rewind/Core/RewindArtifactGauntlet.swift"
           ]
+        },
+        "workflow_call": {
+          "inputs": {
+            "nightly_main_sha": {
+              "default": "",
+              "description": "Main SHA pinned by the unfiltered nightly caller",
+              "required": "false",
+              "type": "string"
+            }
+          }
         }
       }
     },
     "desktop-checks.yml": {
       "name": "Desktop Checks",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Initial workflow inventory P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged. 2026-10-21 runner economy narrows the push trigger to the detect-changes agent-runtime superset; main pushes outside desktop paths skip the workflow, PR forecast unchanged.",
       "triggers": {
         "pull_request": {
           "branches": "main"
         },
         "push": {
-          "branches": "main"
+          "branches": "main",
+          "paths": [
+            "desktop/macos/agent/**",
+            "desktop/macos/pi-mono-extension/**",
+            "desktop/macos/run.sh",
+            "desktop/macos/scripts/audit-desktop-bundle-deps.sh",
+            "desktop/macos/scripts/prepare-agent-runtime.sh",
+            "desktop/macos/scripts/prepare-desktop-bundle-native-deps.sh",
+            "desktop/macos/scripts/test-tool-surfaces.sh",
+            "desktop/macos/scripts/agent-logic-harness.sh",
+            "codemagic.yaml",
+            "scripts/pre-push",
+            "scripts/pre_push_ci_prediction.py",
+            ".github/actions/detect-changes/**",
+            ".github/workflows/desktop-checks.yml"
+          ]
+        },
+        "workflow_call": {
+          "inputs": {
+            "nightly_main_sha": {
+              "default": "",
+              "description": "Main SHA pinned by the unfiltered nightly caller",
+              "required": "false",
+              "type": "string"
+            }
+          }
         }
       }
     },
     "desktop-swift-ci.yml": {
       "name": "Desktop Swift CI",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Initial workflow inventory P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged.",
       "triggers": {
         "pull_request": {
           "branches": "main"
@@ -3093,13 +3686,23 @@
             "cron": "17 5 * * *"
           }
         ],
+        "workflow_call": {
+          "inputs": {
+            "nightly_main_sha": {
+              "default": "",
+              "description": "Main SHA pinned by the unfiltered nightly caller",
+              "required": "false",
+              "type": "string"
+            }
+          }
+        },
         "workflow_dispatch": ""
       }
     },
     "desktop-windows-ci.yml": {
       "name": "Desktop Windows CI",
       "owner": "CI maintainers",
-      "rationale": "Refresh pre-existing inventory drift: the current upstream workflow already triggers for desktop_windows_release.yml. This PR does not edit that workflow; forecast one additional execution per day per job for the existing release path, with duration budgets and global caps unchanged.",
+      "rationale": "Also triggers on web/packages/note-shared/** and contracts/note_citation_contract.json: the Windows renderer bundles @omi/note-shared from source, so its typecheck and tests must run when the package or its contract changes. Earlier: the workflow already triggered for desktop_windows_release.yml. P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged.",
       "triggers": {
         "pull_request": {
           "branches": [
@@ -3107,6 +3710,8 @@
           ],
           "paths": [
             "desktop/windows/**",
+            "web/packages/note-shared/**",
+            "contracts/note_citation_contract.json",
             ".github/workflows/desktop-windows-ci.yml",
             ".github/workflows/desktop_windows_release.yml"
           ]
@@ -3117,9 +3722,21 @@
           ],
           "paths": [
             "desktop/windows/**",
+            "web/packages/note-shared/**",
+            "contracts/note_citation_contract.json",
             ".github/workflows/desktop-windows-ci.yml",
             ".github/workflows/desktop_windows_release.yml"
           ]
+        },
+        "workflow_call": {
+          "inputs": {
+            "nightly_main_sha": {
+              "default": "",
+              "description": "Main SHA pinned by the unfiltered nightly caller",
+              "required": "false",
+              "type": "string"
+            }
+          }
         }
       }
     },
@@ -3346,7 +3963,7 @@
     "desktop_promote_beta.yml": {
       "name": "Promote Signed Desktop Candidate",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Initial workflow inventory P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged.",
       "triggers": {
         "workflow_call": {
           "inputs": {
@@ -3646,8 +4263,31 @@
     "gcp_app.yml": {
       "name": "Deploy App to Cloud Run",
       "owner": "CI maintainers",
-      "rationale": "David's 2026-09-29 CI cleanup removed push triggers because main pushes queued rejected prod deploys; retain manual dispatch.",
+      "rationale": "The app follows the frontend's main/development auto-deploy pattern for app, shared-package, and public-build configuration changes. The no-traffic candidate, browser smoke, and automatic rollback pipeline addresses the 2026-09-29 rejected-production-deploy concern; expect one path-matched main/development push run per day, outside the PR run budget.",
       "triggers": {
+        "push": {
+          "branches": [
+            "main",
+            "development"
+          ],
+          "paths": [
+            "web/app/**",
+            "web/packages/note-shared/**",
+            "config/public-build-*.json",
+            ".dockerignore",
+            ".github/workflows/gcp_app.yml",
+            ".github/actions/deploy-public-build/**",
+            ".github/actions/prepare-public-build/**",
+            ".github/actions/public-build-candidate-promotion/**",
+            ".github/scripts/preflight_public_build_config.py",
+            ".github/scripts/preflight_public_build_runtime.py",
+            ".github/scripts/check_public_build_contract.py",
+            ".github/scripts/smoke_public_build_browser.py",
+            ".github/scripts/public_build_acceptance_route.py",
+            "backend/scripts/wait_cloud_run_candidate_readiness.py",
+            "backend/scripts/resolve_cloud_run_tagged_url.py"
+          ]
+        },
         "workflow_dispatch": {
           "inputs": {
             "environment": {
@@ -3667,7 +4307,7 @@
     "gcp_backend.yml": {
       "name": "Deploy Backend to Cloud RUN",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Manual-only backend deploy workflow. 2026-10-20 adds mode=build-only (image build and push, no deploy) alongside deploy and repair-traffic-only; no automatic trigger.. 2026-10-21 plan B B2 (named by David 2026-10-21): service_images input for mode=deploy role-image opt-in, and build-only also publishes the role images (build-role-images job). B5 (2026-10-19) adds the break_glass_lock dispatch input.",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -3675,6 +4315,12 @@
               "default": "",
               "description": "Type deploy-without-proof when skip_eligibility_proof is set",
               "required": "false"
+            },
+            "break_glass_lock": {
+              "default": "false",
+              "description": "Break-glass: skip the shared prod-train lock (still serialized per target; the actor is recorded)",
+              "required": "false",
+              "type": "boolean"
             },
             "break_glass_reason": {
               "default": "",
@@ -3712,6 +4358,7 @@
               "description": "Workflow mode",
               "options": [
                 "deploy",
+                "build-only",
                 "repair-traffic-only"
               ],
               "required": "true",
@@ -3719,12 +4366,17 @@
             },
             "release_sha": {
               "default": "",
-              "description": "Exact main SHA with a successful Release Eligibility proof (deploy mode only)",
+              "description": "Exact main SHA with a successful Release Eligibility proof (deploy and build-only modes)",
               "required": "false"
             },
             "release_version": {
               "default": "",
               "description": "Release version (optional)",
+              "required": "false"
+            },
+            "service_images": {
+              "default": "",
+              "description": "mode=deploy only: service=<role image>@sha256 pairs from a build-only run of this release_sha (blank = every service keeps its current image)",
               "required": "false"
             },
             "skip_eligibility_proof": {
@@ -3758,7 +4410,7 @@
     "gcp_backend_listen_helm.yml": {
       "name": "Upgrade Backend Listen Helm Chart",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "B5 prod-train lock (2026-10-19): break_glass_lock dispatch input added; triggers otherwise unchanged. 2026-10-22 plan D D2 (lane p41-d2): listen_edge_image_digest dispatch input (blank by default) rolls backend/charts/listen-edge by admitted digest after the listen rollout; no new event trigger, no PR runs",
       "triggers": {
         "push": {
           "branches": [
@@ -3786,6 +4438,12 @@
               "default": "main",
               "description": "Branch to deploy from",
               "required": "true"
+            },
+            "break_glass_lock": {
+              "default": "false",
+              "description": "Break-glass: skip the shared prod-train lock (still serialized per target; the actor is recorded)",
+              "required": "false",
+              "type": "boolean"
             },
             "chat_agent_route": {
               "default": "chart-default",
@@ -3829,6 +4487,12 @@
               "description": "Short-SHA image to deploy (blank keeps the running image). Prod requires an ancestor of main.",
               "required": "false"
             },
+            "listen_edge_image_digest": {
+              "default": "",
+              "description": "Plan D D2: listen-edge image to roll, gcr.io/<project>/listen-edge@sha256:<digest> from a build-only train summary; it must have been built from a commit the checked-out source contains (blank leaves the listen-edge release untouched)",
+              "required": "false",
+              "type": "string"
+            },
             "mode": {
               "default": "deploy",
               "description": "deploy applies the chart; rollback restores an earlier Helm revision",
@@ -3858,7 +4522,7 @@
     "gcp_backend_pusher.yml": {
       "name": "Deploy Backend Pusher to GKE",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "B5 prod-train lock (2026-10-19): break_glass_lock dispatch input added; triggers otherwise unchanged. 2026-10-22 plan B B3 adds the pusher_role_image_digest dispatch input (development-only backend-pusher role-image opt-in, blank by default); manual dispatch only, no PR runs",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -3871,6 +4535,12 @@
               "default": "",
               "description": "Type skip-live-capacity-gate when skip_live_capacity_gate is set",
               "required": "false"
+            },
+            "break_glass_lock": {
+              "default": "false",
+              "description": "Break-glass: skip the shared prod-train lock (still serialized per target; the actor is recorded)",
+              "required": "false",
+              "type": "boolean"
             },
             "break_glass_reason": {
               "default": "",
@@ -3897,6 +4567,11 @@
               "description": "Production Pusher only: exact digest from a successful automatic development qualification",
               "required": "false"
             },
+            "pusher_role_image_digest": {
+              "default": "",
+              "description": "Development Pusher only: backend-pusher role-image digest sha256:<64 hex> from a build-only run of this SHA (blank = build and deploy today image)",
+              "required": "false"
+            },
             "release_version": {
               "default": "",
               "description": "Release version (optional)",
@@ -3920,7 +4595,7 @@
     "gcp_backend_pusher_auto_deploy.yml": {
       "name": "Auto Deploy Backend Pusher to GKE (Development)",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Initial workflow inventory. 2026-10-21 plan B B2: backend/omi_logging.py added to the pusher source-closure paths. 2026-10-22 plan B B3: backend/Dockerfile.roles added \u2014 a qualification may name the backend-pusher role image, so its image definition joins the bake trigger closure",
       "triggers": {
         "push": {
           "branches": [
@@ -3935,7 +4610,9 @@
             "backend/testing/parity_pack_v0/**",
             "backend/utils/**",
             "backend/pusher/**",
+            "backend/omi_logging.py",
             "backend/charts/pusher/**",
+            "backend/Dockerfile.roles",
             ".dockerignore",
             "backend/scripts/verify_pusher_source_closure.py",
             "backend/scripts/verify_pusher_live_deployment_gate.py",
@@ -3961,7 +4638,7 @@
     "gcp_cloud_run_metrics_egress.yml": {
       "name": "Deploy Cloud Run Metrics Egress",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Existing main/dev and explicit protected prod workflow; triggers now also span verify_pusher_live_alert_route.py and mute-timings.json so alert-import fixes re-provision Grafana on main; render/query-path gates add work without adding runners or PR events.",
       "triggers": {
         "push": {
           "branches": [
@@ -3971,7 +4648,11 @@
             "backend/charts/monitoring/prometheus-stackdriver-exporter/*_omi_cloud_run_metrics_exporter.yaml",
             "backend/charts/monitoring/kube-prometheus-stack/*_omi_monitoring_values.yaml",
             "backend/charts/monitoring/alerts/live-stt.json",
+            "backend/charts/monitoring/alerts/resilience.json",
             "backend/charts/monitoring/live-alert-gate.json",
+            "backend/charts/monitoring/mute-timings.json",
+            "backend/charts/monitoring/gmp/frontend-values.prod.yaml",
+            "backend/scripts/verify_pusher_live_alert_route.py",
             ".github/workflows/gcp_cloud_run_metrics_egress.yml"
           ]
         },
@@ -3988,55 +4669,6 @@
               "type": "choice"
             }
           }
-        }
-      }
-    },
-    "gcp_daily_memory_sweep_job.yml": {
-      "name": "Deploy Daily Memory Sweep Job to Cloud RUN",
-      "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
-      "triggers": {
-        "workflow_dispatch": {
-          "inputs": {
-            "environment": {
-              "default": "development",
-              "description": "Select the environment to deploy to",
-              "options": [
-                "development",
-                "prod"
-              ],
-              "required": "true",
-              "type": "choice"
-            },
-            "release_sha": {
-              "description": "Exact merged-main SHA with a successful Release Eligibility proof",
-              "required": "true",
-              "type": "string"
-            },
-            "release_version": {
-              "default": "",
-              "description": "Release version (optional)",
-              "required": "false"
-            }
-          }
-        }
-      }
-    },
-    "gcp_daily_memory_sweep_job_auto_dev.yml": {
-      "name": "Auto Deploy Daily Memory Sweep Job to Development",
-      "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
-      "triggers": {
-        "workflow_run": {
-          "branches": [
-            "main"
-          ],
-          "types": [
-            "completed"
-          ],
-          "workflows": [
-            "Release Eligibility"
-          ]
         }
       }
     },
@@ -4092,7 +4724,7 @@
     "gcp_diarizer.yml": {
       "name": "Deploy Diarizer to GKE",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "B5 prod-train lock and worker digest promotion (2026-10-19): break_glass_lock and image_digest dispatch inputs added. 2026-10-24: diarizer-batch service option added so the prod-omi-diarizer-batch Helm release has a CI deploy path (W1); triggers otherwise unchanged",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -4100,6 +4732,12 @@
               "default": "main",
               "description": "Branch to deploy from",
               "required": "true"
+            },
+            "break_glass_lock": {
+              "default": "false",
+              "description": "Break-glass: skip the shared prod-train lock (still serialized per target; the actor is recorded)",
+              "required": "false",
+              "type": "boolean"
             },
             "environment": {
               "default": "development",
@@ -4111,10 +4749,26 @@
               "required": "true",
               "type": "choice"
             },
+            "image_digest": {
+              "default": "",
+              "description": "batch-pipeline-worker only: deploy this already-built gcr.io digest (sha256:...) instead of rebuilding; its omi.release.tree label must equal the source tree",
+              "required": "false"
+            },
             "release_version": {
               "default": "",
               "description": "Release version (optional)",
               "required": "false"
+            },
+            "service": {
+              "default": "diarizer",
+              "description": "Select the GPU service to deploy",
+              "options": [
+                "diarizer",
+                "diarizer-batch",
+                "batch-pipeline-worker"
+              ],
+              "required": "true",
+              "type": "choice"
             }
           }
         }
@@ -4170,8 +4824,22 @@
     "gcp_firestore_indexes.yml": {
       "name": "Reconcile Firestore Indexes",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "P65: prebuild additive same-repository index PRs during review; main/manual reconciliation and required prod approval remain. No new images or vendor calls.",
       "triggers": {
+        "pull_request": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "backend/database/firestore_index_registry.py",
+            "firestore.indexes.json"
+          ],
+          "types": [
+            "opened",
+            "synchronize",
+            "reopened"
+          ]
+        },
         "push": {
           "branches": [
             "main"
@@ -4242,7 +4910,7 @@
     "gcp_frontend.yml": {
       "name": "Deploy Frontend to Cloud Run",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "The frontend depends on @omi/note-shared; package-only edits must trigger its existing main/development deployment. No new PR event or runner. Allow one extra p50 minute for the local package install and consumer rebuild.",
       "triggers": {
         "push": {
           "branches": [
@@ -4251,6 +4919,7 @@
           ],
           "paths": [
             "web/frontend/**",
+            "web/packages/note-shared/**",
             "config/public-build-*.json",
             ".github/actions/deploy-public-build/**",
             ".github/actions/prepare-public-build/**",
@@ -4281,10 +4950,48 @@
         }
       }
     },
+    "gcp_incluster_guards.yml": {
+      "name": "Deploy In-cluster Safety Guards",
+      "owner": "Backend infrastructure",
+      "rationale": "Manual independent guard-only Helm release; no image build or serving rollout; zero PR runs.",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "dry_run": {
+              "default": "false",
+              "description": "Kill switch for HPA writes (development always dry runs)",
+              "required": "true",
+              "type": "boolean"
+            },
+            "enabled": {
+              "default": "true",
+              "description": "Enable guard resources (false removes this release's guards)",
+              "required": "true",
+              "type": "boolean"
+            },
+            "environment": {
+              "default": "development",
+              "description": "Environment for the independent guard release",
+              "options": [
+                "development",
+                "prod"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "source_sha": {
+              "description": "Full merged source SHA (must be an ancestor of main)",
+              "required": "true",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
     "gcp_llm_gateway.yml": {
       "name": "Deploy LLM Gateway to GKE",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "B5 prod-train lock (2026-10-19): break_glass_lock dispatch input added; triggers otherwise unchanged. 2026-10-22 plan B B3 adds the gateway_image_digest dispatch input (backend-gateway role-image opt-in, blank by default); manual dispatch only, no PR runs",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -4297,6 +5004,12 @@
               "default": "",
               "description": "Type deploy-without-proof when skip_eligibility_proof is set",
               "required": "false"
+            },
+            "break_glass_lock": {
+              "default": "false",
+              "description": "Break-glass: skip the shared prod-train lock (still serialized per target; the actor is recorded)",
+              "required": "false",
+              "type": "boolean"
             },
             "break_glass_reason": {
               "default": "",
@@ -4313,6 +5026,11 @@
               "required": "true",
               "type": "choice"
             },
+            "gateway_image_digest": {
+              "default": "",
+              "description": "Role-image opt-in: backend-gateway digest sha256:<64 hex> from a build-only run of the admitted SHA (blank = build and deploy today image)",
+              "required": "false"
+            },
             "release_sha": {
               "default": "",
               "description": "Production only: exact main SHA with a successful first-attempt Release Eligibility proof",
@@ -4325,55 +5043,6 @@
               "type": "boolean"
             }
           }
-        }
-      }
-    },
-    "gcp_memory_maintenance_job.yml": {
-      "name": "Deploy Memory Maintenance Job to Cloud RUN",
-      "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
-      "triggers": {
-        "workflow_dispatch": {
-          "inputs": {
-            "branch": {
-              "default": "main",
-              "description": "Branch to deploy from",
-              "required": "true",
-              "type": "string"
-            },
-            "environment": {
-              "default": "development",
-              "description": "Select the environment to deploy to",
-              "options": [
-                "development",
-                "prod"
-              ],
-              "required": "true",
-              "type": "choice"
-            },
-            "release_version": {
-              "default": "",
-              "description": "Release version (optional)",
-              "required": "false"
-            }
-          }
-        }
-      }
-    },
-    "gcp_memory_maintenance_job_auto_dev.yml": {
-      "name": "Auto Deploy Memory Maintenance Job to Development",
-      "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
-      "triggers": {
-        "push": {
-          "branches": [
-            "main"
-          ],
-          "paths": [
-            "backend/**",
-            ".github/workflows/gcp_memory_maintenance_job.yml",
-            ".github/workflows/gcp_memory_maintenance_job_auto_dev.yml"
-          ]
         }
       }
     },
@@ -4411,7 +5080,7 @@
     "gcp_nllb_translation.yml": {
       "name": "Deploy NLLB Translation to GKE",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Manual NLLB rollout adds receipt-bound existing-image rollback for historical sources; no automatic trigger",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -4433,6 +5102,11 @@
             "release_version": {
               "default": "",
               "description": "Release version (optional)",
+              "required": "false"
+            },
+            "rollback_digest": {
+              "default": "",
+              "description": "Replay the recorded prior serving sha256 digest without rebuilding historical source",
               "required": "false"
             }
           }
@@ -4474,7 +5148,7 @@
     "gcp_parakeet.yml": {
       "name": "Deploy Parakeet ASR to GKE",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "B5 prod-train lock (2026-10-19): break_glass_lock dispatch input added; triggers otherwise unchanged",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -4482,6 +5156,12 @@
               "default": "main",
               "description": "Branch to deploy from",
               "required": "true"
+            },
+            "break_glass_lock": {
+              "default": "false",
+              "description": "Break-glass: skip the shared prod-train lock (still serialized per target; the actor is recorded)",
+              "required": "false",
+              "type": "boolean"
             },
             "environment": {
               "default": "development",
@@ -4679,7 +5359,7 @@
     "grafana_dashboard_provisioning.yml": {
       "name": "Provision Grafana dashboards",
       "owner": "CI maintainers",
-      "rationale": "Register the Grafana provisioning workflow; runs on dashboard JSON merges to main.",
+      "rationale": "Existing main/manual workflow validates alert sources as well as dashboards, selects one environment, and requires explicit protected prod dispatch; the prod-only Business API step reuses the existing job, no new workflow or PR matrix.",
       "triggers": {
         "push": {
           "branches": [
@@ -4687,7 +5367,14 @@
           ],
           "paths": [
             "backend/charts/monitoring/dashboards/**",
-            ".github/workflows/grafana_dashboard_provisioning.yml"
+            "backend/charts/monitoring/alerts/**",
+            "backend/charts/monitoring/alert-rules.json",
+            "backend/scripts/provision_monitoring_alerts.py",
+            "backend/scripts/provision_grafana_dashboards.py",
+            ".github/workflows/grafana_dashboard_provisioning.yml",
+            ".github/scripts/provision_grafana_dashboards.py",
+            ".github/scripts/grafana_business.py",
+            "web/admin/grafana/dashboards/omi-tv-v2.json"
           ]
         },
         "workflow_dispatch": {
@@ -4697,150 +5384,10 @@
               "description": "Select the Grafana to provision",
               "options": [
                 "prod",
-                "dev",
-                "both"
+                "dev"
               ],
               "required": "true",
               "type": "choice"
-            }
-          }
-        }
-      }
-    },
-    "jit_qa_cloud_run.yml": {
-      "name": "JIT isolated QA Cloud Run plane",
-      "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
-      "triggers": {
-        "workflow_dispatch": {
-          "inputs": {
-            "confirmation": {
-              "default": "",
-              "description": "Type RUN_ONCE to admit the drain execution",
-              "required": "false",
-              "type": "string"
-            },
-            "release_sha": {
-              "description": "Immutable main ancestor SHA with a successful first-attempt Release Eligibility proof",
-              "required": "true",
-              "type": "string"
-            },
-            "run_once": {
-              "default": "false",
-              "description": "Run the bounded ledger drain after deployment",
-              "required": "true",
-              "type": "boolean"
-            }
-          }
-        }
-      }
-    },
-    "jit_qa_manual_operator.yml": {
-      "name": "Operate isolated JIT QA data plane",
-      "owner": "CI maintainers",
-      "rationale": "Add a read-only index-oracle choice to the existing manual dispatch; no new events, jobs, or automatic runs",
-      "triggers": {
-        "workflow_dispatch": {
-          "inputs": {
-            "confirmation": {
-              "description": "Use ENABLE_QA_API, APPLY_JIT_QA_INDEXES, PREPARE_QA, DRAIN_VERIFY_QA, SWEEP_VERIFY_QA, SWEEP_REPAIR_QA, ROLLFORWARD_QA, or ROLLBACK_QA for mutating operations",
-              "required": "false",
-              "type": "string"
-            },
-            "invocation_id": {
-              "default": "",
-              "description": "Tombstoned daily-sweep model invocation id to repair (sweep-repair only)",
-              "required": "false",
-              "type": "string"
-            },
-            "operation": {
-              "description": "Named QA operation to run",
-              "options": [
-                "bootstrap",
-                "ensure-infrastructure-api",
-                "indexes-plan",
-                "indexes-apply",
-                "index-oracle",
-                "prepare",
-                "inspect",
-                "drain-verify",
-                "sweep-verify",
-                "sweep-repair",
-                "rollback",
-                "rollforward"
-              ],
-              "required": "true",
-              "type": "choice"
-            },
-            "repair_attestation_confirmation": {
-              "default": "",
-              "description": "Optional human assertion ATTEST_NO_PROVIDER_DISPATCH_AND_WORKER_TERMINATED; never infer from absent accounting",
-              "required": "false",
-              "type": "string"
-            },
-            "repair_attestation_reference": {
-              "default": "",
-              "description": "Content-free reference to independently reviewed claim evidence (required with repair attestation)",
-              "required": "false",
-              "type": "string"
-            },
-            "resume_execution": {
-              "default": "",
-              "description": "Existing first drain execution to resume after a bounded launcher timeout",
-              "required": "false",
-              "type": "string"
-            },
-            "run_id": {
-              "description": "Lowercase synthetic fixture namespace (for example qa-proof-20260905)",
-              "required": "false",
-              "type": "string"
-            },
-            "source_sha": {
-              "description": "Immutable deployed QA source SHA with first-attempt Release Eligibility proof",
-              "required": "true",
-              "type": "string"
-            }
-          }
-        }
-      }
-    },
-    "jit_qa_typesense_projection.yml": {
-      "name": "JIT QA Typesense lexical projection",
-      "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
-      "triggers": {
-        "workflow_dispatch": {
-          "inputs": {
-            "mode": {
-              "default": "prove",
-              "description": "Bootstrap an intentionally unready service, or rehydrate and prove current-ledger retrieval",
-              "options": [
-                "bootstrap",
-                "prove"
-              ],
-              "required": "true",
-              "type": "choice"
-            },
-            "query": {
-              "description": "A real lexical term present in an active QA ledger row; never use a fabricated response",
-              "required": "false",
-              "type": "string"
-            },
-            "release_sha": {
-              "description": "Immutable main ancestor SHA with a successful first-attempt Release Eligibility proof",
-              "required": "true",
-              "type": "string"
-            },
-            "run_id": {
-              "description": "Lowercase namespaced projection run identifier",
-              "required": "true",
-              "type": "string"
-            },
-            "typesense_base_image": {
-              "default": "docker.io/typesense/typesense@sha256:5c12af89130b8ee0be11541321ba8a3a7c7a538d7c6cd95e0409dc2d75ca6455",
-              "description": "Reviewed docker.io/typesense/typesense image pinned by sha256 digest (27.1)",
-              "required": "true",
-              "type": "string"
             }
           }
         }
@@ -4868,10 +5415,23 @@
         }
       }
     },
+    "main_nightly_full.yml": {
+      "name": "Main Nightly Full",
+      "owner": "CI maintainers",
+      "rationale": "David-named P18: one 03:07Z unfiltered main run plus manual branch validation; no deploy, inherited secrets or external writes; existing reusable job budgets own execution cost.",
+      "triggers": {
+        "schedule": [
+          {
+            "cron": "7 3 * * *"
+          }
+        ],
+        "workflow_dispatch": ""
+      }
+    },
     "mobile-app-checks.yml": {
       "name": "Mobile App Checks",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory Add manual exact-source Android acceptance before tags when path selection skipped it; emulator only is forced, other jobs retain their path conditions.",
+      "rationale": "Initial workflow inventory Add manual exact-source Android acceptance before tags when path selection skipped it; emulator only is forced, other jobs retain their path conditions. P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged.",
       "triggers": {
         "pull_request": "",
         "push": {
@@ -4882,16 +5442,31 @@
             "cron": "41 4 * * *"
           }
         ],
+        "workflow_call": {
+          "inputs": {
+            "nightly_main_sha": {
+              "default": "",
+              "description": "Main SHA pinned by the unfiltered nightly caller",
+              "required": "false",
+              "type": "string"
+            }
+          }
+        },
         "workflow_dispatch": ""
       }
     },
     "mobile_daily_train.yml": {
       "name": "Mobile daily train",
       "owner": "CI maintainers",
-      "rationale": "Daily mobile train dispatch is owned by the operator-side release gate (audits candidates against the live baseline, dispatches only on a green verdict; see .github/agent-docs/mobile-release-process.md). The fixed 14:00 UTC schedule was removed 2026-10-14 so an ungated train can no longer fire on a bad candidate; manual workflow_dispatch (dry_run) remains. 2026-10-14: optional pin_ios/pin_android dispatch inputs carry the gate's audited candidate identifiers; they add no runs (same single gated dispatch per day).",
+      "rationale": "Daily mobile train dispatch is owned by the operator-side release gate (audits candidates against the live baseline, dispatches only on a green verdict; see .github/agent-docs/mobile-release-process.md). The fixed 14:00 UTC schedule was removed 2026-10-14 so an ungated train can no longer fire on a bad candidate; manual workflow_dispatch (dry_run) remains. 2026-10-14: optional pin_ios/pin_android dispatch inputs carry the gate's audited candidate identifiers; they add no runs (same single gated dispatch per day). 2026-10-20: optional capture_health_override input lets one run's rollout hops past a capture-health HOLD (rare manual dispatch).",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
+            "capture_health_override": {
+              "default": "",
+              "description": "Reason to let THIS run's rollout hops past a capture-health HOLD (mobile_capture_health.py); empty = no override",
+              "type": "string"
+            },
             "dry_run": {
               "default": "false",
               "description": "Read store state and print the plan without submitting or drafting",
@@ -4932,6 +5507,27 @@
         "workflow_dispatch": ""
       }
     },
+    "mobile_rollout_watch.yml": {
+      "name": "Mobile rollout watch",
+      "owner": "CI maintainers",
+      "rationale": "Intraday half of the self-driving mobile release lane (see .github/agent-docs/mobile-release-process.md): every 4h dispatches the Codemagic mobile-rollout-advance workflow, which moves only ALREADY-RELEASED rollouts along the agreed 12h exposure profile (iOS phased jump to 100% after its 12h observation window, Android staged ladder hop 1->10->50->100% per 4h window). Dispatch-only ubuntu runner (~seconds), no build; 2026-10-17, operator-approved posture. 2026-10-20: manual workflow_dispatch with a capture_health_override input for a one-shot advance past a capture-health HOLD.",
+      "triggers": {
+        "schedule": [
+          {
+            "cron": "0 1,5,9,13,17,21 * * *"
+          }
+        ],
+        "workflow_dispatch": {
+          "inputs": {
+            "capture_health_override": {
+              "default": "",
+              "description": "Reason to advance past a capture-health HOLD for this run only; empty = no override",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
     "onboarding_figma_sync.yml": {
       "name": "Sync macOS onboarding to Figma source",
       "owner": "CI maintainers",
@@ -4943,7 +5539,7 @@
     "openapi-contract.yml": {
       "name": "OpenAPI Contract",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Initial workflow inventory P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged.",
       "triggers": {
         "pull_request": {
           "paths": [
@@ -4987,6 +5583,16 @@
             "docs/docs.json",
             ".github/workflows/openapi-contract.yml"
           ]
+        },
+        "workflow_call": {
+          "inputs": {
+            "nightly_main_sha": {
+              "default": "",
+              "description": "Main SHA pinned by the unfiltered nightly caller",
+              "required": "false",
+              "type": "string"
+            }
+          }
         },
         "workflow_dispatch": ""
       }
@@ -4994,7 +5600,7 @@
     "opentofu-development-wif-pilot-validate.yml": {
       "name": "OpenTofu Development WIF Pilot Validation",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Initial workflow inventory P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged.",
       "triggers": {
         "pull_request": {
           "branches": [
@@ -5021,6 +5627,16 @@
             "infrastructure/opentofu/pilots/development-wif-plan/**",
             "infrastructure/opentofu/probes/development-project-read/**"
           ]
+        },
+        "workflow_call": {
+          "inputs": {
+            "nightly_main_sha": {
+              "default": "",
+              "description": "Main SHA pinned by the unfiltered nightly caller",
+              "required": "false",
+              "type": "string"
+            }
+          }
         }
       }
     },
@@ -5035,7 +5651,7 @@
     "opentofu-foundation-validate.yml": {
       "name": "OpenTofu Foundation Validation",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Initial workflow inventory P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged.",
       "triggers": {
         "pull_request": {
           "branches": [
@@ -5058,6 +5674,16 @@
             ".github/workflows/opentofu-foundation-validate.yml",
             "infrastructure/opentofu/**"
           ]
+        },
+        "workflow_call": {
+          "inputs": {
+            "nightly_main_sha": {
+              "default": "",
+              "description": "Main SHA pinned by the unfiltered nightly caller",
+              "required": "false",
+              "type": "string"
+            }
+          }
         }
       }
     },
@@ -5076,7 +5702,7 @@
     "public-build-config-preflight.yml": {
       "name": "Public Build Configuration Preflight",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Initial workflow inventory P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged.",
       "triggers": {
         "pull_request": {
           "branches": [
@@ -5109,6 +5735,16 @@
             "web/personas-open-source/src/components/public-build-canary.tsx"
           ]
         },
+        "workflow_call": {
+          "inputs": {
+            "nightly_main_sha": {
+              "default": "",
+              "description": "Main SHA pinned by the unfiltered nightly caller",
+              "required": "false",
+              "type": "string"
+            }
+          }
+        },
         "workflow_dispatch": ""
       }
     },
@@ -5136,7 +5772,7 @@
     "python-cli-ci.yml": {
       "name": "Python CLI",
       "owner": "CI maintainers",
-      "rationale": "Path-filter widened so changes to the PyPI publish gate also run Python CLI verification.",
+      "rationale": "Path-filter widened so changes to the PyPI publish gate also run Python CLI verification. P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged.",
       "triggers": {
         "pull_request": {
           "branches": [
@@ -5159,7 +5795,34 @@
             ".github/workflows/python-cli-ci.yml",
             ".github/workflows/publish_omi_cli.yml"
           ]
+        },
+        "workflow_call": {
+          "inputs": {
+            "nightly_main_sha": {
+              "default": "",
+              "description": "Main SHA pinned by the unfiltered nightly caller",
+              "required": "false",
+              "type": "string"
+            }
+          }
         }
+      }
+    },
+    "reid_onboarding_vercel.yml": {
+      "name": "Deploy Reid onboarding prototype to Vercel",
+      "owner": "kodjima33",
+      "rationale": "Publishes prototypes/device_first_onboarding to omi-reid-onboarding.vercel.app (the reid arm of the onboarding-variant flag) only when that path changes on main; Vercel cannot build Flutter",
+      "triggers": {
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "prototypes/device_first_onboarding/**",
+            ".github/workflows/reid_onboarding_vercel.yml"
+          ]
+        },
+        "workflow_dispatch": ""
       }
     },
     "release-eligibility.yml": {
@@ -5178,7 +5841,7 @@
     "repo-checks.yml": {
       "name": "Repo Checks",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Initial workflow inventory P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged.",
       "triggers": {
         "pull_request": {
           "branches": "main",
@@ -5193,6 +5856,16 @@
         },
         "push": {
           "branches": "main"
+        },
+        "workflow_call": {
+          "inputs": {
+            "nightly_main_sha": {
+              "default": "",
+              "description": "Main SHA pinned by the unfiltered nightly caller",
+              "required": "false",
+              "type": "string"
+            }
+          }
         }
       }
     },
@@ -5217,10 +5890,52 @@
         }
       }
     },
+    "role_images.yml": {
+      "name": "Role Images",
+      "owner": "Backend platform (plan B role images)",
+      "rationale": "2026-10-21 plan B B2, named by David 2026-10-21: build-and-probe every role image on PRs that change an image-definition input and on every backend merge to main; never authenticates or pushes P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged.",
+      "triggers": {
+        "pull_request": {
+          "paths": [
+            "backend/Dockerfile.roles",
+            "backend/pylock.runtime.toml",
+            "backend/pusher/pylock.toml",
+            "backend/runtime_images.json",
+            "backend/scripts/runtime_image_contracts.py",
+            "backend/scripts/role_images.py",
+            "backend/edge/**",
+            "backend/utils/stt/assets/silero_vad.onnx",
+            ".dockerignore",
+            ".github/workflows/role_images.yml"
+          ]
+        },
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "backend/**",
+            ".dockerignore",
+            ".github/workflows/role_images.yml"
+          ]
+        },
+        "workflow_call": {
+          "inputs": {
+            "nightly_main_sha": {
+              "default": "",
+              "description": "Main SHA pinned by the unfiltered nightly caller",
+              "required": "false",
+              "type": "string"
+            }
+          }
+        },
+        "workflow_dispatch": ""
+      }
+    },
     "runtime_image_contracts.yml": {
       "name": "Runtime Image Contracts",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Initial workflow inventory P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged.",
       "triggers": {
         "pull_request": {
           "paths": [
@@ -5232,13 +5947,23 @@
             ".github/workflows/gcp_*.yml"
           ]
         },
+        "workflow_call": {
+          "inputs": {
+            "nightly_main_sha": {
+              "default": "",
+              "description": "Main SHA pinned by the unfiltered nightly caller",
+              "required": "false",
+              "type": "string"
+            }
+          }
+        },
         "workflow_dispatch": ""
       }
     },
     "sdk-cpp.yml": {
       "name": "C++ Device SDK",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Initial workflow inventory P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged.",
       "triggers": {
         "pull_request": {
           "paths": [
@@ -5254,13 +5979,23 @@
             "sdks/device/cpp/**",
             ".github/workflows/sdk-cpp.yml"
           ]
+        },
+        "workflow_call": {
+          "inputs": {
+            "nightly_main_sha": {
+              "default": "",
+              "description": "Main SHA pinned by the unfiltered nightly caller",
+              "required": "false",
+              "type": "string"
+            }
+          }
         }
       }
     },
     "sdk-rust.yml": {
       "name": "Rust SDK",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Initial workflow inventory P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged.",
       "triggers": {
         "pull_request": {
           "paths": [
@@ -5276,6 +6011,16 @@
             "sdks/rust/**",
             ".github/workflows/sdk-rust.yml"
           ]
+        },
+        "workflow_call": {
+          "inputs": {
+            "nightly_main_sha": {
+              "default": "",
+              "description": "Main SHA pinned by the unfiltered nightly caller",
+              "required": "false",
+              "type": "string"
+            }
+          }
         }
       }
     },
@@ -5298,10 +6043,16 @@
     "sync_ledger_fence_cutover.yml": {
       "name": "Sync ledger fence cutover",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Initial workflow inventory. 2026-10-21 B5 (M3 review): break_glass_lock input; prod takes the prod-train lock",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
+            "break_glass_lock": {
+              "default": "false",
+              "description": "Break-glass: skip the shared prod-train lock (still serialized on the backend stack lock)",
+              "required": "false",
+              "type": "boolean"
+            },
             "candidate_image": {
               "description": "Exact immutable backend image digest (gcr.io/...@sha256:<64 hex>)",
               "required": "true",
@@ -5337,20 +6088,40 @@
     "web-checks.yml": {
       "name": "Web Checks",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Initial workflow inventory P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged. 2026-10-21 runner economy narrows the push trigger to the detect-changes web superset; main pushes outside web paths skip the workflow, PR forecast unchanged.",
       "triggers": {
         "pull_request": {
           "branches": "main"
         },
         "push": {
-          "branches": "main"
+          "branches": "main",
+          "paths": [
+            "web/frontend/**",
+            "web/app/**",
+            "web/admin/**",
+            "web/personas-open-source/**",
+            "web/packages/note-shared/**",
+            "firestore.indexes.json",
+            ".github/actions/detect-changes/**",
+            ".github/workflows/web-checks.yml"
+          ]
+        },
+        "workflow_call": {
+          "inputs": {
+            "nightly_main_sha": {
+              "default": "",
+              "description": "Main SHA pinned by the unfiltered nightly caller",
+              "required": "false",
+              "type": "string"
+            }
+          }
         }
       }
     },
     "windows-preflight-portability.yml": {
       "name": "Windows Preflight Portability",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Initial workflow inventory P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged.",
       "triggers": {
         "pull_request": {
           "branches": [
@@ -5389,6 +6160,16 @@
             "scripts/pr-preflight",
             "scripts/test-pre-push-worktree-fallback.sh"
           ]
+        },
+        "workflow_call": {
+          "inputs": {
+            "nightly_main_sha": {
+              "default": "",
+              "description": "Main SHA pinned by the unfiltered nightly caller",
+              "required": "false",
+              "type": "string"
+            }
+          }
         }
       }
     }

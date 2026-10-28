@@ -1,0 +1,47 @@
+enabled: true
+image:
+  repository: gcr.io/based-hardware/batch-pipeline-worker
+  # gcp_diarizer.yml builds the prod image and supplies its immutable digest.
+  digest: ""
+serviceAccountName: batch-pipeline-worker
+gcpServiceAccount: batch-pipeline-worker@based-hardware.iam.gserviceaccount.com
+bucket: based-hardware-batch-pipeline-staging
+dataPlaneProject: based-hardware
+stage: prod
+namespace: batch_pipeline_prod
+secretName: prod-omi-backend-secrets
+# Keep the current four workers on image-only rolls. The balanced scaler needs
+# a measured target and lead-approved cutover after the current5c verdict.
+# Its latent min2/max24 budget does not authorize capacity or create an HPA.
+replicaCount: 4
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 24
+  balancedPools:
+    enabled: false
+# Preserve the current shared OD/Spot placement until the approved cutover.
+nodeSelector:
+  cloud.google.com/gke-nodepool: null
+  service: batch-pipeline
+  env: prod
+tolerations:
+  - key: omi.ai/batch-pipeline
+    operator: Equal
+    value: "true"
+    effect: NoSchedule
+  - key: nvidia.com/gpu
+    operator: Equal
+    value: present
+    effect: NoSchedule
+worker:
+  # Preserve the measured profiling-on state across the scaler Helm upgrade.
+  stageProfilingEnabled: true
+  shadowRecoveryApiUrl: "https://backend-integration-hhibjajaja-uc.a.run.app"
+  apiUrl: https://backend-sync-hhibjajaja-uc.a.run.app
+  audience: https://backend-sync-hhibjajaja-uc.a.run.app
+  emptyAsrRecoveryEnabled: true
+  emptyAsrDispositionEnabled: true
+  headPriorityEnabled: true
+  workerSilenceDispositionEnabled: true
+  correctnessMetricsEnabled: true

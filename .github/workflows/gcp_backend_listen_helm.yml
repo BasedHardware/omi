@@ -79,18 +79,44 @@ on:
         required: false
         default: ''
         type: string
+      # Plan D D2: the Rust edge ships through this workflow as a second chart
+      # (backend/charts/listen-edge) next to backend-listen. The image comes from
+      # the build-only train's role-image publish (gcp_backend.yml, job
+      # build-role-images); copy its digest from that run's "Role images" summary.
+      # See backend/docs/runbooks/edge-shadow-rollout.md.
+      listen_edge_image_digest:
+        description: 'Plan D D2: listen-edge image to roll, gcr.io/<project>/listen-edge@sha256:<digest> from a build-only train summary; it must have been built from a commit the checked-out source contains (blank leaves the listen-edge release untouched)'
+        required: false
+        default: ''
+        type: string
+      break_glass_lock:
+        description: 'Break-glass: skip the shared prod-train lock (still serialized per target; the actor is recorded)'
+        required: false
+        default: false
+        type: boolean
 
-# This chart path mutates backend-listen and shared backend-secrets, which are
-# also applied by the full backend deploy for the same environment.
+# This path mutates backend-listen, the production NEG coverage exporter, and
+# shared backend-secrets, which are also applied by the full backend deploy.
+# B5 (named by David, 2026-10-19 fourth round #9): every prod deploy writer shares the
+# prod-train lock, so trains, config-trains and GPU/listen deploys never overlap and the
+# ramp controller can refuse while one runs (backend/scripts/prod_train_lock.py).
+# Break-glass keeps the pre-B5 per-target lock. Development groups are unchanged.
 concurrency:
-  group: deploy-backend-stack-${{ github.event.inputs.environment || 'development' }}
+  group: ${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || format('deploy-backend-stack-{0}', github.event.inputs.environment || 'development') }}
   cancel-in-progress: false
 
 env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
   REGION: us-central1
 
 jobs:
   helm-upgrade:
+    outputs:
+      checked_out_sha: ${{ steps.admit-deploy-source.outputs.checked_out_sha }}
+      neg_coverage_exporter_image_tag: ${{ steps.resolve-listen-image.outputs.neg_coverage_exporter_image_tag }}
     # On manual dispatch use the chosen environment; on auto push only deploy
     # to dev (prod still requires an explicit workflow_dispatch for safety).
     environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
@@ -114,6 +140,7 @@ jobs:
           fetch-depth: 0
 
       - name: Admit checked-out production source and image identity
+        id: admit-deploy-source
         run: |
           set -euo pipefail
           CHECKED_OUT_SHA=$(git rev-parse HEAD)
@@ -128,6 +155,7 @@ jobs:
           echo "Admitted deployment source: $CHECKED_OUT_SHA"
           echo "CHECKED_OUT_SHA=$CHECKED_OUT_SHA" >> "$GITHUB_ENV"
           echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
+          echo "checked_out_sha=$CHECKED_OUT_SHA" >> "$GITHUB_OUTPUT"
 
       - name: Install Helm
         uses: azure/setup-helm@v5
@@ -168,6 +196,7 @@ jobs:
             || echo "No existing release found"
 
       - name: Resolve backend-listen image tag
+        id: resolve-listen-image
         if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
         env:
           REQUESTED_TAG: ${{ github.event.inputs.image_tag }}
@@ -180,6 +209,17 @@ jobs:
             if [[ -z "$RUNNING_TAG" || "$RUNNING_TAG" == "$IMAGE" || "$RUNNING_TAG" == "latest" ]]; then
               echo "ERROR: backend-listen is not pinned to an immutable tag (${IMAGE:-<missing>}) and no image_tag was given." >&2
               echo "Pass image_tag=<short-sha> to set one explicitly." >&2
+              exit 1
+            fi
+            # The chart values no longer set the legacy UID allowlist env keys, so a
+            # chart-only rollout must never land on an image that predates the
+            # Firestore cohort resolver: that runtime reads the absent key as an
+            # empty allowlist and admits every user. Require the running image's
+            # commit to contain the cohort policy module.
+            RUNNING_COMMIT="$(git rev-parse "${RUNNING_TAG}^{commit}" 2>/dev/null || true)"
+            if [[ -z "$RUNNING_COMMIT" ]] || ! git cat-file -e "${RUNNING_COMMIT}:backend/config/rollout_cohorts.py" 2>/dev/null; then
+              echo "ERROR: chart-only upgrade would apply cohort-removal values onto ${RUNNING_TAG}, which does not resolve to a cohort-aware commit in this repository." >&2
+              echo "Deploy with image_tag=<short-sha containing the Firestore cohort resolver> first; the chart-only lane can then keep that image." >&2
               exit 1
             fi
             echo "Keeping the running image tag: $RUNNING_TAG"
@@ -209,6 +249,62 @@ jobs:
           fi
           echo "Deploying image tag ${RESOLVED_TAG} (currently ${RUNNING_TAG:-<none>})"
           echo "BACKEND_LISTEN_IMAGE_TAG=$RESOLVED_TAG" >> "$GITHUB_ENV"
+          echo "neg_coverage_exporter_image_tag=$RESOLVED_TAG" >> "$GITHUB_OUTPUT"
+
+      # Plan D D2: the listen-edge image is admitted by digest before anything is
+      # applied. The admission reads only the image config (the same imagetools
+      # inspect deploy-backend-stack uses for service_images): this project's
+      # registry, the listen-edge image, a revision label equal to its
+      # OMI_RELEASE_SHA stamp, and that revision an ancestor of the checked-out
+      # source admitted above — the image_tag rule applied to a digest, so a
+      # digest from an earlier train (or the previous one, for rollback) stays
+      # deployable after main moves on. Blank input skips every listen-edge
+      # step; nothing else in this workflow changes.
+      - name: Login to GCR for the listen-edge image read
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' && github.event.inputs.listen_edge_image_digest != '' }}
+        run: gcloud auth configure-docker --quiet
+
+      - name: Set up Docker Buildx for the listen-edge image read
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' && github.event.inputs.listen_edge_image_digest != '' }}
+        uses: docker/setup-buildx-action@v4
+
+      - name: Admit listen-edge image digest
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' && github.event.inputs.listen_edge_image_digest != '' }}
+        env:
+          LISTEN_EDGE_IMAGE_DIGEST_INPUT: ${{ github.event.inputs.listen_edge_image_digest }}
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/admit_listen_edge_image.py \
+            --digest "$LISTEN_EDGE_IMAGE_DIGEST_INPUT" \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --sha "$CHECKED_OUT_SHA" \
+            --github-env "$GITHUB_ENV"
+
+      # Private listen-edge env values (the shared EDGE_SHADOW_TOKEN) live only
+      # in the prod environment secret LISTEN_EDGE_PRIVATE_VALUES_YAML, the same
+      # privateEnv pattern and hygiene as LISTEN_PRIVATE_VALUES_YAML above:
+      # validated before anything is applied, never printed, removed after.
+      - name: Materialize private listen-edge values (prod only)
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' && github.event.inputs.environment == 'prod' && github.event.inputs.listen_edge_image_digest != '' }}
+        env:
+          LISTEN_EDGE_PRIVATE_VALUES_YAML: ${{ secrets.LISTEN_EDGE_PRIVATE_VALUES_YAML }}
+          VALUES_FILE: ./backend/charts/listen-edge/${{ vars.ENV }}_omi_listen_edge_values.yaml
+        run: |
+          set -euo pipefail
+          if [[ -z "${LISTEN_EDGE_PRIVATE_VALUES_YAML:-}" ]]; then
+            echo "No private listen-edge values configured; chart defaults apply."
+            exit 0
+          fi
+          python3 -m pip install -q pyyaml
+          umask 077
+          PRIVATE_VALUES_FILE="$(mktemp "${RUNNER_TEMP}/listen-edge-private-values.XXXXXX")"
+          printf '%s\n' "$LISTEN_EDGE_PRIVATE_VALUES_YAML" > "$PRIVATE_VALUES_FILE"
+          unset LISTEN_EDGE_PRIVATE_VALUES_YAML
+          echo "LISTEN_EDGE_PRIVATE_VALUES_FILE=$PRIVATE_VALUES_FILE" >> "$GITHUB_ENV"
+          python3 .github/scripts/listen_helm_env_overrides.py \
+            --values-file "$VALUES_FILE" \
+            --private-values-file "$PRIVATE_VALUES_FILE" \
+            --output-argv-file /dev/null
 
       # Kept and rollback images are already serving and indexes are
       # create-only, so the rollback lane must not gain new failure modes; the
@@ -234,6 +330,49 @@ jobs:
           project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
           credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
 
+      # Private env values (e.g. a test-account cohort UID) live only in the prod
+      # environment secret LISTEN_PRIVATE_VALUES_YAML and are rendered by Helm in
+      # the same rollout. Validate before any config or chart is applied so a bad
+      # secret fails the job with nothing changed. Empty secret: chart defaults.
+      # Never cat, echo, or set -x around the secret or the file.
+      - name: Materialize private listen values (prod only)
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' && github.event.inputs.environment == 'prod' }}
+        env:
+          LISTEN_PRIVATE_VALUES_YAML: ${{ secrets.LISTEN_PRIVATE_VALUES_YAML }}
+          VALUES_FILE: ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml
+          GATEWAY_FEATURE_MODE: ${{ github.event.inputs.gateway_feature_mode }}
+          CHAT_AGENT_ROUTE: ${{ github.event.inputs.chat_agent_route }}
+          ALLOW_DIRECT_MODEL_EXCEPTION: ${{ github.event.inputs.allow_direct_model_exception }}
+          STT_SERVICE_MODELS: ${{ github.event.inputs.stt_service_models }}
+          TRANSLATION_SERVICE_MODELS: ${{ github.event.inputs.translation_service_models }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${LISTEN_PRIVATE_VALUES_YAML:-}" ]]; then
+            echo "No private listen values configured; chart defaults apply."
+            exit 0
+          fi
+          # Install before the secret touches disk so no install hook can see it.
+          python3 -m pip install -q pyyaml
+          umask 077
+          PRIVATE_VALUES_FILE="$(mktemp "${RUNNER_TEMP}/listen-private-values.XXXXXX")"
+          printf '%s\n' "$LISTEN_PRIVATE_VALUES_YAML" > "$PRIVATE_VALUES_FILE"
+          unset LISTEN_PRIVATE_VALUES_YAML
+          # Recorded before validation so the always() cleanup step removes it
+          # even when validation fails the job.
+          echo "LISTEN_PRIVATE_VALUES_FILE=$PRIVATE_VALUES_FILE" >> "$GITHUB_ENV"
+          # Validates without printing content, rejects names the dispatch
+          # overrides below also set (the helper maps disabled/chart-default the
+          # same way the resolve step does), and registers value masks.
+          python3 .github/scripts/listen_helm_env_overrides.py \
+            --values-file "$VALUES_FILE" \
+            --private-values-file "$PRIVATE_VALUES_FILE" \
+            --output-argv-file /dev/null \
+            --set "OMI_LLM_GATEWAY_FEATURE_MODE=${GATEWAY_FEATURE_MODE:-}" \
+            --set "OMI_LLM_CHAT_AGENT_ROUTE=${CHAT_AGENT_ROUTE:-}" \
+            --set "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION=${ALLOW_DIRECT_MODEL_EXCEPTION:-}" \
+            --set "STT_SERVICE_MODELS=${STT_SERVICE_MODELS:-}" \
+            --set "TRANSLATION_SERVICE_MODELS=${TRANSLATION_SERVICE_MODELS:-}"
+
       - name: Carry forward config this workflow does not own
         if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
         run: |
@@ -257,8 +396,13 @@ jobs:
       - name: Apply non-secret backend runtime config
         if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
         env:
+          LADDER_V1_PLUS_MONTH_PRICE_ID: ${{ vars.LADDER_V1_PLUS_MONTH_PRICE_ID }}
+          LADDER_V1_PLUS_YEAR_PRICE_ID: ${{ vars.LADDER_V1_PLUS_YEAR_PRICE_ID }}
+          LADDER_V1_PRO_MONTH_PRICE_ID: ${{ vars.LADDER_V1_PRO_MONTH_PRICE_ID }}
+          LADDER_V1_PRO_YEAR_PRICE_ID: ${{ vars.LADDER_V1_PRO_YEAR_PRICE_ID }}
+          LADDER_V1_ARCHITECT_MONTH_PRICE_ID: ${{ vars.LADDER_V1_ARCHITECT_MONTH_PRICE_ID }}
+          LADDER_V1_ARCHITECT_YEAR_PRICE_ID: ${{ vars.LADDER_V1_ARCHITECT_YEAR_PRICE_ID }}
           ENVIRONMENT: ${{ vars.ENV }}
-          FREE_TIER_LOCAL_PROCESSING_COHORT: ${{ vars.DEV_FREE_TIER_LOCAL_PROCESSING_COHORT }}
           CONVERSATION_SUMMARIZED_APP_IDS: ${{ vars.CONVERSATION_SUMMARIZED_APP_IDS }}
           GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
           MCP_AUTHORIZATION_SERVER_URL: ${{ vars.MCP_AUTHORIZATION_SERVER_URL }}
@@ -313,6 +457,12 @@ jobs:
           if [[ "${CHAT_ROUTE_VALUE}" == "chart-default" ]]; then
             CHAT_ROUTE_VALUE=""
           fi
+          # Set only by the prod materialize step: appends -f <file> to the argv
+          # and rejects a private name that a dispatch override also sets.
+          PRIVATE_VALUES_ARGS=()
+          if [[ -n "${LISTEN_PRIVATE_VALUES_FILE:-}" ]]; then
+            PRIVATE_VALUES_ARGS=(--private-values-file "$LISTEN_PRIVATE_VALUES_FILE")
+          fi
           python3 .github/scripts/listen_helm_env_overrides.py \
             --values-file "$VALUES_FILE" \
             --output-argv-file "$ARGV_FILE" \
@@ -320,7 +470,8 @@ jobs:
             --set "OMI_LLM_CHAT_AGENT_ROUTE=${CHAT_ROUTE_VALUE}" \
             --set "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION=${ALLOW_DIRECT_MODEL_EXCEPTION:-}" \
             --set "STT_SERVICE_MODELS=${STT_SERVICE_MODELS:-}" \
-            --set "TRANSLATION_SERVICE_MODELS=${TRANSLATION_SERVICE_MODELS:-}"
+            --set "TRANSLATION_SERVICE_MODELS=${TRANSLATION_SERVICE_MODELS:-}" \
+            ${PRIVATE_VALUES_ARGS[@]+"${PRIVATE_VALUES_ARGS[@]}"}
           echo "LISTEN_HELM_ENV_OVERRIDES_ARGV=$ARGV_FILE" >> "$GITHUB_ENV"
 
       - name: Helm diff (dry run)
@@ -333,10 +484,16 @@ jobs:
             LISTEN_ENV_OVERRIDES+=("$_tok")
           done < "${LISTEN_HELM_ENV_OVERRIDES_ARGV}"
           echo "=== Current release values ==="
-          helm -n ${{ vars.ENV }}-omi-backend get values ${{ vars.ENV }}-omi-backend-listen || echo "No existing release found"
+          # The stored release can carry privateEnv from an earlier run (even when
+          # this run has no secret), so its values are always printed redacted.
+          helm -n ${{ vars.ENV }}-omi-backend get values ${{ vars.ENV }}-omi-backend-listen \
+            | python3 .github/scripts/listen_helm_env_overrides.py --redact-release-values \
+            || echo "No existing release found"
           echo ""
           echo "=== Dry run upgrade ==="
-          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-backend-listen \
+          # A dry run prints the rendered manifest; withhold it when it renders
+          # private values (errors still reach stderr, masked).
+          DRY_RUN=(helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-backend-listen \
             ./backend/charts/backend-listen \
             -f ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
             --set image.repository=gcr.io/${{ vars.GCP_PROJECT_ID }}/backend \
@@ -344,7 +501,13 @@ jobs:
             --set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }} \
             --set-string "image.tag=${BACKEND_LISTEN_IMAGE_TAG}" \
             ${LISTEN_ENV_OVERRIDES[@]+"${LISTEN_ENV_OVERRIDES[@]}"} \
-            --dry-run
+            --dry-run)
+          if [[ -n "${LISTEN_PRIVATE_VALUES_FILE:-}" ]]; then
+            "${DRY_RUN[@]}" > /dev/null
+            echo "Dry run succeeded; manifest withheld because it renders private env values."
+          else
+            "${DRY_RUN[@]}"
+          fi
 
       # The ExternalSecret resource (which tells external-secrets which GCP
       # Secret Manager keys to sync into the K8s `*-omi-backend-secrets`
@@ -394,9 +557,9 @@ jobs:
           # leaving Helm's stored release ahead of the cluster, so the next chart upgrade
           # would silently reapply the bad revision.
           if [[ -n "$TARGET_REVISION" ]]; then
-            helm -n "$NS" rollback "$RELEASE" "$TARGET_REVISION" --wait --timeout 30m
+            helm -n "$NS" rollback "$RELEASE" "$TARGET_REVISION" --wait --timeout 70m
           else
-            helm -n "$NS" rollback "$RELEASE" --wait --timeout 30m
+            helm -n "$NS" rollback "$RELEASE" --wait --timeout 70m
           fi
           AFTER="$(kubectl -n "$NS" get deploy/"$RELEASE" -o jsonpath='{.spec.template.spec.containers[0].image}')"
           echo "Image after rollback: $AFTER"
@@ -406,13 +569,146 @@ jobs:
         run: |
           # See gcp_backend.yml: 300s cannot cover a full backend-listen roll; a
           # stalled rollout still fails on progressDeadlineSeconds.
-          if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-backend-listen --timeout=1800s; then
+          if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-backend-listen --timeout=4200s; then
             python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen || true
             exit 1
           fi
           python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen
 
+      # GKE creates standalone NEGs from the Service annotation but does not
+      # attach every newly appearing zone to this manually managed LB backend.
+      - name: Reconcile prod listen NEG zones on the LB backend
+        if: ${{ github.event.inputs.environment == 'prod' && (github.event.inputs.mode || 'deploy') == 'deploy' && vars.LISTEN_NEG_RECONCILE_ENABLED != 'false' }}
+        env:
+          RECONCILE_PROJECT: ${{ vars.GCP_PROJECT_ID }}
+          RECONCILE_NAMESPACE: ${{ vars.ENV }}-omi-backend
+          RECONCILE_SERVICE: ${{ vars.ENV }}-omi-backend-listen
+          RECONCILE_BACKEND_SERVICE: custom-domains-api-omi-me-backend-listen-49a4-be
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/ops/reconcile_listen_neg_zones.py \
+            --project "$RECONCILE_PROJECT" \
+            --namespace "$RECONCILE_NAMESPACE" \
+            --service "$RECONCILE_SERVICE" \
+            --backend-service "$RECONCILE_BACKEND_SERVICE"
+
+      # Plan D D2: roll the listen-edge chart after listen is verified, so the
+      # sensitive listen rollout keeps its own step sequence independent of the
+      # edge. Runs only when a digest was admitted above. Blank input never
+      # creates or touches the release: chart-only changes and rollbacks re-pass
+      # a digest explicitly (digests are immutable; any digest built from a
+      # commit main contains is admissible). mode=rollback touches the listen
+      # release only.
+      - name: Upgrade listen-edge Helm chart
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' && env.LISTEN_EDGE_IMAGE_DIGEST != '' }}
+        run: |
+          set -euo pipefail
+          PRIVATE_ARGS=()
+          if [[ -n "${LISTEN_EDGE_PRIVATE_VALUES_FILE:-}" ]]; then
+            PRIVATE_ARGS=(-f "$LISTEN_EDGE_PRIVATE_VALUES_FILE")
+          fi
+          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-listen-edge \
+            ./backend/charts/listen-edge \
+            -f ./backend/charts/listen-edge/${{ vars.ENV }}_omi_listen_edge_values.yaml \
+            --set image.repository="${LISTEN_EDGE_IMAGE_REPOSITORY}" \
+            --set-string image.digest="${LISTEN_EDGE_IMAGE_DIGEST}" \
+            ${PRIVATE_ARGS[@]+"${PRIVATE_ARGS[@]}"}
+          if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-listen-edge --timeout=600s; then
+            python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service listen-edge || true
+            exit 1
+          fi
+          python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service listen-edge
+
+      - name: Show listen-edge pod status
+        if: ${{ always() && env.LISTEN_EDGE_IMAGE_DIGEST != '' }}
+        run: |
+          kubectl -n ${{ vars.ENV }}-omi-backend get pods -l app.kubernetes.io/instance=${{ vars.ENV }}-omi-listen-edge --no-headers
+
+      - name: Remove private listen-edge values file
+        if: ${{ always() && env.LISTEN_EDGE_PRIVATE_VALUES_FILE != '' }}
+        run: rm -f "$LISTEN_EDGE_PRIVATE_VALUES_FILE"
+
       - name: Show pod status
         if: always()
         run: |
           kubectl -n ${{ vars.ENV }}-omi-backend get pods -l app.kubernetes.io/instance=${{ vars.ENV }}-omi-backend-listen --no-headers
+
+      - name: Remove private listen values file
+        if: ${{ always() && env.LISTEN_PRIVATE_VALUES_FILE != '' }}
+        run: rm -f "$LISTEN_PRIVATE_VALUES_FILE"
+
+  deploy-neg-coverage-exporter:
+    name: Deploy NEG coverage exporter
+    needs: helm-upgrade
+    # The tag output is emitted only by the explicit deploy resolver; rollback
+    # and kept-tag paths leave it empty. `needs` also requires the listen job
+    # (including its readiness gate and rollout verification) to succeed.
+    if: ${{ github.event.inputs.environment == 'prod' && needs.helm-upgrade.outputs.neg_coverage_exporter_image_tag != '' }}
+    environment: prod
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.helm-upgrade.outputs.checked_out_sha }}
+
+      - name: Install Helm
+        uses: azure/setup-helm@v5
+
+      - name: Google Auth (prod WIF)
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: us-central1
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Deploy and verify NEG coverage exporter
+        env:
+          IMAGE_TAG: ${{ needs.helm-upgrade.outputs.neg_coverage_exporter_image_tag }}
+        run: |
+          set -euo pipefail
+          report_exporter_failure() {
+            local stage="$1"
+            echo "::error title=NEG coverage exporter ${stage} failed::The listen rollout job succeeded; this exporter job fails independently."
+            {
+              echo "### NEG coverage exporter deployment failed"
+              echo "- Stage: ${stage}"
+              echo "- The listen rollout job remains successful and deployed."
+              echo "- This failed final job makes the overall workflow conclusion failure."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
+          if ! helm -n prod-omi-monitoring upgrade --install prod-omi-neg-coverage-exporter \
+            ./backend/charts/monitoring/neg-coverage-exporter \
+            -f ./backend/charts/monitoring/neg-coverage-exporter/prod-values.yaml \
+            --set-string "image.tag=${IMAGE_TAG}" \
+            --dry-run; then
+            report_exporter_failure "Helm dry run"
+          fi
+          if ! helm -n prod-omi-monitoring upgrade --install prod-omi-neg-coverage-exporter \
+            ./backend/charts/monitoring/neg-coverage-exporter \
+            -f ./backend/charts/monitoring/neg-coverage-exporter/prod-values.yaml \
+            --set-string "image.tag=${IMAGE_TAG}" \
+            --atomic --wait --timeout 5m; then
+            report_exporter_failure "Helm upgrade"
+          fi
+          if ! kubectl -n prod-omi-monitoring rollout status deploy/neg-coverage-exporter --timeout=300s; then
+            report_exporter_failure "rollout verification"
+          fi
+          {
+            echo "### NEG coverage exporter deployment succeeded"
+            echo "- Image: gcr.io/${{ vars.GCP_PROJECT_ID }}/backend:${IMAGE_TAG}"
+            echo "- Backend-listen rollout completed successfully in the preceding job."
+          } >> "$GITHUB_STEP_SUMMARY"

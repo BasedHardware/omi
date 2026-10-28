@@ -58,7 +58,7 @@ def test_http_boundary_blocks_before_lookup_and_counts_requests(
     assert response.json() == {'detail': 'Sync job polling too frequent; retry later'}
     assert lookup.call_count == 40
     for call in poll_lua.call_args_list:
-        assert call.kwargs == {'keys': ['rl:sync_job_poll:owner'], 'args': [20, 40]}
+        assert call.kwargs == {'keys': ['rl:sync_job_poll:owner'], 'args': [20, 40], 'client': None}
     assert sync_router.OMI_SYNC_JOB_POLL_REQUESTS_TOTAL._value.get() - requests_before == 41
     assert sync_router.OMI_SYNC_JOB_POLL_THROTTLED_TOTAL._value.get() - throttles_before == 1
 
@@ -128,3 +128,14 @@ def test_redis_failure_preserves_poll_and_emits_fallback(
         reason='gate_unavailable',
         outcome='degraded',
     )
+
+
+def test_server_backoff_http_wire_and_open_surface(poll_client, monkeypatch):
+    monkeypatch.setenv('SYNC_POLL_BACKOFF_ENABLED', 'true')
+    monkeypatch.setattr(sync_router, 'get_sync_job', lambda *_: {'job_id': 'j', 'uid': 'owner', 'status': 'queued'})
+    response = poll_client.get('/v2/sync-local-files/j')
+    assert response.status_code == 200 and response.json()['poll_after_ms'] == 60000
+    response = poll_client.get('/v2/sync-local-files/j?surface_open=true')
+    assert response.json()['poll_after_ms'] == 20000
+    monkeypatch.setattr(sync_router, 'get_durable_job_status', lambda *_: {'job_id': 'j', 'status': 'completed'})
+    assert poll_client.get('/v2/sync-local-files/j').json()['poll_after_ms'] == 0

@@ -288,7 +288,19 @@ def test_canonical_capture_persists_candidate_predicate_and_arguments(monkeypatc
         ],
     )
 
+    # Ordinary/free extraction must hand committed rows to the decision owner;
+    # Dream allowlist and paid cleanup rollout are independent.
+    from utils.memory import canonical_consolidation as observation_intake
+
+    intake = MagicMock()
+    monkeypatch.setenv('DREAM_AGENT_ELIGIBILITY', 'allowlist')
+    monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', '')
+    monkeypatch.setattr(observation_intake, 'complete_observation_intake', intake)
     result = pc._extract_memories_canonical("uid-predicate-persist", conversation, db_client=MagicMock())
+    intake.assert_called_once()
+    assert intake.call_args.kwargs['memory_ids'] == [
+        mock_service.replace_conversation_memories.call_args.args[2][0]['id']
+    ]
 
     assert result.count == 1
     written = mock_service.replace_conversation_memories.call_args.args[2]

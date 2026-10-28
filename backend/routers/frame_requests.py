@@ -10,7 +10,6 @@ from __future__ import annotations
 import logging
 import time
 from io import BytesIO
-from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
@@ -39,7 +38,6 @@ from models.frame_request import (
 from services.conversation_frame_evidence import read_conversation_frame
 from utils.executors import db_executor, run_blocking, storage_executor
 from utils.integration_telemetry import emit_posthog_event
-from utils.jit_rollout import JITDecisionStage
 from utils.other.endpoints import get_current_user_uid, with_rate_limit
 from utils.retrieval.frame_request_authority import authorize_frame_request
 from utils.retrieval.frame_request_storage import (
@@ -47,7 +45,6 @@ from utils.retrieval.frame_request_storage import (
     TEMPORARY_STORAGE_PREFIX,
     copy_frame_request_pixels_to_permanent,
     delete_frame_request_pixels,
-    download_frame_request_pixels,
     upload_frame_request_pixels,
 )
 
@@ -168,23 +165,9 @@ def _record_frame_lifecycle(
 async def _authorize(
     uid: str,
     account_generation: int,
-    *,
-    mutation: bool = False,
-    paid_boundary: bool = False,
-    force_refresh: bool = False,
 ) -> None:
-    stage = (
-        JITDecisionStage.PAID_BOUNDARY
-        if paid_boundary
-        else JITDecisionStage.INGRESS if mutation else JITDecisionStage.READ_ONLY
-    )
     try:
-        await authorize_frame_request(
-            uid,
-            account_generation,
-            stage=stage,
-            force_refresh=mutation or paid_boundary or force_refresh,
-        )
+        await authorize_frame_request(uid, account_generation)
     except PermissionError as exc:
         raise HTTPException(status_code=404, detail="frame_requests_unavailable") from exc
 
@@ -223,7 +206,7 @@ async def create_frame_request(
     uid: str = Depends(with_rate_limit(get_current_user_uid, "frame_requests:write")),
 ) -> FrameRequestEnvelope:
     started = time.monotonic()
-    await _authorize(uid, request.account_generation, mutation=True)
+    await _authorize(uid, request.account_generation)
     try:
         frame_request, deduplicated = await run_blocking(
             db_executor,
@@ -268,66 +251,6 @@ async def get_frame_request_status(
     return FrameRequestEnvelope(request=frame_request)
 
 
-@router.get(
-    "/v1/frame-requests/temporary/{request_id}/image",
-    response_class=Response,
-    responses={
-        200: {
-            "content": {
-                "image/jpeg": {"schema": {"type": "string", "format": "binary"}},
-                "image/png": {"schema": {"type": "string", "format": "binary"}},
-                "image/webp": {"schema": {"type": "string", "format": "binary"}},
-            }
-        }
-    },
-)
-async def consume_temporary_frame_request_image(
-    request_id: str,
-    account_generation: int = Query(default=0, ge=0),
-    uid: str = Depends(with_rate_limit(get_current_user_uid, "frame_requests:read")),
-) -> Response:
-    """Read one uploaded, unattached temporary frame for JIT vision.
-
-    Conversation evidence is deliberately excluded: permanent images remain
-    reachable only through the conversation-owned endpoint. This read neither
-    promotes nor extends the temporary request's at-most-seven-day expiry.
-    """
-
-    started = time.monotonic()
-    await _authorize(uid, account_generation)
-    try:
-        frame_request = await run_blocking(db_executor, get_frame_request, uid, request_id)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail="frame_request_not_found") from exc
-    if frame_request.account_generation != account_generation or frame_request.conversation_id is not None:
-        raise HTTPException(status_code=404, detail="frame_request_not_found")
-    if frame_request.expires_at <= datetime.now(timezone.utc):
-        raise HTTPException(status_code=410, detail="frame_request_expired")
-    if frame_request.state != FrameRequestState.uploaded or not frame_request.storage_id:
-        raise HTTPException(status_code=409, detail=f"frame_request_{frame_request.state.value}")
-    # Pixel release is the data boundary. Re-check uncached authority after
-    # owner/state validation so a newly enabled kill switch cannot be masked
-    # by the short read-path rollout cache.
-    await _authorize(uid, account_generation, force_refresh=True)
-    try:
-        payload = await run_blocking(
-            storage_executor,
-            download_frame_request_pixels,
-            uid,
-            frame_request.storage_id,
-        )
-    except Exception as exc:
-        raise HTTPException(status_code=404, detail="frame_request_pixels_unavailable") from exc
-    _record_frame_lifecycle(
-        uid,
-        "frame_request_pixels_consumed",
-        state=frame_request.state,
-        started=started,
-        byte_count=frame_request.byte_count,
-    )
-    return Response(content=payload, media_type=frame_request.content_type or "image/jpeg")
-
-
 @router.get("/v1/frame-requests/pending", response_model=FrameRequestBatch)
 async def get_pending_frame_requests(
     device_id: str = Query(min_length=1, max_length=256),
@@ -361,7 +284,7 @@ async def update_frame_request_state(
     uid: str = Depends(with_rate_limit(get_current_user_uid, "frame_requests:write")),
 ) -> FrameRequestEnvelope:
     started = time.monotonic()
-    await _authorize(uid, update.account_generation, mutation=True)
+    await _authorize(uid, update.account_generation)
     try:
         frame_request = await run_blocking(
             db_executor,
@@ -407,7 +330,7 @@ async def upload_frame_request(
     """Store an owner-authorized pixel and then commit its bounded metadata."""
 
     started = time.monotonic()
-    await _authorize(uid, account_generation, mutation=True)
+    await _authorize(uid, account_generation)
     declared_content_type = file.content_type
     if not declared_content_type or declared_content_type.lower() not in set(_ALLOWED_IMAGE_FORMATS.values()):
         raise HTTPException(status_code=415, detail="frame_upload_requires_image")
@@ -421,7 +344,7 @@ async def upload_frame_request(
     # Canonicalization can be deliberately expensive. Re-read rollout and
     # account-generation authority immediately before the external write so a
     # kill/reopen/delete during image processing produces no stored pixels.
-    await _authorize(uid, account_generation, mutation=True)
+    await _authorize(uid, account_generation)
     try:
         await run_blocking(
             storage_executor,
@@ -569,7 +492,7 @@ async def promote_frame_request(
     """Promote uploaded pixels into conversation-lifetime photo evidence."""
 
     started = time.monotonic()
-    await _authorize(uid, promotion.account_generation, paid_boundary=True)
+    await _authorize(uid, promotion.account_generation)
     try:
         # Fast idempotent read path avoids even starting a transaction for a
         # row already known to be permanent. The transaction below remains the

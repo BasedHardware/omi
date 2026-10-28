@@ -8,6 +8,7 @@ import 'package:omi/backend/http/action_items_api_contract.dart';
 import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
+import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/review_provider.dart';
@@ -15,6 +16,7 @@ import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/home_bottom_bar.dart';
 
 import 'project_task_sections.dart';
@@ -23,6 +25,7 @@ import 'task_delete_undo.dart';
 import 'widgets/action_item_form_sheet.dart';
 import 'widgets/action_item_shimmer_widget.dart';
 import 'widgets/task_row_parts.dart';
+import 'widgets/task_suggestions_section.dart';
 
 // Re-export Goal from goals.dart for use in this file
 export 'package:omi/backend/http/api/goals.dart' show Goal;
@@ -42,6 +45,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   // Track the item being hovered over during drag
   String? _hoveredItemId;
+  TaskCategory? _hoveredCategory;
   bool _hoverAbove = false; // true = insert above, false = insert below
   int _hoverIndent = 0; // target indent_level for the drop slot
 
@@ -85,6 +89,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       if (!mounted) return;
       PlatformManager.instance.analytics.actionItemsPageOpened();
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+      final suggestions = provider.suggestions;
+      if (suggestions != null && !suggestions.loaded && suggestions.loadProblem == null) {
+        suggestions.load();
+      }
       final phase = provider.apiViewState.phase;
       final typedResultAlreadyProjected = phase == ApiViewPhase.error ||
           phase == ApiViewPhase.locked ||
@@ -234,6 +242,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     return PullDownButton(
       itemBuilder: (context) => [
         PullDownMenuItem(
+          title: context.l10n.taskIntegrations,
+          iconWidget: const Icon(Icons.ios_share_rounded, size: 18),
+          onTap: () => routeToPage(context, const TaskIntegrationsPage()),
+        ),
+        PullDownMenuItem(
           title: context.l10n.selectActionItems,
           iconWidget: const Icon(Icons.check_box_outlined, size: 18),
           onTap: () {
@@ -354,7 +367,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       destructive: true,
     );
     if (!shouldClear) return;
-    await Future.wait(items.map((item) => provider.deleteActionItem(item)));
+    final deleted = await Future.wait(items.map(provider.deleteActionItem));
+    if (!mounted || deleted.every((ok) => ok)) return;
+    // The provider has already put each rejected row back; say so, as a single delete does
+    // (task_delete_undo.dart), instead of letting the rows reappear in silence.
+    OmiFeedback.error(context, l10n.failedToDeleteActionItem);
   }
 
   int _getIndentLevel(ActionItemWithMetadata item) {
@@ -478,6 +495,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                               controller: _scrollController,
                               physics: const AlwaysScrollableScrollPhysics(),
                               slivers: [
+                                SliverToBoxAdapter(child: TaskSuggestionsSection(controller: provider.suggestions)),
                                 SliverFillRemaining(
                                   hasScrollBody: false,
                                   child: Center(child: ActionItemsApiStatus(provider: provider)),
@@ -485,7 +503,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                               ],
                             )
                           : categorizedItems.values.every((l) => l.isEmpty)
-                              ? _buildEmptyTasksList()
+                              ? _buildEmptyTasksList(provider)
                               : _buildTasksList(categorizedItems, provider),
                 ),
               ),
@@ -513,11 +531,16 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-  Widget _buildEmptyTasksList() {
+  Widget _buildEmptyTasksList(ActionItemsProvider provider) {
     return CustomScrollView(
       controller: _scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
-      slivers: [SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildEmptyTasksContent()))],
+      slivers: [
+        SliverToBoxAdapter(child: TaskSuggestionsSection(controller: provider.suggestions)),
+        if (provider.suggestions?.items.isEmpty ?? true)
+          SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildEmptyTasksContent())),
+        SliverPadding(padding: EdgeInsets.only(bottom: homeBottomClearance(context))),
+      ],
     );
   }
 
@@ -549,6 +572,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       slivers: [
         const SliverPadding(padding: EdgeInsets.only(top: 8)),
         SliverToBoxAdapter(child: _buildPageHeader(provider)),
+        if (!isSearching) SliverToBoxAdapter(child: TaskSuggestionsSection(controller: provider.suggestions)),
 
         if (isSearching) ...[
           if (filteredItems.isEmpty)
@@ -583,19 +607,15 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           // Build each category section (skip empty ones, skip overdue — rendered separately below)
           for (final category in TaskCategory.values)
             if (category != TaskCategory.overdue && (categorizedItems[category] ?? []).isNotEmpty)
-              SliverToBoxAdapter(
-                child: _buildCategorySection(
-                  category: category,
-                  items: categorizedItems[category] ?? [],
-                  provider: provider,
-                ),
+              _buildCategorySection(
+                category: category,
+                items: categorizedItems[category] ?? [],
+                provider: provider,
               ),
 
           // Overdue section — expanded by default
           if ((categorizedItems[TaskCategory.overdue] ?? []).isNotEmpty)
-            SliverToBoxAdapter(
-              child: _buildOverdueSection(items: categorizedItems[TaskCategory.overdue]!, provider: provider),
-            ),
+            _buildOverdueSection(items: categorizedItems[TaskCategory.overdue]!, provider: provider),
         ],
 
         // Bottom padding so the last row scrolls clear of the nav bar
@@ -612,22 +632,29 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     final title = _getCategoryTitle(context, category);
     final orderedItems = _getOrderedItems(category, items);
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: DragTarget<ActionItemWithMetadata>(
-        onWillAcceptWithDetails: (details) => true,
+    final expanded = category != TaskCategory.noDeadline || _noDeadlineExpanded;
+    return _buildLazyTaskSection(
+      items: expanded ? orderedItems : const [],
+      provider: provider,
+      category: category,
+      header: DragTarget<ActionItemWithMetadata>(
+        onWillAcceptWithDetails: (details) {
+          _setHoveredCategory(category);
+          return true;
+        },
+        onLeave: (_) => _setHoveredCategory(null),
         onAcceptWithDetails: (details) {
+          _setHoveredCategory(null);
           // Only change category if dropped on empty area (not on a specific item)
           if (_hoveredItemId == null) {
             _updateTaskCategory(details.data, category);
           }
         },
         builder: (context, candidateData, rejectedData) {
-          final isHovering = candidateData.isNotEmpty && _hoveredItemId == null;
           return AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            decoration: BoxDecoration(
-              color: isHovering ? OmiColors.surface1 : Colors.transparent,
+            decoration: const BoxDecoration(
+              color: Colors.transparent,
               borderRadius: OmiRadius.mdAll,
             ),
             child: Column(
@@ -697,17 +724,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
                 // Drop zone for first position
                 if (orderedItems.isNotEmpty && (category != TaskCategory.noDeadline || _noDeadlineExpanded))
-                  _buildFirstPositionDropZone(category, orderedItems, candidateData.isNotEmpty),
-
-                // Task items. Row padding alone carries the rhythm — no
-                // dividers between rows; matches Things 3 / Apple Reminders.
-                if (category != TaskCategory.noDeadline || _noDeadlineExpanded)
-                  ...orderedItems.map(
-                    (item) => _buildTaskItem(item, provider, category: category, categoryItems: orderedItems),
+                  _buildFirstPositionDropZone(
+                    category,
+                    orderedItems,
+                    candidateData.isNotEmpty || _hoveredCategory == category,
                   ),
-
-                // Spacing after section
-                const SizedBox(height: 12),
               ],
             ),
           );
@@ -718,9 +739,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   Widget _buildOverdueSection({required List<ActionItemWithMetadata> items, required ActionItemsProvider provider}) {
     final orderedItems = _getOrderedItems(TaskCategory.overdue, items);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Column(
+    return _buildLazyTaskSection(
+      items: _overdueExpanded ? orderedItems : const [],
+      provider: provider,
+      category: TaskCategory.overdue,
+      header: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
@@ -754,14 +777,72 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           ),
           if (_overdueExpanded) ...[
             _buildFirstPositionDropZone(TaskCategory.overdue, orderedItems, false),
-            ...orderedItems.map(
-              (item) => _buildTaskItem(item, provider, category: TaskCategory.overdue, categoryItems: orderedItems),
-            ),
           ],
-          const SizedBox(height: 12),
         ],
       ),
     );
+  }
+
+  /// Keep section headers and rows in the same scroll flow without mounting the
+  /// entire category. A task update now only rebuilds the viewport and cache.
+  Widget _buildLazyTaskSection({
+    required Widget header,
+    required List<ActionItemWithMetadata> items,
+    required ActionItemsProvider provider,
+    required TaskCategory category,
+  }) {
+    final indices = {for (var i = 0; i < items.length; i++) ValueKey(items[i].id): i};
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.xxs),
+      sliver: TweenAnimationBuilder<Color?>(
+        tween: ColorTween(
+          end: category != TaskCategory.overdue && _hoveredCategory == category && _hoveredItemId == null
+              ? OmiColors.surface1
+              : Colors.transparent,
+        ),
+        duration: const Duration(milliseconds: 200),
+        builder: (context, color, child) => DecoratedSliver(
+          decoration: BoxDecoration(color: color, borderRadius: OmiRadius.mdAll),
+          sliver: child,
+        ),
+        child: SliverMainAxisGroup(
+          slivers: [
+            SliverToBoxAdapter(child: header),
+            SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) => KeyedSubtree(
+                  key: ValueKey(items[index].id),
+                  child: _buildTaskItem(items[index], provider, category: category, categoryItems: items),
+                ),
+                childCount: items.length,
+                findChildIndexCallback: (key) => indices[key],
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: category == TaskCategory.overdue
+                  ? const SizedBox(height: OmiSpacing.sm)
+                  : DragTarget<ActionItemWithMetadata>(
+                      onWillAcceptWithDetails: (_) {
+                        _setHoveredCategory(category);
+                        return true;
+                      },
+                      onLeave: (_) => _setHoveredCategory(null),
+                      onAcceptWithDetails: (details) {
+                        _setHoveredCategory(null);
+                        if (_hoveredItemId == null) _updateTaskCategory(details.data, category);
+                      },
+                      builder: (context, candidates, rejected) => const SizedBox(height: OmiSpacing.sm),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _setHoveredCategory(TaskCategory? category) {
+    if (_hoveredCategory == category) return;
+    setState(() => _hoveredCategory = category);
   }
 
   Widget _buildFirstPositionDropZone(
@@ -858,10 +939,12 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
     return DragTarget<ActionItemWithMetadata>(
       onWillAcceptWithDetails: (details) {
+        _setHoveredCategory(category);
         // Accept if it's a different item
         return details.data.id != item.id;
       },
       onAcceptWithDetails: (details) {
+        _setHoveredCategory(null);
         final draggedItem = details.data;
         final targetIndent = _hoverIndent;
 
@@ -911,6 +994,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         }
       },
       onLeave: (data) {
+        _setHoveredCategory(null);
         if (_hoveredItemId == item.id) {
           setState(() {
             _hoveredItemId = null;
@@ -1013,6 +1097,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         if (!_dragHasMoved) _showTaskMenu(item, categoryItems);
         setState(() {
           _hoveredItemId = null;
+          _hoveredCategory = null;
           _dragHasMoved = false;
           _hoverIndent = 0;
           _dragStartX = null;

@@ -51,12 +51,24 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
 
     override fun manageDevice(uuid: String, requiresBond: Boolean) {
         Log.i(TAG, "manageDevice: $uuid, requiresBond=$requiresBond")
-        val context = getActivity()?.applicationContext ?: return
+        val context = getActivity()?.applicationContext ?: throw IllegalStateException("BLE activity unavailable")
+        if (bleManager.savedReconnect.isEnabled(uuid) || bleManager.savedReconnect.isBlocked(uuid)) {
+            bleManager.savedReconnect.allow(uuid)
+            OmiBleForegroundService.setUserDisconnected(context, false)
+        }
         OmiBleForegroundService.startService(context, uuid, requiresBond = requiresBond, caller = "Dart")
+    }
+
+    override fun configureSavedReconnect(uuid: String, enabled: Boolean) {
+        bleManager.savedReconnect.setEnabled(uuid, enabled)
     }
 
     override fun unmanageDevice(uuid: String) {
         Log.i(TAG, "unmanageDevice: $uuid")
+        if (bleManager.savedReconnect.isEnabled(uuid)) {
+            bleManager.savedReconnect.block(uuid)
+            getActivity()?.applicationContext?.let { OmiBleForegroundService.setUserDisconnected(it, true) }
+        }
         OmiBleForegroundService.instance?.unmanageDevice(uuid)
             ?: bleManager.closeGatt(uuid) // Fallback if service not running
     }
@@ -207,19 +219,27 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
         bleManager.rssiHistory[addr]?.let { deque -> synchronized(deque) {
             deque.forEach { (ts, rssi) -> samples.put(JSONObject().put("ts", ts).put("rssi", rssi)) }
         } }
-        callback(Result.success(JSONObject()
-            .put("observed_at", System.currentTimeMillis())
-            .put("identity_epoch", DeviceHealthPersistence.epoch(context))
-            .put("audio_outage_started_at", DeviceHealthPersistence.sessions(context).openSince(addr) ?: JSONObject.NULL)
+        val epoch = DeviceHealthPersistence.epoch(context)
+        val historyRaw = prefs.getString("disconnect_history_$addr", "[]")
+        val parsedHistory = try { JSONArray(historyRaw) } catch (_: Exception) { null }
+        val sessionStarted = provenSessionStartedAt(prefs.getString("session_$addr", null), epoch)
+        val history = parsedHistory?.let { dropUnmeasuredAudioRecoveries(it, sessionStarted) }
+        val marker = DeviceHealthPersistence.sessions(context).openSince(addr)
+        val now = System.currentTimeMillis()
+        val payload = JSONObject()
+            .put("observed_at", now)
+            .put("identity_epoch", epoch)
+            .put("audio_outage_started_at", marker ?: JSONObject.NULL)
             .put("audio_packet_days", array("packet_days_$addr"))
-            .put("disconnect_history_v2", array("disconnect_history_$addr"))
+            .put("disconnect_history_v2", history ?: JSONObject.NULL)
             .put("battery_history_v2", batteryHistory)
             .put("rssi_samples", samples)
             .put("firmware_diagnostics", array("firmware_$addr"))
             .put("lifecycle_events", array("lifecycle"))
             .put("ble_log", array("log_$addr"))
             .put("counters_since", prefs?.getLong("counters_since_$addr", 0L)?.takeIf { it > 0L } ?: JSONObject.NULL)
-            .toString()))
+        putAudioRecoveryStamps(payload, prefs.getString(audioRecoveryProofsKey(addr), null), epoch, now)
+        callback(Result.success(payload.toString()))
     }
 
     // ── CompanionDeviceManager ──

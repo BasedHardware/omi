@@ -165,6 +165,10 @@ extension SettingsContentView {
             .scaledFont(size: OmiType.caption)
             .foregroundColor(Ink.secondary)
           }
+
+          if CloudTranscriptionLanguageHint.isShown(for: selectedLanguage, isAppleSilicon: AppState.isAppleSilicon) {
+            CloudTranscriptionLanguageHint()
+          }
         }
       }
 
@@ -254,6 +258,13 @@ extension SettingsContentView {
           Text("Press Enter or click + to add • Click × to remove")
             .scaledFont(size: OmiType.caption)
             .foregroundColor(Ink.secondary)
+
+          if let vocabularySaveError {
+            Text(vocabularySaveError)
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.errorRed)
+              .accessibilityIdentifier("vocabulary-save-error")
+          }
         }
       }
 
@@ -360,6 +371,14 @@ extension SettingsContentView {
     transcriptionAutoDetect && autoDetectSupported
   }
 
+  /// Mirrors `AssistantSettings.transcriptionLanguageSelection` from this pane's live state.
+  var selectedLanguage: STTLanguageCapability.Selection {
+    STTLanguageCapability.Selection(
+      effective: autoDetectIsActive ? STTLanguageCapability.autoDetect : transcriptionLanguage,
+      primary: transcriptionLanguage
+    )
+  }
+
   /// Persists a Single-Language selection to the account in the one order that survives a reload.
   ///
   /// See `TranscriptionLanguageWriter` for why the order is the whole point.
@@ -384,30 +403,54 @@ extension SettingsContentView {
     let word = newVocabularyWord.trimmingCharacters(in: .whitespaces)
     guard !word.isEmpty else { return }
 
-    // Don't add duplicates (case-insensitive check)
-    guard !vocabularyList.contains(where: { $0.lowercased() == word.lowercased() }) else {
-      newVocabularyWord = ""
-      return
+    Task { @MainActor in
+      // When nothing could be saved, the word stays in the field to try again.
+      guard await editVocabulary(.add(word)) else { return }
+      // Keep anything typed while the account's list was being read.
+      if newVocabularyWord.trimmingCharacters(in: .whitespaces) == word {
+        newVocabularyWord = ""
+      }
     }
-
-    vocabularyList.append(word)
-    newVocabularyWord = ""
-    saveVocabulary()
   }
 
   /// Remove a word from the vocabulary
   func removeVocabularyWord(_ word: String) {
-    vocabularyList.removeAll { $0 == word }
-    saveVocabulary()
+    Task { @MainActor in
+      await editVocabulary(.remove(word))
+    }
+  }
+
+  /// Applies `edit` through `TranscriptionVocabularyWriter`, which reads the account's list first
+  /// when this pane's list did not come from it. Returns `false` when nothing could be saved.
+  @discardableResult
+  func editVocabulary(_ edit: TranscriptionVocabularyWriter.Edit) async -> Bool {
+    // One read at a time: an edit made during a read would start from the list that read replaces.
+    guard !isReadingVocabulary else { return false }
+    isReadingVocabulary = !vocabularyLoadedFromAccount
+    defer { isReadingVocabulary = false }
+
+    guard
+      let terms = await TranscriptionVocabularyWriter.apply(
+        edit,
+        to: vocabularyList,
+        loadedFromAccount: vocabularyLoadedFromAccount,
+        readAccountTerms: { try await APIClient.shared.getTranscriptionPreferences().vocabulary },
+        save: { saveVocabulary($0) }
+      )
+    else { return false }
+
+    vocabularyList = terms
+    vocabularyLoadedFromAccount = true
+    return true
   }
 
   /// Save vocabulary to local settings and backend
-  func saveVocabulary() {
+  func saveVocabulary(_ terms: [String]) {
     // Save to local settings
-    AssistantSettings.shared.transcriptionVocabulary = vocabularyList
+    AssistantSettings.shared.transcriptionVocabulary = terms
 
     // Sync to backend
-    updateTranscriptionPreferences(vocabulary: vocabularyList.joined(separator: ", "))
+    updateTranscriptionPreferences(vocabulary: terms.joined(separator: ", "))
   }
 
   /// Restart transcription if currently running to apply new settings
@@ -473,6 +516,68 @@ enum TranscriptionLanguageWriter {
     }
 
     return outcome
+  }
+}
+
+/// Custom-vocabulary edits, which the account stores as one list.
+///
+/// `PATCH /v1/users/transcription-preferences` replaces the account's whole vocabulary with the list
+/// it is sent. This pane shows the local copy in `AssistantSettings` until `loadBackendSettings()`
+/// has read the account's list, and keeps showing it when that load fails. The copy is empty on a
+/// new Mac or after a reinstall, and out of date after edits on the phone or the web. Adding a word
+/// used to save that copy plus the word, so every other word on the account was gone, without an
+/// error; removing a word did the same.
+///
+/// So an edit starts from a list read from the account: the pane's own once it has loaded,
+/// otherwise a fresh read. When that read fails, nothing is saved.
+@MainActor
+enum TranscriptionVocabularyWriter {
+  enum Edit {
+    case add(String)
+    case remove(String)
+
+    func applied(to terms: [String]) -> [String] {
+      switch self {
+      case .add(let word):
+        // Don't add duplicates (case-insensitive check)
+        guard !terms.contains(where: { $0.lowercased() == word.lowercased() }) else { return terms }
+        return terms + [word]
+      case .remove(let word):
+        return terms.filter { $0 != word }
+      }
+    }
+  }
+
+  /// Applies `edit` to the account's list and saves the result when the edit changed it.
+  ///
+  /// `terms` is the list the pane shows. Unless it was `loadedFromAccount`, the account's list is
+  /// read through `readAccountTerms` and the edit applies to that instead. `save` stores a list as
+  /// the account's whole vocabulary.
+  ///
+  /// - Returns: the list after the edit, or `nil` when the account's list could not be read and
+  ///   nothing was saved.
+  static func apply(
+    _ edit: Edit,
+    to terms: [String],
+    loadedFromAccount: Bool,
+    readAccountTerms: () async throws -> [String],
+    save: ([String]) -> Void
+  ) async -> [String]? {
+    var accountTerms = terms
+    if !loadedFromAccount {
+      do {
+        accountTerms = try await readAccountTerms()
+      } catch {
+        logError("Settings: failed to load custom vocabulary, so the edit was not saved", error: error)
+        return nil
+      }
+    }
+
+    let edited = edit.applied(to: accountTerms)
+    if edited != accountTerms {
+      save(edited)
+    }
+    return edited
   }
 }
 
@@ -589,5 +694,25 @@ private struct VoiceAssistantLanguagesCard: View {
     selection = AssistantSettings.shared.voiceLanguages
     // The voiceLanguages setter posts .voiceLanguagesDidChange; the hub controller
     // observes it to prewarm the LID model and re-warm the session's instructions.
+  }
+}
+
+/// One-line notice that meetings in the selected language use cloud STT, because no on-device
+/// Parakeet model covers it (`STTLanguageCapability`). Intel Macs are always cloud, so no notice.
+struct CloudTranscriptionLanguageHint: View {
+  nonisolated static func isShown(for language: STTLanguageCapability.Selection, isAppleSilicon: Bool) -> Bool {
+    isAppleSilicon && !language.isCoveredOnDevice
+  }
+
+  var body: some View {
+    HStack(spacing: OmiSpacing.sm) {
+      Image(systemName: "cloud")
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(Ink.secondary)
+
+      Text("This language isn't available on-device, so Omi transcribes meetings in the cloud.")
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(Ink.secondary)
+    }
   }
 }

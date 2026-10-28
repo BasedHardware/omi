@@ -6,12 +6,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // instead of averaging them in as $0. The legacy estimated path keeps the old
 // fallback, and says so via costSource:"estimated".
 
-vi.mock("@/lib/auth", () => ({ verifyAdmin: vi.fn() }));
+vi.mock("@/lib/auth", async () => {
+  const { testIdentity } = await import("./support/test-identity");
+  return { requireScope: vi.fn().mockResolvedValue(testIdentity()) };
+});
 vi.mock("@/lib/posthog", () => ({
   withRowLimit: (q: string) =>
     `SELECT * FROM (\n${q}\n) AS _row_limit_guard\nLIMIT 50000`,
 }));
-vi.mock("@/lib/stripe", () => ({ getOptionalStripe: () => null }));
+vi.mock("@/lib/stripe", () => ({
+  getOptionalStripe: () => null,
+  getOptionalStripeRead: () => null,
+}));
 vi.mock("@/lib/stripe-subscriptions", () => ({
   MRR_STATUSES: ["active"],
   fetchOmiSubscriptions: vi.fn(async () => ({ subscriptions: [] })),

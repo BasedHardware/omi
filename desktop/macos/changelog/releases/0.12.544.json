@@ -1,0 +1,7 @@
+{
+  "version": "0.12.544",
+  "date": "2026-10-26",
+  "changes": [
+    "Fixed a stale conversation staying in search results after restoring it changed the text that matched your search"
+  ]
+}

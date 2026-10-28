@@ -489,6 +489,7 @@ class TestRestListCursorContract:
     def test_memories_list_stays_array(self, monkeypatch, client):
         service = MagicMock()
         service.read.return_value = [_memory("m1")]
+        service.read_mcp_filtered.return_value = ([_memory("m1").model_dump(mode="json")], 1)
         monkeypatch.setattr(rest.mcp_memory_handlers, "MemoryService", lambda db_client=None: service)
         resp = client.get("/v1/mcp/memories")
         assert resp.status_code == 200
@@ -502,7 +503,8 @@ class TestRestListCursorContract:
         # in-window continuation must surface as X-Next-Cursor, not a body field.
         memories = [_memory(f"m{i}") for i in range(5)]
         service = MagicMock()
-        service.read.side_effect = lambda uid, limit=None, offset=0: memories
+        service.read.side_effect = lambda uid, limit=None, offset=0, budget=None: memories
+        service.read_mcp_filtered.return_value = ([row.model_dump(mode="json") for row in memories], len(memories))
         monkeypatch.setattr(rest.mcp_memory_handlers, "MemoryService", lambda db_client=None: service)
         resp = client.get("/v1/mcp/memories", params={"limit": 2})
         assert resp.status_code == 200
@@ -567,6 +569,7 @@ class TestRestListCursorContract:
         assert [i["id"] for i in body] == ["a1"]
 
     def test_chat_screen_and_daily_summaries_stay_arrays(self, monkeypatch, client):
+        monkeypatch.setattr(rest.mcp_other_handlers.daily_summaries_db, "get_day_recording_count", lambda *a, **k: 137)
         monkeypatch.setattr(
             rest.mcp_other_handlers.chat_db,
             "get_messages",
@@ -646,7 +649,7 @@ class TestRestStatusContract:
         resp = client.get("/v1/mcp/conversations/c1")
         assert resp.status_code == 200
         body = resp.json()
-        assert body["transcript_segments"][0]["speaker_name"] == "Speaker 0"
+        assert body["transcript_segments"][0]["speaker_name"] == "Speaker A"
         assert body["truncated"] is False
         assert body["apps_results"] == [{"app_id": "app-1", "content": "note"}]
 
@@ -850,24 +853,23 @@ class TestRestRetryAfterRouteLayer:
 class TestRestMemoryListScanContract:
     """REST keeps its released 5000-row filtered-scan window."""
 
-    def test_rest_passes_released_max_scan(self, monkeypatch, client):
-        seen = {}
-
-        def fake_collect(fetch_batch, **kwargs):
-            seen.update(kwargs)
-            return {
-                "memories": [{"id": "m1", "content": "c", "category": "other"}],
-                "has_more": False,
-                "more_in_window": False,
-                "scanned_count": 1,
-                "scan_truncated": False,
-            }
-
-        monkeypatch.setattr(rest.mcp_memory_handlers, "collect_filtered_memories", fake_collect)
-        resp = client.get("/v1/mcp/memories", params={"sort": "created_desc"})
-        assert resp.status_code == 200
-        assert resp.json()[0]["id"] == "m1"
-        assert seen["max_scan"] == 5000
+    def test_rest_filtered_global_sort_refuses_an_unproved_candidate_window(self, monkeypatch, client):
+        monkeypatch.setattr(
+            rest.mcp_memory_handlers,
+            'read_filtered_mcp_memories',
+            MagicMock(
+                side_effect=ToolExecutionError(
+                    'memory_filter_window_exceeded: 5000 candidates per store; narrow the filter.',
+                    code=-32009,
+                    http_status=413,
+                )
+            ),
+        )
+        response = client.get(
+            '/v1/mcp/memories', params={'sort': 'created_desc', 'updated_after': '2026-10-01T00:00:00Z'}
+        )
+        assert response.status_code == 413
+        assert '5000 candidates' in response.json()['detail']
 
     def test_scan_truncated_exposed_via_header(self, monkeypatch, client):
         monkeypatch.setattr(

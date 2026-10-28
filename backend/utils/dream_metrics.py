@@ -40,10 +40,12 @@ ERROR_TYPES = {
     'ServiceUnavailable',
     'NotFound',
     'DeadlineExceeded',
+    'FirestoreContentionExhausted',
     'AdmissionDenied',
     'AgentTranscriptReadError',
     'InvalidModelResponse',
     'LeaseAbandoned',
+    'DestructiveOperationInProgress',
 }
 
 
@@ -121,11 +123,13 @@ BASE_VALUE_ERROR_CODES = (
             'dream_contradictory_spelling',
             'dream_conversation_user_protected',
             'dream_cursor_collection',
+            'dream_daily_budget',
             'dream_disabled',
             'dream_edit_cap',
             'dream_frame_evidence',
             'dream_gateway_failure',
             'dream_gateway_rejected',
+            'dream_gate_contention',
             'dream_input_token_budget',
             'dream_invalid_arguments',
             'dream_invalid_cache_usage',
@@ -217,8 +221,12 @@ def record_pass(report):
         ('cache_unreported_tokens', 'unreported'),
     ]:
         CACHE.labels(label).inc(max(0, int(report.get(key, 0))))
+    code = report.get('error_code')
+    stop = report.get('stop_reason')
+    cost = report.get('cost_usd')
     logger.info(
-        'Dream status=%s bucket=%s tokens=%d turns=%d tool_calls=%d verifier_calls=%d applied=%d',
+        'Dream status=%s bucket=%s tokens=%d turns=%d tool_calls=%d verifier_calls=%d applied=%d '
+        'error_type=%s error_code=%s stop_reason=%s weighted_tokens=%d cost_usd=%s',
         status,
         bucket if bucket in {'empty', 'light', 'medium', 'heavy'} else 'unknown',
         tokens,
@@ -226,6 +234,16 @@ def record_pass(report):
         sum(max(0, int(count)) for count in report.get('tool_counts', {}).values()),
         max(0, int(report.get('verifier_calls', 0))),
         sum(row.get('status') == 'applied' for row in report.get('outcomes', [])),
+        # Source-owned codes only; exception messages never reach the log line.
+        error if error in ERROR_TYPES else 'other' if error else 'none',
+        code if code in DREAM_VALUE_ERROR_CODES else 'other' if code else 'none',
+        (
+            stop
+            if isinstance(stop, str) and (stop in DREAM_VALUE_ERROR_CODES or stop.isidentifier())
+            else 'other' if stop else 'none'
+        ),
+        max(0, int(report.get('price_weighted_tokens') or 0)),
+        f'{cost:.4f}' if isinstance(cost, (int, float)) else 'unknown',
     )
 
 

@@ -51,7 +51,11 @@ def system(monkeypatch):
         row.update(status='completed', data_protection_level='enhanced', private_cloud_sync_enabled=True)
         result = lifecycle.ingest_sync_conversation('u', row)
         if result[0].get('sync_merged_from'):
-            bridge.finish_sync_bridges('u', result[0]['id'])
+            import threading
+
+            bridge.finish_sync_segment(
+                'u', result[0], {'new_memories': set(), 'updated_memories': set()}, threading.Lock(), 'en'
+            )
         return result
 
     return store, ingest, retract, copy
@@ -72,7 +76,7 @@ def test_bridge_cleanup_failure_is_retryable_after_atomic_persistence(system):
     assert survivors == []
     assert len(row['transcript_segments']) == 3
     retract.assert_called_with('u', 'chunk-004', retain_capture=True)
-    copy.assert_called_with('u', [{'id': 'chunk-004'}], 'chunk-000', strict=True)
+    copy.assert_called_with('u', [{'id': 'chunk-004'}], 'chunk-000', strict=True, skip_existing=True)
 
 
 def test_stale_snapshots_of_survivor_and_donor_cannot_commit(system, monkeypatch):
@@ -167,7 +171,7 @@ def test_late_audio_copies_without_retracting_completed_ancestor(system):
     copy.reset_mock()
     assert bridge.finish_sync_bridges('u', 'chunk-004', audio_source_id='chunk-004') == 'chunk-000'
     retract.assert_not_called()
-    copy.assert_called_once_with('u', [{'id': 'chunk-004'}], 'chunk-000', strict=True)
+    copy.assert_called_once_with('u', [{'id': 'chunk-004'}], 'chunk-000', strict=True, skip_existing=True)
 
 
 def test_bridge_redirect_cycle_is_bounded_as_assignment_conflict_subtype(monkeypatch):
@@ -185,7 +189,7 @@ def test_bridge_redirect_cycle_is_bounded_as_assignment_conflict_subtype(monkeyp
     assert exc_info.value.subtype == 'redirect_cycle'
 
 
-def test_bridge_source_shape_conflict_uses_other_subtype(monkeypatch):
+def test_bridge_source_shape_conflict_has_its_own_subtype(monkeypatch):
     from utils.sync import bridge
 
     rows = {
@@ -197,7 +201,7 @@ def test_bridge_source_shape_conflict_uses_other_subtype(monkeypatch):
     with pytest.raises(bridge.SyncAssignmentConflict, match='source missing or not a tombstone') as exc_info:
         bridge.finish_sync_bridges('u', 'survivor')
 
-    assert exc_info.value.subtype == 'other'
+    assert exc_info.value.subtype == 'bridge_source_not_tombstone'
 
 
 def test_receipt_does_not_mark_a_newer_tombstone_revision(system):
@@ -246,7 +250,7 @@ def test_failed_late_audio_copy_is_pending_without_transient_source_hint(system)
     copy.reset_mock()
     ingest(3)
     retract.assert_not_called()
-    copy.assert_called_once_with('u', [{'id': 'chunk-004'}], 'chunk-000', strict=True)
+    copy.assert_called_once_with('u', [{'id': 'chunk-004'}], 'chunk-000', strict=True, skip_existing=True)
 
 
 def test_intake_accepts_chunk_when_destructive_gate_is_held_and_retraction_converges_later(system, caplog):
@@ -268,7 +272,7 @@ def test_intake_accepts_chunk_when_destructive_gate_is_held_and_retraction_conve
         donor = store.rows[('users', 'u', 'conversations', 'chunk-004')]
         assert donor['deleted'] and donor['sync_merged_into'] == 'chunk-000'
         assert 'sync_bridge_cleaned_revision' not in donor
-        copy.assert_called_with('u', [{'id': 'chunk-004'}], 'chunk-000', strict=True)
+        copy.assert_called_with('u', [{'id': 'chunk-004'}], 'chunk-000', strict=True, skip_existing=True)
         assert any('event=sync_bridge outcome=deferred' in record.message for record in caplog.records)
         retract.side_effect = None
         retract.reset_mock()
@@ -376,3 +380,172 @@ def test_bare_assertion_failure_logs_empty_reason_and_does_not_receipt(system, c
     donor = store.rows[('users', 'u', 'conversations', 'chunk-004')]
     assert 'sync_bridge_cleaned_revision' not in donor
     copy.assert_not_called()
+
+
+@pytest.mark.parametrize('redirect', [False, True])
+def test_refresh_target_changes_after_bridge_read_without_failing_persisted_intake(system, monkeypatch, redirect):
+    from utils.sync import bridge
+
+    store, ingest, retract, copy = system
+    ingest(0)
+    ingest(4)
+    transfer = bridge.transfer_donor
+    changed = False
+
+    def change_before_refresh(uid, donor_id, target_id):
+        nonlocal changed
+        if not changed:
+            changed = True
+            target = store.rows[('users', 'u', 'conversations', target_id)]
+            if redirect:
+                survivor = deepcopy(target)
+                survivor['id'] = 'survivor'
+                survivor['sync_merged_from'] = [target_id, donor_id]
+                store.rows[('users', 'u', 'conversations', 'survivor')] = survivor
+                target['sync_merged_into'] = 'survivor'
+            target['deleted'] = True
+        transfer(uid, donor_id, target_id)
+
+    monkeypatch.setattr(bridge, 'transfer_donor', change_before_refresh)
+    row, _, _ = ingest(2)
+    donor = store.rows[('users', 'u', 'conversations', 'chunk-004')]
+    assert row['transcript_segments']  # assignment committed before finalize
+    if redirect:
+        copy.assert_called_with('u', [{'id': 'chunk-004'}], 'survivor', strict=True, skip_existing=True)
+        assert donor['sync_bridge_cleaned_revision'] == donor['sync_content_revision']
+    else:
+        retract.assert_not_called()
+        copy.assert_not_called()
+        assert 'sync_bridge_cleaned_revision' not in donor
+
+
+def test_failed_refresh_preserves_donor_and_pending_receipt_then_converges(system, monkeypatch):
+    from utils.sync import bridge
+
+    store, ingest, retract, copy = system
+    ingest(0)
+    ingest(4)
+    transfer = bridge.transfer_donor
+    failed = MagicMock(side_effect=RuntimeError('refresh unavailable'))
+    monkeypatch.setattr(bridge, 'transfer_donor', failed)
+    ingest(2)
+    donor = store.rows[('users', 'u', 'conversations', 'chunk-004')]
+    retract.assert_not_called()
+    assert 'sync_bridge_cleaned_revision' not in donor
+    copy.assert_called_once()
+    monkeypatch.setattr(bridge, 'transfer_donor', transfer)
+    bridge.finish_sync_bridges('u', 'chunk-000')
+    retract.assert_called_once()
+    assert donor['sync_bridge_cleaned_revision'] == donor['sync_content_revision']
+
+
+def test_refresh_recovery_kill_switch_retains_strict_failure(system, monkeypatch):
+    from database.action_item_refresh import RefreshConversationUnavailable
+    from utils.sync import bridge
+
+    _, ingest, retract, copy = system
+    ingest(0)
+    ingest(4)
+    monkeypatch.setenv('SYNC_FINALIZE_TARGET_RECOVERY_ENABLED', 'off')
+    monkeypatch.setattr(bridge, 'transfer_donor', MagicMock(side_effect=RefreshConversationUnavailable()))
+    with pytest.raises(RefreshConversationUnavailable):
+        ingest(2)
+    retract.assert_not_called()
+    copy.assert_not_called()
+
+
+def test_deleted_target_completes_intake_after_audio_and_clears_response(monkeypatch):
+    import threading
+    from utils.sync import bridge
+    from utils.sync.intake_completion import complete_sync_intake
+
+    monkeypatch.setattr(bridge.conversations_db, 'get_conversation', lambda *a: {'deleted': True})
+    events = []
+    response = {'new_memories': set(), 'updated_memories': set()}
+    complete_sync_intake(
+        uid='u',
+        assigned={'id': 'gone', 'sync_relevance': 'keep', 'sync_merged_from': ['donor']},
+        created=False,
+        survivors=[{}],
+        response=response,
+        lock=threading.Lock(),
+        language='en',
+        audio_enabled=True,
+        store_audio=lambda cid: events.append('audio'),
+        mark_finalize=lambda: events.append('finalize'),
+        finish=bridge.finish_sync_segment,
+        acknowledge=lambda: events.append('ack'),
+    )
+    assert events == ['audio', 'finalize', 'ack']
+    assert response == {'new_memories': set(), 'updated_memories': set(), '_merged': {}}
+
+
+@pytest.mark.parametrize('value, expected', [('', True), ('true', True), ('off', False), ('typo', False)])
+def test_finalize_recovery_switch_is_default_on_and_typos_disable(monkeypatch, value, expected):
+    from config.sync_finalize import sync_finalize_target_recovery_enabled
+
+    monkeypatch.setenv('SYNC_FINALIZE_TARGET_RECOVERY_ENABLED', value)
+    assert sync_finalize_target_recovery_enabled() is expected
+
+
+def test_refresh_guard_diagnostic_identifies_site_without_message(system):
+    from database import action_item_refresh
+    from utils.sync.telemetry import finalize_exception_site
+
+    with pytest.raises(action_item_refresh.RefreshConversationUnavailable) as caught:
+        action_item_refresh.reconcile('u', 'missing', [], expected_revision=None)
+    assert finalize_exception_site(caught.value) == 'action_item_refresh'
+
+
+@pytest.mark.parametrize('flatten', ['true', 'off'])
+def test_redirect_during_refresh_retains_transitive_sync_donors(system, monkeypatch, flatten):
+    from utils.sync import bridge
+
+    monkeypatch.setenv('CONVERSATION_SMART_MERGE_FLATTEN_ENABLED', flatten)
+    store, ingest, retract, copy = system
+    ingest(4)
+    ingest(8)
+    ingest(0)
+    transfer = bridge.transfer_donor
+    fired = False
+
+    def absorb_before_refresh(uid, donor_id, target_id):
+        nonlocal fired
+        if not fired:
+            fired = True
+            ingest(2)  # real atomic sync assignment absorbs the current target
+        transfer(uid, donor_id, target_id)
+
+    monkeypatch.setattr(bridge, 'transfer_donor', absorb_before_refresh)
+    ingest(6)
+    target = store.rows[('users', 'u', 'conversations', 'chunk-000')]
+    assert set(target['sync_merged_from']) == {'chunk-004', 'chunk-008'}
+    for source in ('chunk-004', 'chunk-008'):
+        donor = store.rows[('users', 'u', 'conversations', source)]
+        assert donor['sync_bridge_cleaned_revision'] == donor['sync_content_revision']
+    assert ('u', [{'id': 'chunk-008'}], 'chunk-000') in [c.args for c in copy.call_args_list]
+
+
+def test_silent_bridge_keeps_notification_capable_cleanup_debt(system, monkeypatch):
+    from utils.sync import bridge
+
+    store, ingest, retract, copy = system
+    ingest(0)
+    ingest(4)
+    # Persist a bridge without running its ordinary post-persist callback.
+    from utils.conversations import lifecycle
+
+    incoming = capture(2)
+    incoming.update(status='completed', data_protection_level='enhanced', private_cloud_sync_enabled=True)
+    lifecycle.ingest_sync_conversation('u', incoming)
+    transfer = MagicMock()
+    monkeypatch.setattr(bridge, 'transfer_donor', transfer)
+    assert bridge.finish_sync_bridges('u', 'chunk-000', silent=True) == 'chunk-000'
+    transfer.assert_not_called()
+    retract.assert_not_called()
+    assert 'sync_bridge_cleaned_revision' not in store.rows[('users', 'u', 'conversations', 'chunk-004')]
+    copy.assert_called_once()
+    # Normal later work still owns the retained cleanup; silence is not global.
+    bridge.finish_sync_bridges('u', 'chunk-000')
+    transfer.assert_called_once()
+    retract.assert_called_once()

@@ -57,6 +57,80 @@ alertmanager:
 
 grafana:
   enabled: true
+  # Canvas raw SVG field icons require 13.x; match the board owner's tested host.
+  image:
+    tag: 13.1.3
+  # Chart75's plugins key emits GF_INSTALL_PLUGINS, ignored by13 unless forced.
+  # Use the supported synchronous installer (also exercised in local13 QA).
+  env:
+    GF_PLUGINS_PREINSTALL_SYNC: yesoreyeram-infinity-datasource@4.1.1
+  # Grafana 13 refuses to start with the default [rendering] renderer_token in
+  # production (2026-10-16 crash loop). Secret grafana-renderer-token is created
+  # out of band; the renderer reads the same value as AUTH_TOKEN.
+  envValueFrom:
+    GF_RENDERING_RENDERER_TOKEN:
+      secretKeyRef:
+        name: grafana-renderer-token
+        key: token
+  # Server admin (user 1, omi_admin_prod) lives in an out-of-band secret so a
+  # helm upgrade with --reuse-values cannot overwrite it with the chart default.
+  admin:
+    existingSecret: grafana-admin-credentials
+    userKey: admin-user
+    passwordKey: admin-password
+  # Parent bootstrap supplies the allocated org ID; never default to monitoring.
+  service:
+    annotations:
+      cloud.google.com/backend-config: '{"default":"grafana-private-embed"}'
+  envFromConfigMaps:
+    - name: grafana-business-runtime
+  datasources:
+    business.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Omi Admin Stats
+          uid: omi-admin-api
+          orgId: ${OMI_GRAFANA_BUSINESS_ORG_ID}
+          type: yesoreyeram-infinity-datasource
+          access: proxy
+          url: http://127.0.0.1:8899
+          editable: false
+          jsonData:
+            auth_method: none
+            timeoutInSeconds: 420
+            allowedHosts: [http://127.0.0.1:8899]
+  extraConfigmapMounts:
+    - name: stats-proxy
+      mountPath: /opt/omi-stats
+      configMap: grafana-stats-proxy
+      readOnly: true
+  extraContainers: |
+      - name: stats-proxy
+        image: python:3.13.12-slim-bookworm@sha256:a58daefb915e1e03ad48f3ca4df8832065412c5c35cacb9d39f4229184de12b6
+        command: [python, -B, /opt/omi-stats/stats_proxy.py]
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 65532
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: [ALL]
+        resources:
+          requests:
+            cpu: 25m
+            memory: 48Mi
+          limits:
+            cpu: 200m
+            memory: 192Mi
+        volumeMounts:
+          - name: stats-proxy
+            mountPath: /opt/omi-stats
+            readOnly: true
+        readinessProbe:
+          exec:
+            command: [python, -c, "import socket; socket.create_connection(('127.0.0.1',8899),2).close()"]
+          periodSeconds: 15
+          timeoutSeconds: 3
   sidecar:
     datasources:
       alertmanager:
@@ -68,13 +142,16 @@ grafana:
   # starved: /api/health returned 502 externally and alert provisioning timed
   # out. Requests give the alerting UI a guaranteed CPU share; sized from
   # measured peaks (214m CPU, 241Mi during the 2026-10-14 evaluation storm).
+  # Grafana 13 was OOMKilled at 1Gi three times on 2026-10-16 (15:18, 15:19,
+  # 15:51Z), each at the end of an internet scanner burst (~300 unauthenticated
+  # .env/secrets probes in ~70s) while steady-state working set stays ~260-510Mi.
   resources:
     requests:
       cpu: 250m
       memory: 384Mi
     limits:
       cpu: "1"
-      memory: 1Gi
+      memory: 2Gi
   serviceAccount:
     create: true
     annotations:
@@ -100,12 +177,17 @@ grafana:
       - kubernetes.io/pvc-protection
   imageRenderer:
     enabled: true
+    envValueFrom:
+      AUTH_TOKEN:
+        secretKeyRef:
+          name: grafana-renderer-token
+          key: token
   grafana.ini:
-    # Grafana v12.1.0 conf/defaults.ini [database] and
-    # pkg/services/sqlstore/database_config.go (https://github.com/grafana/grafana/tree/v12.1.0).
+    # Grafana v13.1.3 conf/defaults.ini [database] and
+    # pkg/services/sqlstore/database_config.go (https://github.com/grafana/grafana/tree/v13.1.3).
     # 2026-10-12 prod lock bursts: 03:02Z (11 lines), 09:02Z (67 lines);
     # evaluation ticks dropped, API 500/502 (32.7s GET), probes failed.
-    # SQLite-only wal/query_retries/transaction_retries; defaults false/0/5.
+    # SQLite-only wal/query_retries/transaction_retries; defaults false/0/10.
     # Keep the existing sqlite3 type, grafana.db path and PVC. No busy_timeout INI option.
     database:
       wal: true
@@ -119,6 +201,35 @@ grafana:
     # Telegram notifications carry dashboard/panel links instead.
     unified_alerting.screenshots:
       capture: false
+    auth.anonymous:
+      enabled: false
+    auth.jwt:
+      enabled: true
+      header_name: X-Omi-Grafana-JWT
+      url_login: true
+      auto_sign_up: true
+      username_claim: sub
+      email_claim: email
+      jwk_set_url: https://admin.omi.me/api/grafana/jwks
+      cache_ttl: 1m
+      expect_claims: '{"iss":"https://admin.omi.me","aud":"https://monitor.omi.me","purpose":"omi-business-embed"}'
+      org_attribute_path: orgs
+      org_mapping: 'business:${OMI_GRAFANA_BUSINESS_ORG_ID}:Viewer'
+      role_attribute_strict: true
+      allow_assign_grafana_admin: false
+    security:
+      allow_embedding: true
+      cookie_secure: true
+      cookie_samesite: none
+      content_security_policy: true
+      # Preserve v13.1.3 defaults.ini CSP; INI triple quotes retain semicolon-separated directives.
+      content_security_policy_template: >-
+        """script-src 'self' 'unsafe-eval' 'unsafe-inline' 'strict-dynamic' $NONCE;
+        object-src 'none';font-src 'self';style-src 'self' 'unsafe-inline' blob:;
+        img-src * data:;base-uri 'self';
+        connect-src 'self' grafana.com ws://$ROOT_PATH wss://$ROOT_PATH;
+        manifest-src 'self';media-src 'none';form-action 'self' $FORM_ACTION_ADDITIONAL_HOSTS;
+        frame-ancestors https://admin.omi.me;"""
     server:
       root_url: https://monitor.omi.me/
   affinity:
@@ -178,7 +289,9 @@ prometheus:
     resources:
       requests:
         cpu: "1"
-        memory: 2G
+        # 2026-10-21: request matches steady-state use (5.4-7.8Gi) so the
+        # scheduler accounts for it; both e2-highmem-4 monitoring nodes fit it.
+        memory: 8Gi
       limits:
         # 2026-10-14 review: keep "2". Prometheus load is sustained, not
         # bursty - 1.5-2.2 cores across 14h with the node pinned near its
@@ -191,11 +304,18 @@ prometheus:
         # starvation is fixed with requests (Grafana/operator below, adapter
         # and Loki read path in their values files) plus the 4-vCPU pool
         # resize runbook in the monitoring README - not by shrinking this.
-        cpu: "2"
+        # 2026-10-21: raised to "3". At 2.25M head series replica 0 ran at
+        # 1.73 cores and rules with 6h-7d ranges hit Grafana's 30s evaluation
+        # limit (omi-stt-fallback-leg-dead, omi-slo-chat-warning,
+        # omi-slo-live-warning). The pool is now e2-highmem-4 (3920m allocatable).
+        cpu: "3"
         # 2026-09-28: Prometheus restored 2.56M head series from 24 WAL segments,
         # then OOM-killed shortly after replay completed at the 4Gi limit. The
         # request stays 2G because the monitoring node's requests are ~94% committed.
-        memory: 8Gi
+        # 2026-10-21: head series reached 2.25M (Cloud Run bridge 835k,
+        # backend-sync 456k) with RSS at 7.8Gi of 8Gi, the same edge as 09-28.
+        # 14Gi leaves WAL-replay headroom on the 28.9Gi e2-highmem-4 nodes.
+        memory: 14Gi
     storageSpec:
     # Using PersistentVolumeClaim
       volumeClaimTemplate:
@@ -370,13 +490,24 @@ prometheus:
           - source_labels: [__meta_kubernetes_service_name]
             regex: "(.*)-prometheus-stackdriver-exporter"
             action: keep
-      # Exporter namespace allowlist includes notifications-job (GMP cluster=__run__).
+      # Two exporter releases feed this one job (GMP cluster=__run__):
+      # prod-omi-cloud-run-metrics-exporter imports every omi_* family from the
+      # non-sync Cloud Run services; prod-omi-cloud-run-sync-metrics-exporter
+      # imports only the consumed families from the sync services. Keeping one job
+      # name keeps every job="cloud-run-application-metrics" query, min(up) and
+      # max(stackdriver_monitoring_last_scrape_error) covering both.
       - job_name: cloud-run-application-metrics
         # A prod scrape is ~28MB and takes 6-10s because the exporter queries
         # Cloud Monitoring inline. The default 10s scrape_timeout cut every
         # collection off mid-flight and recorded 0 samples, so the budget has to
         # exceed a slow scrape, and the interval has to exceed the budget.
-        scrape_interval: 60s
+        # Every scrape is a full timeSeries.list of each imported family, billed per
+        # time series returned (SKU 6E35-67F5-C3C6, "Time series billed count"), and
+        # both Prometheus replicas scrape independently. At 60s this cost ~$50/day on
+        # 2026-10-16 for data Cloud Run only writes every 60s anyway. 120s halves the
+        # bill; no rule reads these families over a window shorter than 5m, which
+        # still holds 2-3 samples. Do not drop below 120s without re-pricing.
+        scrape_interval: 120s
         scrape_timeout: 45s
         metrics_path: /metrics
         scheme: http
@@ -387,7 +518,7 @@ prometheus:
               - "prod-omi-monitoring"
         relabel_configs:
           - source_labels: [__meta_kubernetes_service_name]
-            regex: "prod-omi-cloud-run-metrics-exporter"
+            regex: "prod-omi-cloud-run-(sync-)?metrics-exporter"
             action: keep
         metric_relabel_configs:
           # The Stackdriver exporter mangles every imported name into

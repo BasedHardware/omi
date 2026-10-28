@@ -10,7 +10,13 @@ import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
 class PostHogAnalyticsAdapter
-    implements AnalyticsAdapter, AnalyticsDeliveryAdapter, AnalyticsIdentityAdapter, AnalyticsFeatureFlagAdapter {
+    implements
+        AnalyticsResolvedFlagAdapter,
+        AnalyticsAdapter,
+        AnalyticsDeliveryAdapter,
+        AnalyticsIdentityAdapter,
+        AnalyticsFeatureFlagAdapter,
+        AnalyticsBooleanFlagAdapter {
   PostHogAnalyticsAdapter({
     required this.apiKey,
     this.host = 'https://us.i.posthog.com',
@@ -176,6 +182,28 @@ class PostHogAnalyticsAdapter
   }
 
   Map<String, Object> _captureProperties(Map<String, Object>? properties) => {...?properties};
+
+  @override
+  bool isBooleanFeatureEnabledCached(String key) => _fresh?.flags[key] == true;
+
+  @override
+  Future<bool> isBooleanFeatureEnabled(String key) async {
+    final verified = _fresh;
+    if (verified != null) return verified.flags[key] == true;
+    final result = await Posthog().getFeatureFlagResult(key);
+    return result?.enabled == true && result?.variant == null;
+  }
+
+  @override
+  Future<bool?> resolvedFeatureEnabled(String key) async {
+    final verified = _fresh;
+    if (verified != null) {
+      final value = verified.flags[key];
+      return value is bool ? value : null;
+    }
+    final result = await Posthog().getFeatureFlagResult(key);
+    return result?.enabled;
+  }
 
   @override
   Future<bool> isFeatureEnabled(String key) {

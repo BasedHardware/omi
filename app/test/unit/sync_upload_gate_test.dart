@@ -14,7 +14,77 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
+    limiter.clockForTesting = null;
     limiter.clear();
+  });
+
+  test('dispatch holds double Retry-After to one hour and clear resets the backoff', () {
+    for (final seconds in [60, 120, 240, 480, 960, 1920, 3600, 3600]) {
+      limiter.markDispatchHoldLimited(retryAfterSeconds: 60);
+      expect(limiter.activeRetryAfterSeconds, inInclusiveRange(seconds - 1, seconds));
+    }
+
+    // Successful uploads call clear() on the account limiter.
+    limiter.clear();
+    limiter.markDispatchHoldLimited(retryAfterSeconds: 60);
+    expect(limiter.activeRetryAfterSeconds, inInclusiveRange(59, 60));
+  });
+
+  test('a hold right after the cooldown expires keeps growing the backoff', () {
+    // Real flow: the next upload only runs once the cooldown has expired, so a
+    // fence that is still held answers just after expiry.
+    var now = DateTime(2026, 10, 26);
+    limiter.clockForTesting = () => now;
+    for (final seconds in [60, 120, 240, 480]) {
+      limiter.markDispatchHoldLimited(retryAfterSeconds: 60);
+      expect(limiter.activeRetryAfterSeconds, seconds);
+      now = now.add(Duration(seconds: seconds + 1));
+    }
+  });
+
+  test('dispatch hold backoff resets after a quiet gap of twice the last cooldown', () {
+    var now = DateTime(2026, 10, 26);
+    limiter.clockForTesting = () => now;
+    limiter.markDispatchHoldLimited(retryAfterSeconds: 60);
+    now = now.add(const Duration(seconds: 61));
+    limiter.markDispatchHoldLimited(retryAfterSeconds: 60);
+    expect(limiter.activeRetryAfterSeconds, 120);
+
+    now = now.add(const Duration(seconds: 120 + 241));
+    limiter.markDispatchHoldLimited(retryAfterSeconds: 60);
+    expect(limiter.activeRetryAfterSeconds, 60);
+  });
+
+  test('successful upload resets the dispatch hold backoff', () async {
+    var now = DateTime(2026, 10, 26);
+    limiter.clockForTesting = () => now;
+    limiter.markDispatchHoldLimited(retryAfterSeconds: 60);
+    limiter.markDispatchHoldLimited(retryAfterSeconds: 60);
+    expect(limiter.dispatchHoldBackoffLevelForTesting, 2);
+    now = now.add(const Duration(seconds: 121));
+
+    final gate = SyncUploadGate(
+      limiter: limiter,
+      fairUseStatusLoader: () async => null,
+      uploader: (
+        files, {
+        onUploadProgress,
+        conversationId,
+        captureEvidence,
+        recordingSessionId,
+        audioStartSeconds,
+        audioEndSeconds,
+        claimLiveCapture = false,
+        geolocation,
+      }) async =>
+          UploadFilesResult.queued('job-after-hold'),
+    );
+
+    await gate.upload([]);
+
+    expect(limiter.dispatchHoldBackoffLevelForTesting, 0);
+    limiter.markDispatchHoldLimited(retryAfterSeconds: 60);
+    expect(limiter.activeRetryAfterSeconds, 60);
   });
 
   test('stale persisted fair-use cooldown self-heals before upload', () async {
@@ -497,5 +567,61 @@ void main() {
 
     expect(SharedPreferencesUtil().getInt('syncRateLimitedUntilMs'), 0);
     expect(SharedPreferencesUtil().getInt('syncBackfillLimitedUntilMs'), 0);
+  });
+
+  test('a 5xx with Retry-After installs the account cooldown instead of failing every batch', () async {
+    // Sync dispatch unavailable behind an account gate: the server scopes the
+    // pause via Retry-After on an otherwise-unscoped 503. The next upload must
+    // be refused client-side rather than re-sending the same doomed batch.
+    var uploads = 0;
+    final gate = SyncUploadGate(
+      limiter: limiter,
+      fairUseStatusLoader: () async => null,
+      uploader: (files,
+          {onUploadProgress,
+          conversationId,
+          captureEvidence,
+          recordingSessionId,
+          audioStartSeconds,
+          audioEndSeconds,
+          claimLiveCapture = false,
+          geolocation}) async {
+        uploads++;
+        throw const SyncUploadHttpException(503, 'Server is temporarily unavailable', retryAfterSeconds: 30);
+      },
+    );
+
+    await expectLater(gate.upload([]), throwsA(isA<SyncUploadHttpException>()));
+    expect(uploads, 1);
+    expect(limiter.isLimited, isTrue);
+    expect(limiter.reason, RateLimitReason.backendBusy);
+    expect(limiter.activeRetryAfterSeconds, lessThanOrEqualTo(30));
+
+    await expectLater(gate.upload([]), throwsA(isA<SyncRateLimitedException>()));
+    expect(uploads, 1, reason: 'the cooldown stops the drain before another body upload');
+  });
+
+  test('a 5xx without Retry-After does not install a cooldown', () async {
+    // Platform-generated 503s carry no pacing; the drain's own inter-batch
+    // pause covers them, and the limiter must stay clear so the next batch
+    // still gets a chance.
+    final gate = SyncUploadGate(
+      limiter: limiter,
+      fairUseStatusLoader: () async => null,
+      uploader: (files,
+              {onUploadProgress,
+              conversationId,
+              captureEvidence,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
+              claimLiveCapture = false,
+              geolocation}) async =>
+          throw const SyncUploadHttpException(503, 'Server is temporarily unavailable'),
+    );
+
+    await expectLater(gate.upload([]), throwsA(isA<SyncUploadHttpException>()));
+
+    expect(limiter.isLimited, isFalse);
   });
 }

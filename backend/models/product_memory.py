@@ -2,6 +2,7 @@ import json
 import hashlib
 import unicodedata
 import uuid
+import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
@@ -13,6 +14,24 @@ from models.memory_evidence import MemoryEvidence, SourceState
 
 DEFAULT_SHORT_TERM_TTL = timedelta(hours=48)
 DEFAULT_SHORT_TERM_TTL_DAYS = 2
+
+
+def undecided_visible() -> bool:
+    """Keep owed decisions visible; explicit false is the operational rollback."""
+    return os.getenv('MEMORY_UNDECIDED_VISIBLE', 'true').strip().lower() not in {'0', 'false', 'off', 'no'}
+
+
+def awaiting_memory_decision(item: 'MemoryItem') -> bool:
+    return (item.promotion or {}).get('route') in {None, 'review'}
+
+
+def visible_memory_tier(item: 'MemoryItem') -> 'MemoryLayer':
+    """Project historical Review archives without rewriting their audit trail."""
+    if undecided_visible() and item.tier == MemoryLayer.archive and (item.promotion or {}).get('route') == 'review':
+        return MemoryLayer.short_term
+    return item.tier
+
+
 RESTRICTED_SENSITIVITY_LABELS = frozenset(
     {
         "credential",
@@ -191,8 +210,6 @@ class MemoryItem(BaseModel):
     primary_capture_device: Optional[str] = None
     corroboration_count: int = 0
     last_corroborated_at: Optional[datetime] = None
-    half_life_days: Optional[float] = None
-    belief_class: Optional[str] = None
     confidence: Optional[float] = None
     superseded_by: Optional[str] = None
     subject_entity_id: Optional[str] = None
@@ -377,6 +394,8 @@ def effective_short_term_expiry(item: MemoryItem) -> datetime:
 def _base_policy_checks(item: MemoryItem, policy: MemoryAccessPolicy, now: datetime) -> Optional[AccessDecision]:
     if (item.promotion or {}).get('chat_deleted') is True:
         return AccessDecision(False, 'owner_removed_from_chat')
+    if (item.promotion or {}).get('user_review') is False:
+        return AccessDecision(False, 'owner_rejected')
     if item.status != MemoryItemStatus.active:
         return AccessDecision(False, "not_active")
     if item.processing_state == ProcessingState.blocked:
@@ -403,17 +422,18 @@ def is_default_access_eligible(
     base = _base_policy_checks(item, policy, current_time)
     if base is not None:
         return base
-    if item.tier == MemoryLayer.archive:
+    tier = visible_memory_tier(item)
+    if tier == MemoryLayer.archive:
         return AccessDecision(False, "archive_requires_explicit_query")
     if policy.consumer in {MemoryConsumer.third_party, MemoryConsumer.developer_api, MemoryConsumer.mcp}:
         if not policy.app_has_default_memory_grant:
             return AccessDecision(False, "missing_default_memory_grant")
-    if item.tier == MemoryLayer.short_term and effective_short_term_expiry(item) <= current_time:
+    if tier == MemoryLayer.short_term and effective_short_term_expiry(item) <= current_time:
         # Time alone is not a terminal lifecycle decision. Active Short-term
         # rows remain readable until canonical apply records promote/archive/
         # review/reject and moves them out of this state.
         return AccessDecision(True, "short_term_expired_pending_adjudication")
-    if item.tier in {MemoryLayer.short_term, MemoryLayer.long_term}:
+    if tier in {MemoryLayer.short_term, MemoryLayer.long_term}:
         return AccessDecision(True, "default_memory_allowed")
     return AccessDecision(False, "unsupported_tier")
 

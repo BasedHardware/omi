@@ -9,6 +9,7 @@ import time
 from config import live_stt_state
 from config.live_stt_registry import Target, assigned, registry, DEFAULT_IDS, routing_on
 from config.stt_provider_policy import MODULATE_SUPPORTED_LANGUAGES, PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
+from config.live_stt_resilience import escape_excludes_benched_enabled
 from utils.stt.live_gate import GateState, gate_rate
 from utils.stt.live_health import bounded_language
 from utils.stt.live_metrics import COST_DECISION, COST_SHADOW, COST_ALL_DEGRADED
@@ -190,7 +191,28 @@ def target_circuit(target: Target | None, default: ProviderCircuitBreaker | None
     return circuit
 
 
-def select(targets, states, uid, language, *, features=frozenset({'streaming'}), required_languages=(), recovery=None):
+def escape_admits(stages) -> bool:
+    """Whether a stage may serve inside the availability escape.
+
+    A benched (stage-0) target is admitted only when no stage>0 target can
+    serve: the escape keeps the chain non-empty, it must not re-admit a
+    benched provider beside a healthy-but-trialling one (2026-10-20).
+    """
+    stages = list(stages)
+    return not (escape_excludes_benched_enabled() and any(stage > 0 for stage in stages))
+
+
+def select(
+    targets,
+    states,
+    uid,
+    language,
+    *,
+    features=frozenset({'streaming'}),
+    required_languages=(),
+    recovery=None,
+    decision=None,
+):
     eligible, available, result = [], [], []
     for target in sorted(targets, key=lambda item: item.cost_per_audio_hour):
         if not target.capable(language, features) or any(
@@ -229,10 +251,19 @@ def select(targets, states, uid, language, *, features=frozenset({'streaming'}),
         state = states.get(target.id, GateState())
         return -state.stage, state.failures / state.n if state.n else 0, target.cost_per_audio_hour
 
-    if available and all(states.get(target.id, GateState()).stage < 100 for target in available):
+    stages = [states.get(target.id, GateState()).stage for target in available]
+    escape = bool(available) and all(stage < 100 for stage in stages)
+    exclude_benched = escape and not escape_admits(stages)
+    if decision is not None:
+        decision.update(escape=escape, exclude_benched=exclude_benched, states=states)
+    if escape:
         # Availability escape: health stages demote, they cannot remove the
         # whole chain. Config ramps and account gates remain hard exclusions.
+        # Strictly stage-ordered; benched targets stay out while any stage>0
+        # target is available.
         result = sorted(available, key=health_order)
+        if exclude_benched:
+            result = [target for target in result if states.get(target.id, GateState()).stage > 0]
     elif not result and eligible:
         # All capacity-signalled/cooled: normal admission decides one escape.
         result = sorted(eligible, key=capacity_refused_at)
@@ -253,8 +284,12 @@ def propose(
     required_languages=(),
     engine_models=None,
     last_resorts=None,
+    decision=None,
 ):
+    """Cost-ordered proposal. ``decision`` (optional dict) receives the
+    escape outcome and the gate states the proposal used."""
     language = bounded_language(language)
+    decision = decision if decision is not None else {}
     gate_rate()
     account_states = (
         account_states if account_states is not None else health.cached_snapshot(configured_families, language)
@@ -270,13 +305,20 @@ def propose(
         targets.append(target)
     states = health.cost_snapshot(targets, language)
     proposed = select(
-        targets, states, uid, language, required_languages=required_languages, recovery=health.prefer_recovery
+        targets,
+        states,
+        uid,
+        language,
+        required_languages=required_languages,
+        recovery=health.prefer_recovery,
+        decision=decision,
     )
     if last_resorts is not None:
         last_resorts.extend(
             target
             for target in sorted(targets, key=lambda target: target.cost_per_audio_hour)
             if states.get(target.id, GateState()).stage < 100
+            and not (decision.get('exclude_benched') and states.get(target.id, GateState()).stage == 0)
             and target not in proposed
             and permitted_target(target, uid, language, required_languages, engine_models, account_states)
             and capacity_available(target)

@@ -158,7 +158,7 @@ def test_canonical_l1_wrapper_keeps_broad_source_aware_candidates_out_of_archive
     assert captured["source_type"] == "voice_transcript"
     assert captured["persist_route_outcomes"] is False
     assert "David:" in captured["text"]
-    assert "Speaker 1:" in captured["text"]
+    assert "Speaker A:" in captured["text"]
 
 
 def test_canonical_l1_wrapper_carries_confirmed_owner_voice_provenance(monkeypatch):
@@ -668,45 +668,7 @@ def test_l1_archive_extractor_deduplicates_within_subject_without_collapsing_oth
     assert len({item.archive_id for item in items}) == 2
 
 
-def test_l1_prompt_omits_belief_instructions_when_flag_off(monkeypatch):
-    monkeypatch.delenv("MEMORY_BELIEF_MODEL_ENABLED", raising=False)
-    fake_llm = FakeLLM('{"items": []}')
-    extract_l1_memory_archive_items_from_text(
-        uid="user_belief_off",
-        source_id="source_belief_off",
-        source_type="voice_transcript",
-        text="User prefers dark mode and asked Omi to remember it.",
-        persist_route_outcomes=False,
-        llm=fake_llm,
-    )
-    prompt = _invoked_system_prompt(fake_llm)
-    assert "belief_class" not in prompt
-    assert "half_life_days" not in prompt
-    assert "subject_scope" not in prompt
-
-
-def test_l1_prompt_includes_belief_instructions_when_flag_on(monkeypatch):
-    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
-    fake_llm = FakeLLM('{"items": []}')
-    extract_l1_memory_archive_items_from_text(
-        uid="user_belief_on",
-        source_id="source_belief_on",
-        source_type="voice_transcript",
-        text="User prefers dark mode and asked Omi to remember it.",
-        persist_route_outcomes=False,
-        llm=fake_llm,
-    )
-    prompt = _invoked_system_prompt(fake_llm)
-    assert "belief_class" in prompt
-    assert "half_life_days" in prompt
-    assert "subject_scope" in prompt
-    assert "user_owned_project" in prompt
-    assert "media_screen" not in prompt
-    assert "Voice, OCR, API, and device transport do not outrank one another by modality" in prompt
-
-
-def test_l1_preserves_scoped_decision_arguments_and_source_lineage(monkeypatch):
-    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
+def test_l1_preserves_scoped_subject_and_source_lineage():
     fake_llm = FakeLLM(
         json.dumps(
             {
@@ -718,12 +680,6 @@ def test_l1_preserves_scoped_decision_arguments_and_source_lineage(monkeypatch):
                         "evidence_quotes": ["I accept the launch plan because it keeps the team focused"],
                         "about": "the user",
                         "subject_scope": "user_owned_project",
-                        "arguments": {
-                            "object": "Omi launch plan",
-                            "decision": "accepted",
-                            "rationale": "keeps the team focused",
-                            "task_id": "must-be-dropped",
-                        },
                     }
                 ]
             }
@@ -743,15 +699,9 @@ def test_l1_preserves_scoped_decision_arguments_and_source_lineage(monkeypatch):
     assert len(items) == 1
     assert items[0].subject_scope == "user_owned_project"
     assert items[0].source_refs[0]["source_id"] == "source-decision"
-    assert items[0].arguments == {
-        "object": "Omi launch plan",
-        "decision": "accepted",
-        "rationale": "keeps the team focused",
-    }
 
 
 def test_l1_does_not_default_assistant_content_to_primary_user(monkeypatch):
-    monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
     fake_llm = FakeLLM(
         json.dumps(
             {
@@ -795,5 +745,5 @@ def test_l1_extraction_receives_untrusted_cluster_render(monkeypatch):
     ]
     extract_canonical_l1_memory_candidates('u', 'c', segments, user_name='David', language='en')
     assert 'UNTRUSTED' in captured['text']
-    assert 'Speaker 0:' in captured['text'] and 'Speaker 1:' in captured['text']
+    assert 'Speaker A:' in captured['text'] and 'Speaker B:' in captured['text']
     assert 'David:' not in captured['text']

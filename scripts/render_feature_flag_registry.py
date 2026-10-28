@@ -8,6 +8,8 @@ header marker, never from wall-clock time, so CI drift checks are stable.
 from __future__ import annotations
 
 import argparse
+
+from feature_flag_parser_defaults import parser_defaults
 import json
 import re
 import sys
@@ -132,6 +134,8 @@ def _effective_envs(base: dict[str, dict[str, str]], overlay: dict[str, dict[str
 
 
 _CHART_NAME = re.compile(r"^\s*-\s*name:\s*['\"]?([A-Za-z0-9_.\-]+)['\"]?\s*$")
+_ACTION_ASSIGNMENT = re.compile(r"^\s*([A-Z][A-Z0-9_]+)=([^,\s]+)")
+_ACTION_ENV_ARG = re.compile(r"--(?:update|set)-env-vars(?:=|\s+)(?:\"([^\"]*)\"|'([^']*)'|([^\s\\]+))", re.S)
 
 
 def _chart_envs(path: Path) -> dict[str, str]:
@@ -169,6 +173,36 @@ def _chart_envs(path: Path) -> dict[str, str]:
     return envs
 
 
+def _action_envs(path: Path) -> dict[str, str]:
+    """Literal env overlays emitted by deploy actions or workflow gcloud calls."""
+    if not path.is_file():
+        return {}
+    text = path.read_text(encoding="utf-8")
+    envs: dict[str, str] = {}
+    for match in _ACTION_ENV_ARG.finditer(text):
+        payload = next((value for value in match.groups() if value is not None), "")
+        for item in payload.replace("\\\n", "").split(","):
+            key, separator, value = item.partition("=")
+            key = key.strip()
+            if separator and re.fullmatch(r"[A-Z][A-Z0-9_]+", key):
+                envs[key] = _unquote(value.strip()) or "declared"
+    # The sync-backfill composite action publishes a small, literal output map
+    # which is merged into the deployed service's cloned runtime contract.
+    if path.as_posix().endswith(".github/actions/sync-backfill-lifecycle/action.yml"):
+        in_output = False
+        for raw in text.splitlines():
+            if 'echo "sync_backfill_env_vars<<EOF"' in raw:
+                in_output = True
+                continue
+            if in_output and 'echo "EOF"' in raw:
+                break
+            if in_output:
+                match = _ACTION_ASSIGNMENT.match(raw.strip().removeprefix('echo "').removesuffix('"'))
+                if match:
+                    envs[match[1]] = match[2]
+    return envs
+
+
 def _deploy_index(root: Path) -> dict[str, dict[str, dict[str, str]]]:
     """scope -> host label -> {env key: token} for base/dev/prod plus charts."""
     deploy_dir = root / "backend" / "deploy" / "runtime_env"
@@ -184,6 +218,19 @@ def _deploy_index(root: Path) -> dict[str, dict[str, dict[str, str]]]:
                     envs = _chart_envs(values)
                     if envs:
                         effective[f"{chart.name} (chart)"] = envs
+        actions_dir = root / ".github" / "actions"
+        if actions_dir.is_dir():
+            for action in sorted(actions_dir.rglob("action.yml")):
+                envs = _action_envs(action)
+                if envs:
+                    effective[f"{action.parent.name} (action)"] = envs
+        if env == "prod":
+            workflows_dir = root / ".github" / "workflows"
+            if workflows_dir.is_dir():
+                for workflow in sorted(workflows_dir.glob("*prod*.y*ml")):
+                    envs = _action_envs(workflow)
+                    if envs:
+                        effective[f"{workflow.stem} (action)"] = envs
         result[env] = effective
     return result
 
@@ -230,18 +277,51 @@ def _preamble() -> list[str]:
         "",
         GENERATED_NOTICE,
         "",
+        "Boolean `fail` fields for migrated switches are generated from the shared parser's",
+        "missing-value policy. `CAPTURE_COVERAGE_MODE` off/shadow preserves the legacy token",
+        "grammar; serve uses `refactor_modes.default_on/default_off`. Explicit child settings",
+        "override repeat-work inheritance only in serve mode. Check with `--check-parsers`.",
+        "",
         "Flipping a row here does not turn a feature on; PostHog / bundle identity /",
         "`runtime_env` remain the live levers. This file is a catalog of *which* lever",
         "owns each gate, not the switch itself.",
+        "",
+        "`terminal` records the reviewed end state: `on` graduates a feature, `off`",
+        "kills it, `keep` retains an ops kill or config switch, and `undecided` means",
+        "no terminal ruling is recorded yet.",
+        "",
+        "## Contributing registry rows",
+        "",
+        "Edit `config/feature-flags.yaml`, then regenerate this document with",
+        "`python3 scripts/render_feature_flag_registry.py`. A `ramp` object is optional",
+        "for existing rows. It is required for `lifecycle: rollout` rows that are",
+        "pending (`decision: pending` or `terminal: undecided`) and created on or after",
+        "2026-10-21. Include every field below; `done_by` must be on or before",
+        "`review_by`.",
+        "",
+        "- `cohorts`: ordered rollout steps, ending in the full intended cohort;",
+        "  a single-user step such as `David-only` cannot be terminal.",
+        "- `clean_metric`: the metric that must stay clean before expansion.",
+        "- `expander`: the session, role, or person responsible for each expansion.",
+        "- `done_by`: the date the ramp reaches its final cohort.",
+        "",
+        "Example:",
+        "",
+        "```yaml",
+        "ramp:",
+        '  cohorts: ["release-probe", "1%", "5% 3h", "25%", "100%"]',
+        '  clean_metric: "checkout_error_rate"',
+        '  expander: "release-owner session"',
+        '  done_by: "2026-11-15"',
+        "```",
+        "",
+        "Rows created before the cutoff stay grandfathered when `ramp` is absent;",
+        "the checker warns and reports their count. Do not backfill plans into them.",
         "",
         "This is **not** a second classification of deployment wiring. Secret vs config",
         "vs `public_build` still lives only in",
         "[`config/deployment-setting-classification.json`](../../config/deployment-setting-classification.json)",
         "and [`deployment-setting-classification.mdx`](deployment-setting-classification.mdx).",
-        "JIT admission (allowlist, `jit-processing-v1`, kill, decoy names) is specified",
-        "in [`jit_rollout_authority.mdx`](jit_rollout_authority.mdx); this registry",
-        "points at that contract and does not replace it.",
-        "",
         "## How to read the three authorities",
         "",
         "### Bundle identity",
@@ -268,17 +348,6 @@ def _preamble() -> list[str]:
         "Whole environment or Cloud Run job, declared in",
         "`backend/deploy/runtime_env/{_base,dev.overlay,prod.overlay}.yaml`. Use this",
         "for fleet-wide backend switches. Do not put those in PostHog.",
-        "",
-        "Memory belief processing uses two deployment-wide runtime controls:",
-        "",
-        "* `MEMORY_BELIEF_MODEL_ENABLED` is the positive dev-on/prod-off processing",
-        "  gate. It is declared for the listener, pusher, Cloud Run memory services,",
-        "  desktop-backend, and belief jobs.",
-        "* `MEMORY_BELIEF_AUTOMATION_PAUSED` is a reversible incident stop. It defaults",
-        "  to `false` in every environment and pauses automated evidence, synthesis, and",
-        "  backfill admission while leaving authenticated memory reads and TTL/expiry",
-        "  maintenance available. It is intentionally deployment-wide; it is not a",
-        "  PostHog user cohort or a per-UID product rollout.",
         "",
         "The source of truth is the composed manifest (`backend/deploy/runtime_env.yaml`)",
         "plus the GKE listener/pusher values. A flag value in this registry describes",
@@ -338,6 +407,27 @@ def _not_feature_flags(ignore: list[dict[str, Any]]) -> list[str]:
     return lines
 
 
+def _render_ramp_plans(flags: list[dict[str, Any]]) -> list[str]:
+    lines = ["## Rollout ramp plans", ""]
+    ramped = [entry for entry in flags if isinstance(entry.get("ramp"), dict)]
+    if ramped:
+        lines += [
+            "| key | cohorts | clean metric | expander | done_by |",
+            "| --- | --- | --- | --- | --- |",
+        ]
+        for entry in ramped:
+            ramp = entry["ramp"]
+            cohorts = " → ".join(str(step) for step in ramp.get("cohorts", []))
+            lines.append(
+                f"| `{entry['key']}` | {_md(cohorts)} | {_md(ramp.get('clean_metric', '—'))} | "
+                f"{_md(ramp.get('expander', '—'))} | {ramp.get('done_by', '—')} |"
+            )
+    else:
+        lines.append("(none)")
+    lines.append("")
+    return lines
+
+
 def render(root: Path, registry: dict[str, list[dict[str, Any]]], as_of: date) -> str:
     """Render the registry doc for ``root`` as of ``as_of`` (never wall clock)."""
     index = _deploy_index(root)
@@ -355,8 +445,8 @@ def render(root: Path, registry: dict[str, list[dict[str, Any]]], as_of: date) -
             "Every running experiment links its preregistration doc. `decision: kill`",
             "entries are exempt: they are queued for removal, not running.",
             "",
-            "| key | owner | prereg | review_by |",
-            "| --- | --- | --- | --- |",
+            "| key | terminal | owner | prereg | review_by |",
+            "| --- | --- | --- | --- | --- |",
         ]
         for entry in experiments:
             prereg = entry.get("prereg")
@@ -364,7 +454,9 @@ def render(root: Path, registry: dict[str, list[dict[str, Any]]], as_of: date) -
             review_by = entry.get("review_by", "—")
             if entry.get("review_by") and date.fromisoformat(entry["review_by"]) < as_of:
                 review_by += " OVERDUE"
-            lines.append(f"| `{entry['key']}` | {_md(entry['owner'])} | {prereg_cell} | {review_by} |")
+            lines.append(
+                f"| `{entry['key']}` | {entry['terminal']} | {_md(entry['owner'])} | {prereg_cell} | {review_by} |"
+            )
     else:
         lines.append("(none)")
     lines.append("")
@@ -379,8 +471,9 @@ def render(root: Path, registry: dict[str, list[dict[str, Any]]], as_of: date) -
     ]
     if overdue:
         lines += [
-            "These rollout/experiment entries passed `review_by` without a recorded",
-            "decision. Overdue is a warning, not a failure.",
+            "These rollout/experiment entries passed `review_by`. The checker warns",
+            "during the seven-day grace, then fails unless a dated `review_overdue`",
+            "exception is recorded for David.",
             "",
         ]
         for entry in overdue:
@@ -394,7 +487,8 @@ def render(root: Path, registry: dict[str, list[dict[str, Any]]], as_of: date) -
         "",
         "`_base`, `dev`, and `prod` show declared literals from `runtime_env`",
         "(`dev`/`prod` are `_base` inheritance plus the environment overlay). Chart",
-        "values appear as extra sources suffixed `(chart)` and never mask runtime",
+        "values and deploy-action env overlays appear as extra sources suffixed",
+        "`(chart)` and `(action)` and never mask runtime",
         "differences; differing values list their hosts. A declaration without a",
         "literal (`config_map`, `env_var`, `secret`, `valueFrom`) counts as declared,",
         "and an explicit empty literal renders as `''`.",
@@ -407,8 +501,8 @@ def render(root: Path, registry: dict[str, list[dict[str, Any]]], as_of: date) -
             lines += ["(none)", ""]
             continue
         lines += [
-            "| key | summary | surfaces | kind | fail | _base | dev | prod | PostHog row | decision | review_by | owner |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+            "| key | summary | surfaces | kind | fail | _base | dev | prod | PostHog row | decision | terminal | review_by | owner |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
         ]
         for entry in rows:
             surfaces = ", ".join(entry.get("surfaces", []))
@@ -428,6 +522,7 @@ def render(root: Path, registry: dict[str, list[dict[str, Any]]], as_of: date) -
                         _md(prod),
                         _posthog_cell(entry),
                         entry["decision"],
+                        entry["terminal"],
                         review_by,
                         _md(entry["owner"]),
                     ]
@@ -435,6 +530,8 @@ def render(root: Path, registry: dict[str, list[dict[str, Any]]], as_of: date) -
                 + " |"
             )
         lines.append("")
+
+    lines += _render_ramp_plans(flags)
 
     lines += ["## Undeclared env flags", ""]
     undeclared = [
@@ -482,6 +579,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=ROOT)
     parser.add_argument("--as-of", dest="as_of", help="YYYY-MM-DD; required on first render")
+    parser.add_argument(
+        '--check-parsers', action='store_true', help='Check migrated boolean fail fields without writing'
+    )
     args = parser.parse_args()
 
     root = args.root.resolve()
@@ -499,7 +599,30 @@ def main() -> int:
             return 2
         as_of = date.fromisoformat(match[1])
 
-    registry = _parse_yaml_subset(root / REGISTRY_PATH)
+    registry_path = root / REGISTRY_PATH
+    defaults = parser_defaults(root)
+    original = registry_path.read_text(encoding='utf-8')
+    updated = []
+    mismatches = []
+    for line in original.splitlines(keepends=True):
+        match = re.search(r'"key"\s*:\s*"([A-Z0-9_]+)"', line)
+        if match and match[1] in defaults:
+            expected = defaults[match[1]]
+            declared = re.search(r'"fail"\s*:\s*"(open|closed)"', line)
+            if declared is None:
+                raise ValueError(f"{match[1]}: missing or invalid fail field")
+            if declared[1] != expected:
+                mismatches.append(match[1])
+                line = line[: declared.start(1)] + expected + line[declared.end(1) :]
+        updated.append(line)
+    if args.check_parsers:
+        if mismatches:
+            print('parser fail field mismatch: ' + ', '.join(mismatches), file=sys.stderr)
+            return 1
+        print(f'checked {len(defaults)} migrated boolean parser defaults')
+        return 0
+    registry_path.write_text(''.join(updated), encoding='utf-8')
+    registry = _parse_yaml_subset(registry_path)
     rendered = render(root, registry, as_of)
     doc = root / DOC_PATH
     doc.parent.mkdir(parents=True, exist_ok=True)

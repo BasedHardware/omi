@@ -479,6 +479,49 @@ class GateFixtureTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("app/scripts/l10n.py", message)
 
+    def test_new_fragment_identical_to_deleted_one_is_not_a_rename(self) -> None:
+        # Integration sync 15: deleting a released `kind: none` fragment while adding a new
+        # byte-identical one paired as R100 and the gate reported "no fragment".
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            git(repo, "init", "-q")
+            # Force rename detection so the fixture fails without --no-renames on any host config.
+            git(repo, "config", "diff.renames", "true")
+            base = commit_all(
+                repo,
+                {
+                    "app/lib/main.dart": "void main() {}\n",
+                    "app/changelog/unreleased/20260901-old.json": '{"kind": "none"}\n',
+                },
+            )
+            git(repo, "rm", "-q", "app/changelog/unreleased/20260901-old.json")
+            head = commit_all(
+                repo,
+                {
+                    "app/lib/main.dart": "void main() { run(); }\n",
+                    "app/changelog/unreleased/20261021-new.json": '{"kind": "none"}\n',
+                },
+            )
+            with unittest.mock.patch.object(checker, "REPO_ROOT", repo):
+                self.assertEqual(
+                    checker.added_unreleased_fragment_paths(base, head),
+                    ["app/changelog/unreleased/20261021-new.json"],
+                )
+                self.assertEqual(checker.check_changelog(base, head)[0], 0)
+
+    def test_renamed_app_source_still_requires_a_fragment(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            git(repo, "init", "-q")
+            git(repo, "config", "diff.renames", "true")
+            base = commit_all(repo, {"app/lib/old_name.dart": "void main() {}\n"})
+            git(repo, "mv", "app/lib/old_name.dart", "app/lib/new_name.dart")
+            head = commit_all(repo, {})
+            with unittest.mock.patch.object(checker, "REPO_ROOT", repo):
+                code, message = checker.check_changelog(base, head)
+            self.assertEqual(code, 1)
+            self.assertIn("app/lib/new_name.dart", message)
+
     def test_invalid_fragment_fails_even_when_required(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)

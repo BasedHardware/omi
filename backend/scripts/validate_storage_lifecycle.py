@@ -15,11 +15,16 @@ The load-bearing facts this guards:
   the apply variant declared (the Coldline rule); any other live rule still
   blocks. ``--allow-rule-removal`` remains as an explicit operator override.
 * No ``Delete`` action may ever reach ``chunks/``. An unscoped Delete rule counts
-  as reaching it.
+  as reaching it. The single exception is ``NONCURRENT_DELETE_RULE``: a Delete
+  scoped to noncurrent ``chunks/**.opus.enc`` generations with
+  ``numNewerVersions: 1``, which deletes only strictly-superseded generations and
+  always keeps the newest generation of every object name (David, 10-23: delete
+  noncurrent ``.opus.enc`` only after the regen check; see the storage-ops
+  README for why this shape satisfies it).
 * Every ``SetStorageClass`` rule must be prefix-scoped to exactly ``chunks/``.
-* Noncurrent-version rules (``isLive: false`` and friends) are forbidden: a
-  bucket-wide noncurrent rule would move ``playback/`` noncurrent versions to
-  Coldline, which the 30-day Delete rule then early-deletes.
+* All other noncurrent-version rules (``isLive: false`` and friends) are
+  forbidden: a bucket-wide noncurrent rule would move ``playback/`` noncurrent
+  versions to Coldline, which the 30-day Delete rule then early-deletes.
 """
 
 from __future__ import annotations
@@ -40,6 +45,24 @@ LEGACY_DELETE_RULES: tuple[dict[str, Any], ...] = (
     {"action": {"type": "Delete"}, "condition": {"age": 3, "matchesPrefix": ["merged/"]}},
     {"action": {"type": "Delete"}, "condition": {"age": 30, "matchesPrefix": ["playback/"]}},
 )
+# The one permitted noncurrent rule: deletes superseded .opus.enc chunk
+# generations only. numNewerVersions: 1 keeps the newest generation of every
+# object name (a live object's current generation has zero newer versions, and
+# so does the newest generation of a fully-deleted conversation), so nothing
+# that exists today is erased; only strictly-older duplicates are removed.
+NONCURRENT_DELETE_RULE: dict[str, Any] = {
+    "action": {"type": "Delete"},
+    "condition": {
+        "isLive": False,
+        "numNewerVersions": 1,
+        "matchesPrefix": [CHUNKS_PREFIX],
+        "matchesSuffix": [".opus.enc"],
+    },
+}
+
+
+def _is_scoped_noncurrent_delete(rule: Any) -> bool:
+    return isinstance(rule, Mapping) and rule == NONCURRENT_DELETE_RULE
 
 
 def _rules(document: Mapping[str, Any] | None) -> list[Any]:
@@ -71,6 +94,7 @@ def validate_desired_document(document: Mapping[str, Any]) -> list[str]:
         return errors
 
     set_class_rules = 0
+    noncurrent_delete_rules = 0
     for index, rule in enumerate(lifecycle["rule"]):
         if not isinstance(rule, Mapping):
             errors.append(f"desired rule {index} is not an object")
@@ -78,10 +102,14 @@ def validate_desired_document(document: Mapping[str, Any]) -> list[str]:
         action = rule.get("action") if isinstance(rule.get("action"), Mapping) else {}
         condition = rule.get("condition") if isinstance(rule.get("condition"), Mapping) else {}
         action_type = action.get("type")
+        if _is_scoped_noncurrent_delete(rule):
+            noncurrent_delete_rules += 1
         if not isinstance(action_type, str) or action_type not in ALLOWED_ACTIONS:
             errors.append(f"desired rule {index} has unsupported action {action_type!r}")
             continue
-        if condition.get("isLive") is False or any(key in condition for key in NONCURRENT_CONDITION_KEYS):
+        if (
+            condition.get("isLive") is False or any(key in condition for key in NONCURRENT_CONDITION_KEYS)
+        ) and not _is_scoped_noncurrent_delete(rule):
             errors.append(
                 f"desired rule {index} targets noncurrent versions; noncurrent-version rules are forbidden "
                 "(they would Coldline playback/ noncurrent versions that the 30-day Delete rule early-deletes)"
@@ -100,7 +128,7 @@ def validate_desired_document(document: Mapping[str, Any]) -> list[str]:
                 errors.append(
                     f"desired rule {index} is an unscoped Delete; a Delete rule must never be able to match {CHUNKS_PREFIX!r}"
                 )
-            else:
+            elif not _is_scoped_noncurrent_delete(rule):
                 for prefix in prefixes:
                     if _prefix_touches_chunks(prefix):
                         errors.append(
@@ -134,6 +162,10 @@ def validate_desired_document(document: Mapping[str, Any]) -> list[str]:
 
     if set_class_rules > 1:
         errors.append(f"desired document declares {set_class_rules} SetStorageClass rules; exactly one is expected")
+    if noncurrent_delete_rules > 1:
+        errors.append(
+            f"desired document declares {noncurrent_delete_rules} scoped noncurrent Delete rules; at most one is expected"
+        )
     if bucket == PROD_BUCKET:
         for legacy in LEGACY_DELETE_RULES:
             if legacy not in lifecycle["rule"]:

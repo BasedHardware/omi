@@ -1,13 +1,11 @@
 """Account-gate contention is a 409 with Retry-After, never a 500."""
 
-from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
 
 from database.legal_holds import DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
-from models.feedback import MemoryUseFeedback
 from utils.other.account_gate_http import (
     ACCOUNT_GATE_BUSY_DETAIL,
     ACCOUNT_GATE_BUSY_RETRY_AFTER_SECONDS,
@@ -55,34 +53,6 @@ def test_canonical_write_maps_destructive_gate_to_account_gate_busy(monkeypatch)
 
     with pytest.raises(HTTPException) as caught:
         canonical_adapter.write_canonical_extraction_memory("uid", {"content": "hello"}, db_client=object())
-
-    _assert_gate_busy(caught.value, fence)
-
-
-def test_memory_use_replay_maps_destructive_gate_to_account_gate_busy(monkeypatch):
-    fence = _fence()
-
-    def blocked(*args, **kwargs):
-        raise fence
-
-    monkeypatch.setattr(canonical_adapter, "read_memory_use_feedback_replay", blocked)
-    feedback = MemoryUseFeedback(
-        uid="uid",
-        feedback_id="use-1",
-        target_memory_id="mem",
-        action="suppress",
-        created_at=datetime.now(timezone.utc),
-    )
-
-    with pytest.raises(HTTPException) as caught:
-        canonical_adapter._apply_canonical_user_mutation(
-            "uid",
-            "mem",
-            mutation_kind="memory_use",
-            build_patch=lambda item, now: None,
-            memory_use_feedback=feedback,
-            db_client=object(),
-        )
 
     _assert_gate_busy(caught.value, fence)
 
@@ -160,6 +130,7 @@ def test_adapter_takeover_preserves_marker_without_retry(monkeypatch, loop):
 
 
 def test_conversation_delete_route_maps_takeover_to_409(monkeypatch):
+    from contextlib import nullcontext
     from unittest.mock import MagicMock
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
@@ -204,6 +175,7 @@ def test_conversation_delete_route_maps_takeover_to_409(monkeypatch):
     service = MagicMock()
     service.retract_conversation_memories.side_effect = DestructiveGateTakeover("peer completed before hold")
     monkeypatch.setattr(conversation_routes, "MemoryService", lambda **kwargs: service)
+    monkeypatch.setattr(conversation_routes, 'destructive_operation_gate', lambda *args, **kwargs: nullcontext())
     monkeypatch.setattr(conversation_routes.conversation_tombstones, "record_deletion", lambda *args: None)
     monkeypatch.setattr(conversation_routes, "delete_owner_prompt_embedding_cache", lambda *args: None)
     monkeypatch.setattr(conversation_routes, "retraction_can_be_skipped", lambda *args, **kwargs: False)

@@ -45,12 +45,19 @@ extension AppState {
       log("Transcription: start ignored because Audio Recording is Off")
       return
     }
+    if deferMeetingRelaunchStart(
+      source: source, conversationRole: conversationRole, userInitiated: userInitiated,
+      armedRetry: armedRetry, launchContext: launchContext)
+    {
+      return
+    }
     sttSession.prepareForStart()
     silentMicRecoveryAttempts = 0
     isMicrophoneSignalMissing = false
     currentConversationRole = conversationRole
     meetingBoundaryInProgress = false
     pendingMeetingState = nil
+    pendingMeetingEndedAt = nil
     conversationRotationInFlight = false
     pendingPreferredMicReapplyDeviceID = nil
     pendingPreferredMicReapplyDeviceName = nil
@@ -112,16 +119,15 @@ extension AppState {
 
     do {
       // Get effective language from settings (handles auto-detect vs single language)
-      let effectiveLanguage = AssistantSettings.shared.effectiveTranscriptionLanguage
+      let languageSelection = AssistantSettings.shared.transcriptionLanguageSelection
       log(
-        "Transcription: Using language=\(effectiveLanguage) (autoDetect=\(AssistantSettings.shared.transcriptionAutoDetect), selected=\(AssistantSettings.shared.transcriptionLanguage))"
+        "Transcription: Using language=\(languageSelection.effective) (autoDetect=\(AssistantSettings.shared.transcriptionAutoDetect), selected=\(languageSelection.primary), onDevice=\(String(describing: languageSelection.onDeviceModel)))"
       )
 
       // Desktop transcribes on-device with Parakeet by default on Apple Silicon — no Deepgram.
-      // Intel Macs (no Neural Engine) fall back to the cloud path. Force cloud for debugging with
-      // OMI_FORCE_CLOUD_STT=1 or `defaults write <bundle> forceCloudSTT -bool true`.
-      // Pendant BLE used to force cloud; identified basic now matches mic (local, unnamed).
-      // Cache miss / unknown plan fail open to the previous BLE→cloud path; prefetch warms the next start.
+      // Intel Macs and languages no on-device model covers use the cloud path. Force cloud for debugging
+      // with OMI_FORCE_CLOUD_STT=1 or `defaults write <bundle> forceCloudSTT -bool true`. Identified basic
+      // BLE matches mic (local, unnamed); cache miss / unknown plan fail open to BLE→cloud.
       let debugForceCloud = STTSessionState.debugForceCloudSTT(
         environmentForceCloud: ProcessInfo.processInfo.environment["OMI_FORCE_CLOUD_STT"] == "1",
         userDefaultsForceCloud: UserDefaults.standard.bool(forKey: "forceCloudSTT")
@@ -134,7 +140,8 @@ extension AppState {
         isAppleSilicon: Self.isAppleSilicon,
         debugForceCloud: debugForceCloud,
         wakeWordNeedsRecognizableName: AssistantSettings.shared.wakeWordNeedsRecognizableName,
-        preferLocalOnBasic: preferLocalOnBasic
+        preferLocalOnBasic: preferLocalOnBasic,
+        language: languageSelection
       )
       let clientConversationId = UUID().uuidString.lowercased()
       currentClientConversationId = sttSession.useLocalSTT ? nil : clientConversationId
@@ -151,16 +158,16 @@ extension AppState {
           self?.handleLocalSTTModelLoadFailure()
         }
         // Mic = the user; system audio = another speaker. Transcribed separately for diarization.
-        let mic = LocalTranscriptionService(language: effectiveLanguage, isUser: true)
+        let mic = LocalTranscriptionService(language: languageSelection, isUser: true)
         mic.start(onSegments: onLocalSegments, onModelLoadFailed: onModelLoadFailed)
         localMicService = mic
-        let system = LocalTranscriptionService(language: effectiveLanguage, isUser: false)
+        let system = LocalTranscriptionService(language: languageSelection, isUser: false)
         system.start(onSegments: onLocalSegments, onModelLoadFailed: onModelLoadFailed)
         localSystemService = system
       } else {
         // Always streaming via Python backend /v4/listen
         transcriptionService = try TranscriptionService(
-          language: effectiveLanguage,
+          language: languageSelection.effective,
           clientConversationId: clientConversationId,
           conversationRole: currentConversationRole
         )
@@ -313,7 +320,7 @@ extension AppState {
           guard recordingGeneration == sessionGeneration else { return }
           let sessionId = try await TranscriptionStorage.shared.startSession(
             source: currentConversationSource.rawValue,
-            language: effectiveLanguage,
+            language: languageSelection.effective,
             timezone: TimeZone.current.identifier,
             inputDeviceName: recordingInputDeviceName,
             clientConversationId: sttSession.useLocalSTT ? nil : clientConversationId,
@@ -707,6 +714,13 @@ extension AppState {
 
     captureGateInFlight = true
 
+    // A retained local session keeps its wall-clock timestamps across a closed meeting gate.
+    if sttSession.useLocalSTT {
+      let transitionAt = Date()
+      localMicService?.setCapturePaused(!shouldCapture, at: transitionAt)
+      localSystemService?.setCapturePaused(!shouldCapture, at: transitionAt)
+    }
+
     // Microphone
     if let mic = audioCaptureService {
       if shouldCapture, !mic.capturing {
@@ -745,37 +759,7 @@ extension AppState {
       }
     }
 
-    if !meetingEndFinalizationInProgress,
-      !meetingBoundaryInProgress,
-      MeetingConversationBoundaryPolicy.shouldFinishConversation(
-        mode: mode,
-        meetingStateReady: meetingStateReady,
-        shouldCapture: shouldCapture,
-        segmentCount: totalSegmentCount,
-        hasSpeakerSegments: !speakerSegments.isEmpty
-      )
-    {
-      meetingEndFinalizationInProgress = true
-      log("Transcription: Meeting ended — finishing conversation and waiting for the next meeting")
-      Task { @MainActor in
-        defer { self.meetingEndFinalizationInProgress = false }
-        // A boundary rotation owns the same finalize — skip rather than run a
-        // second `finishConversation` into the rotation serializer.
-        guard !self.meetingBoundaryInProgress,
-          MeetingConversationBoundaryPolicy.shouldFinishConversation(
-            mode: self.audioRecordingMode,
-            meetingStateReady: self.meetingDetector?.hasObservedState == true,
-            shouldCapture: self.meetingDetector?.isMeetingActive == true,
-            segmentCount: self.totalSegmentCount,
-            hasSpeakerSegments: !self.speakerSegments.isEmpty
-          )
-        else {
-          log("Transcription: skipped meeting-ended finalization because meeting state changed")
-          return
-        }
-        _ = await self.finishConversation(finalizationReason: .meetingEnded)
-      }
-    }
+    finalizeEndedMeetingIfNeeded(mode: mode, meetingStateReady: meetingStateReady, shouldCapture: shouldCapture)
 
     captureGateInFlight = false
     if let recovery = pendingCoreAudioCaptureRecovery {
@@ -932,6 +916,7 @@ extension AppState {
       return nil
     }
     preferredMicrophoneReconnectMonitor.stop()
+    let meetingCaptureEnd = audioRecordingMode == .onlyMeetings ? meetingDetector?.resumeOffAt : nil
     // On-device path: await both Parakeet tail flushes before clearing state so the last words persist to the current conversation.
     if sttSession.useLocalSTT {
       let mic = localMicService
@@ -944,7 +929,7 @@ extension AppState {
         await sys?.finish()
         await self.flushTranscriptPersistence()
         self.clearTranscriptionState(
-          finalizationReason: finalizationReason, allowCloudForceProcess: false)
+          finalizationReason: finalizationReason, allowCloudForceProcess: false, finishedAt: meetingCaptureEnd)
         self.silentMicFallbackInProgress = false
       }
     }
@@ -977,7 +962,7 @@ extension AppState {
         }
         do {
           try await TranscriptionStorage.shared.finishSession(
-            id: sessionId, reason: finalizationReason)
+            id: sessionId, reason: finalizationReason, finishedAt: meetingCaptureEnd)
         } catch {
           logError("Transcription: Failed to finish DB session \(sessionId)", error: error)
           return
@@ -1091,7 +1076,8 @@ extension AppState {
   func finishConversation(
     finalizationReason: TranscriptionFinalizationReason = .finishAndContinue,
     allowEmptyRotation: Bool = false,
-    nextConversationRole: MeetingConversationBoundaryPolicy.Role? = nil
+    nextConversationRole: MeetingConversationBoundaryPolicy.Role? = nil,
+    finishedAt: Date? = nil
   ) async -> FinishConversationResult {
     guard isTranscribing else { return .error("transcription is no longer active") }
     // One rotation at a time, across every caller. `meetingBoundaryInProgress`
@@ -1142,7 +1128,8 @@ extension AppState {
     // (backend will process it; memory_created event may arrive on the new session's WebSocket)
     if let sessionId = sessionToFinalize {
       do {
-        try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: finalizationReason)
+        try await TranscriptionStorage.shared.finishSession(
+          id: sessionId, reason: finalizationReason, finishedAt: finishedAt)
         log("Transcription: Finished DB session \(sessionId) before reconnect")
       } catch {
         logError("Transcription: Failed to finish DB session \(sessionId)", error: error)
@@ -1250,7 +1237,7 @@ extension AppState {
     let nextClientConversationId = sttSession.useLocalSTT ? nil : UUID().uuidString.lowercased()
     currentClientConversationId = nextClientConversationId
     do {
-      let effectiveLanguage = AssistantSettings.shared.effectiveTranscriptionLanguage
+      let languageSelection = AssistantSettings.shared.transcriptionLanguageSelection
       if sttSession.useLocalSTT {
         // On-device mode: re-arm fresh local Parakeet instances (mic + system) for the next
         // conversation — do NOT reconnect the cloud WebSocket. Stopping the old ones flushes
@@ -1265,10 +1252,10 @@ extension AppState {
         let onModelLoadFailed: @MainActor () -> Void = { [weak self] in
           self?.handleLocalSTTModelLoadFailure()
         }
-        let mic = LocalTranscriptionService(language: effectiveLanguage, isUser: true)
+        let mic = LocalTranscriptionService(language: languageSelection, isUser: true)
         mic.start(onSegments: onLocalSegments, onModelLoadFailed: onModelLoadFailed)
         localMicService = mic
-        let system = LocalTranscriptionService(language: effectiveLanguage, isUser: false)
+        let system = LocalTranscriptionService(language: languageSelection, isUser: false)
         system.start(onSegments: onLocalSegments, onModelLoadFailed: onModelLoadFailed)
         localSystemService = system
         // CoreAudio callbacks capture their local transcription sinks when the
@@ -1281,7 +1268,7 @@ extension AppState {
         log("Transcription: Re-armed on-device Parakeet (mic + system) for next conversation")
       } else {
         transcriptionService = try TranscriptionService(
-          language: effectiveLanguage,
+          language: languageSelection.effective,
           clientConversationId: nextClientConversationId,
           conversationRole: nextConversationRole ?? currentConversationRole
         )
@@ -1416,6 +1403,7 @@ extension AppState {
     isAwaitingMeeting = false
     meetingBoundaryInProgress = false
     pendingMeetingState = nil
+    pendingMeetingEndedAt = nil
     conversationRotationInFlight = false
 
     // Stop system audio capture first (if available)
@@ -1456,7 +1444,8 @@ extension AppState {
     finalizationReason: TranscriptionFinalizationReason = .userStop,
     runFinalizer: Bool = true,
     allowCloudForceProcess: Bool = false,
-    finishSession: Bool = true
+    finishSession: Bool = true,
+    finishedAt: Date? = nil
   ) {
     log(
       "Transcription: Final segments count: \(totalSegmentCount) (in-memory: \(speakerSegments.count)), words: \(totalWordCount)"
@@ -1474,7 +1463,8 @@ extension AppState {
     if finishSession, let sessionId = currentSessionId {
       Task {
         do {
-          try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: finalizationReason)
+          try await TranscriptionStorage.shared.finishSession(
+            id: sessionId, reason: finalizationReason, finishedAt: finishedAt)
           log("Transcription: Finished DB session \(sessionId)")
           if runFinalizer {
             await ConversationFinalizationService.shared.finalizeSession(
@@ -1499,6 +1489,7 @@ extension AppState {
     currentClientConversationId = nil
     meetingBoundaryInProgress = false
     pendingMeetingState = nil
+    pendingMeetingEndedAt = nil
     // Terminal outcome of the armed capture attempt (one per arming; the
     // guard keeps double clears and the hermetic automation session silent).
     let attemptIdForEvents = captureAttempt?.attemptId

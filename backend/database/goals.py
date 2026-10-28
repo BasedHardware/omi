@@ -426,8 +426,13 @@ def get_user_goal(uid: str, *, firestore_client: Any = None) -> Optional[Dict[st
 
 
 def get_user_goals(uid: str, limit: int = 3, *, firestore_client: Any = None) -> List[Dict[str, Any]]:
+    if limit <= 0:
+        return []
     collection = _get_db(firestore_client).collection(users_collection).document(uid).collection(goals_collection)
-    query = collection.where(filter=FieldFilter('is_active', '==', True)).limit(limit)
+    # Apply the bound only after the ended-goal filter and oldest-first sort in Python:
+    # pushing .limit(limit) into the unordered Firestore query truncates in document-id
+    # order, dropping active goals behind ended rows or later document ids.
+    query = collection.where(filter=FieldFilter('is_active', '==', True))
     goals = _normalize_goal_documents(query.stream())
     goals = [goal for goal in goals if goal['status'] not in {GoalStatus.achieved.value, GoalStatus.abandoned.value}]
     goals.sort(key=_goal_created_at_sort_key)
@@ -593,11 +598,7 @@ def _metric_validation_message(exc: ValidationError) -> str:
 
 
 def update_goal(
-    uid: str,
-    goal_id: str,
-    updates: Dict[str, Any],
-    *,
-    firestore_client: Any = None,
+    uid: str, goal_id: str, updates: Dict[str, Any], *, firestore_client: Any = None
 ) -> Optional[Dict[str, Any]]:
     ref = _goal_ref(uid, goal_id, firestore_client=firestore_client)
     snapshot = ref.get()
@@ -609,6 +610,10 @@ def update_goal(
     clear_metric = bool(patch.pop('clear_metric', False))
     current = normalize_goal_storage(_goal_dict(snapshot), goal_id=goal_id)
     legacy_metric_keys = {'goal_type', 'current_value', 'target_value', 'min_value', 'max_value', 'unit'}
+    if not clear_metric and patch.get('metric', True) is not None:
+        for k in legacy_metric_keys:
+            if k in patch and patch[k] is None:
+                patch.pop(k)
     if clear_metric:
         metric = None
     elif 'metric' in patch:
@@ -636,9 +641,6 @@ def update_goal(
     if 'metric' in patch or clear_metric or any(key in patch for key in legacy_metric_keys):
         patch['metric'] = metric.model_dump(mode='python') if metric is not None else None
         if metric is None:
-            # Dropping the metric must also clear the released numeric aliases:
-            # _metric_from_storage rebuilds a metric from stale goal_type/current_value
-            # etc., so leaving them resurrects the "cleared" metric on the next read.
             for key in legacy_metric_keys:
                 patch[key] = None
         else:

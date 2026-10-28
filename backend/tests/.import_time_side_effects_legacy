@@ -8,7 +8,7 @@
 #
 # Terminal state: this file is deleted (PLAN.md §4, condition #2).
 #
-# Total: 28 entries.
+# Total: 27 entries.
 #
 # The 4 entries marked "surfaced by P2" below were discovered by the alias-
 # resolution hardening of scan_import_time_side_effects.py: the old checker
@@ -21,7 +21,6 @@ backend/main.py
 backend/migrations/001_enhanced_protection_default.py
 backend/migrations/002_populate_historical_usage.py
 backend/migrations/003_report_top_transcription_users.py
-backend/migrations/004_migrate_action_items_to_collection.py
 backend/migrations/005_backfill_memory_vectors.py
 backend/migrations/006_auto_set_transcription_mode.py
 backend/migrations/007_backfill_action_item_vectors.py

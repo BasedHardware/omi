@@ -13,8 +13,10 @@ import threading
 from time import monotonic
 from typing import Any, Callable, Literal, Mapping
 
+from config.sync_telemetry import SyncFailureReason
 from models.conversation_enums import ConversationSource
 from utils.journey_metrics_contract import bounded_app_build
+from utils.conversations.size_limit import PROJECTED_SIZE_BUCKETS
 from utils.metrics import (
     OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL,
     OMI_LIVE_STT_ACCEPTED_TOTAL,
@@ -29,6 +31,7 @@ from utils.metrics import (
     OMI_LISTEN_UNKNOWN_CHANNEL_PREFIX_TOTAL,
     OMI_LISTEN_ZERO_BYTE_SESSION_TOTAL,
     OMI_SYNC_INTAKE_TOTAL,
+    OMI_SYNC_INTERNAL_FAILURES_TOTAL,
     OMI_SYNC_TRANSCRIPTION_JOBS_TOTAL,
     OMI_SYNC_TRANSCRIPTION_SEGMENTS_TOTAL,
     OMI_TRANSCRIPTION_ACCEPTED_TOTAL,
@@ -39,7 +42,8 @@ from utils.metrics import (
 from utils.env_loader import resolve_stage_from_env
 from utils.product_telemetry import emit_product_event
 from utils.stt.outcomes import TranscriptionOutcome, bounded_provider
-from utils.stt.soniox_runway import meter_audio_seconds
+from utils.observability.demand_cohort import record_metric
+from utils.observability.demand_cohort import DEMAND_COHORTS
 from utils.observability.routing_cohort import current_routing_cohort
 
 logger = logging.getLogger(__name__)
@@ -49,6 +53,9 @@ _PLATFORMS = {'android', 'desktop', 'ios', 'linux', 'macos', 'mobile', 'web', 'w
 _REVISION_PATTERN = re.compile(r'[^a-zA-Z0-9_.-]')
 _SYNC_LANES = {'backfill', 'fresh'}
 _SYNC_MODELS = {'nova-3', 'parakeet', 'velma-2'}
+_SYNC_INTERNAL_FAILURE_REASONS = frozenset(reason.value for reason in SyncFailureReason) - {
+    SyncFailureReason.NONE.value
+}
 _LIVE_PHASES = {'connection', 'initialization', 'send'}
 _LIVE_TERMINAL_OUTCOMES = frozenset({'success', 'failure', 'cancelled'})
 _LIVE_TERMINAL_PHASES = frozenset({'connection', 'initialization', 'send', 'teardown', 'transcript_delivery'})
@@ -82,6 +89,12 @@ def _bounded_source(source: str | None) -> str:
         return ConversationSource(normalized).value if normalized else ConversationSource.unknown.value
     except ValueError:
         return ConversationSource.unknown.value
+
+
+def bounded_client_platform(platform: str | None) -> str:
+    """Public alias so listen-session counters share the bounded platform labels."""
+
+    return _bounded_platform(platform)
 
 
 def _deployment_version() -> str:
@@ -256,21 +269,31 @@ def record_sync_transcription_outcome(
     model: str | None,
     lane: str | None,
     outcome: TranscriptionOutcome,
+    failure_reason: SyncFailureReason = SyncFailureReason.NONE,
 ) -> None:
-    """Record a bounded sync job or segment terminal outcome."""
+    """Record a bounded sync job or segment terminal outcome.
+
+    A persistence/finalize failure is ``internal_error``, never the vendor
+    ``upstream_error``; its cause is counted in omi_sync_internal_failures_total.
+    """
 
     if kind not in {'job', 'segment'}:
         raise ValueError('kind must be job or segment')
     counter = OMI_SYNC_TRANSCRIPTION_SEGMENTS_TOTAL if kind == 'segment' else OMI_SYNC_TRANSCRIPTION_JOBS_TOTAL
     bounded_model = model if model in _SYNC_MODELS else 'unknown'
     bounded_lane = lane if lane in _SYNC_LANES else 'unknown'
+    internal = failure_reason in _SYNC_INTERNAL_FAILURE_REASONS
     counter.labels(
         provider=bounded_provider(provider),
         model=bounded_model,
         lane=bounded_lane,
-        outcome=outcome.value,
+        outcome='internal_error' if internal else outcome.value,
         deployment_version=_deployment_version(),
     ).inc()
+    if internal:
+        OMI_SYNC_INTERNAL_FAILURES_TOTAL.labels(
+            kind=kind, lane=bounded_lane, failure_reason=SyncFailureReason(failure_reason).value
+        ).inc()
 
 
 def record_live_stt_pre_audio_failure(
@@ -306,15 +329,20 @@ def record_live_stt_pre_audio_failure(
         cohort.terminal('failure')
 
 
-def record_sync_intake_outcome(*, created: bool) -> None:
+def record_sync_intake_outcome(*, created: bool, projected_size_bucket: str | None = None) -> None:
     """Count one sync intake as created or merged. Never labeled by uid."""
 
     outcome = 'created' if created else 'merged'
     if outcome not in _SYNC_INTAKE_OUTCOMES:
         raise ValueError(f'unknown sync intake outcome: {outcome}')
-    OMI_SYNC_INTAKE_TOTAL.labels(outcome=outcome).inc()
+    bucket = projected_size_bucket if projected_size_bucket in PROJECTED_SIZE_BUCKETS else None
+    # A missing observation must not invent a size band. Production assignment
+    # supplies one on every write/no-op path; legacy test adapters may not.
+    if bucket is not None:
+        OMI_SYNC_INTAKE_TOTAL.labels(outcome=outcome, projected_size_bucket=bucket).inc()
     try:
-        logger.info('omi_sync_intake outcome=%s', outcome)
+        suffix = f' projected_size_bucket={bucket}' if bucket is not None else ''
+        logger.info('omi_sync_intake outcome=%s%s', outcome, suffix)
     except Exception:
         pass
 
@@ -361,8 +389,6 @@ def record_live_stt_audio_seconds(*, provider: str | None, platform: str | None,
         client_platform=_bounded_platform(platform),
         deployment_environment=_deployment_environment(),
     ).inc(seconds)
-    if provider == 'soniox':
-        meter_audio_seconds(seconds)
 
 
 def record_live_stt_failover_accepted(*, provider: str | None, platform: str | None) -> None:
@@ -437,6 +463,7 @@ def record_listen_audio_outcome(*, source: str | None, outcome: str, platform: s
 
 def record_live_session_transcript_outcome(
     *,
+    demand_cohort: str = 'ineligible',
     outcome: LiveSessionTranscriptOutcome,
     uid: str | None = None,
     source: str | None = None,
@@ -454,7 +481,7 @@ def record_live_session_transcript_outcome(
 
     if outcome not in LIVE_SESSION_TRANSCRIPT_OUTCOMES:
         raise ValueError(f'unknown live session transcript outcome: {outcome}')
-    OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(outcome=outcome).inc()
+    record_metric(OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL, {'outcome': outcome, 'demand_cohort': demand_cohort}, 1)
     if outcome != 'no_transcript' or not uid:
         return
     now = _zero_transcript_clock()
@@ -502,7 +529,8 @@ def initialize_live_session_transcript_outcome_children() -> None:
 
     try:
         for outcome in sorted(LIVE_SESSION_TRANSCRIPT_OUTCOMES):
-            OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(outcome=outcome)
+            for cohort in DEMAND_COHORTS:
+                OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(outcome=outcome, demand_cohort=cohort)
     except Exception:
         pass
 

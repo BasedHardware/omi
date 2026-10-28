@@ -6,7 +6,7 @@ from utils.owner_voice_evidence import authorized_owner_segments
 from utils.speaker_learning_policy import authorized_teaching_segments
 
 
-def _current_source(
+def current_source(
     transaction: Any, user_ref: Any, uid: str, conversation_id: str, generation: Optional[int]
 ) -> Optional[Tuple[List[Mapping[str, Any]], Mapping[str, Any]]]:
     """The conversation's (segments, receipt) as of this transaction, or None when it may no longer teach."""
@@ -55,7 +55,7 @@ def person_teaching_authorized(
     segment_ids: Sequence[str],
     generation: Optional[int],
 ) -> bool:
-    source = _current_source(transaction, user_ref, uid, conversation_id, generation)
+    source = current_source(transaction, user_ref, uid, conversation_id, generation)
     if source is None or not segment_ids:
         return False
     segments, receipt = source
@@ -77,7 +77,7 @@ def owner_teaching_authorized(
     generation: Optional[int],
     card_generation: Optional[int] = None,
 ) -> bool:
-    source = _current_source(transaction, user_ref, uid, conversation_id, generation)
+    source = current_source(transaction, user_ref, uid, conversation_id, generation)
     if source is None:
         return False
     segments, receipt = source

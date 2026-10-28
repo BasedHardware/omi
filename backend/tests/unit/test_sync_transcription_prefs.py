@@ -121,6 +121,12 @@ def _build_fakes() -> dict:
     ]:
         fakes[f'database.{_sub}'] = MagicMock()
 
+    # routers/sync.py resolves its handler budget at import time against these
+    # constants; MagicMock attrs cannot be compared inside min().
+    fakes['database.sync_jobs'].RUN_LOCK_TTL_SECONDS = 1800
+    fakes['database.sync_jobs'].STALE_THRESHOLD_SECONDS = 600
+    fakes['database.sync_jobs'].QUEUED_DISPATCH_STALE_SECONDS = 1800
+
     # firebase_admin
     fb = MagicMock()
     fb.__path__ = ['firebase_admin']
@@ -191,6 +197,8 @@ def _build_fakes() -> dict:
     cloud_tasks.enqueue_audio_merge_job = MagicMock()
     cloud_tasks.enqueue_audio_merge_job_deferred = MagicMock()
     cloud_tasks.enqueue_sync_job = MagicMock()
+    cloud_tasks.enqueue_sync_job_budget_replacement = MagicMock()
+    cloud_tasks.DISPATCH_DEADLINE_SECONDS = 1500
     cloud_tasks.get_sync_tasks_max_attempts = MagicMock(return_value=5)
     cloud_tasks.is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
     cloud_tasks.is_cloud_tasks_dispatch_enabled = MagicMock(return_value=False)
@@ -289,191 +297,6 @@ def test_compare_embeddings_accepts_1d_vectors():
     assert _compare_embeddings(np.array([1.0, 0.0]), np.array([1.0])) == 2.0
 
 
-class TestDeepgramPrerecordedKeywords:
-    """Verify keywords are forwarded correctly to Deepgram options."""
-
-    @patch('utils.stt.pre_recorded._deepgram_client')
-    def test_keywords_nova3_uses_keyterm(self, mock_client):
-        """Nova-3 model should use 'keyterm' option for keywords."""
-        from utils.stt.pre_recorded import deepgram_prerecorded
-
-        mock_response = MagicMock()
-        mock_response.to_dict.return_value = {
-            'results': {
-                'channels': [
-                    {
-                        'detected_language': 'en',
-                        'alternatives': [
-                            {
-                                'words': [
-                                    {
-                                        'word': 'hello',
-                                        'start': 0.0,
-                                        'end': 0.5,
-                                        'speaker': 0,
-                                        'punctuated_word': 'Hello',
-                                    }
-                                ]
-                            }
-                        ],
-                    }
-                ]
-            }
-        }
-        mock_client.listen.rest.v.return_value.transcribe_url.return_value = mock_response
-
-        deepgram_prerecorded('http://example.com/audio.wav', model='nova-3', keywords=['Omi', 'Kelvin'])
-
-        call_args = mock_client.listen.rest.v.return_value.transcribe_url.call_args
-        options = call_args[0][1]
-        assert 'keyterm' in options
-        assert options['keyterm'] == ['Omi', 'Kelvin']
-        assert 'keywords' not in options
-
-    @patch('utils.stt.pre_recorded._deepgram_client')
-    def test_keywords_nova2_uses_keywords(self, mock_client):
-        """Nova-2 model should use 'keywords' option."""
-        from utils.stt.pre_recorded import deepgram_prerecorded
-
-        mock_response = MagicMock()
-        mock_response.to_dict.return_value = {
-            'results': {
-                'channels': [
-                    {
-                        'detected_language': 'en',
-                        'alternatives': [
-                            {'words': [{'word': 'hi', 'start': 0, 'end': 0.3, 'speaker': 0, 'punctuated_word': 'Hi'}]}
-                        ],
-                    }
-                ]
-            }
-        }
-        mock_client.listen.rest.v.return_value.transcribe_url.return_value = mock_response
-
-        deepgram_prerecorded('http://example.com/audio.wav', model='nova-2-general', keywords=['Omi'])
-
-        call_args = mock_client.listen.rest.v.return_value.transcribe_url.call_args
-        options = call_args[0][1]
-        assert 'keywords' in options
-        assert options['keywords'] == ['Omi']
-        assert 'keyterm' not in options
-
-    @patch('utils.stt.pre_recorded._deepgram_client')
-    def test_no_keywords_omits_option(self, mock_client):
-        """When keywords is None or empty, no keyword option should be set."""
-        from utils.stt.pre_recorded import deepgram_prerecorded
-
-        mock_response = MagicMock()
-        mock_response.to_dict.return_value = {
-            'results': {
-                'channels': [
-                    {
-                        'detected_language': 'en',
-                        'alternatives': [
-                            {'words': [{'word': 'ok', 'start': 0, 'end': 0.2, 'speaker': 0, 'punctuated_word': 'Ok'}]}
-                        ],
-                    }
-                ]
-            }
-        }
-        mock_client.listen.rest.v.return_value.transcribe_url.return_value = mock_response
-
-        deepgram_prerecorded('http://example.com/audio.wav', keywords=None)
-
-        call_args = mock_client.listen.rest.v.return_value.transcribe_url.call_args
-        options = call_args[0][1]
-        assert 'keyterm' not in options
-        assert 'keywords' not in options
-
-    @patch('utils.stt.pre_recorded._deepgram_client')
-    def test_empty_list_keywords_omits_option(self, mock_client):
-        """When keywords is an empty list, no keyword option should be set."""
-        from utils.stt.pre_recorded import deepgram_prerecorded
-
-        mock_response = MagicMock()
-        mock_response.to_dict.return_value = {
-            'results': {
-                'channels': [
-                    {
-                        'detected_language': 'en',
-                        'alternatives': [
-                            {'words': [{'word': 'ok', 'start': 0, 'end': 0.2, 'speaker': 0, 'punctuated_word': 'Ok'}]}
-                        ],
-                    }
-                ]
-            }
-        }
-        mock_client.listen.rest.v.return_value.transcribe_url.return_value = mock_response
-
-        deepgram_prerecorded('http://example.com/audio.wav', keywords=[])
-
-        call_args = mock_client.listen.rest.v.return_value.transcribe_url.call_args
-        options = call_args[0][1]
-        assert 'keyterm' not in options
-        assert 'keywords' not in options
-
-    @patch('utils.stt.pre_recorded._deepgram_client')
-    def test_keywords_preserved_on_retry(self, mock_client):
-        """Keywords should be passed through on retry attempts."""
-        from utils.stt.pre_recorded import deepgram_prerecorded
-
-        call_count = 0
-
-        def side_effect(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                raise Exception("Temporary failure")
-            mock_resp = MagicMock()
-            mock_resp.to_dict.return_value = {
-                'results': {
-                    'channels': [
-                        {
-                            'detected_language': 'en',
-                            'alternatives': [
-                                {
-                                    'words': [
-                                        {'word': 'ok', 'start': 0, 'end': 0.2, 'speaker': 0, 'punctuated_word': 'Ok'}
-                                    ]
-                                }
-                            ],
-                        }
-                    ]
-                }
-            }
-            return mock_resp
-
-        mock_client.listen.rest.v.return_value.transcribe_url.side_effect = side_effect
-
-        deepgram_prerecorded('http://example.com/audio.wav', keywords=['TestWord'])
-
-        # Second call (retry) should also have keywords
-        retry_call = mock_client.listen.rest.v.return_value.transcribe_url.call_args_list[1]
-        options = retry_call[0][1]
-        assert 'keyterm' in options
-        assert 'TestWord' in options['keyterm']
-
-    @patch('utils.stt.pre_recorded._deepgram_client')
-    def test_empty_transcript_with_keywords_and_return_language(self, mock_client):
-        """Silence/noise with keywords and return_language should still return ([], lang)."""
-        from utils.stt.pre_recorded import deepgram_prerecorded
-
-        mock_response = MagicMock()
-        mock_response.to_dict.return_value = {
-            'results': {'channels': [{'detected_language': 'fr', 'alternatives': [{'words': []}]}]}
-        }
-        mock_client.listen.rest.v.return_value.transcribe_url.return_value = mock_response
-
-        result = deepgram_prerecorded('http://example.com/audio.wav', return_language=True, keywords=['Omi'])
-        assert result == ([], 'fr')
-
-
-# ---------------------------------------------------------------------------
-# process_segment: user preferences integration
-# ---------------------------------------------------------------------------
-
-
-@patch('utils.sync.pipeline.run_blocking', MagicMock())
 class TestProcessSegmentPreferences:
     """Verify process_segment applies user transcription preferences."""
 

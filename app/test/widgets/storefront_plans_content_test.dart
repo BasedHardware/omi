@@ -14,6 +14,7 @@ import 'package:omi/pages/settings/widgets/plans/contextual_plans.dart';
 import 'package:omi/pages/settings/widgets/plans/storefront_plans_content.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../helpers/sfpro_font_fixtures.dart';
 
 Map<String, dynamic> fixture([String name = 'plus_monthly_yearly_toggle']) =>
     jsonDecode(File('test/fixtures/storefront_v2/$name.json').readAsStringSync()) as Map<String, dynamic>;
@@ -27,9 +28,12 @@ Future<void> capture(WidgetTester tester, String name) async {
   await tester.pump(const Duration(milliseconds: 50));
   InlineSpan productFont(InlineSpan span) {
     if (span is! TextSpan) return span;
+    final style = span.style ?? const TextStyle();
     return TextSpan(
       text: span.text,
-      style: (span.style ?? const TextStyle()).copyWith(fontFamily: span.style?.fontFamily ?? 'SF Pro Display'),
+      // Keep package icon fonts intact: copying their already-qualified fontFamily
+      // would apply the package prefix a second time.
+      style: style.fontFamily == null ? style.copyWith(fontFamily: 'SF Pro Display') : style,
       children: span.children?.map(productFont).toList(),
       recognizer: span.recognizer,
       semanticsLabel: span.semanticsLabel,
@@ -96,12 +100,13 @@ Future<void> pumpSheet(
       'CupertinoSystemDisplay',
       '.SF UI Text',
       '.SF UI Display',
+      'SF Pro Display',
       'FlutterTest',
       'Ahem'
     ]) {
       final loader = FontLoader(family)
-        ..addFont(rootBundle.load('assets/fonts/SFPRODISPLAYREGULAR.OTF'))
-        ..addFont(rootBundle.load('assets/fonts/SFPRODISPLAYMEDIUM.OTF'));
+        ..addFont(sfProFont('SFPRODISPLAYREGULAR.OTF'))
+        ..addFont(sfProFont('SFPRODISPLAYMEDIUM.OTF'));
       await loader.load();
     }
   });

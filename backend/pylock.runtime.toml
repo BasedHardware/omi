@@ -118,6 +118,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/e7/45/282a04df72c17cc6c
 wheels = [{ url = "https://files.pythonhosted.org/packages/51/95/d43a02410e4e1cb6397a675facf5a65285d670697c0762a0e29c0c3615b4/av-12.0.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", upload-time = 2024-03-21T11:15:50Z, size = 34691295, hashes = { sha256 = "7a6d4f1e261df48932128e6495772faa4cc23f5dd1512eec73daab82ad9f3240" } }]
 
 [[packages]]
+name = "babel"
+version = "2.18.0"
+sdist = { url = "https://files.pythonhosted.org/packages/7d/b2/51899539b6ceeeb420d40ed3cd4b7a40519404f9baf3d4ac99dc413a834b/babel-2.18.0.tar.gz", upload-time = 2026-02-01T12:30:56Z, size = 9959554, hashes = { sha256 = "b80b99a14bd085fcacfa15c9165f651fbb3406e66cc603abf11c5750937c992d" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/77/f5/21d2de20e8b8b0408f0681956ca2c69f1320a3848ac50e6e7f39c6159675/babel-2.18.0-py3-none-any.whl", upload-time = 2026-02-01T12:30:53Z, size = 10196845, hashes = { sha256 = "e2b422b277c2b9a9630c1d7903c2a00d0830c409c59ac8cae9081c92f1aeba35" } }]
+
+[[packages]]
 name = "backoff"
 version = "2.2.1"
 sdist = { url = "https://files.pythonhosted.org/packages/47/d7/5bbeb12c44d7c4f2fb5b56abce497eb5ed9f34d85701de869acedd602619/backoff-2.2.1.tar.gz", upload-time = 2022-10-05T19:19:32Z, size = 17001, hashes = { sha256 = "03f829f5bb1923180821643f8753b0502c3b682293992485b0eef2807afa5cba" } }
@@ -354,9 +360,9 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/fd/5b/8f0c4a5bb9fd491
 
 [[packages]]
 name = "gitpython"
-version = "3.1.55"
-sdist = { url = "https://files.pythonhosted.org/packages/b2/ab/ba0d29f2fa2277ed6256b2ac09003494045355f3a10bf32f351761287870/gitpython-3.1.55.tar.gz", upload-time = 2026-07-23T02:52:43Z, size = 225071, hashes = { sha256 = "781e3b1624dad81b24e9524bf0297b69786a0706db2cbceec1e2b05c38e5152f" } }
-wheels = [{ url = "https://files.pythonhosted.org/packages/20/6a/d3b8208d2f8aac66abe8ccc1c23fa2c89464ec42cc71a601e95d05902428/gitpython-3.1.55-py3-none-any.whl", upload-time = 2026-07-23T02:52:41Z, size = 216590, hashes = { sha256 = "7c9ec1e69c158c081632ab35c41471e302c96db2ae42165036a5d2403378812e" } }]
+version = "3.2.1"
+sdist = { url = "https://files.pythonhosted.org/packages/c0/ff/fee293f1ec3e1b64db6eb270e00964f29c086d769201474cedb8d1608930/gitpython-3.2.1.tar.gz", upload-time = 2026-10-14T12:20:20.589439Z, size = 241688, hashes = { sha256 = "0f1229ec5c057bdabdeeda8bda4f17bda679ab33dbccc00f24e6a480553c8613" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/6b/50/2a923c4dc02522ff9567f07c67ed1deca6d5fa9474f4708168b8088dfa37/gitpython-3.2.1-py3-none-any.whl", upload-time = 2026-10-14T12:20:18.844050Z, size = 231548, hashes = { sha256 = "d66b0832aa8755c1a84892937282df0befb16c97e5a64aeebd68be9c5e323f53" } }]
 
 [[packages]]
 name = "google-ai-generativelanguage"
@@ -1054,6 +1060,18 @@ wheels = [
 ]
 
 [[packages]]
+name = "psycopg"
+version = "3.2.10"
+sdist = { url = "https://files.pythonhosted.org/packages/a9/f1/0258a123c045afaf3c3b60c22ccff077bceeb24b8dc2c593270899353bd0/psycopg-3.2.10.tar.gz", upload-time = 2025-09-08T09:13:37Z, size = 160380, hashes = { sha256 = "0bce99269d16ed18401683a8569b2c5abd94f72f8364856d56c0389bcd50972a" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/4a/90/422ffbbeeb9418c795dae2a768db860401446af0c6768bc061ce22325f58/psycopg-3.2.10-py3-none-any.whl", upload-time = 2025-09-08T09:07:50Z, size = 206586, hashes = { sha256 = "ab5caf09a9ec42e314a21f5216dbcceac528e0e05142e42eea83a3b28b320ac3" } }]
+
+[[packages]]
+name = "psycopg-binary"
+version = "3.2.10"
+marker = "implementation_name != 'pypy'"
+wheels = [{ url = "https://files.pythonhosted.org/packages/1b/d4/26d0fa9e8e7c05f0338024d2822a3740fac6093999443ad54e164f154bcc/psycopg_binary-3.2.10-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", upload-time = 2025-09-08T09:09:13Z, size = 4413805, hashes = { sha256 = "1b29285474e3339d0840e1b5079fdb0481914108f92ec62de0c87ae333c60b24" } }]
+
+[[packages]]
 name = "ptyprocess"
 version = "0.7.0"
 sdist = { url = "https://files.pythonhosted.org/packages/20/e5/16ff212c1e452235a90aeb09066144d0c5a6a8c0834397e03f5224495c4e/ptyprocess-0.7.0.tar.gz", upload-time = 2020-12-28T15:15:30Z, size = 70762, hashes = { sha256 = "5c5d0a3b48ceee0b48485e0c26037c0acd7d29765ca3fbb5cb3831d347423220" } }
@@ -1065,8 +1083,6 @@ version = "0.2.3"
 sdist = { url = "https://files.pythonhosted.org/packages/cd/05/0a34433a064256a578f1783a10da6df098ceaa4a57bbeaa96a6c0352786b/pure_eval-0.2.3.tar.gz", upload-time = 2024-07-21T12:58:21Z, size = 19752, hashes = { sha256 = "5f4e983f40564c576c7c8635ae88db5956bb2229d7e9237d03b3c0b0190eaf42" } }
 wheels = [{ url = "https://files.pythonhosted.org/packages/8e/37/efad0257dc6e593a18957422533ff0f87ede7c9c6ea010a2177d738fb82f/pure_eval-0.2.3-py3-none-any.whl", upload-time = 2024-07-21T12:58:20Z, size = 11842, hashes = { sha256 = "1db8e35b67b3d218d818ae653e27f06c3aa420901fa7b081ca98cbedc874e0d0" } }]
 
-# TODO(#12758): pyarrow pinned at 19.0.1 for GCP buildpack/rmgpgab manylinux2014
-# (23.x is manylinux_2_28-only → sdist fail). Drop when trigger uses Dockerfile/uv.
 [[packages]]
 name = "pyarrow"
 version = "19.0.1"
@@ -1138,9 +1154,9 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/f4/7e/a72dd26f3b0f4f2
 
 [[packages]]
 name = "pyjwt"
-version = "2.13.0"
-sdist = { url = "https://files.pythonhosted.org/packages/3b/81/58d0ac84e1ef3a3843791d6954d94c0b33d526c75eeb1efbce9d0a4c4077/pyjwt-2.13.0.tar.gz", upload-time = 2026-05-21T19:54:36Z, size = 107515, hashes = { sha256 = "41571c89ca91598c79e8ef18a2d07367d4810fbbd6f637794879baf1b7703423" } }
-wheels = [{ url = "https://files.pythonhosted.org/packages/a3/5e/ecf12fdb62546d64385c158514e9b2b671f7832108ef2ecd2020ce0af2d1/pyjwt-2.13.0-py3-none-any.whl", upload-time = 2026-05-21T19:54:35Z, size = 31274, hashes = { sha256 = "66adcc2aff09b3f1bbd95fc1e1577df8ac8723c978552fd43304c8a290ac5728" } }]
+version = "2.15.1"
+sdist = { url = "https://files.pythonhosted.org/packages/43/ea/5194e52748b0da83d71e082d75496eaec6e58f419f5e184786ded517e6a9/pyjwt-2.15.1.tar.gz", upload-time = 2026-09-28T18:40:42.598678Z, size = 121252, hashes = { sha256 = "4f259e80cdfb6b3fc18a7de51fd1ef9ec79652f25019bae68975ca2468a34df8" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/50/ca/44de4e75f8aadc457f0634be3b542815078ded46dca30efb960edeecad6e/pyjwt-2.15.1-py3-none-any.whl", upload-time = 2026-09-28T18:40:41.429003Z, size = 33860, hashes = { sha256 = "42d59d631f7768a1028a64c7ff581a9bf7519804daf91fc5b6c56e30eec5e193" } }]
 
 [[packages]]
 name = "pynndescent"

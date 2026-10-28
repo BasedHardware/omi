@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/utils/plan_pricing.dart';
+import 'package:omi/backend/schema/gen/payments_wire.g.dart';
 
 List<Map<String, dynamic>> _tier({num? monthly, num? yearly}) {
   return [
@@ -10,6 +11,28 @@ List<Map<String, dynamic>> _tier({num? monthly, num? yearly}) {
 }
 
 void main() {
+  test('billing total survives generated wire decoding with whole yen', () {
+    final decoded = GeneratedPaymentPricingOption.fromJson({
+      'id': 'price_jpy',
+      'title': 'Unlimited Annual',
+      'interval': 'year',
+      'unit_amount': 43200,
+      'currency': 'jpy',
+      'billing_total': '43,200 JPY',
+      'price_string': '3,600 JPY/mo',
+    }).toJson();
+    expect(planBillingTotal(decoded), '43,200 JPY');
+    expect(planBillingTotal({'unit_amount': 26991}), '\$269.91');
+  });
+
+  test('discounts never compare amounts in different currencies', () {
+    expect(
+        annualDiscountPercent([
+          {'interval': 'month', 'unit_amount': 4800, 'currency': 'jpy'},
+          {'interval': 'year', 'unit_amount': 26991, 'currency': 'usd'},
+        ]),
+        isNull);
+  });
   group('planForCheckout', () {
     final plans = <Map<String, dynamic>>[
       {'id': 'plus-month', 'plan_id': 'plus', 'interval': 'month'},
@@ -229,6 +252,24 @@ void main() {
         ),
         isFalse,
       );
+    });
+
+    test('shows desktop-plan Continue onto Omi Pro, which also grants desktop', () {
+      for (final current in ['operator', 'architect']) {
+        expect(
+          shouldShowPlanContinueButton(
+            isOnAnnualPlan: true,
+            hasScheduledUpgrade: false,
+            isCancelled: false,
+            plansLoaded: true,
+            selectedTierId: 'unlimited_v2',
+            currentTierId: current,
+            currentGrantsDesktop: true,
+          ),
+          isTrue,
+          reason: current,
+        );
+      }
     });
 
     test('still shows monthly→annual Continue on a desktop plan', () {

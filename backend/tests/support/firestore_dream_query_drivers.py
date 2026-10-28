@@ -32,7 +32,7 @@ def finish_lease():
         'reservation_usd': 0.24,
         'budget_charge_usd': 0.24,
         'admission_refunded': False,
-        'max_usd_per_token': Caps().max_usd_per_token,
+        'max_usd_per_token': 0.00001,
         'spend_scope': 'user',
         'dirty_dropped': 0,
         'dirty_dropped_reported': 0,
@@ -47,8 +47,18 @@ def admission_state(client, args, trial):
     client.documents['dream_users/' + UID] = {'score': 1}
 
 
+def required_retry_cursor(client, args, trial):
+    client.documents['dream_scheduler/required_intake'] = {'after': 'one'} if trial else {}
+
+
 def entries():
     return (
+        DriverEntry(
+            'database.dream_scheduler.required_retry_page',
+            domains={'limit': [1, 4990]},
+            setup=required_retry_cursor,
+            trials=2,
+        ),
         DriverEntry(
             'utils.dream_seed.load',
             base={'uid': UID},
@@ -160,9 +170,9 @@ registry_extension = SimpleNamespace(
         'database.dream_scheduler.discover': CoveredByEntry(
             'database.dream_scheduler.discover',
             covered_by=('database.dream_scheduler.candidate_page',),
-            reason='Discovery streams only through candidate_page; its get_all calls read explicit document refs and its transaction only initializes due rows and a cursor. SDK queue races are exercised in test_dream_queue_emulator.',
+            reason='Discovery streams only through candidate_page (allowlist mode reads listed user documents by explicit ref instead); its chunked get_all calls read explicit document refs in bounded transactions that only initialize due rows and a cursor. SDK queue races are exercised in test_dream_queue_emulator.',
             expect_observed=False,
-            body_digest='c0e27c29293523fa0ddf6095c56b0502810590259e28ce80c43e0ac4bc826789',
+            body_digest='e614de2d842268bb1b96e7e7a12c885b3e1bbcef9bd63da881baccf177d1c722',
         )
     },
     SKIPS={},

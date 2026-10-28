@@ -1,5 +1,6 @@
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/utils/note_citations.dart';
 
 /// The one summary body a conversation detail surface should render or export.
 ///
@@ -14,7 +15,11 @@ class ConversationSummarySelection {
   final String? appId;
   final int? resultIndex;
 
-  const ConversationSummarySelection({required this.content, required this.kind, this.appId, this.resultIndex});
+  /// Renderable first-party sections; app outputs and edited overviews keep their flat path.
+  final List<Section> sections;
+
+  const ConversationSummarySelection(
+      {required this.content, required this.kind, this.appId, this.resultIndex, this.sections = const []});
 
   bool get isApp => kind == ConversationSummaryKind.app;
 
@@ -51,31 +56,81 @@ class ConversationSummarySelection {
   /// same Markdown twice.
   static ConversationSummarySelection select(ServerConversation conversation) {
     for (var index = 0; index < conversation.appResults.length; index++) {
-      final result = conversation.appResults[index];
-      final content = result.content.trim();
-      if (content.isNotEmpty) {
-        return ConversationSummarySelection(
-          content: content,
-          kind: ConversationSummaryKind.app,
-          appId: result.appId,
-          resultIndex: index,
-        );
-      }
+      final selection = _appResult(conversation, index);
+      if (selection != null) return selection;
     }
+    return firstParty(conversation);
+  }
 
+  /// Every summary [conversation] holds: Omi's own first (when it has one), then each non-empty
+  /// app result in server order — except results that share a source identity: duplicate app ids
+  /// are valid read-only data, but sibling chips with the same `sourceKey` would both look
+  /// selected and the second could never be resolved by key, so only the first is offered (the
+  /// freshest result once the reprocess contract lands it first). Legacy results without an app
+  /// id keep their per-result keys and stay individually viewable.
+  static List<ConversationSummarySelection> available(ServerConversation conversation) {
+    final omi = firstParty(conversation);
+    final seenKeys = <String>{};
+    return [
+      if (omi.kind != ConversationSummaryKind.empty) omi,
+      for (var index = 0; index < conversation.appResults.length; index++)
+        if (_appResult(conversation, index) case final selection?)
+          if (seenKeys.add(selection.sourceKey)) selection,
+    ];
+  }
+
+  /// Omi's own summary: the compatibility overview or the section projection, else empty.
+  static ConversationSummarySelection firstParty(ServerConversation conversation) {
+    final knownIDs = conversation.transcriptSegments.map((segment) => segment.id).where((id) => id.isNotEmpty);
+    String presentable(String text) => repairNoteCitations(text, knownIDs).text;
     final overview = conversation.structured.overview.trim();
     final projectedSections = renderSections(conversation.structured.sections);
+    final validIDs = knownIDs.toSet();
+    final sections =
+        conversation.structured.sections.where((section) => section.bodyMarkdown.trim().isNotEmpty).map((section) {
+      final heading = repairNoteCitations(section.heading, knownIDs);
+      final body = repairNoteCitations(section.bodyMarkdown, knownIDs);
+      // Inline citations the repair removes join the typed provenance (macOS presentableSection),
+      // so a legacy note whose only evidence was `[s01234]` keeps its transcript pointer.
+      return Section(
+        heading: heading.text,
+        bodyMarkdown: body.text,
+        kind: section.kind,
+        sourceSegmentIds: [...?section.sourceSegmentIds, ...heading.sourceIDs, ...body.sourceIDs]
+            .where(validIDs.contains)
+            .toSet()
+            .toList(),
+      );
+    }).toList(growable: false);
     if (projectedSections.isNotEmpty && overview == projectedSections) {
-      return ConversationSummarySelection(content: projectedSections, kind: ConversationSummaryKind.sections);
+      return ConversationSummarySelection(
+          content: presentable(projectedSections), kind: ConversationSummaryKind.sections, sections: sections);
     }
     if (overview.isNotEmpty) {
-      return ConversationSummarySelection(content: overview, kind: ConversationSummaryKind.overview);
+      return ConversationSummarySelection(content: presentable(overview), kind: ConversationSummaryKind.overview);
     }
     if (projectedSections.isNotEmpty) {
-      return ConversationSummarySelection(content: projectedSections, kind: ConversationSummaryKind.sections);
+      return ConversationSummarySelection(
+          content: presentable(projectedSections), kind: ConversationSummaryKind.sections, sections: sections);
     }
     return const ConversationSummarySelection(content: '', kind: ConversationSummaryKind.empty);
   }
+
+  static ConversationSummarySelection? _appResult(ServerConversation conversation, int index) {
+    final result = conversation.appResults[index];
+    final content = result.content.trim();
+    if (content.isEmpty) return null;
+    return ConversationSummarySelection(
+      content: content,
+      kind: ConversationSummaryKind.app,
+      appId: result.appId,
+      resultIndex: index,
+    );
+  }
+
+  /// Identifies a source across refreshes: "omi", or the app id (the result index for legacy
+  /// output without one).
+  String get sourceKey => isApp ? 'app:${appId ?? '#$resultIndex'}' : 'omi';
 
   /// The canonical Markdown projection of structured sections.
   ///
