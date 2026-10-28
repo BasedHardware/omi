@@ -93,6 +93,7 @@ def test_enabled_chart_pins_gpu_pool_image_and_age_autoscaling():
         'service': 'batch-pipeline',
         'env': 'dev',
     }
+    assert manifests['Deployment']['spec']['replicas'] == 1
     assert {(item['key'], item['operator'], item['value'], item['effect']) for item in pod['tolerations']} == {
         ('omi.ai/batch-pipeline', 'Equal', 'true', 'NoSchedule'),
         ('nvidia.com/gpu', 'Equal', 'present', 'NoSchedule'),
@@ -184,7 +185,7 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     assert deployment['spec']['progressDeadlineSeconds'] == 2400
     pod = deployment['spec']['template']['spec']
     if environment == 'prod':
-        assert len(deployments) == 1 and 'replicas' not in deployment['spec']  # HPA owns the live count; min=3 below.
+        assert len(deployments) == 1 and deployment['spec']['replicas'] == 3  # Preserve baseline/live count for HPA.
         hpa = manifests['HorizontalPodAutoscaler']['spec']
         assert hpa['minReplicas'] == 3 and hpa['maxReplicas'] == 16
         assert 'omi.ai/required-companion-deployment' not in deployment['metadata'].get('annotations', {})
@@ -434,7 +435,7 @@ def test_production_worker_policy_binding_matches_accepted_identity():
     assert env['BATCH_PIPELINE_ENABLED'] == 'false'
     assert env['BATCH_PIPELINE_API_URL'] == config['worker']['apiUrl'] == config['worker']['audience']
     assert env['BATCH_PIPELINE_WORKER_AUDIENCE'] == config['worker']['audience']
-    assert 'replicas' not in docs['Deployment']['spec']  # Enabled HPA owns the live count.
+    assert docs['Deployment']['spec']['replicas'] == 3  # Keep the HPA floor through Helm upgrades.
     hpa = docs['HorizontalPodAutoscaler']['spec']
     assert hpa['minReplicas'] == 3 and hpa['maxReplicas'] == 16
 
