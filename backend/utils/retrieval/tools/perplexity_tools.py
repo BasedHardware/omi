@@ -97,6 +97,10 @@ async def perplexity_web_search_tool(
         query="What are the latest developments in AI in 2025?"
         Returns web search results with citations about recent AI developments
     """
+    if not query or not isinstance(query, str) or not query.strip():
+        return "Error: query is required and cannot be empty."
+    query = query.strip()
+
     logger.info(f"🔍 perplexity_web_search_tool called - query: {query}")
 
     return await _perplexity_gateway_search(query)
