@@ -249,6 +249,7 @@ from utils.conversations.meeting_context import (
 from utils.conversations.capture_group_meeting_context import (
     dispatch_primary_notes_refresh,
     merged_member_contexts,
+    MEMBER_CONTEXT_FIELD,
 )
 from utils.conversations.meeting_notes_wiring import (
     notes_agent_inputs,
@@ -357,6 +358,7 @@ def _get_structured(
     recovery_minimum_fallback_observer: Optional[Callable[[], None]] = None,
     llm_hashes: dict[str, str] | None = None,
     open_loop_out: Optional[dict[str, Any]] = None,
+    meeting_context_override: Optional[CalendarMeetingContext] = None,
 ) -> Tuple[Structured, bool]:
     try:
         if is_recovery_trigger(trigger) and not recovery_transcript_decoded:
@@ -396,22 +398,24 @@ def _get_structured(
             or str(uuid.uuid4())
         )
 
-        direct_calendar_context = getattr(conversation, 'calendar_meeting_context', None)
-        calendar_context: Optional[CalendarMeetingContext] = (
-            direct_calendar_context
-            if isinstance(direct_calendar_context, CalendarMeetingContext)
-            else (
-                CalendarMeetingContext(**direct_calendar_context)
-                if isinstance(direct_calendar_context, dict) and direct_calendar_context
-                else None
+        calendar_context = meeting_context_override
+        if calendar_context is None:
+            direct_calendar_context = getattr(conversation, 'calendar_meeting_context', None)
+            calendar_context = (
+                direct_calendar_context
+                if isinstance(direct_calendar_context, CalendarMeetingContext)
+                else (
+                    CalendarMeetingContext(**direct_calendar_context)
+                    if isinstance(direct_calendar_context, dict) and direct_calendar_context
+                    else None
+                )
             )
-        )
-        if hasattr(conversation, 'external_data'):
-            external_data_value = cast(Optional[Dict[str, Any]], getattr(conversation, 'external_data', None))
-            if external_data_value:
-                calendar_data = external_data_value.get('calendar_meeting_context')
-                if calendar_data:
-                    calendar_context = CalendarMeetingContext(**calendar_data)
+            if hasattr(conversation, 'external_data'):
+                external_data_value = cast(Optional[Dict[str, Any]], getattr(conversation, 'external_data', None))
+                if external_data_value:
+                    calendar_data = external_data_value.get('calendar_meeting_context')
+                    if calendar_data:
+                        calendar_context = CalendarMeetingContext(**calendar_data)
 
         # Segment uploads can carry provenance without external text-only fields.
         if isinstance(conversation, ExternalIntegrationCreateConversation) and (
@@ -2298,6 +2302,9 @@ def _normal_persist_payload(conversation: Conversation, *, clear_terminal_marker
     that lands the clear.
     """
     payload = conversation.dict()
+    # The field is excluded from client projections; write it explicitly so a
+    # reprocess after group separation clears the prior derived context.
+    payload[MEMBER_CONTEXT_FIELD] = getattr(conversation, '_capture_group_member_context', None)
     if clear_terminal_marker:
         payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = None
     if payload.get('processing_state') is None:
@@ -2338,7 +2345,7 @@ def _calendar_overlap_retains_conversation(
         return False
 
 
-def _enrich_meeting_context(uid: str, conversation: Any) -> None:
+def _enrich_meeting_context(uid: str, conversation: Any) -> Optional[CalendarMeetingContext]:
     """Read identity context before summarization without mutating calendar providers.
 
     Sources, best first — each merges only the participants the better sources did
@@ -2402,18 +2409,52 @@ def _enrich_meeting_context(uid: str, conversation: Any) -> None:
             duration_seconds=conversation_duration_seconds(conversation),
         )
 
-    context = resolve_meeting_context(
-        direct=_stored_meeting_context(conversation),
-        stored=_stored if _stored_meeting_lookup_enabled() else None,
-        member_contexts=lambda: merged_member_contexts(uid, conversation),
-        calendar=_calendar if has_window else None,
-        screen=_screen if has_window else None,
-        on_error=lambda source, exc: logger.error(
-            'Error reading %s meeting context before summarization: %s', source, exc
-        ),
+    cached: dict[str, Any] = {}
+
+    def once(name: str, supplier):
+        def read():
+            if name not in cached:
+                try:
+                    cached[name] = (True, supplier())
+                except Exception as exc:
+                    cached[name] = (False, exc)
+            succeeded, value = cached[name]
+            if not succeeded:
+                raise value
+            return value
+
+        return read
+
+    stored_supplier = once('stored', _stored) if _stored_meeting_lookup_enabled() else None
+    calendar_supplier = once('calendar', _calendar) if has_window else None
+    screen_supplier = once('screen', _screen) if has_window else None
+    direct_context = _stored_meeting_context(conversation)
+    on_error = lambda source, exc: logger.error(
+        'Error reading %s meeting context before summarization: %s', source, exc
     )
-    if context:
-        _store_meeting_context(conversation, context)
+    own_context = resolve_meeting_context(
+        direct=direct_context,
+        stored=stored_supplier,
+        calendar=calendar_supplier,
+        screen=screen_supplier,
+        on_error=on_error,
+    )
+    member_context = merged_member_contexts(uid, conversation)
+    context = resolve_meeting_context(
+        direct=direct_context,
+        stored=stored_supplier,
+        member_contexts=lambda: member_context,
+        calendar=calendar_supplier,
+        screen=screen_supplier,
+        on_error=on_error,
+    )
+    if own_context:
+        _store_meeting_context(conversation, own_context)
+    if isinstance(conversation, Conversation):
+        conversation._capture_group_member_context = (
+            member_context.model_dump(mode='json') if member_context is not None else None
+        )
+    return context
 
 
 @spelling_context_run
@@ -2479,6 +2520,7 @@ def process_conversation(
     user_kept: bool = False,
     speaker_receipt_observer: Callable[[bool], None] | None = None,
     smart_merge_refresh: tuple[int, str] | None = None,
+    capture_group_refresh_fence: tuple[str, int, str] | None = None,
     recovery_transcript_decoded: bool = True,
     prior_relevance_decision: Mapping[str, Any] | None = None,
     created_webhook_observer: Callable[[Callable[[], None]], None] | None = None,
@@ -2677,8 +2719,9 @@ def process_conversation(
         report_persistence(False)
         return cast(Conversation, conversation)
 
+    meeting_context_override = None
     if not silent_backfill:
-        _enrich_meeting_context(uid, conversation)
+        meeting_context_override = _enrich_meeting_context(uid, conversation)
     # Everything below reads speaker_id as one voice; capture only guarantees that per piece.
     with identity_pass(None if already_observed else 'first'):
         speaker_receipt_applied = False if silent_backfill else resolve_speakers_for_processing(uid, conversation)
@@ -2718,6 +2761,7 @@ def process_conversation(
         recovery_minimum_fallback_observer=_mark_recovery_minimum_fallback,
         llm_hashes=llm_hashes,
         open_loop_out=open_loop_sink,
+        meeting_context_override=meeting_context_override,
     )
     if recovery_minimum_fallback:
         sys.stdout.write(
@@ -2824,6 +2868,14 @@ def process_conversation(
     conversation.summary_retryable = None  # merge-cleared by the payload the same way
     if is_initial_creation:
         persisted = lifecycle_service.create_completed_conversation(uid, payload, idempotent=True)
+    elif capture_group_refresh_fence is not None:
+        group_id, group_revision, reservation_id = capture_group_refresh_fence
+        persisted = lifecycle_service.persist_processed_conversation(
+            uid,
+            payload,
+            expected_capture_group=(group_id, group_revision),
+            capture_group_notes_refresh=(group_id, reservation_id),
+        )
     elif smart_merge_refresh is not None:
         persisted = lifecycle_service.persist_processed_conversation(
             uid, payload, smart_merge_refresh=smart_merge_refresh

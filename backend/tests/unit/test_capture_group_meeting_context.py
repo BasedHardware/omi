@@ -27,7 +27,10 @@ def context(names=(), event_id='evt-1', source='system_calendar', title='Weekly 
 
 
 def stored(context_value):
-    return {'external_data': {'calendar_meeting_context': context_value.model_dump(mode='json')}}
+    return {
+        'visibility': 'shared',
+        'external_data': {'calendar_meeting_context': context_value.model_dump(mode='json')},
+    }
 
 
 def group_record(primary, *members):
@@ -35,11 +38,24 @@ def group_record(primary, *members):
         'id': 'group-1',
         'primary_id': primary,
         'revision': 3,
-        'members': [{'id': primary, 'source': 'omi'}] + [{'id': mid, 'source': source} for mid, source in members],
+        'members': [{'id': primary, 'source': 'omi', 'evidence': {'method': 'overlap_shared_speech_v1'}}]
+        + [
+            {'id': mid, 'source': source, 'evidence': {'method': 'overlap_shared_speech_v1'}} for mid, source in members
+        ],
     }
 
 
 def conversation(id='pendant', group=None):
+    if group is not None:
+        if not hasattr(group, 'id'):
+            group.id = 'group-1'
+        if not hasattr(group, 'primary_id'):
+            group.primary_id = id
+        if not hasattr(group, 'revision'):
+            group.revision = 3
+        for member in getattr(group, 'members', ()) or ():
+            if not hasattr(member, 'evidence'):
+                member.evidence = {'method': 'shared_speech'}
     return SimpleNamespace(id=id, capture_group=group)
 
 
@@ -133,7 +149,9 @@ class TestPrimaryNotesGap:
         return {mid: stored(ctx) for mid, ctx in contexts.items()}
 
     def test_gap_when_primary_has_no_context_and_a_member_has_one(self):
-        gap = cg.primary_notes_gap(self.primary(), self.member_rows({'half-b': context(['Nik Shevchenko'])}))
+        gap = cg.primary_notes_gap(
+            self.primary(), self.member_rows({'half-b': context(['Nik Shevchenko'])}), has_new_meeting_evidence=True
+        )
         assert gap is not None
         assert (gap.group_id, gap.revision, gap.primary_id) == ('group-1', 3, 'pendant')
         assert [p.name for p in gap.member_context.participants] == ['Nik Shevchenko']
@@ -142,6 +160,7 @@ class TestPrimaryNotesGap:
         gap = cg.primary_notes_gap(
             self.primary(own=context(['Ash Kalb'])),
             self.member_rows({'half-b': context(['Ash Kalb', 'Nik Shevchenko'])}),
+            has_new_meeting_evidence=True,
         )
         assert gap is not None
 
@@ -163,6 +182,34 @@ class TestPrimaryNotesGap:
 
     def test_no_gap_without_a_group_record(self):
         assert cg.primary_notes_gap({'id': 'pendant'}, {}) is None
+
+    def test_frame_only_evidence_can_create_a_refresh_gap(self):
+        gap = cg.primary_notes_gap(self.primary(), {}, has_new_meeting_evidence=True)
+        assert gap is not None and gap.member_context is None
+
+    def test_private_member_context_is_never_merged(self):
+        private = stored(context(['Private participant']))
+        private['visibility'] = 'private'
+        confirmed = conversation(
+            group=SimpleNamespace(
+                members=[SimpleNamespace(id='pendant', source='omi'), SimpleNamespace(id='half-b', source='desktop')]
+            )
+        )
+        assert cg.merged_member_contexts('u', confirmed, member_rows={'half-b': private}) is None
+
+    def test_legacy_and_non_shared_speech_groups_are_not_eligible(self):
+        legacy = self.primary()
+        legacy['capture_group']['kind'] = 'desktop_pendant_call'
+        assert (
+            cg.primary_notes_gap(legacy, self.member_rows({'half-b': context(['Nik'])}), has_new_meeting_evidence=True)
+            is None
+        )
+        legacy['capture_group'].pop('kind')
+        legacy['capture_group']['members'][1]['evidence']['method'] = 'capture_containment_v1'
+        assert (
+            cg.primary_notes_gap(legacy, self.member_rows({'half-b': context(['Nik'])}), has_new_meeting_evidence=True)
+            is None
+        )
 
 
 class TestKillSwitch:

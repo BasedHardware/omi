@@ -28,11 +28,20 @@ from typing import Any, Optional, Sequence
 
 from PIL import Image
 
-from database.screen_frames import get_conversation_screen_frames, own_frames
+from database import conversations as conversations_db
+from database.screen_frames import (
+    get_conversation_screen_frames,
+    get_conversation_screenshot_sharing_enabled,
+    own_frames,
+)
 from database.users import get_meeting_note_screenshots_enabled
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant
-from utils.conversations.capture_group_meeting_context import group_members as capture_group_members
-from utils.conversations.capture_group_meeting_context import capture_group_primary_notes_enabled
+from utils.conversations.capture_group_meeting_context import (
+    group_members as capture_group_members,
+    member_row_is_shareable,
+    capture_group_primary_notes_enabled,
+    shared_speech_group_record,
+)
 from utils.conversations.meeting_context import is_ai_agent_tile_name, strip_leading_tile_glyphs
 from utils.conversations.meeting_participants import looks_like_ai_agent_name
 from utils.llm.meeting_notes_rich_prompts import NotesFrameImage
@@ -128,13 +137,29 @@ def load_capture_group_frame_evidence(uid: str, conversation: Any) -> tuple[Scre
     evidence = [replace(item, conversation_id=own_id) for item in load_screen_frame_evidence(uid, own_id)]
     if not capture_group_primary_notes_enabled():
         return tuple(evidence)
+    group = shared_speech_group_record(uid, conversation)
+    if group is None:
+        return tuple(evidence)
     members = [
         member['id']
-        for member in capture_group_members(conversation)
+        for member in capture_group_members({'capture_group': group})
         if member['id'] != own_id and member['source'] == 'desktop'
     ]
     for member_id in members[:MAX_GROUP_MEMBER_FRAME_READS]:
         try:
+            member_row = conversations_db.get_conversation_raw_snapshot(
+                uid,
+                member_id,
+                field_paths=['external_data', 'visibility', 'deleted', 'screenshot_sharing_enabled'],
+            )
+            external_data = (member_row or {}).get('external_data') or {}
+            if (
+                not member_row_is_shareable(member_row)
+                or not get_conversation_screenshot_sharing_enabled(member_row)
+                or not isinstance(external_data, dict)
+                or external_data.get('conversation_role') != 'meeting'
+            ):
+                continue
             evidence.extend(
                 replace(item, conversation_id=member_id) for item in load_screen_frame_evidence(uid, member_id)
             )
