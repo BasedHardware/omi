@@ -5,6 +5,7 @@ from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 
+from models.dream_agent import Feedback
 from models.dream_edit import Strict, Term
 from models.agent_edit import HarnessEdit, DreamHarnessEdit
 from models.agent_refs import canonical_collection
@@ -164,19 +165,45 @@ TOOLS = {
 }
 
 
+class ReportDefect(Feedback):
+    """A defect in Dream's own harness, tools or data shape, stored only as an anonymous k-aggregated pattern."""
+
+    count: int = Field(default=1, ge=1, le=10000, description='How many times this pass hit the defect.')
+    latency_ms: float = Field(default=0, ge=0, le=3600000, allow_inf_nan=False)
+    error_rate: float = Field(default=0, ge=0, le=1, allow_inf_nan=False)
+    reproduction: str = Field(
+        min_length=1,
+        max_length=500,
+        description='Generic steps that hit the defect. Never quote owner text, names, ids or refs.',
+    )
+
+
+# Dream-only and offered only when the caller supplies a sink; outside TOOLS so
+# owner-requested sessions and existing tool contracts are unchanged.
+DEFECT_TOOL = 'report_defect'
+DEFECT_TOOL_DESCRIPTION = (
+    'Report a defect in this harness: a tool that errored or returned wrong/unhelpful data, a missing tool or '
+    'field, a confusing rejection, or a budget that blocked useful work. Never for owner data quality; fix that '
+    'with edits. Anonymous and aggregated; never include owner text, names, ids or refs. Does not end the session.'
+)
+
+
 def tool_model(name, authority='user'):
+    if name == DEFECT_TOOL:
+        return ReportDefect
     return DreamProposeEdit if name == 'propose_edit' and authority == 'dream' else TOOLS[name][1]
 
 
-def tool_schemas(*, authority='user'):
+def tool_schemas(*, authority='user', defect_reports=False):
+    names = [*TOOLS, *([DEFECT_TOOL] if defect_reports and authority == 'dream' else [])]
     return tuple(
         {
             'type': 'function',
             'function': {
                 'name': name,
-                'description': description,
+                'description': DEFECT_TOOL_DESCRIPTION if name == DEFECT_TOOL else TOOLS[name][0],
                 'parameters': tool_model(name, authority).model_json_schema(),
             },
         }
-        for name, (description, _model) in TOOLS.items()
+        for name in names
     )
