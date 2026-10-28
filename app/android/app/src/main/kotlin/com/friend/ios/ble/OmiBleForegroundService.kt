@@ -250,8 +250,11 @@ class OmiBleForegroundService : Service() {
 
         override fun onGattDisconnected(address: String, gattHash: Int, status: Int) {
             val addr = address.uppercase()
+            // Consume before any early return: non-null means this disconnect is a
+            // discovery-failure retirement and its retry takes the bounded backoff.
+            val discoveryBackoffMs = bleManager.discoveryReconnectPolicy.consumeRetirementBackoffMs(addr)
             Log.i(TAG, "onGattDisconnected: $addr (status=$status)")
-            handleDisconnection(addr, gattHash, status)
+            handleDisconnection(addr, gattHash, status, discoveryBackoffMs)
         }
 
         override fun onGattServicesDiscovered(address: String, services: List<BleService>) {
@@ -590,7 +593,7 @@ class OmiBleForegroundService : Service() {
 
     // ── Disconnect handling + retry ──
 
-    private fun handleDisconnection(address: String, gattHash: Int, status: Int) {
+    private fun handleDisconnection(address: String, gattHash: Int, status: Int, discoveryBackoffMs: Long? = null) {
         synchronized(syncLock) {
             val addr = address.uppercase()
             val managed = managedDevices[addr] ?: return
@@ -633,7 +636,7 @@ class OmiBleForegroundService : Service() {
         val addr = address.uppercase()
 
         val cccdTimeout = status == OmiBleManager.CCCD_TIMEOUT_STATUS
-        val retrying = handleRetryLogic(addr, status)
+        val retrying = handleRetryLogic(addr, status, discoveryBackoffMs)
         val error = BleDisconnectReason.connectionErrorFromStatus(status, retrying)
 
 
@@ -666,7 +669,7 @@ class OmiBleForegroundService : Service() {
         }
     }
 
-    private fun handleRetryLogic(address: String, status: Int): Boolean {
+    private fun handleRetryLogic(address: String, status: Int, discoveryBackoffMs: Long? = null): Boolean {
         val addr = address.uppercase()
         val managed = managedDevices[addr] ?: return false
 
@@ -674,9 +677,13 @@ class OmiBleForegroundService : Service() {
         reportSavedReconnect(addr, if (status == 137) "failed:pairing_lost" else "failed:gatt")
         if (isDestroying || (managed.pairingLost && bleManager.savedReconnect.isEnabled(addr)) || status == -1 || status == 137 || !isBluetoothEnabled) return false
 
-        val delayMs = bleManager.cccdReconnectPolicy.reconnectDelay(
-            addr, status == OmiBleManager.CCCD_TIMEOUT_STATUS, RECONNECT_DELAY_MS,
-        ) ?: return false
+        // A discovery-failure retirement backs off exponentially instead of retrying at
+        // the fixed interval forever (PR #23882); it never spends the CCCD budget, and
+        // the original status still drives diagnostics above.
+        val delayMs = discoveryBackoffMs
+            ?: bleManager.cccdReconnectPolicy.reconnectDelay(
+                addr, status == OmiBleManager.CCCD_TIMEOUT_STATUS, RECONNECT_DELAY_MS,
+            ) ?: return false
         scheduleReconnect(addr, managed, delayMs)
         return true
     }
