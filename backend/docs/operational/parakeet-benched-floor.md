@@ -11,47 +11,41 @@ The ceiling remains 12, admission targets remain two active requests per pod
 and 35% GPU utilization, and the existing safety guard remains enabled. This is
 not clearance to re-ramp live traffic or the dedicated batch pipeline.
 
-## Apply (operator only)
+## Apply through the guard's atomic floor writer (operator only)
 
-Before **every Parakeet Helm apply**, including restoration below, inspect the
-exact live HPA's external metric names:
+**Do not dispatch `gcp_parakeet.yml` or run a Parakeet Helm upgrade for this
+floor operation.** That workflow rolls an image and can overwrite an active
+guard rollback after an operator's last check. The Parakeet chart's static
+minimum remains eight; the guard's existing schedule writer applies four to
+the live HPA without an image or HPA-policy reconcile. Avoid an unrelated
+Parakeet Helm/image deployment during this floor operation.
 
-```bash
-kubectl --context=gke_based-hardware_us-central1_prod-omi-gke \
-  -n prod-omi-backend get hpa prod-omi-parakeet \
-  -o jsonpath='{.spec.metrics[*].external.metric.name}{"\n"}'
-```
-
-If `parakeet_request_latency_p99` is present, the guard has an active rollback:
-**defer the Parakeet workflow/chart apply** until the guard's own consecutive
-clean-window recovery removes that metric. Keep its 12-replica floor and full
-rollback metrics intact; neither the four-replica apply nor eight-replica
-restoration may overwrite them. Do not clear the marker manually. Recheck at
-the Helm apply boundary, not only before the image build; if a rollback appears
-while the workflow is building, stop that run before its Helm step. If the
-operator cannot ensure this precondition, hold the apply. A floor of 12 alone
-is not the marker: the normal time-of-day schedule can also request 12.
-
-If #23863 is already deployed, skip the four-replica reduction and follow the
-restoration instructions instead, under the same active-rollback precondition.
-
-1. Deploy `backend/charts/incluster-guards/prod_omi_incluster_guards_values.yaml`
-   through `gcp_incluster_guards.yml` first. Confirm the installed script
-   ConfigMap's `floors.json` contains 24 fours and the guard still observes
-   usable signals. It must retain its trip rollback; do not disable it.
-2. Deploy the Parakeet chart through `gcp_parakeet.yml`. The prod overlay has
-   `autoscaling.minReplicas: 4`, `maxReplicas: 12`. This workflow also builds/pins
-   a source-SHA image; review that image rollout before dispatching. On Oct 28
-   the live HPA scale-up policy was 1 pod/60s while the existing source specifies
-   4 pods/15s: the workflow will reconcile that pre-existing drift as well.
-   Image or HPA-policy changes reset the guard's 15-minute arming identity;
-   observe a full new-state lookback before accepting the reduced floor as
-   guarded. If that warmup exposure is unacceptable, hold the apply for a
-   floor-only operator path instead of assuming the workflow keeps the image.
-   Do not bypass a deferred or blind guard.
-3. Use an approved GKE operator identity for the following **pool autoscaler
-   edits**, never the report's `ro-prod` identity. These are separate from the
-   Helm workflows and are not applied by merging this change:
+1. Confirm #23863 is not already deployed; if it is, skip the reduction and use
+   the restoration below. Lead also clears the source-pin merge slot first.
+2. Deploy `backend/charts/incluster-guards/prod_omi_incluster_guards_values.yaml`
+   through `gcp_incluster_guards.yml` only. Confirm the installed script
+   ConfigMap's `floors.json` contains 24 fours, the guard is enabled, and its
+   readings are fresh. Do not disable or manually bypass the writer.
+3. Let the scheduled guard Job apply the HPA floor. Its `apply_floor_schedule`
+   checks `rolled_back(spec)` and defers while the external metric
+   `parakeet_request_latency_p99` is present. Lowering also requires one full
+   15-minute lookback under the current identity and a usable current reading.
+   The write uses a JSON patch that **tests the whole observed `/spec` before
+   replacing `/spec/minReplicas`**: a concurrent guard rollback or HPA policy
+   edit makes that patch fail instead of overwriting it. Any identity change
+   from the guard upgrade starts a new lookback; wait for it. No static Helm
+   minimum or operator patch may clear the rollback marker or its floor of 12.
+4. Verify the guard reports `floor_schedule` applied (or explicitly deferred),
+   then read the exact-context HPA min/max, desired and ready replicas, shared
+   v1/v2 latency and queue age. A legitimate rollback remains at 12 until its
+   own consecutive clean-window recovery clears it; a floor of 12 alone is
+   not a rollback marker because the normal schedule can also request 12.
+   The existing down budget is one pod per 900 seconds plus 900 seconds
+   stabilization, so eight to four takes about an hour plus node drain. Do not
+   accept a pending/deferred floor as an applied saving.
+5. Use an approved GKE operator identity for these separate **pool autoscaler
+   edits**, never the report's `ro-prod` identity. Merging the PR and deploying
+   the guard chart do not apply them:
 
    ```bash
    gcloud container node-pools update parakeet-pool \
@@ -63,33 +57,30 @@ restoration instructions instead, under the same active-rollback precondition.
    ```
 
    `parakeet-pool-v2` already has total min 0/max 10 and needs no edit. Preserve
-   all maxima. The HPA supplies four warm pods, so zero pool minima do not mean
-   zero serving replicas. Let normal drain and cluster autoscaling reclaim idle
+   all maxima. The HPA supplies the serving pods, so zero pool minima do not
+   mean zero replicas. Let normal drain and cluster autoscaling reclaim idle
    nodes; do not resize pools down, evict busy pods, or delete nodes manually.
-4. Verify exact-context HPA min/max 4/12, desired and ready replicas, current
-   guard verdict/freshness, shared v1/v2 latency and queue age, and actual nodes
-   after scale-down. A guard trip may intentionally restore 12 and the latency
-   metric. The existing down budget is one pod per 900 seconds plus 900 seconds
-   stabilization, so reduction from eight can take about an hour plus node drain.
-   Observe one full new-state lookback before treating a guard as armed.
 
 Dedicated batch L4 workers stay at three; T4 diarizer-batch stays HPA/pool 1–18;
 listen stays HPA 30–60 with zero CPU-pool minima. Do not count those pools as
 interchangeable GPU capacity or pre-allocate capacity above 16.
 
-## Restore or roll back
+## Restore through the same atomic writer
 
-Restore Parakeet `autoscaling.minReplicas: 8` and remove the production
-`floorSchedule.hours` override so it inherits the prior schedule below. Reapply
-both charts through their owning workflows. Restore the first pool's min to 2
-and the `-b` pool's min to 1 using the commands above with those minima; keep
-their maxima 4 and 3 and v2 total min/max 0/10. Confirm the current UTC hour's
-scheduled floor and readiness; the schedule, rather than the static eight,
-becomes the normal floor writer again. Preserve any active safety rollback
-until its existing clean-window recovery permits the schedule to resume.
-In particular, defer the Parakeet chart restoration while
-`parakeet_request_latency_p99` is present; reapplying a minimum of eight is also
-a reduction from the guard's twelve and is not a way to clear the incident.
+Remove the prod `floorSchedule.hours` override so it inherits the prior
+schedule below; the Parakeet chart minimum already remains eight. Deploy
+only the guard chart through `gcp_incluster_guards.yml`; **do not dispatch the
+Parakeet Helm/image workflow for restoration**. Let the existing schedule writer
+restore the current UTC hour's prior floor using the same `/spec` test patch.
+It defers while `parakeet_request_latency_p99` is present, so a restore to eight
+cannot erase an active twelve-replica rollback. Preserve that rollback until the
+guard's own clean-window recovery clears it; no manual marker removal.
+
+Restore the first pool's min to 2 and the `-b` pool's min to 1 using the commands
+above with those minima; keep maxima 4 and 3 and v2 total min/max 0/10. Verify
+the scheduled floor, readiness and actual nodes. The schedule, rather than the
+static eight in source, remains the live floor writer. Any later normal
+Parakeet image/HPA deployment is a separately reviewed operator action.
 
 Prior UTC-hour schedule (indexes 0–23):
 

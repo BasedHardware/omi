@@ -42,7 +42,7 @@ def test_parakeet_values_own_explicit_stream_capacity_and_allocation(environment
 def test_prod_parakeet_autoscaling_and_zone_spread_contract():
     values = _values('prod')
 
-    assert values['autoscaling']['minReplicas'] == 4
+    assert values['autoscaling']['minReplicas'] == 8
     assert values['autoscaling']['maxReplicas'] == 12
     assert values['topologySpreadConstraints'] == [
         {
@@ -72,7 +72,7 @@ def test_demand_scaler_renders_requests_and_queue_ages_without_raw_tail_or_gpu()
         'templates/hpa.yaml',
     ]
     hpa = yaml.safe_load(subprocess.run(command, check=True, text=True, capture_output=True).stdout)
-    assert hpa['spec']['minReplicas'] == 4 and hpa['spec']['maxReplicas'] == 12
+    assert hpa['spec']['minReplicas'] == 8 and hpa['spec']['maxReplicas'] == 12
     metrics = hpa['spec']['metrics']
     assert all(metric['type'] == 'Pods' for metric in metrics)
     targets = {metric['pods']['metric']['name']: str(metric['pods']['target']['averageValue']) for metric in metrics}
@@ -115,7 +115,7 @@ def test_workload_only_hpa_omits_mixed_latency_and_preserves_capacity_controls(d
     ]
     hpa = yaml.safe_load(subprocess.run(command, check=True, text=True, capture_output=True).stdout)
     spec = hpa['spec']
-    assert (spec['minReplicas'], spec['maxReplicas']) == (4, 12)
+    assert (spec['minReplicas'], spec['maxReplicas']) == (8, 12)
     assert spec['behavior'] == _values('prod')['autoscaling']['behavior']
     metrics = {m[m['type'].lower()]['metric']['name']: m[m['type'].lower()]['target'] for m in spec['metrics']}
     expected = {'parakeet_active_requests_total': {'type': 'AverageValue', 'averageValue': '2'}}
@@ -180,7 +180,7 @@ def test_rendered_prod_deployment_contains_stream_admission_settings():
     hpa = next(
         document for document in yaml.safe_load_all(rendered) if document.get('kind') == 'HorizontalPodAutoscaler'
     )
-    assert hpa['spec']['minReplicas'] == 4
+    assert hpa['spec']['minReplicas'] == 8
     assert hpa['spec']['maxReplicas'] == 12
     assert hpa['spec']['metrics'] == [
         {

@@ -198,10 +198,8 @@ autoscaling:
   workloadOnly: true
   # The ratified 2 active requests / 35% GPU targets trigger scale-out;
   # they are not hard per-pod capacity. Five to seven pods carry the 7-day peak.
-  # While the live window is benched, retain four warm pods for shared legacy
-  # batch traffic. Restore the prior floor/schedule after the no-text fix ships:
-  # docs/operational/parakeet-benched-floor.md (pkwin2, PR #23863).
-  minReplicas: 4
+  # Floor 8 retains warm headroom; cap 12 bounds burst scale-out.
+  minReplicas: 8
   maxReplicas: 12
   behavior:
     scaleUp:
