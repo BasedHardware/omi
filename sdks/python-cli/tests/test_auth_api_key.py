@@ -266,23 +266,16 @@ def test_narrow_key_login_displays_scopes(authed_profile, respx_mock, cli_runner
 
 
 def test_concurrent_store_api_key_preserves_both(config_path):
-    import time
-    
-    # Simulate a slow RMW cycle by patching the config load/save logic
-    # which now respects file locks.
-    def slow_store(profile, key):
-        time.sleep(0.1)
-        store_api_key(profile, key)
-
     errors = []
+
     def run_store(profile, key):
         try:
-            slow_store(profile, key)
+            store_api_key(profile, key)
         except Exception as exc:
             errors.append(exc)
 
-    t1 = threading.Thread(target=run_store, args=("alpha", "KEY-A"))
-    t2 = threading.Thread(target=run_store, args=("beta", "KEY-B"))
+    t1 = threading.Thread(target=run_store, args=("alpha", "omi_dev_" + "a" * 32))
+    t2 = threading.Thread(target=run_store, args=("beta", "omi_dev_" + "b" * 32))
 
     t1.start()
     t2.start()
@@ -290,7 +283,7 @@ def test_concurrent_store_api_key_preserves_both(config_path):
     t2.join()
 
     assert not errors, f"Concurrent store_api_key raised: {errors}"
-    
+
     config = cfg.load()
-    assert config.get_profile("alpha").api_key == "KEY-A"
-    assert config.get_profile("beta").api_key == "KEY-B"
+    assert config.get_profile("alpha").api_key == "omi_dev_" + "a" * 32
+    assert config.get_profile("beta").api_key == "omi_dev_" + "b" * 32
