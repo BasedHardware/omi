@@ -8596,26 +8596,25 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deleteReasonOther => '기타';
 
   @override
-  String get deletePauseInsteadTitle => 'Pause Omi Instead?';
+  String get deletePauseInsteadTitle => '대신 Omi를 일시 중지할까요?';
 
   @override
-  String get deletePauseInsteadSubtitle => 'Stop recording and keep everything. Come back anytime.';
+  String get deletePauseInsteadSubtitle => '녹음을 중지하고 모든 내용을 그대로 보관하세요. 언제든 돌아올 수 있습니다.';
 
   @override
-  String get deletePauseRecordingLine => 'Recording stops. Nothing new is captured while you are away.';
+  String get deletePauseRecordingLine => '녹음이 중지됩니다. 자리를 비운 동안 새로운 내용은 녹음되지 않습니다.';
 
   @override
-  String get deletePauseKeepLine => 'Your memories, conversations and apps are kept exactly as they are.';
+  String get deletePauseKeepLine => '기억, 대화, 앱은 모두 지금 상태 그대로 유지됩니다.';
 
   @override
-  String get deletePauseReturnLine =>
-      'You stay signed in. Resume recording anytime. Your subscription continues unchanged.';
+  String get deletePauseReturnLine => '로그인 상태가 유지됩니다. 언제든 녹음을 다시 시작할 수 있습니다. 구독은 변경 없이 계속됩니다.';
 
   @override
-  String get pauseOmiButton => 'Pause Omi';
+  String get pauseOmiButton => 'Omi 일시 중지';
 
   @override
-  String get continueDeletingButton => 'Continue Deleting';
+  String get continueDeletingButton => '삭제 계속하기';
 
   @override
   String get deleteFlowFeedbackTitle => '더 자세히 알려주세요';
@@ -8643,8 +8642,8 @@ class AppLocalizationsKo extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'You have $count recordings still processing. Deleting now loses them.',
-      one: 'You have 1 recording still processing. Deleting now loses it.',
+      other: '처리 중인 녹음이 $count개 있습니다. 지금 삭제하면 잃게 됩니다.',
+      one: '처리 중인 녹음이 1개 있습니다. 지금 삭제하면 잃게 됩니다.',
     );
     return '$_temp0';
   }
@@ -8654,8 +8653,8 @@ class AppLocalizationsKo extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Sign in again within $days days to restore your account.',
-      one: 'Sign in again within 1 day to restore your account.',
+      other: '계정을 복원하려면 $days일 이내에 다시 로그인하세요.',
+      one: '계정을 복원하려면 1일 이내에 다시 로그인하세요.',
     );
     return '$_temp0';
   }
@@ -14557,26 +14556,25 @@ class AppLocalizationsKo extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other:
-          '$count recordings haven\'t uploaded yet. Deleting now loses them — keep the app open to finish uploading.',
-      one: '1 recording hasn\'t uploaded yet. Deleting now loses it — keep the app open to finish uploading.',
+      other: '아직 업로드되지 않은 녹음이 $count개 있습니다. 지금 삭제하면 잃게 됩니다 — 업로드가 완료될 때까지 앱을 열어 두세요.',
+      one: '아직 업로드되지 않은 녹음이 1개 있습니다. 지금 삭제하면 잃게 됩니다 — 업로드가 완료될 때까지 앱을 열어 두세요.',
     );
     return '$_temp0';
   }
 
   @override
-  String get deleteConfirmGraceSubtitle => 'Review what happens to your data before you leave.';
+  String get deleteConfirmGraceSubtitle => '떠나기 전에 데이터가 어떻게 되는지 확인하세요.';
 
   @override
-  String get deletePauseConfirmation => 'Omi is paused. Resume recording anytime.';
+  String get deletePauseConfirmation => 'Omi가 일시 중지되었습니다. 언제든 녹음을 다시 시작할 수 있습니다.';
 
   @override
   String deleteProcessingKept(int count, int days) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count recordings are still processing. They’re kept with your account for $days days.',
-      one: '1 recording is still processing. It is kept with your account for $days days.',
+      other: '처리 중인 녹음이 $count개 있습니다. 이 녹음들은 $days일 동안 계정에 보관됩니다.',
+      one: '처리 중인 녹음이 1개 있습니다. 이 녹음은 $days일 동안 계정에 보관됩니다.',
     );
     return '$_temp0';
   }
@@ -14586,52 +14584,50 @@ class AppLocalizationsKo extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Your memories and conversations will be erased after $days days.',
-      one: 'Your memories and conversations will be erased after 1 day.',
+      other: '기억과 대화는 $days일 후 삭제됩니다.',
+      one: '기억과 대화는 1일 후 삭제됩니다.',
     );
     return '$_temp0';
   }
 
   @override
-  String get deleteAppsDisconnectImmediately => 'Your apps and integrations disconnect immediately.';
+  String get deleteAppsDisconnectImmediately => '앱과 연동 서비스의 연결이 즉시 해제됩니다.';
 
   @override
-  String get deleteSubscriptionImmediately => 'Your subscription is cancelled immediately.';
+  String get deleteSubscriptionImmediately => '구독이 즉시 취소됩니다.';
 
   @override
-  String get deleteRestoreTitle => 'Your account is pending deletion';
+  String get deleteRestoreTitle => '계정 삭제가 대기 중입니다';
 
   @override
-  String get deleteRestoreSubtitle => 'Changed your mind? Restore your account before it is erased.';
+  String get deleteRestoreSubtitle => '마음이 바뀌셨나요? 삭제되기 전에 계정을 복원하세요.';
 
   @override
-  String get deleteRestoreKeepData => 'Restore your memories and conversations.';
+  String get deleteRestoreKeepData => '기억과 대화를 복원하세요.';
 
   @override
-  String get deleteRestoreBillingNotice =>
-      'Your subscription stays cancelled. Reconnect apps and integrations after restoring.';
+  String get deleteRestoreBillingNotice => '구독은 취소된 상태로 유지됩니다. 복원한 후 앱과 연동 서비스를 다시 연결하세요.';
 
   @override
   String deleteRestoreDaysRemaining(int days) {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'You have at least $days days left to restore your account.',
-      one: 'You have at least 1 day left to restore your account.',
+      other: '계정을 복원할 수 있는 기간이 최소 $days일 남았습니다.',
+      one: '계정을 복원할 수 있는 기간이 최소 1일 남았습니다.',
     );
     return '$_temp0';
   }
 
   @override
-  String get deleteRestoreButton => 'Restore my account';
+  String get deleteRestoreButton => '내 계정 복원';
 
   @override
-  String get deleteFinishButton => 'Finish deleting';
+  String get deleteFinishButton => '삭제 완료';
 
   @override
-  String get deleteFinishNowButton => 'Erase my account now';
+  String get deleteFinishNowButton => '지금 내 계정 삭제';
 
   @override
-  String get deleteFinishNowWarning =>
-      'This ends the restore window. Your account and its recordings will be permanently erased.';
+  String get deleteFinishNowWarning => '복원 기간이 종료됩니다. 계정과 녹음이 영구적으로 삭제됩니다.';
 }

@@ -8759,26 +8759,26 @@ class AppLocalizationsHu extends AppLocalizations {
   String get deleteReasonOther => 'Egyéb';
 
   @override
-  String get deletePauseInsteadTitle => 'Pause Omi Instead?';
+  String get deletePauseInsteadTitle => 'Inkább szünetelteted az Omi használatát?';
 
   @override
-  String get deletePauseInsteadSubtitle => 'Stop recording and keep everything. Come back anytime.';
+  String get deletePauseInsteadSubtitle => 'Állítsd le a felvételt, és őrizz meg mindent. Bármikor visszatérhetsz.';
 
   @override
-  String get deletePauseRecordingLine => 'Recording stops. Nothing new is captured while you are away.';
+  String get deletePauseRecordingLine => 'A felvétel leáll. Amíg távol vagy, semmi új nem kerül rögzítésre.';
 
   @override
-  String get deletePauseKeepLine => 'Your memories, conversations and apps are kept exactly as they are.';
+  String get deletePauseKeepLine => 'Emlékeid, beszélgetéseid és alkalmazásaid pontosan úgy maradnak, ahogy vannak.';
 
   @override
   String get deletePauseReturnLine =>
-      'You stay signed in. Resume recording anytime. Your subscription continues unchanged.';
+      'Bejelentkezve maradsz. Bármikor folytathatod a felvételt. Az előfizetésed változatlanul folytatódik.';
 
   @override
-  String get pauseOmiButton => 'Pause Omi';
+  String get pauseOmiButton => 'Omi szüneteltetése';
 
   @override
-  String get continueDeletingButton => 'Continue Deleting';
+  String get continueDeletingButton => 'Törlés folytatása';
 
   @override
   String get deleteFlowFeedbackTitle => 'Mesélj többet';
@@ -8806,8 +8806,8 @@ class AppLocalizationsHu extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'You have $count recordings still processing. Deleting now loses them.',
-      one: 'You have 1 recording still processing. Deleting now loses it.',
+      other: '$count felvétel feldolgozása még folyamatban van. Ha most törlöd őket, elveszíted őket.',
+      one: '1 felvétel feldolgozása még folyamatban van. Ha most törlöd, elveszíted.',
     );
     return '$_temp0';
   }
@@ -8817,8 +8817,8 @@ class AppLocalizationsHu extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Sign in again within $days days to restore your account.',
-      one: 'Sign in again within 1 day to restore your account.',
+      other: 'A fiókod visszaállításához $days napon belül jelentkezz be újra.',
+      one: 'A fiókod visszaállításához 1 napon belül jelentkezz be újra.',
     );
     return '$_temp0';
   }
@@ -14818,25 +14818,26 @@ class AppLocalizationsHu extends AppLocalizations {
       count,
       locale: localeName,
       other:
-          '$count recordings haven\'t uploaded yet. Deleting now loses them — keep the app open to finish uploading.',
-      one: '1 recording hasn\'t uploaded yet. Deleting now loses it — keep the app open to finish uploading.',
+          '$count felvétel még nincs feltöltve. Ha most törlöd őket, elveszíted őket — hagyd nyitva az alkalmazást a feltöltés befejezéséig.',
+      one:
+          '1 felvétel még nincs feltöltve. Ha most törlöd, elveszíted — hagyd nyitva az alkalmazást a feltöltés befejezéséig.',
     );
     return '$_temp0';
   }
 
   @override
-  String get deleteConfirmGraceSubtitle => 'Review what happens to your data before you leave.';
+  String get deleteConfirmGraceSubtitle => 'Mielőtt távozol, nézd meg, mi történik az adataiddal.';
 
   @override
-  String get deletePauseConfirmation => 'Omi is paused. Resume recording anytime.';
+  String get deletePauseConfirmation => 'Az Omi szünetel. Bármikor folytathatod a felvételt.';
 
   @override
   String deleteProcessingKept(int count, int days) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count recordings are still processing. They’re kept with your account for $days days.',
-      one: '1 recording is still processing. It is kept with your account for $days days.',
+      other: '$count felvétel feldolgozása még folyamatban van. $days napig megőrizzük őket a fiókodban.',
+      one: '1 felvétel feldolgozása még folyamatban van. $days napig megőrizzük a fiókodban.',
     );
     return '$_temp0';
   }
@@ -14846,52 +14847,52 @@ class AppLocalizationsHu extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Your memories and conversations will be erased after $days days.',
-      one: 'Your memories and conversations will be erased after 1 day.',
+      other: 'Emlékeid és beszélgetéseid $days nap múlva törlődnek.',
+      one: 'Emlékeid és beszélgetéseid 1 nap múlva törlődnek.',
     );
     return '$_temp0';
   }
 
   @override
-  String get deleteAppsDisconnectImmediately => 'Your apps and integrations disconnect immediately.';
+  String get deleteAppsDisconnectImmediately => 'Az alkalmazásaid és integrációid azonnal lecsatlakoznak.';
 
   @override
-  String get deleteSubscriptionImmediately => 'Your subscription is cancelled immediately.';
+  String get deleteSubscriptionImmediately => 'Az előfizetésed azonnal lemondásra kerül.';
 
   @override
-  String get deleteRestoreTitle => 'Your account is pending deletion';
+  String get deleteRestoreTitle => 'A fiókod törlése folyamatban van';
 
   @override
-  String get deleteRestoreSubtitle => 'Changed your mind? Restore your account before it is erased.';
+  String get deleteRestoreSubtitle => 'Meggondoltad magad? Állítsd vissza a fiókodat, mielőtt töröljük.';
 
   @override
-  String get deleteRestoreKeepData => 'Restore your memories and conversations.';
+  String get deleteRestoreKeepData => 'Állítsd vissza emlékeidet és beszélgetéseidet.';
 
   @override
   String get deleteRestoreBillingNotice =>
-      'Your subscription stays cancelled. Reconnect apps and integrations after restoring.';
+      'Az előfizetésed továbbra is lemondott marad. A visszaállítás után csatlakoztasd újra az alkalmazásokat és integrációkat.';
 
   @override
   String deleteRestoreDaysRemaining(int days) {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'You have at least $days days left to restore your account.',
-      one: 'You have at least 1 day left to restore your account.',
+      other: 'Legalább $days napod maradt a fiókod visszaállítására.',
+      one: 'Legalább 1 napod maradt a fiókod visszaállítására.',
     );
     return '$_temp0';
   }
 
   @override
-  String get deleteRestoreButton => 'Restore my account';
+  String get deleteRestoreButton => 'Fiókom visszaállítása';
 
   @override
-  String get deleteFinishButton => 'Finish deleting';
+  String get deleteFinishButton => 'Törlés befejezése';
 
   @override
-  String get deleteFinishNowButton => 'Erase my account now';
+  String get deleteFinishNowButton => 'Fiókom törlése most';
 
   @override
   String get deleteFinishNowWarning =>
-      'This ends the restore window. Your account and its recordings will be permanently erased.';
+      'Ezzel véget ér a visszaállítási időszak. Fiókodat és a hozzá tartozó felvételeket véglegesen töröljük.';
 }

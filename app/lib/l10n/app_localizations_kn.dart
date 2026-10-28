@@ -8752,26 +8752,26 @@ class AppLocalizationsKn extends AppLocalizations {
   String get deleteReasonOther => 'ಇತರೆ';
 
   @override
-  String get deletePauseInsteadTitle => 'Pause Omi Instead?';
+  String get deletePauseInsteadTitle => 'ಬದಲಿಗೆ Omi ಅನ್ನು ವಿರಾಮಗೊಳಿಸಬೇಕೇ?';
 
   @override
-  String get deletePauseInsteadSubtitle => 'Stop recording and keep everything. Come back anytime.';
+  String get deletePauseInsteadSubtitle => 'ರೆಕಾರ್ಡಿಂಗ್ ನಿಲ್ಲಿಸಿ, ಎಲ್ಲವನ್ನೂ ಹಾಗೆಯೇ ಉಳಿಸಿ. ಯಾವಾಗ ಬೇಕಾದರೂ ಹಿಂತಿರುಗಿ.';
 
   @override
-  String get deletePauseRecordingLine => 'Recording stops. Nothing new is captured while you are away.';
+  String get deletePauseRecordingLine => 'ರೆಕಾರ್ಡಿಂಗ್ ನಿಲ್ಲುತ್ತದೆ. ನೀವು ದೂರವಿರುವಾಗ ಹೊಸದನ್ನು ಯಾವುದನ್ನೂ ದಾಖಲಿಸುವುದಿಲ್ಲ.';
 
   @override
-  String get deletePauseKeepLine => 'Your memories, conversations and apps are kept exactly as they are.';
+  String get deletePauseKeepLine => 'ನಿಮ್ಮ ನೆನಪುಗಳು, ಸಂವಾದಗಳು ಮತ್ತು ಆ್ಯಪ್‌ಗಳು ಇದ್ದಂತೆಯೇ ಉಳಿಯುತ್ತವೆ.';
 
   @override
   String get deletePauseReturnLine =>
-      'You stay signed in. Resume recording anytime. Your subscription continues unchanged.';
+      'ನೀವು ಸೈನ್ ಇನ್ ಆಗಿಯೇ ಇರುತ್ತೀರಿ. ಯಾವಾಗ ಬೇಕಾದರೂ ರೆಕಾರ್ಡಿಂಗ್ ಮುಂದುವರಿಸಿ. ನಿಮ್ಮ ಚಂದಾದಾರಿಕೆ ಬದಲಾಗದೆ ಮುಂದುವರಿಯುತ್ತದೆ.';
 
   @override
-  String get pauseOmiButton => 'Pause Omi';
+  String get pauseOmiButton => 'Omi ಅನ್ನು ವಿರಾಮಗೊಳಿಸಿ';
 
   @override
-  String get continueDeletingButton => 'Continue Deleting';
+  String get continueDeletingButton => 'ಅಳಿಸುವುದನ್ನು ಮುಂದುವರಿಸಿ';
 
   @override
   String get deleteFlowFeedbackTitle => 'ಹೆಚ್ಚು ಹೇಳಿ';
@@ -8799,8 +8799,8 @@ class AppLocalizationsKn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'You have $count recordings still processing. Deleting now loses them.',
-      one: 'You have 1 recording still processing. Deleting now loses it.',
+      other: '$count ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆಯಲ್ಲಿವೆ. ಈಗ ಅಳಿಸಿದರೆ ಅವು ಕಳೆದುಹೋಗುತ್ತವೆ.',
+      one: '1 ರೆಕಾರ್ಡಿಂಗ್ ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆಯಲ್ಲಿದೆ. ಈಗ ಅಳಿಸಿದರೆ ಅದು ಕಳೆದುಹೋಗುತ್ತದೆ.',
     );
     return '$_temp0';
   }
@@ -8810,8 +8810,8 @@ class AppLocalizationsKn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Sign in again within $days days to restore your account.',
-      one: 'Sign in again within 1 day to restore your account.',
+      other: 'ನಿಮ್ಮ ಖಾತೆಯನ್ನು ಮರುಸ್ಥಾಪಿಸಲು $days ದಿನಗಳೊಳಗೆ ಮತ್ತೆ ಸೈನ್ ಇನ್ ಮಾಡಿ.',
+      one: 'ನಿಮ್ಮ ಖಾತೆಯನ್ನು ಮರುಸ್ಥಾಪಿಸಲು 1 ದಿನದೊಳಗೆ ಮತ್ತೆ ಸೈನ್ ಇನ್ ಮಾಡಿ.',
     );
     return '$_temp0';
   }
@@ -14808,25 +14808,26 @@ class AppLocalizationsKn extends AppLocalizations {
       count,
       locale: localeName,
       other:
-          '$count recordings haven\'t uploaded yet. Deleting now loses them — keep the app open to finish uploading.',
-      one: '1 recording hasn\'t uploaded yet. Deleting now loses it — keep the app open to finish uploading.',
+          '$count ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಇನ್ನೂ ಅಪ್‌ಲೋಡ್ ಆಗಿಲ್ಲ. ಈಗ ಅಳಿಸಿದರೆ ಅವು ಕಳೆದುಹೋಗುತ್ತವೆ — ಅಪ್‌ಲೋಡ್ ಪೂರ್ಣಗೊಳ್ಳುವವರೆಗೆ ಆ್ಯಪ್ ತೆರೆಯೇ ಇರಲಿ.',
+      one:
+          '1 ರೆಕಾರ್ಡಿಂಗ್ ಇನ್ನೂ ಅಪ್‌ಲೋಡ್ ಆಗಿಲ್ಲ. ಈಗ ಅಳಿಸಿದರೆ ಅದು ಕಳೆದುಹೋಗುತ್ತದೆ — ಅಪ್‌ಲೋಡ್ ಪೂರ್ಣಗೊಳ್ಳುವವರೆಗೆ ಆ್ಯಪ್ ತೆರೆಯೇ ಇರಲಿ.',
     );
     return '$_temp0';
   }
 
   @override
-  String get deleteConfirmGraceSubtitle => 'Review what happens to your data before you leave.';
+  String get deleteConfirmGraceSubtitle => 'ನಿರ್ಗಮಿಸುವ ಮೊದಲು ನಿಮ್ಮ ಡೇಟಾಕ್ಕೆ ಏನಾಗುತ್ತದೆ ಎಂಬುದನ್ನು ಪರಿಶೀಲಿಸಿ.';
 
   @override
-  String get deletePauseConfirmation => 'Omi is paused. Resume recording anytime.';
+  String get deletePauseConfirmation => 'Omi ವಿರಾಮದಲ್ಲಿದೆ. ಯಾವಾಗ ಬೇಕಾದರೂ ರೆಕಾರ್ಡಿಂಗ್ ಮುಂದುವರಿಸಿ.';
 
   @override
   String deleteProcessingKept(int count, int days) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count recordings are still processing. They’re kept with your account for $days days.',
-      one: '1 recording is still processing. It is kept with your account for $days days.',
+      other: '$count ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆಯಲ್ಲಿವೆ. ಅವುಗಳನ್ನು ನಿಮ್ಮ ಖಾತೆಯಲ್ಲಿ $days ದಿನಗಳವರೆಗೆ ಉಳಿಸಲಾಗುತ್ತದೆ.',
+      one: '1 ರೆಕಾರ್ಡಿಂಗ್ ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆಯಲ್ಲಿದೆ. ಅದನ್ನು ನಿಮ್ಮ ಖಾತೆಯಲ್ಲಿ $days ದಿನಗಳವರೆಗೆ ಉಳಿಸಲಾಗುತ್ತದೆ.',
     );
     return '$_temp0';
   }
@@ -14836,52 +14837,52 @@ class AppLocalizationsKn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Your memories and conversations will be erased after $days days.',
-      one: 'Your memories and conversations will be erased after 1 day.',
+      other: 'ನಿಮ್ಮ ನೆನಪುಗಳು ಮತ್ತು ಸಂವಾದಗಳನ್ನು $days ದಿನಗಳ ನಂತರ ಅಳಿಸಲಾಗುತ್ತದೆ.',
+      one: 'ನಿಮ್ಮ ನೆನಪುಗಳು ಮತ್ತು ಸಂವಾದಗಳನ್ನು 1 ದಿನದ ನಂತರ ಅಳಿಸಲಾಗುತ್ತದೆ.',
     );
     return '$_temp0';
   }
 
   @override
-  String get deleteAppsDisconnectImmediately => 'Your apps and integrations disconnect immediately.';
+  String get deleteAppsDisconnectImmediately => 'ನಿಮ್ಮ ಆ್ಯಪ್‌ಗಳು ಮತ್ತು ಇಂಟಿಗ್ರೇಷನ್‌ಗಳ ಸಂಪರ್ಕ ತಕ್ಷಣ ಕಡಿತಗೊಳ್ಳುತ್ತದೆ.';
 
   @override
-  String get deleteSubscriptionImmediately => 'Your subscription is cancelled immediately.';
+  String get deleteSubscriptionImmediately => 'ನಿಮ್ಮ ಚಂದಾದಾರಿಕೆಯನ್ನು ತಕ್ಷಣ ರದ್ದುಗೊಳಿಸಲಾಗುತ್ತದೆ.';
 
   @override
-  String get deleteRestoreTitle => 'Your account is pending deletion';
+  String get deleteRestoreTitle => 'ನಿಮ್ಮ ಖಾತೆ ಅಳಿಸುವಿಕೆಗಾಗಿ ಬಾಕಿಯಿದೆ';
 
   @override
-  String get deleteRestoreSubtitle => 'Changed your mind? Restore your account before it is erased.';
+  String get deleteRestoreSubtitle => 'ಮನಸ್ಸು ಬದಲಾಯಿಸಿದ್ದೀರಾ? ಅಳಿಸುವ ಮೊದಲು ನಿಮ್ಮ ಖಾತೆಯನ್ನು ಮರುಸ್ಥಾಪಿಸಿ.';
 
   @override
-  String get deleteRestoreKeepData => 'Restore your memories and conversations.';
+  String get deleteRestoreKeepData => 'ನಿಮ್ಮ ನೆನಪುಗಳು ಮತ್ತು ಸಂವಾದಗಳನ್ನು ಮರುಸ್ಥಾಪಿಸಿ.';
 
   @override
   String get deleteRestoreBillingNotice =>
-      'Your subscription stays cancelled. Reconnect apps and integrations after restoring.';
+      'ನಿಮ್ಮ ಚಂದಾದಾರಿಕೆ ರದ್ದಾಗಿಯೇ ಇರುತ್ತದೆ. ಮರುಸ್ಥಾಪಿಸಿದ ನಂತರ ಆ್ಯಪ್‌ಗಳು ಮತ್ತು ಇಂಟಿಗ್ರೇಷನ್‌ಗಳನ್ನು ಮತ್ತೆ ಸಂಪರ್ಕಿಸಿ.';
 
   @override
   String deleteRestoreDaysRemaining(int days) {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'You have at least $days days left to restore your account.',
-      one: 'You have at least 1 day left to restore your account.',
+      other: 'ನಿಮ್ಮ ಖಾತೆಯನ್ನು ಮರುಸ್ಥಾಪಿಸಲು ಕನಿಷ್ಠ $days ದಿನಗಳು ಬಾಕಿಯಿವೆ.',
+      one: 'ನಿಮ್ಮ ಖಾತೆಯನ್ನು ಮರುಸ್ಥಾಪಿಸಲು ಕನಿಷ್ಠ 1 ದಿನ ಬಾಕಿಯಿದೆ.',
     );
     return '$_temp0';
   }
 
   @override
-  String get deleteRestoreButton => 'Restore my account';
+  String get deleteRestoreButton => 'ನನ್ನ ಖಾತೆಯನ್ನು ಮರುಸ್ಥಾಪಿಸಿ';
 
   @override
-  String get deleteFinishButton => 'Finish deleting';
+  String get deleteFinishButton => 'ಅಳಿಸುವುದನ್ನು ಪೂರ್ಣಗೊಳಿಸಿ';
 
   @override
-  String get deleteFinishNowButton => 'Erase my account now';
+  String get deleteFinishNowButton => 'ನನ್ನ ಖಾತೆಯನ್ನು ಈಗಲೇ ಅಳಿಸಿ';
 
   @override
   String get deleteFinishNowWarning =>
-      'This ends the restore window. Your account and its recordings will be permanently erased.';
+      'ಇದರಿಂದ ಮರುಸ್ಥಾಪನೆಯ ಅವಧಿ ಮುಗಿಯುತ್ತದೆ. ನಿಮ್ಮ ಖಾತೆ ಮತ್ತು ಅದರ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಶಾಶ್ವತವಾಗಿ ಅಳಿಸಲಾಗುತ್ತದೆ.';
 }

@@ -8728,26 +8728,25 @@ class AppLocalizationsLt extends AppLocalizations {
   String get deleteReasonOther => 'Kita';
 
   @override
-  String get deletePauseInsteadTitle => 'Pause Omi Instead?';
+  String get deletePauseInsteadTitle => 'Gal pristabdyti Omi?';
 
   @override
-  String get deletePauseInsteadSubtitle => 'Stop recording and keep everything. Come back anytime.';
+  String get deletePauseInsteadSubtitle => 'Sustabdykite įrašymą ir išsaugokite viską. Grįžkite bet kada.';
 
   @override
-  String get deletePauseRecordingLine => 'Recording stops. Nothing new is captured while you are away.';
+  String get deletePauseRecordingLine => 'Įrašymas sustabdomas. Kol jūsų nėra, nieko naujo neįrašoma.';
 
   @override
-  String get deletePauseKeepLine => 'Your memories, conversations and apps are kept exactly as they are.';
+  String get deletePauseKeepLine => 'Jūsų prisiminimai, pokalbiai ir programėlės išsaugomi tokie, kokie yra.';
 
   @override
-  String get deletePauseReturnLine =>
-      'You stay signed in. Resume recording anytime. Your subscription continues unchanged.';
+  String get deletePauseReturnLine => 'Liksite prisijungę. Galite bet kada tęsti įrašymą. Jūsų prenumerata nesikeis.';
 
   @override
-  String get pauseOmiButton => 'Pause Omi';
+  String get pauseOmiButton => 'Pristabdyti Omi';
 
   @override
-  String get continueDeletingButton => 'Continue Deleting';
+  String get continueDeletingButton => 'Tęsti trynimą';
 
   @override
   String get deleteFlowFeedbackTitle => 'Papasakok daugiau';
@@ -8775,8 +8774,8 @@ class AppLocalizationsLt extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'You have $count recordings still processing. Deleting now loses them.',
-      one: 'You have 1 recording still processing. Deleting now loses it.',
+      other: 'Vis dar apdorojama $count įrašų. Ištrynus dabar jie bus prarasti.',
+      one: 'Vis dar apdorojamas 1 įrašas. Ištrynus dabar jis bus prarastas.',
     );
     return '$_temp0';
   }
@@ -8786,8 +8785,8 @@ class AppLocalizationsLt extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Sign in again within $days days to restore your account.',
-      one: 'Sign in again within 1 day to restore your account.',
+      other: 'Prisijunkite dar kartą per $days dienų, kad atkurtumėte paskyrą.',
+      one: 'Prisijunkite dar kartą per 1 dieną, kad atkurtumėte paskyrą.',
     );
     return '$_temp0';
   }
@@ -14783,25 +14782,26 @@ class AppLocalizationsLt extends AppLocalizations {
       count,
       locale: localeName,
       other:
-          '$count recordings haven\'t uploaded yet. Deleting now loses them — keep the app open to finish uploading.',
-      one: '1 recording hasn\'t uploaded yet. Deleting now loses it — keep the app open to finish uploading.',
+          '$count įrašų dar neįkelta. Ištrynus dabar jie bus prarasti — palikite programėlę atidarytą, kol įkėlimas bus baigtas.',
+      one:
+          '1 įrašas dar neįkeltas. Ištrynus dabar jis bus prarastas — palikite programėlę atidarytą, kol įkėlimas bus baigtas.',
     );
     return '$_temp0';
   }
 
   @override
-  String get deleteConfirmGraceSubtitle => 'Review what happens to your data before you leave.';
+  String get deleteConfirmGraceSubtitle => 'Prieš išeidami peržiūrėkite, kas nutiks jūsų duomenims.';
 
   @override
-  String get deletePauseConfirmation => 'Omi is paused. Resume recording anytime.';
+  String get deletePauseConfirmation => 'Omi pristabdytas. Galite bet kada tęsti įrašymą.';
 
   @override
   String deleteProcessingKept(int count, int days) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count recordings are still processing. They’re kept with your account for $days days.',
-      one: '1 recording is still processing. It is kept with your account for $days days.',
+      other: '$count įrašų vis dar apdorojama. Jie bus saugomi jūsų paskyroje $days dienų.',
+      one: '1 įrašas vis dar apdorojamas. Jis bus saugomas jūsų paskyroje $days dienų.',
     );
     return '$_temp0';
   }
@@ -14811,52 +14811,52 @@ class AppLocalizationsLt extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Your memories and conversations will be erased after $days days.',
-      one: 'Your memories and conversations will be erased after 1 day.',
+      other: 'Jūsų prisiminimai ir pokalbiai bus ištrinti po $days dienų.',
+      one: 'Jūsų prisiminimai ir pokalbiai bus ištrinti po 1 dienos.',
     );
     return '$_temp0';
   }
 
   @override
-  String get deleteAppsDisconnectImmediately => 'Your apps and integrations disconnect immediately.';
+  String get deleteAppsDisconnectImmediately => 'Jūsų programėlės ir integracijos bus išjungtos iš karto.';
 
   @override
-  String get deleteSubscriptionImmediately => 'Your subscription is cancelled immediately.';
+  String get deleteSubscriptionImmediately => 'Jūsų prenumerata bus atšaukta iš karto.';
 
   @override
-  String get deleteRestoreTitle => 'Your account is pending deletion';
+  String get deleteRestoreTitle => 'Jūsų paskyra laukia ištrynimo';
 
   @override
-  String get deleteRestoreSubtitle => 'Changed your mind? Restore your account before it is erased.';
+  String get deleteRestoreSubtitle => 'Persigalvojote? Atkurkite paskyrą, kol ji dar neištrinta.';
 
   @override
-  String get deleteRestoreKeepData => 'Restore your memories and conversations.';
+  String get deleteRestoreKeepData => 'Atkurkite savo prisiminimus ir pokalbius.';
 
   @override
   String get deleteRestoreBillingNotice =>
-      'Your subscription stays cancelled. Reconnect apps and integrations after restoring.';
+      'Jūsų prenumerata liks atšaukta. Atkūrę paskyrą iš naujo prijunkite programėles ir integracijas.';
 
   @override
   String deleteRestoreDaysRemaining(int days) {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'You have at least $days days left to restore your account.',
-      one: 'You have at least 1 day left to restore your account.',
+      other: 'Paskyrai atkurti liko bent $days dienos.',
+      one: 'Paskyrai atkurti liko bent 1 diena.',
     );
     return '$_temp0';
   }
 
   @override
-  String get deleteRestoreButton => 'Restore my account';
+  String get deleteRestoreButton => 'Atkurti mano paskyrą';
 
   @override
-  String get deleteFinishButton => 'Finish deleting';
+  String get deleteFinishButton => 'Baigti ištrynimą';
 
   @override
-  String get deleteFinishNowButton => 'Erase my account now';
+  String get deleteFinishNowButton => 'Ištrinti mano paskyrą dabar';
 
   @override
   String get deleteFinishNowWarning =>
-      'This ends the restore window. Your account and its recordings will be permanently erased.';
+      'Taip baigsis paskyros atkūrimo laikotarpis. Jūsų paskyra ir joje esantys įrašai bus ištrinti visam laikui.';
 }

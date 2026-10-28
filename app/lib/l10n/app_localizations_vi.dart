@@ -8724,26 +8724,27 @@ class AppLocalizationsVi extends AppLocalizations {
   String get deleteReasonOther => 'Khác';
 
   @override
-  String get deletePauseInsteadTitle => 'Pause Omi Instead?';
+  String get deletePauseInsteadTitle => 'Tạm dừng Omi thay vì xóa?';
 
   @override
-  String get deletePauseInsteadSubtitle => 'Stop recording and keep everything. Come back anytime.';
+  String get deletePauseInsteadSubtitle => 'Dừng ghi âm và giữ nguyên mọi thứ. Bạn có thể quay lại bất cứ lúc nào.';
 
   @override
-  String get deletePauseRecordingLine => 'Recording stops. Nothing new is captured while you are away.';
+  String get deletePauseRecordingLine =>
+      'Việc ghi âm sẽ dừng. Sẽ không có nội dung mới nào được ghi lại khi bạn vắng mặt.';
 
   @override
-  String get deletePauseKeepLine => 'Your memories, conversations and apps are kept exactly as they are.';
+  String get deletePauseKeepLine => 'Kỷ niệm, cuộc trò chuyện và ứng dụng của bạn vẫn được giữ nguyên.';
 
   @override
   String get deletePauseReturnLine =>
-      'You stay signed in. Resume recording anytime. Your subscription continues unchanged.';
+      'Bạn vẫn đăng nhập. Tiếp tục ghi âm bất cứ lúc nào. Gói đăng ký của bạn không thay đổi.';
 
   @override
-  String get pauseOmiButton => 'Pause Omi';
+  String get pauseOmiButton => 'Tạm dừng Omi';
 
   @override
-  String get continueDeletingButton => 'Continue Deleting';
+  String get continueDeletingButton => 'Tiếp tục xóa';
 
   @override
   String get deleteFlowFeedbackTitle => 'Hãy chia sẻ thêm';
@@ -8771,8 +8772,8 @@ class AppLocalizationsVi extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'You have $count recordings still processing. Deleting now loses them.',
-      one: 'You have 1 recording still processing. Deleting now loses it.',
+      other: 'Bạn có $count bản ghi vẫn đang xử lý. Xóa bây giờ sẽ làm mất những bản ghi đó.',
+      one: 'Bạn có 1 bản ghi vẫn đang xử lý. Xóa bây giờ sẽ làm mất bản ghi đó.',
     );
     return '$_temp0';
   }
@@ -8782,8 +8783,8 @@ class AppLocalizationsVi extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Sign in again within $days days to restore your account.',
-      one: 'Sign in again within 1 day to restore your account.',
+      other: 'Đăng nhập lại trong vòng $days ngày để khôi phục tài khoản.',
+      one: 'Đăng nhập lại trong vòng 1 ngày để khôi phục tài khoản.',
     );
     return '$_temp0';
   }
@@ -14761,25 +14762,26 @@ class AppLocalizationsVi extends AppLocalizations {
       count,
       locale: localeName,
       other:
-          '$count recordings haven\'t uploaded yet. Deleting now loses them — keep the app open to finish uploading.',
-      one: '1 recording hasn\'t uploaded yet. Deleting now loses it — keep the app open to finish uploading.',
+          '$count bản ghi chưa được tải lên. Xóa bây giờ sẽ làm mất những bản ghi đó — hãy mở ứng dụng để quá trình tải lên hoàn tất.',
+      one:
+          '1 bản ghi chưa được tải lên. Xóa bây giờ sẽ làm mất bản ghi đó — hãy mở ứng dụng để quá trình tải lên hoàn tất.',
     );
     return '$_temp0';
   }
 
   @override
-  String get deleteConfirmGraceSubtitle => 'Review what happens to your data before you leave.';
+  String get deleteConfirmGraceSubtitle => 'Xem lại những gì sẽ xảy ra với dữ liệu của bạn trước khi rời đi.';
 
   @override
-  String get deletePauseConfirmation => 'Omi is paused. Resume recording anytime.';
+  String get deletePauseConfirmation => 'Omi đã tạm dừng. Tiếp tục ghi âm bất cứ lúc nào.';
 
   @override
   String deleteProcessingKept(int count, int days) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count recordings are still processing. They’re kept with your account for $days days.',
-      one: '1 recording is still processing. It is kept with your account for $days days.',
+      other: '$count bản ghi vẫn đang xử lý. Các bản ghi sẽ được giữ trong tài khoản của bạn trong $days ngày.',
+      one: '1 bản ghi vẫn đang xử lý. Bản ghi sẽ được giữ trong tài khoản của bạn trong $days ngày.',
     );
     return '$_temp0';
   }
@@ -14789,52 +14791,52 @@ class AppLocalizationsVi extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Your memories and conversations will be erased after $days days.',
-      one: 'Your memories and conversations will be erased after 1 day.',
+      other: 'Kỷ niệm và cuộc trò chuyện của bạn sẽ bị xóa sau $days ngày.',
+      one: 'Kỷ niệm và cuộc trò chuyện của bạn sẽ bị xóa sau 1 ngày.',
     );
     return '$_temp0';
   }
 
   @override
-  String get deleteAppsDisconnectImmediately => 'Your apps and integrations disconnect immediately.';
+  String get deleteAppsDisconnectImmediately => 'Các ứng dụng và tích hợp của bạn sẽ bị ngắt kết nối ngay lập tức.';
 
   @override
-  String get deleteSubscriptionImmediately => 'Your subscription is cancelled immediately.';
+  String get deleteSubscriptionImmediately => 'Gói đăng ký của bạn sẽ bị hủy ngay lập tức.';
 
   @override
-  String get deleteRestoreTitle => 'Your account is pending deletion';
+  String get deleteRestoreTitle => 'Tài khoản của bạn đang chờ xóa';
 
   @override
-  String get deleteRestoreSubtitle => 'Changed your mind? Restore your account before it is erased.';
+  String get deleteRestoreSubtitle => 'Bạn đổi ý? Khôi phục tài khoản trước khi tài khoản bị xóa.';
 
   @override
-  String get deleteRestoreKeepData => 'Restore your memories and conversations.';
+  String get deleteRestoreKeepData => 'Khôi phục kỷ niệm và cuộc trò chuyện của bạn.';
 
   @override
   String get deleteRestoreBillingNotice =>
-      'Your subscription stays cancelled. Reconnect apps and integrations after restoring.';
+      'Gói đăng ký vẫn bị hủy. Kết nối lại ứng dụng và tích hợp sau khi khôi phục.';
 
   @override
   String deleteRestoreDaysRemaining(int days) {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'You have at least $days days left to restore your account.',
-      one: 'You have at least 1 day left to restore your account.',
+      other: 'Bạn còn ít nhất $days ngày để khôi phục tài khoản.',
+      one: 'Bạn còn ít nhất 1 ngày để khôi phục tài khoản.',
     );
     return '$_temp0';
   }
 
   @override
-  String get deleteRestoreButton => 'Restore my account';
+  String get deleteRestoreButton => 'Khôi phục tài khoản của tôi';
 
   @override
-  String get deleteFinishButton => 'Finish deleting';
+  String get deleteFinishButton => 'Hoàn tất xóa';
 
   @override
-  String get deleteFinishNowButton => 'Erase my account now';
+  String get deleteFinishNowButton => 'Xóa tài khoản của tôi ngay';
 
   @override
   String get deleteFinishNowWarning =>
-      'This ends the restore window. Your account and its recordings will be permanently erased.';
+      'Thao tác này sẽ kết thúc thời hạn khôi phục. Tài khoản và các bản ghi của bạn sẽ bị xóa vĩnh viễn.';
 }

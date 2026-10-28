@@ -8595,26 +8595,25 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deleteReasonOther => 'その他';
 
   @override
-  String get deletePauseInsteadTitle => 'Pause Omi Instead?';
+  String get deletePauseInsteadTitle => '代わりにOmiを一時停止しますか？';
 
   @override
-  String get deletePauseInsteadSubtitle => 'Stop recording and keep everything. Come back anytime.';
+  String get deletePauseInsteadSubtitle => '録音を停止して、すべてをそのまま残します。いつでも戻れます。';
 
   @override
-  String get deletePauseRecordingLine => 'Recording stops. Nothing new is captured while you are away.';
+  String get deletePauseRecordingLine => '録音は停止します。不在中に新しい内容が記録されることはありません。';
 
   @override
-  String get deletePauseKeepLine => 'Your memories, conversations and apps are kept exactly as they are.';
+  String get deletePauseKeepLine => '記憶、会話、アプリはすべてそのまま保持されます。';
 
   @override
-  String get deletePauseReturnLine =>
-      'You stay signed in. Resume recording anytime. Your subscription continues unchanged.';
+  String get deletePauseReturnLine => 'サインインしたままになります。録音はいつでも再開できます。サブスクリプションは変更なく継続します。';
 
   @override
-  String get pauseOmiButton => 'Pause Omi';
+  String get pauseOmiButton => 'Omiを一時停止';
 
   @override
-  String get continueDeletingButton => 'Continue Deleting';
+  String get continueDeletingButton => '削除を続ける';
 
   @override
   String get deleteFlowFeedbackTitle => 'もう少し聞かせてください';
@@ -8642,8 +8641,8 @@ class AppLocalizationsJa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'You have $count recordings still processing. Deleting now loses them.',
-      one: 'You have 1 recording still processing. Deleting now loses it.',
+      other: '処理中の録音が$count件あります。今削除すると失われます。',
+      one: '処理中の録音が1件あります。今削除すると失われます。',
     );
     return '$_temp0';
   }
@@ -8653,8 +8652,8 @@ class AppLocalizationsJa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Sign in again within $days days to restore your account.',
-      one: 'Sign in again within 1 day to restore your account.',
+      other: 'アカウントを復元するには、$days日以内にもう一度サインインしてください。',
+      one: 'アカウントを復元するには、1日以内にもう一度サインインしてください。',
     );
     return '$_temp0';
   }
@@ -14551,26 +14550,25 @@ class AppLocalizationsJa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other:
-          '$count recordings haven\'t uploaded yet. Deleting now loses them — keep the app open to finish uploading.',
-      one: '1 recording hasn\'t uploaded yet. Deleting now loses it — keep the app open to finish uploading.',
+      other: '未アップロードの録音が$count件あります。今削除すると失われます — アップロードが完了するまでアプリを開いたままにしてください。',
+      one: '未アップロードの録音が1件あります。今削除すると失われます — アップロードが完了するまでアプリを開いたままにしてください。',
     );
     return '$_temp0';
   }
 
   @override
-  String get deleteConfirmGraceSubtitle => 'Review what happens to your data before you leave.';
+  String get deleteConfirmGraceSubtitle => '利用を終了する前に、データがどうなるか確認してください。';
 
   @override
-  String get deletePauseConfirmation => 'Omi is paused. Resume recording anytime.';
+  String get deletePauseConfirmation => 'Omiを一時停止しました。録音はいつでも再開できます。';
 
   @override
   String deleteProcessingKept(int count, int days) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count recordings are still processing. They’re kept with your account for $days days.',
-      one: '1 recording is still processing. It is kept with your account for $days days.',
+      other: '処理中の録音が$count件あります。$days日間アカウントに保存されます。',
+      one: '処理中の録音が1件あります。$days日間アカウントに保存されます。',
     );
     return '$_temp0';
   }
@@ -14580,52 +14578,50 @@ class AppLocalizationsJa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Your memories and conversations will be erased after $days days.',
-      one: 'Your memories and conversations will be erased after 1 day.',
+      other: '記憶と会話は$days日後に消去されます。',
+      one: '記憶と会話は1日後に消去されます。',
     );
     return '$_temp0';
   }
 
   @override
-  String get deleteAppsDisconnectImmediately => 'Your apps and integrations disconnect immediately.';
+  String get deleteAppsDisconnectImmediately => 'アプリと連携機能はすぐに切断されます。';
 
   @override
-  String get deleteSubscriptionImmediately => 'Your subscription is cancelled immediately.';
+  String get deleteSubscriptionImmediately => 'サブスクリプションはすぐに解約されます。';
 
   @override
-  String get deleteRestoreTitle => 'Your account is pending deletion';
+  String get deleteRestoreTitle => 'アカウントは削除待ちです';
 
   @override
-  String get deleteRestoreSubtitle => 'Changed your mind? Restore your account before it is erased.';
+  String get deleteRestoreSubtitle => '気が変わりましたか？消去される前にアカウントを復元してください。';
 
   @override
-  String get deleteRestoreKeepData => 'Restore your memories and conversations.';
+  String get deleteRestoreKeepData => '記憶と会話を復元します。';
 
   @override
-  String get deleteRestoreBillingNotice =>
-      'Your subscription stays cancelled. Reconnect apps and integrations after restoring.';
+  String get deleteRestoreBillingNotice => 'サブスクリプションは解約されたままです。復元後にアプリと連携機能を再接続してください。';
 
   @override
   String deleteRestoreDaysRemaining(int days) {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'You have at least $days days left to restore your account.',
-      one: 'You have at least 1 day left to restore your account.',
+      other: 'アカウントの復元期限まで、少なくともあと$days日あります。',
+      one: 'アカウントの復元期限まで、少なくともあと1日あります。',
     );
     return '$_temp0';
   }
 
   @override
-  String get deleteRestoreButton => 'Restore my account';
+  String get deleteRestoreButton => 'アカウントを復元';
 
   @override
-  String get deleteFinishButton => 'Finish deleting';
+  String get deleteFinishButton => '削除を完了';
 
   @override
-  String get deleteFinishNowButton => 'Erase my account now';
+  String get deleteFinishNowButton => '今すぐアカウントを消去';
 
   @override
-  String get deleteFinishNowWarning =>
-      'This ends the restore window. Your account and its recordings will be permanently erased.';
+  String get deleteFinishNowWarning => 'これにより復元期間が終了します。アカウントと録音は完全に消去されます。';
 }
