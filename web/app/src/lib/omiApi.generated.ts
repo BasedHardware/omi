@@ -1755,6 +1755,7 @@ export interface ConversationTestPromptResponse {
 }
 
 export interface ConversationTopicRequest {
+  conversation_language?: string | null;
   transcript: string;
 }
 

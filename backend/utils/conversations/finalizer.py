@@ -57,6 +57,7 @@ from utils.observability.finalization import (
     finalization_diagnostic_id,
     record_finalization_failure,
 )
+from utils.conversations.capture_group_notes_refresh import refresh_primary_notes
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retry
 from services.conversation_keyframes import ensure_conversation_keyframe_job, reconcile_conversation_keyframe_jobs
 from utils.retrieval.frame_request_authority import resolve_frame_request_authority
@@ -469,6 +470,11 @@ async def finalize_persisted_conversation(
             await run_blocking(
                 db_executor, link_duplicate_captures, uid, overlap_snapshot(uid, conversation, conversation_data)
             )
+            # Grouping may have delivered meeting identity (member calendar
+            # context, screen evidence) that the primary's already-generated
+            # notes lack; regenerate them once per group revision. Never fails
+            # finalization: the step swallows its own errors.
+            await run_blocking(lifecycle_executor(uid), refresh_primary_notes, uid, conversation_id)
         if fanout['status'] == 'completed':
             schedule_person_voice_learning_retry(uid, conversation_id)
             # Re-finalization of a row whose fanout already completed (e.g.
