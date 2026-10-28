@@ -14817,10 +14817,16 @@ class AppLocalizationsNl extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count opnames worden nog verwerkt. Deze blijven $days dagen bij je account bewaard.',
-      one: '1 opname wordt nog verwerkt. Deze blijft $days dagen bij je account bewaard.',
+      other: '$count opnames worden nog verwerkt. Deze worden nog ',
+      one: '1 opname wordt nog verwerkt. Deze wordt nog ',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days dagen in je account bewaard.',
+      one: '1 dag in je account bewaard.',
+    );
+    return '$_temp0$_temp1';
   }
 
   @override

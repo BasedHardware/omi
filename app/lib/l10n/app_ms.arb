@@ -4477,7 +4477,7 @@
     "deleteLocalRecordingsWarning": "{count, plural, =1{1 rakaman belum dimuat naik. Jika dipadam sekarang, rakaman itu akan hilang — biarkan aplikasi terbuka sehingga muat naik selesai.} other{{count} rakaman belum dimuat naik. Jika dipadam sekarang, semuanya akan hilang — biarkan aplikasi terbuka sehingga muat naik selesai.}}",
     "deleteConfirmGraceSubtitle": "Semak perkara yang akan berlaku kepada data anda sebelum anda pergi.",
     "deletePauseConfirmation": "Omi dijeda. Sambung semula rakaman bila-bila masa.",
-    "deleteProcessingKept": "{count, plural, =1{1 rakaman masih diproses. Rakaman itu akan disimpan bersama akaun anda selama {days} hari.} other{{count} rakaman masih diproses. Semuanya akan disimpan bersama akaun anda selama {days} hari.}}",
+    "deleteProcessingKept": "{count, plural, =1{1 rakaman masih diproses. Rakaman ini akan disimpan dalam akaun anda selama } other{{count} rakaman masih diproses. Rakaman ini akan disimpan dalam akaun anda selama }}{days, plural, =1{1 hari.} other{{days} hari.}}",
     "deleteDataErasedAfterDays": "{days, plural, =1{Kenangan dan perbualan anda akan dipadam selepas 1 hari.} other{Kenangan dan perbualan anda akan dipadam selepas {days} hari.}}",
     "deleteAppsDisconnectImmediately": "Aplikasi dan integrasi anda akan diputuskan serta-merta.",
     "deleteSubscriptionImmediately": "Langganan anda akan dibatalkan serta-merta.",

@@ -14773,10 +14773,16 @@ class AppLocalizationsBn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$countটি রেকর্ডিং এখনও প্রক্রিয়াকরণ হচ্ছে। সেগুলো $days দিন আপনার অ্যাকাউন্টে রাখা হবে।',
-      one: '১টি রেকর্ডিং এখনও প্রক্রিয়াকরণ হচ্ছে। এটি $days দিন আপনার অ্যাকাউন্টে রাখা হবে।',
+      other: '$countটি রেকর্ডিং এখনও প্রক্রিয়াধীন। এগুলো আপনার অ্যাকাউন্টে আরও ',
+      one: '১টি রেকর্ডিং এখনও প্রক্রিয়াধীন। এটি আপনার অ্যাকাউন্টে আরও ',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days দিন রাখা হবে।',
+      one: '১ দিন রাখা হবে।',
+    );
+    return '$_temp0$_temp1';
   }
 
   @override

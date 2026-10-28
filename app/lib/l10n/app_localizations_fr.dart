@@ -14899,10 +14899,16 @@ class AppLocalizationsFr extends AppLocalizations {
       count,
       locale: localeName,
       other:
-          '$count enregistrements sont encore en cours de traitement. Ils sont conservés avec votre compte pendant $days jours.',
-      one: '1 enregistrement est encore en cours de traitement. Il est conservé avec votre compte pendant $days jours.',
+          '$count enregistrements sont toujours en cours de traitement. Ils restent associés à votre compte pendant ',
+      one: '1 enregistrement est toujours en cours de traitement. Il reste associé à votre compte pendant ',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days jours.',
+      one: '1 jour.',
+    );
+    return '$_temp0$_temp1';
   }
 
   @override

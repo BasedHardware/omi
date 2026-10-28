@@ -14573,10 +14573,16 @@ class AppLocalizationsKo extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '처리 중인 녹음이 $count개 있습니다. 이 녹음들은 $days일 동안 계정에 보관됩니다.',
-      one: '처리 중인 녹음이 1개 있습니다. 이 녹음은 $days일 동안 계정에 보관됩니다.',
+      other: '녹음 $count개가 아직 처리 중입니다. 계정에 ',
+      one: '녹음 1개가 아직 처리 중입니다. 계정에 ',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days일 동안 보관됩니다.',
+      one: '1일 동안 보관됩니다.',
+    );
+    return '$_temp0$_temp1';
   }
 
   @override

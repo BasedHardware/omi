@@ -4477,7 +4477,7 @@
     "deleteLocalRecordingsWarning": "{count, plural, =1{有 1 段录音尚未上传。现在删除会丢失这段录音 — 请保持应用开启，直到上传完成。} other{有 {count} 段录音尚未上传。现在删除会丢失这些录音 — 请保持应用开启，直到上传完成。}}",
     "deleteConfirmGraceSubtitle": "离开前，请查看您的数据会如何处理。",
     "deletePauseConfirmation": "Omi 已暂停。随时恢复录音。",
-    "deleteProcessingKept": "{count, plural, =1{1 段录音仍在处理中。它会在您的账户中保留 {days} 天。} other{{count} 段录音仍在处理中。它们会在您的账户中保留 {days} 天。}}",
+    "deleteProcessingKept": "{count, plural, =1{1 条录音仍在处理中。它会在您的账户中再保留 } other{{count} 条录音仍在处理中。它们会在您的账户中再保留 }}{days, plural, =1{1 天。} other{{days} 天。}}",
     "deleteDataErasedAfterDays": "{days, plural, =1{您的记忆和对话将在 1 天后删除。} other{您的记忆和对话将在 {days} 天后删除。}}",
     "deleteAppsDisconnectImmediately": "您的应用和集成会立即断开连接。",
     "deleteSubscriptionImmediately": "您的订阅会立即取消。",

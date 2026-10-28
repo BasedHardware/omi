@@ -4573,7 +4573,7 @@
     "deleteLocalRecordingsWarning": "{count, plural, =1{1 felvétel még nincs feltöltve. Ha most törlöd, elveszíted — hagyd nyitva az alkalmazást a feltöltés befejezéséig.} other{{count} felvétel még nincs feltöltve. Ha most törlöd őket, elveszíted őket — hagyd nyitva az alkalmazást a feltöltés befejezéséig.}}",
     "deleteConfirmGraceSubtitle": "Mielőtt távozol, nézd meg, mi történik az adataiddal.",
     "deletePauseConfirmation": "Az Omi szünetel. Bármikor folytathatod a felvételt.",
-    "deleteProcessingKept": "{count, plural, =1{1 felvétel feldolgozása még folyamatban van. {days} napig megőrizzük a fiókodban.} other{{count} felvétel feldolgozása még folyamatban van. {days} napig megőrizzük őket a fiókodban.}}",
+    "deleteProcessingKept": "{count, plural, =1{1 felvétel feldolgozása még folyamatban van. A fiókodban marad még } other{{count} felvétel feldolgozása még folyamatban van. A fiókodban maradnak még }}{days, plural, =1{1 napig.} other{{days} napig.}}",
     "deleteDataErasedAfterDays": "{days, plural, =1{Emlékeid és beszélgetéseid 1 nap múlva törlődnek.} other{Emlékeid és beszélgetéseid {days} nap múlva törlődnek.}}",
     "deleteAppsDisconnectImmediately": "Az alkalmazásaid és integrációid azonnal lecsatlakoznak.",
     "deleteSubscriptionImmediately": "Az előfizetésed azonnal lemondásra kerül.",

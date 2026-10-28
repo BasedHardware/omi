@@ -14800,10 +14800,16 @@ class AppLocalizationsLt extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count įrašų vis dar apdorojama. Jie bus saugomi jūsų paskyroje $days dienų.',
-      one: '1 įrašas vis dar apdorojamas. Jis bus saugomas jūsų paskyroje $days dienų.',
+      other: 'Dar apdorojama $count įrašų. Jie jūsų paskyroje bus saugomi dar ',
+      one: '1 įrašas vis dar apdorojamas. Jis jūsų paskyroje bus saugomas dar ',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days dienas.',
+      one: '1 dieną.',
+    );
+    return '$_temp0$_temp1';
   }
 
   @override

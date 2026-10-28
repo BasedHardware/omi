@@ -4477,7 +4477,7 @@
     "deleteLocalRecordingsWarning": "{count, plural, =1{1 înregistrare nu a fost încă încărcată. Dacă ștergi acum, o vei pierde — lasă aplicația deschisă pentru a termina încărcarea.} other{{count} înregistrări nu au fost încă încărcate. Dacă ștergi acum, le vei pierde — lasă aplicația deschisă pentru a termina încărcarea.}}",
     "deleteConfirmGraceSubtitle": "Vezi ce se va întâmpla cu datele tale înainte să pleci.",
     "deletePauseConfirmation": "Omi este întrerupt. Poți relua înregistrarea oricând.",
-    "deleteProcessingKept": "{count, plural, =1{1 înregistrare este încă în curs de procesare. Va fi păstrată în contul tău timp de {days} zile.} other{{count} înregistrări sunt încă în curs de procesare. Vor fi păstrate în contul tău timp de {days} zile.}}",
+    "deleteProcessingKept": "{count, plural, =1{1 înregistrare este încă în curs de procesare. Va fi păstrată în contul tău timp de } other{{count} înregistrări sunt încă în curs de procesare. Vor fi păstrate în contul tău timp de }}{days, plural, =1{1 zi.} other{{days} zile.}}",
     "deleteDataErasedAfterDays": "{days, plural, =1{Amintirile și conversațiile tale vor fi șterse după 1 zi.} other{Amintirile și conversațiile tale vor fi șterse după {days} zile.}}",
     "deleteAppsDisconnectImmediately": "Aplicațiile și integrările tale se deconectează imediat.",
     "deleteSubscriptionImmediately": "Abonamentul tău se anulează imediat.",

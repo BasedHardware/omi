@@ -14771,10 +14771,16 @@ class AppLocalizationsEt extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count salvestist on veel töötlemisel. Neid säilitatakse sinu kontoga $days päeva.',
-      one: '1 salvestis on veel töötlemisel. Seda säilitatakse sinu kontoga $days päeva.',
+      other: '$count salvestist on endiselt töötlemisel. Neid hoitakse teie kontol veel ',
+      one: '1 salvestis on endiselt töötlemisel. Seda hoitakse teie kontol veel ',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days päeva.',
+      one: '1 päev.',
+    );
+    return '$_temp0$_temp1';
   }
 
   @override

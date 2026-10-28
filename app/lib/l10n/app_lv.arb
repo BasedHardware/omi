@@ -4477,7 +4477,7 @@
     "deleteLocalRecordingsWarning": "{count, plural, =1{1 ieraksts vēl nav augšupielādēts. Dzēšot tagad, tas tiks zaudēts — turiet lietotni atvērtu, līdz augšupielāde ir pabeigta.} other{{count} ieraksti vēl nav augšupielādēti. Dzēšot tagad, tie tiks zaudēti — turiet lietotni atvērtu, līdz augšupielāde ir pabeigta.}}",
     "deleteConfirmGraceSubtitle": "Pirms aiziešanas pārskatiet, kas notiks ar jūsu datiem.",
     "deletePauseConfirmation": "Omi ir pauzēts. Atsāciet ierakstīšanu jebkurā laikā.",
-    "deleteProcessingKept": "{count, plural, =1{1 ieraksts joprojām tiek apstrādāts. Tas tiks saglabāts jūsu kontā {days} dienas.} other{{count} ieraksti joprojām tiek apstrādāti. Tie tiks saglabāti jūsu kontā {days} dienas.}}",
+    "deleteProcessingKept": "{count, plural, =1{1 ieraksts joprojām tiek apstrādāts. Tas jūsu kontā tiks glabāts vēl } other{Joprojām tiek apstrādāti {count} ieraksti. Tie jūsu kontā tiks glabāti vēl }}{days, plural, =1{1 dienu.} other{{days} dienas.}}",
     "deleteDataErasedAfterDays": "{days, plural, =1{Jūsu atmiņas un sarunas tiks dzēstas pēc 1 dienas.} other{Jūsu atmiņas un sarunas tiks dzēstas pēc {days} dienām.}}",
     "deleteAppsDisconnectImmediately": "Jūsu lietotnes un integrācijas tiks nekavējoties atvienotas.",
     "deleteSubscriptionImmediately": "Jūsu abonements tiks nekavējoties atcelts.",

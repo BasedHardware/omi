@@ -11903,7 +11903,7 @@
     "deleteLocalRecordingsWarning": "{count, plural, =1{Jedan snimak još nije otpremljen. Ako ga sada izbrišete, izgubit ćete ga — ostavite aplikaciju otvorenom da se otpremanje završi.} other{{count} snimaka još nije otpremljeno. Ako ih sada izbrišete, izgubit ćete ih — ostavite aplikaciju otvorenom da se otpremanje završi.}}",
     "deleteConfirmGraceSubtitle": "Prije odlaska pogledajte šta će se desiti s vašim podacima.",
     "deletePauseConfirmation": "Omi je pauziran. Snimanje možete nastaviti bilo kada.",
-    "deleteProcessingKept": "{count, plural, =1{Jedan snimak se još obrađuje. Ostat će sačuvan na vašem računu {days} dana.} other{{count} snimaka se još obrađuje. Ostat će sačuvani na vašem računu {days} dana.}}",
+    "deleteProcessingKept": "{count, plural, =1{1 snimak se još obrađuje. Čuva se na vašem računu još } other{{count} snimaka se još obrađuje. Čuvaju se na vašem računu još }}{days, plural, =1{1 dan.} other{{days} dana.}}",
     "deleteDataErasedAfterDays": "{days, plural, =1{Vaše uspomene i razgovori bit će izbrisani nakon 1 dana.} other{Vaše uspomene i razgovori bit će izbrisani nakon {days} dana.}}",
     "deleteAppsDisconnectImmediately": "Vaše aplikacije i integracije odmah će se odspojiti.",
     "deleteSubscriptionImmediately": "Vaša pretplata bit će odmah otkazana.",

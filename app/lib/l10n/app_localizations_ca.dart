@@ -14853,10 +14853,16 @@ class AppLocalizationsCa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Encara s\'estan processant $count enregistraments. Es conservaran al vostre compte durant $days dies.',
-      one: 'Encara s\'està processant un enregistrament. Es conservarà al vostre compte durant $days dies.',
+      other: '$count enregistraments encara s\'estan processant. Es conserven al vostre compte durant ',
+      one: '1 enregistrament encara s\'està processant. Es conserva al vostre compte durant ',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days dies.',
+      one: '1 dia.',
+    );
+    return '$_temp0$_temp1';
   }
 
   @override

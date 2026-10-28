@@ -14692,10 +14692,16 @@ class AppLocalizationsAr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'لا تزال $count تسجيلات قيد المعالجة. ستبقى محفوظة في حسابك لمدة $days يومًا.',
-      one: 'لا يزال تسجيل واحد قيد المعالجة. سيبقى محفوظًا في حسابك لمدة $days يومًا.',
+      other: '$count تسجيلات لا تزال قيد المعالجة. سيُحتفظ بها في حسابك لمدة ',
+      one: 'لا يزال تسجيل واحد قيد المعالجة. سيُحتفظ به في حسابك لمدة ',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days يومًا.',
+      one: '1 يوم.',
+    );
+    return '$_temp0$_temp1';
   }
 
   @override

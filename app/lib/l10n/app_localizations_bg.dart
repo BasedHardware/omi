@@ -14829,10 +14829,16 @@ class AppLocalizationsBg extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count записа все още се обработват. Те ще се пазят в профила ви $days дни.',
-      one: 'Един запис все още се обработва. Той ще се пази в профила ви $days дни.',
+      other: '$count записа все още се обработват. Те ще се пазят в акаунта ви още ',
+      one: '1 запис все още се обработва. Той ще се пази в акаунта ви още ',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days дни.',
+      one: '1 ден.',
+    );
+    return '$_temp0$_temp1';
   }
 
   @override

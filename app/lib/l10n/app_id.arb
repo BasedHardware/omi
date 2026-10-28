@@ -4512,7 +4512,7 @@
     "deleteLocalRecordingsWarning": "{count, plural, =1{1 rekaman belum diunggah. Jika dihapus sekarang, rekaman ini akan hilang — biarkan aplikasi tetap terbuka hingga pengunggahan selesai.} other{{count} rekaman belum diunggah. Jika dihapus sekarang, rekaman ini akan hilang — biarkan aplikasi tetap terbuka hingga pengunggahan selesai.}}",
     "deleteConfirmGraceSubtitle": "Tinjau dampaknya pada data Anda sebelum pergi.",
     "deletePauseConfirmation": "Omi dijeda. Lanjutkan perekaman kapan saja.",
-    "deleteProcessingKept": "{count, plural, =1{1 rekaman masih diproses. Rekaman ini akan disimpan di akun Anda selama {days} hari.} other{{count} rekaman masih diproses. Rekaman ini akan disimpan di akun Anda selama {days} hari.}}",
+    "deleteProcessingKept": "{count, plural, =1{1 rekaman masih diproses. Rekaman ini akan disimpan di akun Anda selama } other{{count} rekaman masih diproses. Rekaman tersebut akan disimpan di akun Anda selama }}{days, plural, =1{1 hari.} other{{days} hari.}}",
     "deleteDataErasedAfterDays": "{days, plural, =1{Kenangan dan percakapan Anda akan dihapus setelah 1 hari.} other{Kenangan dan percakapan Anda akan dihapus setelah {days} hari.}}",
     "deleteAppsDisconnectImmediately": "Aplikasi dan integrasi Anda akan langsung terputus.",
     "deleteSubscriptionImmediately": "Langganan Anda langsung dibatalkan.",

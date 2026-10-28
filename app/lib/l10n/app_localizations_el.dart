@@ -14877,10 +14877,16 @@ class AppLocalizationsEl extends AppLocalizations {
       count,
       locale: localeName,
       other:
-          '$count ηχογραφήσεις βρίσκονται ακόμη σε επεξεργασία. Θα διατηρηθούν στον λογαριασμό σας για $days ημέρες.',
-      one: '1 ηχογράφηση βρίσκεται ακόμη σε επεξεργασία. Θα διατηρηθεί στον λογαριασμό σας για $days ημέρες.',
+          '$count ηχογραφήσεις εξακολουθούν να υποβάλλονται σε επεξεργασία. Παραμένουν στον λογαριασμό σας για ακόμα ',
+      one: '1 ηχογράφηση εξακολουθεί να υποβάλλεται σε επεξεργασία. Παραμένει στον λογαριασμό σας για ακόμα ',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days ημέρες.',
+      one: '1 ημέρα.',
+    );
+    return '$_temp0$_temp1';
   }
 
   @override

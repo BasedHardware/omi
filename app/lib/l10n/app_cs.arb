@@ -4477,7 +4477,7 @@
     "deleteLocalRecordingsWarning": "{count, plural, =1{Jeden záznam ještě nebyl nahrán. Pokud ho teď smažete, ztratíte ho — nechte aplikaci otevřenou, aby se nahrávání dokončilo.} other{{count} záznamů ještě nebylo nahráno. Pokud je teď smažete, ztratíte je — nechte aplikaci otevřenou, aby se nahrávání dokončilo.}}",
     "deleteConfirmGraceSubtitle": "Než odejdete, přečtěte si, co se stane s vašimi daty.",
     "deletePauseConfirmation": "Omi je pozastaveno. Nahrávání můžete kdykoli obnovit.",
-    "deleteProcessingKept": "{count, plural, =1{Jeden záznam se stále zpracovává. Zůstane ve vašem účtu po dobu {days} dnů.} other{{count} záznamů se stále zpracovává. Zůstanou ve vašem účtu po dobu {days} dnů.}}",
+    "deleteProcessingKept": "{count, plural, =1{1 nahrávka se stále zpracovává. Zůstane uložená ve vašem účtu ještě } other{{count} nahrávek se stále zpracovává. Zůstanou uložené ve vašem účtu ještě }}{days, plural, =1{1 den.} other{{days} dní.}}",
     "deleteDataErasedAfterDays": "{days, plural, =1{Vaše vzpomínky a konverzace budou smazány za 1 den.} other{Vaše vzpomínky a konverzace budou smazány za {days} dnů.}}",
     "deleteAppsDisconnectImmediately": "Vaše aplikace a integrace se okamžitě odpojí.",
     "deleteSubscriptionImmediately": "Vaše předplatné bude okamžitě zrušeno.",

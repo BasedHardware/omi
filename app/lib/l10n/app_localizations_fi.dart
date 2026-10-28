@@ -14783,10 +14783,16 @@ class AppLocalizationsFi extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count tallennetta on vielä käsiteltävänä. Ne säilytetään tililläsi $days päivän ajan.',
-      one: 'Yksi tallenne on vielä käsiteltävänä. Se säilytetään tililläsi $days päivän ajan.',
+      other: '$count tallennetta on yhä käsittelyssä. Ne säilytetään tililläsi vielä ',
+      one: '1 tallenne on yhä käsittelyssä. Se säilytetään tililläsi vielä ',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days päivän ajan.',
+      one: '1 päivän ajan.',
+    );
+    return '$_temp0$_temp1';
   }
 
   @override

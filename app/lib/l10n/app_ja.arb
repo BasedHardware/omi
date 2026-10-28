@@ -4477,7 +4477,7 @@
     "deleteLocalRecordingsWarning": "{count, plural, =1{未アップロードの録音が1件あります。今削除すると失われます — アップロードが完了するまでアプリを開いたままにしてください。} other{未アップロードの録音が{count}件あります。今削除すると失われます — アップロードが完了するまでアプリを開いたままにしてください。}}",
     "deleteConfirmGraceSubtitle": "利用を終了する前に、データがどうなるか確認してください。",
     "deletePauseConfirmation": "Omiを一時停止しました。録音はいつでも再開できます。",
-    "deleteProcessingKept": "{count, plural, =1{処理中の録音が1件あります。{days}日間アカウントに保存されます。} other{処理中の録音が{count}件あります。{days}日間アカウントに保存されます。}}",
+    "deleteProcessingKept": "{count, plural, =1{録音1件を処理中です。アカウントに } other{{count}件の録音を処理中です。アカウントに }}{days, plural, =1{1日間保存されます。} other{{days}日間保存されます。}}",
     "deleteDataErasedAfterDays": "{days, plural, =1{記憶と会話は1日後に消去されます。} other{記憶と会話は{days}日後に消去されます。}}",
     "deleteAppsDisconnectImmediately": "アプリと連携機能はすぐに切断されます。",
     "deleteSubscriptionImmediately": "サブスクリプションはすぐに解約されます。",

@@ -4477,7 +4477,7 @@
     "deleteLocalRecordingsWarning": "{count, plural, =1{1 opptak er ikke lastet opp ennå. Hvis du sletter nå, mister du det — hold appen åpen til opplastingen er fullført.} other{{count} opptak er ikke lastet opp ennå. Hvis du sletter nå, mister du dem — hold appen åpen til opplastingen er fullført.}}",
     "deleteConfirmGraceSubtitle": "Se hva som skjer med dataene dine før du går videre.",
     "deletePauseConfirmation": "Omi er satt på pause. Gjenoppta opptaket når som helst.",
-    "deleteProcessingKept": "{count, plural, =1{1 opptak behandles fortsatt. Det beholdes på kontoen din i {days} dager.} other{{count} opptak behandles fortsatt. De beholdes på kontoen din i {days} dager.}}",
+    "deleteProcessingKept": "{count, plural, =1{1 opptak behandles fortsatt. Det beholdes på kontoen din i ytterligere } other{{count} opptak behandles fortsatt. De beholdes på kontoen din i ytterligere }}{days, plural, =1{1 dag.} other{{days} dager.}}",
     "deleteDataErasedAfterDays": "{days, plural, =1{Minnene og samtalene dine blir slettet etter 1 dag.} other{Minnene og samtalene dine blir slettet etter {days} dager.}}",
     "deleteAppsDisconnectImmediately": "Appene og integrasjonene dine kobles fra umiddelbart.",
     "deleteSubscriptionImmediately": "Abonnementet ditt avsluttes umiddelbart.",

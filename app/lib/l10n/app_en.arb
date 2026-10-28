@@ -18040,9 +18040,9 @@
     "@deletePauseConfirmation": {
         "description": "Brief confirmation after capture pause succeeds"
     },
-    "deleteProcessingKept": "{count, plural, =1{1 recording is still processing. It is kept with your account for {days} days.} other{{count} recordings are still processing. They’re kept with your account for {days} days.}}",
+    "deleteProcessingKept": "{count, plural, =1{1 recording is still processing. It is kept with your account for } other{{count} recordings are still processing. They’re kept with your account for }}{days, plural, =1{1 day.} other{{days} days.}}",
     "@deleteProcessingKept": {
-        "description": "Server-held recordings are retained during the backend-reported grace period",
+        "description": "Server-held recordings survive the server-reported grace window. Two consecutive plurals: count controls recordings/pronoun; days controls day/days. Preserve the space between clauses and every selector/placeholder position. A one-day backend policy must say 1 day, not 1 days.",
         "placeholders": {
             "count": {
                 "type": "int"

@@ -4477,7 +4477,7 @@
     "deleteLocalRecordingsWarning": "{count, plural, =1{1 Aufnahme wurde noch nicht hochgeladen. Wenn du sie jetzt löschst, geht sie verloren — lass die App geöffnet, bis der Upload abgeschlossen ist.} other{{count} Aufnahmen wurden noch nicht hochgeladen. Wenn du sie jetzt löschst, gehen sie verloren — lass die App geöffnet, bis der Upload abgeschlossen ist.}}",
     "deleteConfirmGraceSubtitle": "Sieh dir an, was mit deinen Daten passiert, bevor du gehst.",
     "deletePauseConfirmation": "Omi ist pausiert. Du kannst die Aufnahme jederzeit fortsetzen.",
-    "deleteProcessingKept": "{count, plural, =1{1 Aufnahme wird noch verarbeitet. Sie bleibt {days} Tage in deinem Konto gespeichert.} other{{count} Aufnahmen werden noch verarbeitet. Sie bleiben {days} Tage in deinem Konto gespeichert.}}",
+    "deleteProcessingKept": "{count, plural, =1{1 Aufnahme wird noch verarbeitet. Sie bleibt in Ihrem Konto noch } other{{count} Aufnahmen werden noch verarbeitet. Sie bleiben in Ihrem Konto noch }}{days, plural, =1{1 Tag gespeichert.} other{{days} Tage gespeichert.}}",
     "deleteDataErasedAfterDays": "{days, plural, =1{Deine Erinnerungen und Gespräche werden nach 1 Tag gelöscht.} other{Deine Erinnerungen und Gespräche werden nach {days} Tagen gelöscht.}}",
     "deleteAppsDisconnectImmediately": "Deine Apps und Integrationen werden sofort getrennt.",
     "deleteSubscriptionImmediately": "Dein Abo wird sofort gekündigt.",

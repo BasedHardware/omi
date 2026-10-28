@@ -4477,7 +4477,7 @@
     "deleteLocalRecordingsWarning": "{count, plural, =1{لم يُرفع تسجيل واحد بعد. سيؤدي حذفه الآن إلى فقدانه — اترك التطبيق مفتوحًا حتى يكتمل الرفع.} other{لم تُرفع {count} تسجيلات بعد. سيؤدي حذفها الآن إلى فقدانها — اترك التطبيق مفتوحًا حتى يكتمل الرفع.}}",
     "deleteConfirmGraceSubtitle": "راجع ما سيحدث لبياناتك قبل المغادرة.",
     "deletePauseConfirmation": "تم إيقاف Omi مؤقتًا. يمكنك استئناف التسجيل في أي وقت.",
-    "deleteProcessingKept": "{count, plural, =1{لا يزال تسجيل واحد قيد المعالجة. سيبقى محفوظًا في حسابك لمدة {days} يومًا.} other{لا تزال {count} تسجيلات قيد المعالجة. ستبقى محفوظة في حسابك لمدة {days} يومًا.}}",
+    "deleteProcessingKept": "{count, plural, =1{لا يزال تسجيل واحد قيد المعالجة. سيُحتفظ به في حسابك لمدة } other{{count} تسجيلات لا تزال قيد المعالجة. سيُحتفظ بها في حسابك لمدة }}{days, plural, =1{1 يوم.} other{{days} يومًا.}}",
     "deleteDataErasedAfterDays": "{days, plural, =1{سيتم محو ذكرياتك ومحادثاتك بعد يوم واحد.} other{سيتم محو ذكرياتك ومحادثاتك بعد {days} يومًا.}}",
     "deleteAppsDisconnectImmediately": "سيتم قطع الاتصال بتطبيقاتك وعمليات التكامل فورًا.",
     "deleteSubscriptionImmediately": "سيتم إلغاء اشتراكك فورًا.",

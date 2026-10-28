@@ -14841,10 +14841,16 @@ class AppLocalizationsRo extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count înregistrări sunt încă în curs de procesare. Vor fi păstrate în contul tău timp de $days zile.',
-      one: '1 înregistrare este încă în curs de procesare. Va fi păstrată în contul tău timp de $days zile.',
+      other: '$count înregistrări sunt încă în curs de procesare. Vor fi păstrate în contul tău timp de ',
+      one: '1 înregistrare este încă în curs de procesare. Va fi păstrată în contul tău timp de ',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days zile.',
+      one: '1 zi.',
+    );
+    return '$_temp0$_temp1';
   }
 
   @override

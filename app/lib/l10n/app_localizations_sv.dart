@@ -14787,10 +14787,16 @@ class AppLocalizationsSv extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count inspelningar bearbetas fortfarande. De behålls på ditt konto i $days dagar.',
-      one: '1 inspelning bearbetas fortfarande. Den behålls på ditt konto i $days dagar.',
+      other: '$count inspelningar bearbetas fortfarande. De sparas på ditt konto i ytterligare ',
+      one: '1 inspelning bearbetas fortfarande. Den sparas på ditt konto i ytterligare ',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days dagar.',
+      one: '1 dag.',
+    );
+    return '$_temp0$_temp1';
   }
 
   @override

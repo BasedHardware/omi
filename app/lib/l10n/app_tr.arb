@@ -4512,7 +4512,7 @@
     "deleteLocalRecordingsWarning": "{count, plural, =1{1 kayıt henüz yüklenmedi. Şimdi silerseniz kaydı kaybedersiniz — yüklemenin tamamlanması için uygulamayı açık tutun.} other{{count} kayıt henüz yüklenmedi. Şimdi silerseniz kayıtları kaybedersiniz — yüklemenin tamamlanması için uygulamayı açık tutun.}}",
     "deleteConfirmGraceSubtitle": "Ayrılmadan önce verilerinize ne olacağını inceleyin.",
     "deletePauseConfirmation": "Omi duraklatıldı. İstediğiniz zaman kayda devam edin.",
-    "deleteProcessingKept": "{count, plural, =1{1 kayıt hâlâ işleniyor. {days} gün boyunca hesabınızda saklanacak.} other{{count} kayıt hâlâ işleniyor. {days} gün boyunca hesabınızda saklanacaklar.}}",
+    "deleteProcessingKept": "{count, plural, =1{1 kayıt hâlâ işleniyor. Hesabınızda } other{{count} kayıt hâlâ işleniyor. Hesabınızda }}{days, plural, =1{1 gün boyunca saklanacak.} other{{days} gün boyunca saklanacak.}}",
     "deleteDataErasedAfterDays": "{days, plural, =1{Anılarınız ve konuşmalarınız 1 gün sonra silinecek.} other{Anılarınız ve konuşmalarınız {days} gün sonra silinecek.}}",
     "deleteAppsDisconnectImmediately": "Uygulamalarınız ve entegrasyonlarınız hemen bağlantıyı keser.",
     "deleteSubscriptionImmediately": "Aboneliğiniz hemen iptal edilir.",

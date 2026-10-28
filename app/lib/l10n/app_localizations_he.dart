@@ -14669,10 +14669,16 @@ class AppLocalizationsHe extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count הקלטות עדיין בעיבוד. הן יישמרו בחשבון שלכם למשך $days ימים.',
-      one: 'הקלטה אחת עדיין בעיבוד. היא תישמר בחשבון שלכם למשך $days ימים.',
+      other: '$count הקלטות עדיין בעיבוד. הן נשמרות בחשבונך למשך ',
+      one: 'הקלטה אחת עדיין בעיבוד. היא נשמרת בחשבונך למשך ',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days ימים.',
+      one: 'יום אחד.',
+    );
+    return '$_temp0$_temp1';
   }
 
   @override

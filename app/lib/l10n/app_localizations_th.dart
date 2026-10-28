@@ -14705,10 +14705,16 @@ class AppLocalizationsTh extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'ยังมี $count รายการบันทึกที่กำลังประมวลผล โดยจะเก็บไว้กับบัญชีของคุณเป็นเวลา $days วัน',
-      one: 'ยังมี 1 รายการบันทึกที่กำลังประมวลผล โดยจะเก็บไว้กับบัญชีของคุณเป็นเวลา $days วัน',
+      other: 'การบันทึก $count รายการยังประมวลผลอยู่ โดยจะเก็บไว้ในบัญชีของคุณอีก ',
+      one: 'การบันทึก 1 รายการยังประมวลผลอยู่ โดยจะเก็บไว้ในบัญชีของคุณอีก ',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days วัน.',
+      one: '1 วัน.',
+    );
+    return '$_temp0$_temp1';
   }
 
   @override

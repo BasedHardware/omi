@@ -14808,10 +14808,16 @@ class AppLocalizationsUk extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count записи ще обробляються. Вони зберігатимуться у вашому обліковому записі протягом $days днів.',
-      one: '1 запис ще обробляється. Він зберігатиметься у вашому обліковому записі протягом $days днів.',
+      other: 'Ще триває обробка $count записів. Вони зберігатимуться у вашому обліковому записі ще ',
+      one: '1 запис усе ще обробляється. Він зберігатиметься у вашому обліковому записі ще ',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days днів.',
+      one: '1 день.',
+    );
+    return '$_temp0$_temp1';
   }
 
   @override

@@ -4512,7 +4512,7 @@
     "deleteLocalRecordingsWarning": "{count, plural, =1{1 gravação ainda não foi enviada. Se excluir agora, você vai perdê-la — mantenha o app aberto para concluir o envio.} other{{count} gravações ainda não foram enviadas. Se excluir agora, você vai perdê-las — mantenha o app aberto para concluir o envio.}}",
     "deleteConfirmGraceSubtitle": "Confira o que acontecerá com seus dados antes de sair.",
     "deletePauseConfirmation": "O Omi está pausado. Retome a gravação quando quiser.",
-    "deleteProcessingKept": "{count, plural, =1{1 gravação ainda está em processamento. Ela será mantida na sua conta por {days} dias.} other{{count} gravações ainda estão em processamento. Elas serão mantidas na sua conta por {days} dias.}}",
+    "deleteProcessingKept": "{count, plural, =1{1 gravação ainda está sendo processada. Ela será mantida na sua conta por } other{{count} gravações ainda estão sendo processadas. Elas serão mantidas na sua conta por }}{days, plural, =1{1 dia.} other{{days} dias.}}",
     "deleteDataErasedAfterDays": "{days, plural, =1{Suas memórias e conversas serão apagadas após 1 dia.} other{Suas memórias e conversas serão apagadas após {days} dias.}}",
     "deleteAppsDisconnectImmediately": "Seus apps e integrações serão desconectados imediatamente.",
     "deleteSubscriptionImmediately": "Sua assinatura será cancelada imediatamente.",

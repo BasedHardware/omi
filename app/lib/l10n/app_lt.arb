@@ -4477,7 +4477,7 @@
     "deleteLocalRecordingsWarning": "{count, plural, =1{1 įrašas dar neįkeltas. Ištrynus dabar jis bus prarastas — palikite programėlę atidarytą, kol įkėlimas bus baigtas.} other{{count} įrašų dar neįkelta. Ištrynus dabar jie bus prarasti — palikite programėlę atidarytą, kol įkėlimas bus baigtas.}}",
     "deleteConfirmGraceSubtitle": "Prieš išeidami peržiūrėkite, kas nutiks jūsų duomenims.",
     "deletePauseConfirmation": "Omi pristabdytas. Galite bet kada tęsti įrašymą.",
-    "deleteProcessingKept": "{count, plural, =1{1 įrašas vis dar apdorojamas. Jis bus saugomas jūsų paskyroje {days} dienų.} other{{count} įrašų vis dar apdorojama. Jie bus saugomi jūsų paskyroje {days} dienų.}}",
+    "deleteProcessingKept": "{count, plural, =1{1 įrašas vis dar apdorojamas. Jis jūsų paskyroje bus saugomas dar } other{Dar apdorojama {count} įrašų. Jie jūsų paskyroje bus saugomi dar }}{days, plural, =1{1 dieną.} other{{days} dienas.}}",
     "deleteDataErasedAfterDays": "{days, plural, =1{Jūsų prisiminimai ir pokalbiai bus ištrinti po 1 dienos.} other{Jūsų prisiminimai ir pokalbiai bus ištrinti po {days} dienų.}}",
     "deleteAppsDisconnectImmediately": "Jūsų programėlės ir integracijos bus išjungtos iš karto.",
     "deleteSubscriptionImmediately": "Jūsų prenumerata bus atšaukta iš karto.",

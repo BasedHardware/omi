@@ -14791,10 +14791,16 @@ class AppLocalizationsTr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count kayıt hâlâ işleniyor. $days gün boyunca hesabınızda saklanacaklar.',
-      one: '1 kayıt hâlâ işleniyor. $days gün boyunca hesabınızda saklanacak.',
+      other: '$count kayıt hâlâ işleniyor. Hesabınızda ',
+      one: '1 kayıt hâlâ işleniyor. Hesabınızda ',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days gün boyunca saklanacak.',
+      one: '1 gün boyunca saklanacak.',
+    );
+    return '$_temp0$_temp1';
   }
 
   @override

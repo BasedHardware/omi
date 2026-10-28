@@ -11903,7 +11903,7 @@
     "deleteLocalRecordingsWarning": "{count, plural, =1{הקלטה אחת עדיין לא הועלתה. מחיקה עכשיו תגרום לאובדנה — השאירו את האפליקציה פתוחה עד לסיום ההעלאה.} other{{count} הקלטות עדיין לא הועלו. מחיקה עכשיו תגרום לאובדן שלהן — השאירו את האפליקציה פתוחה עד לסיום ההעלאה.}}",
     "deleteConfirmGraceSubtitle": "בדקו מה יקרה לנתונים שלכם לפני שתעזבו.",
     "deletePauseConfirmation": "Omi מושהה. תוכלו לחדש את ההקלטה בכל עת.",
-    "deleteProcessingKept": "{count, plural, =1{הקלטה אחת עדיין בעיבוד. היא תישמר בחשבון שלכם למשך {days} ימים.} other{{count} הקלטות עדיין בעיבוד. הן יישמרו בחשבון שלכם למשך {days} ימים.}}",
+    "deleteProcessingKept": "{count, plural, =1{הקלטה אחת עדיין בעיבוד. היא נשמרת בחשבונך למשך } other{{count} הקלטות עדיין בעיבוד. הן נשמרות בחשבונך למשך }}{days, plural, =1{יום אחד.} other{{days} ימים.}}",
     "deleteDataErasedAfterDays": "{days, plural, =1{הזיכרונות והשיחות שלכם יימחקו לאחר יום אחד.} other{הזיכרונות והשיחות שלכם יימחקו לאחר {days} ימים.}}",
     "deleteAppsDisconnectImmediately": "החיבור לאפליקציות ולאינטגרציות שלכם ינותק מיד.",
     "deleteSubscriptionImmediately": "המינוי שלכם יבוטל מיד.",

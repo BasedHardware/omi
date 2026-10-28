@@ -14548,10 +14548,16 @@ class AppLocalizationsZh extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count 段录音仍在处理中。它们会在您的账户中保留 $days 天。',
-      one: '1 段录音仍在处理中。它会在您的账户中保留 $days 天。',
+      other: '$count 条录音仍在处理中。它们会在您的账户中再保留 ',
+      one: '1 条录音仍在处理中。它会在您的账户中再保留 ',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days 天。',
+      one: '1 天。',
+    );
+    return '$_temp0$_temp1';
   }
 
   @override

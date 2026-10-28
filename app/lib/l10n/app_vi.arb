@@ -4477,7 +4477,7 @@
     "deleteLocalRecordingsWarning": "{count, plural, =1{1 bản ghi chưa được tải lên. Xóa bây giờ sẽ làm mất bản ghi đó — hãy mở ứng dụng để quá trình tải lên hoàn tất.} other{{count} bản ghi chưa được tải lên. Xóa bây giờ sẽ làm mất những bản ghi đó — hãy mở ứng dụng để quá trình tải lên hoàn tất.}}",
     "deleteConfirmGraceSubtitle": "Xem lại những gì sẽ xảy ra với dữ liệu của bạn trước khi rời đi.",
     "deletePauseConfirmation": "Omi đã tạm dừng. Tiếp tục ghi âm bất cứ lúc nào.",
-    "deleteProcessingKept": "{count, plural, =1{1 bản ghi vẫn đang xử lý. Bản ghi sẽ được giữ trong tài khoản của bạn trong {days} ngày.} other{{count} bản ghi vẫn đang xử lý. Các bản ghi sẽ được giữ trong tài khoản của bạn trong {days} ngày.}}",
+    "deleteProcessingKept": "{count, plural, =1{1 bản ghi âm vẫn đang được xử lý. Bản ghi sẽ được giữ trong tài khoản của bạn thêm } other{{count} bản ghi âm vẫn đang được xử lý. Các bản ghi sẽ được giữ trong tài khoản của bạn thêm }}{days, plural, =1{1 ngày.} other{{days} ngày.}}",
     "deleteDataErasedAfterDays": "{days, plural, =1{Kỷ niệm và cuộc trò chuyện của bạn sẽ bị xóa sau 1 ngày.} other{Kỷ niệm và cuộc trò chuyện của bạn sẽ bị xóa sau {days} ngày.}}",
     "deleteAppsDisconnectImmediately": "Các ứng dụng và tích hợp của bạn sẽ bị ngắt kết nối ngay lập tức.",
     "deleteSubscriptionImmediately": "Gói đăng ký của bạn sẽ bị hủy ngay lập tức.",

@@ -14777,10 +14777,16 @@ class AppLocalizationsCs extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count záznamů se stále zpracovává. Zůstanou ve vašem účtu po dobu $days dnů.',
-      one: 'Jeden záznam se stále zpracovává. Zůstane ve vašem účtu po dobu $days dnů.',
+      other: '$count nahrávek se stále zpracovává. Zůstanou uložené ve vašem účtu ještě ',
+      one: '1 nahrávka se stále zpracovává. Zůstane uložená ve vašem účtu ještě ',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days dní.',
+      one: '1 den.',
+    );
+    return '$_temp0$_temp1';
   }
 
   @override

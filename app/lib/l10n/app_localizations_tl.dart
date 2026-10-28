@@ -14895,10 +14895,16 @@ class AppLocalizationsTl extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Pinoproseso pa ang $count recording. Itatago ang mga ito sa account mo sa loob ng $days araw.',
-      one: 'Pinoproseso pa ang 1 recording. Itatago ito sa account mo sa loob ng $days araw.',
+      other: 'Pinoproseso pa ang $count recording. Itatago ang mga ito sa iyong account nang ',
+      one: 'Pinoproseso pa ang 1 recording. Itatago ito sa iyong account nang ',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days araw.',
+      one: '1 araw.',
+    );
+    return '$_temp0$_temp1';
   }
 
   @override

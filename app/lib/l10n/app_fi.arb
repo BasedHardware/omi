@@ -4477,7 +4477,7 @@
     "deleteLocalRecordingsWarning": "{count, plural, =1{Yhtä tallennetta ei ole vielä ladattu. Jos poistat sen nyt, menetät sen — pidä sovellus auki, jotta lataus valmistuu.} other{{count} tallennetta ei ole vielä ladattu. Jos poistat ne nyt, menetät ne — pidä sovellus auki, jotta lataus valmistuu.}}",
     "deleteConfirmGraceSubtitle": "Tarkista, mitä tiedoillesi tapahtuu, ennen kuin lähdet.",
     "deletePauseConfirmation": "Omi on keskeytetty. Voit jatkaa tallennusta milloin tahansa.",
-    "deleteProcessingKept": "{count, plural, =1{Yksi tallenne on vielä käsiteltävänä. Se säilytetään tililläsi {days} päivän ajan.} other{{count} tallennetta on vielä käsiteltävänä. Ne säilytetään tililläsi {days} päivän ajan.}}",
+    "deleteProcessingKept": "{count, plural, =1{1 tallenne on yhä käsittelyssä. Se säilytetään tililläsi vielä } other{{count} tallennetta on yhä käsittelyssä. Ne säilytetään tililläsi vielä }}{days, plural, =1{1 päivän ajan.} other{{days} päivän ajan.}}",
     "deleteDataErasedAfterDays": "{days, plural, =1{Muistosi ja keskustelusi poistetaan 1 päivän kuluttua.} other{Muistosi ja keskustelusi poistetaan {days} päivän kuluttua.}}",
     "deleteAppsDisconnectImmediately": "Sovelluksesi ja integraatiosi yhteydet katkaistaan heti.",
     "deleteSubscriptionImmediately": "Tilauksesi peruutetaan heti.",

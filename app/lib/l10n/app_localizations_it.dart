@@ -14854,10 +14854,16 @@ class AppLocalizationsIt extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count registrazioni sono ancora in elaborazione. Verranno conservate nel tuo account per $days giorni.',
-      one: '1 registrazione è ancora in elaborazione. Verrà conservata nel tuo account per $days giorni.',
+      other: '$count registrazioni sono ancora in elaborazione. Restano associate al tuo account per ',
+      one: '1 registrazione è ancora in elaborazione. Resta associata al tuo account per ',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days giorni.',
+      one: '1 giorno.',
+    );
+    return '$_temp0$_temp1';
   }
 
   @override

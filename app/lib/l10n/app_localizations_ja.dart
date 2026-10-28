@@ -14567,10 +14567,16 @@ class AppLocalizationsJa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '処理中の録音が$count件あります。$days日間アカウントに保存されます。',
-      one: '処理中の録音が1件あります。$days日間アカウントに保存されます。',
+      other: '$count件の録音を処理中です。アカウントに ',
+      one: '録音1件を処理中です。アカウントに ',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days日間保存されます。',
+      one: '1日間保存されます。',
+    );
+    return '$_temp0$_temp1';
   }
 
   @override

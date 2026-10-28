@@ -14780,10 +14780,16 @@ class AppLocalizationsVi extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count bản ghi vẫn đang xử lý. Các bản ghi sẽ được giữ trong tài khoản của bạn trong $days ngày.',
-      one: '1 bản ghi vẫn đang xử lý. Bản ghi sẽ được giữ trong tài khoản của bạn trong $days ngày.',
+      other: '$count bản ghi âm vẫn đang được xử lý. Các bản ghi sẽ được giữ trong tài khoản của bạn thêm ',
+      one: '1 bản ghi âm vẫn đang được xử lý. Bản ghi sẽ được giữ trong tài khoản của bạn thêm ',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days ngày.',
+      one: '1 ngày.',
+    );
+    return '$_temp0$_temp1';
   }
 
   @override

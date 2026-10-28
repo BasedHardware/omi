@@ -14814,10 +14814,16 @@ class AppLocalizationsHr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count snimke se još obrađuju. Čuvat će se uz vaš račun $days dana.',
-      one: '1 snimka se još obrađuje. Čuvat će se uz vaš račun $days dana.',
+      other: '$count snimaka se još obrađuje. Čuvaju se na tvom računu još ',
+      one: '1 snimka se još obrađuje. Čuva se na tvom računu još ',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days dana.',
+      one: '1 dan.',
+    );
+    return '$_temp0$_temp1';
   }
 
   @override

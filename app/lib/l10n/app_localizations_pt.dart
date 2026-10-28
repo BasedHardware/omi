@@ -14806,10 +14806,16 @@ class AppLocalizationsPt extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count gravações ainda estão em processamento. Elas serão mantidas na sua conta por $days dias.',
-      one: '1 gravação ainda está em processamento. Ela será mantida na sua conta por $days dias.',
+      other: '$count gravações ainda estão sendo processadas. Elas serão mantidas na sua conta por ',
+      one: '1 gravação ainda está sendo processada. Ela será mantida na sua conta por ',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days dias.',
+      one: '1 dia.',
+    );
+    return '$_temp0$_temp1';
   }
 
   @override

@@ -14840,10 +14840,16 @@ class AppLocalizationsTe extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count రికార్డింగ్‌లు ఇంకా ప్రాసెస్ అవుతున్నాయి. అవి $days రోజుల పాటు మీ ఖాతాలో ఉంచబడతాయి.',
-      one: '1 రికార్డింగ్ ఇంకా ప్రాసెస్ అవుతోంది. అది $days రోజుల పాటు మీ ఖాతాలో ఉంచబడుతుంది.',
+      other: '$count రికార్డింగ్‌లు ఇంకా ప్రాసెస్ అవుతున్నాయి. అవి మీ ఖాతాలో మరో ',
+      one: '1 రికార్డింగ్ ఇంకా ప్రాసెస్ అవుతోంది. అది మీ ఖాతాలో మరో ',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days రోజులు.',
+      one: '1 రోజు.',
+    );
+    return '$_temp0$_temp1';
   }
 
   @override

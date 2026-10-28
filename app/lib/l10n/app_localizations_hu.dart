@@ -14836,10 +14836,16 @@ class AppLocalizationsHu extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count felvétel feldolgozása még folyamatban van. $days napig megőrizzük őket a fiókodban.',
-      one: '1 felvétel feldolgozása még folyamatban van. $days napig megőrizzük a fiókodban.',
+      other: '$count felvétel feldolgozása még folyamatban van. A fiókodban maradnak még ',
+      one: '1 felvétel feldolgozása még folyamatban van. A fiókodban marad még ',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days napig.',
+      one: '1 napig.',
+    );
+    return '$_temp0$_temp1';
   }
 
   @override

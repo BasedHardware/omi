@@ -4477,7 +4477,7 @@
     "deleteLocalRecordingsWarning": "{count, plural, =1{아직 업로드되지 않은 녹음이 1개 있습니다. 지금 삭제하면 잃게 됩니다 — 업로드가 완료될 때까지 앱을 열어 두세요.} other{아직 업로드되지 않은 녹음이 {count}개 있습니다. 지금 삭제하면 잃게 됩니다 — 업로드가 완료될 때까지 앱을 열어 두세요.}}",
     "deleteConfirmGraceSubtitle": "떠나기 전에 데이터가 어떻게 되는지 확인하세요.",
     "deletePauseConfirmation": "Omi가 일시 중지되었습니다. 언제든 녹음을 다시 시작할 수 있습니다.",
-    "deleteProcessingKept": "{count, plural, =1{처리 중인 녹음이 1개 있습니다. 이 녹음은 {days}일 동안 계정에 보관됩니다.} other{처리 중인 녹음이 {count}개 있습니다. 이 녹음들은 {days}일 동안 계정에 보관됩니다.}}",
+    "deleteProcessingKept": "{count, plural, =1{녹음 1개가 아직 처리 중입니다. 계정에 } other{녹음 {count}개가 아직 처리 중입니다. 계정에 }}{days, plural, =1{1일 동안 보관됩니다.} other{{days}일 동안 보관됩니다.}}",
     "deleteDataErasedAfterDays": "{days, plural, =1{기억과 대화는 1일 후 삭제됩니다.} other{기억과 대화는 {days}일 후 삭제됩니다.}}",
     "deleteAppsDisconnectImmediately": "앱과 연동 서비스의 연결이 즉시 해제됩니다.",
     "deleteSubscriptionImmediately": "구독이 즉시 취소됩니다.",

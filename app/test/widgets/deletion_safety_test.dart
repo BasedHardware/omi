@@ -61,6 +61,13 @@ void main() {
     expect(find.textContaining('Deleting now loses'), findsNothing);
   });
 
+  testWidgets('one-day backend policy uses singular retention and erasure copy', (tester) async {
+    await confirmStep(tester, const DeletionPendingData(processingCount: 1, notUploadedCount: 0, gracePeriodDays: 1));
+    expect(find.textContaining('kept with your account for 1 day.'), findsOneWidget);
+    expect(find.text('Your memories and conversations will be erased after 1 day.'), findsOneWidget);
+    expect(find.textContaining('Deleting now loses'), findsNothing);
+  });
+
   for (final reason in ['Just taking a break', 'Too many technical issues']) {
     testWidgets('$reason pause awaits capture then leaves the flow', (tester) async {
       final paused = Completer<void>();

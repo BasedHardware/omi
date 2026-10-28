@@ -4477,7 +4477,7 @@
     "deleteLocalRecordingsWarning": "{count, plural, =1{1 salvestis pole veel üles laaditud. Kustutamisel kaotad selle — jäta rakendus avatuks, et üleslaadimine lõpule viia.} other{{count} salvestist pole veel üles laaditud. Kustutamisel kaotad need — jäta rakendus avatuks, et üleslaadimine lõpule viia.}}",
     "deleteConfirmGraceSubtitle": "Vaata enne lahkumist, mis sinu andmetega juhtub.",
     "deletePauseConfirmation": "Omi on peatatud. Võid salvestamist igal ajal jätkata.",
-    "deleteProcessingKept": "{count, plural, =1{1 salvestis on veel töötlemisel. Seda säilitatakse sinu kontoga {days} päeva.} other{{count} salvestist on veel töötlemisel. Neid säilitatakse sinu kontoga {days} päeva.}}",
+    "deleteProcessingKept": "{count, plural, =1{1 salvestis on endiselt töötlemisel. Seda hoitakse teie kontol veel } other{{count} salvestist on endiselt töötlemisel. Neid hoitakse teie kontol veel }}{days, plural, =1{1 päev.} other{{days} päeva.}}",
     "deleteDataErasedAfterDays": "{days, plural, =1{Sinu mälestused ja vestlused kustutatakse 1 päeva pärast.} other{Sinu mälestused ja vestlused kustutatakse {days} päeva pärast.}}",
     "deleteAppsDisconnectImmediately": "Sinu rakendused ja integratsioonid ühendatakse kohe lahti.",
     "deleteSubscriptionImmediately": "Sinu tellimus tühistatakse kohe.",

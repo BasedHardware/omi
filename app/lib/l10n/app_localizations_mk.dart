@@ -14842,10 +14842,16 @@ class AppLocalizationsMk extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count снимки сè уште се обработуваат. Ќе бидат зачувани со вашата сметка $days дена.',
-      one: '1 снимка сè уште се обработува. Ќе биде зачувана со вашата сметка $days дена.',
+      other: 'Сè уште се обработуваат $count снимки. Ќе се чуваат на вашата сметка уште ',
+      one: '1 снимка сè уште се обработува. Ќе се чува на вашата сметка уште ',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days дена.',
+      one: '1 ден.',
+    );
+    return '$_temp0$_temp1';
   }
 
   @override

@@ -4477,7 +4477,7 @@
     "deleteLocalRecordingsWarning": "{count, plural, =1{1 inspelning har inte laddats upp än. Om du raderar nu förlorar du den — håll appen öppen så att uppladdningen slutförs.} other{{count} inspelningar har inte laddats upp än. Om du raderar nu förlorar du dem — håll appen öppen så att uppladdningen slutförs.}}",
     "deleteConfirmGraceSubtitle": "Se vad som händer med dina data innan du lämnar.",
     "deletePauseConfirmation": "Omi är pausad. Du kan återuppta inspelningen när du vill.",
-    "deleteProcessingKept": "{count, plural, =1{1 inspelning bearbetas fortfarande. Den behålls på ditt konto i {days} dagar.} other{{count} inspelningar bearbetas fortfarande. De behålls på ditt konto i {days} dagar.}}",
+    "deleteProcessingKept": "{count, plural, =1{1 inspelning bearbetas fortfarande. Den sparas på ditt konto i ytterligare } other{{count} inspelningar bearbetas fortfarande. De sparas på ditt konto i ytterligare }}{days, plural, =1{1 dag.} other{{days} dagar.}}",
     "deleteDataErasedAfterDays": "{days, plural, =1{Dina minnen och konversationer raderas efter 1 dag.} other{Dina minnen och konversationer raderas efter {days} dagar.}}",
     "deleteAppsDisconnectImmediately": "Dina appar och integrationer kopplas från direkt.",
     "deleteSubscriptionImmediately": "Din prenumeration sägs upp direkt.",

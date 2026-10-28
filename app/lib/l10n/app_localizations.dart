@@ -26049,10 +26049,10 @@ abstract class AppLocalizations {
   /// **'Omi is paused. Resume recording anytime.'**
   String get deletePauseConfirmation;
 
-  /// Server-held recordings are retained during the backend-reported grace period
+  /// Server-held recordings survive the server-reported grace window. Two consecutive plurals: count controls recordings/pronoun; days controls day/days. Preserve the space between clauses and every selector/placeholder position. A one-day backend policy must say 1 day, not 1 days.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{1 recording is still processing. It is kept with your account for {days} days.} other{{count} recordings are still processing. They’re kept with your account for {days} days.}}'**
+  /// **'{count, plural, =1{1 recording is still processing. It is kept with your account for } other{{count} recordings are still processing. They’re kept with your account for }}{days, plural, =1{1 day.} other{{days} days.}}'**
   String deleteProcessingKept(int count, int days);
 
   /// Consequence row; days comes from backend

@@ -11903,7 +11903,7 @@
     "deleteLocalRecordingsWarning": "{count, plural, =1{Hindi pa naa-upload ang 1 recording. Kapag nag-delete ka ngayon, mawawala ito — panatilihing bukas ang app para matapos ang pag-upload.} other{Hindi pa naa-upload ang {count} recording. Kapag nag-delete ka ngayon, mawawala ang mga ito — panatilihing bukas ang app para matapos ang pag-upload.}}",
     "deleteConfirmGraceSubtitle": "Suriin kung ano ang mangyayari sa data mo bago ka umalis.",
     "deletePauseConfirmation": "Naka-pause ang Omi. Ipagpatuloy ang pagre-record kahit kailan.",
-    "deleteProcessingKept": "{count, plural, =1{Pinoproseso pa ang 1 recording. Itatago ito sa account mo sa loob ng {days} araw.} other{Pinoproseso pa ang {count} recording. Itatago ang mga ito sa account mo sa loob ng {days} araw.}}",
+    "deleteProcessingKept": "{count, plural, =1{Pinoproseso pa ang 1 recording. Itatago ito sa iyong account nang } other{Pinoproseso pa ang {count} recording. Itatago ang mga ito sa iyong account nang }}{days, plural, =1{1 araw.} other{{days} araw.}}",
     "deleteDataErasedAfterDays": "{days, plural, =1{Mabubura ang mga alaala at pag-uusap mo pagkalipas ng 1 araw.} other{Mabubura ang mga alaala at pag-uusap mo pagkalipas ng {days} araw.}}",
     "deleteAppsDisconnectImmediately": "Agad na madidiskonekta ang mga app at integration mo.",
     "deleteSubscriptionImmediately": "Agad na makakansela ang subscription mo.",

@@ -4477,7 +4477,7 @@
     "deleteLocalRecordingsWarning": "{count, plural, =1{1 opname is nog niet geüpload. Als je nu verwijdert, raak je die kwijt — laat de app openstaan totdat het uploaden is voltooid.} other{{count} opnames zijn nog niet geüpload. Als je nu verwijdert, raak je ze kwijt — laat de app openstaan totdat het uploaden is voltooid.}}",
     "deleteConfirmGraceSubtitle": "Bekijk wat er met je gegevens gebeurt voordat je vertrekt.",
     "deletePauseConfirmation": "Omi is gepauzeerd. Hervat het opnemen wanneer je wilt.",
-    "deleteProcessingKept": "{count, plural, =1{1 opname wordt nog verwerkt. Deze blijft {days} dagen bij je account bewaard.} other{{count} opnames worden nog verwerkt. Deze blijven {days} dagen bij je account bewaard.}}",
+    "deleteProcessingKept": "{count, plural, =1{1 opname wordt nog verwerkt. Deze wordt nog } other{{count} opnames worden nog verwerkt. Deze worden nog }}{days, plural, =1{1 dag in je account bewaard.} other{{days} dagen in je account bewaard.}}",
     "deleteDataErasedAfterDays": "{days, plural, =1{Je herinneringen en gesprekken worden na 1 dag gewist.} other{Je herinneringen en gesprekken worden na {days} dagen gewist.}}",
     "deleteAppsDisconnectImmediately": "Je apps en integraties worden meteen losgekoppeld.",
     "deleteSubscriptionImmediately": "Je abonnement wordt meteen opgezegd.",

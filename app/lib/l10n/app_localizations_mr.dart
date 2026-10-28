@@ -14785,10 +14785,16 @@ class AppLocalizationsMr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count रेकॉर्डिंगवर अजून प्रक्रिया सुरू आहे. ती $days दिवस तुमच्या खात्यासह जतन केली जातील.',
-      one: '१ रेकॉर्डिंगवर अजून प्रक्रिया सुरू आहे. ते $days दिवस तुमच्या खात्यासह जतन केले जाईल.',
+      other: 'तुमची $count रेकॉर्डिंग अजून प्रक्रियेत आहेत. ती तुमच्या खात्यात आणखी ',
+      one: '1 रेकॉर्डिंगवर अजून प्रक्रिया सुरू आहे. ते तुमच्या खात्यात आणखी ',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days दिवस.',
+      one: '1 दिवस.',
+    );
+    return '$_temp0$_temp1';
   }
 
   @override

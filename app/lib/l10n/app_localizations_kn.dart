@@ -14826,10 +14826,16 @@ class AppLocalizationsKn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆಯಲ್ಲಿವೆ. ಅವುಗಳನ್ನು ನಿಮ್ಮ ಖಾತೆಯಲ್ಲಿ $days ದಿನಗಳವರೆಗೆ ಉಳಿಸಲಾಗುತ್ತದೆ.',
-      one: '1 ರೆಕಾರ್ಡಿಂಗ್ ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆಯಲ್ಲಿದೆ. ಅದನ್ನು ನಿಮ್ಮ ಖಾತೆಯಲ್ಲಿ $days ದಿನಗಳವರೆಗೆ ಉಳಿಸಲಾಗುತ್ತದೆ.',
+      other: '$count ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆಯಲ್ಲಿವೆ. ನಿಮ್ಮ ಖಾತೆಯಲ್ಲಿ ಇಡುವ ಅವಧಿ: ',
+      one: '1 ರೆಕಾರ್ಡಿಂಗ್ ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆಯಲ್ಲಿದೆ. ನಿಮ್ಮ ಖಾತೆಯಲ್ಲಿ ಇಡುವ ಅವಧಿ: ',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days ದಿನಗಳು.',
+      one: '1 ದಿನ.',
+    );
+    return '$_temp0$_temp1';
   }
 
   @override

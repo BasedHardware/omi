@@ -14782,10 +14782,16 @@ class AppLocalizationsNo extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count opptak behandles fortsatt. De beholdes på kontoen din i $days dager.',
-      one: '1 opptak behandles fortsatt. Det beholdes på kontoen din i $days dager.',
+      other: '$count opptak behandles fortsatt. De beholdes på kontoen din i ytterligere ',
+      one: '1 opptak behandles fortsatt. Det beholdes på kontoen din i ytterligere ',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days dager.',
+      one: '1 dag.',
+    );
+    return '$_temp0$_temp1';
   }
 
   @override

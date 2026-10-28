@@ -14773,10 +14773,16 @@ class AppLocalizationsFa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count ضبط هنوز در حال پردازش هستند. این ضبط‌ها تا $days روز در حساب شما نگه داشته می‌شوند.',
-      one: 'یک ضبط هنوز در حال پردازش است. این ضبط تا $days روز در حساب شما نگه داشته می‌شود.',
+      other: '$count ضبط هنوز در حال پردازش هستند. این ضبط‌ها به مدت ',
+      one: '۱ ضبط هنوز در حال پردازش است. این ضبط به مدت ',
     );
-    return '$_temp0';
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days روز.',
+      one: '۱ روز.',
+    );
+    return '$_temp0$_temp1';
   }
 
   @override

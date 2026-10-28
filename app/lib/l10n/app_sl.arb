@@ -11903,7 +11903,7 @@
     "deleteLocalRecordingsWarning": "{count, plural, =1{1 posnetek še ni naložen. Če ga zdaj izbrišete, ga boste izgubili — pustite aplikacijo odprto, da se nalaganje dokonča.} other{{count} posnetki še niso naloženi. Če jih zdaj izbrišete, jih boste izgubili — pustite aplikacijo odprto, da se nalaganje dokonča.}}",
     "deleteConfirmGraceSubtitle": "Preden odidete, preverite, kaj se bo zgodilo z vašimi podatki.",
     "deletePauseConfirmation": "Omi je začasno ustavljen. Snemanje lahko kadar koli nadaljujete.",
-    "deleteProcessingKept": "{count, plural, =1{1 posnetek se še obdeluje. V vašem računu bo ostal {days} dni.} other{{count} posnetki se še obdelujejo. V vašem računu bodo ostali {days} dni.}}",
+    "deleteProcessingKept": "{count, plural, =1{1 posnetek se še obdeluje. V vašem računu bo shranjen še } other{Obdelava {count} posnetkov še poteka. V vašem računu bodo shranjeni še }}{days, plural, =1{1 dan.} other{{days} dni.}}",
     "deleteDataErasedAfterDays": "{days, plural, =1{Vaši spomini in pogovori bodo izbrisani po 1 dnevu.} other{Vaši spomini in pogovori bodo izbrisani po {days} dneh.}}",
     "deleteAppsDisconnectImmediately": "Vaše aplikacije in integracije bodo takoj prekinjene.",
     "deleteSubscriptionImmediately": "Vaša naročnina bo takoj preklicana.",

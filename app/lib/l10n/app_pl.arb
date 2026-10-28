@@ -4512,7 +4512,7 @@
     "deleteLocalRecordingsWarning": "{count, plural, =1{1 nagranie nie zostało jeszcze przesłane. Jeśli usuniesz je teraz, zostanie utracone — pozostaw aplikację otwartą, aż przesyłanie się zakończy.} other{{count} nagrania nie zostały jeszcze przesłane. Jeśli usuniesz je teraz, zostaną utracone — pozostaw aplikację otwartą, aż przesyłanie się zakończy.}}",
     "deleteConfirmGraceSubtitle": "Zanim odejdziesz, sprawdź, co stanie się z Twoimi danymi.",
     "deletePauseConfirmation": "Omi jest wstrzymane. Wznów nagrywanie w dowolnym momencie.",
-    "deleteProcessingKept": "{count, plural, =1{1 nagranie jest nadal przetwarzane. Pozostanie na Twoim koncie przez {days} dni.} other{{count} nagrania są nadal przetwarzane. Pozostaną na Twoim koncie przez {days} dni.}}",
+    "deleteProcessingKept": "{count, plural, =1{1 nagranie jest nadal przetwarzane. Pozostanie na Twoim koncie przez } other{Nadal trwa przetwarzanie {count} nagrań. Pozostaną na Twoim koncie przez }}{days, plural, =1{1 dzień.} other{{days} dni.}}",
     "deleteDataErasedAfterDays": "{days, plural, =1{Twoje wspomnienia i rozmowy zostaną usunięte po 1 dniu.} other{Twoje wspomnienia i rozmowy zostaną usunięte po {days} dniach.}}",
     "deleteAppsDisconnectImmediately": "Twoje aplikacje i integracje zostaną natychmiast odłączone.",
     "deleteSubscriptionImmediately": "Twoja subskrypcja zostanie natychmiast anulowana.",
