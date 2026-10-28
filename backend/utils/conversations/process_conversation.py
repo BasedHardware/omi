@@ -29,6 +29,7 @@ from utils.conversations.transcript_for_llm import (
     conversation_transcript_for_llm,
     conversation_transcripts_for_llm,
     memory_transcript_from_segments,
+    owner_safe_transcript_segments,
 )
 from utils.conversations.wake_word import has_structural_wake_word_marker
 import database.conversations as conversations_db
@@ -125,6 +126,12 @@ from utils.conversations.owner_attribution import (
     OwnerAttributionEvidence,
     may_attribute_to_owner,
     confident_owner_segments,
+    speaker_role_projection,
+    grounded_quote_segments,
+    normalized_evidence_quote,
+    owner_spoken_for_quotes,
+    quote_source_attribution,
+    explicitly_self_referential,
 )
 from utils.conversations.speaker_resolution import resolve_speakers_for_processing
 from utils.observability.owner_identity_retry import identity_pass
@@ -1164,7 +1171,7 @@ def _l1_quote_matched_segments(evidence_quotes: List[str], segments: List[Any]) 
     ]
 
 
-def _l1_candidate_subject(
+def _legacy_l1_candidate_subject(
     *,
     source_id: str,
     about: str,
@@ -1286,6 +1293,34 @@ def _l1_candidate_subject(
     return None, SubjectAttribution.unknown, "unknown"
 
 
+def _l1_candidate_subject(
+    *,
+    source_id: str,
+    about: str,
+    speaker_label: Optional[str],
+    evidence_quotes: List[str],
+    user_name: Optional[str],
+    segments: List[Any],
+) -> Tuple[Optional[str], SubjectAttribution, str]:
+    roles = speaker_role_projection(segments)
+    prompt_segments = owner_safe_transcript_segments(segments)[0] if roles is not None else segments
+    subject = _legacy_l1_candidate_subject(
+        source_id=source_id,
+        about=about,
+        speaker_label=speaker_label,
+        evidence_quotes=evidence_quotes,
+        user_name=user_name,
+        segments=prompt_segments,
+    )
+    if roles is not None and subject[1] == SubjectAttribution.user:
+        # Aboutness and utterance source are separate. Even the owner's own
+        # voice can be reporting another person's circumstances. No fallback
+        # from a model's about=user or speaker label may create an owner fact.
+        if not explicitly_self_referential(evidence_quotes) or not owner_spoken_for_quotes(evidence_quotes, segments):
+            return None, SubjectAttribution.unknown, 'unknown'
+    return subject
+
+
 def _l1_candidate_sensitivity_labels(candidate: Any) -> List[str]:
     labels = [
         str(label).strip().lower() for label in (getattr(candidate, "risk_flags", []) or []) if str(label).strip()
@@ -1300,24 +1335,18 @@ def _l1_candidate_sensitivity_labels(candidate: Any) -> List[str]:
 
 
 def _normalized_l1_evidence_quote(value: str) -> str:
-    return re.sub(r"[\W_]+", " ", value.casefold()).strip()
+    return normalized_evidence_quote(value)
 
 
 def _grounded_l1_evidence_quotes(evidence_quotes: List[str], segments: List[Any]) -> List[str]:
     """Return quotes only when each has one unambiguous authoritative source segment."""
+    if grounded_quote_segments(evidence_quotes, segments) is None:
+        return []
     grounded: List[str] = []
     seen: Set[str] = set()
     for raw_quote in evidence_quotes:
         quote = raw_quote.strip()
         normalized_quote = _normalized_l1_evidence_quote(quote)
-        matched_segments = [
-            segment
-            for segment in segments
-            if normalized_quote
-            and f" {normalized_quote} " in f" {_normalized_l1_evidence_quote(str(getattr(segment, 'text', '') or ''))} "
-        ]
-        if not normalized_quote or len(matched_segments) != 1:
-            return []
         if normalized_quote in seen:
             continue
         seen.add(normalized_quote)
@@ -1335,20 +1364,7 @@ def _l1_owner_spoken_for_grounded_quotes(evidence_quotes: List[str], segments: L
     to the owner's cluster.
     """
 
-    owner_evidence = OwnerAttributionEvidence.from_segments(segments)
-    if not evidence_quotes or not may_attribute_to_owner(owner_evidence):
-        return False
-    for raw_quote in evidence_quotes:
-        normalized_quote = _normalized_l1_evidence_quote(raw_quote)
-        matched_segments = [
-            segment
-            for segment in segments
-            if normalized_quote
-            and f" {normalized_quote} " in f" {_normalized_l1_evidence_quote(str(getattr(segment, 'text', '') or ''))} "
-        ]
-        if len(matched_segments) != 1 or not may_attribute_to_owner(owner_evidence, segment=matched_segments[0]):
-            return False
-    return True
+    return owner_spoken_for_quotes(evidence_quotes, segments)
 
 
 def _canonical_quote_ref(
@@ -1357,13 +1373,8 @@ def _canonical_quote_ref(
     source_id: str,
     segments: List[Any],
 ) -> Dict[str, Any]:
-    normalized_quote = _normalized_l1_evidence_quote(quote)
-    matched_segments = [
-        segment
-        for segment in segments
-        if f" {normalized_quote} " in f" {_normalized_l1_evidence_quote(str(getattr(segment, 'text', '') or ''))} "
-    ]
-    if len(matched_segments) != 1:
+    matched_segments = grounded_quote_segments([quote], segments)
+    if not matched_segments:
         raise RuntimeError("canonical conversation quote lost its unique source binding")
     segment = matched_segments[0]
     raw_speaker = getattr(segment, "speaker", None)
@@ -1647,6 +1658,8 @@ def _extract_memories_canonical(
                 if _l1_owner_spoken_for_grounded_quotes(evidence_quotes, conversation.transcript_segments)
                 else "third_party" if subject_attribution == SubjectAttribution.third_party else "unknown"
             )
+            if speaker_role_projection(conversation.transcript_segments) is not None:
+                source_attribution = quote_source_attribution(evidence_quotes, conversation.transcript_segments)
             memory.capture_context = MemoryCaptureContext(
                 source_type="conversation",
                 captured_at=source_captured_at,

@@ -26,6 +26,7 @@ from models.other import Person
 from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.location import get_google_maps_location
 from utils.conversations.render import conversations_to_string
+from utils.conversations.owner_attribution import speaker_role_projection
 from utils.llm.clients import get_llm, parser
 from utils.llm.usage_tracker import track_usage, Features
 from utils.llm.output_language import normalize_language, resolve_output_language
@@ -415,7 +416,15 @@ def generate_comprehensive_daily_summary(
         people_data = users_db.get_people_by_ids(uid, list(set(all_person_ids)))
         people = [Person(**p) for p in people_data]
 
-    conversation_history = conversations_to_string(conversations, people=people)
+    conversation_history = conversations_to_string(conversations, people=people, user_name=user_name)
+    attribution_guidance = (
+        'The inputs are generated conversation notes, titles, tasks and events, not full transcripts. '
+        'Keep who said, experienced, requested or promised each thing separate from who owns the recording. '
+        'Preserve third-party subjects and uncertain attribution. Do not turn an unattributed statement into '
+        f'a fact or commitment about {user_name}, and do not claim to have corrected older notes.'
+        if speaker_role_projection(()) is not None
+        else ''
+    )
 
     # Calculate stats - exclude discarded conversations
     non_discarded = [c for c in conversations if not c.discarded]
@@ -537,6 +546,7 @@ Daily stats: {memories_created} memories created, {action_items_created} action 
 {reflection_context}
 
 Here are {user_name}'s conversations from today (numbered 1-{len(non_discarded)}):
+{attribution_guidance}
 ```
 {conversation_history}
 ```
