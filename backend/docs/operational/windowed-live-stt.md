@@ -295,13 +295,15 @@ sentence so the next POST starts on a sentence boundary.
 
 The startup POST is selected after eight admitted seconds (bounded by the normal
 pace), so continuous speech can produce text before the 12-second startup
-deadline. If no ordinary segment can emit, its nonempty held tail is released once by the default-on
-`PARAKEET_WINDOW_FIRST_TEXT_CUT_ENABLED`; subsequent POSTs keep normal sentence
-anchoring. `PARAKEET_WINDOW_FIRST_POST_SECONDS=15` plus
+deadline. If no ordinary segment can emit while a startup or progress watchdog
+is armed and rescue is allowed, the default-on
+`PARAKEET_WINDOW_FIRST_TEXT_CUT_ENABLED` releases the nonempty held answer.
+Ordinary emittable segments and unarmed windows retain sentence anchoring.
+`PARAKEET_WINDOW_FIRST_POST_SECONDS=15` plus
 `PARAKEET_WINDOW_FIRST_TEXT_CUT_ENABLED=false` restores the previous behavior.
 Empty or stalled answers still expire and replay normally; the gate is unchanged.
 
-After startup, the last sentence is held on a paced POST unless it ended ≥1.2 s ago with
+The ordinary paced decision holds the last sentence unless it ended ≥1.2 s ago with
 terminal punctuation (`.?!`). `finalize()` from the live VAD gate (300 ms hangover)
 is a **soft** pause POST: `[anchor, now]` with `force=False` as soon as pacing
 and the single in-flight slot allow. Managed windows enable this pause and

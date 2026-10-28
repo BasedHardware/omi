@@ -856,20 +856,20 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         has_held_tail = cut_requested and len(
             decide_window(segments, job.duration, job.duration + 1.0, force=job.force, pause=job.pause).emit
         ) < len(segments)
-        # The startup POST must publish before the first-text deadline: its
-        # next paced answer can arrive after that deadline even when healthy.
-        # Cut a wholly held first answer; an already-emittable segment keeps
-        # its ordinary sentence boundary. Empty answers
-        # and in-flight faults keep the original deadline and replay behavior.
-        first_text_cut = (
+        # Sentence anchoring can hold valid text past an armed startup or
+        # progress watchdog. Release a wholly held answer while that watchdog
+        # requires text; an ordinary emittable segment keeps its boundary.
+        # Empty answers and in-flight faults retain the deadline and replay.
+        deadline_text_cut = (
             self._first_text_cut_enabled
             and self._deadline_speech_at is not None
-            and not self._first_text_recorded
+            and (not self._first_text_recorded or self.progress_deadline_enabled)
+            and (not self.progress_deadline_enabled or self.allow_no_text_rescue())
             and not decide_window(
                 segments, job.duration, self._max_context_seconds, force=job.force, pause=job.pause
             ).emit
         )
-        deadline_cut = first_text_cut or (
+        deadline_cut = deadline_text_cut or (
             self._deadline_cut_enabled
             and self._deadline_speech_at is not None
             and (not self._first_text_recorded or self.progress_deadline_enabled)

@@ -4383,6 +4383,66 @@ async def test_live_posts_are_paced_and_single_flight(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('cut_enabled,rescue_available', [(True, True), (False, True), (True, False)])
+async def test_wholly_held_progress_answer_keeps_twelve_second_watchdog_and_exact_replay(
+    monkeypatch, cut_enabled, rescue_available
+):
+    monkeypatch.setenv('STT_NO_TEXT_RESCUE_ENABLED', 'true')
+    monkeypatch.setenv('PARAKEET_WINDOW_FIRST_TEXT_CUT_ENABLED', str(cut_enabled).lower())
+    monkeypatch.delenv('PARAKEET_WINDOW_FIRST_POST_SECONDS')
+
+    def response(n, kwargs):
+        duration = _wav_duration(kwargs)
+        return {
+            'segments': [
+                {
+                    'text': 'Opening.' if n == 1 else 'Unfinished continuing speech',
+                    'start': 0.0,
+                    'end': duration - 1.5 if n == 1 else duration,
+                }
+            ]
+        }
+
+    client = SeqClient([response])
+    actual, base, previous, replayed, callbacks = await _receiver_for_anchor_replay(monkeypatch, client)
+    raw = previous.raw
+    raw._first_text_deadline = 12  # The helper normally stretches it for unrelated replay mechanics.
+    raw.allow_no_text_rescue = lambda: rescue_available
+    assert raw.progress_deadline_enabled and raw._pace_seconds == 6
+    clock = [window.time.monotonic()]
+    monkeypatch.setattr(window, 'time', SimpleNamespace(monotonic=lambda: clock[0], time=window.time.time))
+    sample = 0
+    snapshot = None
+    try:
+        for _ in range(500):  # Twenty seconds of uninterrupted production-mode capture.
+            sample = await _fragment_frame(actual, clock, sample, speech=True)
+            for _ in range(8):
+                await _REAL_SLEEP(0)
+            if raw._deadline_speech_at is not None and clock[0] >= raw._deadline_speech_at + 12:
+                snapshot = actual._window_ring().snapshot()
+                raw._expire_first_text()
+                if raw.is_connection_dead:
+                    break
+        assert raw._first_text_recorded  # Initial complete text succeeded in both controls.
+        expected_failure = rescue_available and not cut_enabled
+        assert raw.is_connection_dead == expected_failure
+        if rescue_available and cut_enabled:
+            assert len(base.emitted) >= 3
+            assert all(right['start'] >= left['end'] for left, right in zip(base.emitted, base.emitted[1:]))
+            assert replayed == [] and callbacks == []
+        elif expected_failure:
+            assert raw.death_reason == 'first_text_deadline' and snapshot is not None
+            assert await actual._failover_stt_socket()
+            assert b''.join(replayed) == b''.join(data for _, data in snapshot)
+            assert len(callbacks) == 1
+        else:
+            assert len(base.emitted) == 1 and raw._deadline_speech_at is None
+            assert replayed == [] and callbacks == []
+    finally:
+        await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('answer', ['held', 'complete', 'empty', 'cut_off'])
 async def test_default_startup_replay_posts_before_deadline_and_preserves_fallback(monkeypatch, answer):
     monkeypatch.delenv('PARAKEET_WINDOW_PACE_SECONDS')
@@ -4409,6 +4469,7 @@ async def test_default_startup_replay_posts_before_deadline_and_preserves_fallba
     client = SeqClient([response])
     actual, base, previous, replayed, callbacks = await _receiver_for_anchor_replay(monkeypatch, client)
     raw = previous.raw
+    raw._first_text_deadline = 12
     clock = [window.time.monotonic()]
     began = clock[0]
     monkeypatch.setattr(window, 'time', SimpleNamespace(monotonic=lambda: clock[0], time=window.time.time))
@@ -4923,7 +4984,9 @@ async def test_no_text_rescue_audio_budget_counts_replay_and_preserves_rejected_
 
 
 @pytest.mark.asyncio
-async def test_gated_progress_deadline_rearms_after_text(monkeypatch):
+@pytest.mark.parametrize('cut_enabled', [True, False])
+async def test_gated_progress_deadline_rearms_after_text(monkeypatch, cut_enabled):
+    monkeypatch.setenv('PARAKEET_WINDOW_FIRST_TEXT_CUT_ENABLED', str(cut_enabled).lower())
     client = SeqClient([{'segments': [{'text': 'Done.', 'start': 0.0, 'end': 4.0}]}, {'text': ''}])
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
     sock = window.WindowedParakeetSocket(lambda _: None, 'http://tdt.invalid', 16000, lambda: None)
