@@ -171,7 +171,13 @@ void main() {
     final entry = _HeavyHomeShell(conversationsProvider: conversations, walService: walService);
 
     const timelineEnabled = bool.fromEnvironment('PERF_HEAVY_TIMELINE');
-    if (timelineEnabled) await binding.enableTimeline(streams: const ['Dart', 'GC']);
+    if (timelineEnabled) {
+      // Attribution only (never a baseline): name each widget build in the trace so a slow first
+      // build (e.g. the first Tasks switch) points at the widget, not just at BUILD.
+      debugProfileBuildsEnabled = true;
+      debugProfileBuildsEnabledUserWidgets = true;
+      await binding.enableTimeline(streams: const ['Dart', 'GC']);
+    }
     await (() async {
       // 4. Cold start: shell mount → Home request → empty server page → cache
       //    decode of the full seeded history → grouped list rendered → settled.
