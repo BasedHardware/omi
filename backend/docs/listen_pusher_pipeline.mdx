@@ -387,7 +387,9 @@ Startup continuous speech selects its first POST after
 admitted seconds (first-post default `8`, normal pace default `15`). Earlier
 VAD pause/idle flushes still apply. While first text is pending, the default-on
 `PARAKEET_WINDOW_FIRST_TEXT_CUT_ENABLED` releases a nonempty answer's held tail
-through the timestamp-preserving cut. Otherwise even a healthy answer can wait
+through the timestamp-preserving cut when no ordinary segment can emit. An
+answer that already emits a completed segment keeps its unfinished tail anchored.
+Otherwise even a healthy answer can wait
 for a second 15-second pace past the 12-second first-text deadline. After first
 text, normal pacing and sentence anchoring resume. Empty or stalled POSTs retain
 the deadline and exact fallback replay. Rollback: set first-post seconds to `15`

@@ -4383,7 +4383,7 @@ async def test_live_posts_are_paced_and_single_flight(monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('answer', ['held', 'empty', 'cut_off'])
+@pytest.mark.parametrize('answer', ['held', 'complete', 'empty', 'cut_off'])
 async def test_default_startup_replay_posts_before_deadline_and_preserves_fallback(monkeypatch, answer):
     monkeypatch.delenv('PARAKEET_WINDOW_PACE_SECONDS')
     monkeypatch.delenv('PARAKEET_WINDOW_FIRST_POST_SECONDS')
@@ -4393,6 +4393,13 @@ async def test_default_startup_replay_posts_before_deadline_and_preserves_fallba
 
     def response(_n, kwargs):
         duration = _wav_duration(kwargs)
+        if answer == 'complete' and _n == 1:
+            return {
+                'segments': [
+                    {'text': 'Opening sentence.', 'start': 0.0, 'end': 4.0},
+                    {'text': 'Unfinished tail', 'start': 4.0, 'end': duration},
+                ]
+            }
         return (
             {'text': ''}
             if answer == 'empty'
@@ -4420,15 +4427,19 @@ async def test_default_startup_replay_posts_before_deadline_and_preserves_fallba
             for _ in range(8):
                 await _REAL_SLEEP(0)
         assert len(posts) == 1
-        assert 8.0 <= posts[0] <= 8.4  # VAD admission can lag capture by one frame.
+        assert 8.0 <= round(posts[0], 2) <= 8.4  # Capture advances in 40ms frames.
         assert raw._pace_seconds == 15.0
-        assert raw._first_text_recorded == (answer == 'held')
-        assert bool(base.emitted) == (answer == 'held')
-        if answer == 'held':
+        survives = answer in {'held', 'complete'}
+        assert raw._first_text_recorded == survives
+        assert bool(base.emitted) == survives
+        if survives:
             assert raw._first_text_timer is None
             assert len(base.emitted) == 1
             assert base.emitted[0]['end'] > base.emitted[0]['start']
-            assert raw._anchor_bytes == raw._last_post_end
+            if answer == 'complete':
+                assert raw._anchor_bytes == raw._to_bytes(4.0) < raw._last_post_end
+            else:
+                assert raw._anchor_bytes == raw._last_post_end
             assert raw._last_post_end == raw._to_bytes(_wav_duration(client.requests[0][1]))
             raw._expire_first_text()
             assert not raw.is_connection_dead

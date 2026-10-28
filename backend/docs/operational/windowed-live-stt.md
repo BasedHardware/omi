@@ -295,7 +295,7 @@ sentence so the next POST starts on a sentence boundary.
 
 The startup POST is selected after eight admitted seconds (bounded by the normal
 pace), so continuous speech can produce text before the 12-second startup
-deadline. Its nonempty held tail is released once by the default-on
+deadline. If no ordinary segment can emit, its nonempty held tail is released once by the default-on
 `PARAKEET_WINDOW_FIRST_TEXT_CUT_ENABLED`; subsequent POSTs keep normal sentence
 anchoring. `PARAKEET_WINDOW_FIRST_POST_SECONDS=15` plus
 `PARAKEET_WINDOW_FIRST_TEXT_CUT_ENABLED=false` restores the previous behavior.
