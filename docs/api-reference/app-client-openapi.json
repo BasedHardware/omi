@@ -21497,6 +21497,20 @@
             ],
             "title": "Expected Calendar"
           },
+          "observed_call_tiles": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/MeetingParticipant"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed Call Tiles"
+          },
           "observed_screen_listing": {
             "anyOf": [
               {
@@ -32257,6 +32271,16 @@
             ],
             "description": "Meeting notes/description",
             "title": "Notes"
+          },
+          "participant_sources": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MeetingParticipantSources"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "participants": {
             "description": "Meeting participants",

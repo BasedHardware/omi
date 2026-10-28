@@ -206,6 +206,7 @@ _ALLOWED_SCOPES: FrozenSet[tuple[str, str]] = frozenset(
         (_SCHEMA_MODULE, '*'),
         ('models/conversation.py', '<module>'),
         ('models/conversation.py', 'Conversation'),
+        ('models/conversation.py', 'ProcessConversationRequest'),
         ('routers/developer.py', '<module>'),
         ('routers/developer_segments_models.py', 'CreateConversationFromTranscriptRequest'),
         ('routers/developer.py', '_accepted_client_projection'),
@@ -265,8 +266,8 @@ class Reference(NamedTuple):
 # display-only trust boundary and added here. Schema-module hits collapse to one
 # wildcard so the Pydantic field list can evolve without a pin churn.
 #
-# Reviewed production hits: schema + Conversation field + developer request
-# field + process_conversation storage/coordinator seams + locked-integration
+# Reviewed production hits: schema + Conversation field + request fields
+# + process_conversation storage/coordinator seams + locked-integration
 # redaction + transcript-edit genuine clear + live-capture overlap clear.
 # ``_get_structured``, ``extract_memories``, ``save_structured_vector``,
 # and RAG are absent. ``conversation_to_dict`` is a dump without a named read.
@@ -291,7 +292,7 @@ PINNED_REFERENCES: FrozenSet[Reference] = frozenset(
         Reference('routers/developer_segments.py', 'continuation', 'client_processing'),
         Reference('routers/developer_segments.py', 'stage_chunk', 'client_processing'),
         Reference('routers/conversations.py', '<module>', 'ClientProcessing'),
-        Reference('routers/conversations.py', 'ProcessConversationRequest', 'client_processing'),
+        Reference('models/conversation.py', 'ProcessConversationRequest', 'client_processing'),
         Reference('routers/conversations.py', '_accepted_client_projection', 'ClientProcessing'),
         Reference('routers/conversations.py', 'finalize_conversation', 'client_processing'),
         Reference('routers/conversations.py', 'finalize_conversation', 'client_projection'),
@@ -503,8 +504,10 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite('utils/memory/developer_memory_list.py', '_validated_memories', 'model_dump'),
         DumpSite('utils/goals_response.py', 'list_developer_goals', 'model_dump'),
         DumpSite('routers/developer.py', '_ingest_conversation_from_segments', 'model_dump'),
-        # Retry identity hashes only the explicit recording-facts include set;
-        # client_processing and the other display projections are excluded.
+        # Blank-session retry identity hashes only fixed recording facts;
+        # client_processing and other display projections are excluded. This
+        # serialization derives the digest only; it is not persisted or sent
+        # to an intelligence consumer.
         DumpSite('routers/developer.py', '_derived_client_session_id', 'model_dump'),
         # Request serialization goes only to encrypted staging, never intelligence.
         DumpSite('routers/developer_segments.py', 'stage_chunk', 'model_dump'),
