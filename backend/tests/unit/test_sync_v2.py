@@ -8,11 +8,13 @@ polls GET /v2/sync-local-files/{job_id} until the job reaches a terminal status.
 v1 remains completely unchanged.
 """
 
+from utils.sync import size_telemetry  # noqa: F401 - retain real scoped telemetry across legacy package stubs
 from utils.other import owned_paths  # noqa: F401 - retain real scratch guard across legacy package stubs
 
 from models import conversation_continuity  # noqa: F401 - retain pure policy across legacy package stubs
 from utils import dream_vocabulary  # noqa: F401 - retain shared keyterms across legacy package stubs
 from utils import firestore_document_size  # noqa: F401 - retain pure size estimate across legacy package stubs
+from utils.conversations import size_limit as actual_size_limit
 from utils import manual_speaker_assignments  # noqa: F401 - retain pure policy across legacy package stubs
 from utils.stt import speaker_identity  # noqa: F401 - retain allocator across legacy package stubs
 from utils.stt import sync_speaker_evidence  # noqa: F401 - retain pure evidence policy across legacy package stubs
@@ -765,8 +767,8 @@ class TestV2EndpointContract:
     def test_v2_reraises_http_exceptions(self):
         """v2 must re-raise HTTPException from fast-path helpers."""
         body = self._get_v2_post_body()
-        assert 'except HTTPException:' in body
-        assert 'raise' in body[body.index('except HTTPException:') :]
+        assert 'except HTTPException as error:' in body
+        assert 'raise' in body[body.index('except HTTPException as error:') :]
 
     def test_v2_finally_cleans_up_on_fast_path_failure(self):
         """v2 finally block must clean up raw files if fast-path fails."""
@@ -1394,6 +1396,7 @@ class TestAsyncCoordinatorBehavioral:
         prior_capture_evidence = sys.modules.get('utils.capture_evidence')
         from utils import capture_evidence as actual_capture_evidence
 
+        prior_size_limit = sys.modules.get('utils.conversations.size_limit')
         prior_sync_lanes = sys.modules.get('utils.sync.lanes')
         from utils.sync import lanes as actual_sync_lanes
 
@@ -1571,6 +1574,10 @@ class TestAsyncCoordinatorBehavioral:
         # pipeline imports unknown_envelope at module scope, and a MagicMock
         # parent for utils is not a package.
         sys.modules['utils.capture_evidence'] = actual_capture_evidence
+        # Assignment's encoded-size primitive stays real even while the
+        # conversations parent package and cloud clients are stubbed.
+        saved_modules['utils.conversations.size_limit'] = prior_size_limit
+        sys.modules['utils.conversations.size_limit'] = actual_size_limit
         saved_modules['utils.sync.lanes'] = prior_sync_lanes
         # Keep SyncLane real: V2 responses serialize lane as a str-enum value, and a
         # MagicMock lane fails response validation. lanes.py is stdlib-only.
@@ -3437,6 +3444,7 @@ class TestV2EndpointExecution:
         prior_capture_evidence = sys.modules.get('utils.capture_evidence')
         from utils import capture_evidence as actual_capture_evidence
 
+        prior_size_limit = sys.modules.get('utils.conversations.size_limit')
         prior_sync_lanes = sys.modules.get('utils.sync.lanes')
         from utils.sync import lanes as actual_sync_lanes
 
@@ -3614,6 +3622,10 @@ class TestV2EndpointExecution:
         # pipeline imports unknown_envelope at module scope, and a MagicMock
         # parent for utils is not a package.
         sys.modules['utils.capture_evidence'] = actual_capture_evidence
+        # Assignment's encoded-size primitive stays real even while the
+        # conversations parent package and cloud clients are stubbed.
+        saved_modules['utils.conversations.size_limit'] = prior_size_limit
+        sys.modules['utils.conversations.size_limit'] = actual_size_limit
         saved_modules['utils.sync.lanes'] = prior_sync_lanes
         # Keep SyncLane real: V2 responses serialize lane as a str-enum value, and a
         # MagicMock lane fails response validation. lanes.py is stdlib-only.

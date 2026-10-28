@@ -190,7 +190,9 @@
 		DECE0A4513CE66136ABC42D2 /* Config in Resources */ = {isa = PBXBuildFile; fileRef = 426B89AC2C46919D00E24442 /* Config */; };
 		DF385A18EA9CC7E3C915F581 /* OmiDirectCallCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFCC2F2A81B100E78A3C /* OmiDirectCallCoordinator.swift */; };
 		E5ECD5F893BE640A2A446738 /* LivePreviewPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E9FCBF3791B725CA1BEA76C /* LivePreviewPlugin.swift */; };
+		F3A44AF484B44F559ADD1671 /* LivePreviewNotesPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3EEA6589ABA4CE7924CDA2D /* LivePreviewNotesPlugin.swift */; };
 		B9C64E7F6FA52D7B7B3F1403 /* LivePreviewPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E9FCBF3791B725CA1BEA76C /* LivePreviewPlugin.swift */; };
+		8F414CD61C9E4B5DA84FBCCD /* LivePreviewNotesPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3EEA6589ABA4CE7924CDA2D /* LivePreviewNotesPlugin.swift */; };
 		908FD40D876E8C8344452BC0 /* LivePreviewSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0E325766888761A213589D3 /* LivePreviewSelection.swift */; };
 		E2656CA5F9118C50722F0764 /* LivePreviewSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0E325766888761A213589D3 /* LivePreviewSelection.swift */; };
 		E1293501E1293501E1293501 /* SpeechDeadline.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1293503E1293503E1293503 /* SpeechDeadline.swift */; };
@@ -420,6 +422,7 @@
 		D71C4A0A2F0A11E700DE7000 /* DeviceToolsService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DeviceToolsService.swift; sourceTree = "<group>"; };
 		DAD10001DAD10001DAD10001 /* OmiBleConnectionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiBleConnectionPolicy.swift; sourceTree = "<group>"; };
 		9E9FCBF3791B725CA1BEA76C /* LivePreviewPlugin.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LivePreviewPlugin.swift; sourceTree = "<group>"; };
+		E3EEA6589ABA4CE7924CDA2D /* LivePreviewNotesPlugin.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LivePreviewNotesPlugin.swift; sourceTree = "<group>"; };
 		F0E325766888761A213589D3 /* LivePreviewSelection.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LivePreviewSelection.swift; sourceTree = "<group>"; };
 		E1293503E1293503E1293503 /* SpeechDeadline.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SpeechDeadline.swift; sourceTree = "<group>"; };
 		E2100BFB54B13863400AB3AB /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
@@ -700,6 +703,7 @@
 				E1293503E1293503E1293503 /* SpeechDeadline.swift */,
 				F0E325766888761A213589D3 /* LivePreviewSelection.swift */,
 				9E9FCBF3791B725CA1BEA76C /* LivePreviewPlugin.swift */,
+				E3EEA6589ABA4CE7924CDA2D /* LivePreviewNotesPlugin.swift */,
 				A2047903A2047903A2047903 /* WatchAudioChunkRelay.swift */,
 				A2047910A2047910A2047910 /* WatchRecordingStore.swift */,
 				D71C4A0A2F0A11E700DE7000 /* DeviceToolsService.swift */,
@@ -1230,6 +1234,7 @@
 				E1293501E1293501E1293501 /* SpeechDeadline.swift in Sources */,
 				908FD40D876E8C8344452BC0 /* LivePreviewSelection.swift in Sources */,
 				E5ECD5F893BE640A2A446738 /* LivePreviewPlugin.swift in Sources */,
+				F3A44AF484B44F559ADD1671 /* LivePreviewNotesPlugin.swift in Sources */,
 				A2047901A2047901A2047901 /* WatchAudioChunkRelay.swift in Sources */,
 				E91B0002E91B0002E91B0002 /* OmiBleEnergyPolicy.swift in Sources */,
 				387657874D0C4CD5BAE2E8F1 /* OmiDeviceHealthStore.swift in Sources */,
@@ -1307,6 +1312,7 @@
 				E1293502E1293502E1293502 /* SpeechDeadline.swift in Sources */,
 				E2656CA5F9118C50722F0764 /* LivePreviewSelection.swift in Sources */,
 				B9C64E7F6FA52D7B7B3F1403 /* LivePreviewPlugin.swift in Sources */,
+				8F414CD61C9E4B5DA84FBCCD /* LivePreviewNotesPlugin.swift in Sources */,
 				A2047902A2047902A2047902 /* WatchAudioChunkRelay.swift in Sources */,
 				E91B0003E91B0003E91B0003 /* OmiBleEnergyPolicy.swift in Sources */,
 				9C1738D70A50495EA3AFADF5 /* OmiDeviceHealthStore.swift in Sources */,

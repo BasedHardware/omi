@@ -104,6 +104,7 @@ import 'package:omi/backend/schema/message_event.dart'
         SttCapLiveHeldEvent;
 
 part 'capture_speaker_events.dart';
+part 'capture_transcript_snapshot.dart';
 part 'capture_uplink_policy.dart';
 part 'capture_live_recovery.dart';
 part 'capture_continuity_watch.dart';
@@ -761,6 +762,7 @@ class CaptureController extends ChangeNotifier
   }
 
   ServerConversation? _conversation;
+  DateTime? get liveTranscriptStartedAt => _conversation?.startedAt;
   List<TranscriptSegment> segments = [];
   List<ConversationPhoto> photos = [];
 
@@ -3734,7 +3736,8 @@ class CaptureController extends ChangeNotifier
     }
     _conversation = nextConversation;
     if (_conversation != null) {
-      segments = _conversation!.transcriptSegments;
+      segments = List<TranscriptSegment>.of(_conversation!.transcriptSegments)
+        ..sort((a, b) => a.start.compareTo(b.start));
       // Merge server photos with locally-captured temp photos to avoid losing
       // photos that haven't been processed server-side yet.
       final serverPhotos = _conversation!.photos;
@@ -4372,49 +4375,6 @@ class CaptureController extends ChangeNotifier
     }
     if (newSegments.any((segment) => segment.text.trim().isNotEmpty)) _armUplinkSilence();
     _processNewSegmentReceived(newSegments);
-  }
-
-  Future<void> _processNewSegmentReceived(List<TranscriptSegment> newSegments) async {
-    if (newSegments.isEmpty) return;
-    final arrivedAt = _nowSeconds;
-    for (final segment in newSegments) {
-      _segmentArrivals[segment.id] = arrivedAt;
-    }
-    _recordingTelemetry.observeTranscript();
-    final deviceId = _recordingDevice?.id;
-    if (deviceId != null) _wedgeMonitor.onTranscriptObserved(deviceId);
-
-    if (segments.isEmpty && !_isLoadingInProgressConversation) {
-      _isLoadingInProgressConversation = true;
-      // Product: recording is the tap; location is metadata. Refresh at the
-      // first transcript without relying on the long-lived foreground-task
-      // isolate. Fail-open: do not delay segment processing.
-      unawaited(_conversationLocationCapture.captureAndUpload());
-      try {
-        await _loadInProgressConversation();
-      } finally {
-        _isLoadingInProgressConversation = false;
-      }
-    }
-
-    retainManualLiveLabels(segments, newSegments, _manualSpeakerDefaults);
-    final remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
-    segments.addAll(remainSegments);
-
-    // Refresh people cache if we see unknown personIds (backend-created persons)
-    // Check all newSegments, not just remainSegments, to catch updates to existing segments
-    if (_peopleRefreshFuture == null && _hasMissingPerson(newSegments)) {
-      _peopleRefreshFuture = externalActions.refreshPeople().whenComplete(() {
-        _peopleRefreshFuture = null;
-      }).catchError((Object error, StackTrace stack) {
-        Logger.debug('People cache refresh failed: ${error.runtimeType}');
-        return _reportDetachedCaptureError('capture_people_refresh_segments', error, stack);
-      });
-    }
-
-    _segmentsPhotosVersion++; // Bump version so Selector rebuilds
-    hasTranscripts = true;
-    notifyListeners();
   }
 
   void onConnectionStateChanged(bool isConnected) {

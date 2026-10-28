@@ -192,6 +192,10 @@ class Scheduler:
             'owner_key': key,
             'enqueued_at': now,
             'state': 'ready',
+            # Capacity may follow a newly admitted first attempt. This is not
+            # paid permission: per-lease admission replaces it with allowed or
+            # held, or removes it on an unevaluated refusal (also on old workers).
+            'compute_decision': {'outcome': 'unattempted'},
             'attempt': 0,
             'token': '',
             'lease_until': 0.0,

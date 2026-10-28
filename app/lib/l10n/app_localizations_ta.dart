@@ -13721,32 +13721,6 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals வழியில்';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'பதிவேற்றப்படுகிறது: $count';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'கிட்டத்தட்ட தயார்: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count பதிவுகளுக்குக் கவனம் தேவை',
-      one: '1 பதிவுக்குக் கவனம் தேவை',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'இதுவரை எந்தச் செயல்பாடும் இல்லை';
 
   @override
@@ -14531,13 +14505,7 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'முந்தைய பகுதியைத் திறக்கவும்';
-
-  @override
   String get episodeNotesSoon => 'பேச்சின் முதல் சில நிமிடங்களுக்குப் பிறகு குறிப்புகள் தோன்றும்.';
-
-  @override
-  String get episodeOpenAll => 'அனைத்தையும் திற';
 
   @override
   String get episodeWrapUpNow => 'இப்போதே முடி';
@@ -14676,22 +14644,10 @@ class AppLocalizationsTa extends AppLocalizations {
   String get othersSpeakerLabel => 'மற்றவர்கள்';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'முடிந்தது';
@@ -14721,4 +14677,88 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'பதிவேற்றங்கள் சிறிது நேரம் இடைநிறுத்தப்பட்டுள்ளன — தானாகவே தொடரும்';
+
+  @override
+  String episodeContinues(Object title) {
+    return '“$title” தொடர்கிறது';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· $time முதல்';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'இறுதி எழுத்துப்பிரதி வந்தவுடன் குறிப்புகள் தொடங்கும்.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'நீங்கள் பேசும்போது உங்கள் ஃபோனிலேயே எழுதப்படுகிறது. முழு குறிப்புகள் இறுதி எழுத்துப்பிரதியுடன் வரும்.';
+
+  @override
+  String get episodeOnThisPhone => 'இந்த ஃபோனில்';
+
+  @override
+  String get episodeOpenTranscript => 'எழுத்துப்பிரதியைத் திற';
+
+  @override
+  String get liveCardTitle => 'நேரலை';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'இறுதி எழுத்துப்பிரதி சுமார் $duration பின்தங்கியுள்ளது';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'இறுதி எழுத்துப்பிரதி பின்தொடர்கிறது';
+
+  @override
+  String get livePreviewNoEngineBody =>
+      'நீங்கள் சொன்ன ஒன்று அல்லது இரண்டு நிமிடங்களில் உங்கள் வார்த்தைகள் இங்கே தோன்றும்.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'பாதுகாப்பாக பதிவு செய்கிறது';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'இந்த ஃபோனில் நேரலை';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'நேரலை உரையை இயக்கு';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'வழியில் உள்ளது';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'ஆன்லைனில் இருக்கும்போது';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration வழியில் உள்ளது';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'தானாகவே பதிவேற்றப்படும். பதிவுகள் சேரும்போது உரையாடல்கள் உருவாகும்.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'இணையத்திற்குத் திரும்பியதும் தானாகவே பதிவேற்றப்படும். பதிவுகள் சேரும்போது உரையாடல்கள் உருவாகும்.';
+
+  @override
+  String get onTheWayDayUploading => 'பதிவேறுகிறது';
+
+  @override
+  String get onTheWayDayNext => 'அடுத்தது';
+
+  @override
+  String get onTheWayDayQueued => 'வரிசையில் உள்ளது';
+
+  @override
+  String get onTheWayNoDate => 'தேதி இல்லை';
+
+  @override
+  String get onTheWayFootnote =>
+      'தோல்வியுற்ற பதிவுகள் பின்னணியில் மீண்டும் முயற்சிக்கும். எழுத்துப்பெயர்க்க முடியாதவை தானாகவே எங்களுக்குத் தெரிவிக்கப்படும்.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'ஆதரவுக்கான விவரங்கள்';
 }

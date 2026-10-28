@@ -43,9 +43,9 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
     expect(history.conversations, isEmpty);
-    // Home never surfaces an "Open Previous Episode" row (unapproved UI, 2026-10-25); the
-    // link lives only on the live episode page.
-    expect(find.byKey(const Key('previous_episode_link')), findsNothing);
+    // Home never surfaces a previous-episode row (unapproved UI, 2026-10-25); the
+    // Continues pill lives only on the live episode page.
+    expect(find.byKey(const Key('previous_episode_pill')), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });

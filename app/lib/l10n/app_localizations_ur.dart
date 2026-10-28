@@ -13642,32 +13642,6 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals راستے میں';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'اپ لوڈ ہو رہی ہیں: $count';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'تقریباً تیار: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count پر توجہ درکار ہے',
-      one: '1 پر توجہ درکار ہے',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'ابھی تک کوئی سرگرمی نہیں';
 
   @override
@@ -14445,13 +14419,7 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'پچھلی قسط کھولیں';
-
-  @override
   String get episodeNotesSoon => 'گفتگو کے پہلے چند منٹ بعد نوٹس ظاہر ہوں گے۔';
-
-  @override
-  String get episodeOpenAll => 'سب کھولیں';
 
   @override
   String get episodeWrapUpNow => 'ابھی ختم کریں';
@@ -14589,22 +14557,10 @@ class AppLocalizationsUr extends AppLocalizations {
   String get othersSpeakerLabel => 'دیگر';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'مکمل';
@@ -14634,4 +14590,87 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'اپلوڈز چند لمحے کے لیے روک دیے گئے ہیں — یہ خودکار طور پر دوبارہ شروع ہوں گے';
+
+  @override
+  String episodeContinues(Object title) {
+    return '“$title” جاری ہے';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· $time سے';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'نوٹس حتمی نقل کے پہنچنے پر شروع ہوں گے۔';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'آپ بولتے وقت آپ کے فون پر تیار ہوتی ہیں۔ مکمل نوٹس حتمی نقل کے ساتھ آئیں گے۔';
+
+  @override
+  String get episodeOnThisPhone => 'اس فون پر';
+
+  @override
+  String get episodeOpenTranscript => 'نقل کھولیں';
+
+  @override
+  String get liveCardTitle => 'براہِ راست';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'حتمی نقل تقریباً $duration پیچھے ہے';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'حتمی نقل پہنچ رہا ہے';
+
+  @override
+  String get livePreviewNoEngineBody => 'آپ کے الفاظ کہنے کے ایک دو منٹ بعد یہاں ظاہر ہوتے ہیں۔';
+
+  @override
+  String get livePreviewNoEngineTitle => 'محفوظ طریقے سے ریکارڈ ہو رہا ہے';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'اس فون پر براہِ راست';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'براہِ راست متن آن کریں';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'راستے میں ہے';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'آن لائن ہونے پر';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration کا کام مکمل ہو رہا ہے';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'خود بخود اپ لوڈ ہو جاتا ہے۔ جیسے ہی یہ پہنچتا ہے، بات چیتیں بنتی جاتی ہیں۔';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'جیسے ہی آپ دوبارہ آن لائن ہوں گے، خود بخود اپ لوڈ ہو جائے گا۔ جیسے ہی یہ پہنچتا ہے، بات چیتیں بنتی جاتی ہیں۔';
+
+  @override
+  String get onTheWayDayUploading => 'اپ لوڈ ہو رہا ہے';
+
+  @override
+  String get onTheWayDayNext => 'اگلا';
+
+  @override
+  String get onTheWayDayQueued => 'قطار میں';
+
+  @override
+  String get onTheWayNoDate => 'کوئی تاریخ نہیں';
+
+  @override
+  String get onTheWayFootnote =>
+      'ناکام ہونے والی ریکارڈنگز پس منظر میں دوبارہ کوشش کرتی رہتی ہیں۔ جو ہم ٹرانسکرائب نہیں کر سکتے وہ خود بخود ہمیں رپورٹ ہو جاتا ہے۔';
+
+  @override
+  String get onTheWayDetailsForSupport => 'سپورٹ کے لیے تفصیلات';
 }

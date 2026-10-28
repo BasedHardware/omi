@@ -13,7 +13,7 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversations/on_the_way_page.dart';
-import 'package:omi/pages/settings/device/device_catching_up_card.dart';
+import 'package:omi/pages/settings/device/device_live_sections.dart';
 import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -156,16 +156,31 @@ void main() {
     return store;
   }
 
-  testWidgets('large idle backlog shows its status, audio span and reachable On the Way, with no bar', (tester) async {
-    await pump(tester, _Sync(wals: [_wal()]));
-    expect(find.text('Catching up'), findsOneWidget);
-    expect(find.text('Waiting to sync'), findsOneWidget);
-    expect(find.textContaining(' of '), findsNothing);
-    expect(find.byType(LinearProgressIndicator), findsNothing);
-    expect(find.byKey(const Key('device_catching_up_span')), findsOneWidget);
-    expect(tester.widget<Text>(find.byKey(const Key('device_catching_up_span'))).data, contains('11'));
+  final tile = find.byKey(const Key('device_stat_catching_up'));
+  String tileValue(WidgetTester tester) =>
+      tester.widget<Text>(find.descendant(of: tile, matching: find.byType(Text)).at(1)).data!;
+
+  /// Option C: no stage words, date ranges or conversation titles anywhere on the device page.
+  void expectQuiet() {
+    expect(find.text('Waiting to sync'), findsNothing);
+    expect(find.text('Processing'), findsNothing);
+    expect(find.text('Transcribing…'), findsNothing);
+    expect(find.byKey(const Key('device_catching_up_span')), findsNothing);
     expect(find.byKey(const Key('device_catching_up_targets')), findsNothing);
-    await tester.tap(find.byKey(const Key('device_catching_up_on_the_way')));
+    expect(find.textContaining('Conversation '), findsNothing);
+  }
+
+  testWidgets('a large idle backlog is the Catching up tile, and the tile opens On the Way', (tester) async {
+    await pump(tester, _Sync(wals: [_wal()]));
+    expect(tile, findsOneWidget);
+    expect(find.byKey(const Key('device_stat_on_device')), findsNothing);
+    expect(tileValue(tester), '3h');
+    expect(find.descendant(of: tile, matching: find.textContaining('on its way')), findsOneWidget);
+    expect(find.byKey(const Key('device_right_now_catching_up')), findsNothing,
+        reason: 'Right now keeps only Listening');
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    expectQuiet();
+    await tester.tap(tile);
     await tester.pumpAndSettle();
     expect(find.byType(OnTheWayPage), findsOneWidget);
     expect(find.text('All recordings are synced'), findsNothing);
@@ -176,7 +191,7 @@ void main() {
     [],
     ['a', 'b']
   ]) {
-    testWidgets('server-only catch-up stays visible for targets=$ids and opens its work', (tester) async {
+    testWidgets('server-only catch-up stays on the tile for targets=$ids and opens its work', (tester) async {
       final item = PendingWorkItem(
           id: 'sync:j',
           kind: 'sync_job',
@@ -195,12 +210,10 @@ void main() {
       ]);
       await store.refresh();
       await tester.pump();
-      expect(find.text('Catching up'), findsOneWidget);
-      expect(find.text('Processing'), findsOneWidget);
-      expect(find.byType(LinearProgressIndicator), findsNothing);
-      expect(find.byKey(const Key('device_catching_up_span')), findsOneWidget);
-      if (ids.isNotEmpty) expect(find.text('2 conversations · Conversation a · Conversation b'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('device_catching_up_on_the_way')));
+      expect(tile, findsOneWidget);
+      expect(tileValue(tester), '12m');
+      expectQuiet();
+      await tester.tap(tile);
       await tester.pumpAndSettle();
       expect(find.byType(OnTheWayPage), findsOneWidget);
       expect(find.text('All recordings are synced'), findsNothing);
@@ -215,24 +228,20 @@ void main() {
     });
   }
 
-  testWidgets('a never-set device clock cannot stretch the catch-up span to 1985', (tester) async {
+  testWidgets('a never-set device clock still counts its audio but never names 1985', (tester) async {
     await pump(tester, _Sync(wals: [_unsetClockWal(), _wal(minutes: 180)]));
-    expect(find.text('Catching up'), findsOneWidget);
-    final span = tester.widget<Text>(find.byKey(const Key('device_catching_up_span')));
-    expect(span.data, contains('11'));
-    expect(span.data, isNot(contains('1985')));
-    expect(span.data, isNot(contains('Sep 5')));
+    expect(tileValue(tester), '3h 1m');
+    expect(find.textContaining('1985'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('a never-set clock recording alone keeps the card but shows no span', (tester) async {
+  testWidgets('a never-set clock recording alone keeps the tile', (tester) async {
     await pump(tester, _Sync(wals: [_unsetClockWal()]));
-    expect(find.text('Catching up'), findsOneWidget);
-    expect(find.byKey(const Key('device_catching_up_span')), findsNothing);
+    expect(tileValue(tester), '1m');
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('server work stamped before 2024 keeps its card and targets without a 1985 span', (tester) async {
+  testWidgets('server work stamped before 2024 keeps its tile with no title or date', (tester) async {
     final item = PendingWorkItem(
         id: 'sync:j',
         kind: 'sync_job',
@@ -251,9 +260,9 @@ void main() {
     ]);
     await store.refresh();
     await tester.pump();
-    expect(find.text('Catching up'), findsOneWidget);
-    expect(find.byKey(const Key('device_catching_up_span')), findsNothing);
-    expect(find.text('1 conversation · Before its clock was set'), findsOneWidget);
+    expect(tileValue(tester), '12m');
+    expect(find.text('Before its clock was set'), findsNothing);
+    expect(find.textContaining('1985'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -271,7 +280,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('a synced phone twin hides the card instead of opening an empty page', (tester) async {
+  testWidgets('a synced phone twin hides the tile instead of opening an empty page', (tester) async {
     final phone = _wal(minutes: 4, status: WalStatus.synced)..storage = WalStorage.disk;
     final deviceTwin = _wal(minutes: 4);
     await pump(tester, _Sync(wals: [phone, deviceTwin]));
@@ -279,12 +288,11 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('phone-only waiting audio shows the waiting status, with no bar', (tester) async {
+  testWidgets('phone-only waiting audio is a duration, with no stage word or bar', (tester) async {
     final phone = _wal(minutes: 180)..storage = WalStorage.disk;
     await pump(tester, _Sync(wals: [phone]));
-    expect(find.text('Catching up'), findsOneWidget);
-    expect(find.text('Waiting to sync'), findsOneWidget);
-    expect(find.text('Processing'), findsNothing);
+    expect(tileValue(tester), '3h');
+    expectQuiet();
     expect(find.byType(LinearProgressIndicator), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -303,22 +311,22 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('retry-exhausted audio never holds the card on its own', (tester) async {
+  testWidgets('retry-exhausted audio never holds the tile on its own', (tester) async {
     final failed = _wal(minutes: 180)
       ..retryCount = 99
       ..timerStart += 60;
     final waiting = _wal(minutes: 1);
     final sync = _Sync(wals: [failed, waiting]);
     await pump(tester, sync);
-    expect(find.text('Catching up'), findsOneWidget);
-    expect(find.text('Waiting to sync'), findsOneWidget);
+    expect(tileValue(tester), '1m', reason: 'the exhausted recording is not counted as on its way');
     sync.update([failed]);
     await tester.pump();
     expect(find.text('Catching up'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('card wraps at 200 percent text scale', (tester) async {
+  testWidgets('the tile wraps at 200 percent text scale', (tester) async {
+    var opened = 0;
     await tester.pumpWidget(MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
@@ -328,25 +336,31 @@ void main() {
               body: SizedBox(
                   width: 320,
                   child: SingleChildScrollView(
-                      child: DeviceCatchingUpCard(
-                    summary: const DeviceCatchUpSummary(
-                        status: 'Waiting to sync',
-                        targetIds: {'a', 'b'},
-                        targetTitles: ['A very long conversation title', 'Another conversation']),
-                    onOpen: () {},
+                      child: DeviceStatsRow(
+                    batteryLevel: 72,
+                    isCharging: true,
+                    heardTodaySeconds: 33 * 60,
+                    onDeviceSeconds: 0,
+                    catchUpSeconds: 8 * 3600 + 14 * 60,
+                    catchUpCaption: 'when online',
+                    onOpenCatchUp: () => opened++,
                   )))),
         )));
     expect(tester.takeException(), isNull);
     final semantics = tester.ensureSemantics();
-    expect(tester.getSemantics(find.byKey(const Key('device_catching_up_on_the_way'))).label, 'On the Way');
+    expect(tester.getSemantics(tile).label, 'Catching up, 8h 14m, when online');
+    expect(tester.getSemantics(tile).flagsCollection.isButton, isTrue);
+    expect(tester.getSize(tile).height, greaterThanOrEqualTo(44));
     semantics.dispose();
+    await tester.tap(tile);
+    expect(opened, 1);
   });
 
   testWidgets('a WAL-less server phase remains reachable', (tester) async {
     await pump(tester, _Sync(state: const SyncState(status: SyncStatus.fetchingConversations)));
-    expect(find.text('Catching up'), findsOneWidget);
-    expect(find.byKey(const Key('device_catching_up_on_the_way')), findsOneWidget);
-    await tester.tap(find.byKey(const Key('device_catching_up_on_the_way')));
+    expect(tile, findsOneWidget);
+    expect(tileValue(tester), '—', reason: 'pending but not yet measured');
+    await tester.tap(tile);
     await tester.pumpAndSettle();
     expect(find.byType(OnTheWayPage), findsOneWidget);
     expect(find.text('All recordings are synced'), findsNothing);

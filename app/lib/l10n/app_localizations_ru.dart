@@ -13674,32 +13674,6 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals в пути';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'Загружается: $count';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'Почти готово: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Требуют внимания: $count',
-      one: '1 требует внимания',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Пока нет активности';
 
   @override
@@ -14480,13 +14454,7 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Открыть предыдущий эпизод';
-
-  @override
   String get episodeNotesSoon => 'Заметки появятся после первых минут разговора.';
-
-  @override
-  String get episodeOpenAll => 'Открыть всё';
 
   @override
   String get episodeWrapUpNow => 'Завершить сейчас';
@@ -14624,22 +14592,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get othersSpeakerLabel => 'Другие';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Готово';
@@ -14669,4 +14625,87 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'Загрузка ненадолго приостановлена — она возобновится автоматически';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Продолжение «$title»';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· с $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Заметки появятся, когда прибудет финальная расшифровка.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Создаются на вашем телефоне, пока вы говорите. Полные заметки появятся вместе с финальной расшифровкой.';
+
+  @override
+  String get episodeOnThisPhone => 'На этом телефоне';
+
+  @override
+  String get episodeOpenTranscript => 'Открыть расшифровку';
+
+  @override
+  String get liveCardTitle => 'Прямой эфир';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Финальная расшифровка отстает примерно на $duration';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'Финальная расшифровка догоняет';
+
+  @override
+  String get livePreviewNoEngineBody => 'Ваши слова появятся здесь через минуту-две после того, как вы их произнесли.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Безопасная запись';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Прямой эфир на этом телефоне';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Включить текст прямой трансляции';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'в пути';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'когда появится сеть';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration в пути';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'Загрузка идёт автоматически. Разговоры появятся по мере поступления записей.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Загрузка возобновится автоматически, когда вы снова будете онлайн. Разговоры появятся по мере поступления записей.';
+
+  @override
+  String get onTheWayDayUploading => 'Загружается';
+
+  @override
+  String get onTheWayDayNext => 'Следующие';
+
+  @override
+  String get onTheWayDayQueued => 'В очереди';
+
+  @override
+  String get onTheWayNoDate => 'Без даты';
+
+  @override
+  String get onTheWayFootnote =>
+      'Если загрузка записи завершится сбоем, попытки продолжатся в фоновом режиме. Всё, что мы не сможем расшифровать, будет автоматически отправляться нам.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Подробности для поддержки';
 }

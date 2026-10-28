@@ -69,6 +69,7 @@ Wal _fullyPopulated() => Wal(
       syncedAt: 4,
       keptForTranscriptRecovery: true,
       clockRun: 'run',
+      uploadRejectionReason: WalUploadRejection.serverRefused,
     );
 
 /// One mutation per key [Wal.toJson] writes. The key set is asserted against
@@ -113,6 +114,11 @@ final _mutations = <String, void Function(Wal)>{
   'last_retry_at': (w) => w.lastRetryAt = 6,
   'job_id': (w) => w.jobId = 'job-2',
   'uploaded_at': (w) => w.uploadedAt = 7,
+  'job_pending_confirmed_at': (w) => w.jobPendingConfirmedAt = 42,
+  'upload_rejection_reason': (w) => w.uploadRejectionReason = WalUploadRejection.invalidFile,
+  'upload_rejection_status_code': (w) => w.uploadRejectionStatusCode = 413,
+  'upload_rejected_at': (w) => w.uploadRejectedAt = 43,
+  'upload_refusal_last_attempt_at': (w) => w.uploadRefusalLastAttemptAt = 44,
   'synced_at': (w) => w.syncedAt = 8,
   'kept_for_transcript_recovery': (w) => w.keptForTranscriptRecovery = false,
   'clock_run': (w) => w.clockRun = 'run-2',
