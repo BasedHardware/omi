@@ -178,7 +178,11 @@ List<_ConversationListRow> _buildConversationListRows({
     // Revealed clips take their place in the day's timeline, not a pile at its end.
     final conversations = revealedNoiseDates.contains(date) && folded.isNotEmpty
         // omi-perf-allow: sort-in-build -- one revealed day's rows, only while that day is revealed
-        ? ([...shown, ...folded]..sort((x, y) => y.createdAt.compareTo(x.createdAt)))
+        ? ([
+            ...shown,
+            for (final c in folded)
+              if (c.isFoldedNoise && !shown.any((s) => s.id == c.id)) c,
+          ]..sort((x, y) => y.createdAt.compareTo(x.createdAt)))
         : shown;
     final recordings = recordingsByDate[date] ?? const <LocalRecording>[];
     final entries = buildConversationGroupEntries(conversations: conversations, recordings: recordings);
@@ -653,14 +657,17 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               };
         // Episodes beta, default view: background conversations live in the day's recap, not on Home.
         final hidingBackground = episodesOn && showRecordings && !convoProvider.isSelectionModeActive;
+        final folding =
+            showRecordings && !convoProvider.isSelectionModeActive && !convoProvider.showDiscardedConversations;
         final builtRows = _buildConversationListRows(
           dates: mergedDates,
           conversationsByDate: hidingBackground ? _withoutBackground(conversationsByDate) : conversationsByDate,
           recordingsByDate: recordingsByDate,
-          foldedNoiseCounts:
-              showRecordings && !convoProvider.isSelectionModeActive ? convoProvider.foldedNoiseCounts : const {},
-          foldedNoiseByDate: convoProvider.foldedNoiseByDate,
-          revealedNoiseDates: convoProvider.revealedNoiseDates,
+          // Only the plain default view folds: a search, folder, selection or "show discarded"
+          // list shows exactly what it matched.
+          foldedNoiseCounts: folding ? convoProvider.foldedNoiseCounts : const {},
+          foldedNoiseByDate: folding ? convoProvider.foldedNoiseByDate : const {},
+          revealedNoiseDates: folding ? convoProvider.revealedNoiseDates : const {},
         );
         final withLive =
             episodeLive ? _withTodayRow(builtRows, DateTime.now(), _ConversationListRowKind.liveEpisode) : builtRows;

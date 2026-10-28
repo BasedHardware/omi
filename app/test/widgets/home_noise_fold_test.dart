@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -5,7 +6,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -26,15 +26,11 @@ import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
 import 'package:omi/backend/schema/pending_work.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/backend/schema/structured.dart';
-import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/local_recording.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
-import 'package:omi/pages/conversation_detail/page.dart' show ConversationDetailPage;
 import 'package:omi/pages/conversations/conversations_page.dart';
-import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
-import 'package:omi/pages/episodes/live_episode_row.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -52,7 +48,6 @@ import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
-import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/services/wals/wal.dart' show Wal;
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -237,18 +232,7 @@ DateTime _today(int h, int m) {
 
 final _seedNow = _today(23, 40);
 
-TranscriptSegment _segment(int i) => TranscriptSegment(
-      id: 'seg-$i',
-      text: 'Line $i of a long conversation about rollout lanes and capacity.',
-      speaker: 'SPEAKER_0',
-      isUser: true,
-      personId: null,
-      translations: [],
-      start: i * 8.0,
-      end: i * 8.0 + 7,
-    );
-
-ServerConversation _conversation(int i, {int segmentCount = 0, String? salience}) => _day[i % _day.length].build(i);
+ServerConversation _conversation(int i) => _day[i % _day.length].build(i);
 
 ServerConversation _titled(String id, String title, String emoji, DateTime at, Duration length, {bool noise = false}) =>
     ServerConversation(
@@ -304,14 +288,8 @@ Episode _liveEpisode() => Episode(
       stateUpdatedAt: _seedNow,
     );
 
-/// Home as David sees it: a pendant streaming into a live episode (the live
-/// row), 30 conversations as the list endpoint projects them (two lines each),
-/// and the detail endpoint hydrating an opened one with its full transcript.
+/// Home with a live episode, a realistic day of conversations, and that day's folded noise clips.
 class _Home {
-  _Home({this.background = const {}});
-
-  /// Conversations whose notes call them background (Episodes M3).
-  final Set<int> background;
   DateTime now = _seedNow;
   late final _LiveCapture capture = _LiveCapture();
   late final EpisodeProvider episodes = EpisodeProvider(
@@ -323,8 +301,7 @@ class _Home {
   );
   late final ConversationProvider conversations = ConversationProvider(isSignedIn: () => false)
     ..conversations = [
-      for (var i = 0; i < _day.length; i++)
-        _conversation(i, segmentCount: 2, salience: background.contains(i) ? 'background' : null),
+      for (var i = 0; i < _day.length; i++) _conversation(i),
     ]
     ..groupConversationsByDate()
     ..foldedNoiseCounts = {_today(0, 0): _folded.length}
@@ -336,7 +313,7 @@ class _Home {
     ..conversationDetailsFetcherOverride = (id) async => hydrated(int.parse(id.substring('conv-'.length)));
 
   /// The detail endpoint's copy: the same conversation with every line.
-  ServerConversation hydrated(int i, {int segmentCount = 1500}) => _conversation(i, segmentCount: segmentCount);
+  ServerConversation hydrated(int i) => _conversation(i);
 }
 
 Widget _app(_Home home) {
@@ -399,76 +376,6 @@ Widget _app(_Home home) {
       ),
     ),
   );
-}
-
-Future<_Home> _pumpHome(WidgetTester tester, {Set<int> background = const {}}) async {
-  tester.view.physicalSize = const Size(800, 1600);
-  tester.view.devicePixelRatio = 1.0;
-  addTearDown(tester.view.resetPhysicalSize);
-  addTearDown(tester.view.resetDevicePixelRatio);
-  final home = _Home(background: background);
-  await tester.pumpWidget(_app(home));
-  await tester.pump();
-  await tester.pump(const Duration(milliseconds: 300));
-  expect(find.byType(LiveEpisodeRow), findsOneWidget, reason: 'Home must show the live episode row');
-  expect(find.byType(ConversationListItem), findsWidgets);
-  expect(tester.binding.transientCallbackCount, greaterThan(0), reason: 'Home must be animating');
-  return home;
-}
-
-/// Rebuilds by widget type while [body] runs.
-Future<Map<String, int>> _rebuildsDuring(Future<void> Function() body) async {
-  final builds = <String, int>{};
-  final previous = debugOnRebuildDirtyWidget;
-  debugOnRebuildDirtyWidget = (element, builtOnce) {
-    builds.update(element.widget.runtimeType.toString(), (n) => n + 1, ifAbsent: () => 1);
-    previous?.call(element, builtOnce);
-  };
-  try {
-    await body();
-  } finally {
-    debugOnRebuildDirtyWidget = previous;
-  }
-  return builds;
-}
-
-Future<void> _tickSeconds(WidgetTester tester, int seconds) async {
-  for (var i = 0; i < seconds; i++) {
-    await tester.pump(const Duration(seconds: 1));
-  }
-}
-
-Future<void> _openAndCloseRow(WidgetTester tester, String conversationId) async {
-  await tester.tap(find.byKey(ValueKey(conversationId)));
-  for (var i = 0; i < 3; i++) {
-    await tester.pump(const Duration(milliseconds: 400));
-  }
-  expect(find.byType(ConversationDetailPage), findsOneWidget);
-  Navigator.of(tester.element(find.byType(ConversationDetailPage))).pop();
-  await tester.pump();
-  await tester.pump(const Duration(seconds: 1));
-  expect(find.byType(ConversationDetailPage), findsNothing);
-}
-
-/// Fires every short timer the page leaves after a scroll or a list update,
-/// before and after the tree goes away, so the binding's pending-timer check
-/// sees none.
-Future<void> _drainAndUnmount(WidgetTester tester) async {
-  await tester.pump(const Duration(seconds: 1));
-  await tester.pumpWidget(const SizedBox.shrink());
-  await tester.pump(const Duration(seconds: 1));
-}
-
-/// Five ticks may rebuild the page shell once (the 30-second episode poll or the midnight rollover
-/// can land in the window), never once per tick, and never a conversation row. A shell rebuild
-/// also rebuilds the clock's element, so only the shell bound, not the clock count, guards the
-/// per-tick amplification.
-void _expectTickStaysInLeaf(Map<String, int> rebuilds, {required String when}) {
-  expect(rebuilds['LiveEpisodeClock'] ?? 0, greaterThanOrEqualTo(5), reason: '$when: the clock must tick each second');
-  expect(rebuilds['ConversationListItem'], isNull, reason: '$when: a tick must not rebuild a conversation row');
-  for (final shell in ['ConversationsPage', 'ConversationCaptureWidget']) {
-    expect(rebuilds[shell] ?? 0, lessThanOrEqualTo(1), reason: '$when: a tick must not rebuild $shell');
-  }
 }
 
 const _out = String.fromEnvironment('OMI_NOISE_FOLD_RENDER_DIR');
@@ -546,6 +453,50 @@ void main() {
     provider.showDiscardedConversations = true;
     await provider.refreshFoldedNoiseCounts();
     expect(provider.foldedNoiseCounts, isEmpty);
+  });
+
+  test('sign-out forgets the fold, and a reply for the old account is dropped', () async {
+    final provider = ConversationProvider(isSignedIn: () => false)
+      ..conversations = [_day.first.build(0)]
+      ..groupConversationsByDate();
+    final reply = Completer<Map<DateTime, int>?>();
+    provider.hiddenNoiseCountsFetcherOverride = (start, end) => reply.future;
+    final pending = provider.refreshFoldedNoiseCounts();
+    provider
+      ..foldedNoiseByDate[_today(0, 0)] = _folded
+      ..revealedNoiseDates.add(_today(0, 0))
+      ..clearUserData();
+    reply.complete({_today(0, 0): 4});
+    await pending;
+    expect(provider.foldedNoiseCounts, isEmpty);
+    expect(provider.foldedNoiseByDate, isEmpty);
+    expect(provider.revealedNoiseDates, isEmpty);
+  });
+
+  test('a clip deleted on this phone leaves its day\'s fold', () {
+    final provider = ConversationProvider(isSignedIn: () => false)
+      ..foldedNoiseCounts = {_today(0, 0): 4}
+      ..foldedNoiseByDate[_today(0, 0)] = List.of(_folded);
+    provider.dropFromFoldedNoise('noise-2');
+    expect(provider.foldedNoiseCounts, {_today(0, 0): 3});
+    expect(provider.foldedNoiseByDate[_today(0, 0)]!.map((c) => c.id), isNot(contains('noise-2')));
+  });
+
+  testWidgets('show discarded lists everything and folds nothing', (tester) async {
+    tester.view.physicalSize = const Size(390, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final home = _Home();
+    home.conversations
+      ..showDiscardedConversations = true
+      ..foldedNoiseByDate[_today(0, 0)] = _folded
+      ..revealedNoiseDates.add(_today(0, 0));
+    await tester.pumpWidget(_app(home));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byKey(ValueKey('noise_fold_${_today(0, 0).toIso8601String()}')), findsNothing);
+    expect(find.text('Mm-'), findsNothing, reason: 'no folded rows merge into a show-discarded list');
   });
 
   testWidgets('folded', (tester) => _shoot(tester, '1-folded', reveal: false, height: 844));
