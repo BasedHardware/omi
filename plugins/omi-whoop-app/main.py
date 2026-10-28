@@ -22,11 +22,7 @@ except ImportError:  # pragma: no cover - defensive for minimal test stubs
     def Depends(dependency=None, **kwargs):
         return dependency
 
-try:
-    from whoop_tools_auth import require_whoop_tools_auth
-except ImportError:  # pragma: no cover - defensive for minimal test stubs
-    def require_whoop_tools_auth(*args, **kwargs):
-        return None
+from whoop_tools_auth import require_whoop_tools_auth
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
 from db import (
