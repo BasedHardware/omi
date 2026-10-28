@@ -1312,6 +1312,16 @@ def _l1_candidate_subject(
         user_name=user_name,
         segments=prompt_segments,
     )
+    if roles is not None:
+        about_norm = _normalized_l1_subject_label(about)
+        user_alias = _normalized_l1_subject_label(user_name)
+        owner_about = about_norm in {'user', 'the user', 'primary user'} or bool(
+            user_alias and about_norm == user_alias
+        )
+        if owner_about and not explicitly_self_referential(evidence_quotes, segments):
+            # A speaker can report somebody else's fact. An ungrounded model
+            # subject must not be silently replaced with the quote's author.
+            return None, SubjectAttribution.unknown, 'unknown'
     if roles is not None and subject[1] == SubjectAttribution.user:
         # Aboutness and utterance source are separate. Even the owner's own
         # voice can be reporting another person's circumstances. No fallback

@@ -34,7 +34,7 @@ from utils.conversations.owner_attribution import (
     SpeakerRoleMap,
 )
 from utils.conversations.wake_word import WAKE_WORD_MARKER, escape_spoken_wake_word_marker, find_wake_word_segment_ids
-from utils.speakers.display import DisplayParticipants, display_participants, _clean_name
+from utils.speakers.display import DisplayParticipants, display_participants
 
 
 class _TranscriptSource(Protocol):
@@ -115,6 +115,7 @@ def _speaker_map(
     display = display or display_participants(segments, names=people_map, owner_name=user_name)
     roles = roles if roles is not None else speaker_role_projection(segments)
     speaker_map.role_evidence_authoritative = roles is not None
+    cluster_bindings: dict[tuple[Optional[str], int], set[Optional[str]]] = {}
     tallies: dict[tuple[Optional[str], int], tuple[bool, list[str], float, int]] = {}
     for segment in segments:
         speaker_id = getattr(segment, 'speaker_id', None)
@@ -139,7 +140,11 @@ def _speaker_map(
         if roles is not None:
             cluster_key = speaker_cluster_key(segment)
             role = roles.clusters.get(cluster_key, UNKNOWN_ROLE) if cluster_key is not None else UNKNOWN_ROLE
-            name = _clean_name(role.name(user_name, people_map))
+            expected_name = role.name(user_name, people_map)
+            # Reuse the display policy's name qualification without widening
+            # identity authority or importing its private formatting helper.
+            name = expected_name if name and ' '.join(name.split()) == expected_name else None
+            cluster_bindings.setdefault(key, set()).add(name)
         if prompt_key not in speaker_map:
             speaker_map[prompt_key] = name
         elif roles is not None and speaker_map[prompt_key] != name:
@@ -149,7 +154,9 @@ def _speaker_map(
         if roles is not None:
             role = roles.clusters.get((scope, speaker_id), UNKNOWN_ROLE)
             owner = role.role == 'primary_user'
-            name = _clean_name(role.name(user_name, people_map)) if role.person_id else None
+            bindings = cluster_bindings.get((scope, speaker_id), set())
+            name = role.name(user_name, people_map) if role.person_id else None
+            name = name if name and bindings == {name} else None
             names = [name] if name else []
         clusters.append(
             SpeakerCluster(

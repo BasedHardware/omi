@@ -209,7 +209,7 @@ def speaker_role_map(
             candidate = contact_evidence.get(_field(row, 'id'))
             if candidate and candidate.person_id != person_id and not manual:
                 return UNKNOWN_ROLE
-            return SpeakerRole('other', person_id, candidate.display_name if candidate else None)
+            return SpeakerRole('other', person_id, candidate.display_name if candidate else _field(row, 'person_name'))
         if not _field(row, 'is_user', False) and not manual:
             return contact_evidence.get(_field(row, 'id'), UNKNOWN_ROLE)
         return UNKNOWN_ROLE

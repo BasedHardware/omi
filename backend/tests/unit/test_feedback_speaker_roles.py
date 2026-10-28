@@ -212,6 +212,22 @@ def test_subject_and_quote_authorship_are_independent(pc):
     )
 
 
+@pytest.mark.parametrize('about', ['user', 'the user', 'David'])
+def test_report_about_owner_does_not_become_quote_authors_fact(pc, about):
+    owner = segment(owner=True, source='auto', text='I prefer tea.')
+    contact = segment('b', voice=1, person='sam', text='David prefers tea.')
+    subject = pc._l1_candidate_subject(
+        source_id='synthetic',
+        about=about,
+        speaker_label='speaker_1',
+        evidence_quotes=[contact.text],
+        user_name='David',
+        segments=[owner, contact],
+    )
+    assert subject == (None, SubjectAttribution.unknown, 'unknown')
+    assert quote_source_attribution([contact.text], [owner, contact]) == 'third_party'
+
+
 def test_daily_summary_actual_generated_input_keeps_subjects_and_omits_transcript():
     conv = conversation([segment(text='PRIVATE TRANSCRIPT SENTINEL')])
     text = conversations_to_string([conv], user_name='David')
