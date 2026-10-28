@@ -10,7 +10,6 @@ from __future__ import annotations
 import threading
 import unittest
 import json
-import os
 from pathlib import Path
 
 from omi_cli.auth.store import store_api_key
@@ -54,9 +53,8 @@ class TestConcurrentConfigStore(unittest.TestCase):
         # Verify the final state contains keys for both profiles
         data = json.loads(config_path.read_text(encoding="utf-8"))
         
-        # Verify the structure matches the actual implementation's expectation
-        # (Assuming the implementation uses a nested structure or flat keys)
-        self.assertIn("alpha", data)
-        self.assertIn("beta", data)
-        self.assertEqual(data["alpha"], "KEY-A-9")
-        self.assertEqual(data["beta"], "KEY-B-9")
+        self.assertIn("profiles", data)
+        self.assertIn("alpha", data["profiles"])
+        self.assertIn("beta", data["profiles"])
+        self.assertEqual(data["profiles"]["alpha"]["api_key"], "KEY-A-9")
+        self.assertEqual(data["profiles"]["beta"]["api_key"], "KEY-B-9")
