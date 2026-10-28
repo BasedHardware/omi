@@ -747,8 +747,10 @@ Both legacy intake and batch projection emit fresh append and stamp markers
 through one post-commit consumer. Append timing observes final survivors
 independently of the dedupe policy, including fleet safety dedupe. Filter append
 lines to `lineage_admitted=true` for the cohort widening formula. On cohort live
-targets, capture-proof plus lexical lineage dedupe takes precedence over fleet
-fuzzy dedupe and refactor proposals; non-cohort fleet policy is unchanged.
+targets, capture-proof plus lexical lineage dedupe composes with fleet fuzzy
+dedupe: lineage lexical drops and exact retries run first, then the unchanged
+fleet pass runs on their survivors. Refactor proposals may not override lineage
+lexical abstentions; non-cohort fleet policy is unchanged.
 Finite zero-length donor intervals contribute zero seconds without invalidating
 the bridge; inverted/nonfinite donor timing remains unknown.
 Bridge observations have a separate denominator from resolver decisions and

@@ -12,8 +12,11 @@ suppresses — an unproven identical utterance is legitimate repetition. The
 exact-retry pass then drops identical normalized text plus identical absolute
 range or segment id only for a capture-proven segment or one sharing the
 stored line's nonempty ``sync:`` scope; anything ambiguous is kept. On admitted
-live targets this contract takes precedence over fleet safety-WAL fuzzy dedupe
-and capture-refactor serving proposals; neither may drop a lexical abstention.
+live targets this contract composes with fleet safety-WAL fuzzy dedupe: the
+lineage lexical and exact-retry passes run first, then the unchanged fleet
+matcher runs on their survivors. Final survivors determine append and repeat
+timing. This contract retains precedence over capture-refactor serving
+proposals, which may not drop a lexical abstention.
 Non-cohort users retain their existing fleet/refactor policy.
 
 Stored sync donors consolidated into a live target use the same gate at the

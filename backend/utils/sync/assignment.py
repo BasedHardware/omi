@@ -628,6 +628,7 @@ def assign_in_transaction(
             and result['sync_live_target']
             and sync_live_dedupe_active_for(user_ref.id)
         )
+        survivors = new
         if live_dedupe and plan_target is not None and live_row is not None:
             verified = capture_covered_indices(
                 new,
@@ -662,11 +663,14 @@ def assign_in_transaction(
                 'exact_retries': exact_retries,
                 'sync_retry': sync_retry,
             }
-        else:
+        if fleet_live_dedupe or not live_dedupe:
+            # Compose the cohort contract with the shipped fleet matcher:
+            # capture-proven lexical drops and exact retries run first, then
+            # fleet fuzzy dedupe sees only their survivors.
             survivors = dedupe_segments_for_merge(
                 origin,
                 existing,
-                new,
+                survivors,
                 fuzzy_live_overlap=fleet_live_dedupe,
                 text_match_slop_seconds=(
                     60
@@ -683,8 +687,8 @@ def assign_in_transaction(
                 single_match_slop_seconds=2 if plan_target and result['sync_live_target'] else 0,
             )
         if not live_dedupe:
-            # Fleet/refactor fuzzy matching may drop unproven speech. It must
-            # never override the admitted lineage contract's lexical abstention.
+            # Capture-refactor serving proposals must not override the
+            # admitted lineage contract's lexical abstention.
             survivors = choose_segments(
                 user_ref.id,
                 'incoming',
