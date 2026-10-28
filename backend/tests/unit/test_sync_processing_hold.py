@@ -265,12 +265,14 @@ def test_hold_scheduling_respects_the_existing_outbox_runtime_boundary(monkeypat
     assert hold.scheduling_enabled() is expected
 
 
+@pytest.mark.parametrize('switch_on', [True, False])
 @pytest.mark.parametrize('trigger', ['client_finalize', 'backlog_choice', 'first_open', 'user_reprocess'])
-def test_explicit_end_satisfies_hold_immediately_without_spending_late_budget(monkeypatch, trigger):
+def test_explicit_end_satisfies_hold_immediately_without_spending_late_budget(monkeypatch, trigger, switch_on):
     world = World(monkeypatch)
     world.add('parent', 0, 5, sync_content_revision=2, **{hold.FIELD: {'pending_since': 100, 'last_content_at': 100}})
     current = world.get('user-1', 'parent')
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('SYNC_PROCESSING_HOLD_ENABLED', str(switch_on).lower())
     sync_hold_completion.complete_explicit(
         'user-1', callback.deserialize_conversation(current), ProcessingTrigger(trigger)
     )
@@ -521,3 +523,17 @@ def test_deferred_effects_wake_respects_settlement_deadline_on_demand(state, mon
     assert schedule.call_args.kwargs['not_before'] == 950
     assert not outbox.effects_may_run_early(current)
     assert outbox.effects_may_run_early(dict(current, deferred_reason=None))
+
+
+def test_explicit_rollback_only_settles_existing_hold_metadata(monkeypatch):
+    world = World(monkeypatch)
+    world.add('parent', 0, 5, sync_content_revision=2)
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('SYNC_PROCESSING_HOLD_ENABLED', 'false')
+    complete = Mock()
+    monkeypatch.setattr(callback.conversations_db, 'complete_sync_processing_hold', complete)
+    sync_hold_completion.complete_explicit(
+        'user-1', callback.deserialize_conversation(world.get('user-1', 'parent')), ProcessingTrigger.BACKLOG_CHOICE
+    )
+    complete.assert_not_called()
+    assert hold.FIELD not in world.raw('parent')
