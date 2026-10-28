@@ -139,7 +139,11 @@ def assert_batch_write_allowed(
         # after another writer. The server revision prevents that ABA: replay
         # commits get a new update_time, including deletion/recreation. Keep
         # nanoseconds too rather than relying on datetime's microsecond equality.
-        version = (token, revision.isoformat(), getattr(revision, 'nanosecond', 0)) if eligible else None
+        version = (
+            (token, revision.isoformat(), getattr(revision, 'nanosecond', 0))
+            if eligible and revision is not None
+            else None
+        )
         generation = attempt.get(key, version) if eligible else None
         if generation is not None and (expected_generation is None or generation == expected_generation):
             return generation

@@ -73,9 +73,11 @@ def with_batch_privacy_attempt(function):
     if inspect.iscoroutinefunction(function):
 
         @wraps(function)
-        async def wrapped(*args, **kwargs):
+        async def async_wrapped(*args, **kwargs):
             with batch_privacy_attempt():
                 return await function(*args, **kwargs)
+
+        return async_wrapped
 
     else:
 

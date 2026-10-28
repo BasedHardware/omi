@@ -8,7 +8,7 @@ positions are preserved. Install in every writer process before enabling readers
 import functools
 import hashlib
 import inspect
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from google.api_core.exceptions import GoogleAPICallError
@@ -24,8 +24,11 @@ from google.cloud.firestore_v1.types import (
     Write,
     WriteResult,
 )
-from google.rpc.status_pb2 import Status
+from google.rpc import status_pb2
 from database.batch_privacy_attempt import TOKEN_FIELD, SCHEMA_FIELD, TOKEN_SCHEMA
+
+# Protobuf builds this class dynamically; the installed module has no typed declaration.
+Status = cast(Any, status_pb2).Status
 
 PRIVACY_COLLECTION = 'batch_pipeline_privacy'
 _ROOT_AUTHORITIES = frozenset({'account_deletions', 'legal_holds', 'legal_hold_deletion_gates'})
@@ -124,16 +127,20 @@ def _wrap_commit(original: Any) -> Any:
     if inspect.iscoroutinefunction(original):
 
         @functools.wraps(original)
-        async def wrapped(client, request=None, **kwargs):
+        async def async_wrapped(client, request=None, **kwargs):
             prepared, count = prepare(request, kwargs)
             return response(await original(client, request=prepared, **kwargs), count)
+
+        wrapped = async_wrapped
 
     else:
 
         @functools.wraps(original)
-        def wrapped(client, request=None, **kwargs):
+        def sync_wrapped(client, request=None, **kwargs):
             prepared, count = prepare(request, kwargs)
             return response(original(client, request=prepared, **kwargs), count)
+
+        wrapped = sync_wrapped
 
     setattr(wrapped, '_omi_batch_privacy_fence', True)
     return wrapped
@@ -182,7 +189,7 @@ def _wrap_bulk(original: Any) -> Any:
     if inspect.iscoroutinefunction(original):
 
         @functools.wraps(original)
-        async def wrapped(client, request=None, **kwargs):
+        async def async_wrapped(client, request=None, **kwargs):
             prepared, indices = _bulk_parts(request)
             if not indices:
                 return await original(client, request=request, **kwargs)
@@ -203,10 +210,12 @@ def _wrap_bulk(original: Any) -> Any:
             rest = await original(client, request=pending, **kwargs) if pending.writes else None
             return finish(prepared, indices, individual, rest)
 
+        wrapped = async_wrapped
+
     else:
 
         @functools.wraps(original)
-        def wrapped(client, request=None, **kwargs):
+        def sync_wrapped(client, request=None, **kwargs):
             prepared, indices = _bulk_parts(request)
             if not indices:
                 return original(client, request=request, **kwargs)
@@ -224,6 +233,8 @@ def _wrap_bulk(original: Any) -> Any:
             pending = remainder(prepared, indices)
             rest = original(client, request=pending, **kwargs) if pending.writes else None
             return finish(prepared, indices, individual, rest)
+
+        wrapped = sync_wrapped
 
     setattr(wrapped, '_omi_batch_privacy_fence', True)
     return wrapped
