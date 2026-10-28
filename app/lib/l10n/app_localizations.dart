@@ -16413,10 +16413,10 @@ abstract class AppLocalizations {
   /// **'Unlimited chat messages this month'**
   String get unlimitedChatThisMonth;
 
-  /// No description provided for @chatUsedOfLimitCompute.
+  /// Compute budget usage; used and limit are already formatted unambiguous USD amounts.
   ///
   /// In en, this message translates to:
-  /// **'\${used} of \${limit} compute budget used'**
+  /// **'{used} of {limit} compute budget used'**
   String chatUsedOfLimitCompute(String used, String limit);
 
   /// No description provided for @chatUsedOfLimitMessages.
@@ -16515,16 +16515,16 @@ abstract class AppLocalizations {
   /// **'{count} questions per month'**
   String operatorSubtitle(int count);
 
-  /// No description provided for @chatUsageCost.
+  /// Chat compute usage; used and limit are already formatted unambiguous USD amounts.
   ///
   /// In en, this message translates to:
-  /// **'Chat: \${used} / \${limit} used this month'**
+  /// **'Chat: {used} / {limit} used this month'**
   String chatUsageCost(String used, String limit);
 
-  /// No description provided for @chatUsageCostNoLimit.
+  /// Chat compute usage; used is an already formatted unambiguous USD amount.
   ///
   /// In en, this message translates to:
-  /// **'Chat: \${used} used this month'**
+  /// **'Chat: {used} used this month'**
   String chatUsageCostNoLimit(String used);
 
   /// No description provided for @chatUsageMessages.

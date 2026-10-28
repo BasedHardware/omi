@@ -8894,12 +8894,12 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'చాట్: \$$used / \$$limit ఈ నెల ఉపయోగించబడింది';
+    return 'చాట్: $used / $limit ఈ నెల ఉపయోగించబడింది';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'చాట్: \$$used ఈ నెల ఉపయోగించబడింది';
+    return 'చాట్: $used ఈ నెల ఉపయోగించబడింది';
   }
 
   @override

@@ -8776,12 +8776,12 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'צ\'אט: \$$used / \$$limit נוצל החודש';
+    return 'צ\'אט: $used / $limit נוצל החודש';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'צ\'אט: \$$used נוצל החודש';
+    return 'צ\'אט: $used נוצל החודש';
   }
 
   @override

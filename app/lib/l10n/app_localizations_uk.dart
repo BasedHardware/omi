@@ -8860,12 +8860,12 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Чат: \$$used / \$$limit використано цього місяця';
+    return 'Чат: $used / $limit використано цього місяця';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Чат: \$$used використано цього місяця';
+    return 'Чат: $used використано цього місяця';
   }
 
   @override

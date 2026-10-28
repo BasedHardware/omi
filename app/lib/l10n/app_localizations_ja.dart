@@ -8719,12 +8719,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'チャット: \$$used / \$$limit 今月の使用量';
+    return 'チャット: $used / $limit 今月の使用量';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'チャット: \$$used 今月の使用量';
+    return 'チャット: $used 今月の使用量';
   }
 
   @override

@@ -8848,12 +8848,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Trò chuyện: \$$used / \$$limit đã dùng tháng này';
+    return 'Trò chuyện: $used / $limit đã dùng tháng này';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Trò chuyện: \$$used đã dùng tháng này';
+    return 'Trò chuyện: $used đã dùng tháng này';
   }
 
   @override

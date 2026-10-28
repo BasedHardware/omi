@@ -343,6 +343,34 @@
       "description": "Android API 36 dev fixture, en-us-web; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
       "captured_by": "agent",
       "source": "visual-audit"
+    },
+    {
+      "file": "050-mobile-android-native-en-ca-usage-capped.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture; en_CA Plan and Usage, capped USD chat budget; agent-flutter capture, no account/session",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "051-mobile-android-native-en-ca-usage-uncapped.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture; en_CA Plan and Usage, uncapped USD chat budget; agent-flutter capture, no account/session",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "052-mobile-android-native-en-us-usage-capped.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture; en_US Plan and Usage, capped USD chat budget; agent-flutter capture, no account/session",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "053-mobile-android-native-en-us-usage-uncapped.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture; en_US Plan and Usage, uncapped USD chat budget; agent-flutter capture, no account/session",
+      "captured_by": "agent",
+      "source": "visual-audit"
     }
   ]
 }

@@ -8861,12 +8861,12 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'چیٹ: \$$used / \$$limit اس مہینے استعمال ہوا';
+    return 'چیٹ: $used / $limit اس مہینے استعمال ہوا';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'چیٹ: \$$used اس مہینے استعمال ہوا';
+    return 'چیٹ: $used اس مہینے استعمال ہوا';
   }
 
   @override

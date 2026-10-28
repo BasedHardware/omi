@@ -15,6 +15,7 @@ import 'package:omi/backend/schema/gen/payments_wire.g.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/plan_storefront.dart';
+import 'package:omi/models/user_usage.dart';
 import 'package:omi/pages/paywall/outline_paywall_page.dart';
 import 'package:omi/pages/paywall/paywall_checkout.dart';
 import 'package:omi/pages/paywall/trial_paywall_page.dart';
@@ -24,6 +25,7 @@ import 'package:omi/pages/settings/widgets/cancel_subscription_sheet.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_cards.dart';
 import 'package:omi/pages/settings/widgets/plans/storefront_plans_content.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
+import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -53,6 +55,8 @@ Map<String, dynamic> _row(PaywallPrice price) => {
     };
 
 class _Usage extends UsageProvider {
+  _Usage() : super(deviceTimeZone: () async => 'UTC');
+
   final sessions = <(String, int?, String?)>[];
   @override
   Future<void> fetchSubscription() async {}
@@ -122,7 +126,7 @@ Future<void> _capture(WidgetTester tester, String name) async {
 }
 
 Future<void> _pump(WidgetTester tester, Locale locale, _Usage usage, Widget page,
-    {Size size = const Size(430, 1000)}) async {
+    {Size size = const Size(430, 1000), bool settle = true}) async {
   final previousPalette = OmiColors.active;
   OmiColors.active = OmiPalette.dark;
   addTearDown(() => OmiColors.active = previousPalette);
@@ -169,7 +173,11 @@ Future<void> _pump(WidgetTester tester, Locale locale, _Usage usage, Widget page
           home: Scaffold(body: page),
         ),
       )));
-  await tester.pumpAndSettle();
+  if (settle) {
+    await tester.pumpAndSettle();
+  } else {
+    await tester.pump(const Duration(milliseconds: 400));
+  }
   expect(tester.takeException(), isNull);
 }
 
@@ -199,6 +207,47 @@ void main() {
     const Locale('de', 'DE')
   ]) {
     final tag = locale.toString();
+    for (final capped in [true, false]) {
+      testWidgets('$tag chat compute usage uses the shared USD formatter (capped=$capped)', (tester) async {
+        final usage = _usage();
+        await usage.refreshUsageTimeZone();
+        usage.debugSetSubscription(UserSubscriptionResponse(
+          subscription: Subscription(
+              plan: PlanType.unlimitedV2,
+              status: SubscriptionStatus.active,
+              limits: PlanLimits(chatCostUsdPerMonth: capped ? 80 : null)),
+          transcriptionSecondsUsed: 0,
+          transcriptionSecondsLimit: 0,
+          wordsTranscribedUsed: 0,
+          wordsTranscribedLimit: 0,
+          insightsGainedUsed: 0,
+          insightsGainedLimit: 0,
+          chatQuotaUnit: 'cost_usd',
+          chatQuotaUsed: 18.25,
+        ));
+        final zero = UsageStats(
+            transcriptionSeconds: 0, speechSeconds: 0, wordsTranscribed: 0, insightsGained: 0, memoriesCreated: 0);
+        usage.debugSetUsage('today', zero, []);
+        usage.debugSetUsage('monthly', zero, []);
+        await _pump(tester, locale, usage, const UsagePage(debugSkipFetch: true),
+            size: const Size(430, 1200), settle: false);
+        final l10n = AppLocalizations.of(tester.element(find.byType(UsagePage)));
+        await tester.tap(find.text(l10n.usageMonth));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        final expected = capped ? r'US$18.25 / US$80.00' : r'US$18.25';
+        await tester.scrollUntilVisible(find.text(expected), 200,
+            scrollable: find
+                .descendant(of: find.byKey(const Key('usage_scroll_monthly')), matching: find.byType(Scrollable))
+                .first);
+        await tester.pump();
+        expect(find.text(expected), findsOneWidget);
+        expect(l10n.chatUsageCost(r'US$18.25', r'US$80.00'), contains(r'US$18.25'));
+        expect(l10n.chatUsageCostNoLimit(r'US$18.25'), isNot(contains(r'$US$')));
+        expect(l10n.chatUsedOfLimitCompute(r'US$18.25', r'US$80.00'), isNot(contains(r'$US$')));
+        await _capture(tester, '${tag}_chat_usage_${capped ? 'capped' : 'uncapped'}');
+      });
+    }
     testWidgets('$tag trial card, post-trial disclosure and real checkout handoff agree', (tester) async {
       final usage = _usage();
       await _pump(

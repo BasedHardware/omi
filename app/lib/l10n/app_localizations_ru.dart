@@ -8874,12 +8874,12 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Чат: \$$used / \$$limit использовано в этом месяце';
+    return 'Чат: $used / $limit использовано в этом месяце';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Чат: \$$used использовано в этом месяце';
+    return 'Чат: $used использовано в этом месяце';
   }
 
   @override

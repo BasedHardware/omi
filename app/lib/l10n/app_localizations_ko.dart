@@ -8720,12 +8720,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return '채팅: \$$used / \$$limit 이번 달 사용량';
+    return '채팅: $used / $limit 이번 달 사용량';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return '채팅: \$$used 이번 달 사용량';
+    return '채팅: $used 이번 달 사용량';
   }
 
   @override

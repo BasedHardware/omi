@@ -8856,12 +8856,12 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Sohbet: \$$used / \$$limit bu ay kullanıldı';
+    return 'Sohbet: $used / $limit bu ay kullanıldı';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Sohbet: \$$used bu ay kullanıldı';
+    return 'Sohbet: $used bu ay kullanıldı';
   }
 
   @override

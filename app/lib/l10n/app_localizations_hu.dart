@@ -8883,12 +8883,12 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit felhasználva ebben a hónapban';
+    return 'Chat: $used / $limit felhasználva ebben a hónapban';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used felhasználva ebben a hónapban';
+    return 'Chat: $used felhasználva ebben a hónapban';
   }
 
   @override

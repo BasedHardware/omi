@@ -8852,12 +8852,12 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Pokalbis: \$$used / \$$limit panaudota šį mėnesį';
+    return 'Pokalbis: $used / $limit panaudota šį mėnesį';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Pokalbis: \$$used panaudota šį mėnesį';
+    return 'Pokalbis: $used panaudota šį mėnesį';
   }
 
   @override

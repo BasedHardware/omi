@@ -8865,12 +8865,12 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Tērzēšana: \$$used / \$$limit izmantots šomēnes';
+    return 'Tērzēšana: $used / $limit izmantots šomēnes';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Tērzēšana: \$$used izmantots šomēnes';
+    return 'Tērzēšana: $used izmantots šomēnes';
   }
 
   @override

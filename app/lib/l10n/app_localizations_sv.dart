@@ -8848,12 +8848,12 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chatt: \$$used / \$$limit använt denna månad';
+    return 'Chatt: $used / $limit använt denna månad';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chatt: \$$used använt denna månad';
+    return 'Chatt: $used använt denna månad';
   }
 
   @override

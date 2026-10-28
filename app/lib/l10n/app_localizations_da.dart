@@ -8835,12 +8835,12 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit brugt denne måned';
+    return 'Chat: $used / $limit brugt denne måned';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used brugt denne måned';
+    return 'Chat: $used brugt denne måned';
   }
 
   @override

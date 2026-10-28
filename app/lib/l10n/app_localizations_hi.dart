@@ -8827,12 +8827,12 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'चैट: \$$used / \$$limit इस महीने उपयोग किया';
+    return 'चैट: $used / $limit इस महीने उपयोग किया';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'चैट: \$$used इस महीने उपयोग किया';
+    return 'चैट: $used इस महीने उपयोग किया';
   }
 
   @override

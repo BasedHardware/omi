@@ -8852,12 +8852,12 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'চ্যাট: \$$used / \$$limit এই মাসে ব্যবহৃত';
+    return 'চ্যাট: $used / $limit এই মাসে ব্যবহৃত';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'চ্যাট: \$$used এই মাসে ব্যবহৃত';
+    return 'চ্যাট: $used এই মাসে ব্যবহৃত';
   }
 
   @override

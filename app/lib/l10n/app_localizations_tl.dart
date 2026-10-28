@@ -8926,12 +8926,12 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit nagamit ngayong buwan';
+    return 'Chat: $used / $limit nagamit ngayong buwan';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used nagamit ngayong buwan';
+    return 'Chat: $used nagamit ngayong buwan';
   }
 
   @override

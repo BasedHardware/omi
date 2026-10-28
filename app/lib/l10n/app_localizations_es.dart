@@ -8871,12 +8871,12 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit usado este mes';
+    return 'Chat: $used / $limit usado este mes';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used usado este mes';
+    return 'Chat: $used usado este mes';
   }
 
   @override

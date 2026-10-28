@@ -8878,12 +8878,12 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Чат: \$$used / \$$limit използвани този месец';
+    return 'Чат: $used / $limit използвани този месец';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Чат: \$$used използвани този месец';
+    return 'Чат: $used използвани този месец';
   }
 
   @override

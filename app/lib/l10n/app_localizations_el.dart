@@ -8907,12 +8907,12 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Συνομιλία: \$$used / \$$limit χρησιμοποιήθηκαν αυτόν τον μήνα';
+    return 'Συνομιλία: $used / $limit χρησιμοποιήθηκαν αυτόν τον μήνα';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Συνομιλία: \$$used χρησιμοποιήθηκαν αυτόν τον μήνα';
+    return 'Συνομιλία: $used χρησιμοποιήθηκαν αυτόν τον μήνα';
   }
 
   @override

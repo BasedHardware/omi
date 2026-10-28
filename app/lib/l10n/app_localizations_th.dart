@@ -8799,12 +8799,12 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'แชท: \$$used / \$$limit ที่ใช้ในเดือนนี้';
+    return 'แชท: $used / $limit ที่ใช้ในเดือนนี้';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'แชท: \$$used ที่ใช้ในเดือนนี้';
+    return 'แชท: $used ที่ใช้ในเดือนนี้';
   }
 
   @override

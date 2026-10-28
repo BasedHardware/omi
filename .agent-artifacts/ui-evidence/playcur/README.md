@@ -51,3 +51,10 @@ API 36 dev emulator, source revision `7d9be9db6c82ca504c1b6d902224641c95e46fa9`,
 - [047-mobile-android-native-en-us-v2-month.png](047-mobile-android-native-en-us-v2-month.png)
 - [048-mobile-android-native-en-us-v2-year.png](048-mobile-android-native-en-us-v2-year.png)
 - [049-mobile-android-native-en-us-web.png](049-mobile-android-native-en-us-web.png)
+
+Plan & Usage follow-up: both capped and uncapped USD chat budgets were inspected with agent-flutter, including native accessibility text. These four captures include the subsequent chat-usage formatter/copy update.
+
+- [050-mobile-android-native-en-ca-usage-capped.png](050-mobile-android-native-en-ca-usage-capped.png)
+- [051-mobile-android-native-en-ca-usage-uncapped.png](051-mobile-android-native-en-ca-usage-uncapped.png)
+- [052-mobile-android-native-en-us-usage-capped.png](052-mobile-android-native-en-us-usage-capped.png)
+- [053-mobile-android-native-en-us-usage-uncapped.png](053-mobile-android-native-en-us-usage-uncapped.png)

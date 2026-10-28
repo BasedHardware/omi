@@ -8876,12 +8876,12 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'ಚಾಟ್: \$$used / \$$limit ಈ ತಿಂಗಳು ಬಳಸಲಾಗಿದೆ';
+    return 'ಚಾಟ್: $used / $limit ಈ ತಿಂಗಳು ಬಳಸಲಾಗಿದೆ';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'ಚಾಟ್: \$$used ಈ ತಿಂಗಳು ಬಳಸಲಾಗಿದೆ';
+    return 'ಚಾಟ್: $used ಈ ತಿಂಗಳು ಬಳಸಲಾಗಿದೆ';
   }
 
   @override
