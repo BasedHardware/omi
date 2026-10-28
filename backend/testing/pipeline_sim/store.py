@@ -210,9 +210,7 @@ class SimStore:
             values = [
                 row['enqueued_at']
                 for (table, _), row in self.rows.items()
-                if table == 'jobs'
-                and row.get('priority') == priority
-                and row.get('state') == 'ready'
+                if table == 'jobs' and row.get('priority') == priority and row.get('state') == 'ready'
             ]
             return min(values) if values else None
         from database.batch_pipeline_store import OLDEST_POLICY_HOLD_SCAN_LIMIT, is_allowance_policy_hold
@@ -220,9 +218,7 @@ class SimStore:
         candidates = [
             row
             for (table, _), row in self.rows.items()
-            if table == 'jobs'
-            and row.get('priority') == priority
-            and row.get('merge_pending')
+            if table == 'jobs' and row.get('priority') == priority and row.get('merge_pending')
         ]
         candidates.sort(key=lambda r: (r.get('enqueued_at', float('inf')), str(r.get('id', ''))))
         oldest_hold: float | None = None

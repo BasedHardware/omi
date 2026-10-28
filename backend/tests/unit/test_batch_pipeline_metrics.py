@@ -547,4 +547,3 @@ def test_postgres_store_oldest_and_capacity_query_contract():
         (60.0, {'compute_decision': {'outcome': 'allowed'}}),
     ]
     assert store.oldest(1, ready_only=False) == 60.0
-
