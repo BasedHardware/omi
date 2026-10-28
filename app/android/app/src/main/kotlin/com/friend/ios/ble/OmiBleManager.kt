@@ -579,6 +579,18 @@ class OmiBleManager private constructor(private val application: Application) {
         connectionListener?.onGattDisconnected(addr, gatt.hashCode(), CCCD_TIMEOUT_STATUS)
     }
 
+    private val discoveryFailureRetire = DiscoveryFailureRetire<BluetoothGatt>(
+        releaseTrackedLink = { gatt -> connectedGatts.remove(gatt.device.address.uppercase(), gatt) },
+        cleanupPeripheral = { cleanupPeripheral(it) },
+        disconnectLink = { it.disconnect() },
+        closeLink = { it.close() },
+        onTeardownError = { stage, e -> Log.w(TAG, "Discovery retire $stage failed: ${e.message}") },
+        notifyDisconnected = { addr, gattHash, status ->
+            // The managed service retains reconnect policy, including user-disconnect guards.
+            connectionListener?.onGattDisconnected(addr, gattHash, status)
+        },
+    )
+
     // ── RSSI keep-alive ──
 
     fun startRssiKeepAlive(address: String) {
@@ -844,6 +856,11 @@ class OmiBleManager private constructor(private val application: Application) {
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 Log.e(TAG, "Service discovery failed for $address (status=$status)")
                 completeCommand()
+                // A connected link whose service discovery failed never delivers
+                // onConnectionStateChange(STATE_DISCONNECTED), so the managed service
+                // sees no disconnect to retry from (#19453). Retire the unusable link so
+                // its existing disconnect path resumes saved reconnect (iOS: #23872).
+                discoveryFailureRetire.onDiscoveryFailed(gatt, address, gatt.hashCode(), status)
                 return@dispatchGattCallback
             }
 
