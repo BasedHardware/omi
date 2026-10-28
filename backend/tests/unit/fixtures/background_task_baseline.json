@@ -190,13 +190,6 @@
       "why": "reviewed safe (Episodes sync intake): folds a just-persisted offline-sync clip into the live episode overlay so Home hides it under the live row; holds no conversation, task or memory authority and runs after intake committed the row. Lost at SIGKILL, the clip still joins at its sync_update finalize (on_conversation_finalized -> _attach_synced), so the only cost is the old minutes-late fold; awaiting it would put episode Firestore reads on every sync segment's hot path"
     },
     {
-      "path": "utils/episodes/live.py",
-      "function": "on_session_end",
-      "kind": "start_background_task",
-      "count": 1,
-      "why": "reviewed safe (Episodes v1.1): the session-end flush is itself the recovery for an in-process buffer; if it is lost at SIGKILL the conversation's finalization tail applies the same segments past the episode's applied offset"
-    },
-    {
       "path": "utils/executors.py",
       "function": "MonitoredThreadPoolExecutor._drain_deferred",
       "kind": "executor.submit",
