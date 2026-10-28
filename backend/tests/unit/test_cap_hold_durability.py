@@ -29,6 +29,8 @@ def _fleet_snapshot_stays_local(monkeypatch):
     # Reset the process-local snapshot gate so every test schedules one snapshot.
     cap_hold_redrive._snapshot_gate.update(inflight=False, attempt_at=0.0)
     monkeypatch.setattr(cap_hold_redrive.store, 'fleet_snapshot', lambda firestore_client=None: dict(_EMPTY_FLEET))
+    # Subscription priority is part of the sweep; keep the unit lane hermetic.
+    monkeypatch.setattr(cap_hold_redrive.users_db, 'get_user_valid_subscription', lambda uid, **_: None)
 
 
 @pytest.fixture
@@ -135,7 +137,7 @@ async def test_sweep_awaits_worker_and_does_not_create_consent(monkeypatch):
     entered, release = asyncio.Event(), asyncio.Event()
 
     async def run(uid, **kwargs):
-        assert uid == 'owner' and kwargs['max_items'] == 1 and not kwargs['continuation']
+        assert uid == 'owner' and kwargs['max_items'] == 10 and not kwargs['continuation']
         assert 0 < kwargs['time_budget'] <= 900
         entered.set()
         await release.wait()
@@ -491,8 +493,8 @@ async def test_shutdown_cancellation_resistant_close_cannot_extend_deadline(monk
     await asyncio.gather(*cap_hold_lifecycle.CLOSING)
 
 
-async def test_sweep_progresses_five_owners_concurrently(monkeypatch):
-    snaps = [SimpleNamespace(reference=SimpleNamespace(path=f'users/{i}/processing_backlog/current')) for i in range(5)]
+async def test_sweep_progresses_eight_owners_concurrently(monkeypatch):
+    snaps = [SimpleNamespace(reference=SimpleNamespace(path=f'users/{i}/processing_backlog/current')) for i in range(8)]
     monkeypatch.setattr(cap_hold_redrive.store, 'discover', lambda kind, **_: snaps if kind == 'choices' else [])
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'all')
@@ -501,16 +503,16 @@ async def test_sweep_progresses_five_owners_concurrently(monkeypatch):
     completed = []
 
     async def run(uid, *, continuation, max_items, time_budget):
-        assert max_items == 1 and not continuation and 0 < time_budget <= 900
+        assert max_items == 10 and not continuation and 0 < time_budget <= 900
         entered.add(uid)
-        if len(entered) == 5:
+        if len(entered) == 8:
             all_entered.set()
         await asyncio.wait_for(all_entered.wait(), timeout=1)
         completed.append(uid)
 
     monkeypatch.setattr(cap_hold_redrive.processing_backlog_worker, 'run', run)
-    assert (await cap_hold_redrive.sweep())['visited'] == 5
-    assert len(completed) == 5
+    assert (await cap_hold_redrive.sweep())['visited'] == 8
+    assert len(completed) == 8
 
 
 async def test_sweep_rotates_owners_before_fast_owner_gets_another_turn(monkeypatch):
@@ -521,7 +523,7 @@ async def test_sweep_rotates_owners_before_fast_owner_gets_another_turn(monkeypa
     turns, seen = [], {str(i): 0 for i in range(5)}
 
     async def run(uid, *, continuation, max_items, time_budget):
-        assert max_items == 1
+        assert max_items == 10
         assert continuation == (seen[uid] > 0)
         assert max(seen.values()) - min(seen.values()) <= 1
         turns.append(uid)
@@ -707,12 +709,16 @@ async def test_fleet_snapshot_kill_switch_skips_aggregation(monkeypatch):
 async def test_parallel_drain_bounds_reach_discovery_and_the_worker(monkeypatch):
     snaps = [
         SimpleNamespace(reference=SimpleNamespace(path=f'users/{index}/processing_backlog/current'))
-        for index in range(5)
+        for index in range(8)
     ]
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'all')
     monkeypatch.setenv('STT_CAP_DISPATCH_LANES', 'live,sync,batch')
-    discover = Mock(side_effect=lambda kind, limit=None: snaps if kind == 'choices' else [])
+
+    def discover(kind, limit=None):
+        return snaps[:limit] if kind == 'choices' else []
+
+    discover = Mock(side_effect=discover)
     items = []
 
     async def run(uid, *, continuation, max_items, time_budget):
@@ -721,21 +727,47 @@ async def test_parallel_drain_bounds_reach_discovery_and_the_worker(monkeypatch)
 
     monkeypatch.setattr(cap_hold_redrive.store, 'discover', discover)
     monkeypatch.setattr(cap_hold_redrive.processing_backlog_worker, 'run', run)
-    assert (await cap_hold_redrive.sweep())['visited'] == 5
-    # Defaults: a 20-owner choices page (legacy was five), one item per turn.
-    assert discover.call_args.kwargs['limit'] == 20 and items == [1] * 5
+    assert (await cap_hold_redrive.sweep())['visited'] == 8
+    # Defaults: eight concurrent owners (legacy was five), ten items per turn.
+    assert discover.call_args.kwargs['limit'] == 8 and items == [10] * 8
 
     discover.reset_mock()
     items.clear()
     monkeypatch.setenv('CAP_HOLD_REDRIVE_CHOICES_PAGE', '7')
     monkeypatch.setenv('CAP_HOLD_REDRIVE_ITEMS_PER_OWNER', '3')
     await cap_hold_redrive.sweep()
-    assert discover.call_args.kwargs['limit'] == 7 and items == [3] * 5
+    assert discover.call_args.kwargs['limit'] == 7 and items == [3] * 7
 
     discover.reset_mock()
+    items.clear()
     monkeypatch.setenv('CAP_HOLD_REDRIVE_CHOICES_PAGE', '9999')  # clamped to the ceiling
     await cap_hold_redrive.sweep()
-    assert discover.call_args.kwargs['limit'] == cap_hold_redrive.CHOICES_PAGE_CEILING
+    assert discover.call_args.kwargs['limit'] == cap_hold_redrive.CHOICES_PAGE_CEILING == 8
+    assert items == [3] * 8
+
+
+async def test_paid_owners_are_visited_first_within_a_bounded_page(monkeypatch):
+    from config.plan_catalog import PAID_PLAN_TYPES, PlanType
+
+    free = SimpleNamespace(reference=SimpleNamespace(path='users/free/processing_backlog/current'))
+    paid = SimpleNamespace(reference=SimpleNamespace(path='users/paid/processing_backlog/current'))
+    calls = []
+
+    def subscription(uid, *, provision):
+        calls.append((uid, provision))
+        plan = next(iter(PAID_PLAN_TYPES)) if uid == 'paid' else PlanType.basic
+        return SimpleNamespace(plan=plan)
+
+    async def run_blocking(_executor, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'all')
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', 'live,sync,batch')
+    monkeypatch.setattr(cap_hold_redrive.users_db, 'get_user_valid_subscription', subscription)
+    monkeypatch.setattr(cap_hold_redrive, 'run_blocking', run_blocking)
+    assert await cap_hold_redrive._paid_first([free, paid]) == [paid, free]
+    assert calls == [('free', False), ('paid', False)]
 
 
 async def test_parallel_drain_kill_switch_restores_the_legacy_shape(monkeypatch):

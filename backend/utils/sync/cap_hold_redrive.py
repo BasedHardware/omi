@@ -6,17 +6,18 @@ import os
 import time
 from typing import Any
 
-from database import cap_hold_redrive as store
+from database import cap_hold_redrive as store, users as users_db
 from utils.executors import db_executor, run_blocking, start_background_task, storage_executor
 from utils import funded_processing, processing_backlog_worker
 from config.stt_cap_dispatch import execution_admission_configured, recovery_cohort_admits
+from config.plan_catalog import PAID_PLAN_TYPES
 from utils.observability.held_content import publish_fleet
 from utils.sync import live_cap_staging
 
 logger = logging.getLogger(__name__)
 
 LEGACY_CHOICES_PAGE = 5
-CHOICES_PAGE_CEILING = 50
+CHOICES_PAGE_CEILING = 8
 OWNER_ITEMS_CEILING = 10
 FLEET_SNAPSHOT_INTERVAL_SECONDS = 600.0
 FLEET_SNAPSHOT_WAIT_CEILING = 300.0
@@ -44,13 +45,10 @@ def parallel_drain_enabled() -> bool:
 
 
 def choices_page() -> int:
-    """Processing owners visited per sweep. Paid processing owners are the
-    whole choices population (choose requires a funded allowance), so a wider
-    page shortens the rotation that starved them; leases and per-owner fences
-    still bound concurrent work."""
+    """Processing owners visited per sweep, bounded below the shared sync pool."""
     if not parallel_drain_enabled():
         return LEGACY_CHOICES_PAGE
-    return int(_env_number('CAP_HOLD_REDRIVE_CHOICES_PAGE', 20, low=1, high=CHOICES_PAGE_CEILING))
+    return int(_env_number('CAP_HOLD_REDRIVE_CHOICES_PAGE', 8, low=1, high=CHOICES_PAGE_CEILING))
 
 
 def owner_items() -> int:
@@ -59,7 +57,7 @@ def owner_items() -> int:
     gets another turn."""
     if not parallel_drain_enabled():
         return 1
-    return int(_env_number('CAP_HOLD_REDRIVE_ITEMS_PER_OWNER', 1, low=1, high=OWNER_ITEMS_CEILING))
+    return int(_env_number('CAP_HOLD_REDRIVE_ITEMS_PER_OWNER', 10, low=1, high=OWNER_ITEMS_CEILING))
 
 
 def fleet_snapshot_enabled() -> bool:
@@ -84,6 +82,36 @@ def owner(snap: Any, collection: str) -> str | None:
     if collection == 'processing_backlog' and parts[3] != 'current':
         return None
     return parts[1]
+
+
+async def _paid_first(choices: list[Any]) -> list[Any]:
+    """Order this bounded page by the current valid subscription, without writes.
+
+    The collection-group cursor still advances fairly across pages. Each page
+    starts funded paid owners first; basic, missing and temporarily unreadable
+    subscriptions remain eligible only through the worker's normal gates.
+    """
+
+    async def is_paid(snap: Any) -> bool:
+        uid = owner(snap, 'processing_backlog')
+        if uid is None or not recovery_cohort_admits(uid) or not funded_processing.enabled(uid):
+            return False
+        try:
+            subscription = await run_blocking(db_executor, users_db.get_user_valid_subscription, uid, provision=False)
+        except Exception as error:
+            logger.warning(
+                'event=cap_hold_redrive outcome=subscription_priority_deferred uid=%s exception_type=%s',
+                uid,
+                type(error).__name__,
+                exc_info=True,
+            )
+            return False
+        return subscription is not None and subscription.plan in PAID_PLAN_TYPES
+
+    priorities = await asyncio.gather(*(is_paid(snap) for snap in choices))
+    return [snap for snap, paid in zip(choices, priorities) if paid] + [
+        snap for snap, paid in zip(choices, priorities) if not paid
+    ]
 
 
 async def _run_fleet_snapshot() -> None:
@@ -122,6 +150,7 @@ async def _settle_fleet_snapshot(task) -> None:
 async def sweep() -> dict:
     if not enabled():
         return {'disabled': True}
+    sweep_started = time.monotonic()
     snapshot_task = _schedule_fleet_snapshot()
     counts = {'sealed': 0, 'visited': 0}
     staging = await run_blocking(db_executor, store.discover, 'staging')
@@ -145,6 +174,11 @@ async def sweep() -> dict:
             logger.warning('event=cap_hold_redrive outcome=cleanup_deferred exception_type=%s', type(error).__name__)
     if not execution_admission_configured():
         await _settle_fleet_snapshot(snapshot_task)
+        logger.info(
+            'event=cap_hold_redrive outcome=complete visited=0 sealed=%s duration_seconds=%.3f',
+            counts['sealed'],
+            time.monotonic() - sweep_started,
+        )
         return counts
 
     started = time.monotonic()
@@ -176,6 +210,7 @@ async def sweep() -> dict:
             return None
 
     choices = await run_blocking(db_executor, store.discover, 'choices', limit=choices_page())
+    choices = await _paid_first(choices)
     for turn in range(100):
         if not choices or time.monotonic() - started >= 900:
             break
@@ -183,5 +218,12 @@ async def sweep() -> dict:
         choices = [snap for snap in results if snap is not None]
     counts['visited'] = len(visited)
     await _settle_fleet_snapshot(snapshot_task)
-    logger.info('event=cap_hold_redrive outcome=complete visited=%s sealed=%s', counts['visited'], counts['sealed'])
+    logger.info(
+        'event=cap_hold_redrive outcome=complete visited=%s sealed=%s duration_seconds=%.3f choices_page=%s owner_items=%s',
+        counts['visited'],
+        counts['sealed'],
+        time.monotonic() - sweep_started,
+        choices_page(),
+        items_per_turn,
+    )
     return counts
