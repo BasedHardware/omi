@@ -556,11 +556,11 @@ def search_conversations_tool(
                 keyword_ids = keyword_search_conversation_ids(
                     uid=uid, query=query, limit=limit, start_date=starts_at, end_date=ends_at, raise_on_error=True
                 )
-                OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL.labels(path="keyword", outcome="success").inc()
+                OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL.labels(path="keyword", outcome="ok").inc()
             except Exception as kw_err:
                 logger.warning("Keyword search failed during conversation search; falling back to vector/semantic search: %s", kw_err)
-                record_fallback(component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded', log=logger)
-                OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL.labels(path="keyword", outcome="fallback").inc()
+                record_fallback(component='conversation_search', from_mode='keyword', to_mode='vector', reason='index_error', outcome='degraded')
+                OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL.labels(path="keyword", outcome="degraded").inc()
                 keyword_degraded = True
 
             index_available = getattr(vector_db, 'index', None) is not None
@@ -589,7 +589,7 @@ def search_conversations_tool(
             withheld_locked = sum(1 for row in conversations_data if row.get('is_locked', False) and not row.get('discarded', False))
             withheld_discarded = sum(1 for row in conversations_data if row.get('discarded', False))
             conversations_data = [c for c in conversations_data if not c.get('is_locked', False) and not c.get('discarded', False)]
-            OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL.labels(path="semantic", outcome="success").inc()
+            OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL.labels(path="vector", outcome="ok").inc()
 
         if not conversations_data:
             msg = none_found('conversations', f"matching query {query!r}")
@@ -676,5 +676,5 @@ def search_conversations_tool(
         return result
     except Exception as e:
         logger.error(f"Error in search_conversations_tool: {e}")
-        OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL.labels(path="semantic", outcome="error").inc()
+        OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL.labels(path="vector", outcome="empty").inc()
         return "An unexpected error occurred during search."
