@@ -35,9 +35,9 @@ from typing import Any
 PROJECT_ID = os.environ.setdefault("GOOGLE_CLOUD_PROJECT", "demo-omi-isolated-tests")
 os.environ.setdefault("GCLOUD_PROJECT", PROJECT_ID)
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_dream_park_race_emulator_key_32_bytes")
-os.environ["DREAM_AGENT_ENABLED"] = "true"
-os.environ["DREAM_AGENT_ELIGIBILITY"] = "all"
-os.environ["REVIEW_SURFACE_MODE"] = "on"
+os.environ.setdefault("DREAM_AGENT_ENABLED", "true")
+os.environ.setdefault("DREAM_AGENT_ELIGIBILITY", "all")
+os.environ.setdefault("REVIEW_SURFACE_MODE", "on")
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
