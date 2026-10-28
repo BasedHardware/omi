@@ -371,6 +371,154 @@ def test_held_partial_read_governor_defers_the_sweep_until_the_window_refills(mo
     assert projector.sweep_held.call_count == 1
 
 
+def _held_partial_clock(monkeypatch, started=10_000.0):
+    from utils.batch_pipeline import serving as serving_module
+
+    clock = {'monotonic': started}
+    monkeypatch.setattr(
+        serving_module, 'time', SimpleNamespace(monotonic=lambda: clock['monotonic'], time=lambda: 1_000_000.0)
+    )
+    return serving_module, clock
+
+
+def _held_partial_lines(caplog):
+    return [record.getMessage() for record in caplog.records if 'batch_held_partial' in record.getMessage()]
+
+
+def test_held_partial_segment_lines_sum_into_one_pass_line_on_wrap(monkeypatch, caplog):
+    serving_module, clock = _held_partial_clock(monkeypatch)
+    results = [
+        {'pages': 3, 'units': 96, 'partial': 1, 'waiting': 94, 'error': 1, 'reads': 480, 'more': 1},
+        {'pages': 2, 'units': 37, 'partial': 2, 'waiting': 35, 'error': 0, 'reads': 190, 'more': 0},
+    ]
+
+    def sweep(**_):
+        clock['monotonic'] += 5.0
+        return results.pop(0)
+
+    projector = Mock()
+    projector.sweep_held = Mock(side_effect=sweep)
+    service = Serving(MemoryStore(), projector=projector)
+    caplog.set_level(logging.INFO, logger=serving_module.__name__)
+    service.reconcile()
+    clock['monotonic'] += 1.0
+    service.reconcile()
+    budget = serving_module.HELD_PARTIAL_READS_PER_HOUR // (
+        serving_module.HELD_PARTIAL_PAGE * serving_module.HELD_PARTIAL_READS_PER_UNIT
+    )
+    resumed_budget = (serving_module.HELD_PARTIAL_READS_PER_HOUR - 480) // (
+        serving_module.HELD_PARTIAL_PAGE * serving_module.HELD_PARTIAL_READS_PER_UNIT
+    )
+    # Two budget-resumed segments, one summed pass line when the scan wraps.
+    assert _held_partial_lines(caplog) == [
+        f'event=batch_held_partial action=segment pages=3 units=96 partial=1 waiting=94 error=1 reads=480 more=1 '
+        f'elapsed_ms=5000 budget_pages={budget}',
+        f'event=batch_held_partial action=segment pages=2 units=37 partial=2 waiting=35 error=0 reads=190 more=0 '
+        f'elapsed_ms=5000 budget_pages={resumed_budget}',
+        'event=batch_held_partial action=pass outcome=completed segments=2 pages=5 units=133 partial=3 waiting=129 '
+        'error=1 reads=670 pass_seconds=11.0',
+    ]
+
+
+def test_held_partial_governor_deferred_tick_logs_nothing_and_keeps_the_pass(monkeypatch, caplog):
+    serving_module, clock = _held_partial_clock(monkeypatch)
+    results = [
+        {'pages': 4, 'units': 128, 'partial': 0, 'waiting': 128, 'error': 0, 'reads': 512, 'more': 1},
+        {'pages': 1, 'units': 2, 'partial': 0, 'waiting': 2, 'error': 0, 'reads': 2, 'more': 0},
+    ]
+    projector = Mock()
+    projector.sweep_held = Mock(side_effect=lambda **_: results.pop(0))
+    service = Serving(MemoryStore(), projector=projector)
+    caplog.set_level(logging.INFO, logger=serving_module.__name__)
+    service.reconcile()
+    budget = serving_module.HELD_PARTIAL_READS_PER_HOUR // (
+        serving_module.HELD_PARTIAL_PAGE * serving_module.HELD_PARTIAL_READS_PER_UNIT
+    )
+    # The hourly read governor is spent: the next tick defers with no sweep call
+    # and no new line, and the in-flight pass is not reset by it.
+    service.held_partial_reads.append((clock['monotonic'], serving_module.HELD_PARTIAL_READS_PER_HOUR))
+    service.reconcile()
+    assert projector.sweep_held.call_count == 1
+    assert _held_partial_lines(caplog) == [
+        f'event=batch_held_partial action=segment pages=4 units=128 partial=0 waiting=128 error=0 reads=512 more=1 '
+        f'elapsed_ms=0 budget_pages={budget}',
+    ]
+    # The window refills and the pass resumes where it stopped: the pass line
+    # spans the deferred gap instead of restarting at the resumed segment.
+    clock['monotonic'] += serving_module.HELD_PARTIAL_WINDOW_SECONDS
+    service.reconcile()
+    assert _held_partial_lines(caplog) == [
+        f'event=batch_held_partial action=segment pages=4 units=128 partial=0 waiting=128 error=0 reads=512 more=1 '
+        f'elapsed_ms=0 budget_pages={budget}',
+        f'event=batch_held_partial action=segment pages=1 units=2 partial=0 waiting=2 error=0 reads=2 more=0 '
+        f'elapsed_ms=0 budget_pages={budget}',
+        'event=batch_held_partial action=pass outcome=completed segments=2 pages=5 units=130 partial=0 waiting=130 '
+        f'error=0 reads=514 pass_seconds={serving_module.HELD_PARTIAL_WINDOW_SECONDS:.1f}',
+    ]
+
+
+def test_single_page_held_pass_logs_one_segment_and_one_pass_line(monkeypatch, caplog):
+    serving_module, _ = _held_partial_clock(monkeypatch)
+    projector = Mock()
+    projector.sweep_held = Mock(
+        return_value={'pages': 1, 'units': 7, 'partial': 1, 'waiting': 6, 'error': 0, 'reads': 40, 'more': 0}
+    )
+    service = Serving(MemoryStore(), projector=projector)
+    caplog.set_level(logging.INFO, logger=serving_module.__name__)
+    service.reconcile()
+    budget = serving_module.HELD_PARTIAL_READS_PER_HOUR // (
+        serving_module.HELD_PARTIAL_PAGE * serving_module.HELD_PARTIAL_READS_PER_UNIT
+    )
+    assert _held_partial_lines(caplog) == [
+        f'event=batch_held_partial action=segment pages=1 units=7 partial=1 waiting=6 error=0 reads=40 more=0 '
+        f'elapsed_ms=0 budget_pages={budget}',
+        'event=batch_held_partial action=pass outcome=completed segments=1 pages=1 units=7 partial=1 waiting=6 '
+        'error=0 reads=40 pass_seconds=0.0',
+    ]
+
+
+def test_held_partial_log_lines_carry_only_counts_never_ids(monkeypatch, caplog):
+    import re
+
+    serving_module, clock = _held_partial_clock(monkeypatch)
+    steps = [
+        {'pages': 2, 'units': 64, 'partial': 1, 'waiting': 63, 'error': 0, 'reads': 320, 'more': 1},
+        TimeoutError('owner uid12345 content cid9876 segment seg0001'),
+        {'pages': 1, 'units': 1, 'partial': 0, 'waiting': 1, 'error': 0, 'reads': 16, 'more': 0},
+    ]
+    projector = Mock()
+    projector.sweep_held = Mock(side_effect=steps)
+    service = Serving(MemoryStore(), projector=projector)
+    caplog.set_level(logging.INFO, logger=serving_module.__name__)
+    service.reconcile()
+    clock['monotonic'] += 1.0
+    # A failed sweep keeps the existing error line and does not reset the pass;
+    # it waits out the interval before the pass can resume.
+    service.reconcile()
+    clock['monotonic'] += 400.0
+    service.reconcile()
+    messages = _held_partial_lines(caplog)
+    shapes = [
+        r'event=batch_held_partial action=segment pages=\d+ units=\d+ partial=\d+ waiting=\d+ error=\d+ reads=\d+ '
+        r'more=[01] elapsed_ms=\d+ budget_pages=\d+',
+        r'event=batch_held_partial action=pass outcome=completed segments=\d+ pages=\d+ units=\d+ partial=\d+ '
+        r'waiting=\d+ error=\d+ reads=\d+ pass_seconds=\d+\.\d',
+        r'event=batch_held_partial action=sweep outcome=retry exception_type=\w+',
+    ]
+    assert messages
+    for message in messages:
+        assert any(re.fullmatch(shape, message) for shape in shapes), message
+    joined = ' '.join(messages)
+    for token in ('uid12345', 'cid9876', 'seg0001'):
+        assert token not in joined
+    # The failed sweep's segment is not lost either: the pass closed two
+    # segments after it started, not one.
+    assert messages[-1] == (
+        'event=batch_held_partial action=pass outcome=completed segments=2 pages=3 units=65 partial=1 waiting=64 '
+        'error=0 reads=336 pass_seconds=401.0'
+    )
+
+
 def test_recovery_is_scheduled_inside_service_but_metrics_reconcile_does_not_dispatch():
     from unittest.mock import Mock
 
