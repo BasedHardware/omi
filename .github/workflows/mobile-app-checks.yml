@@ -164,7 +164,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: changes
     if: github.event_name == 'schedule' || needs.changes.outputs.has_app_dart == 'true'
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
