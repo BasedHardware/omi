@@ -658,3 +658,25 @@ def complete_survivor_refresh(
         return True
 
     return run_transactional(client, complete)
+
+
+def delegate_survivor_refresh(uid: str, survivor_id: str, *, revision: int, firestore_client: Any = None) -> bool:
+    """Receipt a durable outbox handoff, without claiming any processing completed."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    ref = _collection(client, uid).document(survivor_id)
+
+    @firestore.transactional
+    def delegate(transaction):
+        row = ref.get(transaction=transaction).to_dict() or {}
+        state = dict(row.get(SMART_MERGE_FIELD) or {})
+        if row.get('deleted') or int(state.get('revision') or 0) != revision:
+            return False
+        lease = state.get('refresh_lease') or {}
+        until = lease.get('until')
+        if isinstance(until, datetime) and until > datetime.now(timezone.utc):
+            return False
+        state['delegated_revision'] = revision
+        transaction.update(ref, {SMART_MERGE_FIELD: state})
+        return True
+
+    return run_transactional(client, delegate)

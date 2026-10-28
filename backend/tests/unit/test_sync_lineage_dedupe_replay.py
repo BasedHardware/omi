@@ -215,6 +215,8 @@ def load_dependencies():
 
 @pytest.fixture(autouse=True)
 def default_flags(monkeypatch):
+    # These legacy intake/eager-processing cases are independent of durable hold scheduling.
+    monkeypatch.setenv('SYNC_PROCESSING_HOLD_ENABLED', 'false')
     monkeypatch.delenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, raising=False)
     monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, '')
 
@@ -654,6 +656,7 @@ def test_receipt_only_repeat_intake_writes_and_enrolls_enrichment(pipeline_modul
 
 
 def test_receipt_only_append_preserves_existing_enrichment_debt(pipeline_module, monkeypatch):
+    monkeypatch.setenv('SYNC_PROCESSING_HOLD_ENABLED', 'false')
     pipeline = pipeline_module
     store = seeded_store([live_row(capture_evidence=live_evidence())])
     texts = [reworded(text) for text in LIVE]

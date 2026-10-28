@@ -387,7 +387,9 @@ def independent_job_pipeline():
         yield pipeline, transcript_segment, lifecycle
 
 
-def test_real_process_segment_two_independent_job_responses(independent_job_pipeline):
+def test_real_process_segment_two_independent_job_responses(independent_job_pipeline, monkeypatch):
+    # This case exercises the eager assignment/processing boundary; holds have their own consumer suite.
+    monkeypatch.setenv('SYNC_PROCESSING_HOLD_ENABLED', 'false')
     pipeline, transcript_segment, lifecycle = independent_job_pipeline
     store = StrictFirestore()
     barrier = threading.Barrier(2)
