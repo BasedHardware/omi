@@ -26,10 +26,10 @@ def _configurable(config: Any) -> Dict[str, Any]:
 def owner(config):
     config = config or {}
     configurable = config.get('configurable') if isinstance(config, dict) else None
-    uid = (configurable or {}).get('user_id')
-    if not uid:
+    uid = (configurable or {}).get('user_id') or (config.get('user_id') if isinstance(config, dict) else None)
+    if not uid or not isinstance(uid, str) or not uid.strip():
         raise PermissionError('Authenticated owner required')
-    return uid
+    return uid.strip()
 
 
 @tool
@@ -60,7 +60,8 @@ def update_conversation(
     if error:
         return error
     assert conversation_id is not None
-    if not correction.strip() or len(correction) > 2000 or (title is None and overview is None):
+    clean_correction = str(correction or '').strip()
+    if not clean_correction or len(clean_correction) > 2000 or (title is None and overview is None):
         return tool_error('invalid_correction', 'Provide a confirmed correction and a title or overview.')
     if title is not None and (not title.strip() or len(title) > 300):
         return tool_error('invalid_title', 'Title must contain 1 to 300 characters.')
@@ -76,7 +77,7 @@ def update_conversation(
     structured = dict(observed.get('structured') or {})
     notes = list(observed.get('user_corrections') or [])
     corrected_at = datetime.now(timezone.utc).isoformat()  # not-model-facing: persisted edit metadata
-    notes.append({'note': correction.strip(), 'at': corrected_at})
+    notes.append({'note': clean_correction, 'at': corrected_at})
     if len(notes) > 100:
         return tool_error('correction_limit_reached', 'Conversation correction note limit reached (100).')
     patch: Dict[str, Any] = {'user_corrections': notes}
@@ -137,7 +138,8 @@ def edit_memory(memory_id: str, content: str, *, config: RunnableConfig) -> str:
         return error
     assert resolved_id is not None
     memory_id = resolved_id
-    if not content.strip() or len(content) > 20000:
+    clean_content = str(content or '').strip()
+    if not clean_content or len(clean_content) > 20000:
         return 'Error: memory content must contain 1 to 20000 characters.'
     db = get_data_plane_firestore_client()
     before = read_canonical_memory_item(uid, memory_id, db_client=db)
@@ -145,7 +147,7 @@ def edit_memory(memory_id: str, content: str, *, config: RunnableConfig) -> str:
         return 'Error: memory not found.'
     service = MemoryService(db_client=db)
     updated = service.update_external_memory_content(
-        uid, memory_id, content, memory_system=MemorySystem.CANONICAL, consumer='chat', operation='chat_memory_edit'
+        uid, memory_id, clean_content, memory_system=MemorySystem.CANONICAL, consumer='chat', operation='chat_memory_edit'
     )
     target_id = updated.id
     after = read_canonical_memory_item(uid, target_id, db_client=db)
