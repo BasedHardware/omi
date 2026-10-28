@@ -1,10 +1,7 @@
-import 'dart:math' as math;
-
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/payment.dart' as payment_api;
@@ -13,6 +10,7 @@ import 'package:omi/pages/settings/widgets/leave_flow_widgets.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/billing_price.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/other/temp.dart';
 
@@ -22,7 +20,10 @@ const _stepCount = 3;
 /// step is its own route, so the iOS edge swipe and system back step back one step. This widget
 /// is step 1 and owns the flow; [show] resolves `true` when the subscription was cancelled.
 class CancelSubscriptionFlow extends StatefulWidget {
-  const CancelSubscriptionFlow({super.key});
+  const CancelSubscriptionFlow({super.key, this.loadOffer});
+
+  /// Hermetic preview/test seam; production reads the retention endpoint.
+  final Future<wire.GeneratedRetentionOfferResponse?> Function()? loadOffer;
 
   static Future<bool?> show(BuildContext context) {
     return Navigator.of(context).push<bool>(omiPageRoute(builder: (_) => const CancelSubscriptionFlow()));
@@ -34,6 +35,8 @@ class CancelSubscriptionFlow extends StatefulWidget {
 
 /// What the reader has entered so far, shared by the three steps.
 class _CancelFlow {
+  _CancelFlow({this.loadOffer});
+  final Future<wire.GeneratedRetentionOfferResponse?> Function()? loadOffer;
   final exit = LeaveFlowExit();
   final details = TextEditingController();
   String? reason;
@@ -42,7 +45,7 @@ class _CancelFlow {
 }
 
 class _CancelSubscriptionFlowState extends State<CancelSubscriptionFlow> {
-  final _flow = _CancelFlow();
+  late final _flow = _CancelFlow(loadOffer: widget.loadOffer);
 
   static const _reasons = [
     _Reason('too_expensive', FontAwesomeIcons.wallet),
@@ -195,19 +198,15 @@ class _CancelConfirmStepState extends State<_CancelConfirmStep> {
   }
 
   Future<void> _loadOffer() async {
-    final offer = await payment_api.getRetentionOffer();
+    final offer = await (_flow.loadOffer ?? payment_api.getRetentionOffer)();
     if (!mounted || offer == null || !offer.eligible || offer.discountedAmount == null) return;
     setState(() => _offer = offer);
     PlatformManager.instance.analytics
         .track('Retention Offer Shown', properties: {'reason': _flow.reason, 'percent_off': offer.percentOff});
   }
 
-  String _monthlyPrice(wire.GeneratedRetentionOfferResponse offer) {
-    final currency = (offer.currency ?? 'usd').toUpperCase();
-    final format = NumberFormat.simpleCurrency(locale: Localizations.localeOf(context).toString(), name: currency);
-    final minorUnits = format.decimalDigits ?? 2;
-    return format.format(offer.discountedAmount! / math.pow(10, minorUnits));
-  }
+  String _monthlyPrice(wire.GeneratedRetentionOfferResponse offer) =>
+      formatBillingPrice(offer.discountedAmount!, offer.currency ?? 'usd');
 
   Future<void> _acceptOffer() async {
     final offer = _offer;

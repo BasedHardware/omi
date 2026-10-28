@@ -8839,12 +8839,12 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Vestlus: \$$used / \$$limit kasutatud sel kuul';
+    return 'Vestlus: $used / $limit kasutatud sel kuul';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Vestlus: \$$used kasutatud sel kuul';
+    return 'Vestlus: $used kasutatud sel kuul';
   }
 
   @override
@@ -13295,6 +13295,30 @@ class AppLocalizationsEt extends AppLocalizations {
   String get paywallOutlineHeadline => 'Ära jäta enam ühtegi sõna vahele.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/aasta',
+        'other': '/kuu',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/aasta',
+        'other': '/kuu',
+      },
+    );
+    return '$days päeva tasuta, seejärel $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -14653,4 +14677,29 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'Üksikasjad toe jaoks';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count lühikest klippi on peidetud',
+      one: '1 lühike klipp on peidetud',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Kuva';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Peida $count lühikest klippi',
+      one: 'Peida 1 lühike klipp',
+    );
+    return '$_temp0';
+  }
 }

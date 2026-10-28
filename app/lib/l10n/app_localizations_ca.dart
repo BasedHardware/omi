@@ -8894,12 +8894,12 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Xat: \$$used / \$$limit utilitzat aquest mes';
+    return 'Xat: $used / $limit utilitzat aquest mes';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Xat: \$$used utilitzat aquest mes';
+    return 'Xat: $used utilitzat aquest mes';
   }
 
   @override
@@ -13369,6 +13369,30 @@ class AppLocalizationsCa extends AppLocalizations {
   String get paywallOutlineHeadline => 'No et perdis mai més ni una paraula.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/any',
+        'other': '/mes',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/any',
+        'other': '/mes',
+      },
+    );
+    return '$days dies gratis, després $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -14735,4 +14759,29 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'Detalls per al suport';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count clips curts amagats',
+      one: '1 clip curt amagat',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Mostrar';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Amagar $count clips curts',
+      one: 'Amagar 1 clip curt',
+    );
+    return '$_temp0';
+  }
 }

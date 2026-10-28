@@ -2882,8 +2882,8 @@
     "currentPlan": "Mevcut",
     "neoSubtitle": "Ayda {count} soru",
     "operatorSubtitle": "Ayda {count} soru",
-    "chatUsageCost": "Sohbet: ${used} / ${limit} bu ay kullanıldı",
-    "chatUsageCostNoLimit": "Sohbet: ${used} bu ay kullanıldı",
+    "chatUsageCost": "Sohbet: {used} / {limit} bu ay kullanıldı",
+    "chatUsageCostNoLimit": "Sohbet: {used} bu ay kullanıldı",
     "chatUsageMessages": "Sohbet: {used} / {limit} mesaj bu ay",
     "chatUsageMessagesNoLimit": "Sohbet: {used} mesaj bu ay",
     "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
@@ -4113,6 +4113,8 @@
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
     "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
     "paywallOutlineHeadline": "Bir daha tek kelimeyi bile kaçırma.",
+    "billingRecurringPrice": "{price}{interval, select, year{/yıl} other{/ay}}",
+    "billingTrialPrice": "{days} gün ücretsiz, ardından {price}{interval, select, year{/yıl} other{/ay}}",
     "paywallTrialBrand": "Omi Pro",
     "paywallTrialHeadline": "Ücretsiz deneme sürümünüz böyle çalışır.",
     "paywallTrialSlideSummariesTitle": "Sınırsız özetler, sonsuza dek saklanır",
@@ -4494,5 +4496,8 @@
     "onTheWayDayQueued": "Kuyrukta",
     "onTheWayNoDate": "Tarih yok",
     "onTheWayFootnote": "Başarısız olan kayıtlar arka planda yeniden denenmeye devam eder. Transkriptini çıkaramadığımız her şey bize otomatik olarak bildirilir.",
-    "onTheWayDetailsForSupport": "Destek için ayrıntılar"
+    "onTheWayDetailsForSupport": "Destek için ayrıntılar",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 kısa kayıt gizlendi} other{{count} kısa kayıt gizlendi}}",
+    "homeNoiseFoldShow": "Göster",
+    "homeNoiseFoldHide": "{count, plural, =1{1 kısa kaydı gizle} other{{count} kısa kaydı gizle}}"
 }

@@ -10269,8 +10269,8 @@
     "currentPlan": "ಪ್ರಸ್ತುತ",
     "neoSubtitle": "ತಿಂಗಳಿಗೆ {count} ಪ್ರಶ್ನೆಗಳು",
     "operatorSubtitle": "ತಿಂಗಳಿಗೆ {count} ಪ್ರಶ್ನೆಗಳು",
-    "chatUsageCost": "ಚಾಟ್: ${used} / ${limit} ಈ ತಿಂಗಳು ಬಳಸಲಾಗಿದೆ",
-    "chatUsageCostNoLimit": "ಚಾಟ್: ${used} ಈ ತಿಂಗಳು ಬಳಸಲಾಗಿದೆ",
+    "chatUsageCost": "ಚಾಟ್: {used} / {limit} ಈ ತಿಂಗಳು ಬಳಸಲಾಗಿದೆ",
+    "chatUsageCostNoLimit": "ಚಾಟ್: {used} ಈ ತಿಂಗಳು ಬಳಸಲಾಗಿದೆ",
     "chatUsageMessages": "ಚಾಟ್: {used} / {limit} ಸಂದೇಶಗಳು ಈ ತಿಂಗಳು",
     "chatUsageMessagesNoLimit": "ಚಾಟ್: {used} ಸಂದೇಶಗಳು ಈ ತಿಂಗಳು",
     "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
@@ -11501,6 +11501,8 @@
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
     "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
     "paywallOutlineHeadline": "ಇನ್ನು ಮುಂದೆ ಒಂದು ಪದವನ್ನೂ ತಪ್ಪಿಸಿಕೊಳ್ಳಬೇಡಿ.",
+    "billingRecurringPrice": "{price}{interval, select, year{/ವರ್ಷ} other{/ತಿಂಗಳು}}",
+    "billingTrialPrice": "{days} ದಿನಗಳು ಉಚಿತ, ನಂತರ {price}{interval, select, year{/ವರ್ಷ} other{/ತಿಂಗಳು}}",
     "paywallTrialBrand": "Omi Pro",
     "paywallTrialHeadline": "ನಿಮ್ಮ ಉಚಿತ ಪ್ರಯೋಗ ಹೇಗೆ ಕಾರ್ಯನಿರ್ವಹಿಸುತ್ತದೆ ಎಂಬುದು ಇಲ್ಲಿದೆ.",
     "paywallTrialSlideSummariesTitle": "ಅನಿಯಮಿತ ಸಾರಾಂಶಗಳು, ಶಾಶ್ವತವಾಗಿ ಉಳಿಸಲಾಗುತ್ತದೆ",
@@ -11885,5 +11887,8 @@
     "onTheWayDayQueued": "ಸರದಿಯಲ್ಲಿದೆ",
     "onTheWayNoDate": "ದಿನಾಂಕವಿಲ್ಲ",
     "onTheWayFootnote": "ವಿಫಲವಾದ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಹಿನ್ನೆಲೆಯಲ್ಲಿ ಮರುಪ್ರಯತ್ನಿಸುತ್ತಲೇ ಇರುತ್ತವೆ. ನಾವು ಟ್ರಾನ್ಸ್‌ಕ್ರೈಬ್ ಮಾಡಲಾಗದ ವಿಷಯಗಳು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ನಮಗೆ ವರದಿಯಾಗುತ್ತವೆ.",
-    "onTheWayDetailsForSupport": "ಬೆಂಬಲಕ್ಕಾಗಿ ವಿವರಗಳು"
+    "onTheWayDetailsForSupport": "ಬೆಂಬಲಕ್ಕಾಗಿ ವಿವರಗಳು",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 ಸಣ್ಣ ಕ್ಲಿಪ್ ಮರೆಮಾಡಲಾಗಿದೆ} other{{count} ಸಣ್ಣ ಕ್ಲಿಪ್‌ಗಳನ್ನು ಮರೆಮಾಡಲಾಗಿದೆ}}",
+    "homeNoiseFoldShow": "ತೋರಿಸಿ",
+    "homeNoiseFoldHide": "{count, plural, =1{1 ಸಣ್ಣ ಕ್ಲಿಪ್ ಮರೆಮಾಡಿ} other{{count} ಸಣ್ಣ ಕ್ಲಿಪ್‌ಗಳನ್ನು ಮರೆಮಾಡಿ}}"
 }

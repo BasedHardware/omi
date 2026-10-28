@@ -6,10 +6,12 @@ from contextlib import nullcontext
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, BackgroundTasks
 from typing import Annotated, Any, Dict, List, Literal, Optional
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import database.conversation_scan as conversation_scan_db
 import database.conversations as conversations_db
+import database.hidden_noise_counts as hidden_noise_counts_db
 import database._client as db_client_module
 import database.action_items as action_items_db
 import database.redis_db as redis_db
@@ -465,6 +467,20 @@ class ConversationStatusResponse(BaseModel):
 class ConversationsCountResponse(BaseModel):
     count: int
     sources: List[str] | None = None
+
+
+class HiddenNoiseDayCount(BaseModel):
+    date: str
+    count: int
+
+
+class HiddenNoiseCountsResponse(BaseModel):
+    tz: str
+    start_date: datetime
+    end_date: datetime
+    days: List[HiddenNoiseDayCount]
+    total: int
+    truncated: bool
 
 
 class ConversationRecordingResponse(BaseModel):
@@ -1027,6 +1043,34 @@ def get_conversations(
         response, truncated=budget.truncated, cacheable=not any(row.get('is_locked') for row in conversations)
     )
     return conversations
+
+
+@router.get('/v1/conversations/hidden-noise-counts', tags=['conversations'], response_model=HiddenNoiseCountsResponse)
+def get_hidden_noise_counts(
+    start_date: datetime = Query(..., description='Inclusive start instant; naive timestamps use UTC'),
+    end_date: datetime = Query(..., description='Inclusive end instant; maximum window is 31 days'),
+    tz: str = Query('UTC', description='IANA timezone for local created_at day buckets'),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Count hidden noise/media without gating on MEDIA_NOISE_MODE for this uid.
+
+    Zero-count days are omitted. A 1000-row scan cap sets truncated=true when
+    hit; days and total then represent lower bounds. Locked rows are eligible;
+    deletion/merge tombstones never count; Dream duplicates count because the
+    include_discarded reveal list shows them. No hidden rows
+    returns empty days and total=0, even when the media/noise mode is disabled.
+    """
+    start_date = _ensure_aware(start_date).astimezone(timezone.utc)
+    end_date = _ensure_aware(end_date).astimezone(timezone.utc)
+    if start_date > end_date or end_date - start_date > timedelta(days=31):
+        raise HTTPException(status_code=400, detail='start_date and end_date must define a window of at most 31 days')
+    try:
+        zone = ZoneInfo(tz)
+    except (ZoneInfoNotFoundError, ValueError):
+        raise HTTPException(status_code=400, detail='tz must be a valid IANA timezone')
+    # Sync routes run in FastAPI's threadpool, as does the adjacent Home list.
+    counts = hidden_noise_counts_db.count_hidden_noise_by_day(uid, start_date, end_date, zone)
+    return {'tz': tz, 'start_date': start_date, 'end_date': end_date, **counts}
 
 
 @router.get('/v1/conversations/count', tags=['conversations'], response_model=ConversationsCountResponse)

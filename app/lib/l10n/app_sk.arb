@@ -2847,8 +2847,8 @@
     "currentPlan": "Aktuálny",
     "neoSubtitle": "{count} otázok mesačne",
     "operatorSubtitle": "{count} otázok mesačne",
-    "chatUsageCost": "Chat: ${used} / ${limit} využité tento mesiac",
-    "chatUsageCostNoLimit": "Chat: ${used} využité tento mesiac",
+    "chatUsageCost": "Chat: {used} / {limit} využité tento mesiac",
+    "chatUsageCostNoLimit": "Chat: {used} využité tento mesiac",
     "chatUsageMessages": "Chat: {used} / {limit} správ tento mesiac",
     "chatUsageMessagesNoLimit": "Chat: {used} správ tento mesiac",
     "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
@@ -4078,6 +4078,8 @@
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
     "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
     "paywallOutlineHeadline": "Už vám neunikne ani slovo.",
+    "billingRecurringPrice": "{price}{interval, select, year{/rok} other{/mesiac}}",
+    "billingTrialPrice": "{days} dní zadarmo, potom {price}{interval, select, year{/rok} other{/mesiac}}",
     "paywallTrialBrand": "Omi Pro",
     "paywallTrialHeadline": "Takto funguje vaša bezplatná skúšobná verzia.",
     "paywallTrialSlideSummariesTitle": "Neobmedzené súhrny, uchované navždy",
@@ -4459,5 +4461,8 @@
     "onTheWayDayQueued": "Vo fronte",
     "onTheWayNoDate": "Bez dátumu",
     "onTheWayFootnote": "Nahrávky, ktorých odosielanie zlyhá, sa budú na pozadí opakovať. Všetko, čo nedokážeme prepísať, sa nám automaticky nahlási.",
-    "onTheWayDetailsForSupport": "Detaily pre podporu"
+    "onTheWayDetailsForSupport": "Detaily pre podporu",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 skrytá krátka nahrávka} other{Skrytých krátkych nahrávok: {count}}}",
+    "homeNoiseFoldShow": "Zobraziť",
+    "homeNoiseFoldHide": "{count, plural, =1{Skryť 1 krátku nahrávku} other{Skryť {count} krátkych nahrávok}}"
 }

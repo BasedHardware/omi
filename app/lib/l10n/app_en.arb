@@ -10469,7 +10469,7 @@
     "chatTitle": "Chat",
     "chatMessages": "messages",
     "unlimitedChatThisMonth": "Unlimited chat messages this month",
-    "chatUsedOfLimitCompute": "${used} of ${limit} compute budget used",
+    "chatUsedOfLimitCompute": "{used} of {limit} compute budget used",
     "@chatUsedOfLimitCompute": {
         "placeholders": {
             "used": {
@@ -10478,7 +10478,8 @@
             "limit": {
                 "type": "String"
             }
-        }
+        },
+        "description": "Compute budget usage; used and limit are already formatted unambiguous USD amounts."
     },
     "chatUsedOfLimitMessages": "{used} of {limit} messages used this month",
     "@chatUsedOfLimitMessages": {
@@ -10557,7 +10558,7 @@
             }
         }
     },
-    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
+    "chatUsageCost": "Chat: {used} / {limit} used this month",
     "@chatUsageCost": {
         "placeholders": {
             "used": {
@@ -10566,15 +10567,17 @@
             "limit": {
                 "type": "String"
             }
-        }
+        },
+        "description": "Chat compute usage; used and limit are already formatted unambiguous USD amounts."
     },
-    "chatUsageCostNoLimit": "Chat: ${used} used this month",
+    "chatUsageCostNoLimit": "Chat: {used} used this month",
     "@chatUsageCostNoLimit": {
         "placeholders": {
             "used": {
                 "type": "String"
             }
-        }
+        },
+        "description": "Chat compute usage; used is an already formatted unambiguous USD amount."
     },
     "chatUsageMessages": "Chat: {used} / {limit} messages this month",
     "@chatUsageMessages": {
@@ -15984,6 +15987,33 @@
     "@paywallOutlineHeadline": {
         "description": "Headline of the Outline paywall variant (mobile paywall A/B test)"
     },
+    "billingRecurringPrice": "{price}{interval, select, year{/year} other{/month}}",
+    "@billingRecurringPrice": {
+        "description": "Recurring catalog total with an unambiguous formatted currency amount; interval is month or year",
+        "placeholders": {
+            "price": {
+                "type": "String"
+            },
+            "interval": {
+                "type": "String"
+            }
+        }
+    },
+    "billingTrialPrice": "{days} days free, then {price}{interval, select, year{/year} other{/month}}",
+    "@billingTrialPrice": {
+        "description": "Trial disclosure showing the exact recurring catalog total and billing interval after the trial",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            },
+            "price": {
+                "type": "String"
+            },
+            "interval": {
+                "type": "String"
+            }
+        }
+    },
     "paywallTrialBrand": "Omi Pro",
     "@paywallTrialBrand": {
         "description": "Paywall header: plan name"
@@ -16114,7 +16144,7 @@
     },
     "paywallTrialCta": "Try for {price}",
     "@paywallTrialCta": {
-        "description": "Paywall primary button; price is a formatted zero price like $0.00",
+        "description": "Paywall primary button; price is a currency-safe formatted zero amount supplied by the catalog formatter",
         "placeholders": {
             "price": {
                 "type": "String"
@@ -17924,5 +17954,27 @@
     "onTheWayDetailsForSupport": "Details for support",
     "@onTheWayDetailsForSupport": {
         "description": "Small text link at the bottom of On the Way, and the title of the page it opens: a plain technical list of every pending recording with its status codes, meant for the support team."
+    },
+    "homeNoiseFoldHidden": "{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}",
+    "@homeNoiseFoldHidden": {
+        "description": "Quiet line at the end of a day on the Home list: how many very short or noise-only recordings Omi folded away from that day. {count} is a whole number.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "homeNoiseFoldShow": "Show",
+    "@homeNoiseFoldShow": {
+        "description": "Tappable word after the hidden-clips count on Home; reveals the folded short recordings in place."
+    },
+    "homeNoiseFoldHide": "{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}",
+    "@homeNoiseFoldHide": {
+        "description": "Tappable line at the end of a day on Home after the user revealed the short recordings; folds them away again. {count} is a whole number.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
     }
 }

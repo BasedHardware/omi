@@ -10269,8 +10269,8 @@
     "currentPlan": "Trenutni",
     "neoSubtitle": "{count} vprašanj na mesec",
     "operatorSubtitle": "{count} vprašanj na mesec",
-    "chatUsageCost": "Klepet: ${used} / ${limit} porabljeno ta mesec",
-    "chatUsageCostNoLimit": "Klepet: ${used} porabljeno ta mesec",
+    "chatUsageCost": "Klepet: {used} / {limit} porabljeno ta mesec",
+    "chatUsageCostNoLimit": "Klepet: {used} porabljeno ta mesec",
     "chatUsageMessages": "Klepet: {used} / {limit} sporočil ta mesec",
     "chatUsageMessagesNoLimit": "Klepet: {used} sporočil ta mesec",
     "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
@@ -11501,6 +11501,8 @@
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
     "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
     "paywallOutlineHeadline": "Nikoli več ne zamudite niti besede.",
+    "billingRecurringPrice": "{price}{interval, select, year{/leto} other{/mesec}}",
+    "billingTrialPrice": "{days} dni brezplačno, nato {price}{interval, select, year{/leto} other{/mesec}}",
     "paywallTrialBrand": "Omi Pro",
     "paywallTrialHeadline": "Tako deluje vaša brezplačna preizkusna doba.",
     "paywallTrialSlideSummariesTitle": "Neomejeni povzetki, shranjeni za vedno",
@@ -11885,5 +11887,8 @@
     "onTheWayDayQueued": "V čakalni vrsti",
     "onTheWayNoDate": "Brez datuma",
     "onTheWayFootnote": "Posnetki, katerih nalaganje spodleti, se v ozadju poskušajo znova. Vse, česar ne moremo transkribirati, nam bo samodejno sporočeno.",
-    "onTheWayDetailsForSupport": "Podrobnosti za podporo"
+    "onTheWayDetailsForSupport": "Podrobnosti za podporo",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 kratek posnetek skrit} other{{count} kratkih posnetkov skritih}}",
+    "homeNoiseFoldShow": "Prikaži",
+    "homeNoiseFoldHide": "{count, plural, =1{Skrij 1 kratek posnetek} other{Skrij {count} kratkih posnetkov}}"
 }

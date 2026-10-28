@@ -8883,12 +8883,12 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit felhasználva ebben a hónapban';
+    return 'Chat: $used / $limit felhasználva ebben a hónapban';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used felhasználva ebben a hónapban';
+    return 'Chat: $used felhasználva ebben a hónapban';
   }
 
   @override
@@ -13353,6 +13353,30 @@ class AppLocalizationsHu extends AppLocalizations {
   String get paywallOutlineHeadline => 'Soha többé ne maradj le egyetlen szóról sem.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/év',
+        'other': '/hónap',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/év',
+        'other': '/hónap',
+      },
+    );
+    return '$days nap ingyen, utána $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -14718,4 +14742,29 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'Részletek az ügyfélszolgálatnak';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rövid felvétel elrejtve',
+      one: '1 rövid felvétel elrejtve',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Megjelenítés';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rövid felvétel elrejtése',
+      one: '1 rövid felvétel elrejtése',
+    );
+    return '$_temp0';
+  }
 }

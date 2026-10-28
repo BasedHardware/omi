@@ -1,4 +1,5 @@
 import 'package:omi/models/subscription.dart';
+import 'package:omi/utils/billing_price.dart';
 import 'package:omi/backend/schema/gen/storefront_wire.g.dart';
 
 /// Presentation only. The backend owns tier rank, recommendation, copy, prices and entitlements.
@@ -190,7 +191,7 @@ String? storefrontActionLabel({
   required StorefrontCheckoutDecision decision,
 }) {
   if (decision == StorefrontCheckoutDecision.refuse) return null;
-  return price.ctaLabel ?? tier.ctaLabel;
+  return price.formattedCtaLabel ?? tier.ctaLabel;
 }
 
 class StorefrontTier {
@@ -275,6 +276,19 @@ class StorefrontPrice {
   final int? monthsFree;
   final String? ctaLabel;
   final List<String> confirmLines;
+  final String? ctaLabelTemplate;
+  final int? savingMinor;
+  final List<String> confirmLineTemplates;
+
+  String? get formattedCtaLabel => ctaLabelTemplate != null && savingMinor != null
+      ? ctaLabelTemplate!.replaceAll('{saving}', formatBillingPrice(savingMinor!, currency))
+      : ctaLabel;
+
+  List<String> get formattedConfirmLines => confirmLineTemplates.isEmpty
+      ? confirmLines
+      : confirmLineTemplates
+          .map((line) => line.replaceAll('{price}', formatBillingPrice(amountMinor, currency)))
+          .toList();
 
   const StorefrontPrice({
     required this.id,
@@ -287,6 +301,9 @@ class StorefrontPrice {
     this.monthsFree,
     this.ctaLabel,
     this.confirmLines = const [],
+    this.ctaLabelTemplate,
+    this.savingMinor,
+    this.confirmLineTemplates = const [],
   });
 
   factory StorefrontPrice.fromJson(Map<String, dynamic> json) {
@@ -309,6 +326,9 @@ class StorefrontPrice {
       renewalLine: _optionalText(json, 'renewal_line'),
       monthsFree: months as int?,
       ctaLabel: _optionalText(json, 'cta_label'),
+      ctaLabelTemplate: _optionalText(json, 'cta_label_template'),
+      savingMinor: json['saving_minor'] as int?,
+      confirmLineTemplates: List<String>.from(json['confirm_line_templates'] as List? ?? const []),
       confirmLines: List<String>.unmodifiable(
           (json['confirm_lines'] as List? ?? const []).whereType<String>().where((line) => line.trim().isNotEmpty)),
     );
@@ -324,6 +344,13 @@ class StorefrontCurrentPlan {
   final bool cancelAtPeriodEnd;
   final String line;
   final String? legacyNote;
+  final int? amountMinor;
+  final String? currency;
+  final String? lineTemplate;
+
+  String get displayLine => lineTemplate != null && amountMinor != null && currency != null
+      ? lineTemplate!.replaceAll('{price}', formatBillingPrice(amountMinor!, currency!))
+      : line;
 
   const StorefrontCurrentPlan({
     required this.planId,
@@ -334,6 +361,9 @@ class StorefrontCurrentPlan {
     required this.cancelAtPeriodEnd,
     required this.line,
     this.legacyNote,
+    this.amountMinor,
+    this.currency,
+    this.lineTemplate,
   });
 
   factory StorefrontCurrentPlan.fromJson(Map<String, dynamic> json) {
@@ -361,6 +391,9 @@ class StorefrontCurrentPlan {
       cancelAtPeriodEnd: _boolean(json, 'cancel_at_period_end'),
       line: _text(json, 'line'),
       legacyNote: note as String?,
+      amountMinor: json['amount_minor'] as int?,
+      currency: _optionalText(json, 'currency'),
+      lineTemplate: _optionalText(json, 'line_template'),
     );
   }
 }

@@ -60,6 +60,8 @@ class WebPaywallPage extends StatefulWidget {
         if (price == null) continue;
         params['${price.interval}_amount'] = '${price.amountMinor}';
         params['${price.interval}_currency'] = price.currency;
+        params['${price.interval}_price'] = price.formatted;
+        params['${price.interval}_per_month_price'] = price.formattedPerMonth;
       }
     }
     return base.replace(queryParameters: params);
