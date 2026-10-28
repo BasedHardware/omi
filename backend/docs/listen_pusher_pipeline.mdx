@@ -7624,7 +7624,14 @@ existing lead. Modulate's 25→100 promotion is held while Soniox is stage ≥5
 and no other eligible target is full share. Eligibility uses the serving user's
 language, config-ramp cohort, configured capacity signal and known account
 quarantines. The guard follows
-provider families, including custom registry IDs. These default-on guards have independent
+provider families, including custom registry IDs. The selector also projects
+Modulate's effective stage to at most 25 for that request, even when another
+language or cohort previously promoted its persisted global state to 100.
+Escape-vote admission uses the same projection, so Soniox's served outcomes
+still count outside its re-entry cohort. Raw health counters and generations
+are preserved; `omi_stt_cost_routing_decisions_total{reason=sole_primary_guard}`
+counts projections. Both CAS scopes check the actual serving language.
+These default-on guards have independent
 kill switches in `config/live_stt_resilience.py`.
 
 A cost-gate bench atomically records a 90-minute source deadline in a separate

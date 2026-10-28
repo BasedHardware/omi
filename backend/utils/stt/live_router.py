@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextvars import ContextVar
+from dataclasses import replace
 import threading
 import time
 
@@ -11,6 +12,7 @@ from config.live_stt_registry import Target, assigned, registry, DEFAULT_IDS, ro
 from config.stt_provider_policy import MODULATE_SUPPORTED_LANGUAGES, PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
 from config.live_stt_resilience import escape_best_rate_primary_enabled, escape_excludes_benched_enabled
 from utils.stt.live_gate import GateState, gate_rate
+from utils.stt.live_primary_guard import effective_primary_stages
 from utils.stt.live_health import bounded_language
 from utils.stt.live_metrics import COST_DECISION, COST_SHADOW, COST_ALL_DEGRADED
 from utils.stt.provider_resilience import ProviderCircuitBreaker
@@ -260,6 +262,15 @@ def select(
                 continue
             reason = 'capacity_skip'
         COST_DECISION.labels(target=target.id, reason=reason).inc()
+
+    raw_stages = {target.id: states.get(target.id, GateState()).stage for target in available}
+    effective = effective_primary_stages(available, raw_stages)
+    if effective != raw_stages:
+        states = dict(states)
+        for target in available:
+            if effective[target.id] != raw_stages[target.id]:
+                states[target.id] = replace(states.get(target.id, GateState()), stage=effective[target.id])
+                COST_DECISION.labels(target=target.id, reason='sole_primary_guard').inc()
 
     for target in available:
         state = states.get(target.id, GateState())

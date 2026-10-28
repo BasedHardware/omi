@@ -19,6 +19,7 @@ from config.live_stt_resilience import (
 )
 from config.live_stt_registry import DEFAULT_TARGETS, Target, registry, assigned
 from utils.stt.live_gate import GateState, begin_trial, transition, generation_allows, reset_generation_floor
+from utils.stt.live_primary_guard import effective_primary_stages
 from utils.stt.live_metrics import (
     COST_BENCH,
     COST_EVENTS,
@@ -335,10 +336,11 @@ class CostHealthMixin(ABC):
     def _effective_stages(self, uid: str, language: str) -> dict[str, int]:
         """Gate stage of every registry target that could serve this user.
 
-        Mirrors ``live_router.select``'s escape test without capacity: a target
-        counts when it is capable of the language and the user is inside its
-        config ramp. Uses the same conservative global/language view.
+        Mirrors configured eligibility and the per-request primary projection
+        in ``live_router.select``. Transient dial cooldowns remain local to the
+        router. Uses the conservative global/language view.
         """
+        now = self._clock()
         try:
             targets = registry()
         except (ValueError, TypeError):
@@ -347,11 +349,15 @@ class CostHealthMixin(ABC):
             # A malformed ramp (e.g. strict window percent) proves nothing:
             # keep the cohort-only rule rather than guess an escape.
             servable = [
-                target for target in targets if target.capable(language) and assigned(uid, target.id, target.ramp())
+                target
+                for target in targets
+                if target.capable(language)
+                and assigned(uid, target.id, target.ramp())
+                and not target.at_capacity()
+                and self._account_bench_until(target.family) <= now
             ]
         except (ValueError, TypeError):
             return {}
-        now = self._clock()
         stages: dict[str, int] = {}
         with self._lock:
             for target in servable:
@@ -360,7 +366,7 @@ class CostHealthMixin(ABC):
                     key = (target.id, lang)
                     stage = min(stage, self._cost_view(key, self._cost_is_fresh(key, now)).stage)
                 stages[target.id] = stage
-        return stages
+        return effective_primary_stages(servable, stages)
 
     def cost_stage(self, target: str, language: str) -> int:
         """Conservative (global/language minimum) gate stage; no side effects."""
@@ -685,6 +691,7 @@ class CostHealthMixin(ABC):
         hold_update: Callable[[GateState], GateState] | None = None,
         promotion_targets: tuple[str, ...] | None = None,
         surge_probe: Callable[[], Awaitable[dict[str, str]]] | None = None,
+        serving_language: str | None = None,
     ) -> GateState:
         identity = self._check_identity()
         if expected_identity is not None and identity != expected_identity:
@@ -740,7 +747,7 @@ class CostHealthMixin(ABC):
                         and (
                             entry.id in promotion_targets
                             if promotion_targets is not None
-                            else entry.family == SOLE_PRIMARY_GUARD_FAMILY and entry.capable(key[1])
+                            else entry.family == SOLE_PRIMARY_GUARD_FAMILY and entry.capable(serving_language or key[1])
                         )
                     ]
                     guard_indices = [
@@ -748,7 +755,11 @@ class CostHealthMixin(ABC):
                     ]
                     if guard_indices:
                         held = hold_update(old)
-                        keys += [live_stt_state.cost_key(entry, lang) for entry in others for lang in ('all', key[1])]
+                        keys += [
+                            live_stt_state.cost_key(entry, lang)
+                            for entry in others
+                            for lang in ('all', serving_language or key[1])
+                        ]
                         extra = ['hold', json.dumps(held.encode(), separators=(',', ':')), json.dumps(guard_indices)]
                 mode_keys = len(keys)
                 keys.extend(dependencies)
@@ -890,6 +901,7 @@ class CostHealthMixin(ABC):
                     hold_update=(lambda state: update(state, hold=True)) if guarded else None,
                     promotion_targets=promotion_targets,
                     surge_probe=probe if failed else None,
+                    serving_language=language,
                 )
                 if write_committed and write_dropped:
                     return

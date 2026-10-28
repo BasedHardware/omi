@@ -576,3 +576,94 @@ async def test_real_lua_promotion_hold_reads_current_shared_stages(soniox_stage,
         assert state.stage == (25 if held else 100)
         assert state.n == (61 if held else 0)
         assert await redis.ttl(key) == (-1 if held else 900)
+
+
+async def _partitioned_pod():
+    clock = [20_000.0]
+    pod = _Pod(lambda: clock[0])
+    redis = pod.pod._redis()
+    _seed(redis, PARAKEET, GateState(stage=0, until=clock[0] + 14_400))
+    _seed(redis, SONIOX, GateState(n=300, failures=3), ('all', 'ar'))
+    _seed(
+        redis,
+        SONIOX,
+        GateState(stage=5, n=30, trial_started_at=clock[0], trial_users=tuple((f'{i:016x}', 3, 0) for i in range(10))),
+        ('en',),
+    )
+    users = tuple((f'{100 + i:016x}', 3, int(i < 4)) for i in range(20))
+    _seed(
+        redis,
+        MODULATE,
+        GateState(stage=25, n=60, failures=4, trial_users=users, trial_started_at=clock[0] - 700),
+        ('all',),
+    )
+    _seed(redis, MODULATE, GateState(n=500, failures=30), ('en', 'ar'))
+    await pod.refresh()
+    return pod
+
+
+@pytest.mark.asyncio
+async def test_global_promotion_uses_serving_language_restriction():
+    pod = await _partitioned_pod()
+    uid = next(_uid(i) for i in range(5000, 6000) if assigned(_uid(i), 'stt-reentry:' + MODULATE.id, 25))
+    await pod.vote(MODULATE.id, uid, False, 'en')
+    assert pod.stage(MODULATE.id, 'all') == 25
+    assert pod.stage(MODULATE.id, 'en') == 25
+    assert pod.primary('en') == SONIOX.id
+
+
+@pytest.mark.asyncio
+async def test_other_language_global_unlock_keeps_english_guard_and_escape_votes():
+    pod = await _partitioned_pod()
+    uid = next(_uid(i) for i in range(5000, 6000) if assigned(_uid(i), 'stt-reentry:' + MODULATE.id, 25))
+    await pod.vote(MODULATE.id, uid, False, 'ar')
+    assert pod.stage(MODULATE.id, 'all') == 100  # Arabic has full-share Soniox.
+    assert pod.stage(MODULATE.id, 'en') == 100  # Raw health is intentionally preserved.
+    assert pod.primary('en') == SONIOX.id  # The effective English route still guards Modulate.
+    out_of_cohort = next(_uid(i) for i in range(6000, 7000) if not assigned(_uid(i), 'stt-reentry:' + SONIOX.id, 5))
+    before = pod.pod.cost_snapshot(DEFAULT_TARGETS, 'en')[SONIOX.id].n
+    await pod.vote(SONIOX.id, out_of_cohort, False, 'en')
+    assert pod.pod.cost_snapshot(DEFAULT_TARGETS, 'en')[SONIOX.id].n == before + 1
+
+
+def test_global_full_share_cannot_unlock_a_user_outside_the_other_target_ramp():
+    parakeet = replace(PARAKEET, ramp_percent=50)
+    states = {PARAKEET.id: GateState(), MODULATE.id: GateState(n=60, failures=4), SONIOX.id: GateState(stage=5, n=30)}
+    inside = next(str(i) for i in range(1000) if assigned(str(i), parakeet.id, 50))
+    outside = next(str(i) for i in range(1000) if not assigned(str(i), parakeet.id, 50))
+    assert select((parakeet, MODULATE, SONIOX), states, inside, 'en')[0] == parakeet
+    assert select((parakeet, MODULATE, SONIOX), states, outside, 'en')[0] == SONIOX
+
+
+@pytest.mark.parametrize(
+    'soniox_stage,parakeet_stage,enabled,guarded',
+    [
+        (5, 0, True, True),
+        (25, 0, True, True),
+        (100, 0, True, False),
+        (0, 0, True, False),
+        (5, 100, True, False),
+        (5, 0, False, False),
+    ],
+)
+def test_request_guard_projects_stages_without_changing_health(
+    monkeypatch, soniox_stage, parakeet_stage, enabled, guarded
+):
+    monkeypatch.setenv('LISTEN_STT_SOLE_PRIMARY_HOLD_ENABLED', 'true' if enabled else 'false')
+    states = {
+        PARAKEET.id: GateState(stage=parakeet_stage),
+        MODULATE.id: GateState(n=60, failures=4),
+        SONIOX.id: GateState(stage=soniox_stage, n=30),
+    }
+    original = dict(states)
+    decision = {}
+    select(DEFAULT_TARGETS, states, 'projection-user', 'en', decision=decision)
+    assert decision['states'][MODULATE.id].stage == (25 if guarded else 100)
+    assert states == original
+    assert decision['states'][MODULATE.id].n == 60
+
+
+def test_request_guard_uses_provider_families_for_custom_ids():
+    modulate, soniox = replace(MODULATE, id='modulate-prod'), replace(SONIOX, id='soniox-prod')
+    states = {modulate.id: GateState(n=60, failures=4), soniox.id: GateState(stage=5, n=30)}
+    assert select((modulate, soniox), states, 'custom-projection-user', 'en')[0] == soniox
