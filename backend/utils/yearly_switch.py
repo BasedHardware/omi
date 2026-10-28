@@ -116,6 +116,11 @@ def refusal(sub: Any, now: Optional[int] = None) -> Optional[str]:
         return 'pending_update'
     if _get(sub, 'discount') or _get(sub, 'discounts'):
         return 'discounted'
+    # Paused collection voids the switch invoice; an invoiced (enterprise) subscription is not charged now.
+    if _get(sub, 'pause_collection'):
+        return 'paused'
+    if (_get(sub, 'collection_method') or 'charge_automatically') != 'charge_automatically':
+        return 'collection_method'
     items = _get(_get(sub, 'items'), 'data') or []
     if len(items) != 1 or int(_get(items[0], 'quantity', 1) or 1) != 1:
         return 'items'
@@ -216,9 +221,22 @@ def charge_refusal(
     return None if amount_due == expected_amount_due else 'preview_changed'
 
 
-def idempotency_key(subscription_id: str, proration_date: int) -> str:
+def upgrade_refusal(sub: Any, request: Any) -> Optional[str]:
+    """POST upgrade-subscription ``switch_now`` guard: the offer's rules, then the re-run preview."""
+    price_id, proration_date, expected = request.price_id, request.proration_date, request.expected_amount_due
+    return request_refusal(sub, price_id, request.promotion_code, proration_date, expected) or charge_refusal(
+        sub, price_id, proration_date, expected
+    )
+
+
+def idempotency_key(subscription_id: str, proration_date: Optional[int]) -> str:
     """One charge per preview: a retried or doubled request replays Stripe's first result."""
     return f'omi-yearly-switch-{subscription_id}-{proration_date}'
+
+
+def charge_params(subscription_id: str, proration_date: Optional[int]) -> dict[str, Any]:
+    """Subscription.modify arguments that pin the switch to the preview upgrade_refusal accepted."""
+    return {'proration_date': proration_date, 'idempotency_key': idempotency_key(subscription_id, proration_date)}
 
 
 def proration_date_refusal(sub: Any, proration_date: Optional[int], now: Optional[int] = None) -> Optional[str]:

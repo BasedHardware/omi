@@ -527,7 +527,9 @@ def _ys_patches(router, stripe_sub_dict, modify, invoice=None):
             schedule_modify=stack.enter_context(patch.object(router.stripe.SubscriptionSchedule, "modify")),
             promo=stack.enter_context(patch.object(router.stripe.PromotionCode, "list")),
             preview=stack.enter_context(
-                patch.object(router.yearly_switch.stripe.Invoice, "create_preview", return_value=invoice or _ys_invoice())
+                patch.object(
+                    router.yearly_switch.stripe.Invoice, "create_preview", return_value=invoice or _ys_invoice()
+                )
             ),
         )
         stack.enter_context(patch.object(router.stripe.Subscription, "retrieve", return_value=retrieved_sub))
@@ -625,6 +627,8 @@ def test_declined_yearly_switch_returns_402_and_keeps_the_monthly_plan(payment_r
         ({"discounts": ["di_retention"]}, {}, None),
         ({"discount": {"coupon": {"id": "omi-retention-50off-3mo"}}}, {}, None),
         ({"currency": "jpy"}, {}, None),
+        ({"pause_collection": {"behavior": "void"}}, {}, None),
+        ({"collection_method": "send_invoice"}, {}, None),
         ({}, {"promotion_code": "SAVE20"}, None),
         ({}, {"proration_date": _YS_NOW - 2 * 3600}, None),  # a stale preview
         ({}, {"proration_date": None}, None),  # no preview, no charge

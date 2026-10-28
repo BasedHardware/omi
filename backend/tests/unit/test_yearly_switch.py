@@ -120,6 +120,8 @@ def test_omi_pro_monthly_is_offered_omi_pro_yearly_with_the_real_savings():
         # A coupon (the stay offer's 50% off) would carry onto the yearly invoice.
         (_sub(discounts=['di_1']), 'discounted'),
         (_sub(discount={'coupon': {'id': 'omi-retention-50off-3mo'}}), 'discounted'),
+        (_sub(pause_collection={'behavior': 'void'}), 'paused'),
+        (_sub(collection_method='send_invoice'), 'collection_method'),
         (_sub(price_id='price_uy', amount=26991, interval='year'), 'not_monthly'),
         # Retired plans (2026-10-26) are not offered a new yearly term, even their own.
         (_sub(price_id='price_pm', amount=1799), 'not_offered'),

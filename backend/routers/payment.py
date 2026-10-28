@@ -901,14 +901,7 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
             raise HTTPException(status_code=400, detail=change_error)
 
         # The yearly switch offer's rules: no trial (#23298), past_due, scheduled change or discount.
-        refusal = request.switch_now and (
-            yearly_switch.request_refusal(
-                stripe_sub, request.price_id, request.promotion_code, request.proration_date, request.expected_amount_due
-            )
-            or yearly_switch.charge_refusal(
-                stripe_sub, request.price_id, request.proration_date, request.expected_amount_due
-            )
-        )
+        refusal = request.switch_now and yearly_switch.upgrade_refusal(stripe_sub, request)
         if refusal:
             logger.info(f"Yearly switch refused for user {uid}: {refusal}")
             raise HTTPException(status_code=409, detail="Switching to yearly is not available for this subscription.")
@@ -938,8 +931,7 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                 modify_params['discounts'] = [{'promotion_code': resolved_promo_id}]
             if request.switch_now:
                 modify_params['metadata']['omi_yearly_switch'] = 'in_app'
-                modify_params['proration_date'] = request.proration_date
-                modify_params['idempotency_key'] = yearly_switch.idempotency_key(stripe_sub['id'], request.proration_date)
+                modify_params.update(yearly_switch.charge_params(stripe_sub['id'], request.proration_date))
 
             updated_sub = stripe.Subscription.modify(stripe_sub['id'], **modify_params)
             updated_sub_dict = updated_sub.to_dict()
