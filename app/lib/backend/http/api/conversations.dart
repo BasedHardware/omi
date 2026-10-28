@@ -415,6 +415,7 @@ Future<Map<DateTime, int>?> getHiddenNoiseCounts({required DateTime start, requi
   final response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
   if (response == null || response.statusCode != 200) return null;
   try {
+    // omi-perf-allow: history-json-on-ui -- at most 31 day rows, independent of history size
     return parseHiddenNoiseCounts(jsonDecode(response.body));
   } catch (_) {
     return null;
