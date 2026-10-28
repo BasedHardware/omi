@@ -599,6 +599,8 @@ def test_subscription_endpoint_falls_back_to_basic_when_no_valid_subscription():
     ), patch.object(
         users_router, 'get_monthly_usage_for_subscription', MagicMock(return_value={})
     ), patch.object(
+        users_router.users_db, 'get_stripe_customer_id', MagicMock(return_value=None)
+    ), patch.object(
         users_router, 'get_paid_plan_definitions', MagicMock(return_value=[])
     ), patch.object(
         users_router, 'should_hide_subscription_ui', MagicMock(return_value=False)
@@ -1162,6 +1164,7 @@ def test_closed_real_allowance_preserves_finite_snapshot_budget(monkeypatch, rea
     plan = users_router.PlanType.basic if reason == 'subscription_inactive' else users_router.PlanType.plus
     cap = 18_000 if plan is users_router.PlanType.basic else 90_000
     subscription = users_router.Subscription(plan=plan, status=users_router.SubscriptionStatus.active)
+    monkeypatch.setattr(users_router.users_db, 'get_stripe_customer_id', lambda uid: None)
     monkeypatch.setattr(users_router.users_db, 'is_byok_active', lambda uid: False)
     monkeypatch.setattr(users_router, 'get_user_subscription', lambda uid: subscription)
     monkeypatch.setattr(users_router, 'reconcile_basic_plan_with_stripe', lambda *args, **kwargs: None)
