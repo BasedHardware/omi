@@ -131,7 +131,7 @@ env:
   - name: BATCH_PIPELINE_PERCENT
     value: "0"
   - name: SERVER_BATCH_ONLY_MOBILE_PERCENT
-    value: "100"
+    value: "25"
   - name: BATCH_PIPELINE_SERVING_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_WORKER_ENABLED
