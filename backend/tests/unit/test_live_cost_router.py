@@ -251,7 +251,7 @@ class MemoryRedis:
             return 0
         result = 1
         if _numkeys > 2:
-            mode, held, guard_index = args[_numkeys + 3 :]
+            mode, held, guard_indices = args[_numkeys + 3 :]
             assert mode == 'hold'
             stages = {
                 index
@@ -261,7 +261,9 @@ class MemoryRedis:
                 )
                 for index in range(1, _numkeys, 2)
             }
-            if stages[guard_index] >= 5 and all(stage < 100 for stage in stages.values()):
+            if any(stages[index] >= 5 for index in json.loads(guard_indices)) and all(
+                stage < 100 for stage in stages.values()
+            ):
                 new, ttl, result = held, 0, 2
         self.data[key] = new
         self.expires_at.pop(key, None)

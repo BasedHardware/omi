@@ -24,7 +24,7 @@ from config import live_stt_state
 from config.live_stt_registry import DEFAULT_TARGETS, assigned
 from tests.unit.test_live_cost_router import MemoryRedis, controls, seed_cost_interest  # noqa: F401 -- autouse fixture
 from utils.stt import live_health
-from utils.stt.live_cost_health import CAS, CostHealthMixin, FAILOVER_SURGE_CENSOR_SECONDS
+from utils.stt.live_cost_health import CAS, FAILOVER_SURGE_CENSOR_SECONDS
 from utils.stt.live_gate import GateState, begin_trial, transition
 from utils.stt.live_router import select
 
@@ -152,6 +152,85 @@ async def test_surge_window_reaches_other_pods_through_the_snapshot():
     assert first.stage(SONIOX.id) == 100
 
 
+@pytest.mark.asyncio
+async def test_failed_votes_see_a_source_bench_before_the_next_snapshot():
+    clock = [10_000.0]
+    first, second = _Pod(lambda: clock[0]), _Pod(lambda: clock[0])
+    second.pod._redis = first.pod._redis
+    await first.refresh()
+    await second.refresh()
+    for i in range(8):
+        await first.vote(PARAKEET.id, _uid(i), True)
+    assert SONIOX.id not in second.pod._cost_surge_until
+    for i in range(8):
+        await second.vote(SONIOX.id, _uid(100 + i), True)
+    assert second.stage(SONIOX.id) == 100
+    assert json.loads(first.pod._redis().data[live_stt_state.cost_key(SONIOX, 'all')])['stage'] == 100
+
+
+@pytest.mark.parametrize(
+    'language,exclude_by', [('ar', 'capability'), ('en', 'ramp'), ('en', 'capacity'), ('en', 'cohort')]
+)
+@pytest.mark.asyncio
+async def test_ineligible_full_share_target_cannot_release_modulate(monkeypatch, language, exclude_by):
+    clock = [20_000.0]
+    if exclude_by in {'ramp', 'capacity', 'cohort'}:
+        parakeet = replace(
+            PARAKEET,
+            ramp_percent=0 if exclude_by == 'ramp' else 1 if exclude_by == 'cohort' else 100,
+            capacity_env='TEST_CASCADE_FULL' if exclude_by == 'capacity' else None,
+        )
+        monkeypatch.setenv(
+            'STT_ROUTING_TARGETS_JSON',
+            json.dumps(
+                [
+                    {key: value for key, value in vars(entry).items() if value is not None}
+                    for entry in (parakeet, MODULATE, SONIOX)
+                ]
+            ),
+        )
+        if exclude_by == 'capacity':
+            monkeypatch.setenv('TEST_CASCADE_FULL', 'true')
+    pod = _Pod(lambda: clock[0])
+    users = tuple((f'{i:016x}', 3, 0) for i in range(20))
+    _seed(
+        pod.pod._redis(),
+        MODULATE,
+        GateState(stage=25, n=60, trial_users=users, trial_started_at=clock[0] - 700),
+        ('all', language),
+    )
+    _seed(pod.pod._redis(), SONIOX, GateState(stage=5), ('all', language))
+    await pod.refresh()
+    uid = next(
+        _uid(i)
+        for i in range(4000, 5000)
+        if assigned(_uid(i), 'stt-reentry:' + MODULATE.id, 25)
+        and (exclude_by != 'cohort' or not assigned(_uid(i), PARAKEET.id, 1))
+    )
+    await pod.vote(MODULATE.id, uid, False, language)
+    assert pod.stage(MODULATE.id, language) == 25
+    assert json.loads(pod.pod._redis().data[live_stt_state.cost_key(MODULATE, 'all')])['stage'] == 25
+
+
+@pytest.mark.asyncio
+async def test_custom_modulate_and_soniox_ids_keep_the_family_guard(monkeypatch):
+    modulate, soniox = replace(MODULATE, id='modulate-prod'), replace(SONIOX, id='soniox-prod')
+    monkeypatch.setenv(
+        'STT_ROUTING_TARGETS_JSON',
+        json.dumps(
+            [{key: value for key, value in vars(entry).items() if value is not None} for entry in (modulate, soniox)]
+        ),
+    )
+    clock = [20_000.0]
+    pod = _Pod(lambda: clock[0])
+    users = tuple((f'{i:016x}', 3, 0) for i in range(20))
+    _seed(pod.pod._redis(), modulate, GateState(stage=25, n=60, trial_users=users, trial_started_at=clock[0] - 700))
+    _seed(pod.pod._redis(), soniox, GateState(stage=5))
+    await pod.refresh()
+    await pod.vote(modulate.id, 'custom-user', False)
+    assert pod.stage(modulate.id) == 25
+
+
 @pytest.mark.parametrize('enabled', [True, False])
 @pytest.mark.asyncio
 async def test_sim_1028_parakeet_bench_failover_surge_cannot_burst_bench_soniox(monkeypatch, enabled):
@@ -183,7 +262,7 @@ async def test_sim_1028_parakeet_bench_failover_surge_cannot_burst_bench_soniox(
 
 
 def test_sole_primary_blocked_rule():
-    blocked = CostHealthMixin._sole_primary_blocked
+    blocked = live_health.FleetHealth(redis_client=MemoryRedis())._sole_primary_blocked
     assert blocked(MODULATE.id, {SONIOX.id: 5, PARAKEET.id: 0})
     assert not blocked(MODULATE.id, {SONIOX.id: 100})  # another full share: not sole
     assert not blocked(MODULATE.id, {PARAKEET.id: 0})  # guard below stage 5
@@ -417,7 +496,7 @@ async def test_real_lua_promotion_hold_reads_current_shared_stages(soniox_stage,
         for target, stage in [(PARAKEET, parakeet_stage), (SONIOX, soniox_stage)]:
             for lang in ('all', 'en'):
                 await redis.set(live_stt_state.cost_key(target, lang), json.dumps(GateState(stage=stage).encode()))
-        result = await redis.eval(CAS, len(keys), *keys, old, promoted, 900, 'hold', held_state, 4)
+        result = await redis.eval(CAS, len(keys), *keys, old, promoted, 900, 'hold', held_state, json.dumps([4]))
         assert result == (2 if held else 1)
         state = GateState.decode(json.loads(await redis.get(key)))
         assert state.stage == (25 if held else 100)

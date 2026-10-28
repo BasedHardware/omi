@@ -7621,12 +7621,16 @@ excludes stage-0 targets while a stage-5+ target exists. Its lead is the
 lowest observed failure-rate candidate with at least 30 admitted outcomes;
 without a proven candidate, existing stage ordering applies. Ties retain the
 existing lead. Modulate's 25→100 promotion is held while Soniox is stage ≥5
-and no other target is full share. These default-on guards have independent
+and no other eligible target is full share. Eligibility uses the serving user's
+language, config-ramp cohort and configured capacity signal. The guard follows
+provider families, including custom registry IDs. These default-on guards have independent
 kill switches in `config/live_stt_resilience.py`.
 
 A cost-gate bench atomically records a 90-minute source deadline in a separate
 identity-scoped Redis key. Snapshot refresh shares it with cold pods even after
-the source begins recovery. During that window, failures on other targets keep
+the source begins recovery. Failed shared writes also read persisted deadlines
+before transitioning, so a stale snapshot cannot miss a new bench.
+During that window, failures on other targets keep
 their denominator, failure rate, CUSUM and sustained breadth, but are excluded
 from the eight-failure burst count. A fixed-width `!` marker in recent failure
 fingerprints preserves the existing GateState wire schema; older pods count

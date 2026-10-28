@@ -41,6 +41,7 @@ from utils.stt.live_metrics import (
 )
 from utils.stt.live_signal import provider_observation
 from utils.stt.live_reason import LIVE_STT_REASONS, normalize_live_stt_reason
+from utils.observability.reasons import LiveSttReason, ReasonFamily, reason_label
 
 logger = logging.getLogger(__name__)
 
@@ -86,17 +87,20 @@ local encoded = ARGV[2]
 local ttl = tonumber(ARGV[3])
 local result = 1
 if ARGV[4] == 'hold' then
-    local guard = 0
+    local guard = false
+    local guard_indices = cjson.decode(ARGV[6])
     local full_share = false
     for index = 2, #KEYS, 2 do
         local global = redis.call('GET', KEYS[index])
         local language = redis.call('GET', KEYS[index + 1])
         local stage = math.min(global and cjson.decode(global).stage or 100,
                                language and cjson.decode(language).stage or 100)
-        if index == tonumber(ARGV[6]) then guard = stage end
+        for _, guard_index in ipairs(guard_indices) do
+            if index == guard_index and stage >= 5 then guard = true end
+        end
         if stage == 100 then full_share = true end
     end
-    if guard >= 5 and not full_share then
+    if guard and not full_share then
         encoded = ARGV[5]
         ttl = 0
         result = 2
@@ -124,7 +128,8 @@ FAILOVER_SURGE_CENSOR_SECONDS = 90 * 60
 # 6.2% trial rate while soniox trialed healthy at stage 5, then served ~9%
 # failure for six hours. While the guard target is at stage >= 5, the held
 # target may not become the only stage-100 primary.
-SOLE_PRIMARY_HOLD = {'modulate-velma-2': 'soniox'}
+SOLE_PRIMARY_FAMILY = 'modulate'
+SOLE_PRIMARY_GUARD_FAMILY = 'soniox'
 
 
 class CostHealthMixin(ABC):
@@ -379,30 +384,38 @@ class CostHealthMixin(ABC):
     def _failover_surge_open(self, target: str, now: float) -> bool:
         return failover_surge_censor_enabled() and now < self._cost_surge_until.get(target, 0.0)
 
-    @staticmethod
-    def _sole_primary_blocked(target: str, stages: dict[str, int]) -> bool:
-        """Held target may not become the only stage-100 share (2026-10-28)."""
-        guard = SOLE_PRIMARY_HOLD.get(target)
-        if guard is None or guard not in stages or stages[guard] < 5:
-            return False
-        return all(stage < 100 for stage in stages.values())
+    async def _fresh_failover_surge(self, target: str, now: float, identity: str) -> bool:
+        """A failed vote must see source benches committed before its Redis time.
 
-    def _cached_target_stages(self, exclude: str, language: str) -> dict[str, int]:
-        """Conservative stages of every other registry target, from local view."""
-        try:
-            targets = [entry for entry in registry() if entry.id != exclude]
-        except (ValueError, TypeError):
-            return {}
-        now = self._clock()
-        stages: dict[str, int] = {}
-        with self._lock:
-            for target in targets:
-                stage = 100
-                for lang in ('all', language):
-                    key = (target.id, lang)
-                    stage = min(stage, self._cost_view(key, self._cost_is_fresh(key, now)).stage)
-                stages[target.id] = stage
-        return stages
+        Snapshot cadence is not a censor boundary: a different pod can bench
+        a source and overload this target before this pod's next refresh.
+        """
+        if not failover_surge_censor_enabled():
+            return False
+        sources = [entry for entry in registry() if entry.id != target]
+        if sources:
+            try:
+                values = await self._redis().mget([live_stt_state.cost_surge_key(entry) for entry in sources])
+            except Exception as exc:
+                raise _RedisCallFailed('Redis surge MGET failed') from exc
+            if self._check_identity() != identity:
+                raise _IdentityChanged('live STT state identity changed')
+            for source, raw in zip(sources, values):
+                if raw:
+                    self._open_failover_surge(source.id, float(raw))
+        return self._failover_surge_open(target, now)
+
+    def _sole_primary_blocked(self, target: str, stages: dict[str, int]) -> bool:
+        """Held target may not become the only stage-100 share (2026-10-28)."""
+        entry = self._cost_target(target)
+        guards = {entry.id for entry in registry() if entry.family == SOLE_PRIMARY_GUARD_FAMILY}
+        if (
+            entry is None
+            or entry.family != SOLE_PRIMARY_FAMILY
+            or not any(stages.get(guard, 0) >= 5 for guard in guards)
+        ):
+            return False
+        return all(stage < 100 for other, stage in stages.items() if other != target)
 
     def prefer_recovery(self, target: str, language: str) -> None:
         self._check_identity()
@@ -443,8 +456,13 @@ class CostHealthMixin(ABC):
             return True
         minimum_share = trial_minimum_share(uid, entry)
         now = self._clock()
+        stages = self._effective_stages(uid, language)
+        promotion_stages = {
+            candidate.id: stages[candidate.id]
+            for candidate in registry()
+            if candidate.id in stages and not candidate.at_capacity()
+        }
         if minimum_share > 0 and escape_trial_votes_enabled() and assigned(uid, target, entry.ramp()):
-            stages = self._effective_stages(uid, language)
             if stages and all(stage < 100 for stage in stages.values()):
                 # No stage-100 target serves this user: the escape routed
                 # them here regardless of the re-entry cohort, so their
@@ -457,11 +475,15 @@ class CostHealthMixin(ABC):
                 minimum_share = 0
         surge = failed and self._failover_surge_open(target, self._fleet_now())
         if surge:
-            COST_IGNORED_DEATHS.labels(target=target, reason=reason, boundary='failover_surge').inc()
+            COST_IGNORED_DEATHS.labels(
+                target=target,
+                reason=reason_label(ReasonFamily.LIVE_STT, reason, LiveSttReason),
+                boundary='failover_surge',
+            ).inc()
         hold = (
             sole_primary_hold_enabled()
-            and target in SOLE_PRIMARY_HOLD
-            and self._sole_primary_blocked(target, self._cached_target_stages(target, language))
+            and entry.family == SOLE_PRIMARY_FAMILY
+            and self._sole_primary_blocked(target, promotion_stages)
         )
         with self._lock:
             for lang in ('all', language):
@@ -504,6 +526,7 @@ class CostHealthMixin(ABC):
                 generations,
                 witness,
                 minimum_share,
+                promotion_targets=tuple(promotion_stages),
                 connect=outcome == 'connect_failure',
                 expected_identity=identity,
             ),
@@ -642,6 +665,7 @@ class CostHealthMixin(ABC):
         on_commit: Callable[[], None] | None = None,
         on_identity_changed: Callable[[str], None] | None = None,
         hold_update: Callable[[GateState], GateState] | None = None,
+        promotion_targets: tuple[str, ...] | None = None,
     ) -> GateState:
         identity = self._check_identity()
         if expected_identity is not None and identity != expected_identity:
@@ -686,13 +710,26 @@ class CostHealthMixin(ABC):
                 extra = [FAILOVER_SURGE_CENSOR_SECONDS] if bench else []
                 held = None
                 if old.stage == 25 and new.stage == 100 and hold_update is not None:
-                    others = [entry for entry in registry() if entry.id != target.id]
-                    guard = SOLE_PRIMARY_HOLD[target.id]
-                    guard_index = next((2 + 2 * i for i, entry in enumerate(others) if entry.id == guard), 0)
-                    if guard_index:
+                    # Eligibility is captured for the actual serving user and
+                    # language before hashing the witness. An incapable or
+                    # withdrawn target cannot count as a full-share escape.
+                    others = [
+                        entry
+                        for entry in registry()
+                        if entry.id != target.id
+                        and (
+                            entry.id in promotion_targets
+                            if promotion_targets is not None
+                            else entry.family == SOLE_PRIMARY_GUARD_FAMILY and entry.capable(key[1])
+                        )
+                    ]
+                    guard_indices = [
+                        2 + 2 * i for i, entry in enumerate(others) if entry.family == SOLE_PRIMARY_GUARD_FAMILY
+                    ]
+                    if guard_indices:
                         held = hold_update(old)
                         keys += [live_stt_state.cost_key(entry, lang) for entry in others for lang in ('all', key[1])]
-                        extra = ['hold', json.dumps(held.encode(), separators=(',', ':')), guard_index]
+                        extra = ['hold', json.dumps(held.encode(), separators=(',', ':')), json.dumps(guard_indices)]
                 committed = await self._redis().eval(
                     CAS,
                     len(keys),
@@ -748,6 +785,7 @@ class CostHealthMixin(ABC):
         *,
         connect: bool = False,
         expected_identity: str | None = None,
+        promotion_targets: tuple[str, ...] | None = None,
     ) -> None:
         write_committed = False
         write_dropped = False
@@ -771,8 +809,9 @@ class CostHealthMixin(ABC):
             if expected_identity is not None and identity != expected_identity:
                 raise _IdentityChanged('live STT state identity changed')
             now = await self._server_now(identity)
-            surge = failed and self._failover_surge_open(target, now)
-            guarded = sole_primary_hold_enabled() and target in SOLE_PRIMARY_HOLD
+            surge = failed and await self._fresh_failover_surge(target, now, identity)
+            entry = self._cost_target(target)
+            guarded = sole_primary_hold_enabled() and entry is not None and entry.family == SOLE_PRIMARY_FAMILY
             for lang in ('all', language):
                 result = 'applied'
 
@@ -817,6 +856,7 @@ class CostHealthMixin(ABC):
                     on_commit=record_commit,
                     on_identity_changed=record_drop,
                     hold_update=(lambda state: update(state, hold=True)) if guarded else None,
+                    promotion_targets=promotion_targets,
                 )
                 if write_committed and write_dropped:
                     return
