@@ -63,12 +63,19 @@ class MobileStoreVersionTests(unittest.TestCase):
         self.assertEqual((app_store.version, app_store.build_number), ("2.0.0", 789))
 
     def test_play_bundle_list_takes_the_highest_uploaded_version_code(self) -> None:
-        empty = store.parse_play_bundles_output("[]")
-        self.assertEqual(empty.status, "empty")
+        self.assertEqual(store.parse_play_bundles_output("[]").status, "empty")
         bundles = store.parse_play_bundles_output(
             '[{"versionCode": "1526", "sha1": "a", "sha256": "b"}, {"versionCode": 1527, "sha1": "c", "sha256": "d"}]'
         )
         self.assertEqual((bundles.status, bundles.build_number), ("available", 1527))
+
+    def test_play_bundle_list_blank_and_null_fail_closed(self) -> None:
+        # A successful bundles list --json always prints a JSON array, so
+        # blank output and null cannot be trusted as empty history.
+        for raw in ("", "\n", "null"):
+            with self.subTest(raw=raw):
+                with self.assertRaises(store.StoreLookupError):
+                    store.parse_play_bundles_output(raw)
 
     def test_malformed_or_zero_store_values_fail_closed(self) -> None:
         cases = (

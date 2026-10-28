@@ -118,18 +118,18 @@ def parse_play_bundles_output(raw: str, *, returncode: int = 0) -> StoreSnapshot
     The bundle list covers every version code Google Play has already
     accepted, including bundles orphaned by a rejected release that no track
     references anymore; a track-only lookup cannot see those, yet their
-    version codes are burned forever.
+    version codes are burned forever.  A successful listing always carries a
+    JSON array, so blank output and ``null`` are errors and an empty list is
+    the only valid empty-history result.
     """
     provider = "play_bundles"
     _require_success(returncode, provider)
     if not raw.strip():
-        return StoreSnapshot.empty(provider)
+        raise StoreLookupError(f"{provider} returned a blank response")
     try:
         payload = json.loads(raw)
     except json.JSONDecodeError as error:
         raise StoreLookupError(f"{provider} returned invalid JSON") from error
-    if payload is None or payload == []:
-        return StoreSnapshot.empty(provider)
     if not isinstance(payload, list):
         raise StoreLookupError(f"{provider} returned a non-list result")
     builds: list[int] = []
@@ -137,6 +137,8 @@ def parse_play_bundles_output(raw: str, *, returncode: int = 0) -> StoreSnapshot
         if not isinstance(bundle, dict) or "versionCode" not in bundle or set(bundle) - PLAY_BUNDLE_FIELDS:
             raise StoreLookupError(f"{provider} returned an incomplete result")
         builds.append(_require_build(bundle["versionCode"], f"{provider}.versionCode"))
+    if not builds:
+        return StoreSnapshot.empty(provider)
     return StoreSnapshot.available(provider, None, max(builds))
 
 

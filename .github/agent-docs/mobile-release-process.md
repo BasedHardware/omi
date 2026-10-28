@@ -42,7 +42,11 @@ into build zero.
 The Android build number also clears version codes Play has already burned off
 every track: the lane reads the highest build number across all tracks plus the
 highest uploaded bundle version code (`google-play bundles list`, parsed by
-`mobile_store_version.py` as the `play_bundles` source). A rejected release
+`mobile_store_version.py` as the `play_bundles` source; a successful listing is
+a JSON array, so blank or `null` output fails closed). The resolve step first
+ensures the build image's `codemagic-cli-tools` provides `bundles list`
+(added in 0.57.0), upgrading in place only when the subcommand is missing so a
+newer image CLI is never downgraded. A rejected release
 leaves its uploaded bundle on no track — invisible to track-only lookups — but
 Play version codes are global and immutable, so reusing one fails the upload as
 a duplicate (2026-10-27/28: build 1527 was picked twice this way after a policy
