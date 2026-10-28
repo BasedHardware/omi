@@ -221,6 +221,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   void clearUserData() {
     _backlogTelemetry.clearUserData();
     _sessionGeneration++;
+    _drainGroupBatchCounts.clear();
+    _drainGroupCountedAt.clear();
     conversationCompletions.value = null;
     _lastStaleWalReportAt = null;
     cancelSync();

@@ -275,24 +275,25 @@ class StorageSyncImpl implements StorageSync {
     listener.onWalUpdated();
   }
 
-  /// Cached rows recorded by a device other than the connected one. setDevice
-  /// swaps the device without clearing cached rows, and a refresh that fails
-  /// before listing keeps them, so after a pendant switch these rows' file
-  /// indexes name the NEW pendant's files. Deletes must never see them; the
-  /// rows drop locally instead (their audio still lives on their own device
-  /// and re-lists when that device reconnects).
-  Set<String> _previousDeviceWalIds() {
+  /// Cached rows of [status] recorded by a device other than the connected
+  /// one. setDevice swaps the device without clearing cached rows, and a
+  /// refresh that fails before listing keeps them, so after a pendant switch
+  /// these rows' file indexes name the NEW pendant's files. Deletes must
+  /// never see them; the rows drop locally instead (their audio still lives
+  /// on their own device and re-lists when that device reconnects).
+  Set<String> _previousDeviceWalIds(WalStatus status) {
     final device = _device;
     if (device == null) return const {};
-    return _wals.where((w) => w.device != device.id).map((w) => w.id).toSet();
+    return _wals.where((w) => w.status == status && w.device != device.id).map((w) => w.id).toSet();
   }
 
   @override
   Future<void> deleteAllSyncedWals() async {
     // Stale previous-device rows get the same drop-only handling as the
     // single-row path: sending their fileNums would delete the current
-    // pendant's files at those indexes (#14688).
-    final stale = _previousDeviceWalIds();
+    // pendant's files at those indexes (#14688). Only the status this clear
+    // covers drops; the other device's pending rows keep their local rows.
+    final stale = _previousDeviceWalIds(WalStatus.synced);
     final toDelete = _wals.where((w) => w.status == WalStatus.synced && !stale.contains(w.id)).toList();
     final attempted = await _deleteWalsOnDevice(toDelete);
     _wals = _wals
@@ -307,7 +308,7 @@ class StorageSyncImpl implements StorageSync {
   Future<void> deleteAllPendingWals() async {
     // Stale previous-device rows never reach the device delete (see
     // deleteAllSyncedWals); they drop locally like the single-row path.
-    final stale = _previousDeviceWalIds();
+    final stale = _previousDeviceWalIds(WalStatus.miss);
     final toDelete = _wals.where((w) => w.status == WalStatus.miss && !stale.contains(w.id)).toList();
     final attempted = await _deleteWalsOnDevice(toDelete);
     // Attempted deletes drop their rows whatever the reply said (a positional

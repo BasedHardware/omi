@@ -146,4 +146,25 @@ void main() {
 
     expect(stale.any(sync.owns), isFalse);
   });
+
+  test('deleteAllSyncedWals leaves the previous device pending rows listed', () async {
+    final sync = StorageSyncImpl(_Listener());
+    sync.testDevice = BtDevice(
+      id: 'pendant-2',
+      name: 'Omi Pendant',
+      type: DeviceType.omi,
+      rssi: -50,
+      locator: DeviceLocator.bluetooth(deviceId: 'pendant-2'),
+    );
+    final staleSynced = storageWal(timerStart: 1000, fileNum: 0, status: WalStatus.synced, device: 'pendant-1');
+    final stalePending = storageWal(timerStart: 2000, fileNum: 1, status: WalStatus.miss, device: 'pendant-1');
+    sync.testWals = [staleSynced, stalePending];
+
+    await sync.deleteAllSyncedWals();
+
+    // Only the status this clear covers drops: the other device's pending
+    // recording keeps its local row for its own reconnect.
+    expect(sync.owns(staleSynced), isFalse);
+    expect(await sync.getMissingWals(), [stalePending]);
+  });
 }
