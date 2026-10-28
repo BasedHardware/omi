@@ -321,6 +321,7 @@ class OmiBleManager private constructor(private val application: Application) {
 
     fun connectGatt(address: String, autoConnect: Boolean): BluetoothGatt? {
         val addr = address.uppercase()
+        discoveryReconnectPolicy.onConnectAttempt(addr)
         val adapter = bluetoothAdapter ?: return null
         // Use getRemoteLeDevice with ADDRESS_TYPE_RANDOM to specify the correct address type.
         val device = if (android.os.Build.VERSION.SDK_INT >= 34) {
@@ -530,6 +531,8 @@ class OmiBleManager private constructor(private val application: Application) {
         },
     )
 
+    internal val discoveryReconnectPolicy = DiscoveryReconnectPolicy()
+
     private val cccdWrites = CccdWriteCoordinator<BluetoothGatt, BluetoothGattDescriptor>(
         isConnected = { connectedGatts[it.device.address.uppercase()] === it },
         ownsCommand = { ownsCommand(it) },
@@ -595,6 +598,21 @@ class OmiBleManager private constructor(private val application: Application) {
         // The managed service retains reconnect policy, including user-disconnect guards.
         connectionListener?.onGattDisconnected(addr, gatt.hashCode(), CCCD_TIMEOUT_STATUS)
     }
+
+    private val discoveryFailureRetire = DiscoveryFailureRetire<BluetoothGatt>(
+        releaseTrackedLink = { gatt -> connectedGatts.remove(gatt.device.address.uppercase(), gatt) },
+        cleanupPeripheral = { cleanupPeripheral(it) },
+        disconnectLink = { it.disconnect() },
+        closeLink = { it.close() },
+        onTeardownError = { stage, e -> Log.w(TAG, "Discovery retire $stage failed: ${e.message}") },
+        notifyDisconnected = { addr, gattHash, status ->
+            // Arm the retirement marker before notifying: the service consumes it while
+            // handling this disconnect and backs its retry off instead of looping at 3 s.
+            discoveryReconnectPolicy.onDiscoveryRetirement(addr)
+            // The managed service retains reconnect policy, including user-disconnect guards.
+            connectionListener?.onGattDisconnected(addr, gattHash, status)
+        },
+    )
 
     // ── RSSI keep-alive ──
 
@@ -866,6 +884,11 @@ class OmiBleManager private constructor(private val application: Application) {
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 Log.e(TAG, "Service discovery failed for $address (status=$status)")
                 completeCommand()
+                // A connected link whose service discovery failed never delivers
+                // onConnectionStateChange(STATE_DISCONNECTED), so the managed service
+                // sees no disconnect to retry from (#19453). Retire the unusable link so
+                // its existing disconnect path resumes saved reconnect (iOS: #23872).
+                discoveryFailureRetire.onDiscoveryFailed(gatt, address, gatt.hashCode(), status)
                 return@dispatchGattCallback
             }
 
@@ -881,6 +904,7 @@ class OmiBleManager private constructor(private val application: Application) {
             }
 
             servicesDiscoveredFor.add(address)
+            discoveryReconnectPolicy.onDiscoverySucceeded(address)
 
             if (!gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)) {
                 Log.w(TAG, "Failed to request high connection priority")
