@@ -6,8 +6,12 @@ import time
 import pytest
 import stripe
 
-from config.plan_catalog import RECOGNIZED_STRIPE_PRICE_INTERVALS, resolve_stripe_price_plan
-from models.users import PlanType, Subscription
+from config.plan_catalog import (
+    MANAGEMENT_CURRENCY_PRICES,
+    RECOGNIZED_STRIPE_PRICE_INTERVALS,
+    resolve_stripe_price_plan,
+)
+from models.users import PlanType, Subscription, SubscriptionStatus
 from routers import payment
 from utils import product_telemetry
 from utils.observability import subscription_events
@@ -178,3 +182,101 @@ def test_jpy_fixture_omits_mrr_cents(monkeypatch):
     assert properties['currency'] == 'jpy'
     assert properties['price_id'] == price_id
     assert 'mrr_cents' not in properties
+
+
+class _MockPrice:
+    def __init__(self, price_id: str, currency: str, unit_amount: int, interval: str, active: bool = True):
+        self.id = price_id
+        self.currency = currency
+        self.unit_amount = unit_amount
+        self.active = active
+        self.livemode = True
+        self.recurring = type('Recurring', (), {'interval': interval, 'interval_count': 1})()
+
+
+def test_canonical_jpy_catalog_helpers():
+    from utils.subscription import is_purchasable_price_id
+
+    canonical_jpy_ids = frozenset(
+        pid for pid, binding in MANAGEMENT_CURRENCY_PRICES.items() if binding.get('currency') == 'jpy'
+    )
+    assert 'price_1ULq6b1F8wnoWYvwtchjjNqq' in canonical_jpy_ids
+    assert 'price_1ULq501F8wnoWYvwwN56CHzO' in canonical_jpy_ids
+    assert 'price_1ULq5e1F8wnoWYvwQT8XQ4Uw' in canonical_jpy_ids
+    assert MANAGEMENT_CURRENCY_PRICES['price_1ULq6b1F8wnoWYvwtchjjNqq']['plan_id'] == PlanType.plus.value
+    assert MANAGEMENT_CURRENCY_PRICES['price_1ULq6b1F8wnoWYvwtchjjNqq']['interval'] == 'month'
+    assert MANAGEMENT_CURRENCY_PRICES['price_1ULq5e1F8wnoWYvwQT8XQ4Uw']['plan_id'] == PlanType.unlimited_v2.value
+    assert MANAGEMENT_CURRENCY_PRICES['price_1ULq5e1F8wnoWYvwQT8XQ4Uw']['interval'] == 'year'
+    # Legacy recognition-ledger unlimited (v1) prices remain excluded from upgrade admission and fresh checkout
+    assert 'price_1RtJPm1F8wnoWYvwhVJ38kLb' not in canonical_jpy_ids
+    assert 'price_1RtJQ71F8wnoWYvwKMPaGlGY' not in canonical_jpy_ids
+    assert is_purchasable_price_id('price_1RtJPm1F8wnoWYvwhVJ38kLb') is False
+    assert is_purchasable_price_id('price_1ULq501F8wnoWYvwwN56CHzO') is False
+
+
+def test_upgrade_subscription_allows_jpy_to_jpy_and_rejects_currency_mismatch(webhook, monkeypatch):
+    from fastapi import HTTPException
+
+    plus_monthly_jpy = 'price_1ULq6b1F8wnoWYvwtchjjNqq'
+    unlim_monthly_jpy = 'price_1ULq501F8wnoWYvwwN56CHzO'
+    usd_unlim_monthly = 'price_usd_unlim_monthly'
+    monkeypatch.setenv('STRIPE_UNLIMITED_V2_MONTHLY_PRICE_ID', usd_unlim_monthly)
+
+    sub = Subscription(
+        plan=PlanType.plus,
+        status=SubscriptionStatus.active,
+        current_period_end=2_000_000_000,
+        stripe_subscription_id='sub-jpy',
+        current_price_id=plus_monthly_jpy,
+    )
+    monkeypatch.setattr(payment.users_db, 'get_user_subscription', lambda uid: sub)
+    stripe_sub_dict = _stripe_sub(plus_monthly_jpy)
+    stripe_sub_dict['currency'] = 'jpy'
+    stripe_sub_dict['status'] = 'active'
+    monkeypatch.setattr(
+        payment.stripe.Subscription,
+        'retrieve',
+        lambda sid: _StripeSubscription(stripe_sub_dict),
+    )
+
+    released = []
+    monkeypatch.setattr(payment, '_release_attached_schedules', lambda s: released.append(s['id']))
+    monkeypatch.setattr(
+        payment.stripe.Price,
+        'retrieve',
+        lambda pid: _MockPrice(pid, 'jpy' if pid == unlim_monthly_jpy else 'usd', 4800, 'month'),
+    )
+    monkeypatch.setattr(
+        payment,
+        'price_for_currency',
+        lambda base_price, curr: _MockPrice(unlim_monthly_jpy, 'jpy', 4800, 'month'),
+    )
+    monkeypatch.setattr(payment, 'funded_processing_enabled', lambda uid: False)
+
+    # Mismatched USD price on JPY subscription is rejected before schedule release or Stripe modify
+    with pytest.raises(HTTPException) as exc_info:
+        payment.upgrade_subscription_endpoint(
+            payment.UpgradeSubscriptionRequest(price_id=usd_unlim_monthly),
+            uid='user-jp',
+        )
+    assert exc_info.value.status_code in (400, 409)
+    assert released == []
+
+    # Same-currency JPY target succeeds, releases schedules, and modifies the subscription item
+    modified_calls = []
+    monkeypatch.setattr(
+        payment.stripe.Subscription,
+        'modify',
+        lambda sid, **kwargs: modified_calls.append((sid, kwargs))
+        or _StripeSubscription(_stripe_sub(unlim_monthly_jpy)),
+    )
+    monkeypatch.setattr(payment.users_db, 'update_user_subscription', lambda uid, data: None)
+
+    result = payment.upgrade_subscription_endpoint(
+        payment.UpgradeSubscriptionRequest(price_id=unlim_monthly_jpy),
+        uid='user-jp',
+    )
+    assert released == ['sub-jpy']
+    assert len(modified_calls) == 1
+    assert modified_calls[0][0] == 'sub-jpy'
+    assert result['status'] == 'success'
