@@ -506,6 +506,7 @@ and an explicit empty literal renders as `''`.
 | `PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED` | Default on; internal live-window POSTs use ready GPU pods with per-pod 2-5 minute adaptive quarantine and one different-pod retry inside the original budget | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED` | Default on unless false; a stranded-flush window answer whose text fell beyond the posted fragment settles like an empty answer instead of holding replay until replay_ring_overflow | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `PINNED_SPEAKER_PRIOR_ENABLED` | Turn near-misses on pinned people into suggestions and record voice candidates for the suggestion card (never loosens auto-labels) | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `PLAYBACK_MANIFEST_RECOVERY_ENABLED` | Default on; next-access recovery for merge_failed playback markers after 15 minutes, deduped by marker generation | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `PUBLIC_SHARED_CONVERSATION_CHAT_MODE` | Enable chat on public shared conversations | backend | env | closed | declared (gke/backend-listen); gateway (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill) | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | gateway (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill); off (backend-listen (chart), gke/backend-listen) | — | keep | keep | — | dazheng |
 | `RATE_LIMIT_SHADOW_MODE` | Shadow backend rate limits | backend | env | closed | — | — | — | — | keep | keep | — | unowned |
 | `SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED` | Fallback to keyword search for screen activity | backend | env | open | — | — | — | — | keep | keep | — | unowned |
@@ -979,6 +980,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED` — Default on; internal live-window POSTs use ready GPU pods with per-pod 2-5 minute adaptive quarantine and one different-pod retry inside the original budget (fail: open)
 - `PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED` — Default on unless false; a stranded-flush window answer whose text fell beyond the posted fragment settles like an empty answer instead of holding replay until replay_ring_overflow (fail: open)
 - `PINNED_SPEAKER_PRIOR_ENABLED` — Turn near-misses on pinned people into suggestions and record voice candidates for the suggestion card (never loosens auto-labels) (fail: open)
+- `PLAYBACK_MANIFEST_RECOVERY_ENABLED` — Default on; next-access recovery for merge_failed playback markers after 15 minutes, deduped by marker generation (fail: closed)
 - `RATE_LIMIT_SHADOW_MODE` — Shadow backend rate limits (fail: closed)
 - `RECORDING_SESSION_MODE` — Select recording session migration mode (fail: closed)
 - `SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED` — Fallback to keyword search for screen activity (fail: open)

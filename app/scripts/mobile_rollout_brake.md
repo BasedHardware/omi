@@ -39,11 +39,12 @@ Halt and resume change status only. Country-targeted mutations are explicitly un
 Play allows `countryTargeting` only on `inProgress` releases, and stripping it would change
 more than status. Use an approved Play Console procedure for those releases. A brake
 commit uses `ERROR_IF_IN_REVIEW` to refuse cancellation/resubmission of existing
-reviews; `changesNotSentForReview` is attached only while
-`promote.CHANGES_NOT_SENT_FOR_REVIEW` is True (held-changes mode, on since
-2026-10-28 after Codemagic's internal Play publishing failed with "Changes
-cannot be sent for review automatically"). The brake follows the shared
-constant so its commit joins the same Console review queue as other Play edits.
+reviews. When `promote.CHANGES_NOT_SENT_FOR_REVIEW` is True, halt and resume fail before
+opening a Play edit: a held status change only queues for Console review and does not
+change current rollout exposure. Halt or resume in Play Console (Test and release →
+Production/track → rollout), then verify the live track there. Stage still follows the
+shared held-changes flag, so a held stage may remain pending and fail its live readback;
+inspect Play Console and the live track before retrying.
 Readback must match the complete expected production track, including its original fraction.
 Unused-edit cleanup failures emit a static warning without hiding a verified result.
 

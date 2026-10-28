@@ -506,6 +506,9 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         # field allowlist and feeds a hash, never a client or intelligence view.
         DumpSite('routers/developer.py', '_derived_client_session_id', 'model_dump'),
         DumpSite('routers/developer.py', '_ingest_conversation_from_segments', 'model_dump'),
+        # Retry identity hashes only the explicit recording-facts include set;
+        # client_processing and the other display projections are excluded.
+        DumpSite('routers/developer.py', '_derived_client_session_id', 'model_dump'),
         # Request serialization goes only to encrypted staging, never intelligence.
         DumpSite('routers/developer_segments.py', 'stage_chunk', 'model_dump'),
         DumpSite('routers/developer.py', 'update_goal', 'model_dump'),
