@@ -66,17 +66,23 @@ class DeviceToolsTests(unittest.TestCase):
         self.assertIn('--timeline', command)
 
     def test_new_cli_modes_are_retained_in_dry_run(self):
-        result = subprocess.run([sys.executable, str(Path(runner.__file__)), '--dry-run',
-                                 '--upload', 'accept', '--upload-wals', '6', '--semantics', 'on'],
-                                capture_output=True, text=True, check=True)
+        # An explicit root keeps the test independent of the host's scratch mounts.
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run([sys.executable, str(Path(runner.__file__)), '--dry-run',
+                                     '--artifact-root', directory,
+                                     '--upload', 'accept', '--upload-wals', '6', '--semantics', 'on'],
+                                    capture_output=True, text=True, check=True)
         value = json.loads(result.stdout)
         self.assertEqual((value['upload'], value['upload_wals'], value['semantics']), ('accept', 6, 'on'))
 
     def test_invalid_modes_are_rejected_before_launch(self):
         for option, value in (('--upload', 'real'), ('--semantics', 'auto'), ('--upload-wals', '19')):
-            result = subprocess.run([sys.executable, str(Path(runner.__file__)), '--dry-run', option, value],
-                                    capture_output=True, text=True)
+            with tempfile.TemporaryDirectory() as directory:
+                result = subprocess.run([sys.executable, str(Path(runner.__file__)), '--dry-run',
+                                         '--artifact-root', directory, option, value],
+                                        capture_output=True, text=True)
             self.assertEqual(result.returncode, 2)
+            self.assertIn(option, result.stderr)
 
     def test_stale_gui_request_cannot_start_a_device_job(self):
         with tempfile.TemporaryDirectory() as directory:
