@@ -1,6 +1,6 @@
 {
   "about": "CI flag budget for the transcription pipeline env surface (ADR 0006, backend/docs/adr/0006-pipeline-flag-budget.md). tests/unit/test_flag_budget.py fails when a read name is missing here, an entry is stale, or budget drifts.",
-  "as_of": "2026-10-28",
+  "as_of": "2026-10-29",
   "scope": [
     "utils/batch_pipeline/**/*.py",
     "diarizer/batch_pipeline*.py",
@@ -20,13 +20,14 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 169,
-  "count": 182,
+  "count": 183,
   "names": {
     "BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED": {"owner": "langexcl / batch rollout lead", "review_by": "2026-11-15"},
     "BATCH_PIPELINE_API_URL": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_ASR_LEFT_CONTEXT_SECONDS": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_ASR_LEFT_CONTEXT_UNITS": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_CONTEXT_SECONDS": {"seeded": "2026-10-25"},
+    "BATCH_PIPELINE_CONTENTION_RETRY_ENABLED": {"owner": "batch record lane / rollout lead", "review_by": "2026-11-28"},
     "BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_DIARIZER": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED": {"seeded": "2026-10-25"},
