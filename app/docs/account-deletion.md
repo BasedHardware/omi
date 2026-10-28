@@ -18,7 +18,7 @@ supplies a duration. A missing deadline on a pending account does not imply time
 remaining; restoration remains a server decision.
 
 A 404/405 status endpoint permits legacy sign-in, with a bounded fallback event.
-Other status errors block product initialization with Retry. Deletion confirmation
+Other status errors offer Retry. A transport outage preserves offline startup only for the same cached, onboarded owner and never for an owner already confirmed pending deletion; this fallback grants no grace window. Deletion confirmation
 can still use local WAL evidence and immediate-loss copy if policy lookup fails;
 if the local inventory itself cannot be read, confirmation requires Retry.
 

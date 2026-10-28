@@ -66,6 +66,26 @@ void main() {
     }
   });
 
+  test('offline fallback stays bound to the cached owner and cannot override pending deletion', () async {
+    bool allowed(String uid, String startup, String pending) => canUseCachedAccountOffline(
+          uid: uid,
+          startupUid: startup,
+          pendingUid: pending,
+          onboardingCompleted: true,
+        );
+    expect(allowed('a', 'a', ''), isTrue);
+    expect(allowed('b', 'a', ''), isFalse);
+    expect(allowed('a', 'a', 'a'), isFalse);
+    expect(allowed('', '', ''), isFalse);
+    expect(canUseCachedAccountOffline(uid: 'a', startupUid: 'a', pendingUid: '', onboardingCompleted: false), isFalse);
+    final api =
+        AccountDeletionApi(baseUrl: 'http://fixture/', send: (_) async => throw http.ClientException('offline'));
+    expect(await readAccountDeletionForSignIn(api: api, fallback: (_) {}), isA<ApiFailure<AccountDeletionStatus>>());
+    final offline = await readAccountDeletionForSignIn(api: api, allowCachedOfflineAccount: true, fallback: (_) {});
+    expect((offline as ApiSuccess<AccountDeletionStatus>).data.gracePeriodDays, 0);
+    expect(offline.data.pendingDeletion, isFalse);
+  });
+
   test('status uses loss_summary; restore and erase-now retain typed failures', () async {
     final requests = <ApiRequest>[];
     final api = AccountDeletionApi(

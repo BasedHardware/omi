@@ -67,6 +67,8 @@ class AuthenticationProvider extends BaseProvider {
     if (initializeListeners) _initializeAuthListeners();
   }
 
+  static const _pendingDeletionUidsKey = 'pendingDeletionOwnerUids';
+  String _startupUid = '';
   String? _deletionStatusUid;
   Future<ApiResult<AccountDeletionStatus>>? _deletionStatus;
 
@@ -74,12 +76,33 @@ class AuthenticationProvider extends BaseProvider {
     final uid = _auth.currentUser?.uid;
     if (refresh || uid != _deletionStatusUid || _deletionStatus == null) {
       _deletionStatusUid = uid;
-      _deletionStatus = readAccountDeletionForSignIn();
+      _deletionStatus = _readDeletionStatusForOwner(uid);
     }
     return _deletionStatus!;
   }
 
+  Future<ApiResult<AccountDeletionStatus>> _readDeletionStatusForOwner(String? uid) async {
+    if (uid == null || uid.isEmpty) return const ApiFailure(ApiProblem(ApiProblemKind.authTerminal));
+    final prefs = SharedPreferencesUtil();
+    final result = await readAccountDeletionForSignIn(
+      allowCachedOfflineAccount: canUseCachedAccountOffline(
+        uid: uid,
+        startupUid: _startupUid,
+        pendingUid: prefs.getStringList(_pendingDeletionUidsKey).contains(uid) ? uid : '',
+        onboardingCompleted: prefs.onboardingCompleted,
+      ),
+    );
+    if (_auth.currentUser?.uid != uid) return const ApiFailure(ApiProblem(ApiProblemKind.authTerminal));
+    if (result case ApiSuccess<AccountDeletionStatus>(:final data)) {
+      final pending = prefs.getStringList(_pendingDeletionUidsKey).toSet();
+      final changed = data.pendingDeletion ? pending.add(uid) : pending.remove(uid);
+      if (changed) await prefs.saveStringList(_pendingDeletionUidsKey, pending.toList());
+    }
+    return result;
+  }
+
   void _initializeAuthListeners() {
+    _startupUid = SharedPreferencesUtil().uid;
     // DEBUG: Log initial state
     Logger.debug(
       'DEBUG AuthProvider: Initial currentUser=${_auth.currentUser?.uid}, isAnonymous=${_auth.currentUser?.isAnonymous}',

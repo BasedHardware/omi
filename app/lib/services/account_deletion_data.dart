@@ -9,9 +9,15 @@ import 'package:omi/services/wals/wal_interfaces.dart';
 Future<ApiResult<AccountDeletionStatus>> readAccountDeletionForSignIn({
   AccountDeletionApi api = const AccountDeletionApi(),
   void Function(ApiFallbackEvent)? fallback,
+  bool allowCachedOfflineAccount = false,
 }) async {
   final result = await api.status();
   if (result case ApiFailure<AccountDeletionStatus>(:final problem)) {
+    if (problem.kind == ApiProblemKind.transport && allowCachedOfflineAccount) {
+      (fallback ?? recordFallback)(
+          const ApiFallbackEvent(reason: ApiFallbackReason.offline, outcome: ApiFallbackOutcome.degraded));
+      return const ApiSuccess(AccountDeletionStatus());
+    }
     if (problem.statusCode == 404 || problem.statusCode == 405) {
       (fallback ?? recordFallback)(
           const ApiFallbackEvent(reason: ApiFallbackReason.error, outcome: ApiFallbackOutcome.degraded));
@@ -20,6 +26,16 @@ Future<ApiResult<AccountDeletionStatus>> readAccountDeletionForSignIn({
   }
   return result;
 }
+
+/// Preserve an existing owner's offline startup without admitting another account
+/// or overriding a deletion decision the server already confirmed.
+bool canUseCachedAccountOffline({
+  required String uid,
+  required String startupUid,
+  required String pendingUid,
+  required bool onboardingCompleted,
+}) =>
+    uid.isNotEmpty && uid == startupUid && uid != pendingUid && onboardingCompleted;
 
 class DeletionPendingData {
   const DeletionPendingData(
