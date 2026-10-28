@@ -22,9 +22,10 @@ def _entitled(monkeypatch):
 async def test_generate_topic_returns_without_persisting(monkeypatch):
     calls: dict[str, object] = {}
 
-    def fake_generate(uid, transcript):
+    def fake_generate(uid, transcript, *, conversation_language=None):
         calls['uid'] = uid
         calls['transcript'] = transcript
+        calls['conversation_language'] = conversation_language
         return ConversationTopic(emoji='🎧', title='Weekly standup')
 
     import utils.llm.conversation_topic as conversation_topic_llm
@@ -32,7 +33,7 @@ async def test_generate_topic_returns_without_persisting(monkeypatch):
     monkeypatch.setattr(conversation_topic_llm, 'generate_conversation_topic', fake_generate)
 
     response = await conversations_router.generate_conversation_topic_endpoint(
-        conversations_router.ConversationTopicRequest(transcript='we discussed the sprint'),
+        conversations_router.ConversationTopicRequest(transcript='we discussed the sprint', conversation_language='ja'),
         uid=UID,
     )
 
@@ -40,6 +41,7 @@ async def test_generate_topic_returns_without_persisting(monkeypatch):
     assert response.title == 'Weekly standup'
     assert calls['uid'] == UID
     assert calls['transcript'] == 'we discussed the sprint'
+    assert calls['conversation_language'] == 'ja'
 
 
 async def test_generate_topic_fails_closed_when_generation_returns_none(monkeypatch):

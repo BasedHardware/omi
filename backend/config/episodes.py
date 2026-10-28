@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import os
 
+from config.refactor_modes import default_on as modes_default_on
 from config.refactor_switches import default_on as rollout_default_on
 
 from config.jev_decisions import percentage, uid_bucket
@@ -49,6 +50,7 @@ EPISODES_ENABLED_ENV = 'EPISODES_ENABLED'
 EPISODES_PERCENT_ENV = 'EPISODES_PERCENT'
 EPISODES_UID_ALLOWLIST_ENV = 'EPISODES_UID_ALLOWLIST'
 EPISODES_CLIENT_CHANNELS_ENV = 'EPISODES_CLIENT_CHANNELS'
+EPISODE_OUTPUT_LANGUAGE_PIN_ENV = 'EPISODE_OUTPUT_LANGUAGE_PIN'
 APP_CHANNEL_HEADER = 'X-Omi-App-Channel'
 APP_CHANNELS = frozenset({'beta', 'store'})
 _DEFAULT_CLIENT_CHANNELS = frozenset({'beta'})
@@ -87,6 +89,17 @@ def episodes_client_channels() -> frozenset[str]:
     if not raw.strip():
         return _DEFAULT_CLIENT_CHANNELS
     return frozenset(item.strip().lower() for item in raw.split(',')) & APP_CHANNELS
+
+
+def episode_output_language_pinned() -> bool:
+    """Whether the shared output-language prompt pin is enabled.
+
+    The kill switch also covers provisional conversation topics, daily recaps, and
+    proactive notification prompts so one setting rolls the prompt changes back.
+    Unknown values stay on. Off restores each surface's legacy prompt wording and
+    the former cohort-gated episode language behavior.
+    """
+    return modes_default_on(EPISODE_OUTPUT_LANGUAGE_PIN_ENV)
 
 
 def client_channel_admitted(raw: str | None) -> bool:

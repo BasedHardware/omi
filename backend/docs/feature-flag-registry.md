@@ -425,7 +425,7 @@ and an explicit empty literal renders as `''`.
 | `CONVERSATION_SMART_MERGE_MODE` | Fold a finished pendant conversation into its predecessor when Jev says same occasion; default merge, set off to stop | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `CONVERSATION_SPEAKER_RESOLUTION_ENABLED` | Incident stop for conversation-wide speaker resolution | backend | env | open | — | — | — | — | keep | keep | — | unowned |
 | `CONVERSATION_STORED_MEETING_CONTEXT_ENABLED` | Incident stop for stored meeting context lookup | backend | env | open | — | — | — | — | keep | keep | — | unowned |
-| `CONVERSATION_TOPIC_DETERMINISTIC_SHORT_ENABLED` | Default on; the desktop provisional-topic endpoint answers transcripts under the notes short-clip word floor deterministically (first-sentence title, no emoji) instead of one conv_structure model call per request | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `CONVERSATION_TOPIC_DETERMINISTIC_SHORT_ENABLED` | Default on; the desktop provisional-topic endpoint answers short transcripts deterministically only when the conversation language matches the resolved output language; a mismatch uses one pinned conv_structure call | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `DAY3_REENGAGEMENT_EMAIL_KILL_SWITCH` | Stop day-three re-engagement email | backend | env | inverted | false | false | false | — | keep | keep | — | unowned |
 | `DEEPGRAM_SELF_HOSTED_ENABLED` | Retired 2026-08-27 with the rest of Deepgram; env removed from all charts and forbidden_env on every Cloud Run owner | backend | env | closed | — | — | — | — | keep | keep | — | unowned |
 | `DESKTOP_LOOP_WATCHDOG_ENABLED` | Desktop event-loop stall warning and liveness signal; default on, false disables both | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -433,6 +433,7 @@ and an explicit empty literal renders as `''`.
 | `DREAM_AGENT_ENABLED` | Global Dream harness kill switch; false prevents admission, model dispatch and effects | backend | env | closed | — | — | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | keep | keep | — | dazheng |
 | `DREAM_GATEWAY_PROBE_ENABLED` | Default-on 3.8 reservation probe through the LLM gateway's reserved Dream route; 0/false/off/no makes no probe call and admission relies on fresh evidence from real Dream turns | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODES_ENABLED` | Default on unless set to a non-on value; live episodes overlay (per-moment gpt-5-nano update, provisional items, /v1/episodes capability). Off reports enabled=false and apps keep today's per-conversation UI | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `EPISODE_OUTPUT_LANGUAGE_PIN` | Default on unless set off (0/false/off/no); pins generated output to a safe language for live episodes, provisional topics, daily recaps, and proactive notifications; multi/auto captures use dominant in-memory segment language | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `FAIR_USE_ENABLED` | Enforce fair-use metering; set false to stop enforcement | backend | env | closed | — | true (backend-listen (chart)) | true (backend-listen (chart)) | — | keep | keep | — | unowned |
 | `FAIR_USE_KILL_SWITCH` | Emergency stop for fair-use enforcement | backend | env | inverted | — | false (backend-listen (chart)) | false (backend-listen (chart)) | — | keep | keep | — | unowned |
 | `FSR_KG_CITATION_INDEX` | Default on; query native reverse citations for KG node pruning; off restores the node scan | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -828,7 +829,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `CONVERSATION_SMART_MERGE_MODE` — Fold a finished pendant conversation into its predecessor when Jev says same occasion; default merge, set off to stop (fail: open)
 - `CONVERSATION_SPEAKER_RESOLUTION_ENABLED` — Incident stop for conversation-wide speaker resolution (fail: open)
 - `CONVERSATION_STORED_MEETING_CONTEXT_ENABLED` — Incident stop for stored meeting context lookup (fail: open)
-- `CONVERSATION_TOPIC_DETERMINISTIC_SHORT_ENABLED` — Default on; the desktop provisional-topic endpoint answers transcripts under the notes short-clip word floor deterministically (first-sentence title, no emoji) instead of one conv_structure model call per request (fail: open)
+- `CONVERSATION_TOPIC_DETERMINISTIC_SHORT_ENABLED` — Default on; the desktop provisional-topic endpoint answers short transcripts deterministically only when the conversation language matches the resolved output language; a mismatch uses one pinned conv_structure call (fail: open)
 - `DEEPGRAM_SELF_HOSTED_ENABLED` — Retired 2026-08-27 with the rest of Deepgram; env removed from all charts and forbidden_env on every Cloud Run owner (fail: closed)
 - `DESKTOP_LOOP_WATCHDOG_ENABLED` — Desktop event-loop stall warning and liveness signal; default on, false disables both (fail: open)
 - `DIARIZATION_V2_ENABLED` — Enable the separate batch-only diarizer app; default false; startup loads models before readiness (fail: closed)
@@ -846,6 +847,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `EPISODE_BOUNDARIES_MODE_SERVE_PERCENT` — Serve cohort percentage in shadow mode, default 0 (fail: closed)
 - `EPISODE_BOUNDARIES_MODE_SERVE_UID_SHA256S` — Serve cohort account digests in shadow mode, default empty; never raw account identifiers (fail: closed)
 - `EPISODE_BOUNDARIES_MODE_SHADOW_PERCENT` — Boundary evidence database writes sampled in shadow; default 5 percent, serve cohort always writes (fail: closed)
+- `EPISODE_OUTPUT_LANGUAGE_PIN` — Default on unless set off (0/false/off/no); pins generated output to a safe language for live episodes, provisional topics, daily recaps, and proactive notifications; multi/auto captures use dominant in-memory segment language (fail: open)
 - `FIRESTORE_CACHE_ENABLED` — Enable Firestore response cache (fail: closed)
 - `FIRST_SUMMARY_DEADLINE_SECONDS` — First required summary dispatch budget; default 120 seconds, bounded 60 to 120 (fail: closed)
 - `FIRST_SUMMARY_UID_ALLOWLIST` — Optional summary canary owner allowlist; empty admits only the positive percentage cohort when global gate is on (fail: closed)

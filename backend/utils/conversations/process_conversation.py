@@ -71,7 +71,7 @@ from utils.conversations.relevance_salience import finish_home_salience
 from utils.conversations.relevance_content import exclude_from_derived, noise_hidden_from_home
 from utils.conversations.relevance_media_metrics import observe_owner_memory_admission
 from utils.llm.notes_short_clip import quiet_minimum
-from utils.llm.output_language import resolve_output_language
+from utils.llm.output_language import normalize_language, resolve_output_language
 from utils.conversations.deterministic_minimum import (
     build_deterministic_minimum_structured,
     deterministic_minimum_title,
@@ -382,7 +382,10 @@ def _get_structured(
         user_language = (
             resolve_output_language(uid, language_code)
             if serving_for('NOTES_PACKET_V2_MODE', uid)
-            else users_db.get_user_language_preference(uid) or language_code
+            # Normalized so a 'multi'/'auto' capture tag can never reach a notes prompt.
+            else normalize_language(users_db.get_user_language_preference(uid))
+            or normalize_language(language_code)
+            or 'en'
         )
         minimum = quiet_minimum(uid, conversation, tz=tz)
         if minimum is not None:
@@ -755,7 +758,10 @@ def trigger_conversation_apps(
     produced or paid for.
     """
     if serving_for('NOTES_PACKET_V2_MODE', uid):
-        language_code = resolve_output_language(uid, conversation.language or language_code)
+        language_code = resolve_output_language(uid, normalize_language(conversation.language) or language_code)
+    else:
+        # The legacy branch never resolved: a 'multi' capture tag reached app prompts verbatim.
+        language_code = normalize_language(conversation.language) or normalize_language(language_code) or 'en'
     if first_party_only and app_id:
         raise ValueError('first_party_only excludes an explicit app selection')
     if usage_attribution is None:
