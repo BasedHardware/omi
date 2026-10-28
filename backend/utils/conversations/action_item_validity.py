@@ -20,7 +20,7 @@ _DEICTIC_ONLY = re.compile(
 )
 _EXPLICIT_TARGET = re.compile(
     r'\b(?:speaker\s*\d+|the other (?:speaker|person|one)|another speaker)\s+'
-    r'(?:is|means|refers to)\s+|\b(?:asked|requested)\s+(?:me\s+)?(?:for\s+)?(?:a\s+)?(?:callback|call back)\b',
+    r'(?:means|refers to)\s+|\b(?:asked|requested)\s+(?:me\s+)?(?:for\s+)?(?:a\s+)?(?:callback|call back)\b',
     re.I,
 )
 _GENERIC = frozenset(

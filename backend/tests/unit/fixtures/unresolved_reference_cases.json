@@ -32,5 +32,6 @@
   {"description":"Remove the Speaker 2 placeholder from the demo UI","reason":null},
   {"description":"Speaker 2 to email the budget spreadsheet","reason":null},
   {"description":"Call the other speaker","context":"We covered the Q3 budget and deck","reason":"unresolved_reference"},
-  {"description":"Call the other speaker","context":"The other speaker refers to Ayşe","reason":null}
+  {"description":"Call the other speaker","context":"The other speaker refers to Ayşe","reason":null},
+  {"description":"Call the other speaker","context":"The other speaker is reviewing the budget","reason":"unresolved_reference"}
 ]
