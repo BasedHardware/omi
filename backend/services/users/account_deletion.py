@@ -23,6 +23,7 @@ from database.dev_api_key import delete_dev_key, get_dev_keys_for_user
 from database.mcp_api_key import delete_mcp_key, get_mcp_keys_for_user
 from database.mcp_oauth import delete_user_oauth_credentials
 from database import account_deletion_grace as deletion_grace_db
+from database import account_deletion_marker as deletion_marker_db
 from database import users as users_db
 from database import processing_backlog as processing_backlog_db
 from database.action_items import get_action_item_ids
@@ -392,7 +393,7 @@ def background_wipe_user_data(
         # leave an account usable and recoverable.
         current_operation = 'billing_subscription'
         heartbeat()
-        marker = users_db.read_account_deletion_marker(uid) or {}
+        marker = deletion_marker_db.read_account_deletion_marker(uid) or {}
         # Grace admission completed Stripe cancellation before the window
         # began; do not re-open that dependency at wipe time.
         if marker.get('grace_actions_complete') is not True:
@@ -705,11 +706,13 @@ def start_account_deletion(
             # fence while the status and restore routes remain available.
             _run_immediate_deletion_steps(uid)
             if deletion_grace_db.mark_user_deletion_grace_actions_complete(uid, wipe_job_id) is False:
-                marker = users_db.read_account_deletion_marker(uid) or {}
+                marker = deletion_marker_db.read_account_deletion_marker(uid) or {}
                 if marker.get('wipe_status') != 'cancelled':
                     raise RuntimeError('deletion grace immediate steps could not be committed')
-            status = (users_db.read_account_deletion_marker(uid) or {}).get('wipe_status') or status
-            joined_due_at = (users_db.read_account_deletion_marker(uid) or {}).get('wipe_due_at') or joined_due_at
+            status = (deletion_marker_db.read_account_deletion_marker(uid) or {}).get('wipe_status') or status
+            joined_due_at = (deletion_marker_db.read_account_deletion_marker(uid) or {}).get(
+                'wipe_due_at'
+            ) or joined_due_at
         else:
             logger.info('delete_account joined existing grace-window deletion intent')
         return _account_deletion_result(str(status or 'pending_deletion'), joined_due_at)
@@ -746,7 +749,7 @@ def start_account_deletion(
 
 def account_deletion_status(uid: str) -> dict[str, Any]:
     """Owner-facing deletion state and metadata-only loss summary."""
-    marker = users_db.read_account_deletion_marker(uid) or {}
+    marker = deletion_marker_db.read_account_deletion_marker(uid) or {}
     status = marker.get('wipe_status')
     wipe_at = marker.get('wipe_due_at') if status == 'pending_deletion' else None
     held = read_held_audio_summary(uid) or {}
@@ -766,7 +769,7 @@ def account_deletion_status(uid: str) -> dict[str, Any]:
 
 def restore_account_deletion(uid: str) -> dict[str, Any]:
     """Restore the existing uid while the grace marker is still restorable."""
-    marker = users_db.read_account_deletion_marker(uid) or {}
+    marker = deletion_marker_db.read_account_deletion_marker(uid) or {}
     if marker.get('wipe_status') != 'pending_deletion':
         return {'status': 'not_pending', 'restored': False}
     if marker.get('grace_actions_complete') is not True:

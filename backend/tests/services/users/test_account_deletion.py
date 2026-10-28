@@ -1282,7 +1282,7 @@ def test_start_account_deletion_uses_default_grace_without_dispatch(monkeypatch)
         'wipe_due_at': datetime.now(timezone.utc) + timedelta(days=14),
         'grace_actions_complete': True,
     }
-    monkeypatch.setattr(account_deletion.users_db, 'read_account_deletion_marker', lambda _uid: marker)
+    monkeypatch.setattr(account_deletion.deletion_marker_db, 'read_account_deletion_marker', lambda _uid: marker)
     enqueue = MagicMock()
     monkeypatch.setattr(account_deletion, 'enqueue_deletion_wipe', enqueue)
     submit = MagicMock()
@@ -1404,7 +1404,7 @@ def test_restore_grace_deletion_keeps_billing_cancelled_and_restores_access(monk
         'wipe_due_at': datetime.now(timezone.utc) + timedelta(days=2),
         'grace_actions_complete': True,
     }
-    monkeypatch.setattr(account_deletion.users_db, 'read_account_deletion_marker', lambda _uid: marker)
+    monkeypatch.setattr(account_deletion.deletion_marker_db, 'read_account_deletion_marker', lambda _uid: marker)
     restore = MagicMock(return_value='restored')
     monkeypatch.setattr(account_deletion.deletion_grace_db, 'restore_user_deletion', restore)
     enable_auth_user = MagicMock()
@@ -1422,7 +1422,7 @@ def test_account_deletion_status_includes_pending_deadline_and_loss_counts(monke
 
     wipe_at = datetime.now(timezone.utc) + timedelta(days=4)
     monkeypatch.setattr(
-        account_deletion.users_db,
+        account_deletion.deletion_marker_db,
         'read_account_deletion_marker',
         lambda _uid: {'wipe_status': 'pending_deletion', 'wipe_due_at': wipe_at},
     )
