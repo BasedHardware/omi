@@ -11,7 +11,9 @@ from fastapi.testclient import TestClient
 from database import conversations as conversations_db
 from routers import action_items as routes
 from utils.conversations import action_item_extraction as extraction
+from utils.conversations import process_conversation as pc
 from utils.retrieval.tool_services import action_items as service
+from utils.retrieval.tools import action_item_tools as tools
 from utils.task_intelligence import task_source_validation as sources
 from utils.task_intelligence import conversation_capture as capture
 
@@ -104,10 +106,9 @@ def test_tool_error_is_visible_and_does_not_write(store, monkeypatch):
     store[2].assert_not_called()
 
 
-def test_langchain_tool_uses_the_same_source_boundary(store):
-    from utils.retrieval.tools.action_item_tools import create_action_item_tool
-
-    result = create_action_item_tool.invoke(
+def test_langchain_tool_uses_the_same_source_boundary(store, monkeypatch):
+    monkeypatch.setattr(tools, 'clock_for_config', lambda *_: None)
+    result = tools.create_action_item_tool.invoke(
         {'description': 'Buy milk', 'conversation_id': 'foreign-only'},
         config={'configurable': {'user_id': 'owner'}},
     )
@@ -135,8 +136,6 @@ def test_conversion_keeps_only_existing_cited_segments():
 
 
 def test_missing_automatic_source_preserves_existing_tasks(store, monkeypatch):
-    from utils.conversations import process_conversation as pc
-
     delete = MagicMock()
     refresh = MagicMock()
     monkeypatch.setattr(pc.action_items_db, 'delete_action_items_for_conversation', delete)
