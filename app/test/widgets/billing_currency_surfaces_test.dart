@@ -123,6 +123,9 @@ Future<void> _capture(WidgetTester tester, String name) async {
 
 Future<void> _pump(WidgetTester tester, Locale locale, _Usage usage, Widget page,
     {Size size = const Size(430, 1000)}) async {
+  final previousPalette = OmiColors.active;
+  OmiColors.active = OmiPalette.dark;
+  addTearDown(() => OmiColors.active = previousPalette);
   Intl.defaultLocale = locale.toString();
   addTearDown(() => Intl.defaultLocale = null);
   tester.view.physicalSize = size;
@@ -287,6 +290,32 @@ void main() {
       await _capture(tester, '${tag}_promo');
       await _tap(tester, find.byKey(const Key('plans_sheet_upgrade_button')));
       expect(usage.sessions.last, (_offer.yearly!.priceId, null, 'FIXTURE_PROMO'));
+    });
+
+    testWidgets('$tag V2 paid cards show the exact recurring checkout total', (tester) async {
+      final data = PlanStorefront.fromJson(
+          jsonDecode(File('test/fixtures/storefront_v2/single_plan_omi_pro.json').readAsStringSync())
+              as Map<String, dynamic>);
+      StorefrontPrice? selected;
+      await _pump(
+          tester,
+          locale,
+          _usage(),
+          StorefrontPlansContent(
+              storefront: data,
+              onRetry: () async {},
+              onSelect: (_, price) async {
+                selected = price;
+              },
+              onManage: () async {}));
+      expect(find.textContaining(r'US$29.99'), findsOneWidget);
+      await _capture(tester, '${tag}_v2_plans_month');
+      await _tap(tester, find.byKey(const Key('storefront_year')));
+      expect(find.textContaining(r'US$269.91'), findsWidgets);
+      await _capture(tester, '${tag}_v2_plans_year');
+      await _tap(tester, find.byKey(const Key('storefront_buy_unlimited_v2')));
+      expect(selected?.amountMinor, 26991);
+      expect(selected?.currency, 'usd');
     });
 
     testWidgets('$tag retention offer uses the same formatter', (tester) async {

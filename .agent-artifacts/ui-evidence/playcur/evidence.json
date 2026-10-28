@@ -182,6 +182,34 @@
       "description": "en US trial year card; rendered production widget with hermetic fixture data",
       "captured_by": "agent",
       "source": "visual-audit"
+    },
+    {
+      "file": "027-mobile-android-en-ca-v2-plans-month.png",
+      "platform": "mobile-android",
+      "description": "en CA v2 plans month; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "028-mobile-android-en-ca-v2-plans-year.png",
+      "platform": "mobile-android",
+      "description": "en CA v2 plans year; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "029-mobile-android-en-us-v2-plans-month.png",
+      "platform": "mobile-android",
+      "description": "en US v2 plans month; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "030-mobile-android-en-us-v2-plans-year.png",
+      "platform": "mobile-android",
+      "description": "en US v2 plans year; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
     }
   ]
 }
