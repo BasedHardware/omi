@@ -10,12 +10,13 @@ and again at deletion confirmation. The backend owns the policy. Optional fields
 - `loss_summary.held_recordings` and `loss_summary.backlog_conversations`:
   server-held counts shown together as recordings still processing.
 
-The deletion-grace backend lane currently returns the deadline only once an
-account is pending deletion. Its pre-delete response must also expose the enabled
-policy duration for the mobile confirmation to display grace copy. Until that
-contract is supplied, the client uses immediate-deletion copy. No client constant
-supplies a duration. A missing deadline on a pending account does not imply time
-remaining; restoration remains a server decision.
+Before deletion, the backend reports the enabled policy duration as
+`grace_period_days`; the new flow opts in with `DELETE /v1/users/delete-account?grace=true`.
+Clients that omit the query parameter keep immediate erasure, preserving the
+behavior of released apps without restore UI. A missing or zero policy duration
+uses immediate-deletion copy. No client constant supplies a duration. A missing
+deadline on a pending account does not imply time remaining; restoration remains
+a server decision.
 
 A 404/405 status endpoint permits legacy sign-in, with a bounded fallback event.
 Other status errors offer Retry. A transport outage preserves offline startup only for the same cached, onboarded owner and never for an owner already confirmed pending deletion; this fallback grants no grace window. Deletion confirmation
@@ -28,11 +29,8 @@ Unknown/foreign ownership is excluded, as are unreadable/corrupt or server-rejec
 unsupported audio. Server-held recordings get immediate-loss warnings only without
 a reported grace window. Phone-only recordings always warn of loss on deletion.
 
-The backend lane's DELETE route currently uses normal `get_current_user_uid`,
-which rejects `pending_deletion` before `erase_now` can be handled. The backend
-must grant authenticated, owner-only deletion access for this operation while
-keeping ordinary product writes fenced. Until then Finish deleting fails safely
-and retains the decision screen and local audio.
+The backend DELETE route uses authenticated, owner-only deletion access so a
+pending owner can finish erasing without reopening ordinary product writes.
 
 `POST /v1/users/restore-account` must return `restored: true` before the app resumes.
 Restoration restarts shell initialization and rechecks status. It does not restart
