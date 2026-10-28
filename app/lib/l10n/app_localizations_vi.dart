@@ -14732,4 +14732,10 @@ class AppLocalizationsVi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get dailyRecapsOnHome => 'Tóm tắt hàng ngày trên Trang chủ';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Hiển thị các tóm tắt mới nhất ở đầu Trang chủ.';
 }

@@ -14806,4 +14806,10 @@ class AppLocalizationsCa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get dailyRecapsOnHome => 'Resums diaris a l\'Inici';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Mostra els teus resums més recents a dalt de l\'Inici.';
 }

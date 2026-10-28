@@ -4470,5 +4470,7 @@
     "onTheWayDetailsForSupport": "Dettagli per l'assistenza",
     "homeNoiseFoldHidden": "{count, plural, =1{1 clip breve nascosto} other{{count} clip brevi nascosti}}",
     "homeNoiseFoldShow": "Mostra",
-    "homeNoiseFoldHide": "{count, plural, =1{Nascondi 1 clip breve} other{Nascondi {count} clip brevi}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Nascondi 1 clip breve} other{Nascondi {count} clip brevi}}",
+    "dailyRecapsOnHome": "Riepiloghi giornalieri nella Home",
+    "dailyRecapsOnHomeDescription": "Mostra i riepiloghi più recenti in cima alla Home."
 }

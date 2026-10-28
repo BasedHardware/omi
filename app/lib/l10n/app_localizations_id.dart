@@ -14745,4 +14745,10 @@ class AppLocalizationsId extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get dailyRecapsOnHome => 'Ringkasan Harian di Beranda';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Tampilkan ringkasan terbaru di bagian atas Beranda.';
 }

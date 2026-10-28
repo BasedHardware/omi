@@ -108,6 +108,8 @@ def transfer_redirect(document_id: str, token: str, owner: str, canonical: str, 
             summary_repair=False,
             summary_expected_revision=None,
         )
+        if donor.get('sync_hold'):
+            pending['sync_hold'] = True
         if donor.get('summary_deadline_at') is not None:
             prior_deadline = previous.get('summary_deadline_at')
             pending['summary_deadline_at'] = min(

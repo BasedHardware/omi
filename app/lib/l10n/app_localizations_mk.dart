@@ -14795,4 +14795,10 @@ class AppLocalizationsMk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get dailyRecapsOnHome => 'Дневни резимеа на Почетна';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Прикажи ги најновите резимеа на врвот на Почетна.';
 }

@@ -11896,5 +11896,7 @@
     "onTheWayDetailsForSupport": "ஆதரவுக்கான விவரங்கள்",
     "homeNoiseFoldHidden": "{count, plural, =1{1 குறுகிய பதிவு மறைக்கப்பட்டது} other{{count} குறுகிய பதிவுகள் மறைக்கப்பட்டன}}",
     "homeNoiseFoldShow": "காட்டவும்",
-    "homeNoiseFoldHide": "{count, plural, =1{1 குறுகிய பதிவை மறைக்கவும்} other{{count} குறுகிய பதிவுகளை மறைக்கவும்}}"
+    "homeNoiseFoldHide": "{count, plural, =1{1 குறுகிய பதிவை மறைக்கவும்} other{{count} குறுகிய பதிவுகளை மறைக்கவும்}}",
+    "dailyRecapsOnHome": "முகப்பில் தினசரி சுருக்கங்கள்",
+    "dailyRecapsOnHomeDescription": "முகப்பின் மேலே உங்கள் சமீபத்திய சுருக்கங்களைக் காட்டு."
 }

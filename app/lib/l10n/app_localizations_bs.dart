@@ -14759,4 +14759,10 @@ class AppLocalizationsBs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get dailyRecapsOnHome => 'Dnevni rezimei na početnoj';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Prikaži najnovije rezimee na vrhu početne.';
 }

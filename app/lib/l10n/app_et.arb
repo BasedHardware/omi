@@ -4470,5 +4470,7 @@
     "onTheWayDetailsForSupport": "Üksikasjad toe jaoks",
     "homeNoiseFoldHidden": "{count, plural, =1{1 lühike klipp on peidetud} other{{count} lühikest klippi on peidetud}}",
     "homeNoiseFoldShow": "Kuva",
-    "homeNoiseFoldHide": "{count, plural, =1{Peida 1 lühike klipp} other{Peida {count} lühikest klippi}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Peida 1 lühike klipp} other{Peida {count} lühikest klippi}}",
+    "dailyRecapsOnHome": "Päevased kokkuvõtted avalehel",
+    "dailyRecapsOnHomeDescription": "Näita viimaseid kokkuvõtteid avalehe ülaosas."
 }

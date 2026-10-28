@@ -14738,4 +14738,10 @@ class AppLocalizationsSr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get dailyRecapsOnHome => 'Дневни резимеи на почетној';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Прикажи најновије резимее на врху почетне.';
 }

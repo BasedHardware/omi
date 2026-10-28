@@ -11896,5 +11896,7 @@
     "onTheWayDetailsForSupport": "פרטים לתמיכה",
     "homeNoiseFoldHidden": "{count, plural, =1{קטע קצר 1 הוסתר} other{{count} קטעים קצרים הוסתרו}}",
     "homeNoiseFoldShow": "הצג",
-    "homeNoiseFoldHide": "{count, plural, =1{הסתר קטע קצר 1} other{הסתר {count} קטעים קצרים}}"
+    "homeNoiseFoldHide": "{count, plural, =1{הסתר קטע קצר 1} other{הסתר {count} קטעים קצרים}}",
+    "dailyRecapsOnHome": "סיכומים יומיים במסך הבית",
+    "dailyRecapsOnHomeDescription": "הצג את הסיכומים האחרונים שלך בראש מסך הבית."
 }

@@ -14768,4 +14768,10 @@ class AppLocalizationsMs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get dailyRecapsOnHome => 'Ringkasan Harian di Utama';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Tunjukkan ringkasan terkini anda di bahagian atas Utama.';
 }

@@ -14659,4 +14659,10 @@ class AppLocalizationsTh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get dailyRecapsOnHome => 'สรุปรายวันในหน้าหลัก';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'แสดงสรุปล่าสุดของคุณที่ด้านบนของหน้าหลัก';
 }

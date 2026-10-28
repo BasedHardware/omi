@@ -11896,5 +11896,7 @@
     "onTheWayDetailsForSupport": "Detalji za podršku",
     "homeNoiseFoldHidden": "{count, plural, =1{1 kratki isječak skriven} other{{count} kratkih isječaka skriveno}}",
     "homeNoiseFoldShow": "Prikaži",
-    "homeNoiseFoldHide": "{count, plural, =1{Skrij 1 kratki isječak} other{Skrij {count} kratkih isječaka}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Skrij 1 kratki isječak} other{Skrij {count} kratkih isječaka}}",
+    "dailyRecapsOnHome": "Dnevni sažetci na početnoj",
+    "dailyRecapsOnHomeDescription": "Prikaži najnovije sažetke na vrhu početne."
 }

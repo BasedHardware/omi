@@ -19,6 +19,7 @@ import pytest
 
 import tests.unit.test_sync_v2 as sync_v2_harness
 from config import sync_lineage
+from utils.sync import assignment
 from config.sync_live_dedupe import SYNC_LINEAGE_LIVE_DEDUPE_ENV
 from tests.unit.test_sync_cross_job_assignment import intake
 from tests.unit.test_sync_lineage_dedupe_replay import (
@@ -511,6 +512,7 @@ def test_all_repeat_stamp_fallback_with_a_donor_appends_and_reports_growth():
 
 
 def test_dedupe_off_persistence_is_unchanged(monkeypatch):
+    monkeypatch.setattr(assignment, 'time', SimpleNamespace(time=lambda: 1760000000.0))
     monkeypatch.setenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, 'off')
     with_marker = seeded_store([live_row()])
     without_marker = seeded_store([live_row()])

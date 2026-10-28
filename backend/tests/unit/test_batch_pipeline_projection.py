@@ -117,6 +117,59 @@ def test_original_vad_union_must_agree_with_speech_metering():
         projection_speech_spans(payload, 160)
 
 
+def test_decoded_eof_span_overrunning_admitted_duration_is_clamped():
+    from utils.batch_pipeline.contracts import projection_speech_spans
+
+    # The worker's fetch_decode check admits decoded audio up to 0.1s longer
+    # than the admitted capture, and span edges ride the decoded sample clock,
+    # so a sample-rounded EOF span ends past the admitted duration (reentry29
+    # probe, 2026-10-28: admitted 1.00001s, 16001 decoded samples).
+    admitted, decoded_eof = 1.00001, 16001 / 16000
+    payload = {'speech_spans': [{'start': 0.0, 'end': decoded_eof}], 'speech_seconds': decoded_eof}
+    assert projection_speech_spans(payload, admitted) == [{'start': 0.0, 'end': admitted}]
+    # The worker's own tolerance boundary (exactly 0.1s) still clamps.
+    payload = {'speech_spans': [{'start': 0.0, 'end': 4.1}], 'speech_seconds': 4.1}
+    assert projection_speech_spans(payload, 4) == [{'start': 0.0, 'end': 4}]
+
+
+def test_vad_span_overrun_beyond_decode_tolerance_is_still_rejected():
+    from utils.batch_pipeline.contracts import projection_speech_spans
+
+    payload = {'speech_spans': [{'start': 0.0, 'end': 4.2}], 'speech_seconds': 4.2}
+    with pytest.raises(ValueError, match='ordered nonoverlapping'):
+        projection_speech_spans(payload, 4)
+    # A span starting at or past the admitted duration degenerates after the
+    # clamp (start >= end), whether or not its own overrun is within tolerance.
+    payload = {'speech_spans': [{'start': 4.05, 'end': 4.1}], 'speech_seconds': 0.05}
+    with pytest.raises(ValueError, match='ordered nonoverlapping'):
+        projection_speech_spans(payload, 4)
+
+
+def test_clamped_eof_span_keeps_overlapping_spans_rejected():
+    from utils.batch_pipeline.contracts import projection_speech_spans
+
+    # Overlap against a span the clamp shortened must still fail: the second
+    # span cannot survive inside the admitted tail the first span now owns.
+    payload = {'speech_spans': [{'start': 3.9, 'end': 4.1}, {'start': 3.95, 'end': 4.05}], 'speech_seconds': 0.2}
+    with pytest.raises(ValueError, match='ordered nonoverlapping'):
+        projection_speech_spans(payload, 4)
+
+
+def test_speech_accounting_tolerates_the_eof_clamp_only_within_one_sample():
+    from utils.batch_pipeline.contracts import projection_speech_spans
+
+    # speech_seconds counts the decoded-clock union (the worker sums the same
+    # spans it emits), so the clamp must not break the accounting fence: the
+    # pre-clamp union is compared, and a real disagreement still fails.
+    admitted, decoded_eof = 1.00001, 16001 / 16000
+    spans = [{'start': 0.5, 'end': decoded_eof}]
+    payload = {'speech_spans': spans, 'speech_seconds': decoded_eof - 0.5}
+    assert projection_speech_spans(payload, admitted) == [{'start': 0.5, 'end': admitted}]
+    payload['speech_seconds'] = decoded_eof - 0.5 + 0.001
+    with pytest.raises(ValueError, match='accounting'):
+        projection_speech_spans(payload, admitted)
+
+
 def test_production_result_cannot_invent_vad_groups_from_transcript_gaps():
     from utils.batch_pipeline.contracts import WorkItem, Priority
     from utils.batch_pipeline.projection_parts import split_result

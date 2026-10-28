@@ -14523,4 +14523,10 @@ class AppLocalizationsJa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get dailyRecapsOnHome => 'ホームの日次の要約';
+
+  @override
+  String get dailyRecapsOnHomeDescription => '最新の要約をホームの上部に表示します。';
 }
