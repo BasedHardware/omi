@@ -94,6 +94,24 @@ class CreateConversationFromTranscriptRequest(developer_segments.ContinuationFie
     # reasons, causing every upload carrying a newer reason to fail with a 422.
     conversation_finalization_reason: Optional[str] = None
 
+    @field_validator('client_session_id', mode='before')
+    @classmethod
+    def blank_client_session_id_is_absent(cls, value: Any) -> Any:
+        """Treat a blank client_session_id as if it were not sent.
+
+        This field is optional metadata: the id only exists so retries dedupe,
+        and every caller already handles its absence. Rejecting the request on
+        a blank value strands the only copy of a transcript — clients that
+        persist a blank id retry the identical bytes forever (measured
+        2026-10: ~16k 422s/day against this validator, stuck sessions from
+        builds that stored empty client ids). Running before the length
+        constraints also keeps `min_length=1` in the published schema honest
+        for ids that carry content.
+        """
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
     @field_validator('client_session_id')
     @classmethod
     def normalize_client_session_id(cls, value: Optional[str]) -> Optional[str]:

@@ -239,6 +239,61 @@ def test_from_segments_keeps_transcript_shape_for_integration_sources(
     assert not hasattr(conversation, 'text_source')
 
 
+@pytest.mark.parametrize('alias', ['client_session_id', 'client_conversation_id', 'session_id', 'client_id'])
+@pytest.mark.parametrize('blank', ['', ' ', '   ', ' \t\n '])
+def test_blank_client_session_id_is_treated_as_absent(monkeypatch, alias, blank, segment_api_client):
+    # A blank id under any accepted alias must not 422 the upload. Clients that
+    # persisted a blank id resend identical bytes on every retry, so a 422 here
+    # strands the only copy of the transcript (BasedHardware/omi#15500;
+    # ~16k 422s/day against this validator measured 2026-10). Absent id is the
+    # plain create path — the same one a request without the field takes.
+    captured = []
+    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
+    monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', MagicMock())
+    monkeypatch.setattr(
+        developer,
+        'resolve_client_device_from_request',
+        lambda _request: SimpleNamespace(client_device_id=None, platform=None),
+    )
+
+    def process(_uid, _language, conversation, *, trigger):
+        captured.append(conversation)
+        return Conversation(
+            **conversation.model_dump(exclude={'id', 'created_at', 'structured', 'status'}),
+            id='blank-id-result',
+            created_at=NOW,
+            structured={'title': 'Synthetic summary'},
+            status=ConversationStatus.completed,
+        )
+
+    monkeypatch.setattr(developer, 'process_conversation', process)
+    body = _request().model_dump(mode='json')
+    body.pop('client_session_id', None)
+    body[alias] = blank
+    response = segment_api_client.post('/v1/conversations/from-segments', json=body)
+
+    assert response.status_code == 200, response.text
+    assert len(captured) == 1
+    # No id means no idempotency claim: the conversation takes the create path.
+    assert isinstance(captured[0], CreateConversation)
+
+
+def test_client_session_id_with_content_still_strips_and_dedupes(monkeypatch):
+    # The blank-id leniency must not weaken the contract for real ids: a padded
+    # id still normalizes to its stripped value and keeps the idempotency path.
+    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock())
+    claim = MagicMock()
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', claim)
+    monkeypatch.setattr(developer, 'process_conversation', MagicMock())
+
+    body = _request().model_dump(mode='json')
+    body['client_session_id'] = '  local-session-1  '
+    request = developer.CreateConversationFromTranscriptRequest.model_validate(body)
+
+    assert request.client_session_id == 'local-session-1'
+
+
 def test_client_session_id_persists_when_processor_returns_without_saving(monkeypatch):
     expected_id = developer._from_segments_conversation_id('uid1', 'local-session-1')
     monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))

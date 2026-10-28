@@ -1,0 +1,3 @@
+{
+  "change": "Fixed recordings failing to upload forever when their stored session id was blank: uploads now always carry a real session id"
+}
