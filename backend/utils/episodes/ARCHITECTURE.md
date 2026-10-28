@@ -49,6 +49,15 @@ one capture window's evidence.
      (`state.render_state`, at most `MAX_STATE_CHARS`) plus only this moment's
      new text. The earlier transcript is never re-read. The fixed instruction
      prefix comes first and the clock, state and new speech come last.
+     One output language is resolved for every moment (`output_language.py`,
+     kill switch `EPISODE_OUTPUT_LANGUAGE_PIN`): the user's explicit preference,
+     then the language the episode state is already written in, then the
+     conversation's dominant language tag — never the newest moment's speech
+     deciding on its own, and `multi`/`auto`/`unknown` count as unset. The
+     prompt pins that language, the resolved value is stamped on the episode as
+     `output_language`, and a state detected in a different language is
+     rewritten in the update instead of being fed back, so a wrong-language
+     episode recovers on its next moment.
    - **Compare-and-swap store** (`database/episodes.py`): speech-derived fields are
      sealed with the user's key. A lost race retries once.
 3. When a conversation's finalize starts, its live episode closes

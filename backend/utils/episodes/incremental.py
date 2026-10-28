@@ -25,6 +25,7 @@ from config.episodes import (
     JEV_LANE,
     JEV_TIMEOUT_SECONDS,
     MOMENT_TEXT_MAX_CHARS,
+    episode_output_language_pinned,
 )
 from config.refactor_modes import serving_for, shadow_or_serve
 from database.auth import get_user_name
@@ -183,15 +184,23 @@ def _bounded_moment(rendered: str) -> str:
 
 
 def build_messages(
-    state_json: str, moment: str, *, now: datetime, tz_name: str, output_language: str | None = None
+    state_json: str,
+    moment: str,
+    *,
+    now: datetime,
+    tz_name: str,
+    output_language: str | None = None,
+    repair_instruction: str | None = None,
 ) -> list[tuple[str, str]]:
     """Fixed prefix first; the clock, state and new speech last."""
     try:
         local = now.astimezone(ZoneInfo(tz_name))
     except Exception:
         local, tz_name = now, 'UTC'
+    repair = f'{repair_instruction}\n' if repair_instruction else ''
     volatile = (
         f'Local time now: {local.strftime("%Y-%m-%d %H:%M")} ({tz_name})\n'
+        f'{repair}'
         f'Episode state so far:\n{state_json}\n\n'
         f'Newest moment:\n{moment}'
     )
@@ -240,12 +249,15 @@ def run_incremental_update(
     invoke=None,
     output_language: str | None = None,
     conversation_language: str | None = None,
+    repair_instruction: str | None = None,
 ) -> ModelResult:
     """One cheap call. Raises ``ModelCallFailed`` (llm_error | parse_error); never partial state."""
     language = None
-    if serving_for('NOTES_PACKET_V2_MODE', uid):
+    if episode_output_language_pinned() or serving_for('NOTES_PACKET_V2_MODE', uid):
         language = output_language or resolve_output_language(uid, conversation_language)
-    messages = build_messages(state_json, moment, now=now, tz_name=tz_name, output_language=language)
+    messages = build_messages(
+        state_json, moment, now=now, tz_name=tz_name, output_language=language, repair_instruction=repair_instruction
+    )
     started = time.monotonic()
     try:
         reply = (invoke or invoke_model)(uid, messages)

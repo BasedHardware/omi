@@ -11,9 +11,10 @@ from config import episodes as config
 from database import episode_receipts
 from database import conversations as conversations_db
 from database import episodes as episodes_db
+from database import users as users_db
 from models.episode import Episode
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
-from utils.episodes import service
+from utils.episodes import incremental, service
 from utils.episodes.service import Collaborators, MomentInput
 
 UID = 'uid-episodes'
@@ -1751,3 +1752,148 @@ def test_sync_absorb_finalization_applies_only_the_survivors_novel_speech(monkey
     assert len(model.calls) == 2
     newest = model.calls[-1][-1][1].split('Newest moment:\n')[-1]
     assert novel['text'] in newest and LONG not in newest
+
+
+# --------------------------------------------------------------------------- output language
+
+
+def test_english_preference_keeps_english_notes_through_a_vietnamese_moment(monkeypatch):
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Team lunch', 'bullets': ['Lunch at 12:30']})
+    monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_a: 'en')
+    moment = replace(_moment(), language='vi')
+    assert (
+        service.record_moment(UID, moment, _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+        == 'applied'
+    )
+    system, _user = model.calls[0]
+    assert 'in en.' in system[1] and 'language the people speak' not in system[1]
+    assert episodes_db.get_current_episode(UID, firestore_client=store)['output_language'] == 'en'
+
+
+def test_vietnamese_preference_writes_vietnamese_notes(monkeypatch):
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Bữa trưa', 'bullets': ['Ăn trưa lúc 12:30']})
+    monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_a: 'vi')
+    assert (
+        service.record_moment(UID, _moment(), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+        == 'applied'
+    )
+    assert 'in vi.' in model.calls[0][0][1]
+    assert episodes_db.get_current_episode(UID, firestore_client=store)['output_language'] == 'vi'
+
+
+def test_without_a_preference_the_conversations_language_wins_and_sticks(monkeypatch):
+    store = StrictFirestore()
+    store.rows[('users', UID, 'conversations', 'c1')] = {'language': 'vi'}
+    model = FakeModel({'title': 'Bữa trưa', 'bullets': ['Ăn trưa']}, {'bullets': ['Vẫn là tiếng Việt']})
+    monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_a: '')
+    assert (
+        service.record_moment(UID, _moment(), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+        == 'applied'
+    )
+    assert 'in vi.' in model.calls[0][0][1]
+    # The newest moment carries a different tag; the episode keeps its running language.
+    later = replace(_moment(minutes=3, start=30.0, text=LONG.upper()), language='en')
+    assert (
+        service.record_moment(UID, later, _collaborators(model, now=T0 + timedelta(minutes=4), store=store))
+        == 'applied'
+    )
+    assert 'in vi.' in model.calls[1][0][1]
+    assert episodes_db.get_current_episode(UID, firestore_client=store)['output_language'] == 'vi'
+
+
+def test_a_multi_tag_counts_as_no_language(monkeypatch):
+    store = StrictFirestore()
+    model = FakeModel({'bullets': ['A']})
+    monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_a: '')
+    moment = replace(_moment(), language='multi')
+    assert (
+        service.record_moment(UID, moment, _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+        == 'applied'
+    )
+    assert 'in en.' in model.calls[0][0][1]
+
+
+def test_a_wrong_language_state_is_repaired_not_fed_back(monkeypatch):
+    store = StrictFirestore()
+    preference = {'lang': 'vi'}
+    monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_a: preference['lang'])
+    model = FakeModel(
+        {'title': 'Trao đổi công việc', 'bullets': ['Hẹn ăn trưa lúc 12:30']},
+        {'title': 'Team lunch', 'bullets': ['Lunch at 12:30 near the office']},
+        {'bullets': ['Lunch at 12:30 near the office', 'Book the table']},
+    )
+    assert (
+        service.record_moment(UID, _moment(), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+        == 'applied'
+    )
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['output_language'] == 'vi'
+
+    preference['lang'] = 'en'
+    second = _moment(minutes=3, start=30.0, text=LONG.upper())
+    assert (
+        service.record_moment(UID, second, _collaborators(model, now=T0 + timedelta(minutes=4), store=store))
+        == 'applied'
+    )
+    assert 'written in vi' in model.calls[1][1][1]
+    # A repair update does not stamp: the state must prove its new language on the next moment.
+    assert episodes_db.get_episode(UID, episode['id'], firestore_client=store)['output_language'] is None
+
+    third = _moment(
+        minutes=6,
+        start=60.0,
+        text='and a last bit about the dessert options for the team lunch. someone mentioned the mango sticky rice '
+        'again and the coconut pancakes. we should order both for the whole table when everyone arrives',
+    )
+    assert (
+        service.record_moment(UID, third, _collaborators(model, now=T0 + timedelta(minutes=7), store=store))
+        == 'applied'
+    )
+    assert 'written in' not in model.calls[2][1][1]
+    assert episodes_db.get_episode(UID, episode['id'], firestore_client=store)['output_language'] == 'en'
+
+
+def test_a_legacy_unstamped_vietnamese_state_is_detected_and_repaired(monkeypatch):
+    store = StrictFirestore()
+    model = FakeModel(
+        {'title': 'Bữa trưa', 'bullets': ['Ăn trưa']}, {'title': 'Team lunch', 'bullets': ['Lunch at 12:30']}
+    )
+    monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_a: '')
+    assert (
+        service.record_moment(UID, _moment(), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+        == 'applied'
+    )
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    # The incident's shape: a stored state in Vietnamese that predates the language stamp.
+    episodes_db.update_episode(
+        UID,
+        episode['id'],
+        expected_version=episode['state_version'],
+        updates={
+            'title': 'Trao đổi công việc',
+            'bullets': ['Hẹn ăn trưa lúc 12:30', 'Đặt bàn cho nhóm'],
+            'output_language': None,
+        },
+        firestore_client=store,
+    )
+    monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_a: 'en')
+    second = _moment(minutes=3, start=30.0, text=LONG.upper())
+    assert (
+        service.record_moment(UID, second, _collaborators(model, now=T0 + timedelta(minutes=4), store=store))
+        == 'applied'
+    )
+    assert 'written in vi' in model.calls[1][1][1]
+
+
+def test_the_language_pin_kill_switch_restores_the_legacy_prompt(monkeypatch):
+    store = StrictFirestore()
+    model = FakeModel({'bullets': ['A']})
+    monkeypatch.setenv(config.EPISODE_OUTPUT_LANGUAGE_PIN_ENV, 'off')
+    assert (
+        service.record_moment(UID, _moment(), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+        == 'applied'
+    )
+    assert model.calls[0][0] == ('system', incremental.PROMPT_PREFIX)
+    assert 'output_language' not in episodes_db.get_current_episode(UID, firestore_client=store)

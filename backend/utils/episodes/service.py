@@ -53,6 +53,7 @@ from config.episodes import (
     LAST_CLOSED_CACHE_SECONDS,
     MOMENT_MIN_INTERVAL_SECONDS,
     MOMENT_MIN_WORDS,
+    episode_output_language_pinned,
     episodes_enabled_for,
 )
 from database import action_items as action_items_db
@@ -63,7 +64,7 @@ from database import notifications as notification_db
 from database import users as users_db
 from database.auth import get_user_name
 from utils.episodes import moment_render, boundary_runtime
-from utils.episodes.output_language import resolved_invoke
+from utils.episodes import output_language as episode_language
 from utils.episodes import client_gate, incremental, metrics, policy, recovery
 from utils.episodes.recovery import segment_end as _segment_end, segment_start as _segment_start
 from utils.episodes.moment import MomentInput
@@ -138,6 +139,20 @@ def _owner_name(uid: str, c: Collaborators) -> str:
     except Exception as error:
         logger.warning('event=episode_moment owner_name_failed exception_type=%s', type(error).__name__)
         return 'You'
+
+
+def _conversation_language(uid: str, conversation_id: str, c: Collaborators) -> str:
+    """The conversation's dominant language tag, for moments the stream did not carry one."""
+    if not conversation_id:
+        return ''
+    try:
+        row = conversations_db.get_conversation_raw_snapshot(
+            uid, conversation_id, field_paths=['language'], firestore_client=c.firestore_client
+        )
+        return str((row or {}).get('language') or '')
+    except Exception as error:
+        logger.warning('event=episode_moment conversation_language_failed exception_type=%s', type(error).__name__)
+        return ''
 
 
 def _empty_episode(moment: MomentInput, now: datetime) -> dict[str, Any]:
@@ -637,6 +652,13 @@ def _record_moment_once(
 
     base = dict(episode) if episode else _empty_episode(moment, now)
     known_ids = [item['id'] for item in provisional_items(base) if item.get('status') == 'provisional']
+    output_language, repair = '', None
+    if episode_output_language_pinned():
+        conversation_language = moment.language or _conversation_language(uid, moment.conversation_id, c)
+        output_language = episode_language.resolve_episode_language(uid, base, conversation_language)
+        prior = episode_language.state_language(base, hint_language=conversation_language)
+        if prior and prior != output_language:
+            repair = episode_language.repair_instruction(prior, output_language)
     try:
         result = incremental.run_incremental_update(
             uid,
@@ -645,8 +667,10 @@ def _record_moment_once(
             known_item_ids=known_ids,
             now=now,
             tz_name=_tz(uid, c),
-            invoke=resolved_invoke(uid, moment.language, c.invoke),
+            invoke=episode_language.resolved_invoke(uid, output_language or moment.language, c.invoke),
             conversation_language=moment.language,
+            output_language=output_language or None,
+            repair_instruction=repair,
         )
     except incremental.ModelCallFailed as failure:
         metrics.record_moment_update(
@@ -724,6 +748,13 @@ def _record_moment_once(
         'last_activity_at': max(moment.ended_at, last_activity) if last_activity else moment.ended_at,
         'calendar_identity': base.get('calendar_identity') or moment.calendar_identity,
     }
+    if output_language:
+        if repair:
+            # The stamp says what the state is written in; a repair update may not have
+            # landed it, so clear the stamp and re-detect rather than loop repairs on it.
+            updates['output_language'] = None
+        else:
+            updates['output_language'] = output_language
     if pending is not None:
         updates['pending_boundary'] = {k: v for k, v in _pending(base).items() if k != moment.conversation_id}
     if episode is None:
