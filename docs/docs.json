@@ -41,6 +41,7 @@
               "doc/developer/apps/Notifications",
               "doc/developer/apps/Oauth",
               "doc/developer/apps/AudioStreaming",
+              "doc/developer/custom-stt",
               "doc/developer/apps/Import",
               "doc/developer/apps/Submitting",
               "doc/developer/apps/OpenSource",
@@ -158,12 +159,12 @@
         "icon": "sitemap",
         "groups": [
           {
-            "group": "How Omi Works",
+            "group": "How Omi works",
             "pages": [
               "doc/how-omi-works/architecture",
-              "doc/developer/backend/transcription",
-              "doc/developer/backend/StoringConversations",
-              "doc/developer/backend/chat_system",
+              "doc/how-omi-works/capture-and-transcription",
+              "doc/how-omi-works/conversations-and-memories",
+              "doc/how-omi-works/chat",
               "doc/how-omi-works/privacy-and-data"
             ]
           }
@@ -319,7 +320,10 @@
     { "source": "/doc/developer/backend/translation_benchmark", "destination": "https://github.com/BasedHardware/omi/tree/main/backend/docs" },
     { "source": "/finops/telemetry-transport-contract", "destination": "https://github.com/BasedHardware/omi/blob/main/backend/docs/telemetry-transport-contract.md" },
     { "source": "/product-telemetry/README", "destination": "https://github.com/BasedHardware/omi/blob/main/scripts/product-telemetry/README.md" },
-    { "source": "/archive/SPEC-meeting-receipt", "destination": "/doc/get_started/what-is-omi" }
+    { "source": "/archive/SPEC-meeting-receipt", "destination": "/doc/get_started/what-is-omi" },
+    { "source": "/doc/developer/backend/transcription", "destination": "/doc/how-omi-works/capture-and-transcription" },
+    { "source": "/doc/developer/backend/StoringConversations", "destination": "/doc/how-omi-works/conversations-and-memories" },
+    { "source": "/doc/developer/backend/chat_system", "destination": "/doc/how-omi-works/chat" }
   ],
   "ai": {
     "llmsTxt": true

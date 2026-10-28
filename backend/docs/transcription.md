@@ -802,10 +802,10 @@ close and must retain unconfirmed local audio until a later successful sync.
   <Card title="Backend Deep Dive" icon="server" href="/doc/how-omi-works/architecture">
     Complete backend architecture overview
   </Card>
-  <Card title="Storing Conversations" icon="database" href="/doc/developer/backend/StoringConversations">
+  <Card title="Storing Conversations" icon="database" href="./storing-conversations.md">
     How conversations and memories are stored
   </Card>
-  <Card title="Chat System" icon="comments" href="/doc/developer/backend/chat_system">
+  <Card title="Chat System" icon="comments" href="./chat-system.md">
     How the AI chat system uses transcriptions
   </Card>
   <Card title="Backend Setup" icon="gear" href="/doc/developer/backend/Backend_Setup">

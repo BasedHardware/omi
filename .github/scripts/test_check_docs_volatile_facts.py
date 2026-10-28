@@ -33,6 +33,11 @@ def main() -> int:
             "vendor.mdx": "Audio goes to Deepgram Nova-3.\n",
             "model.mdx": "Powered by gpt-4o and claude-sonnet.\n",
             "pin.mdx": "Requires Python 3.11 and macOS 14.4.\n",
+            "search.mdx": "Vectors live in Pinecone.\n",
+            "sunset.mdx": "Keys are retired (2026-08-27).\n",
+            "emoji.mdx": "## \U0001F680 Quick Start\n",
+            # Emoji inside code fences and the bounty label name are allowed.
+            "emoji_ok.mdx": '```json\n{"emoji": "\U0001F4BC"}\n```\nIssues labeled "Paid Bounty \U0001F4B0".\n',
         }
         for rel, body in violations.items():
             path = root / rel
@@ -51,22 +56,28 @@ def main() -> int:
             ("vendor.mdx", "stt vendor"),
             ("model.mdx", "llm model name"),
             ("pin.mdx", "tool version pin"),
+            ("search.mdx", "stt/search vendor"),
+            ("sunset.mdx", "dated retirement note"),
+            ("emoji.mdx", "emoji"),
         ]:
             if not any(name in line and label in line for line in out.splitlines()):
                 raise SystemExit(f"expected {name} flagged as {label}:\n{out}")
             print(f"  ok: {name} -> {label}")
+        if "emoji_ok.mdx" in out:
+            raise SystemExit(f"fenced payload emoji and bounty label must pass:\n{out}")
+        print("  ok: fenced/label emoji exempt")
         if "api-reference" in out:
             raise SystemExit(f"api-reference must be exempt:\n{out}")
         print("  ok: api-reference exempt")
 
         # Allowlist path: build the same violation under an allowlisted rel path.
-        allowed = root / "doc" / "developer" / "backend"
+        allowed = root / "doc" / "get_started"
         allowed.mkdir(parents=True)
-        (allowed / "transcription.mdx").write_text("Deepgram $5 reviewed within 24 hours.\n")
+        (allowed / "byok_and_custom_transcription.mdx").write_text("Deepgram $5 reviewed within 24 hours.\n")
         root2 = tempfile.TemporaryDirectory()
         try:
             clean = pathlib.Path(root2.name)
-            page = clean / "doc" / "developer" / "backend" / "transcription.mdx"
+            page = clean / "doc" / "get_started" / "byok_and_custom_transcription.mdx"
             page.parent.mkdir(parents=True)
             page.write_text("Deepgram $5 reviewed within 24 hours.\n")
             code, out = run(clean)

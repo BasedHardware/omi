@@ -20,8 +20,8 @@ flowchart TD
 ## The life of a conversation
 
 1. **Capture.** The wearable streams audio to the phone app over Bluetooth (the protocol is specified in [BLE Protocol](/doc/developer/Protocol)). Devices with storage can also record standalone and sync later.
-2. **Transcription.** The app streams audio to the backend over a WebSocket; transcript segments flow back to the app in near real time. See [Capture & transcription](/doc/developer/backend/transcription).
-3. **Structuring.** When a conversation ends, the backend processes it: title, overview, category, action items, events, and extracted **memories** (durable facts about you). See [Conversations & memories](/doc/developer/backend/StoringConversations).
+2. **Transcription.** The app streams audio to the backend over a WebSocket; transcript segments flow back to the app in near real time. See [Capture & transcription](/doc/how-omi-works/capture-and-transcription).
+3. **Structuring.** When a conversation ends, the backend processes it: title, overview, category, action items, events, and extracted **memories** (durable facts about you). See [Conversations & memories](/doc/how-omi-works/conversations-and-memories).
 4. **Serving.** Everything lands behind one account-scoped surface: the apps, the [Developer API](/doc/developer/api/overview), the [MCP server](/doc/developer/mcp/introduction), and the [CLI](/doc/developer/cli/introduction). Apps you install can react to each stage via webhooks.
 
 ## Where things live
@@ -40,13 +40,13 @@ Details that churn — provider configurations, internal runbooks, operational c
 ## Read next
 
 <CardGroup cols={2}>
-  <Card title="Capture & Transcription" icon="microphone" href="/doc/developer/backend/transcription">
+  <Card title="Capture & Transcription" icon="microphone" href="/doc/how-omi-works/capture-and-transcription">
     From microphone to transcript segments
   </Card>
-  <Card title="Conversations & Memories" icon="database" href="/doc/developer/backend/StoringConversations">
+  <Card title="Conversations & Memories" icon="database" href="/doc/how-omi-works/conversations-and-memories">
     The data model behind your history
   </Card>
-  <Card title="Chat" icon="comments" href="/doc/developer/backend/chat_system">
+  <Card title="Chat" icon="comments" href="/doc/how-omi-works/chat">
     How Omi answers questions with your data
   </Card>
   <Card title="Privacy & Data Handling" icon="shield" href="/doc/how-omi-works/privacy-and-data">

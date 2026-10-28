@@ -27,7 +27,6 @@ ALLOWLIST = {
     "doc/developer/cli/commands",       # generated sections + flag/env reference
     "doc/developer/mcp/tools",          # generated from the tool registry
     # provider-topic pages (vendors and pins are the content)
-    "doc/developer/backend/transcription",
     "doc/get_started/byok_and_custom_transcription",
     "doc/developer/sdk/sdk",
     "doc/developer/sdk/python",
@@ -63,8 +62,16 @@ PATTERNS: list[tuple[str, str]] = [
     ("retired bounty flow", re.compile(r"omi\.me/bounties|amzn\.to|josancamon19|kodjima33")),
     ("stt vendor", re.compile(r"\bDeepgram\b|\bNova-3\b")),
     ("llm model name", re.compile(r"\bgpt-\d|\bclaude-[a-z0-9]|\bgemini-\d")),
+    ("stt/search vendor", re.compile(r"\b(Pinecone|Soniox|Modulate|Parakeet)\b|text-embedding-")),
+    ("dated retirement note", re.compile(r"retired[^.\n]{0,20}\d{4}-\d{2}-\d{2}", re.IGNORECASE)),
     ("tool version pin", re.compile(r"\b(Python|macOS|iOS|Android|Xcode|Flutter|NCS|nRF Connect SDK)\s\d+\.\d+")),
 ]
+
+
+# Emoji are checked in prose only: code blocks carry real payloads (conversation
+# emoji fields) and the bounty label's name contains one.
+EMOJI = re.compile("[\U0001F300-\U0001FAFF\u2600-\u27BF]")
+EMOJI_EXEMPT = ("Paid Bounty",)
 
 
 def main() -> int:
@@ -76,7 +83,12 @@ def main() -> int:
         rel = path.relative_to(docs_root).with_suffix("").as_posix()
         if rel in ALLOWLIST or rel.startswith("api-reference/"):
             continue
+        in_fence = False
         for lineno, line in enumerate(path.read_text().splitlines(), start=1):
+            if line.lstrip().startswith("```"):
+                in_fence = not in_fence
+            elif not in_fence and EMOJI.search(line) and not any(x in line for x in EMOJI_EXEMPT):
+                problems.append(f"{rel}.mdx:{lineno}: emoji: {line.strip()[:100]}")
             for label, pattern in PATTERNS:
                 if pattern.search(line):
                     problems.append(f"{rel}.mdx:{lineno}: {label}: {line.strip()[:100]}")

@@ -33,7 +33,7 @@ sequenceDiagram
     A->>M: tools/list (discover available tools)
     M-->>A: Tools allowed by the user's OAuth grant or MCP key
     A->>M: tools/call search_memories {query: "morning routine"}
-    M->>D: Semantic search via Pinecone
+    M->>D: Semantic search
     D-->>M: Ranked results
     M-->>A: Memories with relevance scores
 ```

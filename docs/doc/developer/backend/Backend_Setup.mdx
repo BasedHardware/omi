@@ -6,7 +6,7 @@ description: "Set up the Omi backend infrastructure for local development. This 
 
 ## Overview
 
-The Omi backend powers all AI capabilities including transcription, conversation processing, chat, and integrations. This page is **contributor setup** — running the backend to develop and test the platform. It is not a self-hosting guide (see [Open Source & Omi Cloud](/doc/get_started/open-source-and-omi-cloud) for that distinction).
+The Omi backend powers all AI capabilities including transcription, conversation processing, chat, and integrations. This page is **contributor setup** — running the backend to develop and test the platform. It is not a guide to running your own production Omi (see [Open Source & Omi Cloud](/doc/get_started/open-source-and-omi-cloud)).
 
 The fastest local path is the repository dev harness: `make dev-init` once, then `make dev-up`, which starts the Firestore and Auth emulators, Redis, and Typesense, and runs the API — no external cloud accounts needed. The manual steps below are for working against your own cloud services instead.
 
@@ -328,23 +328,7 @@ OAuth is required for user authentication. You need to configure both Google and
 
     Edit `.env` and fill in your API keys (see [Environment Variables](#environment-variables) below).
 
-    For a self-hosted backend used by an existing Omi mobile build, set the
-    Firebase token audience separately from your data project:
-
-    ```dotenv
-    # Stock development/community Omi mobile builds mint tokens for this project.
-    FIREBASE_AUTH_PROJECT_ID=based-hardware-dev
-
-    # Your own Google Cloud/Firebase project for Firestore and other backend data.
-    FIREBASE_PROJECT_ID=your-self-hosted-project
-    ```
-
-    Firebase ID tokens are verified with the issuer's public signing keys, so
-    `FIREBASE_AUTH_PROJECT_ID` does not require Omi service-account credentials.
-    When it is unset, Firebase Admin uses its default project selection instead;
-    set the auth project explicitly when it differs from your data-project setup,
-    or stock mobile-build tokens will be rejected.
-    Do not enable `LOCAL_DEVELOPMENT` on an internet-accessible deployment: that
+    Never enable `LOCAL_DEVELOPMENT` on an internet-accessible machine: that
     mode intentionally bypasses authentication for local harnesses.
   </Step>
 </Steps>
@@ -573,10 +557,10 @@ ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
   <Card title="Backend Deep Dive" icon="magnifying-glass" href="/doc/how-omi-works/architecture">
     Understand the backend architecture
   </Card>
-  <Card title="Chat System" icon="comments" href="/doc/developer/backend/chat_system">
+  <Card title="Chat System" icon="comments" href="/doc/how-omi-works/chat">
     Learn how the chat feature works
   </Card>
-  <Card title="Storing Conversations" icon="database" href="/doc/developer/backend/StoringConversations">
+  <Card title="Storing Conversations" icon="database" href="/doc/how-omi-works/conversations-and-memories">
     How conversations and memories are stored
   </Card>
 </CardGroup>

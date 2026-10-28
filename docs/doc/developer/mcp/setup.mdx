@@ -42,7 +42,7 @@ Omi supports four setup paths:
 | Omi's guided connection | OAuth for ChatGPT and Claude; a generated MCP key for local clients | The current Omi macOS app (recommended) |
 | Hosted server with OAuth | Browser sign-in and consent; no key to copy | Supported cloud clients |
 | Hosted server with an MCP key | `Authorization: Bearer omi_mcp_...` | Clients that accept custom headers |
-| Local stdio server | An MCP key passed to `mcp-server-omi` | Clients that require a local process or a self-hosted backend |
+| Local stdio server | An MCP key passed to `mcp-server-omi` | Clients that require a local process |
 
 OAuth and MCP keys grant access to the same hosted endpoint. OAuth is the default for the
 new cloud-connector UI; manual MCP keys remain available as a fallback. Cleanup capabilities
@@ -326,9 +326,8 @@ OAuth flows.
 
 <Warning>
 The local `mcp-server-omi` package is **deprecated** — the hosted endpoint above
-is the supported path for every client that accepts a remote URL. Keep this
-section only for clients that genuinely require a local stdio process or a
-self-hosted backend.
+is the supported path for every client that accepts a remote URL. Use it only for
+clients that require a local stdio process.
 </Warning>
 
 Run the MCP server locally over the standard input/output transport. `uvx` (which
@@ -431,21 +430,3 @@ docker run --rm -i \
   The API key can also be provided with each tool call. If not provided, the
   server uses the `OMI_API_KEY` environment variable as a fallback.
 </Tip>
-
----
-
-## Custom Backend URL
-
-Only applies to the **local `mcp-server-omi` package** above when self-hosting
-the Omi backend. The package appends REST segments (`memories`,
-`conversations/...`) directly, so the value **must end with `/v1/mcp/`**:
-
-```bash
-export OMI_API_BASE_URL="https://your-backend-url.com/v1/mcp/"
-```
-
-<Note>
-  This is the *REST base* for the self-hosted package — distinct from the
-  hosted MCP endpoint remote clients connect to (`https://api.omi.me/v1/mcp`,
-  no trailing slash). Only needed for self-hosted Omi instances.
-</Note>

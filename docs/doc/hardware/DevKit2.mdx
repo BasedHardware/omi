@@ -65,7 +65,7 @@ Boot briefly blinks red, green, blue, then white.
 
 ## Testing device storage over BLE
 
-Standalone recordings land on the microSD card as `a01.txt`, `a02.txt`, … (raw Opus-in-ADTS style bytes). The app imports them automatically when it reconnects (device storage support). To read or clear them yourself, write 6-byte commands to the storage characteristic and read 6-byte responses back (`[status, file_num, b2, b3, b4, b5]`):
+Standalone recordings land on the microSD card as `audio/a01.txt`, `audio/a02.txt`, … (raw Opus-in-ADTS style bytes). The app imports them automatically when it reconnects (device storage support). To read or clear them yourself, write 6-byte commands to the storage characteristic and read 6-byte responses back (`[status, file_num, b2, b3, b4, b5]`):
 
 | Command | Bytes | Meaning |
 |---------|-------|---------|
@@ -75,7 +75,7 @@ Standalone recordings land on the microSD card as `a01.txt`, `a02.txt`, … (raw
 
 Response codes: `0` read OK · `100` write OK · `200` clear OK · `3` file out of range · `4` file has size 0 · `5` requested size too large · `6` invalid command.
 
-Helper scripts for discovery, listing, downloading, decoding, and deleting live in [`omi/firmware/scripts/devkit/`](https://github.com/BasedHardware/omi/tree/main/omi/firmware/scripts/devkit). Button events over the button characteristic are `1` single tap, `2` double tap, `3` long press, `5` release.
+Helper scripts for discovery, listing, downloading, decoding, and deleting live in [`omi/firmware/scripts/devkit/`](https://github.com/BasedHardware/omi/tree/main/omi/firmware/scripts/devkit). Button events over the button characteristic are `1` single tap, `2` double tap, and `5` release. A long press powers the device off and is not reported.
 
 ## Getting a DevKit 2
 

@@ -475,10 +475,10 @@ Vectors are created ONCE during initial processing. Reprocessed conversations do
 ## Related Documentation
 
 <CardGroup cols={2}>
-  <Card title="Chat System Architecture" icon="comments" href="/doc/developer/backend/chat_system">
+  <Card title="Chat System Architecture" icon="comments" href="./chat-system.md">
     How conversations are retrieved for chat using LangGraph
   </Card>
-  <Card title="Real-time Transcription" icon="microphone" href="/doc/developer/backend/transcription">
+  <Card title="Real-time Transcription" icon="microphone" href="./transcription.md">
     WebSocket-based real-time speech-to-text
   </Card>
   <Card title="Backend Deep Dive" icon="server" href="/doc/how-omi-works/architecture">

@@ -520,13 +520,13 @@ The Flutter app parses these to show:
   <Card title="Chat Tools for Apps" icon="puzzle-piece" href="/doc/developer/apps/ChatTools">
     Learn how to build custom chat tools for your Omi apps
   </Card>
-  <Card title="Storing Conversations" icon="database" href="/doc/developer/backend/StoringConversations">
+  <Card title="Storing Conversations" icon="database" href="./storing-conversations.md">
     How conversations and memories are stored
   </Card>
   <Card title="Backend Deep Dive" icon="server" href="/doc/how-omi-works/architecture">
     General backend architecture overview
   </Card>
-  <Card title="Real-time Transcription" icon="microphone" href="/doc/developer/backend/transcription">
+  <Card title="Real-time Transcription" icon="microphone" href="./transcription.md">
     WebSocket transcription and STT providers
   </Card>
 </CardGroup>
