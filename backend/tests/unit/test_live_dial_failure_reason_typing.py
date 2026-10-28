@@ -17,6 +17,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from tests.unit.test_live_stt_chain import socket  # noqa: F401 -- pytest fixture
+from tests.unit.fixtures.live_stt_registry import enabled_live_targets
 from utils.stt import live_chain
 from utils.stt import streaming as st
 from utils.stt.live_chain import RejectedStream, dial_failure_reason, failure_reason
@@ -71,6 +72,7 @@ def test_normalize_never_degrades_a_miss_to_the_other_bucket():
 
 @pytest.mark.asyncio
 async def test_failed_dial_hops_carry_a_typed_reason(monkeypatch):
+    enabled_live_targets(monkeypatch)
     events = []
 
     import utils.stt.live_failure as live_failure
