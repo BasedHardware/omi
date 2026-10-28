@@ -1247,6 +1247,8 @@ async def drain(*, limit=5000, sweep=None):
         dream_telemetry.SWEEP_ID.reset(sweep_token)
         sweep['owners_started'] = reached['owners']
         sweep['owners_unreached'] = max(0, int(sweep.get('due_owners', 0)) - reached['owners'])
+        # Owners whose pass the drain deadline cancelled have no final report.
+        sweep['owners_inflight'] = max(0, reached['owners'] - len(finals))
         sweep['duration_ms'] = int(1000 * (time.monotonic() - sweep_started))
     return results
 

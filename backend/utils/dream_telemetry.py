@@ -157,6 +157,7 @@ def sweep_payload(sweep: dict[str, Any], reports: list[dict[str, Any]]) -> dict[
         'due_owners': _int(sweep.get('due_owners')),
         'owners_started': _int(sweep.get('owners_started')),
         'owners_unreached': _int(sweep.get('owners_unreached')),
+        'owners_inflight': _int(sweep.get('owners_inflight')),
         'attempts': len(reports),
         'final_status': _counts(report.get('status') for report in finals),
         'not_admitted': _counts(report.get('reason') for report in finals if report.get('status') == 'not_admitted'),

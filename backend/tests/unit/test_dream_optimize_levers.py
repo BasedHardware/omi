@@ -468,6 +468,13 @@ def test_denial_reasons_are_named(queue):
     assert denied['reason'] == 'not_due'
 
 
+def test_park_if_idle_keeps_owners_with_a_pending_score(queue):
+    queue.rows[('dream_due', QUEUE_UID)] = {'due_at': NOW}
+    queue.rows[('dream_users', QUEUE_UID)] = {'score': 2}
+    assert dream_store.park_if_idle(QUEUE_UID) is False
+    assert ('dream_due', QUEUE_UID) in queue.rows
+
+
 def test_park_if_idle_is_transactional_with_the_dirty_count(queue):
     queue.rows[('dream_due', QUEUE_UID)] = {'due_at': NOW}
     seed(queue, 1)
@@ -475,6 +482,7 @@ def test_park_if_idle_is_transactional_with_the_dirty_count(queue):
     assert ('dream_due', QUEUE_UID) in queue.rows
     for key in [key for key in queue.rows if key[:3] == ('dream_users', QUEUE_UID, 'dirty')]:
         del queue.rows[key]
+    queue.rows[('dream_users', QUEUE_UID)] = {'score': 0}
     assert dream_store.park_if_idle(QUEUE_UID) is True
     assert ('dream_due', QUEUE_UID) not in queue.rows
 
@@ -522,3 +530,31 @@ def test_discovery_parking_fails_open(monkeypatch):
     monkeypatch.setattr(dream_scheduler, '_backlog_owed', lambda uid: False)
     assert dream_scheduler._parked('owner', {'score': 0}) is True
     assert dream_scheduler._parked('owner', {'score': 3}) is False
+
+
+def test_defect_kill_switch_reads_only_false_words_as_off(monkeypatch):
+    monkeypatch.setenv('DREAM_DEFECT_REPORTS_ENABLED', 'false')
+    assert dream_levers.defect_reports_enabled() is False
+    monkeypatch.setenv('DREAM_DEFECT_REPORTS_ENABLED', 'garbage')
+    assert dream_levers.defect_reports_enabled() is True
+
+
+def test_looser_gate_still_blocks_cross_field_spans_quotes_and_ids():
+    inputs = {
+        'records': {
+            'conversations/conv-alpha-123': {
+                # Adjacent transcript segments: a span across them is still copied speech.
+                'segments': ['ship the robot arm', 'prototype next tuesday after lunch with everyone'],
+                'segment_id': 'seg-991',
+            }
+        }
+    }
+    # Eight words spanning two fields still count as copied content.
+    with pytest.raises(ValueError, match='feedback_input_overlap'):
+        dream_feedback.validate(_defect('the robot arm prototype next tuesday after lunch was lost'), inputs, [])
+    with pytest.raises(ValueError, match='feedback_input_overlap'):
+        dream_feedback.validate(_defect('summary said "after lunch" twice'), inputs, [])
+    with pytest.raises(ValueError, match='feedback_record_reference'):
+        dream_feedback.validate(_defect('segment seg-991 was dropped by read'), inputs, [])
+    with pytest.raises(ValueError, match='feedback_record_reference'):
+        dream_feedback.validate(_defect('read conv-alpha-123 returned nothing'), inputs, [])

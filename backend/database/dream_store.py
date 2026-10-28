@@ -430,14 +430,17 @@ def acquire(
 def park_if_idle(uid, *, firestore_client=None):
     """Idle-skip lever: drop the due row when no dirty work is queued; True when parked.
 
-    The dirty count and the delete share one transaction, so a concurrent
-    mark_dirty either lands first (no park) or re-enqueues after it.
+    The state read is the conflict fence: every mark_dirty batch writes the
+    state doc (score increment), so a concurrent write aborts and retries this
+    transaction; an aggregation count alone carries no document identity.
+    A positive score also keeps the owner queued, matching discovery's rule.
     """
     database = client(firestore_client)
 
     @firestore.transactional
     def park(tx):
-        if dirty_count(uid, transaction=tx, firestore_client=database) > 0:
+        state = state_ref(database, uid).get(transaction=tx).to_dict() or {}
+        if state.get('score', 0) or dirty_count(uid, transaction=tx, firestore_client=database) > 0:
             return False
         tx.delete(database.collection('dream_due').document(uid))
         return True
