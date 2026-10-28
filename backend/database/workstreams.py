@@ -512,16 +512,20 @@ def list_workstream_events(
     *,
     after_sequence: int = 0,
     limit: int = 100,
+    descending: bool = False,
     firestore_client: Any = None,
 ) -> list[WorkstreamEvent]:
-    query = (
-        _workstream_ref(uid, workstream_id, firestore_client=firestore_client)
-        .collection(EVENTS_COLLECTION)
-        .where(filter=FieldFilter('sequence', '>', after_sequence))
-        .order_by('sequence', direction=firestore.Query.ASCENDING)
-        .limit(limit)
-    )
-    return parse_snapshots(WorkstreamEvent, query.stream())
+    query = _workstream_ref(uid, workstream_id, firestore_client=firestore_client).collection(EVENTS_COLLECTION)
+    if after_sequence > 0:
+        query = query.where(filter=FieldFilter('sequence', '>', after_sequence))
+    elif not descending:
+        query = query.where(filter=FieldFilter('sequence', '>', 0))
+    direction = firestore.Query.DESCENDING if descending else firestore.Query.ASCENDING
+    query = query.order_by('sequence', direction=direction).limit(limit)
+    events = parse_snapshots(WorkstreamEvent, query.stream())
+    if descending:
+        events.reverse()
+    return events
 
 
 def create_artifact_descriptor(
@@ -1401,7 +1405,7 @@ def get_workstream_detail(
     tasks = _task_responses_from_snapshots(task_snapshots, context='workstream_detail')
     return WorkstreamDetailProjection(
         workstream=workstream,
-        recent_events=list_workstream_events(uid, workstream_id, firestore_client=client),
+        recent_events=list_workstream_events(uid, workstream_id, descending=True, firestore_client=client),
         tasks=tasks,
         artifacts=list_artifact_descriptors(uid, workstream_id, firestore_client=client),
         checkpoints=list_continuation_checkpoints(uid, workstream_id, firestore_client=client),

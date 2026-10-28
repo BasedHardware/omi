@@ -153,6 +153,7 @@ def list_workstream_events(
     workstream_id: str,
     after_sequence: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
+    descending: bool = Query(False),
     uid: str = Depends(require_canonical_task_user),
 ) -> list[WorkstreamEvent]:
     clean_workstream_id = _clean_id(workstream_id, 'workstream_id')
@@ -162,6 +163,7 @@ def list_workstream_events(
             clean_workstream_id,
             after_sequence=after_sequence,
             limit=limit,
+            descending=descending,
         )
     except HTTPException:
         raise
