@@ -284,6 +284,7 @@ def test_no_neighbor_outside_the_gap_or_for_itself():
 
 
 def test_a_model_discard_next_to_a_kept_conversation_links_to_it():
+    """Free-tier desktop and local recovery models receive the nearest neighbor to resolve fragments."""
     seen = []
 
     def model(_on_error, neighbor):
