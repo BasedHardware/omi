@@ -19,9 +19,8 @@ import 'package:omi/utils/platform/platform_service.dart';
 /// "Record user sessions" on, so that switch would record every user from launch. Recording starts
 /// through the SDK's start API once the flag resolves true for the settled analytics identity, and
 /// stops when product analytics is turned off, the identity changes, the app leaves the foreground,
-/// or the server hides subscription UI (App Review, also BYOK and reviewer accounts). On the device,
-/// before a frame is encoded, the SDK paints a black box over every Text, text field and Image widget;
-/// content painted another way (a canvas, a decoration image) needs a `PostHogMaskWidget`.
+/// or the server hides subscription UI (App Review, also BYOK and reviewer accounts). Frames are not
+/// masked: a recording shows the screen as the user sees it.
 class SessionReplay {
   SessionReplay({
     ValueListenable<bool>? consent,
@@ -46,7 +45,7 @@ class SessionReplay {
 
   static final SessionReplay instance = SessionReplay();
 
-  /// At most one masked screenshot every 2 s (the SDK default is 1 s). Each capture walks the
+  /// At most one screenshot every 2 s (the SDK default is 1 s). Each capture walks the
   /// widget tree and hashes the frame on the UI isolate (INV-PERF-1); an unchanged frame is not sent.
   static const throttleDelay = Duration(seconds: 2);
 
@@ -56,14 +55,14 @@ class SessionReplay {
   static bool get configured => _configured;
   static bool _configured = false;
 
-  /// Replay settings for `Posthog().setup`. Masking is also the SDK default; it is pinned here
-  /// because it is the privacy contract (transcripts, memories, names and chat are all text).
+  /// Replay settings for `Posthog().setup`. The SDK masks every text and image by default; replay
+  /// here records the screen unmasked.
   static void configure(PostHogConfig config) {
     _configured = config.projectToken.isNotEmpty; // the SDK skips setup for a blank token
     config.sessionReplay = false;
     config.sessionReplayConfig
-      ..maskAllTexts = true
-      ..maskAllImages = true
+      ..maskAllTexts = false
+      ..maskAllImages = false
       ..throttleDelay = throttleDelay;
   }
 

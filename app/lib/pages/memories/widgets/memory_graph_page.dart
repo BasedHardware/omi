@@ -12,7 +12,6 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 
 import 'package:path_provider/path_provider.dart';
-import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:omi/utils/share_sheet.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
@@ -830,28 +829,24 @@ class MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProvi
               onScaleEnd: (_) => _lastPanStart = null,
               child: RepaintBoundary(
                 key: _graphKey,
-                // Node and edge labels are painted on the canvas, which replay's text masking
-                // cannot see; mask the whole graph in session replay frames.
-                child: PostHogMaskWidget(
-                  child: ValueListenableBuilder<int>(
-                    valueListenable: _repaintNotifier,
-                    builder: (context, _, __) {
-                      return CustomPaint(
-                        size: Size.infinite,
-                        painter: GraphPainter3D(
-                          nodes: simulation.nodes,
-                          edges: simulation.edges,
-                          nodeMap: simulation.nodeMap,
-                          rotationX: _rotationX,
-                          rotationY: _rotationY,
-                          panX: _panX,
-                          panY: _panY,
-                          zoom: _zoom,
-                          highlightedNodeIds: _highlightedNodeIds,
-                        ),
-                      );
-                    },
-                  ),
+                child: ValueListenableBuilder<int>(
+                  valueListenable: _repaintNotifier,
+                  builder: (context, _, __) {
+                    return CustomPaint(
+                      size: Size.infinite,
+                      painter: GraphPainter3D(
+                        nodes: simulation.nodes,
+                        edges: simulation.edges,
+                        nodeMap: simulation.nodeMap,
+                        rotationX: _rotationX,
+                        rotationY: _rotationY,
+                        panX: _panX,
+                        panY: _panY,
+                        zoom: _zoom,
+                        highlightedNodeIds: _highlightedNodeIds,
+                      ),
+                    );
+                  },
                 ),
               ),
             ),

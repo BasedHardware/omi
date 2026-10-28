@@ -250,7 +250,7 @@ void main() {
   });
 
   group('PostHog setup', () {
-    test('never starts replay and masks every text and image', () async {
+    test('never starts replay and records frames unmasked', () async {
       SharedPreferences.setMockInitialValues({});
       Map<Object?, Object?>? setup;
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -265,7 +265,7 @@ void main() {
 
       expect(SessionReplay.configured, isTrue);
       expect(setup?['sessionReplay'], isFalse);
-      expect(setup?['sessionReplayConfig'], {'maskAllImages': true, 'maskAllTexts': true, 'throttleDelayMs': 2000});
+      expect(setup?['sessionReplayConfig'], {'maskAllImages': false, 'maskAllTexts': false, 'throttleDelayMs': 2000});
     });
   });
 }
