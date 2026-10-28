@@ -248,37 +248,36 @@ maximum per class across identical worker samplers, then sums the classes.
 Absent/stale/partial data stays unavailable; never replace it with zero or sum
 the same global queue once per replica.
 
-Production values preserve the ratified three-worker on-demand floor (lead
-114a22/724762, 10-28) with autoscaling off, so an image roll cannot activate
-an unqualified capacity target. The qualified cutover shape (lead f05065,
-10-28) is a single OD-pinned HPA at min3/max16: every replica pins to
-`batch-pipeline-pool`, so the guaranteed floor and scale-out never depend on
-Spot (persistent L4 Spot stockout; Spot L4 bills above on-demand). The latent
-balanced-pool machinery stays available for non-production explicit-budget
-tests. The chart rejects it when the stage, values namespace, or Helm release
-namespace marks a production install, including even replica overrides. Going
-above 16 replicas is a second, separately qualified step; never pre-provision
-nodes. When the scaler is enabled, op1 raises `batch-pipeline-pool`'s node
-maximum (3 -> 16) in the same reviewed
-qualification window, using a real scale-up during the 25% soak as the
-scheduling proof.
+Production values preserve four fixed workers with autoscaling and balanced
+pools off, so an image roll cannot activate an unqualified capacity target.
+The prepared cutover renders two pool-pinned deployments and HPAs: original release
+on OD and `<release>-spot` on Spot, each min1/max12 (total2/24), with independent
+pod selectors/PodMonitoring but the same metric release scope. This avoids
+strict topology spread, which GKE's node autoscaler does not support. Both HPAs
+consume the shared count as AverageValue. Each target is twice the qualified
+per-worker queued-unit target, dividing demand across the two pools. Node-pool
+ceilings are total12 each, not12 per zone; do not pre-provision nodes.
 
 `targetQueuedUnitsPerWorker=16` is **provisional slot arithmetic**, not a
-qualified throughput target. Before enabling the scaler, op1 must benchmark
-useful completions and queue latency on the exact qualified worker during the
-25% soak, pin the measured target, verify the new index READY and the fresh
-external metric, and get the lead's exact apply approval. This source change
-does not itself expand admission or authorize deployment. accel3g owns the
-scaler PR (lead f05065), bramp3 does the bounded review, op1 installs and
-qualifies; MERGE READY by 10Z on 2026-10-28.
+qualified throughput target. Before enabling either scaler setting, bramp3/op1 must benchmark
+useful completions and queue latency on the exact qualified worker, pin the
+measured target, verify the new index READY and fresh external metric, and get
+the lead's exact apply approval. The current5c floor4 remains until its actual
+ladder-C verdict. Lead75481f permits tomorrow's25% on fixed4/no new nodes if the
+scaler is not ready by2026-10-28 09Z, with the utilization flag re-evaluated at25.
+This source change does not itself expand admission or authorize deployment.
+The qualification deadline is2026-10-28 09Z; bramp3 owns the benchmark and
+measured target, lead approves the resulting values change, and op1 applies it.
 
 For cutover/rollback, op1 captures the current release values/manifest privately,
-keeps the image pinned, preserves all runtime bindings and the 1500s SIGTERM
-drain, and verifies the single OD deployment/image, the HPA budget when enabled,
-and all count classes. Production has no Spot companion. If qualification
-fails, restore the prior release with autoscaling off and three Ready OD
-workers. CPU is not the scale signal; queue latency,
-useful throughput, GPU duty and the cost ledger still gate cohort expansion.
+keeps the image pinned, preserves all runtime bindings and the1500s SIGTERM
+drain, and verifies **both** deployments/images plus all count classes. The OD
+deployment declares its required Spot companion; `deploy_status_report.py`
+fails for a missing/unready/zero-sized or wrong-image companion. Do not treat
+the original deployment's rollout alone as product acceptance. Restore the
+captured pre-scaler release and four Ready workers if qualification fails.
+CPU is not the scale signal; queue latency, useful throughput, GPU duty and
+the cost ledger still gate cohort expansion.
 
 ## Stage profiling (metrics-only)
 

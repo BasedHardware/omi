@@ -2,7 +2,7 @@
 
 Collector for `POST /v1/telemetry/client/batches` and admin
 `GET /v1/telemetry/client/aggregates`. The frozen contract is
-`docs/finops/telemetry-transport-contract.md`. This runbook is operational
+`../telemetry-transport-contract.md`. This runbook is operational
 only. It does not enable transport, the admin reader, or PostHog retirement.
 
 ## Flags
