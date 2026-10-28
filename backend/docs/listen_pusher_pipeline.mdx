@@ -7763,3 +7763,54 @@ log UID-scoped metadata only; parser failures happen before authentication and
 are classified by the client's registered `WAL Upload Refused` event. The mobile
 ledger retains audio and retries on a persisted daily schedule for seven days,
 then retains it as reported without requesting per-row user action.
+
+### P4: grounded task descriptions and valid conversation sources
+
+The existing notes extraction call asks for self-contained actions and outcomes,
+using cited context and P2's shared speaker-role projection. No second model pass
+or independent identity map is added; a name is not required for "Buy milk".
+The final narrow reference policy runs after `action_item_v2.select_items`.
+It considers extraction context and exact cited transcript rows; it preserves
+context-resolved references and abstains when the earlier desktop prefilter lacks
+the cited capture context. The conversation capture adapter repeats the final
+check with cited transcript context before proposing Candidates. Extraction and
+wake-word capture continue to consume P2's existing shared role-label context;
+the validity heuristic never infers a task's subject from the speaking voice.
+The downstream refresh reconciler receives canonical rows after extraction has
+passed this gate. With source provenance but no retained context/segment text,
+the guard abstains rather than rejecting a previously grounded task. Unrelated
+topic words cannot resolve a speaker-only target: that requires an explicit
+referent/callback relation in the supplied evidence, without guessing a name.
+
+`ACTION_ITEM_VALIDITY_MODE` defaults to `shadow` with zero serving percent and
+empty digest allowlist. Text-free aggregate `event=action_item_validity` receipts
+report unresolved-reference count and serving status. `off` disables the check;
+`shadow` can serve consistent uid cohorts via `_SERVE_PERCENT` and
+`_SERVE_UID_SHA256S` using `config.refactor_modes`; `serve` applies globally.
+This heuristic is conservative qualification evidence, not a population accuracy
+claim. It does not alter explicit manual app/tool descriptions.
+
+Lead owns qualification by **Oct 29 12Z**: protected synthetic/authorized fixtures,
+old/new kept-task comparison, and a full 24-hour shadow window where available.
+Include context-resolved pronouns, valid counterpart offers, accepted requests,
+multilingual visitors, code switching, music under real speech and unenrolled
+owners. No reviewed good-task suppression, green consumer parity and understood
+reason/error rates are required. Target **5% Oct 30 12Z**, **25% after six clean
+hours**, and **100% Oct 31 12Z**. Insufficient evidence blocks expansion and requires
+a renewed dated promise. A validated lost good task stops expansion and rolls the
+semantic mode back to `off`.
+
+Source-link correctness is independently on unless
+`ACTION_ITEM_SOURCE_LINKS_ENABLED=false`. The shared create service used by both
+tool implementations and app single/batch routes checks supplied conversation IDs
+and conversation provenance inside the authenticated account, with request-local
+read reuse. A missing, deleted or foreign link produces the same unavailable
+error; routes/tools own its HTTP/text representation. All batch links pass before
+the first write. No foreign-account row is read and no invalid link becomes null.
+Standalone source-less tasks remain valid; idempotency/export metadata pass through.
+
+Automatic extraction with no conversation ID raises before replacement or capture,
+regardless of V2 mode, preserving prior tasks and retryability. Conversion keeps
+existing valid cited IDs; staged provenance is not invented. No source-less history
+or old descriptions are rewritten. The reported null-row writer and staged source
+lineage remain evidence work under ANX step `fbreview-p4-task-integrity-1028`.

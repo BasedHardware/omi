@@ -223,6 +223,7 @@ def test_media_dependency_delegates_to_v2_and_preserves_rollback(monkeypatch):
         return row.get('content_kind') == 'media'
 
     monkeypatch.setattr(media_consumers, '_policy', lambda: policy)
+    monkeypatch.setenv('MEDIA_NOISE_MODE', 'off')  # Explicit rollback; shadow delegates for aggregate observation.
     rows = [{'content_kind': 'media'}, {'content_kind': 'conversation'}]
     assert media_consumers.eligible_conversations('synthetic-owner', rows) == rows
     assert calls == []
