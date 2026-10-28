@@ -23,6 +23,7 @@ from utils.conversations.fragment_visibility import is_user_curated
 from utils.conversations.process_conversation import process_conversation
 from utils.sync import processing_hold
 from utils.conversations.smart_merge import refresh_survivor
+from utils.conversations.smart_merge_policy import refresh_owed
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.silent_redrive import is_silent_redrive
 from utils.conversations.relevance import sync_intake_decision
@@ -107,7 +108,11 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
             context['defer_reason'] = 'open_live_target'
         return
 
-    if processing_hold.enabled() and context is not None and context.get('sync_hold'):
+    if (
+        processing_hold.enabled()
+        and context is not None
+        and (context.get('sync_hold') or processing_hold.FIELD in conversation_data)
+    ):
         context['sync_hold'] = True
         outcome, due = processing_hold.admission(conversation_data, context, now=time.time())
         processing_hold.OUTCOMES.labels(outcome=outcome).inc()
@@ -160,6 +165,7 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
         context is not None
         and context.get('sync_hold')
         and (conversation_data.get('smart_merge') or {}).get('role') == 'survivor'
+        and refresh_owed(conversation_data)
     ):
         # Preserve the smart-merge refresh lease/checkpoints and its vector work.
         refresh_survivor(uid, conversation_id, owner=context['owner'], settled=True)

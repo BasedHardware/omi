@@ -187,3 +187,50 @@ def test_completion_receipt_is_revision_fenced_and_preserves_late_budget(monkeyp
     state.update(pending_since=200, late_runs=1)
     assert conversations_db.complete_sync_processing_hold('user-1', 'parent', 2, None, firestore_client=world.store)
     assert world.raw('parent')[hold.FIELD]['late_runs'] == 1
+
+
+def test_first_summary_repair_cannot_bypass_a_stored_hold(monkeypatch):
+    current = row()
+    monkeypatch.setattr(callback.conversations_db, 'get_conversation', lambda *_: current)
+    monkeypatch.setattr(callback, 'repair_fenced', lambda _: False)
+    monkeypatch.setattr(callback.time, 'time', lambda: 200)
+    full = Mock(side_effect=AssertionError('repair cannot process during quiet window'))
+    monkeypatch.setattr(callback, 'process_conversation', full)
+    context = {'owner': 'repair', 'lease_until': 1000, 'first_pending_at': 100}
+    token = PROCESS_CONTEXT.set(context)
+    try:
+        assert callback.enrich_conversation('u', 'c', 'en') is None
+    finally:
+        PROCESS_CONTEXT.reset(token)
+    assert context['defer_until'] == 700 and context['sync_hold']
+    full.assert_not_called()
+
+
+def test_late_wal_after_smart_refresh_still_processes_new_content(monkeypatch):
+    world = World(monkeypatch)
+    world.add(
+        'parent',
+        0,
+        5,
+        sync_content_revision=3,
+        **{hold.FIELD: {'pending_since': 100, 'last_content_at': 100}},
+        smart_merge={'role': 'survivor', 'revision': 2, 'refreshed_revision': 2, 'processed_sync_revision': 2}
+    )
+    current = world.get('user-1', 'parent')
+    monkeypatch.setattr(callback.conversations_db, 'get_conversation', lambda *_: current)
+    monkeypatch.setattr(callback.conversations_db, 'complete_sync_processing_hold', lambda *_: True)
+    monkeypatch.setattr(callback, 'repair_fenced', lambda _: False)
+    monkeypatch.setattr(callback, 'claim_from_snapshot', lambda *_: True)
+    monkeypatch.setattr(callback, 'schedule_after_finalization', lambda *_: None)
+    monkeypatch.setattr(callback.time, 'time', lambda: 700)
+    full = Mock(return_value=callback.deserialize_conversation(current))
+    smart = Mock(side_effect=AssertionError('a completed merge receipt cannot consume new WAL content'))
+    monkeypatch.setattr(callback, 'process_conversation', full)
+    monkeypatch.setattr(callback, 'refresh_survivor', smart)
+    token = PROCESS_CONTEXT.set({'owner': 'worker', 'lease_until': 1000, 'first_pending_at': 100, 'sync_hold': True})
+    try:
+        callback.enrich_conversation('user-1', 'parent', 'en')
+    finally:
+        PROCESS_CONTEXT.reset(token)
+    full.assert_called_once()
+    smart.assert_not_called()

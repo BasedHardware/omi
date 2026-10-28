@@ -759,6 +759,8 @@ def refresh_survivor(uid: str, survivor_id: str, *, owner: str, settled: bool = 
     if processing_hold.enabled() and not settled:
         row = conversations_db.get_conversation(uid, survivor_id, read_site=FirestoreReadSite.SMART_MERGE)
         if row and not row.get('deleted') and processing_hold.sync_sourced(row):
+            if not refresh_owed(row) or int(smart_merge_state(row).get('delegated_revision') or 0) >= revision(row):
+                return
             # Persist the obligation before acknowledging the merge. Further
             # absorbs may proceed while this durable worker waits for quiet.
             enrichment_outbox.mark(uid, survivor_id, row.get('language') or 'en', sync_hold=True)
