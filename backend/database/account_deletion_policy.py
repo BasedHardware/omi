@@ -9,6 +9,15 @@ from __future__ import annotations
 ACCOUNT_DELETION_ACCESS_ALLOWED_STATUSES = frozenset({'cancelled', 'billing_failed'})
 ACCOUNT_DELETION_INVALID_STATUS = '__invalid_account_deletion_status__'
 
+# Grace window admission state: the deletion intent is durable and every
+# access fence treats it like an active deletion, but the irreversible wipe is
+# deferred until ``wipe_due_at`` so the owner can restore the account.
+ACCOUNT_DELETION_GRACE_STATUS = 'pending_deletion'
+
+# A grace marker is restorable until the window-end wipe is claimed; once a
+# task claim or worker owns the wipe the data is being destroyed.
+ACCOUNT_DELETION_RESTORABLE_STATUSES = frozenset({'pending_deletion', 'pending'})
+
 
 def deletion_billing_error_is_already_gone(error: object) -> bool:
     """Recognize historical billing failures that no longer block erasure.
@@ -46,9 +55,17 @@ def account_deletion_blocks_access(status: str | None) -> bool:
     return status is not None and status not in ACCOUNT_DELETION_ACCESS_ALLOWED_STATUSES
 
 
+def account_deletion_restorable(status: str | None) -> bool:
+    """Whether the owner can still cancel the deletion and keep their data."""
+    return status in ACCOUNT_DELETION_RESTORABLE_STATUSES
+
+
 __all__ = [
     'ACCOUNT_DELETION_ACCESS_ALLOWED_STATUSES',
+    'ACCOUNT_DELETION_GRACE_STATUS',
     'ACCOUNT_DELETION_INVALID_STATUS',
+    'ACCOUNT_DELETION_RESTORABLE_STATUSES',
     'account_deletion_blocks_access',
+    'account_deletion_restorable',
     'normalize_account_deletion_status',
 ]

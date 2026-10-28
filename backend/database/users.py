@@ -24,7 +24,12 @@ from database.account_deletion_marker import (
     account_deletion_firestore_client,
     get_user_deletion_wipe_status,
 )
-from database.account_deletion_policy import deletion_billing_error_is_already_gone
+from database.account_deletion_policy import (
+    ACCOUNT_DELETION_GRACE_STATUS,
+    account_deletion_restorable,
+    deletion_billing_error_is_already_gone,
+    normalize_account_deletion_status,
+)
 from database.account_deletion_transitions import (
     adopt_legacy_late_agent_vm_cleanup as _adopt_legacy_late_agent_vm_cleanup_txn,
     mark_wipe_completed as _mark_user_deletion_wipe_completed_txn,
@@ -85,6 +90,18 @@ class DeletionWipeIntent(TypedDict):
 
     wipe_job_id: str
     dispatch_claimed: bool
+
+
+class DeletionGraceIntent(TypedDict):
+    """Result of admitting or joining a grace-window deletion intent."""
+
+    wipe_job_id: str
+    dispatch_claimed: bool
+    # ``created``: new grace marker, caller owns scheduling.
+    # ``joined``: an active deletion authority already exists; nothing to do.
+    # ``legacy``: a legacy ``deleting_auth`` intent must keep the immediate
+    # pipeline (Firebase Auth may already be gone, so it is not restorable).
+    mode: Literal['created', 'joined', 'legacy']
 
 
 # Conservative low-risk user projections. Do NOT use these policies for

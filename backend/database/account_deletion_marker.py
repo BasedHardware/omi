@@ -68,10 +68,28 @@ def _s4_read_deletion_status(uid: str, *, firestore_client: Any | None = None) -
     return normalize_account_deletion_status(marker_exists=True, raw_status=status)
 
 
+def read_account_deletion_marker(uid: str, *, firestore_client: Any | None = None) -> dict[str, Any] | None:
+    """Full marker payload for the owner-facing deletion-status surface.
+
+    Uncached direct read: it is a cold, owner-initiated endpoint and the
+    grace window fields (``wipe_due_at``) must be exact at read time.
+    """
+    client = account_deletion_firestore_client(firestore_client=firestore_client)
+    snapshot = account_deletion_document(uid, firestore_client=client).get()
+    record_document_read(
+        FirestoreReadSite.USER_DELETION_WIPE_STATUS,
+        FirestoreReadOutcome.HIT if snapshot.exists else FirestoreReadOutcome.MISS,
+    )
+    if not snapshot.exists:
+        return None
+    return dict(snapshot.to_dict() or {})
+
+
 __all__ = [
     "ACCOUNT_DELETION_COLLECTION",
     "account_deletion_collection",
     "account_deletion_document",
     "account_deletion_firestore_client",
     "get_user_deletion_wipe_status",
+    "read_account_deletion_marker",
 ]
