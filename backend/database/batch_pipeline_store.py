@@ -11,10 +11,12 @@ from typing import Any, Callable, Protocol, TypeVar
 
 from google.cloud import firestore
 
+from config.batch_pipeline import contention_retry_enabled
 from config.firestore_read_levers import lever_enabled
 from database._client import get_data_plane_firestore_client
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyMemo
 from database.batch_pipeline_recovery import quarantine_fenced
+from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from utils.sync.stage import collection_name
 
 # Every state an obligation can drain from. Assignment needs only ``pending``;
@@ -175,14 +177,24 @@ class FirestoreStore:
         return self._client if self._client is not None else get_data_plane_firestore_client()
 
     def run(self, body):
+        client = self.client
+
         @firestore.transactional
         def commit(transaction):
-            view = FirestoreTransaction(self.client, self.namespace, transaction)
+            view = FirestoreTransaction(client, self.namespace, transaction)
             result = body(view)
             view.flush()
             return result
 
-        return commit(self.client.transaction())
+        if not contention_retry_enabled():
+            return commit(client.transaction())
+        # The outer budget owns fresh transaction IDs and all retries. The
+        # SDK's same-ID commit loop would multiply the contention window.
+        return run_with_transaction_contention_retry(
+            lambda: client.transaction(max_attempts=1),
+            commit,
+            operation_name='batch_pipeline_store',
+        )
 
     def due(self, state: str, now: float, limit: int = 100) -> list[str]:
         return due(self.client, self.namespace, state, now, limit)

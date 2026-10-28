@@ -26,6 +26,8 @@ tolerations:
     value: present
     effect: NoSchedule
 worker:
+  # Ship-on bounded Firestore transaction retry; false restores legacy behavior.
+  contentionRetryEnabled: true
   # null preserves the runtime's stage-dependent profiling default.
   stageProfilingEnabled: null
   # Same original-lane/owner policy as CPU admission. Non-live widening is

@@ -226,6 +226,14 @@ def projection_contention_enabled() -> bool:
     return resolve_stage_policy('', 'projection').projection_contention
 
 
+def contention_retry_enabled() -> bool:
+    """Retry atomic batch Firestore contention by default; false is the kill switch."""
+    return rollout_default_on(
+        'BATCH_PIPELINE_CONTENTION_RETRY_ENABLED',
+        os.getenv('BATCH_PIPELINE_CONTENTION_RETRY_ENABLED', 'true').strip().lower() != 'false',
+    )
+
+
 def speech_empty_multilingual_enabled() -> bool:
     from config.policy import resolve_stage_policy
 

@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-10-22 -->
+<!-- feature-flag-registry as-of: 2026-10-29 -->
 
 # Feature-flag authority registry
 
@@ -114,7 +114,65 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-10-22.
+These rollout/experiment entries passed `review_by`. The checker warns
+during the seven-day grace, then fails unless a dated `review_overdue`
+exception is recorded for David.
+
+- `ACTION_ITEMS_V2_MODE` — review_by 2026-10-26 (dazheng)
+- `ACTION_ITEMS_V2_MODE_SERVE_PERCENT` — review_by 2026-10-26 (dazheng)
+- `ACTION_ITEMS_V2_MODE_SERVE_UID_SHA256S` — review_by 2026-10-26 (dazheng)
+- `BATCH_PIPELINE_ASR_LEFT_CONTEXT_SECONDS` — review_by 2026-10-26 (dazheng)
+- `BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED` — review_by 2026-10-26 (dazheng)
+- `CALLS_RECAP_MODE` — review_by 2026-10-26 (dazheng)
+- `CALLS_RECAP_MODE_SERVE_PERCENT` — review_by 2026-10-26 (dazheng)
+- `CALLS_RECAP_MODE_SERVE_UID_SHA256S` — review_by 2026-10-26 (dazheng)
+- `CAPTURE_COVERAGE_MODE` — review_by 2026-10-26 (dazheng)
+- `CAPTURE_COVERAGE_MODE_SERVE_PERCENT` — review_by 2026-10-26 (dazheng)
+- `CAPTURE_COVERAGE_MODE_SERVE_UID_SHA256S` — review_by 2026-10-26 (dazheng)
+- `CAPTURE_COVERAGE_MODE_SHADOW_PERCENT` — review_by 2026-10-26 (dazheng)
+- `CLIENTS_FROM_SEGMENTS_CHUNKS_MODE` — review_by 2026-10-26 (dazheng)
+- `CLIENTS_FROM_SEGMENTS_CHUNKS_MODE_SERVE_PERCENT` — review_by 2026-10-26 (dazheng)
+- `CLIENTS_FROM_SEGMENTS_CHUNKS_MODE_SERVE_UID_SHA256S` — review_by 2026-10-26 (dazheng)
+- `CONVERSATION_NOTES_AGENT_PERCENT` — review_by 2026-10-27 (dazheng)
+- `CONVERSATION_NOTES_AGENT_UID_ALLOWLIST` — review_by 2026-10-27 (dazheng)
+- `DREAM_REQUIRED_INTAKE_BACKLOG_COHORT` — review_by 2026-10-28 (dazheng)
+- `DREAM_REQUIRED_INTAKE_BACKLOG_ENABLED` — review_by 2026-10-28 (dazheng)
+- `EPISODE_BOUNDARIES_MODE` — review_by 2026-10-26 (dazheng)
+- `EPISODE_BOUNDARIES_MODE_SERVE_PERCENT` — review_by 2026-10-26 (dazheng)
+- `EPISODE_BOUNDARIES_MODE_SERVE_UID_SHA256S` — review_by 2026-10-26 (dazheng)
+- `EPISODE_BOUNDARIES_MODE_SHADOW_PERCENT` — review_by 2026-10-26 (dazheng)
+- `LIFECYCLE_V2_MODE` — review_by 2026-10-26 (dazheng)
+- `LIFECYCLE_V2_MODE_SERVE_PERCENT` — review_by 2026-10-26 (dazheng)
+- `LIFECYCLE_V2_MODE_SERVE_UID_SHA256S` — review_by 2026-10-26 (dazheng)
+- `MEDIA_NOISE_MODE` — review_by 2026-10-26 (dazheng)
+- `MEDIA_NOISE_MODE_SERVE_PERCENT` — review_by 2026-10-26 (dazheng)
+- `MEDIA_NOISE_MODE_SERVE_UID_SHA256S` — review_by 2026-10-26 (dazheng)
+- `MEDIA_NOISE_MODE_SHADOW_PERCENT` — review_by 2026-10-26 (dazheng)
+- `NOTES_PACKET_V2_MODE` — review_by 2026-10-26 (dazheng)
+- `NOTES_PACKET_V2_MODE_SERVE_PERCENT` — review_by 2026-10-26 (dazheng)
+- `NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S` — review_by 2026-10-26 (dazheng)
+- `OMI_LIST_VERSION_EPOCH` — review_by 2026-10-24 (dazheng)
+- `SPEAKER_EVIDENCE_MODE` — review_by 2026-10-26 (dazheng)
+- `SPEAKER_EVIDENCE_MODE_SERVE_PERCENT` — review_by 2026-10-26 (dazheng)
+- `SPEAKER_EVIDENCE_MODE_SERVE_UID_SHA256S` — review_by 2026-10-26 (dazheng)
+- `SPEAKER_EVIDENCE_MODE_SHADOW_PERCENT` — review_by 2026-10-26 (dazheng)
+- `STT_CAP_DISPATCH_COHORT` — review_by 2026-10-27 (dazheng)
+- `STT_CAP_DISPATCH_ENFORCEMENT` — review_by 2026-10-27 (dazheng)
+- `STT_CAP_DISPATCH_LANES` — review_by 2026-10-27 (dazheng)
+- `STT_CAP_RECOVERY_COHORT` — review_by 2026-10-23 (dazheng)
+- `STT_LANGUAGE_HINTS_MODE` — review_by 2026-10-26 (dazheng)
+- `STT_LANGUAGE_HINTS_MODE_SERVE_PERCENT` — review_by 2026-10-26 (dazheng)
+- `STT_LANGUAGE_HINTS_MODE_SERVE_UID_SHA256S` — review_by 2026-10-26 (dazheng)
+- `STT_VOCAB_MODE` — review_by 2026-10-26 (dazheng)
+- `STT_VOCAB_MODE_SERVE_PERCENT` — review_by 2026-10-26 (dazheng)
+- `STT_VOCAB_MODE_SERVE_UID_SHA256S` — review_by 2026-10-26 (dazheng)
+- `STT_VOCAB_MODE_SHADOW_PERCENT` — review_by 2026-10-26 (dazheng)
+- `clients_boundary_evidence` — review_by 2026-10-26 (dazheng)
+- `clients_from_segments_chunks` — review_by 2026-10-26 (dazheng)
+- `clients_refactor` — review_by 2026-10-26 (dazheng)
+- `custody_capture_committed_release` — review_by 2026-10-26 (dazheng)
+- `screen_activity_lossless_sync` — review_by 2026-10-22 (dazheng)
+- `screen_activity_lossless_sync_kill` — review_by 2026-10-22 (dazheng)
 
 ## Flags
 
@@ -390,6 +448,7 @@ and an explicit empty literal renders as `''`.
 | `AUDIO_DURABLE_OUTBOX_ENABLED` | Default on; immutable media and frame-manifest receipts before PCM custody release | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED` | Default on unless false; exclude new unsupported-language batch uploads and non-single-language users without a supported conversation language in every legacy mode | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `BATCH_CONVERSATION_SPEAKERS_ENABLED` | Default on within persisted authoritative batch records; link unit speaker groups acoustically and name conversation groups | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `BATCH_PIPELINE_CONTENTION_RETRY_ENABLED` | Default on; batch Firestore transactions retry explicit contention on fresh transaction IDs with bounded jitter; false restores legacy SDK transaction behavior | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED` | Default on unless false; batch GPU worker diarizes only padded VAD and word evidence and maps turns back to capture clocks | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED` | Default on; one context-bearing Parakeet retry, independent fenced recovery and retained positive-VAD empty audio | backend | env | closed | {value: 'true', category: rollout} | {value: 'true', category: rollout} | {value: 'true', category: rollout} | — | keep | keep | — | dazheng |
 | `BATCH_PIPELINE_FRESH_GPU_PRIORITY_ENABLED` | Default on unless false; batch uploads in the 6 h fresh sync lane whose oldest capture is over 10 min old lease GPU at RECENT priority, after fresh uploads | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -790,6 +849,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `BATCH_JOBSTORE_MODE` — Default firestore; shadow mirrors committed batch job-store writes to the staging Postgres and counts read parity (Firestore stays the only authority) (fail: closed)
 - `BATCH_PIPELINE_ASR_LEFT_CONTEXT_SECONDS` — Default 0 (off); seconds of the same capture stream's contiguous predecessor speech run prefixed to a unit whose speech starts at sample 0, so Parakeet TDT does not start mid-utterance (fail: closed)
 - `BATCH_PIPELINE_ASR_LEFT_CONTEXT_UNITS` — Process-local predecessor tails kept for ASR left context (default 64, range [0, 1024]; each <=8 s int16, 10 min TTL, keyed by owner, privacy generation and capture stream: source, device and lock from the staged intake context, or the record conversation) (fail: closed)
+- `BATCH_PIPELINE_CONTENTION_RETRY_ENABLED` — Default on; batch Firestore transactions retry explicit contention on fresh transaction IDs with bounded jitter; false restores legacy SDK transaction behavior (fail: open)
 - `BATCH_PIPELINE_CONTEXT_SECONDS` — GPU chain internal ASR boundary context seconds; default 2; requires AMI qualification (fail: closed)
 - `BATCH_PIPELINE_DIARIZER` — GPU chain diarizer registry selection; default pyannote; unavailable candidates fail closed (fail: closed)
 - `BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED` — Default on unless false; batch GPU worker diarizes only padded VAD and word evidence and maps turns back to capture clocks (fail: open)

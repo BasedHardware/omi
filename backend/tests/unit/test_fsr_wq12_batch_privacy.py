@@ -206,6 +206,9 @@ def test_projection_prepare_and_plan_counts(monkeypatch, reads):
 def test_real_sdk_retry_reloads_every_fence(monkeypatch, reads, scope, change, reason):
     """SDK reuses its transaction object and retry ID; callback scope must reset."""
     enable(monkeypatch, True)
+    # This contract exercises the SDK's same-transaction retry path, separately
+    # from the batch store's default-on fresh-transaction retry wrapper.
+    monkeypatch.setenv('BATCH_PIPELINE_CONTENTION_RETRY_ENABLED', 'false')
     db = database()
     session = projection_session(db)
     transaction = db.transaction()
