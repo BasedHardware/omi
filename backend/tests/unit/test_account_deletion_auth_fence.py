@@ -35,6 +35,30 @@ def test_http_auth_fences_every_actionable_deletion_state(monkeypatch, status):
     endpoints.validate_byok_request.assert_not_called()
 
 
+def test_pending_deletion_has_a_distinct_owner_facing_auth_error(monkeypatch):
+    monkeypatch.setattr(endpoints, "get_user_deletion_wipe_status", lambda _uid: "pending_deletion")
+
+    with pytest.raises(HTTPException) as error:
+        endpoints.get_current_user_uid(authorization="Bearer token")
+
+    assert error.value.status_code == 403
+    assert error.value.detail == {
+        "code": "account_pending_deletion",
+        "status": "pending_deletion",
+        "retryable": False,
+    }
+
+
+def test_deletion_status_authentication_keeps_pending_account_recovery_route_open(monkeypatch):
+    monkeypatch.setattr(
+        endpoints,
+        "get_user_deletion_wipe_status",
+        lambda _uid: pytest.fail("status authentication must not open ordinary account access"),
+    )
+
+    assert endpoints.get_current_user_uid_for_deletion_status(authorization="Bearer token") == "old-uid"
+
+
 @pytest.mark.parametrize("status", [None, "cancelled", "billing_failed"])
 def test_terminal_or_pre_acceptance_state_allows_auth(monkeypatch, status):
     monkeypatch.setattr(endpoints, "get_user_deletion_wipe_status", lambda _uid: status)

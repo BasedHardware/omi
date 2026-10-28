@@ -274,6 +274,130 @@
         "title": "AccountCutoverState",
         "type": "string"
       },
+      "AccountDeletionActionResponse": {
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "pending_deletion": {
+            "default": false,
+            "title": "Pending Deletion",
+            "type": "boolean"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "wipe_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wipe At"
+          }
+        },
+        "required": [
+          "status",
+          "message"
+        ],
+        "title": "AccountDeletionActionResponse",
+        "type": "object"
+      },
+      "AccountDeletionLossSummary": {
+        "properties": {
+          "backlog_conversations": {
+            "default": 0,
+            "title": "Backlog Conversations",
+            "type": "integer"
+          },
+          "backlog_seconds": {
+            "default": 0,
+            "title": "Backlog Seconds",
+            "type": "integer"
+          },
+          "held_audio_seconds": {
+            "default": 0,
+            "title": "Held Audio Seconds",
+            "type": "integer"
+          },
+          "held_recordings": {
+            "default": 0,
+            "title": "Held Recordings",
+            "type": "integer"
+          }
+        },
+        "title": "AccountDeletionLossSummary",
+        "type": "object"
+      },
+      "AccountDeletionRestoreResponse": {
+        "properties": {
+          "billing_cancelled": {
+            "default": false,
+            "title": "Billing Cancelled",
+            "type": "boolean"
+          },
+          "restored": {
+            "title": "Restored",
+            "type": "boolean"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "restored"
+        ],
+        "title": "AccountDeletionRestoreResponse",
+        "type": "object"
+      },
+      "AccountDeletionStatusResponse": {
+        "properties": {
+          "loss_summary": {
+            "$ref": "#/components/schemas/AccountDeletionLossSummary"
+          },
+          "pending_deletion": {
+            "default": false,
+            "title": "Pending Deletion",
+            "type": "boolean"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "wipe_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wipe At"
+          }
+        },
+        "required": [
+          "loss_summary"
+        ],
+        "title": "AccountDeletionStatusResponse",
+        "type": "object"
+      },
       "Action": {
         "properties": {
           "action": {
@@ -13481,6 +13605,11 @@
       },
       "DeleteAccountRequest": {
         "properties": {
+          "erase_now": {
+            "default": false,
+            "title": "Erase Now",
+            "type": "boolean"
+          },
           "reason": {
             "anyOf": [
               {
@@ -73982,7 +74111,9 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/DeleteAccountRequest",
-                "default": {}
+                "default": {
+                  "erase_now": false
+                }
               }
             }
           }
@@ -73992,7 +74123,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UserStatusResponse"
+                  "$ref": "#/components/schemas/AccountDeletionActionResponse"
                 }
               }
             },
@@ -74018,6 +74149,57 @@
           }
         ],
         "summary": "Delete Account",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/users/deletion-status": {
+      "get": {
+        "description": "Status plus metadata counts used by the account-deletion warning screen.",
+        "operationId": "get_account_deletion_status_endpoint_v1_users_deletion_status_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountDeletionStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Account Deletion Status Endpoint",
         "tags": [
           "v1"
         ]
@@ -78512,6 +78694,57 @@
           }
         ],
         "summary": "Record Channel"
+      }
+    },
+    "/v1/users/restore-account": {
+      "post": {
+        "description": "Cancel a pending grace wipe while the deadline remains in the future.",
+        "operationId": "restore_account_deletion_endpoint_v1_users_restore_account_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountDeletionRestoreResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Restore Account Deletion Endpoint",
+        "tags": [
+          "v1"
+        ]
       }
     },
     "/v1/users/stats/chat-messages": {

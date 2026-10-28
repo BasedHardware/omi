@@ -38,7 +38,54 @@ def test_delete_account_delegates_to_service():
         result = users_router.delete_account(request=request, uid='uid1')
 
     assert result == {'status': 'ok', 'message': 'Account deletion started'}
-    start_account_deletion.assert_called_once_with('uid1', reason='reason', reason_details='details')
+    start_account_deletion.assert_called_once_with('uid1', reason='reason', reason_details='details', erase_now=False)
+
+
+def test_delete_account_forwards_explicit_erase_now():
+    start_account_deletion = MagicMock(
+        return_value={
+            'status': 'ok',
+            'message': 'Account deletion started',
+            'pending_deletion': False,
+            'wipe_at': None,
+        }
+    )
+    request = users_router.DeleteAccountRequest(erase_now=True)
+
+    with patch.object(users_router, 'start_account_deletion', start_account_deletion):
+        result = users_router.delete_account(request=request, uid='uid1')
+
+    assert result['pending_deletion'] is False
+    start_account_deletion.assert_called_once_with('uid1', reason=None, reason_details=None, erase_now=True)
+
+
+def test_account_deletion_status_endpoint_returns_pending_deadline_and_loss_summary():
+    payload = {
+        'status': 'pending_deletion',
+        'pending_deletion': True,
+        'wipe_at': datetime(2026, 11, 11, tzinfo=timezone.utc),
+        'loss_summary': {
+            'held_recordings': 2,
+            'held_audio_seconds': 300,
+            'backlog_conversations': 4,
+            'backlog_seconds': 600,
+        },
+    }
+    with patch.object(users_router, 'account_deletion_status', return_value=payload):
+        result = users_router.get_account_deletion_status_endpoint(uid='uid1')
+
+    assert result == payload
+
+
+def test_restore_account_endpoint_rejects_non_restorable_state():
+    with patch.object(
+        users_router, 'restore_account_deletion', return_value={'status': 'window_expired', 'restored': False}
+    ):
+        with pytest.raises(HTTPException) as exc:
+            users_router.restore_account_deletion_endpoint(uid='uid1')
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail == {'code': 'account_deletion_not_restorable', 'status': 'window_expired'}
 
 
 def test_delete_account_maps_unexpected_service_error_to_500():
@@ -250,11 +297,12 @@ def test_persisted_wipe_recovers_after_enqueue_crash_and_handler_runs_once(monke
     )
     monkeypatch.setitem(service_globals, 'users_db', users_db)
     monkeypatch.setitem(service_globals, 'auth', types.SimpleNamespace(delete_account=lambda _uid: None))
+    monkeypatch.setitem(service_globals, '_run_immediate_deletion_steps', lambda _uid: None)
     monkeypatch.setitem(service_globals, 'assert_account_deletion_permitted', lambda _uid: None)
     monkeypatch.setitem(service_globals, 'is_account_deletion_dispatch_enabled', lambda: True)
     monkeypatch.setitem(service_globals, 'enqueue_account_deletion_wipe', enqueue_task)
 
-    assert users_router.start_account_deletion('uid1')['status'] == 'ok'
+    assert users_router.start_account_deletion('uid1', erase_now=True)['status'] == 'ok'
 
     assert state == {'status': 'failed', 'job_id': 'job-1', 'enqueue_attempts': 1, 'wipe_runs': 0}
 

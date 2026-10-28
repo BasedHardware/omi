@@ -135,6 +135,35 @@ def _run_claim(data, stale_after=timedelta(minutes=10), running_stale_after=user
     return result, txn._updates
 
 
+def _run_task_claim(data):
+    txn = _make_txn()
+    snapshot = _make_snapshot(data)
+    doc_ref = types.SimpleNamespace(get=lambda transaction=None: snapshot)
+    raw_fn = getattr(users_db._claim_deletion_wipe_task_txn, 'to_wrap', users_db._claim_deletion_wipe_task_txn)
+    return raw_fn(txn, doc_ref, users_db.DELETION_WIPE_RUNNING_STALE_AFTER), txn._updates
+
+
+def _run_restore(data):
+    txn = _make_txn()
+    snapshot = _make_snapshot(data)
+    doc_ref = types.SimpleNamespace(get=lambda transaction=None: snapshot)
+    raw_fn = getattr(users_db._restore_user_deletion_txn, 'to_wrap', users_db._restore_user_deletion_txn)
+    return raw_fn(txn, doc_ref), txn._updates
+
+
+def _run_mark_grace(data, due_at):
+    txn = _make_txn()
+    snapshot = _make_snapshot(data)
+    doc_ref = types.SimpleNamespace(id='uid1', get=lambda transaction=None: snapshot)
+    raw_fn = getattr(
+        users_db._mark_user_deletion_grace_intent_txn,
+        'to_wrap',
+        users_db._mark_user_deletion_grace_intent_txn,
+    )
+    result = raw_fn(txn, doc_ref, 'new-job', due_at)
+    return result, txn._sets, txn._updates
+
+
 def _run_mark_billing_failed(data):
     txn = _make_txn()
     txn_obj = users_db._mark_user_deletion_billing_failed_txn
@@ -378,6 +407,112 @@ def test_claim_txn_reclaims_stale_retrying_claim():
     assert 'wipe_claimed_at' in updates[0][1]
 
 
+def test_grace_wipe_cannot_be_reconciled_before_its_deadline_or_action_receipt():
+    now = datetime.now(timezone.utc)
+    for data in (
+        {
+            'uid': 'uid1',
+            'wipe_status': 'pending_deletion',
+            'wipe_due_at': now + timedelta(seconds=1),
+            'grace_actions_complete': True,
+        },
+        {
+            'uid': 'uid1',
+            'wipe_status': 'pending_deletion',
+            'wipe_due_at': now - timedelta(seconds=1),
+            'grace_actions_complete': False,
+        },
+    ):
+        result, updates = _run_claim(data)
+        assert result is None
+        assert updates == []
+
+
+def test_grace_intent_persists_due_time_and_starts_fenced():
+    due_at = datetime.now(timezone.utc) + timedelta(days=14)
+    result, sets, updates = _run_mark_grace(None, due_at)
+
+    assert result['wipe_job_id'] == 'new-job'
+    assert result['mode'] == 'created'
+    assert sets[0][1]['wipe_status'] == 'pending_deletion'
+    assert sets[0][1]['wipe_due_at'] == due_at
+    assert sets[0][1]['grace_actions_complete'] is False
+    assert updates == []
+
+
+def test_repeated_grace_intent_preserves_the_original_deadline():
+    original_due_at = datetime.now(timezone.utc) + timedelta(days=7)
+    result, sets, updates = _run_mark_grace(
+        {
+            'uid': 'uid1',
+            'wipe_status': 'pending_deletion',
+            'wipe_job_id': 'existing-job',
+            'wipe_due_at': original_due_at,
+            'grace_actions_complete': True,
+        },
+        original_due_at + timedelta(days=14),
+    )
+
+    assert result == {
+        'wipe_job_id': 'existing-job',
+        'dispatch_claimed': False,
+        'mode': 'joined',
+        'wipe_status': 'pending_deletion',
+        'wipe_due_at': original_due_at,
+    }
+    assert sets == []
+    assert updates == []
+
+
+def test_grace_wipe_becomes_reconcilable_only_after_deadline_and_immediate_actions():
+    data = {
+        'uid': 'uid1',
+        'wipe_status': 'pending_deletion',
+        'wipe_due_at': datetime.now(timezone.utc) - timedelta(seconds=1),
+        'grace_actions_complete': True,
+    }
+    result, updates = _run_claim(data)
+    assert result == 'uid1'
+    assert updates[0][1]['wipe_status'] == 'retrying'
+
+
+def test_cloud_task_wipe_claim_rechecks_grace_deadline():
+    future = {
+        'uid': 'uid1',
+        'wipe_status': 'pending_deletion',
+        'wipe_due_at': datetime.now(timezone.utc) + timedelta(days=1),
+        'grace_actions_complete': True,
+    }
+    result, updates = _run_task_claim(future)
+    assert result == 'not_actionable'
+    assert updates == []
+
+    due = {
+        **future,
+        'wipe_due_at': datetime.now(timezone.utc) - timedelta(seconds=1),
+    }
+    result, updates = _run_task_claim(due)
+    assert result == 'claimed'
+    assert updates[0][1]['wipe_status'] == 'retrying'
+
+
+def test_restore_and_due_wipe_race_has_one_transactional_winner():
+    future = {
+        'uid': 'uid1',
+        'wipe_status': 'pending_deletion',
+        'wipe_due_at': datetime.now(timezone.utc) + timedelta(days=1),
+        'grace_actions_complete': True,
+    }
+    result, updates = _run_restore(future)
+    assert result == 'restored'
+    assert updates[0][1]['wipe_status'] == 'cancelled'
+
+    expired = {**future, 'wipe_due_at': datetime.now(timezone.utc) - timedelta(seconds=1)}
+    result, updates = _run_restore(expired)
+    assert result == 'window_expired'
+    assert updates == []
+
+
 def test_claim_txn_returns_none_for_missing_doc():
     """A non-existent document returns None."""
     result, updates = _run_claim(None)
@@ -526,6 +661,44 @@ def test_get_pending_deletion_wipes_finds_stale_after_fresh_window():
     assert 'stale1' in uids, 'stale pending record must be found past the fresh window'
     assert 'fresh1' not in uids
     assert 'fresh2' not in uids
+
+
+def test_get_pending_deletion_wipes_selects_incomplete_grace_and_due_completed_markers():
+    now = datetime.now(timezone.utc)
+    docs_by_status = {
+        'failed': [],
+        'billing_failed': [],
+        'pending_deletion': [
+            {
+                'uid': 'due',
+                'wipe_status': 'pending_deletion',
+                'wipe_due_at': now - timedelta(seconds=1),
+                'grace_actions_complete': True,
+            },
+            {
+                'uid': 'early',
+                'wipe_status': 'pending_deletion',
+                'wipe_due_at': now + timedelta(days=1),
+                'grace_actions_complete': True,
+            },
+            {
+                'uid': 'unfinished',
+                'wipe_status': 'pending_deletion',
+                'wipe_due_at': now - timedelta(seconds=1),
+                'grace_actions_complete': False,
+            },
+        ],
+        'pending': [],
+        'running': [],
+        'deleting_auth': [],
+        'retrying': [],
+    }
+    fake_collection = _FakeCollection(docs_by_status)
+
+    with patch.object(users_db, 'account_deletion_collection', lambda **_kwargs: fake_collection):
+        result = users_db.get_pending_deletion_wipes(limit=100)
+
+    assert [row['uid'] for row in result] == ['due', 'unfinished']
 
 
 def test_get_pending_deletion_wipes_respects_limit_with_over_fetch():
