@@ -7,23 +7,35 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import datetime
+from functools import cache
 import hashlib
 import json
 import os
 from typing import Any
 
-from prometheus_client import Counter
+from prometheus_client import Counter, REGISTRY
 from utils.observability.reasons import ReasonFamily, SyncProcessingHoldOutcome, reason_label
 
 QUIET_SECONDS = 600
 MAX_HOLD_SECONDS = 3600
 MAX_LATE_RUNS = 1
 FIELD = 'sync_processing_hold'
-OUTCOMES = Counter('omi_sync_processing_hold_total', 'Sync full-processing admission outcomes', ['outcome'])
+
+
+@cache
+def _outcomes() -> Counter:
+    # Pure assignment/archive imports need no collector registration. Reuse the
+    # process collector if an isolated loader re-executes this policy module.
+    try:
+        return Counter('omi_sync_processing_hold_total', 'Sync full-processing admission outcomes', ['outcome'])
+    except ValueError:
+        return REGISTRY._names_to_collectors['omi_sync_processing_hold_total']  # type: ignore[attr-defined]
 
 
 def record(outcome: str) -> None:
-    OUTCOMES.labels(outcome=reason_label(ReasonFamily.SYNC_PROCESSING_HOLD, outcome, SyncProcessingHoldOutcome)).inc()
+    _outcomes().labels(
+        outcome=reason_label(ReasonFamily.SYNC_PROCESSING_HOLD, outcome, SyncProcessingHoldOutcome)
+    ).inc()
 
 
 def enabled() -> bool:

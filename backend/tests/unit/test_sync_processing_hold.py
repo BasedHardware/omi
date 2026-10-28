@@ -107,6 +107,17 @@ def test_default_on(monkeypatch):
     assert hold.enabled()
 
 
+def test_policy_reload_preserves_outcome_counts():
+    import importlib
+    from prometheus_client import REGISTRY
+
+    hold.record('ready')
+    before = REGISTRY.get_sample_value('omi_sync_processing_hold_total', {'outcome': 'ready'})
+    importlib.reload(hold)
+    hold.record('ready')
+    assert REGISTRY.get_sample_value('omi_sync_processing_hold_total', {'outcome': 'ready'}) == before + 1
+
+
 def test_merged_held_piece_transfers_to_parent_without_full_run(state, monkeypatch):
     rows, tasks = state
     outbox.mark('u', 'piece', 'en', now=100, sync_hold=True)
