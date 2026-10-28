@@ -253,40 +253,110 @@ class StorageSyncImpl implements StorageSync {
   @override
   Future deleteWal(Wal wal) async {
     if (wal.storage != WalStorage.sdcard || !_wals.any((w) => w.id == wal.id)) return;
-    if (wal.device == _device?.id) await _deleteWalsOnDevice([wal]);
+    if (_device != null && wal.device != _device!.id) {
+      // Not this device's recording (e.g. left by a device this phone no
+      // longer pairs with): drop the stale local row, nothing to delete.
+      _wals = _wals.where((w) => w.id != wal.id).toList();
+      listener.onWalUpdated();
+      return;
+    }
+    // A delete that was attempted drops the row whatever the reply said: the
+    // positional file index is potentially burned (FC-deleted-device-file-
+    // stays-addressable) and the next listing re-adds a file that survived.
+    // Only a delete that never reached the device — no connection — keeps the
+    // row, so it cannot resurrect as "new" on the next listing (#14688).
+    final attempted = await _deleteWalsOnDevice([wal]);
+    if (!attempted.contains(wal.id)) {
+      Logger.debug('StorageSync.deleteWal: delete of ${wal.id} never reached the device, keeping WAL');
+      listener.onWalUpdated();
+      return;
+    }
     _wals = _wals.where((w) => w.id != wal.id).toList();
     listener.onWalUpdated();
   }
 
+  /// Cached rows of [status] recorded by a device other than the connected
+  /// one. setDevice swaps the device without clearing cached rows, and a
+  /// refresh that fails before listing keeps them, so after a pendant switch
+  /// these rows' file indexes name the NEW pendant's files. Deletes must
+  /// never see them; the rows drop locally instead (their audio still lives
+  /// on their own device and re-lists when that device reconnects).
+  Set<String> _previousDeviceWalIds(WalStatus status) {
+    final device = _device;
+    if (device == null) return const {};
+    return _wals.where((w) => w.status == status && w.device != device.id).map((w) => w.id).toSet();
+  }
+
   @override
   Future<void> deleteAllSyncedWals() async {
-    final toDelete = _wals.where((w) => w.status == WalStatus.synced).toList();
-    await _deleteWalsOnDevice(toDelete);
-    _wals = _wals.where((w) => w.status != WalStatus.synced).toList();
+    // Stale previous-device rows get the same drop-only handling as the
+    // single-row path: sending their fileNums would delete the current
+    // pendant's files at those indexes (#14688). Only the status this clear
+    // covers drops; the other device's pending rows keep their local rows.
+    final stale = _previousDeviceWalIds(WalStatus.synced);
+    final toDelete = _wals.where((w) => w.status == WalStatus.synced && !stale.contains(w.id)).toList();
+    final attempted = await _deleteWalsOnDevice(toDelete);
+    _wals = _wals
+        .where((w) => !stale.contains(w.id) && (w.status != WalStatus.synced || !attempted.contains(w.id)))
+        .toList();
+    _logStaleRowsDropped('synced', stale.length);
+    _logNeverAttemptedClear('storage_synced_clear_kept', toDelete, attempted);
     listener.onWalUpdated();
   }
 
   @override
   Future<void> deleteAllPendingWals() async {
-    final toDelete = _wals.where((w) => w.status == WalStatus.miss).toList();
-    await _deleteWalsOnDevice(toDelete);
-    _wals = _wals.where((w) => w.status != WalStatus.miss).toList();
+    // Stale previous-device rows never reach the device delete (see
+    // deleteAllSyncedWals); they drop locally like the single-row path.
+    final stale = _previousDeviceWalIds(WalStatus.miss);
+    final toDelete = _wals.where((w) => w.status == WalStatus.miss && !stale.contains(w.id)).toList();
+    final attempted = await _deleteWalsOnDevice(toDelete);
+    // Attempted deletes drop their rows whatever the reply said (a positional
+    // index a delete may have removed is burned; the listing re-adds
+    // survivors). Rows the clear never attempted — no device, no connection —
+    // stay listed, so a clear run with the pendant away does not remove rows
+    // whose audio is still on the device and resurrect them as "new"
+    // recordings on the next scan (#14688).
+    _wals =
+        _wals.where((w) => !stale.contains(w.id) && (w.status != WalStatus.miss || !attempted.contains(w.id))).toList();
+    _logStaleRowsDropped('miss', stale.length);
+    _logNeverAttemptedClear('storage_pending_clear_kept', toDelete, attempted);
     listener.onWalUpdated();
+  }
+
+  void _logStaleRowsDropped(String cleared, int count) {
+    if (count == 0) return;
+    DebugLogManager.logEvent('storage_clear_stale_rows_dropped', {'cleared': cleared, 'stale': count});
+  }
+
+  void _logNeverAttemptedClear(String event, List<Wal> intended, Set<String> attempted) {
+    final kept = intended.where((w) => !attempted.contains(w.id)).length;
+    if (kept == 0) return;
+    DebugLogManager.logEvent(event, {
+      'intended': intended.length,
+      'attempted': attempted.length,
+      'kept': kept,
+      'deviceConnected': _device != null,
+    });
   }
 
   /// Deletes files on the device via CMD_DELETE_FILE. Firmware re-indexes files
   /// after each delete (higher indices shift down by 1), so delete highest index
-  /// first to keep remaining fileNums valid.
-  Future<void> _deleteWalsOnDevice(List<Wal> wals) async {
-    if (wals.isEmpty || _device == null) return;
+  /// first to keep remaining fileNums valid. Returns the ids whose delete was
+  /// sent to the device; a delete that never left the phone (no device, no
+  /// connection) attempts nothing and confirms nothing.
+  Future<Set<String>> _deleteWalsOnDevice(List<Wal> wals) async {
+    final attempted = <String>{};
+    if (wals.isEmpty || _device == null) return attempted;
     final connection = await ServiceManager.instance().device.ensureConnection(_device!.id);
     if (connection == null) {
       Logger.debug('StorageSync._deleteWalsOnDevice: no connection, skipping firmware delete');
-      return;
+      return attempted;
     }
     final targets = wals.where((w) => w.fileNum >= 0).toList()..sort((a, b) => b.fileNum.compareTo(a.fileNum));
     final deletedIds = targets.map((w) => w.id).toSet();
     for (final wal in targets) {
+      attempted.add(wal.id);
       try {
         final ok = await connection.deleteStorageFile(wal.fileNum);
         Logger.debug('StorageSync._deleteWalsOnDevice: deleted fileNum=${wal.fileNum} ok=$ok');
@@ -303,6 +373,7 @@ class StorageSyncImpl implements StorageSync {
         Logger.debug('StorageSync._deleteWalsOnDevice: failed fileNum=${wal.fileNum}: $e');
       }
     }
+    return attempted;
   }
 
   @override
