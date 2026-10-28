@@ -88,7 +88,7 @@ epoch advance changes 7 to 8.
 | `purge_batch_owner`, `user_data_deletion.purge_user_subtree` | Real epoch advance, both namespace scans, finish and recursive user erasure run. Token remains outside the erased tree, generation becomes 8, blocking remains set, and fresh authorization denies the missing account. |
 | `advance_privacy_generation` / `finish_privacy_purge` | Original epoch and purge semantics retained. Their privacy-document writes rotate token atomically; stale purge-generation completion remains the existing no-op. |
 | `legal_holds.place_legal_hold`, destructive gate writes | Existing transactions + token; active hold still blocks destructive deletion, while batch authorization keeps its existing policy. Existing legal-hold suite passes. |
-| Staging replay / enhanced-protection migration | Import backend database owners / `_client`; all real SDK clients in that process use the class-level hook. WQ21 staging writes and migration helper writes therefore share the fence. |
+| Staging replay / enhanced-protection migration | Processes importing backend database owners / `_client` share the class-level hook. This does not certify the standalone `scripts/staging/replay.py` path or external/old-revision writers; staging replay requires explicit discipline before reader enablement. |
 | `scripts/backfill_user_signup_platform.py` | Additional audit found its standalone Admin SDK merge could create a user without importing `_client`. It now installs the fence before client construction. Real script enumeration/write, SDK Commit and token rotation are emulator-tested. |
 
 No direct GAPIC CreateDocument/UpdateDocument/DeleteDocument/Write-stream or raw
@@ -144,64 +144,57 @@ cost remain unmeasured. Compare total read volume across both the old live-read
 origin and the new direct token-read origin, not just disappearance of the old
 `database.batch_pipeline_privacy:read` label.
 
-## Verification
+## Verification (corrected by 1027e)
 
-All test/build work ran at `nice -n 19` through `omi-heavy`, using this worktree's
-Python 3.11 `backend/.venv`. No full backend suite was run. Dependencies were
-available; no dependency-input or lock changes were made.
-
-Focused suite commands (one pytest process per file):
-
-```sh
-BACKEND_UNIT_TEST_FILE_LIST=/Volumes/Ephemeral/scratch/wq26/focused.txt \
-  BACKEND_PYTEST_WORKERS=2 bash backend/test.sh
-BACKEND_UNIT_TEST_FILE_LIST=/Volumes/Ephemeral/scratch/wq26/changed-final.txt \
-  BACKEND_PYTEST_WORKERS=2 bash backend/test.sh
-```
-
-The first selects 15 files: new fence/memo, WQ12, batch privacy, tombstones,
-speaker auto-enroll, lever registry, memory head, list projection, legal holds,
-conversation lifecycle, recording sessions, smart-merge SDK, sync cross-job
-assignment, and account deletion. The second rechecks changed tests plus voice
-artifact consumers, Pump, artifact storage, and sync Cloud Tasks after the final
-scope/retention changes. Final distinct coverage: **837 passed across 19 focused unit/service files**.
-The aggregate run had one Pump timing failure (`after_refund`: computed job
-still leased during a 50ms renewal-timeout scenario) under concurrent host load.
-The entire Pump file was rerun alone through the same runner: **33 passed**; no
-Pump behavior/test change was made to hide it. Other final counts: fence 56,
-memo/read-path 25, voice evidence 23, artifacts 16, sync Cloud Tasks 189.
-Raw Pump rerun: `/Volumes/Ephemeral/scratch/wq26/pump-rerun.log`.
-
-Local emulator only (`127.0.0.1:18926`, demo projects, anonymous credentials;
-BatchWrite uses the emulator's `Bearer owner` test identity):
+The prior **837 focused tests** aggregate is withdrawn as unreproduced; its
+historical file lists/logs do not establish a reproducible scope here. The
+reviewer independently ran six focused unit files: **234 passed**. This fix round
+reran exactly those six files, using Python 3.11.15 from this worktree's
+`backend/.venv`, through `omi-heavy`:
 
 ```sh
-FIRESTORE_EMULATOR_HOST=127.0.0.1:18926 GOOGLE_CLOUD_PROJECT=demo-wq26 \
-  backend/.venv/bin/python -m pytest -q \
-  backend/tests/integration/test_bpp_generation_fence_emulator.py
-FIRESTORE_EMULATOR_HOST=127.0.0.1:18926 GCLOUD_PROJECT=demo-fs-p1 \
-  GOOGLE_CLOUD_PROJECT=demo-fs-p1 backend/.venv/bin/python -m pytest -q \
-  backend/tests/integration/test_list_projection_emulator.py
+/Users/dazheng/workspace/omi/bin/omi-heavy run -- bash -c 'PYTHONPATH=backend backend/.venv/bin/python -m pytest -q backend/tests/unit/test_bpp_generation_fence.py backend/tests/unit/test_bpp_generation_memo.py backend/tests/unit/test_batch_pipeline_privacy.py backend/tests/unit/test_fsr_wq12_batch_privacy.py backend/tests/unit/test_conversation_tombstones.py backend/tests/unit/test_speaker_auto_enroll.py --junitxml=/Volumes/Ephemeral/scratch/wq26-fix-1027e/unit.xml > /Volumes/Ephemeral/scratch/wq26-fix-1027e/unit.log 2>&1'
 ```
 
-Final result: **30 passed**, including the three WQ21 writers, both merge
-engines, inherited smart-merge ancestor, direct CAS rollback, exact transport
-replay, real BatchWrite partial statuses, account subtree wipe, and standalone
-platform backfill. Two existing dependency/query-style warnings were emitted. Projection expansion proof: **4 passed** (450/499
-source writes, projection-expanded Commit and recursive deletion).
+| Unit file under `backend/tests/unit/` | Passed |
+|---|---:|
+| `test_bpp_generation_fence.py` | 56 |
+| `test_bpp_generation_memo.py` | 25 |
+| `test_batch_pipeline_privacy.py` | 14 |
+| `test_fsr_wq12_batch_privacy.py` | 43 |
+| `test_conversation_tombstones.py` | 13 |
+| `test_speaker_auto_enroll.py` | 83 |
+| **Total** | **234** |
 
-`make preflight`: **PASS — 37 checks in 363.45 seconds**, exit 0.
-Final log: `/Volumes/Ephemeral/scratch/wq26/preflight-final.log`. It runs with `VIRTUAL_ENV` and `PATH` selecting
-`backend/.venv`. The first attempt exposed a bare-Python legacy runner replacing
-Firestore with a file-less ModuleType stub. The installer now skips only that
-non-SDK surface; real SDK dependency/import failure still propagates and has a
-regression test. An earlier selection was interrupted because untracked node
-seeding content entered its file list; reruns use a temporary process-local Git
-excludes file containing only `**/.node_modules.seeding.*/`. No seeded directory
-was staged, moved, deleted or stashed. PR metadata is absent because no PR exists;
-`pr-preflight --lane local --suggest` reports no locked invariant citations.
+Result: **234 collected, 234 passed, 0 failed, 0 skipped** (4.61s; one
+`audioop` deprecation warning). No full backend suite was run in this round.
 
-Raw logs: `/Volumes/Ephemeral/scratch/wq26/{focused-final,changed-final,pump-rerun,writers,projection-emulator,preflight-final}.log`.
+The WQ26 emulator file collects **30 tests**, not 34. The canonical harness
+review run was **29 passed, 1 failed**, because the raw transport replay omitted
+emulator-admin authorization metadata. The 1027e fix adds only
+`metadata=(('authorization', 'Bearer owner'),)` to that replay; the prepared
+Commit and all ABA assertions are unchanged. This round reran the entire file
+under the repository's deny-all `firestore.rules`, from the repository root:
+
+```sh
+/Users/dazheng/workspace/omi/bin/omi-heavy run -- bash -c 'firebase emulators:exec --only firestore --project demo-omi-isolated-tests "PYTHONPATH=backend backend/.venv/bin/python -m pytest -q backend/tests/integration/test_bpp_generation_fence_emulator.py --junitxml=/Volumes/Ephemeral/scratch/wq26-fix-1027e/emulator.xml" > /Volumes/Ephemeral/scratch/wq26-fix-1027e/emulator.log 2>&1'
+```
+
+Result: **30 collected, 30 passed, 0 failed, 0 skipped** (2.98s; `audioop`
+deprecation and positional-query warnings). Firebase CLI 15.30.1, Java 21.0.12;
+the harness owns the loopback emulator at `127.0.0.1:8085` and shuts it down on
+exit. Synthetic demo-project data only; GCP tier **none**. The four separate
+list-projection tests from the earlier report are outside this 30-test WQ26
+suite and were not rerun or included in this round's count.
+
+The earlier report's `make preflight` claim (37 checks) was historical, not a
+reviewer rerun. This round's `make preflight` **failed** after 72.17s (make exit
+2): `product-file-line-count-ratchet` cannot measure the synthetic merge of HEAD
+into local `origin/main` (`f10cbeb12c0e`) because
+`backend/utils/batch_pipeline/retention.py` has a content conflict. No merge or
+integration fix was attempted in this test-only round. Log:
+`/Volumes/Ephemeral/scratch/wq26-fix-1027e/preflight.log`. Raw suite logs and JUnit counts:
+`/Volumes/Ephemeral/scratch/wq26-fix-1027e/{unit,emulator}.{log,xml}`.
 
 ## Integrator configuration, rollout boundary and risks
 
@@ -216,6 +209,18 @@ old backend/listen/sync/backfill/desktop/pusher/worker images, standalone admin
 scripts or external writers can leave a memo stale. The integrator must establish
 producer inventory and release convergence before enabling any reader cohort.
 No deployed revisions were inspected here, and no enablement is authorized.
+
+Recorded rollout caveats from review (documentation only):
+
+- Same-document double-write in one Commit is proto-documented and
+  emulator-verified, but **production-unverified**. The writer fence is active
+  on deployment even with the reader lever off. Canary a protection-level
+  change / purge on the first rollout before broad traffic, and retain that
+  check for the first lever-on rollout (or verify via staging end-to-end).
+- The future reader-lever enablement PR must explicitly restate and verify
+  fleet closure: **all writer services and revisions are fenced**, including
+  maintenance producers, with console-edit and staging-replay discipline.
+  A passing in-repo suite does not establish that precondition.
 
 Before a separate ramp decision, measure cohort-wide read totals, failed privacy
 checks, token-write amplification/contention, and artifact hit rate; a short task

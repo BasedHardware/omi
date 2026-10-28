@@ -384,7 +384,7 @@ def test_transport_replay_cannot_restore_a_cached_token(world):
         assert w.check() == 7
         w.user.update({'private_cloud_sync_enabled': False})
         transport = w.client._firestore_api._transport
-        transport._wrapped_methods[transport.commit](prepared)
+        transport._wrapped_methods[transport.commit](prepared, metadata=(('authorization', 'Bearer owner'),))
         replayed = w.token.get()
         assert replayed.to_dict()['memo_token'] == first.to_dict()['memo_token']
         assert replayed.update_time != first.update_time
