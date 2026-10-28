@@ -67,6 +67,7 @@ describe('triggers.on_memory_created', () => {
       .delete('/zapier/trigger/subscribe', {
         target_url: 'https://hooks.zapier.com/test-target',
       })
+      .query(true)
       .reply(200, { success: true });
 
     const bundle = {
