@@ -11896,5 +11896,7 @@
     "onTheWayDetailsForSupport": "Mga detalye para sa support",
     "homeNoiseFoldHidden": "{count, plural, =1{Nakatago ang 1 maikling clip} other{Nakatago ang {count} maikling clip}}",
     "homeNoiseFoldShow": "Ipakita",
-    "homeNoiseFoldHide": "{count, plural, =1{Itago ang 1 maikling clip} other{Itago ang {count} maikling clip}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Itago ang 1 maikling clip} other{Itago ang {count} maikling clip}}",
+    "dailyRecapsOnHome": "Daily Recaps sa Home",
+    "dailyRecapsOnHomeDescription": "Ipakita ang pinakabagong recaps sa itaas ng Home."
 }

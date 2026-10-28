@@ -14730,4 +14730,10 @@ class AppLocalizationsCs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get dailyRecapsOnHome => 'Denní souhrny na domovské obrazovce';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Zobrazit nejnovější souhrny v horní části domovské obrazovky.';
 }

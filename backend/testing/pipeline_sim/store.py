@@ -26,6 +26,7 @@ and serial (the simulation is single-threaded).
 from __future__ import annotations
 
 from copy import deepcopy
+import hashlib
 from typing import Any, Callable, TypeVar
 
 from database.batch_pipeline_privacy import (
@@ -222,12 +223,20 @@ class SimStore:
         ]
         return min(values) if values else None
 
-    def control_candidate(self, priority: int, pool: str, now: float) -> str | None:
+    def acquire_pull_claim(self, shard: str, token: str, now: float, ttl: float) -> bool:
+        if self.rows.get(('pull_claims', shard), {}).get('expires_at', 0) > now:
+            return False
+        self.rows['pull_claims', shard] = {'token': token, 'expires_at': now + ttl}
+        return True
+
+    def control_candidate(self, priority: int, pool: str, now: float, *, worker_id: str = '', exclude=()) -> str | None:
         if priority not in (0, 1, 2) or pool not in {'batch', 'live'}:
             raise ValueError('bounded priority and pool required')
         prefix = f'p{priority}_'
         best = None
         for key in self._controls:
+            if key in exclude:
+                continue
             row = self.rows[('control', key)]
             if not row.get(prefix + 'active'):
                 continue
@@ -235,7 +244,8 @@ class SimStore:
             available = row.get(prefix + pool + '_available_at')
             if service is None or available is None or service < 0 or available > now:
                 continue
-            candidate = (service, available, key)
+            rank = hashlib.sha256(f'{worker_id}:{key}'.encode()).digest() if worker_id else available
+            candidate = (service, rank, key)
             if best is None or candidate < best:
                 best = candidate
         return best[2] if best else None

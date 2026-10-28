@@ -14850,4 +14850,10 @@ class AppLocalizationsFr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get dailyRecapsOnHome => 'Récapitulatifs quotidiens sur l\'Accueil';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Affiche vos derniers récapitulatifs en haut de l\'Accueil.';
 }

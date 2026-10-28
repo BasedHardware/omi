@@ -61,6 +61,7 @@ spec:
           ports:
             - {name: http, containerPort: 8080}
           env:
+            - {name: BATCH_SHARD_SPREAD_ENABLED, value: {{ .Values.worker.shardSpreadEnabled | quote }}}
             - {name: BATCH_PIPELINE_CONTENTION_RETRY_ENABLED, value: {{ .Values.worker.contentionRetryEnabled | quote }}}
             {{- if ne .Values.worker.stageProfilingEnabled nil }}
             - {name: BATCH_PIPELINE_STAGE_PROFILING_ENABLED, value: {{ .Values.worker.stageProfilingEnabled | quote }}}

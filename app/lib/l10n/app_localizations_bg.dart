@@ -14782,4 +14782,10 @@ class AppLocalizationsBg extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get dailyRecapsOnHome => 'Дневни резюмета в Начало';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Показвай последните резюмета в горната част на Начало.';
 }

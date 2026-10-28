@@ -4505,5 +4505,7 @@
     "onTheWayDetailsForSupport": "Detalhes para o suporte",
     "homeNoiseFoldHidden": "{count, plural, =1{1 clipe curto ocultado} other{{count} clipes curtos ocultados}}",
     "homeNoiseFoldShow": "Mostrar",
-    "homeNoiseFoldHide": "{count, plural, =1{Ocultar 1 clipe curto} other{Ocultar {count} clipes curtos}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Ocultar 1 clipe curto} other{Ocultar {count} clipes curtos}}",
+    "dailyRecapsOnHome": "Resumos diários no Início",
+    "dailyRecapsOnHomeDescription": "Mostre seus resumos mais recentes no topo do Início."
 }

@@ -14764,4 +14764,10 @@ class AppLocalizationsLv extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get dailyRecapsOnHome => 'Dienas kopsavilkumi sākumā';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Rādīt jaunākos kopsavilkumus sākuma augšdaļā.';
 }

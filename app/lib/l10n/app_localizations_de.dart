@@ -14841,4 +14841,10 @@ class AppLocalizationsDe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get dailyRecapsOnHome => 'Tägliche Zusammenfassungen auf Start';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Zeige deine neuesten Zusammenfassungen oben auf Start.';
 }

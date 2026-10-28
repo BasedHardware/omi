@@ -14770,4 +14770,10 @@ class AppLocalizationsNl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get dailyRecapsOnHome => 'Dagelijkse samenvattingen op Home';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Toon je nieuwste samenvattingen bovenaan Home.';
 }
