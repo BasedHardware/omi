@@ -111,6 +111,7 @@ _SYS_MODULE_NAMES = [
     "utils",
     "utils.model_text",
     "utils.user_clock",
+    "utils.user_language",
     "utils.committed_capture",
     "utils.capture_evidence",
     "utils.speaker_display",
@@ -291,6 +292,9 @@ sys.modules["utils.llm"].__path__ = [str(BACKEND_DIR / "utils" / "llm")]
 _stub_package("utils.conversations")
 _load_module_from_file("utils.model_text", BACKEND_DIR / "utils" / "model_text.py")
 _load_module_from_file("utils.user_clock", BACKEND_DIR / "utils" / "user_clock.py")
+# The notes-prompt import chain uses the production language allowlist. The
+# isolated utils package has an empty __path__, so load that pure helper first.
+_load_module_from_file("utils.user_language", BACKEND_DIR / "utils" / "user_language.py")
 # models.conversation imports evidence_field/ledger_bound_incomplete at module
 # scope; the stubbed utils package has an empty __path__, so load the real
 # stdlib-only modules first (capture_evidence imports committed_capture).
