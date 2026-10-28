@@ -46,6 +46,7 @@ class Store(Protocol):
     def ready_for_capacity(self, priority: int, now: float) -> int: ...
     def control_candidate(self, priority: int, pool: str, now: float) -> str | None: ...
     def quarantine_fenced(self, segment_id: str, now: float) -> bool: ...
+    def cancel_fenced_recovery(self, segment_id: str) -> bool: ...
     def longest_ready_pending(self, owner_key: str) -> dict | None: ...
     def fresh_pending(self, owner_key: str, limit: int) -> list[dict]: ...
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]: ...
@@ -201,6 +202,41 @@ class FirestoreStore:
 
     def quarantine_fenced(self, segment_id: str, now: float) -> bool:
         return quarantine_fenced(self.client, self.namespace, segment_id, now)
+
+    def cancel_fenced_recovery(self, segment_id: str) -> bool:
+        from google.cloud import firestore
+        from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
+        from database.batch_pipeline_projection_protocol import normalized_binding
+
+        ref = self.client.collection(f'{self.namespace}_jobs').document(segment_id)
+
+        @firestore.transactional
+        def cancel(transaction):
+            job = ref.get(transaction=transaction).to_dict() or {}
+            if not job or not job.get('recovery'):
+                return False
+            binding = normalized_binding(job['projection_binding'])
+            ids = [value for value in (job.get('conversation_id'), binding.target_conversation_id) if value]
+            ids.extend(job.get('conversation_ids') or [])
+            try:
+                assert_batch_write_allowed(
+                    self.client,
+                    transaction,
+                    binding.owner_id,
+                    conversation_ids=ids,
+                    expected_generation=binding.privacy_generation,
+                )
+            except BatchPrivacyBlocked:
+                transaction.update(ref, {'recovery_state': 'cancelled'})
+                return True
+            return False
+
+        cancelled = cancel(self.client.transaction())
+        if cancelled:
+            from database.batch_pipeline_shadow_hook import mirror_refresh
+
+            mirror_refresh(self.namespace, [('jobs', segment_id)])
+        return cancelled
 
     def longest_ready_pending(self, owner_key: str) -> dict | None:
         # A hint read outside any transaction; the bypass transaction re-verifies it.

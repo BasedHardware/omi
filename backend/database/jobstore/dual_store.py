@@ -272,7 +272,7 @@ class DualStore:
         self._tracker: threading.Thread | None = None
 
     def __getattr__(self, name: str) -> Any:
-        # due / oldest / oldest_retry / control_candidate / quarantine_fenced / projection_* / client / namespace
+        # due / oldest / oldest_retry / control_candidate / quarantine_fenced / cancel_fenced_recovery / projection_* / client / namespace
         return getattr(self.primary, name)
 
     def run(self, body: Callable[[Any], T]) -> T:

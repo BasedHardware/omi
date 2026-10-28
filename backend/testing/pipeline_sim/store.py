@@ -257,6 +257,27 @@ class SimStore:
         self.apply(('jobs', segment_id), revoked)
         return True
 
+    def cancel_fenced_recovery(self, segment_id: str) -> bool:
+        """Revocation-only cancellation write after the privacy fence rejects ordinary writes."""
+        from database.batch_pipeline_projection_protocol import normalized_binding
+
+        job = self.rows.get(('jobs', segment_id), {})
+        if not job or not job.get('recovery'):
+            return False
+        binding = normalized_binding(job['projection_binding'])
+        ids = [value for value in (job.get('conversation_id'), binding.target_conversation_id) if value]
+        ids.extend(job.get('conversation_ids') or [])
+        if not self.customer.blocked(
+            binding.owner_id,
+            ids,
+            binding.privacy_generation,
+        ):
+            return False
+        row = dict(job)
+        row['recovery_state'] = 'cancelled'
+        self.apply(('jobs', segment_id), row)
+        return True
+
     # -- Query helpers --------------------------------------------------
     def first_pending(self, owner_key: str, *, ready_only: bool = False) -> dict | None:
         best = None
