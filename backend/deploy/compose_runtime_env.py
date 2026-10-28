@@ -255,7 +255,9 @@ def compose_staging(
         service_inputs = {**env_inputs, **env_inputs_by_service.get(service, {})}
         for name, raw_entry in (_as_config_dict(config.get('env')) or {}).items():
             entry = dict(_as_config_dict(raw_entry) or {})
-            if 'env_var' in entry:
+            # Like render_backend_runtime_env._runtime_value, a literal overlay wins over an inherited env_var.
+            # Otherwise a staging override of an optional prod input would silently disappear below.
+            if 'env_var' in entry and 'value' not in entry:
                 source = str(entry['env_var'])
                 if source in service_inputs:
                     entry = {'value': service_inputs[source], 'category': entry.get('category', 'service_discovery')}
