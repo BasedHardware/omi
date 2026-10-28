@@ -79,6 +79,10 @@ def runtime(monkeypatch):
     # Pin that unit here so they test mechanics, not the shipped default, which
     # test_default_pace_waits_for_fifteen_seconds_of_speech pins on its own.
     monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', '6')
+    # Legacy mechanics below also cover the startup rollback. Dedicated
+    # startup replay cases remove these overrides to exercise shipped defaults.
+    monkeypatch.setenv('PARAKEET_WINDOW_FIRST_POST_SECONDS', '15')
+    monkeypatch.setenv('PARAKEET_WINDOW_FIRST_TEXT_CUT_ENABLED', 'false')
     monkeypatch.setenv('PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS', '12')
     monkeypatch.delenv('PARAKEET_WINDOW_DEADLINE_CUT_ENABLED', raising=False)
     monkeypatch.delenv('PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS', raising=False)
@@ -4376,6 +4380,98 @@ async def test_live_posts_are_paced_and_single_flight(monkeypatch):
     assert delays and delays[0] >= 0
     sock.finish()
     await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('answer', ['held', 'empty', 'cut_off'])
+async def test_default_startup_replay_posts_before_deadline_and_preserves_fallback(monkeypatch, answer):
+    monkeypatch.delenv('PARAKEET_WINDOW_PACE_SECONDS')
+    monkeypatch.delenv('PARAKEET_WINDOW_FIRST_POST_SECONDS')
+    monkeypatch.delenv('PARAKEET_WINDOW_FIRST_TEXT_CUT_ENABLED')
+    if answer == 'cut_off':
+        monkeypatch.setenv('PARAKEET_WINDOW_FIRST_TEXT_CUT_ENABLED', 'false')
+
+    def response(_n, kwargs):
+        duration = _wav_duration(kwargs)
+        return (
+            {'text': ''}
+            if answer == 'empty'
+            else {'segments': [{'text': 'Continuous speech without punctuation', 'start': 0.0, 'end': duration}]}
+        )
+
+    client = SeqClient([response])
+    actual, base, previous, replayed, callbacks = await _receiver_for_anchor_replay(monkeypatch, client)
+    raw = previous.raw
+    clock = [window.time.monotonic()]
+    began = clock[0]
+    monkeypatch.setattr(window, 'time', SimpleNamespace(monotonic=lambda: clock[0], time=window.time.time))
+    posts = []
+    post = client.post
+
+    async def observed_post(*args, **kwargs):
+        posts.append(clock[0] - began)
+        return await post(*args, **kwargs)
+
+    monkeypatch.setattr(client, 'post', observed_post)
+    sample = 0
+    try:
+        for _ in range(250):  # Ten seconds of real receiver/VAD/capture replay.
+            sample = await _fragment_frame(actual, clock, sample, speech=True)
+            for _ in range(8):
+                await _REAL_SLEEP(0)
+        assert len(posts) == 1
+        assert 8.0 <= posts[0] <= 8.4  # VAD admission can lag capture by one frame.
+        assert raw._pace_seconds == 15.0
+        assert raw._first_text_recorded == (answer == 'held')
+        assert bool(base.emitted) == (answer == 'held')
+        if answer == 'held':
+            assert raw._first_text_timer is None
+            assert len(base.emitted) == 1
+            assert base.emitted[0]['end'] > base.emitted[0]['start']
+            assert raw._anchor_bytes == raw._last_post_end
+            assert raw._last_post_end == raw._to_bytes(_wav_duration(client.requests[0][1]))
+            raw._expire_first_text()
+            assert not raw.is_connection_dead
+            # A subsequent incomplete sentence retains normal anchoring.
+            raw.mark_speech()
+            assert raw.send(b'\x01\x00' * 16000 * 15)
+            job = raw._next_job()
+            assert job is not None
+            anchor = raw._anchor_bytes
+            await raw._run_job(job)
+            assert len(base.emitted) == 1 and raw._anchor_bytes == anchor
+        else:
+            assert raw._first_text_timer is not None
+            assert raw._anchor_bytes == 0
+            snapshot = actual._window_ring().snapshot()
+            _fire_first_text_deadline_at_budget(raw, clock)
+            assert raw.death_reason == 'first_text_deadline'
+            assert await actual._failover_stt_socket()
+            assert b''.join(replayed) == b''.join(data for _, data in snapshot)
+            assert len(callbacks) == 1
+    finally:
+        await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('configured,expected', [(None, 8), ('nan', 8), ('0', 8), ('4', 4), ('30', 15)])
+async def test_startup_post_configuration_is_bounded_by_normal_pace(monkeypatch, configured, expected):
+    monkeypatch.delenv('PARAKEET_WINDOW_PACE_SECONDS')
+    if configured is None:
+        monkeypatch.delenv('PARAKEET_WINDOW_FIRST_POST_SECONDS')
+    else:
+        monkeypatch.setenv('PARAKEET_WINDOW_FIRST_POST_SECONDS', configured)
+    sock = window.WindowedParakeetSocket(lambda _: None, 'http://tdt.invalid', 16000, lambda: None)
+    try:
+        sock.mark_speech()
+        assert sock.send(b'\x01\x00' * 16000 * (expected - 1))
+        assert sock._next_job() is None
+        sock.mark_speech()
+        assert sock.send(b'\x01\x00' * 16000)
+        job = sock._next_job()
+        assert job is not None and job.duration == expected and not job.force
+    finally:
+        sock.finish()
 
 
 @pytest.mark.asyncio

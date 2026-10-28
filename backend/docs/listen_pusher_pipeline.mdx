@@ -382,6 +382,17 @@ flag persists the existing CUDA graph selection across NeMo timestamp setup.
 The [packing runbook](runbooks/parakeet-packing.md) owns the demand-scaler train,
 warm floor, mixed-load gates and rollback.
 
+Startup continuous speech selects its first POST after
+`min(PARAKEET_WINDOW_PACE_SECONDS, PARAKEET_WINDOW_FIRST_POST_SECONDS)`
+admitted seconds (first-post default `8`, normal pace default `15`). Earlier
+VAD pause/idle flushes still apply. While first text is pending, the default-on
+`PARAKEET_WINDOW_FIRST_TEXT_CUT_ENABLED` releases a nonempty answer's held tail
+through the timestamp-preserving cut. Otherwise even a healthy answer can wait
+for a second 15-second pace past the 12-second first-text deadline. After first
+text, normal pacing and sentence anchoring resume. Empty or stalled POSTs retain
+the deadline and exact fallback replay. Rollback: set first-post seconds to `15`
+and first-text cut to `false`; neither setting changes the cost gate.
+
 `PARAKEET_WINDOW_DEADLINE_CUT_ENABLED` defaults to `false` in code and
 both listen manifests. Qualification must explicitly enable it in the target
 listen cohort. While enabled, a successful nonempty POST can release its held
@@ -389,7 +400,7 @@ tail through the existing timestamp-preserving cut only when the remaining
 first-text/progress deadline is at most
 `PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS` (default `1.2`, approximately
 the observed POST p95; invalid/nonpositive values use the default). A normal
-first POST after six seconds of capture retains sentence anchoring. Neither a
+progress POST after six seconds of capture retains sentence anchoring. Neither a
 full audio pace nor the next pacing wait increases the allowance.
 
 Emitted text advances the existing capture anchor and cancels the applicable
