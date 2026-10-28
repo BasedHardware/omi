@@ -14,6 +14,7 @@ class WalIndexInventory {
   final _indexedTokens = <int>{};
   var _nextToken = 0;
   bool seedsExistingIndex = false;
+  String? seedPath;
   final _seeded = HashSet<Wal>.identity();
 
   void primeLoaded(Iterable<Wal> loaded) {
@@ -24,6 +25,7 @@ class WalIndexInventory {
       final token = wal.loadedIndexToken;
       if (token == null) continue;
       seedsExistingIndex = true;
+      seedPath = wal.loadedIndexSource;
       _tokens[wal] = token;
       _indexedTokens.add(token);
       _seeded.add(wal);
@@ -65,6 +67,14 @@ class WalIndexInventory {
   }
 
   WalTrackedList track(Iterable<Wal> source) => WalTrackedList._(this, source);
+
+  /// Exceptional recovery only: disk order may have compacted since tokens
+  /// were assigned. Rebuild with our namespace, including every custody bucket,
+  /// rather than adopting possibly stale disk rows under the wrong tokens.
+  Map<int, Map<String, dynamic>> recoverySnapshot() => {
+        for (final wal in _members.keys)
+          if (wal.storage != WalStorage.mem) _tokens[wal]!: wal.toJson(),
+      };
 
   /// Serialization happens synchronously at admission, before any await. The
   /// worker never receives a mutable Wal (or its listener graph/full inventory).

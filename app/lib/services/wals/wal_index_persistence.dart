@@ -35,22 +35,33 @@ extension _WalIndexPersistence on LocalWalSyncImpl {
 
   Future<void> _writeIndexDelta(WalIndexDelta delta) async {
     if (_persistWalsOverride != null) {
-      // Legacy hermetic seam only; production never constructs a full snapshot.
+      // Legacy hermetic seam; normal production saves send deltas.
       await _persistWalsOverride!([
         ..._retiredWals.where((w) => w.storage != WalStorage.mem),
         ..._foreignWals.where((w) => w.storage != WalStorage.mem),
         ..._wals.where((w) => w.storage != WalStorage.mem),
       ]);
     } else {
-      final WalIndexWorker worker;
+      WalIndexWorker? worker;
       try {
-        worker =
-            await (_indexWorker ??= WalFileManager.createIndexWorker(seedFromDisk: _indexInventory.seedsExistingIndex));
+        final rebuild = _rebuildIndexWorker;
+        // Capture before awaiting startup; later mutations remain dirty for the
+        // next save. Recovery includes admitted deltas even if disk is stale.
+        final snapshot = rebuild ? _indexInventory.recoverySnapshot() : null;
+        worker = await (_indexWorker ??= WalFileManager.createIndexWorker(
+            seedFromDisk: !rebuild && _indexInventory.seedsExistingIndex,
+            seedPath: rebuild ? null : _indexInventory.seedPath));
+        // A replacement can survive a failed disk write with its rows cached.
+        // Keep sending removals on retry even when rebuilding a full snapshot.
+        await worker.apply(snapshot ?? delta.changed, delta.removed);
+        _rebuildIndexWorker = false;
       } catch (_) {
-        _indexWorker = null; // A failed spawn must be retryable too.
+        if (worker == null || worker.isDead) {
+          _indexWorker = null;
+          _rebuildIndexWorker = true;
+        }
         rethrow;
       }
-      await worker.apply(delta.changed, delta.removed);
     }
   }
 }
