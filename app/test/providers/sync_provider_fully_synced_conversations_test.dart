@@ -50,6 +50,28 @@ void main() {
     expect(filtered.map((p) => p.conversation.id), ['c2']);
   });
 
+  test('reconciled pointers collapse onto one canonical row, with the latest visibility winning', () {
+    final old = ConversationSyncUtils.createPointer(_convo('live'), SyncedConversationType.newConversation);
+    final updated = ConversationSyncUtils.createPointer(_convo('live'), SyncedConversationType.updatedConversation);
+    expect(SyncProvider.filterFullySyncedConversations(conversations: [old, updated], wals: []), [updated]);
+    updated.conversation.discarded = true;
+    expect(SyncProvider.filterFullySyncedConversations(conversations: [old, updated], wals: []), isEmpty);
+  });
+
+  test('pending-sync results hide discarded, deleted and merged donors', () {
+    final hidden = [
+      _convo('discarded')..discarded = true,
+      ServerConversation(
+          id: 'donor', createdAt: DateTime.utc(2026), structured: Structured('', ''), syncMergedInto: 'live'),
+      ServerConversation(id: 'deleted', createdAt: DateTime.utc(2026), structured: Structured('', ''), deleted: true),
+    ];
+    final filtered = SyncProvider.filterFullySyncedConversations(conversations: [
+      for (final c in [...hidden, _convo('kept')])
+        ConversationSyncUtils.createPointer(c, SyncedConversationType.updatedConversation),
+    ], wals: []);
+    expect(filtered.map((p) => p.conversation.id), ['kept']);
+  });
+
   test('keeps a synced conversation if there are no local WALs yet', () {
     final c1 = _convo('c1');
     final p1 = ConversationSyncUtils.createPointer(c1, SyncedConversationType.newConversation);

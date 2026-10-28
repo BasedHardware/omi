@@ -209,6 +209,7 @@ async def run_process(store: Any, artifacts: Any, registry: CollectorRegistry, s
             registry,
             worker_release=os.environ.get('BATCH_PIPELINE_WORKER_RELEASE', 'unscoped'),
             namespace=os.environ.get('POD_NAMESPACE', 'unscoped'),
+            capacity_sampling=True,
         )
         pump = Pump(
             Scheduler(store, metrics=metrics, pool='batch'),

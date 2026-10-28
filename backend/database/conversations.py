@@ -4272,7 +4272,7 @@ def assign_sync_conversation(
     """
     from utils.sync.assignment import assign_in_transaction
     from config.sync_lineage import sync_lineage_resolve_enabled
-    from utils.sync.intake_completion import log_sync_lineage_created
+    from utils.sync.intake_completion import log_assignment_observations
 
     # The coordinator/projection already validated S1 and cohort admission.
     # Rechecking membership here can refresh its Firestore cache on the hot path.
@@ -4305,6 +4305,9 @@ def assign_sync_conversation(
         # hand the blob to the logical encoder; the encode seam preserves it.
         result.pop(OPEN_LOOP_EXTRACTIONS_FIELD, None)
         result.pop(OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, None)
+        from utils.sync.size_telemetry import remember_size_payload
+
+        remember_size_payload(result.get('id'), result)
         _reveal_match_scores_for_read(result, uid)
         return result
 
@@ -4366,19 +4369,19 @@ def assign_sync_conversation(
                 discover_live_candidates,
             )
         conversation = result[0]
-        for retired_id in sorted({conversation['id'], *absorbed}):
+        log_assignment_observations(conversation, lineage_eligible=lineage_eligible)
+        output_ids = [conversation['id'], *(row['id'] for row, _ in conversation.get('_sync_size_rollover_rows', []))]
+        for retired_id in sorted({*output_ids, *absorbed}):
             stop_quiet_check_for_conversation(uid, retired_id, firestore_client=client)
-        observation = conversation.pop('_sync_lineage_created', None)
-        if lineage_eligible and observation is not None:
-            log_sync_lineage_created(observation)
         if defer_index is not None:
             # Coalesce the lineage's retryable donor deletes once per flush.
             clock.donors = len(absorbed)
-            defer_index(uid, conversation['id'], sorted({*(conversation.get('sync_merged_from') or []), *absorbed}))
+            for output_id in output_ids:
+                defer_index(uid, output_id, sorted({*(conversation.get('sync_merged_from') or []), *absorbed}))
         else:
             with clock.timed('index'):
                 clock.donors = len(conversation.get('sync_merged_from') or [])
-                index_sync_assignment(uid, [conversation['id']], conversation.get('sync_merged_from') or [])
+                index_sync_assignment(uid, output_ids, conversation.get('sync_merged_from') or [])
     return result
 
 

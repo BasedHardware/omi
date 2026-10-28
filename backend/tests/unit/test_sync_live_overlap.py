@@ -205,7 +205,9 @@ def test_merge_size_failure_publishes_immediately_without_hidden_pending_row(mon
     from utils.sync import assignment
 
     store = seeded()
-    monkeypatch.setattr(assignment, 'SYNC_CONVERSATION_BYTE_BUDGET', 1)
+    # Keep room for a new encoded row; only the existing live row is full.
+    store.rows[('users', 'u', 'conversations', 'live')]['structured'] = {'overview': 'x' * 8192}
+    monkeypatch.setattr(assignment, 'SYNC_CONVERSATION_BYTE_BUDGET', 4096)
     incoming = dict(
         chunk('wal', 1005, text='Speech that is not already in the live conversation.'),
         data_protection_level='standard',

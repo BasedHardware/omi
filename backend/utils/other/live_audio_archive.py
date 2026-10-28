@@ -7,8 +7,9 @@ from collections.abc import Awaitable, Callable
 
 from config.audio_archive import admitted
 from config.audio_outbox import enabled as audio_outbox_enabled
+from database.server_batch_audio import note_server_batch_audio, note_server_batch_audio_received
 from models.message_event import AudioCustodyEvent
-from utils.executors import run_blocking, storage_executor
+from utils.executors import db_executor, run_blocking, storage_executor
 from utils.other.raw_audio import CapturePack
 from utils.other.storage import archive_capture_bytes
 from utils.other.audio_outbox import commit_capture
@@ -39,6 +40,7 @@ class LiveAudioArchive:
         # warms membership at connection start, so the first append snapshots
         # the resolved decision for the connection lifetime.
         self._admitted_snapshot: dict[str, bool] = {}
+        self._server_audio_marked: set[str] = set()
 
     def _admitted(self, uid: str, phase: str) -> bool:
         if phase not in self._admitted_snapshot:
@@ -99,6 +101,17 @@ class LiveAudioArchive:
                     'source': source_frame,
                 }
             )
+        if (
+            getattr(self.host, 'server_batch_only', False) is True
+            and conversation_id
+            and conversation_id not in self._server_audio_marked
+        ):
+            # The bytes are already retained in the active pack if this write fails;
+            # teardown can still commit them. Only a proven never-received row may
+            # be reclaimed by an expired recording lease.
+            if not await run_blocking(db_executor, note_server_batch_audio_received, request.uid, conversation_id):
+                raise RuntimeError('server batch capture owner unavailable before first audio')
+            self._server_audio_marked.add(conversation_id)
         # Queue bounded commits ahead of pusher's batched upload without
         # stalling capture/STT clocks. Uncommitted data never retires PCM.
         if (
@@ -270,6 +283,24 @@ class LiveAudioArchive:
                 metadata,
                 frames,
             )
+            if getattr(self.host, 'server_batch_only', False) is True and pack.conversation_id:
+                # Zero-sample originals are retained above, but their arrival
+                # clocks cannot expand or shrink the decoded-audio obligation.
+                spans = [
+                    (frame['start'], frame['start'] + frame['samples'] / request.sample_rate)
+                    for frame in frames
+                    if frame['samples'] > 0
+                ]
+                if spans:
+                    if not await run_blocking(
+                        db_executor,
+                        note_server_batch_audio,
+                        request.uid,
+                        pack.conversation_id,
+                        min(start for start, _ in spans),
+                        max(end for _, end in spans),
+                    ):
+                        raise RuntimeError('desktop batch capture owner unavailable')
             # A failed/disconnected delivery leaves the producer unacknowledged;
             # receipt loss is safe because the immutable media remains indexed.
             query = getattr(request.websocket, 'query_params', {})

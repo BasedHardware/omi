@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-title-preview.png",
+      "platform": "mobile-ios",
+      "description": "Home live row (option E): dot over \"8m\" in the tile, episode title, newest preview words trimmed at the start.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-home-before-title.png",
+      "platform": "mobile-ios",
+      "description": "Home live row before a title exists: \"Listening now\" over the start-trimmed preview line.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-home-no-preview.png",
+      "platform": "mobile-ios",
+      "description": "Home live row with no preview text: today's subtitle without the duration (\"Live\").",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-home-largest-type.png",
+      "platform": "mobile-ios",
+      "description": "Home live row at the largest accessibility text size: preview takes two lines, tile scales down, nothing clips.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-summary-on-device-notes.png",
+      "platform": "mobile-ios",
+      "description": "Summary: one-line header, So far with on-device bullets and the On this phone tag, Live card with Open transcript and a lighter volatile tail.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-summary-notes-unavailable.png",
+      "platform": "mobile-ios",
+      "description": "Summary when the on-device notes engine is unavailable: the quiet line, no tag.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-ios-summary-server-notes.png",
+      "platform": "mobile-ios",
+      "description": "Summary with six server running notes: the newest four only; the rest arrive with the wrap-up.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-ios-summary-on-device-notes-dark.png",
+      "platform": "mobile-ios",
+      "description": "Summary with on-device notes, dark mode.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "009-mobile-ios-transcript-mixed.png",
+      "platform": "mobile-ios",
+      "description": "Transcript: final lines, the Live on this phone divider, the uncovered preview tail, and the quiet behind-line at the bottom.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "010-mobile-ios-transcript-no-engine.png",
+      "platform": "mobile-ios",
+      "description": "Transcript with no on-device engine: the Recording safely card.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "011-mobile-ios-summary-largest-type.png",
+      "platform": "mobile-ios",
+      "description": "Summary at the largest accessibility text size: header and tabs clamp, cards stack their title and tag.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "012-mobile-ios-transcript-catching-up.png",
+      "platform": "mobile-ios",
+      "description": "Uploaded audio awaiting a final transcript: the catching-up line remains visible while preview text is uncovered.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "013-mobile-ios-home-unspaced-preview.png",
+      "platform": "mobile-ios",
+      "description": "Home preview in Japanese: leading ellipsis and newest graphemes retained at the end.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "014-mobile-ios-summary-continues-hit-area.png",
+      "platform": "mobile-ios",
+      "description": "Continues pill retains its compact visual inside a minimum 44 pt tap target.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}
