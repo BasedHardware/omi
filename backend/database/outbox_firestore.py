@@ -9,10 +9,22 @@ Field mapping: ``Claim.lease_token`` is the row's ``owner`` (minted per claim, a
 and ``policy_id`` are additive fields. Post-claim calls are fenced on ``lease_token`` only (invariant 1): a
 producer may rotate ``task_token`` under a live lease, and that must not strand the lease holder.
 
-Wakes (lead ruling 10-19): this implementation creates Cloud Tasks itself through the existing
-``_enqueue`` (binding checks, demand scheduling, eager effects recovery): after a non-transactional
+Wakes (lead ruling 10-19 & #23559 contract decision): this implementation creates Cloud Tasks itself through
+the existing ``_enqueue`` (binding checks, demand scheduling, eager effects recovery): after a non-transactional
 ``enqueue``, on ``defer``, on a not-due ``claim_key`` (returns ``Outcome.DEFERRED``) and on re-armed
 ``ack``. A transactional ``enqueue`` returns the wake token and the caller calls ``wake`` after commit.
+
+Contract decision (#23559 — retained early-wake vs interface contract):
+- Contract (b) injected seam (``self._create_wake is not None``): ``wake_on_move=True`` aligns Firestore with
+  ``PostgresOutbox`` and ``SimOutbox`` so any ``due_at`` change (both ``'max'`` and ``'min'`` coalescing) mints
+  a fresh ``task_token`` and schedules a wake at the moved ``due_at``, while post-commit wake creation on
+  non-transactional ``enqueue`` goes through ``_rearmed`` so task-creation failures leave the durable row for
+  ``sweep()`` (invariant 4) instead of raising out of ``enqueue()``.
+- Production ``reprocess.mark()`` / default ``ENRICHMENT_OUTBOX`` singleton (``self._create_wake is None``):
+  intentionally retains trailing-edge 1-task-per-quiet-window early-wake semantics (``wake_on_move=False``).
+  ``max``-coalesced appends extend ``due_at`` without creating a new Cloud Task per append; when the initial
+  early task fires before ``due_at``, ``run()`` / ``claim_key()`` observes ``row['due_at'] > now``, rotates
+  ``task_token`` once, and re-enqueues for the settled ``due_at`` (with ``sweep()`` as the durable backstop).
 """
 
 from __future__ import annotations
@@ -180,6 +192,7 @@ class FirestoreEnrichmentOutbox:
             new_dispatch=new_dispatch,
             snapshot_summary=snapshot_summary,
             stamps=stamps,
+            wake_on_move=self._create_wake is not None,
         )
         if tx is None:
             row, coalesced = self._mutate(dedupe_key, update)
@@ -193,7 +206,7 @@ class FirestoreEnrichmentOutbox:
             outbox.UNBOUND.labels(action='mark').inc()
         token = row.get('task_token') if wake else None
         if wake and tx is None:
-            self._wake(row)  # Failure leaves the obligation durable for the sweep.
+            self._rearmed(row)  # Failure leaves the obligation durable for the sweep (invariant 4).
         return EnqueueResult(row_id=dedupe_key, coalesced=coalesced, wake_token=token)
 
     def _mutate_in(self, tx: Any, document_id: str, update):
