@@ -696,8 +696,8 @@ extension _DeviceLiveSections on _DeviceSettingsState {
       // notify reuses the last snapshot instead of rescanning, and the server
       // flag and status line select on their own.
       final l10n = context.l10n;
-      final local =
-          context.select<SyncProvider?, DeviceCatchUpLocal>((s) => deviceCatchUpLocal(s?.allWals ?? const []));
+      final local = context.select<SyncProvider?, DeviceCatchUpLocal>(
+          (s) => deviceCatchUpLocal(s?.pendingWorkWals ?? const [], alreadyCollapsed: true));
       final serverProcessing = context.select<SyncProvider?, bool>((s) => s?.syncState.isProcessing ?? false);
       // The status line reads sync state only; whether server jobs exist comes
       // from the memoized snapshot, so a progress tick never rescans the inventory.
