@@ -1053,6 +1053,39 @@ describe("the warm scheduler fills legs off the viewing path", () => {
     );
     // The bound now comes only from values still within 24h.
     expect(Date.parse(served.staleUntil!)).toBeGreaterThan(now.getTime());
+    // Its trend points go too. Mark them with a sentinel the legs never produce.
+    const SENTINEL = 987_654;
+    const marked = (since?: string) => ({
+      ...wall,
+      metrics: wall.metrics.map((m) =>
+        m.id === "growth.wau"
+          ? {
+              ...m,
+              retainedSince: since,
+              trend: m.trend.map((t) => ({ ...t, value: SENTINEL })),
+            }
+          : m
+      ),
+    });
+    expect(
+      wall.metrics.find((m) => m.id === "growth.wau")!.trend.length
+    ).toBeGreaterThan(0);
+    const within = await seriesPayload(
+      "growth",
+      Promise.resolve(
+        marked(new Date(now.getTime() - 3_600_000).toISOString())
+      ),
+      now,
+      s
+    );
+    expect(JSON.stringify(within.frames)).toContain(String(SENTINEL));
+    const expired = await seriesPayload(
+      "growth",
+      Promise.resolve(marked(retained)),
+      now,
+      s
+    );
+    expect(JSON.stringify(expired.frames)).not.toContain(String(SENTINEL));
   });
 
   it("tells the proxy when its oldest served value turns 24h old", async () => {

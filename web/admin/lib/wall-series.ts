@@ -1809,7 +1809,7 @@ export async function seriesPayload(
     metrics: served.metrics.map((m) =>
       m.retainedSince &&
       now.getTime() - Date.parse(m.retainedSince) >= MAX_STALE
-        ? { ...m, value: null }
+        ? { ...m, value: null, trend: [] }
         : m
     ),
   };
