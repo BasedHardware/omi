@@ -38,6 +38,13 @@ def listen_chart_envs():
     return result
 
 
+BATCH_PIPELINE_PERCENT_PROD_CLOUD_RUN = {
+    'env_var': 'BATCH_PIPELINE_PERCENT_DEPLOY_OVERRIDE',
+    'provisional': True,
+    'category': 'rollout',
+}
+
+
 def hosts(config):
     return {
         **{name: config['cloud_run']['services'][name]['env'] for name in SERVICES},
@@ -68,9 +75,14 @@ def test_shadow_recovery_role_accepts_its_rendered_gpu_worker_identity(manifest)
 
 def test_batch_pipeline_admission_is_configured_without_uid_allowlists(manifest, listen_chart_envs):
     for stage, config in manifest.items():
-        for env in hosts(config).values():
+        for host, env in hosts(config).items():
             assert env['BATCH_PIPELINE_ENABLED']['value'] in ('true', 'false')
-            assert env['BATCH_PIPELINE_PERCENT']['value'] == '0'
+            if stage == 'prod' and host in SERVICES:
+                # David-approved (lead 9d8819): the ramp controller owns the prod Cloud Run percent, so the manifest
+                # carries no literal and a deploy never re-asserts 0 over the serving value; unset input = omitted.
+                assert BATCH_PIPELINE_PERCENT_PROD_CLOUD_RUN == env['BATCH_PIPELINE_PERCENT']
+            else:
+                assert env['BATCH_PIPELINE_PERCENT']['value'] == '0'
             if stage == 'prod':
                 assert 'BATCH_PIPELINE_UID_ALLOWLIST' not in env
                 assert env['BATCH_PIPELINE_ENABLED']['value'] == 'true'

@@ -34,6 +34,13 @@ on:
         description: 'Short-SHA image to deploy (blank keeps the running image). Prod requires an ancestor of main.'
         required: false
         default: ''
+      expected_source_sha:
+        # A queued prod run checks out whatever main is when it starts. A caller that reviewed one exact main commit
+        # (e.g. the paired listen adapter's own values merge) pins it here; the admit step fails before any mutation if
+        # the checked-out source or this workflow's own commit is anything else. Blank keeps the existing behaviour.
+        description: 'Optional full 40-hex commit this run must deploy from; any other checkout fails before any mutation (blank = current main)'
+        required: false
+        default: ''
       helm_revision:
         description: 'Helm revision to roll back to (blank = previous). See the Helm history step output.'
         required: false
@@ -141,6 +148,9 @@ jobs:
 
       - name: Admit checked-out production source and image identity
         id: admit-deploy-source
+        env:
+          EXPECTED_SOURCE_SHA: ${{ github.event.inputs.expected_source_sha }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
         run: |
           set -euo pipefail
           CHECKED_OUT_SHA=$(git rev-parse HEAD)
@@ -150,6 +160,23 @@ jobs:
               echo "ERROR: checked-out HEAD $CHECKED_OUT_SHA is not an ancestor of fresh origin/main $(git rev-parse origin/main)." >&2
               exit 1
             fi
+          fi
+          # Pre-mutation expected-source guard (David-approved, 2026-10-28): nothing has been written yet, so a
+          # checkout of a later main than the caller reviewed stops here instead of being detected after the deploy.
+          if [[ -n "${EXPECTED_SOURCE_SHA:-}" ]]; then
+            if [[ ! "$EXPECTED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "ERROR: expected_source_sha must be a full 40-hex commit sha." >&2
+              exit 1
+            fi
+            if [[ "$CHECKED_OUT_SHA" != "$EXPECTED_SOURCE_SHA" ]]; then
+              echo "ERROR: checked-out source $CHECKED_OUT_SHA is not the expected $EXPECTED_SOURCE_SHA; refusing before any mutation." >&2
+              exit 1
+            fi
+            if [[ "$WORKFLOW_SHA" != "$EXPECTED_SOURCE_SHA" ]]; then
+              echo "ERROR: workflow commit $WORKFLOW_SHA is not the expected $EXPECTED_SOURCE_SHA; refusing before any mutation." >&2
+              exit 1
+            fi
+            echo "Expected deployment source pinned: $EXPECTED_SOURCE_SHA"
           fi
           IMAGE_TAG=$(git rev-parse --short=7 "$CHECKED_OUT_SHA")
           echo "Admitted deployment source: $CHECKED_OUT_SHA"

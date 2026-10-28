@@ -4466,6 +4466,11 @@
               "required": "true",
               "type": "choice"
             },
+            "expected_source_sha": {
+              "default": "",
+              "description": "Optional full 40-hex commit this run must deploy from; any other checkout fails before any mutation (blank = current main)",
+              "required": "false"
+            },
             "gateway_feature_mode": {
               "default": "chart-default",
               "description": "Optional OMI_LLM_GATEWAY_FEATURE_MODE override (chart-default = values file; disabled = off)",

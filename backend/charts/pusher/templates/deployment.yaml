@@ -68,9 +68,16 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ $runtimeConfigMapName | quote }}
-          {{- with .Values.env }}
+          {{- /*
+          privateEnv (NAME: string) comes from a values file the prod workflow renders from the protected-environment
+          secret PUSHER_PRIVATE_VALUES_YAML, the same pattern as backend-listen. Each name is emitted exactly once: a
+          privateEnv key replaces the env entry of the same name, because duplicate names break strategic-merge upgrades.
+          */}}
+          {{- $privateEnv := .Values.privateEnv | default dict }}
+          {{- if or .Values.env $privateEnv }}
           env:
-            {{- range . }}
+            {{- range .Values.env }}
+            {{- if not (hasKey $privateEnv .name) }}
             {{- $entry := deepCopy . }}
             {{- $valueFrom := get $entry "valueFrom" }}
             {{- if and (kindIs "map" $valueFrom) (hasKey $valueFrom "configMapKeyRef") }}
@@ -80,6 +87,17 @@ spec:
             {{- end }}
             {{- end }}
             {{- toYaml (list $entry) | nindent 12 }}
+            {{- end }}
+            {{- end }}
+            {{- range $name, $value := $privateEnv }}
+            {{- if not (regexMatch "^[A-Z][A-Z0-9_]*$" $name) }}
+            {{- fail "privateEnv has a key that is not an env var name" }}
+            {{- end }}
+            {{- if not (kindIs "string" $value) }}
+            {{- fail (printf "privateEnv.%s must be a string" $name) }}
+            {{- end }}
+            - name: {{ $name }}
+              value: {{ $value | quote }}
             {{- end }}
           {{- end }}
           ports:

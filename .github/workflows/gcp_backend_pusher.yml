@@ -538,14 +538,45 @@ jobs:
           } >> "$GITHUB_ENV"
           CONFIG_MAP_NAME_OVERRIDE="$PUSHER_CANARY_CONFIG" backend/scripts/deploy-backend-config.sh
 
+      # Private env values (e.g. the MEDIA_NOISE serve digest, David-approved 2026-10-28) live only in the prod
+      # environment secret PUSHER_PRIVATE_VALUES_YAML, the same privateEnv pattern as LISTEN_PRIVATE_VALUES_YAML. The
+      # file is validated (names, string values, no shadowing of valueFrom entries) and its values registered as log
+      # masks before the canary or the release renders it; the canary and the release take the SAME file, so the
+      # canary qualifies exactly what ships. Empty secret: chart defaults. Never cat, echo, or set -x around it.
+      - name: Materialize private pusher values (prod only)
+        if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
+        env:
+          PUSHER_PRIVATE_VALUES_YAML: ${{ secrets.PUSHER_PRIVATE_VALUES_YAML }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${PUSHER_PRIVATE_VALUES_YAML:-}" ]]; then
+            echo "No private pusher values configured; chart defaults apply."
+            exit 0
+          fi
+          # Install before the secret touches disk so no install hook can see it.
+          python3 -m pip install -q pyyaml
+          umask 077
+          PRIVATE_VALUES_FILE="$(mktemp "${RUNNER_TEMP}/pusher-private-values.XXXXXX")"
+          printf '%s\n' "$PUSHER_PRIVATE_VALUES_YAML" > "$PRIVATE_VALUES_FILE"
+          unset PUSHER_PRIVATE_VALUES_YAML
+          # Recorded before validation so the always() cleanup step removes it even when validation fails the job.
+          echo "PUSHER_PRIVATE_VALUES_FILE=$PRIVATE_VALUES_FILE" >> "$GITHUB_ENV"
+          python3 .github/scripts/listen_helm_env_overrides.py \
+            --values-file ./backend/charts/pusher/prod_omi_pusher_values.yaml \
+            --private-values-file "$PRIVATE_VALUES_FILE" \
+            --output-argv-file /dev/null
+
       - name: Create isolated production Pusher and listener canary
         if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
         run: |
           set -euo pipefail
           python3 -m pip install -q pyyaml websockets==12.0
           test -n "$PUSHER_CANARY" -a -n "$LISTENER_CANARY" -a -n "$PUSHER_CANARY_CONFIG"
+          private_values=()
+          if [[ -n "${PUSHER_PRIVATE_VALUES_FILE:-}" ]]; then private_values=(-f "$PUSHER_PRIVATE_VALUES_FILE"); fi
           helm -n prod-omi-backend upgrade --install "$PUSHER_CANARY" ./backend/charts/pusher \
             -f ./backend/charts/pusher/prod_omi_pusher_values.yaml \
+            "${private_values[@]}" \
             --set-string "fullnameOverride=$PUSHER_CANARY" \
             --set serviceAccount.create=false \
             --set-string serviceAccount.name=prod-omi-pusher \
@@ -769,7 +800,9 @@ jobs:
             fi
             python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service llm-gateway
           else
-            helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-pusher ./backend/charts/pusher -f ./backend/charts/pusher/${{ vars.ENV }}_omi_pusher_values.yaml --set-string "image.repository=${PUSHER_IMAGE_REPOSITORY}" --set-string "image.digest=${PUSHER_IMAGE_DIGEST}" --set-string image.tag= --set-string image.pullPolicy=IfNotPresent
+            private_values=()
+            if [[ -n "${PUSHER_PRIVATE_VALUES_FILE:-}" ]]; then private_values=(-f "$PUSHER_PRIVATE_VALUES_FILE"); fi
+            helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-pusher ./backend/charts/pusher -f ./backend/charts/pusher/${{ vars.ENV }}_omi_pusher_values.yaml "${private_values[@]}" --set-string "image.repository=${PUSHER_IMAGE_REPOSITORY}" --set-string "image.digest=${PUSHER_IMAGE_DIGEST}" --set-string image.tag= --set-string image.pullPolicy=IfNotPresent
             # Must cover the chart-derived Pusher rollout budget (fourteen
             # availability waves at the current production HPA ceiling).
             if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-pusher --timeout=9600s; then
@@ -778,6 +811,10 @@ jobs:
             fi
             python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service pusher
           fi
+
+      - name: Remove private pusher values file
+        if: ${{ always() && env.PUSHER_PRIVATE_VALUES_FILE != '' }}
+        run: rm -f "$PUSHER_PRIVATE_VALUES_FILE"
 
       - name: Record exact live production Pusher deployment receipt
         if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'

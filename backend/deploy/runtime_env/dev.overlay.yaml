@@ -312,6 +312,7 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_API_URL:
             value: ''
           BUCKET_BATCH_PIPELINE:
@@ -377,6 +378,7 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_API_URL:
             value: ''
           BATCH_PIPELINE_WORKER_AUDIENCE:
@@ -467,6 +469,7 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_API_URL:
             value: ''
           BUCKET_BATCH_PIPELINE:
@@ -539,6 +542,7 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
           # Lead ruling01d584: activation waits for approved CPU-role secret access.
           BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED: {value: 'false', category: ops_kill}
           BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE:
