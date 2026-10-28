@@ -109,7 +109,7 @@ from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.process_conversation import process_conversation
 from utils.sync import processing_hold
-from utils.conversations.smart_merge import refresh_survivor
+from utils.enrichment.smart_refresh import settle_survivor
 from utils.conversations.sync_hold_completion import complete_explicit
 from utils.conversations.smart_merge_policy import refresh_owed
 from utils.conversations.relevance import sync_intake_decision
@@ -1102,7 +1102,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     ):
         context['sync_hold'] = True
         outcome, due = processing_hold.admission(conversation_data, context, now=time.time())
-        processing_hold.OUTCOMES.labels(outcome=outcome).inc()
+        processing_hold.record(outcome)
         if due is not None:
             context.update(defer_reason=outcome, defer_until=due)
             return
@@ -1155,7 +1155,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         and refresh_owed(conversation_data)
     ):
         # Preserve the smart-merge refresh lease/checkpoints and its vector work.
-        refresh_survivor(uid, conversation_id, owner=context['owner'], settled=True)
+        settle_survivor(uid, conversation_id, owner=context['owner'])
         refreshed = conversations_db.get_conversation(uid, conversation_id)
         if (
             refreshed

@@ -13,12 +13,17 @@ import os
 from typing import Any
 
 from prometheus_client import Counter
+from utils.observability.reasons import ReasonFamily, SyncProcessingHoldOutcome, reason_label
 
 QUIET_SECONDS = 600
 MAX_HOLD_SECONDS = 3600
 MAX_LATE_RUNS = 1
 FIELD = 'sync_processing_hold'
 OUTCOMES = Counter('omi_sync_processing_hold_total', 'Sync full-processing admission outcomes', ['outcome'])
+
+
+def record(outcome: str) -> None:
+    OUTCOMES.labels(outcome=reason_label(ReasonFamily.SYNC_PROCESSING_HOLD, outcome, SyncProcessingHoldOutcome)).inc()
 
 
 def enabled() -> bool:

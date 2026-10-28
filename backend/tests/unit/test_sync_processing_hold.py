@@ -6,7 +6,7 @@ import pytest
 
 from database.outbox_firestore import ENRICHMENT_OUTBOX
 from utils.conversations.summary_delivery import PROCESS_CONTEXT
-from utils.enrichment import callback, custody
+from utils.enrichment import callback, custody, smart_refresh
 from utils.enrichment.consumer import EnrichmentConsumer
 from utils.workers.consumer import run_push
 from tests.unit.test_conversation_smart_merge import World
@@ -233,7 +233,7 @@ def test_late_wal_after_smart_refresh_still_processes_new_content(monkeypatch, h
     full = Mock(return_value=callback.deserialize_conversation(current))
     smart = Mock(side_effect=AssertionError('a completed merge receipt cannot consume new WAL content'))
     monkeypatch.setattr(callback, 'process_conversation', full)
-    monkeypatch.setattr(callback, 'refresh_survivor', smart)
+    monkeypatch.setattr(callback, 'settle_survivor', smart)
     token = PROCESS_CONTEXT.set({'owner': 'worker', 'lease_until': 1000, 'first_pending_at': 100, 'sync_hold': True})
     try:
         callback.enrich_conversation('user-1', 'parent', 'en')
@@ -266,3 +266,18 @@ def test_explicit_end_satisfies_hold_immediately_without_spending_late_budget(mo
     state = world.raw('parent')[hold.FIELD]
     assert state['pending_since'] is None and state['late_runs'] == 0
     assert hold.admission(world.get('user-1', 'parent'), {'first_pending_at': 100}, now=700) == ('unchanged', None)
+
+
+def test_settled_survivor_uses_existing_refresh_lease_and_checkpoint_once(monkeypatch):
+    world = World(monkeypatch)
+    world.add(
+        'parent',
+        0,
+        5,
+        sync_content_revision=2,
+        smart_merge={'role': 'survivor', 'revision': 2, 'refreshed_revision': 1},
+    )
+    smart_refresh.settle_survivor('user-1', 'parent', owner='worker')
+    smart_refresh.settle_survivor('user-1', 'parent', owner='retry')
+    assert len(world.processed) == 1
+    assert world.raw('parent')['smart_merge']['refreshed_revision'] == 2
