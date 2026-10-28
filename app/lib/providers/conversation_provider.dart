@@ -26,6 +26,8 @@ import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/utils/conversations/capture_groups.dart';
 import 'package:omi/utils/logger.dart';
 
+part 'conversation_visibility.dart';
+
 typedef ConversationListFetcher = Future<({List<ServerConversation> items, bool ok})> Function();
 typedef ConversationPageFetcher = Future<({List<ServerConversation> items, bool ok, bool truncated})> Function();
 typedef ConversationLifecycleFetcher = Future<({ServerConversation? item, bool ok})> Function(String id);
@@ -825,6 +827,19 @@ class ConversationProvider extends ChangeNotifier {
       }
       completedById[conversation.id] = conversation;
     }
+    // Refresh pages exclude discarded/bridged donors. Absence is authoritative
+    // inside this page's time window, not for older paginated rows. Failed or
+    // truncated reads never remove rows, nor do they override a live update.
+    if (!result.truncated) {
+      final coveredAfter = rawNewConversations.length >= _conversationPageSize
+          ? rawNewConversations.map((c) => c.startedAt ?? c.createdAt).reduce((a, b) => a.isBefore(b) ? a : b)
+          : null;
+      conversations.removeWhere((row) =>
+          !row.id.startsWith('ondevice-') &&
+          identical(conversationsAtStart[row.id], row) &&
+          !pageConversationIds.contains(row.id) &&
+          (coveredAfter == null || (row.startedAt ?? row.createdAt).isAfter(coveredAfter)));
+    }
     for (final conversation in completedById.values) {
       final index = conversations.indexWhere((existing) => existing.id == conversation.id);
       if (index == -1) {
@@ -1113,7 +1128,7 @@ class ConversationProvider extends ChangeNotifier {
       // Filter by discarded status
       // When showDiscardedConversations is true, show all conversations (including discarded)
       // When showDiscardedConversations is false, hide discarded conversations
-      if (!showDiscardedConversations && convo.discarded) {
+      if (convo.deleted || convo.isMergedDonor || (!showDiscardedConversations && convo.discarded)) {
         return false;
       }
 
@@ -1384,19 +1399,6 @@ class ConversationProvider extends ChangeNotifier {
     return results;
   }
 
-  bool _matchesActiveConversationFilters(ServerConversation conversation) {
-    if (!showDiscardedConversations && conversation.discarded) return false;
-    if (showStarredOnly && !conversation.starred) return false;
-    if (selectedStartDate != null && selectedEndDate != null) {
-      final conversationDate = conversationLocalDayKey(conversation.startedAt ?? conversation.createdAt);
-      final startDay = DateTime(selectedStartDate!.year, selectedStartDate!.month, selectedStartDate!.day);
-      final endDay = DateTime(selectedEndDate!.year, selectedEndDate!.month, selectedEndDate!.day);
-      if (conversationDate.isBefore(startDay) || conversationDate.isAfter(endDay)) return false;
-    }
-    if (selectedFolderId != null && conversation.folderId != selectedFolderId) return false;
-    return true;
-  }
-
   void _reconcileProcessingConversations(
     Map<String, ({ServerConversation? item, bool ok})> lifecycleResults,
     Set<String> processingIdsAtStart,
@@ -1552,6 +1554,9 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   Future<void> addConversation(ServerConversation conversation) async {
+    if (conversation.deleted || conversation.isMergedDonor || _mergedAwayConversationIds.contains(conversation.id)) {
+      return;
+    }
     conversations.insert(0, conversation);
     SiriIntegration.current.queueUpsertConversations([conversation]);
     _groupConversationsByDateWithoutNotify();
@@ -1618,6 +1623,11 @@ class ConversationProvider extends ChangeNotifier {
 
   final _phoneOnlyConversations = <String, ServerConversation>{};
   void upsertConversation(ServerConversation conversation) {
+    if (conversation.deleted || conversation.isMergedDonor) {
+      updateConversationInSortedList(conversation);
+      return;
+    }
+    if (_mergedAwayConversationIds.contains(conversation.id)) return;
     conversation = OnDeviceTranscriptionController.instance.displayConversation(conversation);
     if (conversation.id.startsWith('ondevice-')) _phoneOnlyConversations[conversation.id] = conversation;
     int idx = conversations.indexWhere((m) => m.id == conversation.id);
@@ -1629,24 +1639,9 @@ class ConversationProvider extends ChangeNotifier {
     if (!conversation.discarded) clearEmptyRecordingExplanation();
   }
 
-  void updateConversationInSortedList(ServerConversation conversation) {
-    final canonicalIndex = conversations.indexWhere((element) => element.id == conversation.id);
-    if (canonicalIndex != -1) {
-      conversations[canonicalIndex] = conversation;
-    }
-    final searchedIndex = searchedConversations.indexWhere((element) => element.id == conversation.id);
-    if (searchedIndex != -1) {
-      searchedConversations[searchedIndex] = conversation;
-    }
-    for (final group in groupedConversations.values) {
-      final groupedIndex = group.indexWhere((element) => element.id == conversation.id);
-      if (groupedIndex != -1) {
-        group[groupedIndex] = conversation;
-      }
-    }
-    SiriIntegration.current.queueUpsertConversations([conversation]);
-    notifyListeners();
-  }
+  void _publishConversationChange() => notifyListeners();
+
+  void updateConversationInSortedList(ServerConversation conversation) => _updateConversationProjections(conversation);
 
   (int, DateTime) addConversationWithDateGrouped(ServerConversation conversation) {
     conversations.insert(0, conversation);
@@ -1677,6 +1672,11 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void updateConversation(ServerConversation conversation, [int? index]) {
+    if (conversation.deleted || conversation.isMergedDonor) {
+      updateConversationInSortedList(conversation);
+      return;
+    }
+    if (_mergedAwayConversationIds.contains(conversation.id)) return;
     if (index != null) {
       conversations[index] = conversation;
     } else {
@@ -1699,33 +1699,9 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Replace a sync donor after the detail endpoint returns its bridged survivor.
-  /// Remove the donor from both list projections so the open page and list agree.
-  void replaceBridgedConversation(String donorId, ServerConversation survivor) {
-    conversations.removeWhere((conversation) => conversation.id == donorId);
-    final survivorIndex = conversations.indexWhere((conversation) => conversation.id == survivor.id);
-    if (survivorIndex == -1) {
-      conversations.add(survivor);
-    } else {
-      conversations[survivorIndex] = survivor;
-    }
-    conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
-
-    final searchedDonorIndex = searchedConversations.indexWhere((conversation) => conversation.id == donorId);
-    searchedConversations.removeWhere((conversation) => conversation.id == donorId);
-    final searchedSurvivorIndex = searchedConversations.indexWhere((conversation) => conversation.id == survivor.id);
-    if (searchedSurvivorIndex != -1) {
-      searchedConversations[searchedSurvivorIndex] = survivor;
-    } else if (searchedDonorIndex != -1) {
-      searchedConversations.insert(searchedDonorIndex.clamp(0, searchedConversations.length), survivor);
-    }
-    if (hasActiveSearch) {
-      _groupSearchConvosByDateWithoutNotify();
-    } else {
-      _groupConversationsByDateWithoutNotify();
-    }
-    notifyListeners();
-  }
+  /// Retire the donor in every list projection after a bridge redirect.
+  void replaceBridgedConversation(String donorId, ServerConversation survivor) =>
+      _replaceBridgedProjections(donorId, survivor);
 
   ////////// Delete with Undo (docs/ux-contract.md §4, D5) ///////////////
 
@@ -1748,8 +1724,13 @@ class ConversationProvider extends ChangeNotifier {
   /// delete still reaches the server about 5 s after the swipe.
   static const pendingDeleteWindow = Duration(seconds: 10);
   List<ServerConversation> _filterPendingDeletes(List<ServerConversation> items) {
+    _mergedAwayConversationIds.addAll(items.where((c) => c.isMergedDonor).map((c) => c.id));
     return items
-        .where((c) => !memoriesToDelete.containsKey(c.id) && !_mergedAwayConversationIds.contains(c.id))
+        .where((c) =>
+            !c.deleted &&
+            !c.isMergedDonor &&
+            !memoriesToDelete.containsKey(c.id) &&
+            !_mergedAwayConversationIds.contains(c.id))
         .toList();
   }
 

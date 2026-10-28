@@ -32,6 +32,8 @@ class _LocalSyncs {
   _LocalSyncs(this.phone);
 
   final LocalWalSyncImpl phone;
+  bool get isStorageSyncing => false;
+  bool get isSdCardSyncing => false;
 
   Future<List<Wal>> getAllWals() => phone.getAllWals();
 
@@ -186,7 +188,7 @@ void main() {
     expect(tooOld.status, WalStatus.outsideRecoveryWindow);
   });
 
-  test('an explicit retry recovers a persisted upload refusal without touching permanent audio verdicts', () async {
+  test('a manual retry leaves quiet persisted refusals and permanent audio verdicts retained', () async {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     final rejected = (await diskWal('audio_refused.bin', timerStart: now - 600))..markUploadRejected();
     final restored = Wal.fromJson(rejected.toJson());
@@ -199,13 +201,11 @@ void main() {
 
     await syncProvider.syncWals();
     expect(uploads, isEmpty, reason: 'automatic wakes must not re-arm historical refusals');
-    expect(syncProvider.retryableAttentionWals, [restored]);
+    expect(syncProvider.retryableAttentionWals, isEmpty);
     await syncProvider.retryNeedsAttentionWals();
 
-    expect(uploads, [
-      ['audio_refused.bin']
-    ]);
-    expect(restored.status, WalStatus.uploaded);
+    expect(uploads, isEmpty);
+    expect(restored.status, WalStatus.uploadRejected);
     expect(restored.timerStart, rejected.timerStart);
     expect(tooOld.status, WalStatus.outsideRecoveryWindow);
     expect(localOnly.status, WalStatus.uploadRejected);
@@ -213,23 +213,22 @@ void main() {
     expect(File('${tempDir.path}/audio_refused.bin').existsSync(), isTrue);
   });
 
-  test('the error card retry re-arms the upload refusal it reports', () async {
+  test('a refusal does not create an error card or an immediate manual retry', () async {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     final wal = await diskWal('audio_card_retry.bin', timerStart: now - 600);
     final syncProvider = await start([wal]);
     uploadFailure = const SyncUploadHttpException(400, 'request refused');
     await syncProvider.syncWals();
     expect(wal.status, WalStatus.uploadRejected);
-    expect(syncProvider.syncState.hasError, isTrue);
+    expect(syncProvider.syncState.hasError, isFalse);
 
     uploadFailure = null;
     await syncProvider.retrySync();
 
     expect(uploads, [
-      ['audio_card_retry.bin'],
       ['audio_card_retry.bin']
     ]);
-    expect(wal.status, WalStatus.uploaded);
+    expect(wal.status, WalStatus.uploadRejected);
     expect(File('${tempDir.path}/audio_card_retry.bin').existsSync(), isTrue);
   });
 
@@ -244,8 +243,8 @@ void main() {
     await syncProvider.syncWal(wal);
     expect(wal.status, WalStatus.uploadRejected);
     expect(wal.uploadRejectionReason, WalUploadRejection.tooLarge);
-    expect(syncProvider.syncState.hasError, isTrue, reason: 'fixture: this row is the reported failed sync');
-    expect(syncProvider.failedWal?.id, wal.id);
+    expect(syncProvider.syncState.hasError, isFalse);
+    expect(syncProvider.failedWal, isNull);
 
     uploadFailure = null;
     await syncProvider.retrySync();
@@ -254,7 +253,7 @@ void main() {
     expect(wal.status, WalStatus.uploadRejected);
   });
 
-  test('a too-large refusal needs attention but is never re-offered by the retry-all', () async {
+  test('deterministic refusals aggregate without requesting user attention', () async {
     // 413 is deterministic: the same bytes are the same size, so the card's
     // retry-all must skip it and leave it to the row's Delete.
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
@@ -264,14 +263,26 @@ void main() {
       ..markUploadRejected(reasonCode: WalUploadRejection.invalidCaptureTime);
     final syncProvider = await start([tooLarge, invalidDate]);
 
-    expect(syncProvider.needsAttentionWalsCount, 2);
-    expect(syncProvider.retryableAttentionWals, [invalidDate]);
+    expect(syncProvider.needsAttentionWalsCount, 0);
+    expect(syncProvider.corruptedWals, isEmpty);
+    expect(syncProvider.corruptedStatusCount, 0);
+    expect(syncProvider.clearableWalsCount, 2, reason: 'an explicit storage clear still includes retained refusals');
+    expect(syncProvider.refusalSummary.count, 2);
+    expect(syncProvider.retryableAttentionWals, isEmpty);
 
     await syncProvider.retryNeedsAttentionWals();
 
-    expect(uploads, [
-      ['audio_bad_date.bin']
-    ]);
+    expect(uploads, isEmpty);
     expect(tooLarge.status, WalStatus.uploadRejected, reason: 'a retry cannot change the bytes');
+  });
+  test('daily eligible refusal is picked up by the provider drain with no other work', () async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final refused = (await diskWal('daily.bin', timerStart: now - 600))..markUploadRejected(nowSeconds: now - 86401);
+    final syncProvider = await start([refused]);
+    await syncProvider.drainForTesting();
+    expect(uploads, [
+      ['daily.bin']
+    ]);
+    expect(refused.status, WalStatus.uploaded);
   });
 }

@@ -13652,32 +13652,6 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals a caminho';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'Enviando: $count';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'Quase prontas: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count precisam de atenção',
-      one: '1 precisa de atenção',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Nenhuma atividade ainda';
 
   @override
@@ -14459,13 +14433,7 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Abrir episódio anterior';
-
-  @override
   String get episodeNotesSoon => 'As notas aparecem após os primeiros minutos de conversa.';
-
-  @override
-  String get episodeOpenAll => 'Abrir Tudo';
 
   @override
   String get episodeWrapUpNow => 'Concluir Agora';
@@ -14604,22 +14572,10 @@ class AppLocalizationsPt extends AppLocalizations {
   String get othersSpeakerLabel => 'Outros';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Concluído';
@@ -14649,6 +14605,89 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'Envios pausados por um momento — serão retomados automaticamente';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Continua “$title”';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· desde $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'As notas começam quando a transcrição final chega.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Elaboradas no seu telefone enquanto você fala. As notas completas chegam com a transcrição final.';
+
+  @override
+  String get episodeOnThisPhone => 'Neste telefone';
+
+  @override
+  String get episodeOpenTranscript => 'Abrir transcrição';
+
+  @override
+  String get liveCardTitle => 'Ao vivo';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Transcrição final com cerca de $duration de atraso';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'A transcrição final está se atualizando';
+
+  @override
+  String get livePreviewNoEngineBody => 'Suas palavras aparecem aqui um ou dois minutos depois de você dizê-las.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Gravando com segurança';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Ao vivo neste telefone';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Ativar texto ao vivo';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'a caminho';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'quando estiver online';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration a caminho';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'Envia sozinho. As conversas aparecem conforme o áudio chega.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Envia sozinho quando você voltar a ficar online. As conversas aparecem conforme o áudio chega.';
+
+  @override
+  String get onTheWayDayUploading => 'Enviando';
+
+  @override
+  String get onTheWayDayNext => 'Próximas';
+
+  @override
+  String get onTheWayDayQueued => 'Na fila';
+
+  @override
+  String get onTheWayNoDate => 'Sem data';
+
+  @override
+  String get onTheWayFootnote =>
+      'As gravações que falham continuam sendo tentadas em segundo plano. Tudo o que não conseguimos transcrever nos é reportado automaticamente.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Detalhes para o suporte';
 
   @override
   String get voiceProfileCardDismissed => 'Você pode configurar o perfil de voz a qualquer momento em Ajustes.';

@@ -16454,43 +16454,6 @@
             }
         }
     },
-    "onTheWaySummary": "{totals} on the way",
-    "@onTheWaySummary": {
-        "description": "On the Way summary line at the top. totals is the recording count and total length, e.g. '45 recordings · 8h 54m'",
-        "placeholders": {
-            "totals": {
-                "type": "String",
-                "example": "45 recordings · 8h 54m"
-            }
-        }
-    },
-    "onTheWayUploadingCount": "{count} uploading",
-    "@onTheWayUploadingCount": {
-        "description": "On the Way summary and day header: how many recordings are still syncing to Omi",
-        "placeholders": {
-            "count": {
-                "type": "int"
-            }
-        }
-    },
-    "onTheWayAlmostReadyCount": "{count} almost ready",
-    "@onTheWayAlmostReadyCount": {
-        "description": "On the Way summary and day header: how many recordings are being turned into conversations",
-        "placeholders": {
-            "count": {
-                "type": "int"
-            }
-        }
-    },
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 needs attention} other{{count} need attention}}",
-    "@onTheWayNeedsAttentionCount": {
-        "description": "On the Way summary and day header, in warning colour: how many recordings Omi refused or could not sync",
-        "placeholders": {
-            "count": {
-                "type": "int"
-            }
-        }
-    },
     "activityEmpty": "No activity yet",
     "@activityEmpty": {
         "description": "Empty state of the Activity page"
@@ -17571,16 +17534,11 @@
             }
         }
     },
-    "episodeOpenPrevious": "Open Previous Episode",
     "episodeNotesSoon": "Running notes appear after the first few minutes of talk.",
     "@episodeNotesSoon": {
         "description": "Shown in the running notes card before the first notes exist."
     },
-    "episodeOpenAll": "Open All",
-    "@episodeOpenAll": {
-        "description": "Opens the full live transcript from its preview on a live episode."
-    },
-    "episodeWrapUpNow": "Wrap Up Now",
+    "episodeWrapUpNow": "Wrap up now",
     "@episodeWrapUpNow": {
         "description": "Button that ends a live episode now and makes its full notes."
     },
@@ -17810,14 +17768,6 @@
     "@othersSpeakerLabel": {
         "description": "Collective label for unidentified voices with too little evidence in an over-split transcript; not a participant count."
     },
-    "livePreviewLabel": "Live preview",
-    "@livePreviewLabel": {
-        "description": "Small caption above the on-device live transcript preview while recording"
-    },
-    "livePreviewExplanation": "On-device preview. The final transcript replaces it shortly.",
-    "@livePreviewExplanation": {
-        "description": "One-line explanation under the Live preview caption: the provisional text is made on the phone and replaced by the final transcript"
-    },
     "livePreviewListening": "Listening… words appear here as you speak.",
     "@livePreviewListening": {
         "description": "Live preview is running on the phone but no words have been recognized yet"
@@ -17825,14 +17775,6 @@
     "livePreviewStarting": "Starting live preview…",
     "@livePreviewStarting": {
         "description": "The on-device live preview engine is starting"
-    },
-    "livePreviewTranscribingTitle": "Transcribing…",
-    "@livePreviewTranscribingTitle": {
-        "description": "Calm state when this phone has no on-device preview: the recording is being transcribed after capture"
-    },
-    "livePreviewTranscribingMessage": "Your transcript appears in Conversations when processing finishes.",
-    "@livePreviewTranscribingMessage": {
-        "description": "Explains, under Transcribing…, where and when the transcript appears; not an error"
     },
     "openLoopAnswerDone": "Done",
     "@openLoopAnswerDone": {
@@ -17872,6 +17814,116 @@
     "syncCardUploadsPaused": "Uploads paused for a moment — they'll resume automatically",
     "@syncCardUploadsPaused": {
         "description": "Upload cooldown copy for a per-account dispatch hold, not server capacity"
+    },
+    "episodeContinues": "Continues “{title}”",
+    "@episodeContinues": {
+        "description": "Pill under the live duration: this capture continues the previous episode.",
+        "placeholders": {
+            "title": {}
+        }
+    },
+    "episodeLiveSince": "· since {time}",
+    "@episodeLiveSince": {
+        "description": "The wall-clock start of the live session, after its running length.",
+        "placeholders": {
+            "time": {}
+        }
+    },
+    "episodeNotesStartWithTranscript": "Notes start when the final transcript arrives.",
+    "@episodeNotesStartWithTranscript": {
+        "description": "Quiet line when no on-device notes can be drafted."
+    },
+    "episodeOnDeviceNotesFootnote": "Drafted on your phone as you talk. The full notes arrive with the final transcript.",
+    "@episodeOnDeviceNotesFootnote": {
+        "description": "Footnote under on-device live notes."
+    },
+    "episodeOnThisPhone": "On this phone",
+    "@episodeOnThisPhone": {
+        "description": "Tag on notes drafted on-device from the live preview."
+    },
+    "episodeOpenTranscript": "Open transcript",
+    "@episodeOpenTranscript": {
+        "description": "Link from the Summary live card to the Transcript tab."
+    },
+    "liveCardTitle": "Live",
+    "@liveCardTitle": {
+        "description": "Title of the live preview card on the Summary tab."
+    },
+    "livePreviewBehind": "Final transcript about {duration} behind",
+    "@livePreviewBehind": {
+        "description": "Quiet line: how far the final transcript lags the live preview.",
+        "placeholders": {
+            "duration": {}
+        }
+    },
+    "livePreviewCatchingUp": "Final transcript catching up",
+    "@livePreviewCatchingUp": {
+        "description": "Quiet line when the final-transcript lag is unknown."
+    },
+    "livePreviewNoEngineBody": "Your words show up here a minute or two after you say them.",
+    "@livePreviewNoEngineBody": {
+        "description": "No-engine preview card body."
+    },
+    "livePreviewNoEngineTitle": "Recording safely",
+    "@livePreviewNoEngineTitle": {
+        "description": "No-engine preview card title."
+    },
+    "livePreviewOnPhoneDivider": "Live on this phone",
+    "@livePreviewOnPhoneDivider": {
+        "description": "Divider between the final transcript and the on-device preview lines."
+    },
+    "livePreviewTurnOnLiveText": "Turn on live text",
+    "@livePreviewTurnOnLiveText": {
+        "description": "Link to the speech settings where the platform can deep-link to them."
+    },
+    "deviceCatchUpOnItsWay": "on its way",
+    "@deviceCatchUpOnItsWay": {
+        "description": "Lowercase caption on the Device Settings 'Catching up' stat tile, under a duration like '8h 14m': the recordings are uploading by themselves. A chevron follows; tapping opens the On the Way page."
+    },
+    "deviceCatchUpWhenOnline": "when online",
+    "@deviceCatchUpWhenOnline": {
+        "description": "Lowercase caption on the Device Settings 'Catching up' stat tile, under a duration like '8h 14m', while the phone has no internet: the recordings will upload once it is back online. A chevron follows."
+    },
+    "onTheWayCatchingUp": "{duration} catching up",
+    "@onTheWayCatchingUp": {
+        "description": "Headline of the On the Way page: how much recorded audio is still uploading or being turned into conversations. {duration} is like '8h 14m'.",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "onTheWayUploadsByItself": "Uploads by itself. Conversations fill in as it lands.",
+    "@onTheWayUploadsByItself": {
+        "description": "One quiet line under the On the Way headline and progress bar: the user does not need to do anything; conversations appear as the audio arrives on the server."
+    },
+    "onTheWayUploadsWhenOnline": "Uploads by itself once you're back online. Conversations fill in as it lands.",
+    "@onTheWayUploadsWhenOnline": {
+        "description": "The same line under the On the Way headline while the phone has no internet connection."
+    },
+    "onTheWayDayUploading": "Uploading",
+    "@onTheWayDayUploading": {
+        "description": "Short status at the right of one day's row on On the Way: that day's recordings are uploading right now."
+    },
+    "onTheWayDayNext": "Next",
+    "@onTheWayDayNext": {
+        "description": "Short status at the right of one day's row on On the Way: that day's recordings upload next (next in line, not a 'Next' button)."
+    },
+    "onTheWayDayQueued": "Queued",
+    "@onTheWayDayQueued": {
+        "description": "Short status at the right of one day's row on On the Way: that day's recordings are waiting their turn to upload."
+    },
+    "onTheWayNoDate": "No date",
+    "@onTheWayNoDate": {
+        "description": "Title of the On the Way row for recordings whose recording time is unknown (for example a device clock that was never set), in place of 'Today' or a weekday."
+    },
+    "onTheWayFootnote": "Recordings that fail keep retrying in the background. Anything we can't transcribe is reported to us automatically.",
+    "@onTheWayFootnote": {
+        "description": "Footnote under the list of days on the On the Way page. 'We/us' is the Omi team."
+    },
+    "onTheWayDetailsForSupport": "Details for support",
+    "@onTheWayDetailsForSupport": {
+        "description": "Small text link at the bottom of On the Way, and the title of the page it opens: a plain technical list of every pending recording with its status codes, meant for the support team."
     },
     "voiceProfileCardDismissed": "You can set up Voice Profile anytime in Settings.",
     "@voiceProfileCardDismissed": {

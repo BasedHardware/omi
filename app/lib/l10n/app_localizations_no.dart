@@ -13630,32 +13630,6 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals på vei';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return '$count lastes opp';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return '$count nesten klar';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count krever oppmerksomhet',
-      one: '1 krever oppmerksomhet',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Ingen aktivitet ennå';
 
   @override
@@ -14436,13 +14410,7 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Åpne forrige episode';
-
-  @override
   String get episodeNotesSoon => 'Notatene vises etter de første minuttene av samtalen.';
-
-  @override
-  String get episodeOpenAll => 'Åpne alle';
 
   @override
   String get episodeWrapUpNow => 'Avslutt nå';
@@ -14580,22 +14548,10 @@ class AppLocalizationsNo extends AppLocalizations {
   String get othersSpeakerLabel => 'Andre';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Ferdig';
@@ -14625,6 +14581,89 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'Opplastinger er satt på pause en stund — de fortsetter automatisk';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Fortsetter «$title»';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· siden $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Notater begynner når den endelige utskriften kommer.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Utarbeidet på telefonen din mens du snakker. De fullstendige notatene kommer med den endelige utskriften.';
+
+  @override
+  String get episodeOnThisPhone => 'På denne telefonen';
+
+  @override
+  String get episodeOpenTranscript => 'Åpne utskrift';
+
+  @override
+  String get liveCardTitle => 'Direkte';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Endelig utskrift omtrent $duration bak';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'Endelig utskrift tar igjen';
+
+  @override
+  String get livePreviewNoEngineBody => 'Ordene dine vises her ett til to minutter etter at du har sagt dem.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Tar opp trygt';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Direkte på denne telefonen';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Slå på direkte tekst';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'på vei';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'når du er på nett';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration på vei';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'Laster opp av seg selv. Samtaler dukker opp etter hvert som det kommer frem.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Laster opp av seg selv når du er på nett igjen. Samtaler dukker opp etter hvert som det kommer frem.';
+
+  @override
+  String get onTheWayDayUploading => 'Laster opp';
+
+  @override
+  String get onTheWayDayNext => 'Neste';
+
+  @override
+  String get onTheWayDayQueued => 'I kø';
+
+  @override
+  String get onTheWayNoDate => 'Ingen dato';
+
+  @override
+  String get onTheWayFootnote =>
+      'Opptak som feiler, prøver på nytt i bakgrunnen. Alt vi ikke får transkribert, rapporteres automatisk til oss.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Detaljer for kundestøtte';
 
   @override
   String get voiceProfileCardDismissed => 'Du kan sette opp stemmeprofilen når som helst i Innstillinger.';

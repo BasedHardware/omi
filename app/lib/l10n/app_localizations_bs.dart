@@ -13657,32 +13657,6 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals na putu';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'Slanje: $count';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'Skoro spremno: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Zahtijeva pažnju: $count',
-      one: '1 zahtijeva pažnju',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Još nema aktivnosti';
 
   @override
@@ -14460,13 +14434,7 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Otvori prethodnu epizodu';
-
-  @override
   String get episodeNotesSoon => 'Bilješke se pojavljuju nakon prvih minuta razgovora.';
-
-  @override
-  String get episodeOpenAll => 'Otvori sve';
 
   @override
   String get episodeWrapUpNow => 'Završi sada';
@@ -14604,22 +14572,10 @@ class AppLocalizationsBs extends AppLocalizations {
   String get othersSpeakerLabel => 'Ostali';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Gotovo';
@@ -14649,6 +14605,89 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'Otpremanje je kratko pauzirano — nastavit će se automatski';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Nastavlja „$title”';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· od $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Bilješke počinju kad stigne konačni transkript.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Nastaju na tvom telefonu dok pričaš. Potpune bilješke stižu s konačnim transkriptom.';
+
+  @override
+  String get episodeOnThisPhone => 'Na ovom telefonu';
+
+  @override
+  String get episodeOpenTranscript => 'Otvori transkript';
+
+  @override
+  String get liveCardTitle => 'Uživo';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Konačni transkript kasni oko $duration';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'Konačni transkript sustiže';
+
+  @override
+  String get livePreviewNoEngineBody => 'Tvoje riječi se ovdje pojavljuju minutu ili dvije nakon što ih izgovoriš.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Sigurno snima';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Uživo na ovom telefonu';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Uključi tekst uživo';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'na putu';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'kada bude online';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return 'Još $duration za slanje';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'Šalje se samo. Razgovori se popunjavaju čim snimke stignu.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Šalje se samo kada ponovo budete online. Razgovori se popunjavaju čim snimke stignu.';
+
+  @override
+  String get onTheWayDayUploading => 'Slanje u toku';
+
+  @override
+  String get onTheWayDayNext => 'Sljedeće';
+
+  @override
+  String get onTheWayDayQueued => 'U redu čekanja';
+
+  @override
+  String get onTheWayNoDate => 'Bez datuma';
+
+  @override
+  String get onTheWayFootnote =>
+      'Snimci koji ne uspiju nastavljaju s pokušajima u pozadini. Za sve što ne možemo pretvoriti u tekst automatski nam se prijavljuje.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Detalji za podršku';
 
   @override
   String get voiceProfileCardDismissed => 'Glasovni profil možete podesiti bilo kada u Postavkama.';

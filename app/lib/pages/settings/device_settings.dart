@@ -30,6 +30,7 @@ import 'package:omi/pages/settings/device/device_page_header.dart';
 import 'package:omi/pages/settings/device_diagnostics.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/devices.dart';
@@ -668,7 +669,7 @@ extension _DeviceLiveSections on _DeviceSettingsState {
   Widget _liveSections({required bool connected, required int batteryLevel, required bool isCharging}) {
     const gap = SizedBox(height: OmiSpacing.xxl);
     return Builder(builder: (context) {
-      // One WAL pass per sync notification, shared by Stats and Right now.
+      // One WAL pass per sync notification, shared by the stat row's tiles.
       // Capture/episode updates subscribe below this builder and never rescan it;
       // deviceCatchUpLocal memoizes on the WAL list identity, so a progress-only
       // notify reuses the last snapshot instead of rescanning, and the server
@@ -691,25 +692,36 @@ extension _DeviceLiveSections on _DeviceSettingsState {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (connected) ...[
-            Builder(
-                builder: (context) => DeviceStatsRow(
-                      batteryLevel: batteryLevel,
-                      isCharging: isCharging,
-                      heardTodaySeconds: _heardTodaySeconds(context),
-                      onDeviceSeconds: local.onDeviceSeconds,
-                      phoneQueueSeconds: local.onPhoneSeconds,
-                    )),
-            gap,
-          ],
+          // Catching up lives in the stat row, so the row stays while audio is still on its
+          // way even with the device disconnected.
           ListenableBuilder(
             listenable: _pendingWork,
             builder: (context, _) {
-              final rightNow =
-                  _rightNow(context, local: local, serverProcessing: serverProcessing, syncStatus: syncStatus);
-              return rightNow.hasContent ? Column(children: [rightNow, gap]) : const SizedBox.shrink();
+              final catchUp =
+                  _catchUp(context, local: local, serverProcessing: serverProcessing, syncStatus: syncStatus);
+              if (!connected && catchUp == null) return const SizedBox.shrink();
+              final online = context.select<ConnectivityProvider?, bool>((c) => c?.isConnected ?? true);
+              return Column(children: [
+                Builder(
+                    builder: (context) => DeviceStatsRow(
+                          batteryLevel: connected ? batteryLevel : 0,
+                          isCharging: isCharging,
+                          heardTodaySeconds: _heardTodaySeconds(context),
+                          onDeviceSeconds: local.onDeviceSeconds,
+                          phoneQueueSeconds: local.onPhoneSeconds,
+                          catchUpSeconds: catchUp?.seconds,
+                          // Uploads need only a connection; that is the one thing it can wait on.
+                          catchUpCaption: online ? l10n.deviceCatchUpOnItsWay : l10n.deviceCatchUpWhenOnline,
+                          onOpenCatchUp: () => routeToPage(context, OnTheWayPage(pendingWork: _pendingWork)),
+                        )),
+                gap,
+              ]);
             },
           ),
+          Builder(builder: (context) {
+            final rightNow = _rightNow(context);
+            return rightNow.hasContent ? Column(children: [rightNow, gap]) : const SizedBox.shrink();
+          }),
         ],
       );
     });
@@ -756,9 +768,24 @@ extension _DeviceLiveSections on _DeviceSettingsState {
     return elapsed.inSeconds <= 0 ? null : now.subtract(elapsed);
   }
 
-  DeviceRightNowGroup _rightNow(BuildContext context,
+  /// Everything still on its way to becoming conversations, from the shared WAL snapshot plus
+  /// server work; null when nothing is.
+  DeviceCatchUpSummary? _catchUp(BuildContext context,
       {required DeviceCatchUpLocal local, required bool serverProcessing, required String syncStatus}) {
     final conversations = context.watch<ConversationProvider?>();
+    return DeviceCatchUpSummary.from(
+      local: local,
+      serverProcessing: serverProcessing,
+      // Local or phone-run work reads On the Way's own stage; server work the
+      // phone did not start has no local stage to report.
+      status: local.hasPending || serverProcessing ? syncStatus : context.l10n.processing,
+      pending: _pendingWork.pending,
+      conversations: conversations?.conversations ?? const [],
+      processing: conversations?.processingConversations ?? const [],
+    );
+  }
+
+  DeviceRightNowGroup _rightNow(BuildContext context) {
     final capture = context.read<CaptureProvider?>();
     // Only the visible source, its running length and its audio health depend on
     // capture, not its transcript text, socket state, or BLE/network rate samples.
@@ -811,17 +838,6 @@ extension _DeviceLiveSections on _DeviceSettingsState {
       onOpenLive: capture == null
           ? null
           : () => routeToPage(context, LiveEpisodePage(topConversationId: capture.topConversationId)),
-      catchingUp: DeviceCatchUpSummary.from(
-        local: local,
-        serverProcessing: serverProcessing,
-        // Local or phone-run work reads On the Way's own stage; server work the
-        // phone did not start has no local stage to report.
-        status: local.hasPending || serverProcessing ? syncStatus : l10n.processing,
-        pending: _pendingWork.pending,
-        conversations: conversations?.conversations ?? const [],
-        processing: conversations?.processingConversations ?? const [],
-      ),
-      onOpenCatchingUp: () => routeToPage(context, OnTheWayPage(pendingWork: _pendingWork)),
     );
   }
 

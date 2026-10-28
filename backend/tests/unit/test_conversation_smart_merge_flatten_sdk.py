@@ -9,6 +9,7 @@ All text is synthetic.
 """
 
 from datetime import datetime, timezone
+import logging
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -303,3 +304,51 @@ def test_smart_merge_aborted_by_sync_bridge_absorb_converges(sdk_bridge_world):
     assert len(pairs) == len(set(pairs))
     assert {source for source, target in pairs if target == 'p'} == {'n', 'g1', 'g2', 'd'}
     assert {source for source, target in pairs if target == 'n'} == {'g1', 'g2', 'd'}
+
+
+def test_admitted_bridge_observation_only_after_smart_absorb_commit(sdk_world, monkeypatch, caplog):
+    test = sdk_world
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_ENABLED', 'true')
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', UID)
+    monkeypatch.setenv('SYNC_LINEAGE_LIVE_DEDUPE_ENABLED', 'true')
+    test.world.raw('p')['sync_live_target'] = True
+
+    def aborted_attempt():
+        assert not [r for r in caplog.records if 'stage=bridge' in r.message]
+
+    test.state.compete = aborted_attempt
+    with caplog.at_level(logging.INFO):
+        assert test.world.finish('n') is True
+    assert test.state.aborted
+    lines = [r.message for r in caplog.records if 'stage=bridge' in r.message]
+    assert len(lines) == 1 and 'operation=smart_absorb' in lines[0]
+    assert 'outcome=bridge_clear' in lines[0]
+    with caplog.at_level(logging.INFO):
+        test.world.finish('n')
+    assert len([r for r in caplog.records if 'stage=bridge' in r.message]) == 1
+
+
+def test_admitted_bridge_observation_only_after_assignment_commit(sdk_bridge_world, monkeypatch, caplog):
+    test = sdk_bridge_world
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_ENABLED', 'true')
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', UID)
+    monkeypatch.setenv('SYNC_LINEAGE_LIVE_DEDUPE_ENABLED', 'true')
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'off')
+    test.world.raw('n')['sync_live_target'] = True
+    monkeypatch.setattr(conversations_db, 'find_sync_live_overlap_candidates', lambda *a, **kw: ())
+    monkeypatch.setattr(conversations_db, 'index_sync_assignment', lambda *a, **kw: None)
+    test.state.abort_on = lambda writes: any(write.update.name.endswith('/conversations/d') for write in writes)
+
+    def aborted_attempt():
+        assert not [r for r in caplog.records if 'stage=bridge' in r.message]
+
+    test.state.compete = aborted_attempt
+    with caplog.at_level(logging.INFO):
+        row, _, _ = conversations_db.assign_sync_conversation(
+            UID, _chunk('later', 23), target_id='n', firestore_client=test.client
+        )
+    assert test.state.aborted
+    assert '_sync_lineage_bridge' not in row
+    lines = [r.message for r in caplog.records if 'stage=bridge' in r.message]
+    assert len(lines) == 1 and 'operation=assignment' in lines[0]
+    assert 'outcome=bridge_clear' in lines[0]

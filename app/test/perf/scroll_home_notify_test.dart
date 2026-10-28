@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
+import 'package:omi/ui/ui.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
@@ -259,7 +260,7 @@ Episode _liveEpisode() => Episode(
       stateUpdatedAt: _seedNow,
     );
 
-/// Home as David sees it: a pendant streaming into a live episode (the pulsing
+/// Home as David sees it: a pendant streaming into a live episode (the live
 /// row), 300 conversations as the list endpoint projects them (two lines each),
 /// and an active background sync. All providers are local fakes or hermetic.
 class _Home {
@@ -332,6 +333,10 @@ Widget _app(_Home home) {
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: const [Locale('en')],
       home: Scaffold(
+        // Home's live row no longer pulses (David, 10-27: no dot in the tile). A breathing dot
+        // stands in for any running Home animation, so the scheduler guards run as on device
+        // while something animates.
+        floatingActionButton: const OmiBreathingDot(live: true),
         body: ConversationsPage(
           requestInitialLoad: false,
           loadRecaps: () async => (items: <DailySummary>[], ok: true),
@@ -356,7 +361,7 @@ Future<_Home> _pumpHome(WidgetTester tester, {Set<int> background = const {}}) a
   await tester.pump(const Duration(milliseconds: 300));
   expect(find.byType(LiveEpisodeRow), findsOneWidget, reason: 'Home must show the live episode row');
   expect(find.byType(ConversationListItem), findsWidgets);
-  expect(tester.binding.transientCallbackCount, greaterThan(0), reason: 'the live dot must be pulsing');
+  expect(tester.binding.transientCallbackCount, greaterThan(0), reason: 'Home must be animating');
   return home;
 }
 

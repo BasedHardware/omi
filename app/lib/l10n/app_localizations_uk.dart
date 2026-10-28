@@ -13660,32 +13660,6 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals у дорозі';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'Завантажується: $count';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'Майже готово: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Потребують уваги: $count',
-      one: '1 потребує уваги',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Поки немає активності';
 
   @override
@@ -14463,13 +14437,7 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Відкрити попередній епізод';
-
-  @override
   String get episodeNotesSoon => 'Нотатки з’являться після перших хвилин розмови.';
-
-  @override
-  String get episodeOpenAll => 'Відкрити все';
 
   @override
   String get episodeWrapUpNow => 'Завершити зараз';
@@ -14607,22 +14575,10 @@ class AppLocalizationsUk extends AppLocalizations {
   String get othersSpeakerLabel => 'Інші';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Готово';
@@ -14652,6 +14608,89 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'Завантаження ненадоло призупинено — воно відновиться автоматично';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Продовження «$title»';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· з $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Нотатки з’являться, коли прибуде фінальна розшифровка.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Створюються на вашому телефоні, поки ви говорите. Повні нотатки з’являться разом із фінальною розшифровкою.';
+
+  @override
+  String get episodeOnThisPhone => 'На цьому телефоні';
+
+  @override
+  String get episodeOpenTranscript => 'Відкрити розшифровку';
+
+  @override
+  String get liveCardTitle => 'Наживо';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Фінальна розшифровка відстає приблизно на $duration';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'Фінальна розшифровка наздоганяє';
+
+  @override
+  String get livePreviewNoEngineBody => 'Ваші слова з’являться тут через хвилину-дві після того, як ви їх промовите.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Безпечний запис';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Наживо на цьому телефоні';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Увімкнути текст наживо';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'в дорозі';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'коли з\'явиться інтернет';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return 'Наздоганяємо $duration';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'Завантажується самостійно. Розмови з\'являться, щойно записи надійдуть.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Завантажиться самостійно, коли ви знову будете онлайн. Розмови з\'являться, щойно записи надійдуть.';
+
+  @override
+  String get onTheWayDayUploading => 'Завантаження';
+
+  @override
+  String get onTheWayDayNext => 'Наступні';
+
+  @override
+  String get onTheWayDayQueued => 'У черзі';
+
+  @override
+  String get onTheWayNoDate => 'Без дати';
+
+  @override
+  String get onTheWayFootnote =>
+      'Невдалі записи продовжать повторні спроби у фоновому режимі. Все, що ми не зможемо розшифрувати, автоматично повідомляється нам.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Подробиці для підтримки';
 
   @override
   String get voiceProfileCardDismissed => 'Голосовий профіль можна налаштувати будь-коли в Налаштуваннях.';

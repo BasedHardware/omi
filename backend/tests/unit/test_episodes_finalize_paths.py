@@ -262,6 +262,31 @@ def test_schedule_after_finalization_survives_a_saturated_pool(monkeypatch):
     episode_finalize.schedule_after_finalization(_UID, 'c1', ProcessingTrigger.CLIENT_FINALIZE)
 
 
+@pytest.mark.parametrize('intake', [False, True])
+def test_saturated_episode_hook_is_queued_until_capacity_returns_without_another_append(monkeypatch, intake):
+    import threading
+    from utils.executors import MonitoredThreadPoolExecutor
+
+    pool = MonitoredThreadPoolExecutor('episode-retry-test', max_workers=1, max_queue_size=0, wait_on_saturation=True)
+    release, executed = threading.Event(), threading.Event()
+    occupied = pool.submit(release.wait, 5)
+    monkeypatch.setattr(episode_finalize, 'lifecycle_executor', lambda *a, **kw: pool)
+    hook = 'attach_synced_at_intake' if intake else '_after_finalization'
+    monkeypatch.setattr(episode_finalize, hook, lambda *a: executed.set())
+    try:
+        if intake:
+            episode_finalize.schedule_synced_intake_attach(_UID, 'c1', {'id': 'c1'})
+        else:
+            episode_finalize.schedule_after_finalization(_UID, 'c1', ProcessingTrigger.CLIENT_FINALIZE)
+        assert not executed.is_set()
+        release.set()
+        occupied.result(timeout=5)
+        assert executed.wait(5), 'the final hook was dropped on saturation'
+    finally:
+        release.set()
+        pool.shutdown(wait=True)
+
+
 def test_attach_synced_at_intake_joins_through_the_service_and_normalizes_the_row(monkeypatch):
     from utils.episodes import service
 

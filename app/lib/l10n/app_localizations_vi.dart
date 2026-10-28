@@ -13626,32 +13626,6 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals đang đến';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return '$count đang tải lên';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return '$count sắp xong';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count cần chú ý',
-      one: '1 cần chú ý',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Chưa có hoạt động';
 
   @override
@@ -14432,13 +14406,7 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Mở phiên trước';
-
-  @override
   String get episodeNotesSoon => 'Ghi chú xuất hiện sau vài phút đầu trò chuyện.';
-
-  @override
-  String get episodeOpenAll => 'Mở tất cả';
 
   @override
   String get episodeWrapUpNow => 'Kết thúc ngay';
@@ -14577,22 +14545,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get othersSpeakerLabel => 'Những người khác';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Xong';
@@ -14622,6 +14578,89 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'Tải lên tạm dừng trong chốc lát — sẽ tự động tiếp tục';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Tiếp tục “$title”';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· từ $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Ghi chú bắt đầu khi bản ghi chép cuối cùng đến.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Được soạn trên điện thoại của bạn khi bạn nói. Ghi chú đầy đủ sẽ đến cùng bản ghi chép cuối cùng.';
+
+  @override
+  String get episodeOnThisPhone => 'Trên điện thoại này';
+
+  @override
+  String get episodeOpenTranscript => 'Mở bản ghi chép';
+
+  @override
+  String get liveCardTitle => 'Trực tiếp';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Bản ghi chép cuối cùng chậm khoảng $duration';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'Bản ghi chép cuối cùng đang cập nhật';
+
+  @override
+  String get livePreviewNoEngineBody => 'Lời nói của bạn sẽ xuất hiện ở đây sau một đến hai phút.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Đang ghi âm an toàn';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Trực tiếp trên điện thoại này';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Bật văn bản trực tiếp';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'đang trên đường gửi lên';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'khi có mạng';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return 'Đang xử lý nốt $duration';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'Tự động tải lên. Cuộc trò chuyện sẽ hiện dần khi dữ liệu đến nơi.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Tự động tải lên khi bạn có lại kết nối mạng. Cuộc trò chuyện sẽ hiện dần khi dữ liệu đến nơi.';
+
+  @override
+  String get onTheWayDayUploading => 'Đang tải lên';
+
+  @override
+  String get onTheWayDayNext => 'Tiếp theo';
+
+  @override
+  String get onTheWayDayQueued => 'Trong hàng đợi';
+
+  @override
+  String get onTheWayNoDate => 'Không có ngày';
+
+  @override
+  String get onTheWayFootnote =>
+      'Các bản ghi âm bị lỗi sẽ tiếp tục được thử lại trong nền. Những gì chúng tôi không thể phiên âm sẽ tự động được báo cáo cho chúng tôi.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Chi tiết cho bộ phận hỗ trợ';
 
   @override
   String get voiceProfileCardDismissed => 'Bạn có thể thiết lập Hồ sơ giọng nói bất cứ lúc nào trong Cài đặt.';

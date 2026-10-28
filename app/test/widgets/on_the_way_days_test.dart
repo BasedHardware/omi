@@ -7,20 +7,21 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart' show BleAudioCodec;
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversations/on_the_way_page.dart';
+import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals/wal.dart';
-import 'package:omi/ui/ui.dart';
 
-/// On the Way groups recordings by the local day they started: a summary line, then one pinned
-/// header per day with its totals. Today opens by default; older days fold to their totals.
+/// On the Way, option B: a headline with how much is catching up and a thin bar, one row per
+/// local day with its totals and a quiet status, a footnote, and a plain support list.
 
 class _FakeSync extends ChangeNotifier implements SyncProvider {
-  _FakeSync(this.wals);
+  _FakeSync(this.wals, {this.state = const SyncState()});
 
   final List<Wal> wals;
+  final SyncState state;
 
   @override
-  SyncState get syncState => const SyncState();
+  SyncState get syncState => state;
   @override
   bool get isSyncing => false;
   @override
@@ -37,20 +38,25 @@ class _FakeSync extends ChangeNotifier implements SyncProvider {
 /// machine's time zone.
 final _now = DateTime(2026, 10, 18, 9);
 
-Wal _wal(DateTime start, int seconds, WalStatus status) => Wal(
+Wal _wal(DateTime start, int seconds, WalStatus status, {String? rejectionReason}) => Wal(
       timerStart: start.millisecondsSinceEpoch ~/ 1000,
       codec: BleAudioCodec.opus,
       seconds: seconds,
       status: status,
       storage: WalStorage.disk,
       device: 'phone',
+      uploadRejectionReason: rejectionReason,
     );
 
-Future<void> _pump(WidgetTester tester, List<Wal> wals, {double textScale = 1}) async {
-  final sync = _FakeSync(wals);
+Future<void> _pump(WidgetTester tester, List<Wal> wals,
+    {double textScale = 1, SyncState state = const SyncState(), bool online = true}) async {
+  final sync = _FakeSync(wals, state: state);
   await tester.pumpWidget(
-    ChangeNotifierProvider<SyncProvider>.value(
-      value: sync,
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider<SyncProvider>.value(value: sync),
+        ChangeNotifierProvider<ConnectivityProvider>.value(value: _Connectivity(online)),
+      ],
       child: MaterialApp(
         localizationsDelegates: const [
           AppLocalizations.delegate,
@@ -70,97 +76,132 @@ Future<void> _pump(WidgetTester tester, List<Wal> wals, {double textScale = 1}) 
   await tester.pump();
 }
 
-/// A row's first line; intl separates the time from AM/PM with a narrow no-break space.
+class _Connectivity extends ChangeNotifier implements ConnectivityProvider {
+  _Connectivity(this.isConnected);
+
+  @override
+  final bool isConnected;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/// A support row's first line; intl separates the time from AM/PM with a narrow no-break space.
 Finder _row(String text) =>
     find.byWidgetPredicate((w) => w is Text && w.data?.replaceAll('\u202f', ' ') == text, description: text);
 
 Finder _day(String date) => find.byKey(Key('on_the_way_day_$date'));
 
-/// The header's second line: totals, then the exceptions.
-String _headerLine(WidgetTester tester, String date) {
-  final text = tester.widget<Text>(find.descendant(of: _day(date), matching: find.byType(Text)).at(1));
-  return text.textSpan!.toPlainText();
+/// A day row's title, subtitle and status, in reading order.
+List<String> _dayTexts(WidgetTester tester, String date) =>
+    [for (final t in tester.widgetList<Text>(find.descendant(of: _day(date), matching: find.byType(Text)))) t.data!];
+
+Future<void> _openSupport(WidgetTester tester) async {
+  await tester.tap(find.byKey(const Key('on_the_way_details_for_support')));
+  await tester.pumpAndSettle();
 }
 
 void main() {
-  setUp(OnTheWayPage.resetFolds);
-
-  testWidgets('groups by the local day a recording started, across midnight', (tester) async {
+  testWidgets('one row per local day: totals on the subtitle, a quiet status on the right', (tester) async {
     await _pump(tester, [
       // Starts 11:50 PM yesterday and runs 20 minutes past midnight: it stays on yesterday.
       _wal(DateTime(2026, 10, 17, 23, 50), 20 * 60, WalStatus.uploaded),
-      _wal(DateTime(2026, 10, 18, 0, 30), 5 * 60, WalStatus.uploaded),
+      _wal(DateTime(2026, 10, 18, 0, 30), 5 * 60, WalStatus.miss)..isSyncing = true,
       _wal(DateTime(2026, 10, 18, 8, 15), 60, WalStatus.uploaded),
+      _wal(DateTime(2026, 10, 16, 14), 10 * 60, WalStatus.miss),
+      _wal(DateTime(2026, 10, 14, 9), 30 * 60, WalStatus.miss),
     ]);
 
-    expect(find.descendant(of: _day('2026-10-18'), matching: find.text('Today')), findsOneWidget);
-    expect(find.descendant(of: _day('2026-10-17'), matching: find.text('Yesterday')), findsOneWidget);
-    expect(_headerLine(tester, '2026-10-18'), '2 recordings · 6m');
-    expect(_headerLine(tester, '2026-10-17'), '1 recording · 20m');
-    // Today is open, newest first; yesterday is folded to its totals.
-    expect(_row('8:15 AM · 1m'), findsOneWidget);
-    expect(_row('12:30 AM · 5m'), findsOneWidget);
-    expect(tester.getTopLeft(_row('8:15 AM · 1m')).dy, lessThan(tester.getTopLeft(_row('12:30 AM · 5m')).dy));
-    expect(_row('11:50 PM · 20m'), findsNothing);
-    // Days run newest first, and Sync Details stays the last row.
+    expect(find.text('1h 6m catching up'), findsOneWidget);
+    expect(find.text('Uploads by itself. Conversations fill in as it lands.'), findsOneWidget);
+    expect(_dayTexts(tester, '2026-10-18'), ['Today', '2 recordings · 6m', 'Uploading']);
+    expect(_dayTexts(tester, '2026-10-17'), ['Yesterday', '1 recording · 20m', 'Transcribing…']);
+    // Uploads go oldest first: the oldest waiting day is next, the rest wait their turn.
+    expect(_dayTexts(tester, '2026-10-16').last, 'Queued');
+    expect(_dayTexts(tester, '2026-10-14').last, 'Next');
     expect(tester.getTopLeft(_day('2026-10-18')).dy, lessThan(tester.getTopLeft(_day('2026-10-17')).dy));
+    // Recordings are not rows on this page.
+    expect(_row('8:15 AM · 1m'), findsNothing);
     expect(
-      tester.getTopLeft(find.byKey(const Key('on_the_way_sync_details'))).dy,
-      greaterThan(tester.getTopLeft(_day('2026-10-17')).dy),
+      tester.getTopLeft(find.byKey(const Key('on_the_way_footnote'))).dy,
+      greaterThan(tester.getTopLeft(_day('2026-10-14')).dy),
     );
   });
 
-  testWidgets('a recording stamped before 2024 lists without a time instead of on a bogus day', (tester) async {
+  testWidgets('the bar fills with audio already on the server', (tester) async {
+    await _pump(tester, [
+      _wal(DateTime(2026, 10, 18, 8), 30 * 60, WalStatus.uploaded),
+      _wal(DateTime(2026, 10, 17, 7), 90 * 60, WalStatus.miss),
+    ]);
+    final bar = tester.widget<LinearProgressIndicator>(find.byKey(const Key('on_the_way_progress')));
+    expect(bar.value, 0.25);
+  });
+
+  testWidgets('offline, the line says it uploads once back online', (tester) async {
+    await _pump(tester, [_wal(DateTime(2026, 10, 18, 8), 60, WalStatus.miss)], online: false);
+    expect(find.text("Uploads by itself once you're back online. Conversations fill in as it lands."), findsOneWidget);
+  });
+
+  testWidgets('failed and refused recordings are never rows, actions or counts', (tester) async {
+    await _pump(tester, [
+      _wal(DateTime(2026, 10, 18, 8), 4 * 60, WalStatus.uploaded),
+      _wal(DateTime(2026, 10, 18, 7), 3 * 60, WalStatus.outsideRecoveryWindow),
+      _wal(DateTime(2026, 10, 18, 6), 2 * 60, WalStatus.uploadRejected,
+          rejectionReason: WalUploadRejection.invalidCaptureTime),
+      _wal(DateTime(2026, 10, 15, 9), 60, WalStatus.unsupportedAudio),
+    ]);
+    expect(find.text('4m catching up'), findsOneWidget);
+    expect(_dayTexts(tester, '2026-10-18'), ['Today', '1 recording · 4m', 'Transcribing…']);
+    expect(_day('2026-10-15'), findsNothing);
+    expect(find.textContaining('need attention'), findsNothing);
+    expect(find.text('Try Again'), findsNothing);
+    expect(find.text('Delete'), findsNothing);
+    expect(
+        find.text(
+            "Recordings that fail keep retrying in the background. Anything we can't transcribe is reported to us automatically."),
+        findsOneWidget);
+  });
+
+  testWidgets('Details for support lists every recording with its reason tokens and no buttons', (tester) async {
+    await _pump(tester, [
+      _wal(DateTime(2026, 10, 18, 8), 4 * 60, WalStatus.uploaded),
+      _wal(DateTime(2026, 10, 18, 7), 3 * 60, WalStatus.outsideRecoveryWindow),
+      _wal(DateTime(2026, 10, 18, 6), 2 * 60, WalStatus.uploadRejected,
+          rejectionReason: WalUploadRejection.invalidCaptureTime)
+        ..uploadRejectionStatusCode = 400,
+    ]);
+    await _openSupport(tester);
+
+    expect(find.text('Details for support'), findsWidgets);
+    expect(_row('8:00 AM · 4m'), findsOneWidget);
+    expect(_row('7:00 AM · 3m'), findsOneWidget);
+    expect(_row('6:00 AM · 2m'), findsOneWidget);
+    expect(find.text('Invalid recording date'), findsOneWidget);
+    expect(find.text('uploadRejected · invalid_capture_time · 400'), findsOneWidget);
+    expect(find.text('outsideRecoveryWindow'), findsOneWidget);
+    expect(find.text('Try Again'), findsNothing);
+    expect(find.text('Delete'), findsNothing);
+    // The Offline Sync page stays one tap further, counting only what it lists as attention.
+    expect(find.byKey(const Key('on_the_way_sync_details')), findsOneWidget);
+    expect(find.text('1 recording need attention'), findsOneWidget);
+  });
+
+  testWidgets('a recording stamped before 2024 joins the No date row instead of a bogus day', (tester) async {
     await _pump(tester, [
       _wal(DateTime(2026, 10, 18, 8), 4 * 60, WalStatus.uploaded),
       // A pendant clock that was never set: 1985-09-05 16:17 local.
-      _wal(DateTime(1985, 9, 5, 16, 17), 3 * 60, WalStatus.uploaded),
+      _wal(DateTime(1985, 9, 5, 16, 17), 3 * 60, WalStatus.miss),
     ]);
-
-    expect(_row('8:00 AM · 4m'), findsOneWidget);
-    // No 1985 day header, and no time-of-day row for the bogus clock value.
     expect(_day('1985-09-05'), findsNothing);
     expect(find.textContaining('1985'), findsNothing);
-    expect(_row('4:17 PM · 3m'), findsNothing);
-    // The recording still lists — undated, like server work without a start:
-    // its row carries only the stage label, so "Transcribing…" appears twice.
-    expect(find.text('Transcribing…'), findsNWidgets(2));
+    expect(_dayTexts(tester, 'undated'), ['No date', '1 recording · 3m', 'Next']);
+    expect(find.text('7m catching up'), findsOneWidget);
   });
 
-  testWidgets('the summary and day headers total recordings and name only the exceptions', (tester) async {
-    await _pump(tester, [
-      _wal(DateTime(2026, 10, 18, 8), 4 * 60, WalStatus.uploaded),
-      _wal(DateTime(2026, 10, 18, 7), 2 * 60, WalStatus.miss),
-      _wal(DateTime(2026, 10, 18, 6), 3 * 60, WalStatus.outsideRecoveryWindow),
-      _wal(DateTime(2026, 10, 15, 10), 30 * 60, WalStatus.uploaded),
-      _wal(DateTime(2026, 10, 15, 9), 60, WalStatus.unsupportedAudio),
-    ]);
-
-    expect(find.text('5 recordings · 40m on the way'), findsOneWidget);
-    // Transcribing is the normal state and is never counted.
-    expect(find.text('1 uploading · 2 need attention'), findsOneWidget);
-    expect(_headerLine(tester, '2026-10-18'), '3 recordings · 9m · 1 uploading · 1 needs attention');
-    expect(_headerLine(tester, '2026-10-15'), '2 recordings · 31m · 1 needs attention');
-
-    // Only the attention count is in warning colour.
-    final spans = tester
-        .widget<Text>(find.descendant(of: _day('2026-10-18'), matching: find.byType(Text)).at(1))
-        .textSpan! as TextSpan;
-    final warning = spans.children!.cast<TextSpan>().where((s) => s.style?.color == OmiColors.warning).toList();
-    expect(warning.map((s) => s.text), [' · 1 needs attention']);
-
-    // A refused row says why in the Offline Sync page's words, in warning colour, with a chevron.
-    final reason = tester.widget<Text>(find.text("Too old to sync — Omi can't accept it"));
-    expect(reason.style?.color, OmiColors.warning);
-    // Sync Details still counts the refused recordings.
-    expect(find.text('2 recordings need attention'), findsOneWidget);
-  });
-
-  testWidgets('a wearable source outlives its exhausted phone copy: the block shows the worse state', (tester) async {
-    // A device drain copies audio to the phone piece by piece; copy and source
-    // share the recording id. Here the phone copy exhausted its retries while
-    // the audio still sits on the wearable: the recording must read as needing
-    // attention (its worst part), never as merely syncing (its healthy part).
+  testWidgets('a wearable source outlives its exhausted phone copy: support shows the worse state', (tester) async {
+    // A device drain copies audio to the phone piece by piece; copy and source share the
+    // recording id. The phone copy exhausted its retries while the audio still sits on the
+    // wearable: support reads it as failed (its worst part), never merely syncing.
     Wal drainPiece(DateTime start, int seconds, {WalStorage? original, int retries = 0}) => Wal(
           timerStart: start.millisecondsSinceEpoch ~/ 1000,
           codec: BleAudioCodec.opus,
@@ -176,93 +217,61 @@ void main() {
       drainPiece(start, 4 * 60, original: WalStorage.sdcard, retries: 3),
       drainPiece(start, 4 * 60),
     ]);
-
-    // One recording, shown once — as refused, not as waiting.
+    // The page counts the audio still on the wearable.
+    expect(_dayTexts(tester, '2026-10-18'), ['Today', '1 recording · 4m', 'Next']);
+    await _openSupport(tester);
     expect(_row('8:00 AM · 4m'), findsOneWidget);
-    expect(_headerLine(tester, '2026-10-18'), '1 recording · 4m · 1 needs attention');
     expect(find.text('Failed — tap Retry'), findsOneWidget);
-    expect(find.text('1 recording need attention'), findsOneWidget);
-    expect(find.text('2 recordings need attention'), findsNothing);
   });
 
-  testWidgets('a day opens and folds on tap, and stays that way for the session', (tester) async {
-    final wals = [
-      _wal(DateTime(2026, 10, 18, 8), 4 * 60, WalStatus.uploaded),
-      _wal(DateTime(2026, 10, 16, 14, 5), 7 * 60, WalStatus.uploaded),
-    ];
-    await _pump(tester, wals);
-    expect(_row('8:00 AM · 4m'), findsOneWidget);
-    expect(_row('2:05 PM · 7m'), findsNothing);
-    expect(find.descendant(of: _day('2026-10-16'), matching: find.byIcon(Icons.expand_more)), findsOneWidget);
-
-    await tester.tap(_day('2026-10-16'));
-    await tester.pump();
-    expect(_row('2:05 PM · 7m'), findsOneWidget);
-    expect(find.descendant(of: _day('2026-10-16'), matching: find.byIcon(Icons.expand_less)), findsOneWidget);
-
-    await tester.tap(_day('2026-10-18'));
-    await tester.pump();
-    expect(_row('8:00 AM · 4m'), findsNothing);
-
-    // Leaving and coming back keeps the folds; only a new session opens on Today again.
-    await tester.pumpWidget(const SizedBox());
-    await _pump(tester, wals);
-    expect(_row('8:00 AM · 4m'), findsNothing);
-    expect(_row('2:05 PM · 7m'), findsOneWidget);
-
-    OnTheWayPage.resetFolds();
-    await tester.pumpWidget(const SizedBox());
-    await _pump(tester, wals);
-    expect(_row('8:00 AM · 4m'), findsOneWidget);
-    expect(_row('2:05 PM · 7m'), findsNothing);
-  });
-
-  testWidgets('a day header reports its fold state to accessibility', (tester) async {
-    final handle = tester.ensureSemantics();
-    await _pump(tester, [
-      _wal(DateTime(2026, 10, 18, 8), 60, WalStatus.uploaded),
-      _wal(DateTime(2026, 10, 16, 8), 60, WalStatus.uploaded),
-    ]);
-    expect(tester.getSemantics(_day('2026-10-18')), isSemantics(isHeader: true, isExpanded: true));
-    expect(tester.getSemantics(_day('2026-10-16')), isSemantics(isHeader: true, isExpanded: false));
-    await tester.tap(_day('2026-10-16'));
-    await tester.pump();
-    expect(tester.getSemantics(_day('2026-10-16')), isSemantics(isHeader: true, isExpanded: true));
-    handle.dispose();
-  });
-
-  testWidgets('pinned headers grow with large text instead of clipping', (tester) async {
+  testWidgets('rows and header grow with the largest text instead of clipping', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     await _pump(
       tester,
       [
-        _wal(DateTime(2026, 10, 18, 8), 4 * 60, WalStatus.miss),
-        _wal(DateTime(2026, 10, 15, 10), 30 * 60, WalStatus.outsideRecoveryWindow),
+        _wal(DateTime(2026, 10, 18, 8), 4 * 60, WalStatus.miss)..isSyncing = true,
+        _wal(DateTime(2026, 10, 15, 10), 30 * 60, WalStatus.miss),
       ],
-      textScale: 2,
+      textScale: 3.1,
     );
     expect(tester.takeException(), isNull);
-    expect(tester.getSize(_day('2026-10-18')).height, greaterThan(44 * 1.5));
-    final title = tester.getRect(find.descendant(of: _day('2026-10-15'), matching: find.byType(Text)).at(1));
-    expect(tester.getRect(_day('2026-10-15')).contains(title.bottomLeft - const Offset(0, 1)), isTrue);
+    for (final day in ['2026-10-18', '2026-10-15']) {
+      await tester.scrollUntilVisible(_day(day), 200);
+      expect(tester.getSize(_day(day)).height, greaterThanOrEqualTo(44));
+      final subtitle = tester.getRect(find.descendant(of: _day(day), matching: find.byType(Text)).at(1));
+      expect(tester.getRect(_day(day)).contains(subtitle.bottomLeft - const Offset(0, 1)), isTrue);
+    }
+    final link = find.byKey(const Key('on_the_way_details_for_support'));
+    await tester.scrollUntilVisible(link, 200);
+    expect(tester.takeException(), isNull);
+    expect(tester.getSize(link).height, greaterThanOrEqualTo(44));
   });
 
-  testWidgets('nothing on the way reads as all synced, with no day headers', (tester) async {
+  testWidgets('nothing on the way reads as all synced, with no day rows', (tester) async {
     await _pump(tester, [_wal(DateTime(2026, 10, 18, 8), 60, WalStatus.synced)]);
     expect(find.text('All recordings are synced'), findsOneWidget);
     expect(find.byKey(const Key('on_the_way_day_2026-10-18')), findsNothing);
-    expect(find.textContaining('on the way'), findsNothing);
+    expect(find.textContaining('catching up'), findsNothing);
   });
 
-  testWidgets('grouped chunks with gaps display only positive audio duration in summary, day, and row', (tester) async {
+  testWidgets('a quiet failure alone is never all synced, and support still reaches it', (tester) async {
+    await _pump(tester, [_wal(DateTime(2026, 10, 18, 8), 60, WalStatus.uploadRejected)]);
+    expect(find.text('All recordings are synced'), findsNothing);
+    expect(find.textContaining('catching up'), findsNothing);
+    await _openSupport(tester);
+    expect(_row('8:00 AM · 1m'), findsOneWidget);
+  });
+
+  testWidgets('grouped chunks with gaps total only positive audio duration', (tester) async {
     await _pump(tester, [
       _wal(DateTime(2026, 10, 18, 8, 0), 5, WalStatus.uploaded),
       _wal(DateTime(2026, 10, 18, 8, 1), 5, WalStatus.uploaded),
       _wal(DateTime(2026, 10, 18, 8, 2), 5, WalStatus.uploaded),
     ]);
-
-    expect(find.text('1 recording · 15s on the way'), findsOneWidget);
-    expect(_headerLine(tester, '2026-10-18'), '1 recording · 15s');
-    expect(_row('8:00 AM · 15s'), findsOneWidget);
+    expect(find.text('15s catching up'), findsOneWidget);
+    expect(_dayTexts(tester, '2026-10-18')[1], '1 recording · 15s');
     expect(find.textContaining('2m 5s'), findsNothing);
   });
 }

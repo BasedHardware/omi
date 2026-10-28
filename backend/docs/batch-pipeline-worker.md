@@ -226,9 +226,58 @@ trough is an opportunity to measure slack, not permission to run.
 
 Export oldest pending/ready/retry age per class, freshness, admission-to-lease owner
 wait, transition rates/jobs per second, and GPU utilization/headroom. No owner
-labels. Autoscale on ready-age with fresh/recent/deep targets 30/300/3600 seconds;
-reject stale samples. B's dedicated chart documents the external-metric HPA.
-CPU is not the scale signal; non-preemptible batch latency still needs bounds.
+labels. Queue age is an SLO diagnostic, not a replica demand multiplier: a parked
+allowance hold can re-enter `ready` after its backoff while keeping a days-old
+enqueue time. One such row must not buy the entire GPU ceiling.
+
+Capacity uses `omi_batch_pipeline_admissible_ready_units`, an indexed aggregate
+over ready, merge-pending, currently available work whose compute status is
+`unattempted` or `allowed`. New admission records `unattempted`; it does not
+authorize a paid call. Existing workers already replace that status with
+allowed/held or clear it on an unevaluated refusal, so mixed worker versions
+cannot leave a separate eligibility bit true. Held/parked/unevaluated and
+unmarked legacy debt do not request new GPUs; warm workers still drain them
+under the existing funding/privacy checks. No historical backfill is required.
+
+The three priority counts publish atomically with a separate capacity freshness
+clock. Only the dedicated worker's supervised sampler runs these aggregates;
+serving requests keep their existing gauges without scanning GPU capacity.
+A capacity-query failure leaves its clock unchanged and cannot fail recovery
+or projection. The adapter requires all three classes younger than60seconds, takes the
+maximum per class across identical worker samplers, then sums the classes.
+Absent/stale/partial data stays unavailable; never replace it with zero or sum
+the same global queue once per replica.
+
+Production values preserve four fixed workers with autoscaling and balanced
+pools off, so an image roll cannot activate an unqualified capacity target.
+The prepared cutover renders two pool-pinned deployments and HPAs: original release
+on OD and `<release>-spot` on Spot, each min1/max12 (total2/24), with independent
+pod selectors/PodMonitoring but the same metric release scope. This avoids
+strict topology spread, which GKE's node autoscaler does not support. Both HPAs
+consume the shared count as AverageValue. Each target is twice the qualified
+per-worker queued-unit target, dividing demand across the two pools. Node-pool
+ceilings are total12 each, not12 per zone; do not pre-provision nodes.
+
+`targetQueuedUnitsPerWorker=16` is **provisional slot arithmetic**, not a
+qualified throughput target. Before enabling either scaler setting, bramp3/op1 must benchmark
+useful completions and queue latency on the exact qualified worker, pin the
+measured target, verify the new index READY and fresh external metric, and get
+the lead's exact apply approval. The current5c floor4 remains until its actual
+ladder-C verdict. Lead75481f permits tomorrow's25% on fixed4/no new nodes if the
+scaler is not ready by2026-10-28 09Z, with the utilization flag re-evaluated at25.
+This source change does not itself expand admission or authorize deployment.
+The qualification deadline is2026-10-28 09Z; bramp3 owns the benchmark and
+measured target, lead approves the resulting values change, and op1 applies it.
+
+For cutover/rollback, op1 captures the current release values/manifest privately,
+keeps the image pinned, preserves all runtime bindings and the1500s SIGTERM
+drain, and verifies **both** deployments/images plus all count classes. The OD
+deployment declares its required Spot companion; `deploy_status_report.py`
+fails for a missing/unready/zero-sized or wrong-image companion. Do not treat
+the original deployment's rollout alone as product acceptance. Restore the
+captured pre-scaler release and four Ready workers if qualification fails.
+CPU is not the scale signal; queue latency, useful throughput, GPU duty and
+the cost ledger still gate cohort expansion.
 
 ## Stage profiling (metrics-only)
 

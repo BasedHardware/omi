@@ -13652,32 +13652,6 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals pakeliui';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'Įkeliama: $count';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'Beveik paruošta: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Reikia dėmesio: $count',
-      one: '1 reikia dėmesio',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Veiklos dar nėra';
 
   @override
@@ -14455,13 +14429,7 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Atidaryti ankstesnį epizodą';
-
-  @override
   String get episodeNotesSoon => 'Užrašai atsiranda po pirmųjų pokalbio minučių.';
-
-  @override
-  String get episodeOpenAll => 'Atidaryti viską';
 
   @override
   String get episodeWrapUpNow => 'Užbaigti dabar';
@@ -14599,22 +14567,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String get othersSpeakerLabel => 'Kiti';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Atlikta';
@@ -14644,6 +14600,89 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'Įkėlimai trumpai pristabdyti — jie atsinaujins automatiškai';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Tęsia „$title“';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· nuo $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Pastabos prasidės, kai atvyks galutinė transkripcija.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Kuriamos telefone, kol kalbate. Pilnos pastabos atvyks kartu su galutine transkripcija.';
+
+  @override
+  String get episodeOnThisPhone => 'Šiame telefone';
+
+  @override
+  String get episodeOpenTranscript => 'Atidaryti transkripciją';
+
+  @override
+  String get liveCardTitle => 'Tiesiogiai';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Galutinė transkripcija atsilieka maždaug $duration';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'Galutinė transkripcija pasivijo';
+
+  @override
+  String get livePreviewNoEngineBody => 'Tavo žodžiai čia pasirodo po minutės ar dviejų.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Saugiai įrašinėja';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Tiesiogiai šiame telefone';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Įjungti tiesioginį tekstą';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'pakeliui';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'prisijungus';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration apdorojama';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'Įkeliama automatiškai. Pokalbiai atsiras, vos įrašams pasiekus serverį.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Įkeliama automatiškai, kai vėl būsite prisijungę. Pokalbiai atsiras, vos įrašams pasiekus serverį.';
+
+  @override
+  String get onTheWayDayUploading => 'Įkeliama';
+
+  @override
+  String get onTheWayDayNext => 'Kitas eilėje';
+
+  @override
+  String get onTheWayDayQueued => 'Laukia eilėje';
+
+  @override
+  String get onTheWayNoDate => 'Be datos';
+
+  @override
+  String get onTheWayFootnote =>
+      'Nepavykę įrašai toliau bandomi fone. Viskas, ko nepavyksta transkribuoti, mums automatiškai pranešama.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Išsami informacija palaikymo komandai';
 
   @override
   String get voiceProfileCardDismissed => 'Balso profilį galite nustatyti bet kada nustatymuose.';

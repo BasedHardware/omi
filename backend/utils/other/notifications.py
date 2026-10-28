@@ -21,6 +21,7 @@ from database.redis_db import release_daily_summary_lock, try_acquire_daily_summ
 from models.notification_message import NotificationMessage
 from utils.conversations.factory import deserialize_conversations
 from utils.conversations.summary_selection import select_primary_summary
+from utils.daily_summary_validation import require_daily_summary
 from utils.executors import db_executor, open_loops_executor, postprocess_executor, run_blocking
 from utils.conversations.relevance_content import exclude_from_derived
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
@@ -278,6 +279,9 @@ def _legacy_generate_and_store_daily_summary(
             end_date_utc,
             memories_learned=memories_learned_payload(uid, conversations, start_date_utc, end_date_utc),
         )
+        # Validate before any write. A saved invalid candidate would satisfy the
+        # by-date idempotency guard and prevent the user's next attempt from generating.
+        require_daily_summary(summary_data, uid=uid, operation='legacy_generation_candidate')
         summary_data = finish_legacy_stub(existing_summary, summary_data)
         if fingerprint is not None:
             summary_data[FINGERPRINT_FIELD] = fingerprint

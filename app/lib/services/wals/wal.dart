@@ -34,8 +34,8 @@ const secondsPerFlashPage = 1.4;
 ///                  [outsideRecoveryWindow] this is terminal rather than pending.
 ///                  The local file is kept; only deletion is offered.
 /// - [uploadRejected] — an upload request was refused (HTTP 400/413, or a
-///                  historical 403). Automatic drains stop; an explicit retry
-///                  can re-submit the intact file without rewriting its time.
+///                  historical 403). Retained without user attention; automatic
+///                  uploads retry daily for seven days, then count as reported.
 enum WalStatus {
   inProgress,
   miss,
@@ -57,6 +57,22 @@ class WalUploadRejection {
   static const invalidCaptureTime = 'invalid_capture_time';
   static const tooLarge = 'too_large';
   static const serverRefused = 'server_refused';
+  static const invalidFile = 'invalid_file';
+  static const emptyClip = 'empty_clip';
+  static const malformedMultipart = 'malformed_multipart';
+  static const tooManyParts = 'too_many_parts';
+
+  static String bounded(String? code) => const {
+        emptyClip,
+        invalidCaptureTime,
+        tooLarge,
+        serverRefused,
+        invalidFile,
+        malformedMultipart,
+        tooManyParts,
+      }.contains(code)
+          ? code!
+          : serverRefused;
 }
 
 /// User-facing sync state for a single recording, derived from [Wal.status],
@@ -110,8 +126,7 @@ WalSyncDisplayState? worstSessionSyncState(Iterable<Wal> wals) {
 /// retry can still help (the sync pages' "Failed — tap Retry" case, which
 /// resets the auto-retry budget). Corrupted and out-of-window recordings
 /// cannot be retried into success.
-bool isRetryableSyncState(WalSyncDisplayState state) =>
-    state == WalSyncDisplayState.failed || state == WalSyncDisplayState.uploadRejected;
+bool isRetryableSyncState(WalSyncDisplayState state) => state == WalSyncDisplayState.failed;
 
 /// Whether the state is one the sync pages file under needs attention: the
 /// server refused it, retries are exhausted, or audio is unreadable/too old.
@@ -121,15 +136,15 @@ bool isAttentionSyncState(WalSyncDisplayState state) =>
     state == WalSyncDisplayState.failed ||
     state == WalSyncDisplayState.corrupted ||
     state == WalSyncDisplayState.outsideRecoveryWindow ||
-    state == WalSyncDisplayState.unsupportedAudio ||
-    state == WalSyncDisplayState.uploadRejected;
+    state == WalSyncDisplayState.unsupportedAudio;
 
 /// Whether a recording may be deleted where a block action found it: only a
 /// member that is idle (not mid-upload) and already in a terminal,
 /// needs-attention state. A block can mix a refused member with one still
 /// uploading — the refusal label belongs to the former, so the latter's audio
 /// is never deleted under it.
-bool walDeletionAllowed(Wal wal) => !wal.isSyncing && isAttentionSyncState(wal.syncDisplayState);
+bool walDeletionAllowed(Wal wal) =>
+    !wal.isSyncing && (isAttentionSyncState(wal.syncDisplayState) || wal.status == WalStatus.uploadRejected);
 
 /// Whether a deliberate retry of this recording can change its outcome. A
 /// `too_large` refusal (413) is deterministic — the same bytes are the same
@@ -146,7 +161,7 @@ int _syncOutcomeRank(WalSyncDisplayState state) => switch (state) {
       WalSyncDisplayState.corrupted => 4,
       WalSyncDisplayState.outsideRecoveryWindow => 4,
       WalSyncDisplayState.unsupportedAudio => 4,
-      WalSyncDisplayState.uploadRejected => 4,
+      WalSyncDisplayState.uploadRejected => 1,
       WalSyncDisplayState.retrying => 3,
       WalSyncDisplayState.syncing => 2,
       WalSyncDisplayState.uploaded => 1,
@@ -160,6 +175,11 @@ int _syncOutcomeRank(WalSyncDisplayState state) => switch (state) {
 /// has spent it from every automatic drain, so the label and the behaviour
 /// cannot drift apart. Only the per-recording manual Retry ignores it.
 const int walMaxAutoRetries = 3;
+
+/// Refused recordings one automatic drain may re-send. A day-long server bug can refuse
+/// thousands; their daily recovery then spreads over later drains instead of firing every
+/// single-file upload back to back (400s engage neither the 429 limiter nor the 5xx pause).
+const int walMaxRefusalRetriesPerDrain = 25;
 
 /// A recording young enough to still attach to a live conversation (matches
 /// the backend's fresh-lane cutoff, `SYNC_FRESH_MAX_AGE_SECONDS`).
@@ -309,6 +329,7 @@ class Wal {
 
   /// Unix timestamp (seconds) when the audio was uploaded (202 received).
   int uploadedAt;
+  int jobPendingConfirmedAt;
 
   /// Unix timestamp (seconds) when the server confirmed this recording synced
   /// (job resolved to [WalStatus.synced], or the live-stream ack completed it).
@@ -328,6 +349,22 @@ class Wal {
   /// Why the server refused the last upload attempt, as a bounded
   /// [WalUploadRejection] token; null when the row was never refused.
   String? uploadRejectionReason;
+  int uploadRejectionStatusCode;
+  int uploadRejectedAt;
+  int uploadRefusalLastAttemptAt;
+
+  /// Daily recovery is independent of the transient network retry budget.
+  /// Old indexes get a new seven-day window on their first recovery pass.
+  /// Refusals fixed by the bytes themselves (size, part count) never succeed on a resend.
+  bool refusalRetryDue(int nowSeconds) =>
+      status == WalStatus.uploadRejected &&
+      uploadRejectionReason != WalUploadRejection.tooLarge &&
+      uploadRejectionReason != WalUploadRejection.tooManyParts &&
+      (uploadRejectedAt == 0 || nowSeconds < uploadRejectedAt + 7 * 86400) &&
+      (uploadRefusalLastAttemptAt == 0 || nowSeconds >= uploadRefusalLastAttemptAt + 86400);
+
+  bool refusalReported(int nowSeconds) =>
+      status == WalStatus.uploadRejected && uploadRejectedAt > 0 && nowSeconds >= uploadRejectedAt + 7 * 86400;
 
   String get id => '${device}_$timerStart';
 
@@ -398,14 +435,15 @@ class Wal {
     syncSpeedKBps = null;
   }
 
-  /// Marks a definitive upload-endpoint refusal. The bytes stay available for
-  /// review/deletion and automatic connectivity wakes do not re-offer them;
-  /// an explicit manual retry may still re-submit after user intervention.
-  /// [reasonCode] is a bounded [WalUploadRejection] token naming which
-  /// refusal it was, so rows can say "Too large" instead of a bare "Failed".
-  void markUploadRejected({String? reasonCode}) {
+  /// Retains refused bytes and the closed reason with a durable daily retry
+  /// clock. Connectivity changes and manual gestures cannot reset this clock.
+  void markUploadRejected({String? reasonCode, int statusCode = 400, int? nowSeconds}) {
     status = WalStatus.uploadRejected;
-    uploadRejectionReason = reasonCode;
+    uploadRejectionReason = WalUploadRejection.bounded(reasonCode);
+    uploadRejectionStatusCode = statusCode;
+    final now = nowSeconds ?? DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    if (uploadRejectedAt == 0) uploadRejectedAt = now;
+    uploadRefusalLastAttemptAt = now;
     jobId = null;
     isSyncing = false;
     syncStartedAt = null;
@@ -413,10 +451,8 @@ class Wal {
     syncSpeedKBps = null;
   }
 
-  /// Explicit user action only. Old request refusals carry no per-file proof
-  /// of invalid audio; keep automatic wakes stopped until this gesture.
+  /// Fresh budget for transient failures. Refusals use their separate clock.
   void prepareManualRetry() {
-    if (status == WalStatus.uploadRejected) status = WalStatus.miss;
     retryCount = 0;
     lastRetryAt = 0;
   }
@@ -460,10 +496,14 @@ class Wal {
     this.lastRetryAt = 0,
     this.jobId,
     this.uploadedAt = 0,
+    this.jobPendingConfirmedAt = 0,
     this.syncedAt = 0,
     this.keptForTranscriptRecovery = false,
     this.clockRun,
     this.uploadRejectionReason,
+    this.uploadRejectionStatusCode = 400,
+    this.uploadRejectedAt = 0,
+    this.uploadRefusalLastAttemptAt = 0,
   }) : data = data ?? [] {
     frameSize = codec.getFrameSize();
   }
@@ -513,10 +553,16 @@ class Wal {
       lastRetryAt: json['last_retry_at'] ?? 0,
       jobId: json['job_id'],
       uploadedAt: json['uploaded_at'] ?? 0,
+      jobPendingConfirmedAt: json['job_pending_confirmed_at'] ?? 0,
       syncedAt: json['synced_at'] ?? 0,
       keptForTranscriptRecovery: json['kept_for_transcript_recovery'] == true,
       clockRun: json['clock_run'] as String?,
-      uploadRejectionReason: json['upload_rejection_reason'] as String?,
+      uploadRejectionReason: json['upload_rejection_reason'] == null
+          ? null
+          : WalUploadRejection.bounded(json['upload_rejection_reason'] as String?),
+      uploadRejectionStatusCode: json['upload_rejection_status_code'] ?? 400,
+      uploadRejectedAt: json['upload_rejected_at'] ?? 0,
+      uploadRefusalLastAttemptAt: json['upload_refusal_last_attempt_at'] ?? 0,
     )
       ..frameSize = json['frame_size'] ?? mapNameToCodec(json['codec']).getFrameSize()
       ..repairLegacyImportedCustody();
@@ -562,10 +608,14 @@ class Wal {
       'last_retry_at': lastRetryAt,
       'job_id': jobId,
       'uploaded_at': uploadedAt,
+      'job_pending_confirmed_at': jobPendingConfirmedAt,
       'synced_at': syncedAt,
       if (keptForTranscriptRecovery) 'kept_for_transcript_recovery': true,
       if (clockRun != null) 'clock_run': clockRun,
       if (uploadRejectionReason != null) 'upload_rejection_reason': uploadRejectionReason,
+      'upload_rejection_status_code': uploadRejectionStatusCode,
+      'upload_rejected_at': uploadRejectedAt,
+      'upload_refusal_last_attempt_at': uploadRefusalLastAttemptAt,
     };
   }
 
@@ -618,10 +668,14 @@ class Wal {
     h = _mixFingerprint(h, lastRetryAt);
     h = _mixFingerprint(h, jobId?.hashCode ?? 0);
     h = _mixFingerprint(h, uploadedAt);
+    h = _mixFingerprint(h, jobPendingConfirmedAt);
     h = _mixFingerprint(h, syncedAt);
     h = _mixFingerprint(h, keptForTranscriptRecovery ? 1 : 0);
     h = _mixFingerprint(h, clockRun?.hashCode ?? 0);
     h = _mixFingerprint(h, uploadRejectionReason?.hashCode ?? 0);
+    h = _mixFingerprint(h, uploadRejectionStatusCode);
+    h = _mixFingerprint(h, uploadRejectedAt);
+    h = _mixFingerprint(h, uploadRefusalLastAttemptAt);
     return h;
   }
 
@@ -666,5 +720,26 @@ class Wal {
       return '${directory.path}/$filename';
     }
     return '${directory.path}/$pathOrName';
+  }
+}
+
+/// Refusals are operator feedback: no per-recording gesture can repair them.
+class WalRefusalSummary {
+  const WalRefusalSummary({required this.count, required this.seconds, required this.reportedCount});
+  final int count;
+  final int seconds;
+  final int reportedCount;
+  bool get userActionCanHelp => false;
+
+  factory WalRefusalSummary.from(Iterable<Wal> wals, {int? nowSeconds}) {
+    final now = nowSeconds ?? DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    var count = 0, seconds = 0, reported = 0;
+    for (final wal in wals) {
+      if (wal.status != WalStatus.uploadRejected) continue;
+      count++;
+      seconds += max(0, wal.seconds);
+      if (wal.refusalReported(now)) reported++;
+    }
+    return WalRefusalSummary(count: count, seconds: seconds, reportedCount: reported);
   }
 }
