@@ -14,6 +14,7 @@ from uuid import uuid4
 import pytz
 
 import database.conversations as conversations_db
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from database.durable_queue import ProcessOutcome, drain_isolated_async
 import database.notifications as notification_db
 import database.redis_db as redis_db
@@ -1115,6 +1116,9 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> Optional[Tuple[str
     ):
         return
     uid = user_data[0]
+    if account_deletion_blocks_user_work(str(uid)):
+        logger.info('daily_summary_skipped reason=account_deletion')
+        return None
     user_tz_name = user_data[2] if len(user_data) > 2 else None
 
     # NOTE: The daily recap is a cross-platform feature delivered by a

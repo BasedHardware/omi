@@ -6,8 +6,9 @@ refresh tokens, and removes owner API/OAuth credentials when the request is
 accepted. The `account_deletions/{uid}` marker immediately fences ordinary API,
 capture, and processing access. Authentication remains enabled so the owner can
 sign in to the same UID; blocked requests return
-`account_pending_deletion`. The status and restore routes use a restricted auth
-dependency and do not run normal account registration or content recovery.
+`account_pending_deletion`. The status, restore, and `erase_now` routes use a
+restricted auth dependency and do not run normal account registration or
+content recovery.
 
 ## Owner API
 
@@ -16,7 +17,8 @@ dependency and do not run normal account registration or content recovery.
   and deferred processing backlog. Call it before showing confirmation and
   while the grace period is active.
 - `DELETE /v1/users/delete-account` accepts `{"erase_now": true}` to bypass
-  the grace period. Omitting the field uses the configured default.
+  the grace period, including when promoting an existing pending request.
+  Omitting the field uses the configured default.
 - `POST /v1/users/restore-account` cancels a still-future grace marker. Restore
   changes the marker to `cancelled`, lifting the access and capture fences. The
   subscription remains cancelled, and deleted API/OAuth credentials must be

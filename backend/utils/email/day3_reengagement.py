@@ -32,6 +32,7 @@ from typing import Any, Callable, Iterable, Optional
 from google.cloud.firestore_v1 import FieldFilter
 
 from database._client import db
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from database.auth import get_user_from_uid
 from database.conversations import conversations_collection
 from database.firestore_index_registry import (
@@ -383,6 +384,8 @@ def collect_day3_candidates(
     candidates: list[CandidateFacts] = []
     for snapshot in query.stream():
         uid = snapshot.id
+        if account_deletion_blocks_user_work(uid):
+            continue
         data = snapshot.to_dict() or {}
         signup_at = data.get('signup_platform_at')
 
@@ -434,7 +437,11 @@ def run_day3_reengagement(
         logger.info('day3 re-engagement: closed by authority; no user work performed')
         return summary
 
+    client = firestore_client if firestore_client is not None else db
+
     for facts in candidates:
+        if account_deletion_blocks_user_work(facts.uid):
+            continue
         summary.considered += 1
         decision = evaluate_candidate(facts, now=now)
         if not decision.eligible:

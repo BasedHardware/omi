@@ -51,7 +51,7 @@ class AccountDeletionRestoreResponse(BaseModel):
 @router.delete('/v1/users/delete-account', tags=['v1'], response_model=AccountDeletionActionResponse)
 def delete_account(
     request: DeleteAccountRequest = DeleteAccountRequest(),
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(auth.get_current_user_uid_for_deletion_status),
 ):
     try:
         return start_account_deletion(

@@ -393,11 +393,10 @@ def background_wipe_user_data(
         # leave an account usable and recoverable.
         current_operation = 'billing_subscription'
         heartbeat()
-        marker = deletion_marker_db.read_account_deletion_marker(uid) or {}
-        # Grace admission completed Stripe cancellation before the window
-        # began; do not re-open that dependency at wipe time.
-        if marker.get('grace_actions_complete') is not True:
-            _cancel_subscription_for_account_deletion(uid)
+        # A late checkout/webhook could have created a subscription after the
+        # grace admission check. Re-read Stripe at the irreversible boundary,
+        # even when admission recorded an earlier successful cancellation.
+        _cancel_subscription_for_account_deletion(uid)
         current_operation = 'agent_vm'
         heartbeat()
         delete_agent_vm_for_account(uid)
@@ -434,22 +433,12 @@ def background_wipe_user_data(
         wipe_result = users_db.delete_user_data(uid)
         if wipe_result.get('status') != 'ok':
             raise RuntimeError('authoritative Firestore user-data wipe did not complete')
-        # Best-effort Typesense conversation purge AFTER the wipe: while the
-        # Firebase extension still owns production indexing, account deletion
-        # must not fail closed on Typesense. The purge is userId-filter-based,
-        # so it stays executable (and retryable) even with the user document
-        # gone; a failure here never changes the wipe outcome.
+        # Typesense is a serving surface, so its owner purge is part of
+        # completion. The filter remains executable after Firestore deletion,
+        # and propagating failures leaves the durable wipe retryable.
         current_operation = 'conversation_typesense_purge'
         heartbeat()
-        try:
-            from utils.conversations.typesense_index import purge_user_conversation_index
-
-            purge_user_conversation_index(uid)
-        except Exception as purge_err:
-            logger.error(
-                f'delete_account post-wipe conversation typesense purge failed for {uid}: '
-                f'{sanitize(str(purge_err))}'
-            )
+        purge_user_conversation_index(uid)
         current_operation = 'memory_maintenance_registry'
         heartbeat()
         _delete_memory_maintenance_registry(uid)
@@ -601,6 +590,13 @@ def _cancel_subscription_for_account_deletion(uid: str) -> None:
             stripe_utils.cancel_subscription_for_account_deletion(subscription_id)
     except Exception as error:
         raise DeletionBillingError(subscription_id, error) from error
+
+
+def purge_user_conversation_index(uid: str) -> None:
+    """Remove Typesense's owner documents; failures keep the wipe retryable."""
+    from utils.conversations.typesense_index import purge_user_conversation_index as purge
+
+    purge(uid, raise_on_failure=True)
 
 
 def _run_immediate_deletion_steps(uid: str) -> None:

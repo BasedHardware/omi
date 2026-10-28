@@ -22,6 +22,7 @@ from database import (
     llm_usage as llm_usage_db,
     users as users_db,
 )
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from database._client import get_customer_firestore_client
 from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
 from services.users.data_export import iter_user_data_export, iter_user_data_export_streaming
@@ -2307,6 +2308,14 @@ def get_shared_daily_summary(summary_id: str):
     uid = get_daily_summary_uid(summary_id)
     if not uid:
         raise HTTPException(status_code=404, detail='Daily summary not found')
+
+    try:
+        if account_deletion_blocks_user_work(uid):
+            raise HTTPException(status_code=404, detail='Daily summary not found')
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail='Daily summary unavailable') from exc
 
     summary = daily_summaries_db.get_daily_summary(uid, summary_id)
     if not summary or summary.get('visibility') != 'shared':

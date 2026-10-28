@@ -1,6 +1,7 @@
 """The durable account-deletion marker is an authentication access barrier."""
 
 import logging
+import inspect
 from unittest.mock import MagicMock
 
 import pytest
@@ -8,6 +9,8 @@ from fastapi import HTTPException, WebSocketException
 
 from utils.other import endpoints
 from database import users
+from database.account_deletion_marker import account_deletion_blocks_user_work
+from routers import account_deletion as deletion_router
 
 
 @pytest.fixture(autouse=True)
@@ -162,6 +165,44 @@ class _PlaneClient:
 
     def collection(self, name):
         return _PlaneCollection(self._docs, name)
+
+
+@pytest.mark.parametrize(
+    ('status', 'blocked'),
+    [
+        (None, False),
+        ('cancelled', False),
+        ('billing_failed', False),
+        ('pending_deletion', True),
+        ('pending', True),
+        ('running', True),
+        ('completed', True),
+        ('unexpected', True),
+    ],
+)
+def test_shared_background_predicate_matches_access_fence(status, blocked):
+    docs = {} if status is None else {'account_deletions/u': {'wipe_status': status}}
+    assert account_deletion_blocks_user_work('u', firestore_client=_PlaneClient(docs)) is blocked
+
+
+def test_erase_now_route_uses_the_recovery_auth_dependency_and_promotes_pending(monkeypatch):
+    dependency = inspect.signature(deletion_router.delete_account).parameters['uid'].default.dependency
+    assert dependency is endpoints.get_current_user_uid_for_deletion_status
+    uid = dependency(authorization='Bearer token')
+    observed = {}
+
+    def promote(actual_uid, **kwargs):
+        observed.update(uid=actual_uid, **kwargs)
+        return {'status': 'pending', 'message': 'Wipe scheduled'}
+
+    monkeypatch.setattr(deletion_router, 'start_account_deletion', promote)
+    result = deletion_router.delete_account(
+        request=deletion_router.DeleteAccountRequest(erase_now=True),
+        uid=uid,
+    )
+
+    assert observed == {'uid': 'old-uid', 'reason': None, 'reason_details': None, 'erase_now': True}
+    assert result['status'] == 'pending'
 
 
 def test_auth_fence_refuses_when_the_deletion_marker_is_only_on_the_data_plane(monkeypatch):

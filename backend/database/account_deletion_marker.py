@@ -12,7 +12,7 @@ from typing import Any
 from database.fsr_read_cache import cached_read, memo, plane_id, ttl
 
 from database._client import get_data_plane_firestore_client
-from database.account_deletion_policy import normalize_account_deletion_status
+from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.firestore_read_metrics import FirestoreReadOutcome, FirestoreReadSite, record_document_read
 
 ACCOUNT_DELETION_COLLECTION = "account_deletions"
@@ -55,6 +55,18 @@ def get_user_deletion_wipe_status(uid: str, *, firestore_client: Any | None = No
     )
 
 
+def account_deletion_blocks_user_work(uid: str, *, firestore_client: Any | None = None) -> bool:
+    """Shared fail-closed predicate for per-user background and public work.
+
+    Keep this aligned with the normal account access fence: only explicitly
+    restored/pre-acceptance statuses permit work. An unavailable authority
+    raises so callers cannot silently process a deleting account.
+    """
+    if not isinstance(uid, str) or not uid.strip():
+        raise ValueError('uid is required')
+    return account_deletion_blocks_access(get_user_deletion_wipe_status(uid, firestore_client=firestore_client))
+
+
 def _s4_read_deletion_status(uid: str, *, firestore_client: Any | None = None) -> str | None:
     client = account_deletion_firestore_client(firestore_client=firestore_client)
     snapshot = account_deletion_document(uid, firestore_client=client).get()
@@ -90,6 +102,7 @@ __all__ = [
     "account_deletion_collection",
     "account_deletion_document",
     "account_deletion_firestore_client",
+    "account_deletion_blocks_user_work",
     "get_user_deletion_wipe_status",
     "read_account_deletion_marker",
 ]

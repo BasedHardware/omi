@@ -160,7 +160,9 @@ def _conversation(**overrides) -> Conversation:
 def _call_shared(conversation: Conversation, people_data=None):
     with patch.object(conv_router.redis_db, 'get_conversation_uid', return_value='owner-uid'), patch.object(
         conv_router, '_get_valid_conversation_by_id', return_value={'visibility': 'shared'}
-    ), patch.object(conv_router, 'deserialize_conversation', return_value=conversation), patch.object(
+    ), patch.object(conv_router, 'account_deletion_blocks_user_work', return_value=False), patch.object(
+        conv_router, 'deserialize_conversation', return_value=conversation
+    ), patch.object(
         conv_router.users_db, 'get_people_by_ids', return_value=people_data or []
     ):
         return conv_router.get_shared_conversation_by_id('c1')
@@ -196,6 +198,17 @@ def test_new_arbitrary_field_on_stored_document_does_not_appear():
     assert 'brand_new_conversation_field' not in payload
     assert set(payload) == ALLOWLIST_TOP_LEVEL
     assert payload['people'] == [{'id': 'p1', 'name': 'Ada'}]
+
+
+def test_pending_owner_cannot_read_an_existing_public_conversation_link():
+    with patch.object(conv_router.redis_db, 'get_conversation_uid', return_value='owner-uid'), patch.object(
+        conv_router, 'account_deletion_blocks_user_work', return_value=True
+    ), patch.object(conv_router, '_get_valid_conversation_by_id') as read_conversation:
+        with pytest.raises(HTTPException) as error:
+            conv_router.get_shared_conversation_by_id('c1')
+
+    assert error.value.status_code == 404
+    read_conversation.assert_not_called()
 
 
 def test_people_projection_is_id_and_name_only():
@@ -304,7 +317,7 @@ def test_email_shaped_action_owner_is_not_public():
 def test_private_conversation_still_404s():
     with patch.object(conv_router.redis_db, 'get_conversation_uid', return_value='owner-uid'), patch.object(
         conv_router, '_get_valid_conversation_by_id', return_value={'visibility': 'private'}
-    ):
+    ), patch.object(conv_router, 'account_deletion_blocks_user_work', return_value=False):
         with pytest.raises(HTTPException) as exc:
             conv_router.get_shared_conversation_by_id('c1')
     assert exc.value.status_code == 404

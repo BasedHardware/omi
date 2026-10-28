@@ -67,6 +67,13 @@ def account_deletion_blocks_access(status: str | None) -> bool:
     return status is not None and status not in ACCOUNT_DELETION_ACCESS_ALLOWED_STATUSES
 
 
+def account_deletion_marker_blocks_access(*, marker_exists: bool, raw_status: object) -> bool:
+    """Apply the shared access decision to an already-read marker snapshot."""
+    return account_deletion_blocks_access(
+        normalize_account_deletion_status(marker_exists=marker_exists, raw_status=raw_status)
+    )
+
+
 def account_deletion_restorable(status: str | None) -> bool:
     """Whether the owner can still cancel the deletion and keep their data."""
     return status in ACCOUNT_DELETION_RESTORABLE_STATUSES
@@ -80,6 +87,7 @@ __all__ = [
     'DELETION_WIPE_RETRY_BASE_DELAY',
     'DELETION_WIPE_RETRY_MAX_DELAY',
     'account_deletion_blocks_access',
+    'account_deletion_marker_blocks_access',
     'account_deletion_restorable',
     'deletion_wipe_retry_delay',
     'normalize_account_deletion_status',
