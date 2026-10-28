@@ -100,4 +100,50 @@ void main() {
 
     expect(await sync.getMissingWals(), isEmpty);
   });
+
+  // Bulk clears must filter rows by device ownership the same way: after a
+  // pendant switch, a stale row's fileNum names a different recording on the
+  // new pendant, so sending it would delete that pendant's audio (#14688).
+  // A row that slipped past the filter would reach ServiceManager for the
+  // device delete and throw in this unit test, so these tests also prove the
+  // stale rows never enter the firmware-delete path; they drop locally like
+  // the single-row path above.
+  test('deleteAllPendingWals drops previous-device rows without a device delete', () async {
+    final sync = StorageSyncImpl(_Listener());
+    sync.testDevice = BtDevice(
+      id: 'pendant-2',
+      name: 'Omi Pendant',
+      type: DeviceType.omi,
+      rssi: -50,
+      locator: DeviceLocator.bluetooth(deviceId: 'pendant-2'),
+    );
+    sync.testWals = [
+      storageWal(timerStart: 1000, fileNum: 0, status: WalStatus.miss, device: 'pendant-1'),
+      storageWal(timerStart: 2000, fileNum: 1, status: WalStatus.miss, device: 'pendant-1'),
+    ];
+
+    await sync.deleteAllPendingWals();
+
+    expect(await sync.getMissingWals(), isEmpty);
+  });
+
+  test('deleteAllSyncedWals drops previous-device rows without a device delete', () async {
+    final sync = StorageSyncImpl(_Listener());
+    sync.testDevice = BtDevice(
+      id: 'pendant-2',
+      name: 'Omi Pendant',
+      type: DeviceType.omi,
+      rssi: -50,
+      locator: DeviceLocator.bluetooth(deviceId: 'pendant-2'),
+    );
+    final stale = [
+      storageWal(timerStart: 1000, fileNum: 0, status: WalStatus.synced, device: 'pendant-1'),
+      storageWal(timerStart: 2000, fileNum: 1, status: WalStatus.synced, device: 'pendant-1'),
+    ];
+    sync.testWals = stale;
+
+    await sync.deleteAllSyncedWals();
+
+    expect(stale.any(sync.owns), isFalse);
+  });
 }

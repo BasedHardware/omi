@@ -31,6 +31,8 @@ class _Listener implements IWalSyncListener {
 void main() {
   late Directory tempDir;
   late List<String?> uploadedConversations;
+  late List<String> uploadedBatchFirstFiles;
+  late int rateLimitAtBatch;
   late LocalWalSyncImpl sync;
 
   setUp(() async {
@@ -49,6 +51,8 @@ void main() {
     await WalFileManager.init();
 
     uploadedConversations = [];
+    uploadedBatchFirstFiles = [];
+    rateLimitAtBatch = 0;
     SyncRateLimiter.instance.clear();
     sync = LocalWalSyncImpl(
       _Listener(),
@@ -63,7 +67,11 @@ void main() {
             audioEndSeconds,
             claimLiveCapture = false,
             geolocation}) async {
+          if (rateLimitAtBatch > 0 && uploadedConversations.length >= rateLimitAtBatch) {
+            throw SyncRateLimitedException(kind: SyncRateLimitKind.backendCapacity, retryAfterSeconds: 60);
+          }
           uploadedConversations.add(conversationId);
+          uploadedBatchFirstFiles.add(files.first.uri.pathSegments.last);
           return UploadFilesResult.queued('job-${uploadedConversations.length}');
         },
         fairUseStatusLoader: () async => {'stage': 'none'},
@@ -80,7 +88,7 @@ void main() {
     if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
   });
 
-  Future<Wal> writeWal(int timerStart, {String? conversationId, int seconds = 60}) async {
+  Future<Wal> writeWal(int timerStart, {String? conversationId, int seconds = 60, String device = 'omi'}) async {
     final name = 'audio_$timerStart.bin';
     await File('${tempDir.path}/$name').writeAsBytes(List<int>.filled(64, 1));
     return Wal(
@@ -89,7 +97,7 @@ void main() {
       seconds: seconds,
       status: WalStatus.miss,
       storage: WalStorage.disk,
-      device: 'omi',
+      device: device,
       filePath: name,
       conversationId: conversationId,
     );
@@ -98,6 +106,13 @@ void main() {
   Future<List<Wal>> writeRecording(String conversationId, int startSeconds, int walCount) async => [
         for (var index = 0; index < walCount; index++)
           await writeWal(startSeconds + index * 60, conversationId: conversationId),
+      ];
+
+  // Device-imported WALs (StorageSync → persistDeviceChunk) carry no
+  // conversation or recording-session id; one contiguous run of 60s chunks
+  // is one pendant recording.
+  Future<List<Wal>> writeDeviceRun(int startSeconds, int walCount) async => [
+        for (var index = 0; index < walCount; index++) await writeWal(startSeconds + index * 60, device: 'pendant'),
       ];
 
   test('a recording past its share defers its remainder while smaller recordings sync in the same pass', () async {
@@ -149,5 +164,60 @@ void main() {
     expect(uploadedConversations, ['c1', 'c1', 'c1', 'c1', 'c1', 'c2']);
     expect(first.every((w) => w.status == WalStatus.uploaded), isTrue);
     expect(second.every((w) => w.status == WalStatus.uploaded), isTrue);
+  });
+
+  test('id-less device recordings cap per contiguous run, not one shared bucket', () async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final smallStart = now - 7 * 3600;
+    final hugeStart = smallStart - 3600 - 190 * 60; // ends 1h before the small run
+    final huge = await writeDeviceRun(hugeStart, 190); // one contiguous run, 38 batches
+    final small = await writeDeviceRun(smallStart, 5); // separate recording, 1 batch
+    sync.testWals = [...huge, ...small];
+
+    await sync.syncAll();
+
+    // The huge run defers at its 36-batch share with the small run waiting;
+    // the small run's batch lands before the pass ends. With the old
+    // null|null|false| key every device recording shared one group, so the
+    // cap never fired between them (#14688).
+    expect(uploadedBatchFirstFiles.length, 37);
+    expect(uploadedBatchFirstFiles[36], 'audio_$smallStart.bin');
+    expect(small.every((w) => w.status == WalStatus.uploaded), isTrue);
+    expect(huge.where((w) => w.status == WalStatus.miss).length, 190 - 5 * maxBatchesPerRecordingPerDrain);
+
+    await sync.syncAll();
+    expect(huge.every((w) => w.status == WalStatus.uploaded), isTrue);
+  });
+
+  test('a rate-limit break before the cap carries the spent share into the next pass', () async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final poison = await writeRecording('c1', now - 7 * 3600 - 190 * 60, 190);
+    final small = await writeRecording('c2', now - 6 * 3600 - 30 * 60, 5);
+    sync.testWals = [...poison, ...small];
+
+    // Pass 1 dies on the rate limiter one batch short of the cap. The
+    // failed 36th batch still spent the rate-limit budget, so its share
+    // counts; a pass-local counter would restart at zero and re-monopolize
+    // every interrupted pass (#14688).
+    rateLimitAtBatch = 35;
+    await sync.syncAll();
+    expect(uploadedConversations.where((c) => c == 'c1').length, 35);
+    expect(small.every((w) => w.status == WalStatus.uploaded), isFalse);
+
+    SyncRateLimiter.instance.clear();
+    rateLimitAtBatch = 0;
+    await sync.syncAll();
+
+    // The carried share defers the poison remainder immediately; the small
+    // recording gets its turn in pass 2 instead of waiting for 36 more
+    // poison batches.
+    expect(uploadedConversations.where((c) => c == 'c1').length, 35);
+    expect(uploadedConversations.last, 'c2');
+    expect(small.every((w) => w.status == WalStatus.uploaded), isTrue);
+    expect(poison.where((w) => w.status == WalStatus.miss).length, 190 - 35 * 5);
+
+    await sync.syncAll();
+    expect(poison.every((w) => w.status == WalStatus.uploaded), isTrue);
+    expect(uploadedConversations.where((c) => c == 'c1').length, 38);
   });
 }

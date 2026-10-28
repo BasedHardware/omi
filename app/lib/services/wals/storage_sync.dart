@@ -275,18 +275,40 @@ class StorageSyncImpl implements StorageSync {
     listener.onWalUpdated();
   }
 
+  /// Cached rows recorded by a device other than the connected one. setDevice
+  /// swaps the device without clearing cached rows, and a refresh that fails
+  /// before listing keeps them, so after a pendant switch these rows' file
+  /// indexes name the NEW pendant's files. Deletes must never see them; the
+  /// rows drop locally instead (their audio still lives on their own device
+  /// and re-lists when that device reconnects).
+  Set<String> _previousDeviceWalIds() {
+    final device = _device;
+    if (device == null) return const {};
+    return _wals.where((w) => w.device != device.id).map((w) => w.id).toSet();
+  }
+
   @override
   Future<void> deleteAllSyncedWals() async {
-    final toDelete = _wals.where((w) => w.status == WalStatus.synced).toList();
+    // Stale previous-device rows get the same drop-only handling as the
+    // single-row path: sending their fileNums would delete the current
+    // pendant's files at those indexes (#14688).
+    final stale = _previousDeviceWalIds();
+    final toDelete = _wals.where((w) => w.status == WalStatus.synced && !stale.contains(w.id)).toList();
     final attempted = await _deleteWalsOnDevice(toDelete);
-    _wals = _wals.where((w) => w.status != WalStatus.synced || !attempted.contains(w.id)).toList();
+    _wals = _wals
+        .where((w) => !stale.contains(w.id) && (w.status != WalStatus.synced || !attempted.contains(w.id)))
+        .toList();
+    _logStaleRowsDropped('synced', stale.length);
     _logNeverAttemptedClear('storage_synced_clear_kept', toDelete, attempted);
     listener.onWalUpdated();
   }
 
   @override
   Future<void> deleteAllPendingWals() async {
-    final toDelete = _wals.where((w) => w.status == WalStatus.miss).toList();
+    // Stale previous-device rows never reach the device delete (see
+    // deleteAllSyncedWals); they drop locally like the single-row path.
+    final stale = _previousDeviceWalIds();
+    final toDelete = _wals.where((w) => w.status == WalStatus.miss && !stale.contains(w.id)).toList();
     final attempted = await _deleteWalsOnDevice(toDelete);
     // Attempted deletes drop their rows whatever the reply said (a positional
     // index a delete may have removed is burned; the listing re-adds
@@ -294,9 +316,16 @@ class StorageSyncImpl implements StorageSync {
     // stay listed, so a clear run with the pendant away does not remove rows
     // whose audio is still on the device and resurrect them as "new"
     // recordings on the next scan (#14688).
-    _wals = _wals.where((w) => w.status != WalStatus.miss || !attempted.contains(w.id)).toList();
+    _wals =
+        _wals.where((w) => !stale.contains(w.id) && (w.status != WalStatus.miss || !attempted.contains(w.id))).toList();
+    _logStaleRowsDropped('miss', stale.length);
     _logNeverAttemptedClear('storage_pending_clear_kept', toDelete, attempted);
     listener.onWalUpdated();
+  }
+
+  void _logStaleRowsDropped(String cleared, int count) {
+    if (count == 0) return;
+    DebugLogManager.logEvent('storage_clear_stale_rows_dropped', {'cleared': cleared, 'stale': count});
   }
 
   void _logNeverAttemptedClear(String event, List<Wal> intended, Set<String> attempted) {
