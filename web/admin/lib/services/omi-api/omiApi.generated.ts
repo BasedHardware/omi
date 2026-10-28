@@ -20366,7 +20366,7 @@ export async function delete_account_v1_users_delete_account_delete(header: { au
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_account_deletion_status_endpoint_v1_users_deletion_status_get(header: { authorization?: string }, init?: OmiApiClientInit): Promise<AccountDeletionStatusResponse> {
+export async function get_account_deletion_status_endpoint_v1_users_deletion_status_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AccountDeletionStatusResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/deletion-status`;
   const _search = "";
@@ -20376,6 +20376,9 @@ export async function get_account_deletion_status_endpoint_v1_users_deletion_sta
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
       ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
@@ -21444,7 +21447,7 @@ export async function record_channel_v1_users_release_channel_put(header: { auth
   return;
 }
 
-export async function restore_account_deletion_endpoint_v1_users_restore_account_post(header: { authorization?: string }, init?: OmiApiClientInit): Promise<AccountDeletionRestoreResponse> {
+export async function restore_account_deletion_endpoint_v1_users_restore_account_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AccountDeletionRestoreResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/restore-account`;
   const _search = "";
@@ -21454,6 +21457,9 @@ export async function restore_account_deletion_endpoint_v1_users_restore_account
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
       ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
