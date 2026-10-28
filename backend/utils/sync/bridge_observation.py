@@ -27,7 +27,10 @@ def _donor_speech_span(segment: dict) -> tuple[float, float] | None:
         return span
     timestamp, start, end = (segment.get(key) for key in ('timestamp', 'start', 'end'))
     if (
-        all(isinstance(value, (int, float)) and math.isfinite(value) for value in (timestamp, start, end))
+        isinstance(timestamp, (int, float))
+        and isinstance(start, (int, float))
+        and isinstance(end, (int, float))
+        and all(math.isfinite(value) for value in (timestamp, start, end))
         and start == end
         and math.isfinite(timestamp + timestamp)
     ):
