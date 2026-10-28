@@ -366,7 +366,8 @@ def test_230_file_growth_does_not_fan_out_manifest_retries():
 
 
 @pytest.mark.parametrize('replacement', [False, True])
-def test_stamped_download_pins_generation_and_never_reads_unstamped_sibling(monkeypatch, replacement):
+@pytest.mark.parametrize('filename', ['1000.000.bin', '1000.001.bin'])
+def test_stamped_download_pins_generation_and_never_reads_unstamped_sibling(monkeypatch, replacement, filename):
     from google.api_core.exceptions import PreconditionFailed
 
     monkeypatch.setattr(storage.audio_archive, 'admitted', lambda *_: False)
@@ -378,16 +379,20 @@ def test_stamped_download_pins_generation_and_never_reads_unstamped_sibling(monk
     client = Mock()
     client.bucket.return_value = bucket
     monkeypatch.setattr(storage, '_get_storage_client', lambda: client)
-    listing = [dict(path='chunks/u/c/1000.000.bin', timestamp=1000.0, generation='7', size=32)]
+    path = f'chunks/u/c/{filename}'
+    listing = [dict(path=path, timestamp=1000.00025, generation='7', size=32)]
+    if filename != '1000.000.bin':
+        # A canonical-looking spelling may belong to a different sample key.
+        listing.append(dict(path='chunks/u/c/1000.000.bin', timestamp=2000.0, generation='8', size=32))
     if replacement:
         with pytest.raises(RuntimeError, match='source could not be read'):
-            storage.download_audio_chunks_and_merge('u', 'c', [1000.0], listed_chunks=listing, strict_sources=True)
+            storage.download_audio_chunks_and_merge('u', 'c', [1000.00025], listed_chunks=listing, strict_sources=True)
     else:
         assert (
-            storage.download_audio_chunks_and_merge('u', 'c', [1000.0], listed_chunks=listing, strict_sources=True)
+            storage.download_audio_chunks_and_merge('u', 'c', [1000.00025], listed_chunks=listing, strict_sources=True)
             == b'\x01\x00' * 16
         )
-    bucket.blob.assert_called_once_with('chunks/u/c/1000.000.bin')
+    bucket.blob.assert_called_once_with(path)
     bucket.blob.return_value.download_as_bytes.assert_called_once_with(if_generation_match='7')
 
 
