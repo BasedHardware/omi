@@ -39,6 +39,15 @@ version lookup fails or returns malformed data. A successful empty response is
 still allowed to seed from `pubspec.yaml`; a command failure is never turned
 into build zero.
 
+The Android build number also clears version codes Play has already burned off
+every track: the lane reads the highest build number across all tracks plus the
+highest uploaded bundle version code (`google-play bundles list`, parsed by
+`mobile_store_version.py` as the `play_bundles` source). A rejected release
+leaves its uploaded bundle on no track — invisible to track-only lookups — but
+Play version codes are global and immutable, so reusing one fails the upload as
+a duplicate (2026-10-27/28: build 1527 was picked twice this way after a policy
+rejection orphaned its bundle; both reads fail closed like every other source).
+
 The internal dispatcher advances an iOS or Android baseline only after explicit
 platform-matched distribution evidence. Upload/build completion alone is not a
 distribution receipt. The current destination policy remains TestFlight
