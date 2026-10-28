@@ -81,10 +81,13 @@ class MemoryRedis:
             return self._bench_update(args[0], args[1], args[2], float(args[3]))
         if script is live_health.BENCH_CLEANUP:
             return self._bench_cleanup(args[0], args[1], args[2])
-        key, expected, new, _ttl = args
+        key = args[0]
+        expected, new, _ttl = args[_numkeys : _numkeys + 3]
         if self.data.get(key, '') != expected:
             return 0
         self.data[key] = new
+        if _numkeys == 2:
+            self.data[args[1]] = str(self.clock() + int(args[_numkeys + 3]))
         return 1
 
     @staticmethod

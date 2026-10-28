@@ -12,7 +12,11 @@ from abc import ABC, abstractmethod
 from typing import Any, Callable, ContextManager
 
 from config import live_stt_state
-from config.live_stt_resilience import escape_trial_votes_enabled
+from config.live_stt_resilience import (
+    escape_trial_votes_enabled,
+    failover_surge_censor_enabled,
+    sole_primary_hold_enabled,
+)
 from config.live_stt_registry import DEFAULT_TARGETS, Target, registry, assigned
 from utils.stt.live_gate import GateState, begin_trial, transition, generation_allows, reset_generation_floor
 from utils.stt.live_metrics import (
@@ -80,8 +84,27 @@ local current = redis.call('GET', KEYS[1])
 if (current or '') ~= ARGV[1] then return 0 end
 redis.call('SET', KEYS[1], ARGV[2])
 if tonumber(ARGV[3]) > 0 then redis.call('EXPIRE', KEYS[1], ARGV[3]) end
+if #KEYS > 1 then
+    local clock = redis.call('TIME')
+    local now = tonumber(clock[1]) + tonumber(clock[2]) / 1000000
+    local seconds = tonumber(ARGV[4])
+    redis.call('SET', KEYS[2], tostring(now + seconds), 'EX', seconds)
+end
 return 1
 """
+
+# A bench mass-failovers long-lived sessions onto the remaining targets over
+# tens of minutes. 2026-10-28: the parakeet benches at 19:07/19:43Z pushed a
+# death cluster onto soniox that burst-benched it 81 minutes after the last
+# bench; 2026-10-20's second failure pulse ran 70 minutes after the 13:10Z
+# parakeet bench. 90 minutes covers both timelines.
+FAILOVER_SURGE_CENSOR_SECONDS = 90 * 60
+
+# 2026-10-28: modulate-velma-2 promoted to the only stage-100 primary at a
+# 6.2% trial rate while soniox trialed healthy at stage 5, then served ~9%
+# failure for six hours. While the guard target is at stage >= 5, the held
+# target may not become the only stage-100 primary.
+SOLE_PRIMARY_HOLD = {'modulate-velma-2': 'soniox'}
 
 
 class CostHealthMixin(ABC):
@@ -95,6 +118,7 @@ class CostHealthMixin(ABC):
     _cost_preferred: dict[tuple[str, str], float]
     _cost_fresh: dict[tuple[str, str], float]
     _cost_unreconciled: set[tuple[str, str]]
+    _cost_surge_until: dict[str, float]
     _cost_server_offset: float
 
     @abstractmethod
@@ -121,6 +145,7 @@ class CostHealthMixin(ABC):
         self._cost_preferred = {}
         self._cost_fresh = {}
         self._cost_unreconciled = set()
+        self._cost_surge_until = {}
         self._cost_server_offset = 0.0
         try:
             targets = registry()
@@ -147,7 +172,7 @@ class CostHealthMixin(ABC):
                 failed = provider_observation('text' if reason == 'text' else 'failover', reason)
                 outcome = 'censored' if failed is None else 'provider_failure' if failed else 'success'
                 COST_OBSERVATIONS.labels(target=target.id, outcome=outcome, reason=reason)
-                for boundary in ('client_gone', 'owner_teardown', 'pod_draining'):
+                for boundary in ('client_gone', 'owner_teardown', 'pod_draining', 'failover_surge'):
                     COST_IGNORED_DEATHS.labels(target=target.id, reason=reason, boundary=boundary)
                 for path in ('close', 'failover', 'connect'):
                     COST_SETTLEMENTS.labels(target=target.id, outcome=outcome, reason=reason, path=path)
@@ -310,6 +335,84 @@ class CostHealthMixin(ABC):
                 for lang in ('all', language)
             )
 
+    def _open_failover_surge(self, benched: str, until: float | None = None) -> None:
+        """Open the failover-surge window on every target that inherits the legs.
+
+        Benching a target mass-failovers its in-flight sessions onto the
+        remaining targets; their connect deaths in the window are censored
+        from breadth evidence (2026-10-28 burst bench at a 1.0% rate).
+        """
+        try:
+            others = [entry.id for entry in registry() if entry.id != benched]
+        except (ValueError, TypeError):
+            return
+        now = self._fleet_now()
+        with self._lock:
+            for target in others:
+                deadline = until if until is not None else now + FAILOVER_SURGE_CENSOR_SECONDS
+                if deadline > self._cost_surge_until.get(target, 0.0):
+                    self._cost_surge_until[target] = deadline
+            if len(self._cost_surge_until) > 64:
+                for target in [key for key, until in self._cost_surge_until.items() if until <= now]:
+                    del self._cost_surge_until[target]
+
+    def _failover_surge_open(self, target: str, now: float) -> bool:
+        return failover_surge_censor_enabled() and now < self._cost_surge_until.get(target, 0.0)
+
+    @staticmethod
+    def _sole_primary_blocked(target: str, stages: dict[str, int]) -> bool:
+        """Held target may not become the only stage-100 share (2026-10-28)."""
+        guard = SOLE_PRIMARY_HOLD.get(target)
+        if guard is None or guard not in stages or stages[guard] < 5:
+            return False
+        return all(stage < 100 for stage in stages.values())
+
+    def _cached_target_stages(self, exclude: str, language: str) -> dict[str, int]:
+        """Conservative stages of every other registry target, from local view."""
+        try:
+            targets = [entry for entry in registry() if entry.id != exclude]
+        except (ValueError, TypeError):
+            return {}
+        now = self._clock()
+        stages: dict[str, int] = {}
+        with self._lock:
+            for target in targets:
+                stage = 100
+                for lang in ('all', language):
+                    key = (target.id, lang)
+                    stage = min(stage, self._cost_view(key, self._cost_is_fresh(key, now)).stage)
+                stages[target.id] = stage
+        return stages
+
+    async def _fresh_target_stages(self, exclude: str, language: str, identity: str) -> dict[str, int]:
+        """Conservative stages of every other registry target, read from Redis.
+
+        The sole-primary hold must not miss a just-committed bench because a
+        pod cache is seconds stale, so the decision reads the shared keys.
+        """
+        try:
+            targets = [entry for entry in registry() if entry.id != exclude]
+        except (ValueError, TypeError):
+            return {}
+        if not targets:
+            return {}
+        keys = [live_stt_state.cost_key(entry, lang) for entry in targets for lang in ('all', language)]
+        try:
+            values = await self._redis().mget(keys)
+        except Exception as exc:
+            raise _RedisCallFailed('Redis stage MGET failed') from exc
+        if self._check_identity() != identity:
+            raise _IdentityChanged('live STT state identity changed')
+        stages: dict[str, int] = {}
+        for index, entry in enumerate(targets):
+            stage = 100
+            for offset, lang in enumerate(('all', language)):
+                raw = values[index * 2 + offset]
+                state = GateState.decode(json.loads(raw)) if raw else GateState()
+                stage = min(stage, state.stage)
+            stages[entry.id] = stage
+        return stages
+
     def prefer_recovery(self, target: str, language: str) -> None:
         self._check_identity()
         with self._lock:
@@ -361,6 +464,14 @@ class CostHealthMixin(ABC):
                         COST_ESCAPE_VOTES, metric_name='omi_stt_cost_routing_escape_votes_total', target=target
                     )
                 minimum_share = 0
+        surge = failed and self._failover_surge_open(target, self._fleet_now())
+        if surge:
+            COST_IGNORED_DEATHS.labels(target=target, reason=reason, boundary='failover_surge').inc()
+        hold = (
+            sole_primary_hold_enabled()
+            and target in SOLE_PRIMARY_HOLD
+            and self._sole_primary_blocked(target, self._cached_target_stages(target, language))
+        )
         with self._lock:
             for lang in ('all', language):
                 key = (target, lang)
@@ -375,7 +486,15 @@ class CostHealthMixin(ABC):
                     generations.get(lang) if generations is not None else None,
                     connect=outcome == 'connect_failure',
                 ):
-                    updated = transition(state, failed, self._fleet_now(), witness=witness, language_only=lang != 'all')
+                    updated = transition(
+                        state,
+                        failed,
+                        self._fleet_now(),
+                        witness=witness,
+                        language_only=lang != 'all',
+                        failover_surge=surge,
+                        block_full_share=hold,
+                    )
                     self._cost_local.pop(key, None)
                     self._cost_local[key] = updated
                     if updated.stage == 0 and now < self._redis_retry_at:
@@ -499,6 +618,8 @@ class CostHealthMixin(ABC):
         if old.stage == new.stage:
             return
         event = 'bench' if new.stage == 0 else 'unbench' if new.stage == 100 else 'stage'
+        if event == 'bench':
+            self._open_failover_surge(target)
         if language == 'all':
             self._publish_cost_state(target, new)
         if not local:
@@ -568,8 +689,16 @@ class CostHealthMixin(ABC):
             # and recovery trials have no healthy_users and must not expire
             # into a fresh stage-100 state (especially unprobed expensive legs).
             try:
+                bench = old.stage != 0 and new.stage == 0
+                keys = [redis_key, live_stt_state.cost_surge_key(target)] if bench else [redis_key]
                 committed = await self._redis().eval(
-                    CAS, 1, redis_key, raw or '', encoded, 900 if new.stage == 100 else 0
+                    CAS,
+                    len(keys),
+                    *keys,
+                    raw or '',
+                    encoded,
+                    900 if new.stage == 100 else 0,
+                    *([FAILOVER_SURGE_CENSOR_SECONDS] if bench else []),
                 )
             except Exception as exc:
                 raise _RedisCallFailed('Redis cost-state CAS failed') from exc
@@ -638,6 +767,10 @@ class CostHealthMixin(ABC):
             if expected_identity is not None and identity != expected_identity:
                 raise _IdentityChanged('live STT state identity changed')
             now = await self._server_now(identity)
+            surge = failed and self._failover_surge_open(target, now)
+            hold = False
+            if sole_primary_hold_enabled() and target in SOLE_PRIMARY_HOLD:
+                hold = self._sole_primary_blocked(target, await self._fresh_target_stages(target, language, identity))
             for lang in ('all', language):
                 result = 'applied'
 
@@ -652,7 +785,15 @@ class CostHealthMixin(ABC):
                     ):
                         result = 'generation'
                         return state
-                    updated = transition(state, failed, now, witness=witness, language_only=lang != 'all')
+                    updated = transition(
+                        state,
+                        failed,
+                        now,
+                        witness=witness,
+                        language_only=lang != 'all',
+                        failover_surge=surge,
+                        block_full_share=hold,
+                    )
                     if state.stage in (5, 25) and {user[0]: user[1] for user in state.trial_users}.get(witness, 0) >= 3:
                         result = 'user_cap'
                     elif updated.stage == state.stage and updated.n == state.n and updated.failures == state.failures:
@@ -763,15 +904,19 @@ class CostHealthMixin(ABC):
         lease_keys = {key: live_stt_state.cost_lease_key(key_targets[key], key[1]) for key in keys if key in preferred}
         redis_keys = [live_stt_state.cost_key(key_targets[key], key[1]) for key in keys]
         reset_keys = [live_stt_state.cost_reset_key(target) for target in targets]
+        surge_keys = [live_stt_state.cost_surge_key(target) for target in targets]
 
         async def refresh():
             fleet_now = await self._server_now(identity)
-            values = await self._redis().mget([*redis_keys, *reset_keys])
+            values = await self._redis().mget([*redis_keys, *reset_keys, *surge_keys])
             if self._check_identity() != identity:
                 raise _IdentityChanged('live STT state identity changed')
-            if not isinstance(values, list) or len(values) != len(keys) + len(reset_keys):
+            if not isinstance(values, list) or len(values) != len(keys) + len(reset_keys) + len(surge_keys):
                 raise ValueError('invalid cost gate snapshot')
             floors = {target.id: reset_generation_floor(raw) for target, raw in zip(targets, values[len(keys) :])}
+            surge_deadlines = {
+                target.id: float(raw) for target, raw in zip(targets, values[len(keys) + len(reset_keys) :]) if raw
+            }
             states = {
                 key: GateState.decode(json.loads(raw)) if raw else GateState(generation=floors[key[0]])
                 for key, raw in zip(keys, values[: len(keys)])
@@ -813,6 +958,10 @@ class CostHealthMixin(ABC):
                 COST_SNAPSHOT_AT.set(fleet_now)
                 for target in targets:
                     self._publish_cost_state(target.id, states[(target.id, 'all')])
+            # Shared deadlines survive cold pods and the source's 0->5 trial.
+            # Repeated snapshots must never extend the original window.
+            for target, deadline in surge_deadlines.items():
+                self._open_failover_surge(target, deadline)
 
         try:
             await self._bounded(refresh())

@@ -7612,3 +7612,32 @@ log UID-scoped metadata only; parser failures happen before authentication and
 are classified by the client's registered `WAL Upload Refused` event. The mobile
 ledger retains audio and retries on a persisted daily schedule for seven days,
 then retains it as reported without requesting per-row user action.
+
+
+### Live STT escape and bench cascades
+
+When every available target is below stage 100, the cost router's escape
+excludes stage-0 targets while a stage-5+ target exists. Its lead is the
+lowest observed failure-rate candidate with at least 30 admitted outcomes;
+without a proven candidate, existing stage ordering applies. Ties retain the
+existing lead. Modulate's 25→100 promotion is held while Soniox is stage ≥5
+and no other target is full share. These default-on guards have independent
+kill switches in `config/live_stt_resilience.py`.
+
+A cost-gate bench atomically records a 90-minute source deadline in a separate
+identity-scoped Redis key. Snapshot refresh shares it with cold pods even after
+the source begins recovery. During that window, failures on other targets keep
+their denominator, failure rate, CUSUM and sustained breadth, but are excluded
+from the eight-failure burst count. A fixed-width `!` marker in recent failure
+fingerprints preserves the existing GateState wire schema; older pods count
+marked failures conservatively. Sustained thresholds, trial rejection and
+overflow-outage detection are unchanged. The 90-minute bound covers the Oct 28
+19:43→21:04Z pulse (81 minutes) and Oct 20 13:10→14:20Z pulse (70 minutes).
+The Oct 20 13:44Z sustained CUSUM bench remains valid; escape ordering protects
+the subsequent trial. `omi_stt_cost_routing_ignored_deaths_total` with
+`boundary=failover_surge` counts only exclusion from burst evidence.
+
+Rollback: set `LISTEN_STT_ESCAPE_BEST_RATE_PRIMARY_ENABLED`,
+`LISTEN_STT_SOLE_PRIMARY_HOLD_ENABLED`, or
+`LISTEN_STT_FAILOVER_SURGE_CENSOR_ENABLED` to `false` to restore that guard's
+previous behavior. No routing-state reset is required.

@@ -245,7 +245,8 @@ class MemoryRedis:
             self.expires_at.pop(state_key, None)
             self.expires_at.pop(probe_key, None)
             return 1
-        key, expected, new, ttl = args
+        key = args[0]
+        expected, new, ttl = args[_numkeys : _numkeys + 3]
         if self.data.get(key, '') != expected:
             return 0
         self.data[key] = new
@@ -253,6 +254,10 @@ class MemoryRedis:
         if int(ttl) > 0:
             self.expires_at[key] = self.clock() + int(ttl)
         self.ttls[key] = ttl
+        if _numkeys == 2:
+            seconds = int(args[_numkeys + 3])
+            self.data[args[1]] = str(self.clock() + seconds)
+            self.expires_at[args[1]] = self.clock() + seconds
         return 1
 
     def pipeline(self, *, transaction=False):
