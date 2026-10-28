@@ -267,6 +267,31 @@ void main() {
       await socket.stop();
     });
 
+    test('a thrown initial Omi connect keeps the custom STT socket live and retries', () async {
+      final primary = _ScriptedSocket();
+      final secondary = _ScriptedSocket(
+        connectErrors: [StateError('header provider failed')],
+        connectResults: [true],
+      );
+      final socket = build(primary, secondary);
+
+      expect(await socket.connect(), isTrue);
+      expect(socket.status, PureSocketStatus.connected);
+      expect(socket.secondaryDegraded, isTrue);
+      expect(primary.status, PureSocketStatus.connected);
+
+      final audio = Uint8List.fromList([3, 1, 4]);
+      socket.send(audio);
+      expect(primary.sent, [same(audio)]);
+      expect(secondary.sent, isEmpty);
+
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+      expect(secondary.connectCalls, 2);
+      expect(secondary.status, PureSocketStatus.connected);
+      expect(socket.secondaryDegraded, isFalse);
+      await socket.stop();
+    });
+
     test('an Omi socket that drops mid-session does not tear down the composite', () async {
       final primary = _ScriptedSocket();
       final secondary = _ScriptedSocket(connectResults: [true, false, false, false, false, false]);
@@ -378,6 +403,65 @@ void main() {
       expect(composite.secondaryDegraded, isTrue);
       expect(service.deliversToOmi, isTrue);
       await service.stop();
+    });
+
+    test('raw-audio opt-out buffers transcripts and flushes them after Omi reconnects', () async {
+      final primary = _ScriptedSocket();
+      final secondary = _ScriptedSocket(connectResults: [false, true]);
+      final composite = CompositeTranscriptionSocket(
+        primarySocket: primary,
+        secondarySocket: secondary,
+        forwardRawAudioToSecondary: false,
+        keepPrimaryWhenSecondaryFails: true,
+        secondaryRetryInitialDelay: const Duration(milliseconds: 10),
+        secondaryRetryMaxDelay: const Duration(milliseconds: 40),
+      );
+      final service = TranscriptSegmentSocketService.withSocket(16000, BleAudioCodec.pcm16, 'en', composite);
+
+      await service.start();
+      expect(composite.secondaryDegraded, isTrue);
+      expect(service.deliversToOmi, isTrue, reason: "the user's raw-audio opt-out must not queue audio for upload");
+
+      primary.emitMessage(jsonEncode([
+        {'text': 'transcript retained while Omi is offline'},
+      ]));
+      expect(secondary.sent, isEmpty);
+
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+      expect(composite.secondaryDegraded, isFalse);
+      expect(secondary.sent, hasLength(1));
+      expect(jsonDecode(secondary.sent.single as String), {
+        'type': 'suggested_transcript',
+        'segments': [
+          {'text': 'transcript retained while Omi is offline'},
+        ],
+      });
+      await service.stop();
+    });
+
+    test('raw-audio opt-out does not replay buffered transcripts into a later session', () async {
+      final primary = _ScriptedSocket();
+      final secondary = _ScriptedSocket(connectResults: [false, true]);
+      final composite = CompositeTranscriptionSocket(
+        primarySocket: primary,
+        secondarySocket: secondary,
+        forwardRawAudioToSecondary: false,
+        keepPrimaryWhenSecondaryFails: true,
+        secondaryRetryInitialDelay: const Duration(seconds: 5),
+      );
+
+      expect(await composite.connect(), isTrue);
+      expect(composite.secondaryDegraded, isTrue);
+      primary.emitMessage(jsonEncode([
+        {'text': 'belongs only to the first session'},
+      ]));
+      expect(secondary.sent, isEmpty);
+
+      await composite.stop();
+      expect(await composite.connect(), isTrue);
+      expect(composite.secondaryDegraded, isFalse);
+      expect(secondary.sent, isEmpty);
+      await composite.stop();
     });
 
     test('a primary close clears degraded state so a reconnect retries Omi again', () async {
@@ -546,9 +630,12 @@ class _RecordingListener implements IPureSocketListener {
 /// Fake socket whose successive connect() calls return [connectResults]
 /// (true once the list is exhausted).
 class _ScriptedSocket implements IPureSocket {
-  _ScriptedSocket({List<bool>? connectResults}) : _connectResults = [...?connectResults];
+  _ScriptedSocket({List<bool>? connectResults, List<Object>? connectErrors})
+      : _connectResults = [...?connectResults],
+        _connectErrors = [...?connectErrors];
 
   final List<bool> _connectResults;
+  final List<Object> _connectErrors;
   final List<dynamic> sent = [];
   int connectCalls = 0;
   IPureSocketListener? _listener;
@@ -560,6 +647,10 @@ class _ScriptedSocket implements IPureSocket {
   @override
   Future<bool> connect() async {
     connectCalls++;
+    if (_connectErrors.isNotEmpty) {
+      _status = PureSocketStatus.notConnected;
+      throw _connectErrors.removeAt(0);
+    }
     final ok = _connectResults.isEmpty ? true : _connectResults.removeAt(0);
     _status = ok ? PureSocketStatus.connected : PureSocketStatus.notConnected;
     if (ok) _listener?.onConnected();
