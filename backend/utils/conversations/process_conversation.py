@@ -1303,6 +1303,20 @@ def _l1_candidate_subject(
     segments: List[Any],
 ) -> Tuple[Optional[str], SubjectAttribution, str]:
     roles = speaker_role_projection(segments)
+    about_norm = _normalized_l1_subject_label(about)
+    if roles is not None and about_norm in {
+        '',
+        'unknown',
+        'unclear',
+        'uncertain',
+        'speaker',
+        'the speaker',
+        'unidentified non primary speaker',
+    }:
+        # Utterance authorship is evidence about who spoke, not what the
+        # extracted claim is about. Preserve unknown aboutness instead of
+        # replacing it with the quote author's identity.
+        return None, SubjectAttribution.unknown, 'unknown'
     prompt_segments = owner_safe_transcript_segments(segments)[0] if roles is not None else segments
     subject = _legacy_l1_candidate_subject(
         source_id=source_id,

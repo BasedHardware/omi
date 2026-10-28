@@ -212,6 +212,36 @@ def test_subject_and_quote_authorship_are_independent(pc):
     )
 
 
+@pytest.mark.parametrize(
+    'about', ['', 'unknown', 'unclear', 'uncertain', 'speaker', 'the speaker', 'unidentified non primary speaker']
+)
+def test_unknown_aboutness_does_not_fall_back_to_quote_author(pc, about):
+    owner = segment(owner=True, source='auto', text='I prefer tea.')
+    contact = segment('b', voice=1, person='sam', text='I prefer coffee.')
+
+    owner_subject = pc._l1_candidate_subject(
+        source_id='synthetic',
+        about=about,
+        speaker_label='speaker_0',
+        evidence_quotes=[owner.text],
+        user_name='David',
+        segments=[owner, contact],
+    )
+    contact_subject = pc._l1_candidate_subject(
+        source_id='synthetic',
+        about=about,
+        speaker_label='speaker_1',
+        evidence_quotes=[contact.text],
+        user_name='David',
+        segments=[owner, contact],
+    )
+
+    assert owner_subject == (None, SubjectAttribution.unknown, 'unknown')
+    assert contact_subject == (None, SubjectAttribution.unknown, 'unknown')
+    assert quote_source_attribution([owner.text], [owner, contact]) == 'user_spoken'
+    assert quote_source_attribution([contact.text], [owner, contact]) == 'third_party'
+
+
 @pytest.mark.parametrize('about', ['user', 'the user', 'David'])
 def test_report_about_owner_does_not_become_quote_authors_fact(pc, about):
     owner = segment(owner=True, source='auto', text='I prefer tea.')
