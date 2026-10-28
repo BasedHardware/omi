@@ -47,6 +47,8 @@ def users_service():
         "database.messaging": AutoMockModule("database.messaging"),
         "services.users.agent_vm_account_cleanup": AutoMockModule("services.users.agent_vm_account_cleanup"),
         "utils": _pkg("utils"),
+        "utils.sync": _pkg("utils.sync"),
+        "utils.sync.cap_hold": AutoMockModule("utils.sync.cap_hold"),
         "utils.cloud_tasks": AutoMockModule("utils.cloud_tasks"),
         "utils.stripe": AutoMockModule("utils.stripe"),
         "utils.executors": AutoMockModule("utils.executors"),
