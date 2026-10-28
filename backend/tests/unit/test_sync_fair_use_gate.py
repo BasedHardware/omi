@@ -296,11 +296,7 @@ class TestHardRestrictionRetryAfter:
         monkeypatch.setattr(
             fair_use_mod,
             'fair_use_caps_for_user',
-            lambda _uid: (
-                fair_use_mod.FAIR_USE_DAILY_SPEECH_MS,
-                fair_use_mod.FAIR_USE_3DAY_SPEECH_MS,
-                fair_use_mod.FAIR_USE_WEEKLY_SPEECH_MS,
-            ),
+            lambda _uid: fair_use_mod.fair_use_caps_for_plan(),
         )
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)

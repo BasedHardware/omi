@@ -302,9 +302,7 @@ class TestFairUseStatusRestrictionExpiry:
             fair_use_admin_mod,
             'get_rolling_speech_ms',
             return_value={'daily_ms': 0, 'three_day_ms': 0, 'weekly_ms': 0},
-        ), patch.object(fair_use_admin_mod, 'get_dg_budget_status', return_value=self._dg_budget()), patch.object(
-            fair_use_admin_mod, 'fair_use_caps_for_user', return_value=(36 * 3600000, 73 * 3600000, 137 * 3600000)
-        ):
+        ), patch.object(fair_use_admin_mod, 'get_dg_budget_status', return_value=self._dg_budget()):
             result = fair_use_admin_mod.get_my_fair_use_status('user1')
 
         assert result['stage'] == 'throttle'
@@ -325,14 +323,11 @@ class TestFairUseStatusRestrictionExpiry:
             fair_use_admin_mod,
             'get_rolling_speech_ms',
             return_value={'daily_ms': 0, 'three_day_ms': 0, 'weekly_ms': 0},
-        ), patch.object(fair_use_admin_mod, 'get_dg_budget_status', return_value=self._dg_budget()), patch.object(
-            fair_use_admin_mod, 'fair_use_caps_for_user', return_value=(36 * 3600000, 73 * 3600000, 137 * 3600000)
-        ):
+        ), patch.object(fair_use_admin_mod, 'get_dg_budget_status', return_value=self._dg_budget()):
             result = fair_use_admin_mod.get_my_fair_use_status('user1')
 
         assert result['stage'] == 'restrict'
         assert 'temporarily limited' in result['message']
-        assert result['limits'] == {'daily_hours': 36.0, 'three_day_hours': 73.0, 'weekly_hours': 137.0}
         _fair_use_db.get_fair_use_state.assert_called_once_with('user1')
         _fair_use_db.update_fair_use_state.assert_not_called()
 

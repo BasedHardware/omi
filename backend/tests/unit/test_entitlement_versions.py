@@ -25,14 +25,6 @@ from tests.unit.fixtures.entitlements.snapshot import legacy_snapshot
 GOLDEN = Path(__file__).parent / 'fixtures/entitlements/main_b8076bab847.json'
 
 
-def _drop_fair_use_policy(snapshot):
-    """Project the frozen legacy price snapshot onto persisted entitlements."""
-    for row in snapshot.values():
-        row['definition'].pop('fair_use_profile', None)
-        row.pop('fair_use_profiles', None)
-    return snapshot
-
-
 @pytest.fixture(scope="module")
 def captured_legacy():
     # Import the heavy subscription graph in setup, as test_subscription_restructure does.
@@ -40,22 +32,15 @@ def captured_legacy():
 
 
 def test_all_main_legacy_price_entitlements_are_byte_identical(captured_legacy):
-    # Graduated fair-use policy has its own catalog contract; it is not a
-    # persisted price entitlement and must not weaken this frozen entitlement check.
-    captured = _drop_fair_use_policy(captured_legacy)
-    expected = _drop_fair_use_policy(json.loads(GOLDEN.read_text()))
-    assert (
-        json.dumps(captured, sort_keys=True, separators=(',', ':')) + '\n'
-        == json.dumps(expected, sort_keys=True, separators=(',', ':')) + '\n'
-    )
+    captured = captured_legacy
+    assert json.dumps(captured, sort_keys=True, separators=(',', ':')) + '\n' == GOLDEN.read_text()
+    expected = json.loads(GOLDEN.read_text())
     assert set(expected) == set(RECOGNIZED_STRIPE_PRICE_PLAN_TYPES)
     for price, snapshot in expected.items():
         resolved = resolve_price_entitlements(price, {})
         assert resolved['entitlement_version'] == 'legacy'
         assert resolved['budget'] is None
-        resolved_policy = dict(resolved['policy'])
-        resolved_policy.pop('fair_use_profile', None)
-        assert resolved_policy == snapshot['definition']
+        assert resolved['policy'] == snapshot['definition']
 
 
 def _period(days: int) -> float:

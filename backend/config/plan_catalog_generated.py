@@ -29,8 +29,8 @@ WIRE_PLAN_ALIASES: Final[dict[str, PlanType]] = {
     'pro': PlanType.architect,
 }
 
-CATALOG_SHA256: Final = '8c47e4d8a2ed72f3ad23157d89d00e22106e31dc8693b9457a5d464bcca21b6d'
-CATALOG_REVISION: Final = 14
+CATALOG_SHA256: Final = 'ffc47f59113f510e04b187c499122ceeaf626e810d72f433484b7281ca00c579'
+CATALOG_REVISION: Final = 12
 CATALOG_AUTHORITY: Final = {'plan_identity': 'catalog',
  'price_identity': 'repository_ledger',
  'price_amount': 'stripe_live',
@@ -277,7 +277,7 @@ PLAN_CATALOG_DATA: Final[dict[str, dict[str, Any]]] = {'basic': {'id': 'basic',
           'storefronts': ['android', 'ios', 'web'],
           'desktop_profile': 'desktop_free',
           'conditional_desktop_profiles': [],
-          'fair_use_profile': 'plus_transcription',
+          'fair_use_profile': 'metered_transcription',
           'phone_calls_profile': 'paid',
           'allocations': {'transcription': {'period': 'month',
                                             'unit': 'second',
@@ -448,12 +448,9 @@ DESKTOP_PROFILE_DEFAULTS: Final[dict[str, dict[str, Any]]] = {'desktop_free': {'
 FAIR_USE_PROFILE_LIMITS: Final[dict[str, dict[str, Any]]] = {'metered_transcription': {'speech_milliseconds': {'rolling_day': 7200000,
                                                    'rolling_three_days': 28800000,
                                                    'rolling_week': 36000000}},
- 'plus_transcription': {'speech_milliseconds': {'rolling_day': 86400000,
-                                                'rolling_three_days': 190800000,
-                                                'rolling_week': 313200000}},
- 'unlimited_transcription': {'speech_milliseconds': {'rolling_day': 129600000,
-                                                     'rolling_three_days': 262800000,
-                                                     'rolling_week': 493200000}}}
+ 'unlimited_transcription': {'speech_milliseconds': {'rolling_day': 14400000,
+                                                     'rolling_three_days': 57600000,
+                                                     'rolling_week': 72000000}}}
 PHONE_CALL_PROFILE_DEFAULTS: Final[dict[str, dict[str, Any]]] = {'free': {'monthly_calls': {'kind': 'finite', 'value': 0},
           'max_duration_seconds': {'kind': 'finite', 'value': 300},
           'legacy_runtime_override': 'phone_call_config/default.free_plan'},

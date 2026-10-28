@@ -33,6 +33,7 @@ def _patch_fair_use_deps(monkeypatch):
     _mock_redis.eval.side_effect = None
     monkeypatch.setattr(fair_use_mod, 'redis_client', _mock_redis)
     monkeypatch.setattr(fair_use_mod, 'fair_use_db', _fair_use_db)
+    monkeypatch.setattr(fair_use_mod, 'fair_use_caps_for_user', lambda _uid: fair_use_mod.fair_use_caps_for_plan())
     # The record_fallback patch is applied per-test (see
     # TestNormalizeExpiredRestrictionState.setup_method) and restored here so
     # it cannot leak into other test classes.
@@ -453,10 +454,7 @@ class TestIsHardRestricted:
         }
         mock_speech.return_value = {'daily_ms': 8000000, 'three_day_ms': 0, 'weekly_ms': 0}
 
-        # Keep this engine test independent of subscription storage and use the
-        # backwards-compatible metered profile these 8,000,000 ms exceed.
-        with patch.object(fair_use_mod, 'fair_use_caps_for_user', return_value=fair_use_mod.fair_use_caps_for_plan()):
-            assert fair_use_mod.is_hard_restricted('user1') is True
+        assert fair_use_mod.is_hard_restricted('user1') is True
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
@@ -605,8 +603,7 @@ class TestDatetimeNormalization:
         _fair_use_db.get_fair_use_state.return_value = {'stage': 'restrict', 'restrict_until': aware_future}
         mock_speech.return_value = {'daily_ms': 8000000, 'three_day_ms': 0, 'weekly_ms': 0}
 
-        with patch.object(fair_use_mod, 'fair_use_caps_for_user', return_value=fair_use_mod.fair_use_caps_for_plan()):
-            result = fair_use_mod.is_hard_restricted('user1')
+        result = fair_use_mod.is_hard_restricted('user1')
         assert result is True
 
 

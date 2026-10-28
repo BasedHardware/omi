@@ -124,12 +124,12 @@ def validate_entitlement_compatibility(previous: Mapping[str, Any], current: Map
             'entitlement_version', 'legacy'
         ):
             errors.append(f"compatibility: {price['price_id']} cannot change entitlement version")
-    # Price entitlements and feature policy cannot drift. Fair-use profile selection is
-    # graduated enforcement policy and may change without changing the plan's allocation.
+    # Default runtime APIs still consume these rows, so existing legacy policy cannot drift.
     policy_keys = (
         'allocations',
         'desktop_profile',
         'conditional_desktop_profiles',
+        'fair_use_profile',
         'phone_calls_profile',
     )
 
@@ -164,14 +164,6 @@ def validate_entitlement_compatibility(previous: Mapping[str, Any], current: Map
             continue
         if changed:
             errors.append(f"compatibility: {plan_id} legacy entitlements cannot change")
-    previous_profiles = previous.get('allocation_profiles')
-    current_profiles = current.get('allocation_profiles')
-    # Fair-use thresholds are graduated enforcement policy, not persisted plan
-    # entitlements. Keep the protection for desktop, phone-call and other legacy
-    # allocation profiles while allowing a measured fair-use policy revision.
-    if isinstance(previous_profiles, dict) and isinstance(current_profiles, dict):
-        previous_profiles = {key: value for key, value in previous_profiles.items() if key != 'fair_use'}
-        current_profiles = {key: value for key, value in current_profiles.items() if key != 'fair_use'}
-    if previous_profiles != current_profiles:
+    if previous.get('allocation_profiles') != current.get('allocation_profiles'):
         errors.append('compatibility: legacy allocation profiles cannot change')
     return errors

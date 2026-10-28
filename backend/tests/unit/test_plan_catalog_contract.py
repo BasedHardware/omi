@@ -264,18 +264,6 @@ def test_compatibility_guard_requires_revision_bump():
     )
 
 
-def test_compatibility_guard_allows_measured_fair_use_policy_revision():
-    previous = load_catalog()
-    current = deepcopy(previous)
-    current['catalog_revision'] += 1
-    current['allocation_profiles']['fair_use']['unlimited_transcription']['speech_milliseconds'][
-        'rolling_day'
-    ] += 60_000
-    next(plan for plan in current['plans'] if plan['id'] == 'plus')['fair_use_profile'] = 'metered_transcription'
-
-    assert validate_compatibility(previous, current) == []
-
-
 @pytest.mark.parametrize(
     'patch',
     [

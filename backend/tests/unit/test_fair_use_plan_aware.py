@@ -1,4 +1,4 @@
-"""Tests for plan-aware fair-use soft caps and the hard daily-audio ceiling
+"""Tests for plan-aware fair-use caps and the hard daily-audio ceiling
 (utils/fair_use.py).
 
 ``utils.fair_use`` imports cleanly; we toggle ``FAIR_USE_ENABLED`` per-test via
@@ -7,6 +7,7 @@
 """
 
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -15,7 +16,7 @@ import utils.fair_use as fair_use_mod
 from models.fair_use import SoftCapTrigger
 from models.users import PlanType
 
-DEFAULT_TIER_PLANS = [PlanType.basic, None]
+DEFAULT_TIER_PLANS = [PlanType.basic, PlanType.plus, None]
 UNLIMITED_TIER_PLANS = [
     PlanType.unlimited_v2,
     PlanType.unlimited,
@@ -37,6 +38,7 @@ class TestFairUseCapsForPlan:
         )
         for plan in DEFAULT_TIER_PLANS:
             assert fair_use_mod.fair_use_caps_for_plan(plan) == expected, plan
+            assert fair_use_mod._is_unlimited_tier(plan) is False, plan
 
     def test_unlimited_tier_plans_get_raised_caps(self):
         expected = (
@@ -46,47 +48,35 @@ class TestFairUseCapsForPlan:
         )
         for plan in UNLIMITED_TIER_PLANS:
             assert fair_use_mod.fair_use_caps_for_plan(plan) == expected, plan
+            assert fair_use_mod._is_unlimited_tier(plan) is True, plan
 
     def test_unlimited_daily_cap_is_higher_than_default(self):
         # Guards the whole point of the feature: Unlimited must tolerate more before scrutiny.
         assert fair_use_mod.FAIR_USE_DAILY_SPEECH_MS_UNLIMITED > fair_use_mod.FAIR_USE_DAILY_SPEECH_MS
 
-    def test_plus_uses_its_paid_legacy_profile(self):
-        assert fair_use_mod.fair_use_caps_for_plan(PlanType.plus) == (
-            fair_use_mod.FAIR_USE_DAILY_SPEECH_MS_PLUS,
-            fair_use_mod.FAIR_USE_3DAY_SPEECH_MS_PLUS,
-            fair_use_mod.FAIR_USE_WEEKLY_SPEECH_MS_PLUS,
-        )
+    def test_free_and_plus_are_never_unlimited_tier(self):
+        # The whole point of the tier split: Free/Plus must never get the raised caps.
+        assert fair_use_mod._is_unlimited_tier(PlanType.basic) is False
+        assert fair_use_mod._is_unlimited_tier(PlanType.plus) is False
+        assert fair_use_mod._is_unlimited_tier(None) is False
 
-    def test_raw_string_plan_uses_its_catalog_profile(self):
-        assert fair_use_mod.fair_use_caps_for_plan('unlimited_v2') == (
-            fair_use_mod.FAIR_USE_DAILY_SPEECH_MS_UNLIMITED,
-            fair_use_mod.FAIR_USE_3DAY_SPEECH_MS_UNLIMITED,
-            fair_use_mod.FAIR_USE_WEEKLY_SPEECH_MS_UNLIMITED,
-        )
+    def test_is_unlimited_tier_accepts_raw_string_plan(self):
+        # subscription.plan may arrive as a raw string; PlanType is a str enum so membership holds.
+        assert fair_use_mod._is_unlimited_tier('unlimited_v2') is True
+        assert fair_use_mod._is_unlimited_tier('basic') is False
 
     def test_unknown_plan_fails_closed_during_classification(self):
         with pytest.raises(ValueError, match='unknown catalog plan'):
-            fair_use_mod.fair_use_caps_for_plan('future_plan_123')
+            fair_use_mod._is_unlimited_tier('future_plan_123')
 
 
 class TestCheckSoftCapsPlanAware:
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     def test_default_tier_triggers_daily_at_three_hours(self):
         totals = _totals(daily_ms=fair_use_mod.FAIR_USE_DAILY_SPEECH_MS + 1)
-        triggers = [t['trigger'] for t in fair_use_mod.check_soft_caps('u', totals, PlanType.basic)]
-        assert SoftCapTrigger.DAILY in triggers
-
-    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
-    def test_plus_does_not_trigger_at_free_metered_cap(self):
-        totals = _totals(daily_ms=fair_use_mod.FAIR_USE_DAILY_SPEECH_MS + 1)
-        assert fair_use_mod.check_soft_caps('u', totals, PlanType.plus) == []
-
-    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
-    def test_plus_triggers_above_its_own_daily_cap(self):
-        totals = _totals(daily_ms=fair_use_mod.FAIR_USE_DAILY_SPEECH_MS_PLUS + 1)
-        triggers = [t['trigger'] for t in fair_use_mod.check_soft_caps('u', totals, PlanType.plus)]
-        assert SoftCapTrigger.DAILY in triggers
+        for plan in [PlanType.basic, PlanType.plus]:
+            triggers = [t['trigger'] for t in fair_use_mod.check_soft_caps('u', totals, plan)]
+            assert SoftCapTrigger.DAILY in triggers, plan
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     def test_unlimited_tier_does_not_trigger_below_its_higher_daily_cap(self):
@@ -121,12 +111,7 @@ class TestDailyAudioCeiling:
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     def test_exceeded_at_or_above_ceiling(self):
         totals = _totals(daily_ms=fair_use_mod.MAX_DAILY_AUDIO_MS)
-        with patch.object(
-            fair_use_mod,
-            'fair_use_caps_for_user',
-            return_value=fair_use_mod.fair_use_caps_for_plan(PlanType.basic),
-        ):
-            assert fair_use_mod.is_daily_audio_ceiling_exceeded('u', totals) is True
+        assert fair_use_mod.is_daily_audio_ceiling_exceeded('u', totals) is True
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     def test_not_exceeded_below_ceiling(self):
@@ -150,59 +135,40 @@ class TestDailyAudioCeiling:
         with patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', {'vip'}):
             assert fair_use_mod.is_daily_audio_ceiling_exceeded('vip', totals) is False
 
-    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
-    def test_unlimited_daily_ceiling_does_not_under_cut_profile(self):
-        caps = fair_use_mod.fair_use_caps_for_plan(PlanType.unlimited_v2)
-        with patch.object(fair_use_mod, 'MAX_DAILY_AUDIO_MS', 30 * 60 * 60 * 1000), patch.object(
-            fair_use_mod, 'fair_use_caps_for_user', return_value=caps
-        ):
-            assert fair_use_mod.is_daily_audio_ceiling_exceeded('u', _totals(daily_ms=35 * 60 * 60 * 1000)) is False
-            assert fair_use_mod.is_daily_audio_ceiling_exceeded('u', _totals(daily_ms=36 * 60 * 60 * 1000)) is True
 
-
-class TestUserPlanCaps:
-    def test_caps_for_user_uses_existing_subscription_without_provisioning(self):
-        subscription = type('SubscriptionStub', (), {'plan': PlanType.unlimited_v2})()
-        with patch.object(
-            fair_use_mod.users_db, 'get_existing_user_subscription', return_value=subscription
-        ) as get_sub:
-            assert fair_use_mod.fair_use_caps_for_user('u') == fair_use_mod.fair_use_caps_for_plan(
-                PlanType.unlimited_v2
-            )
-        get_sub.assert_called_once_with('u')
-
-    def test_subscription_read_failure_uses_unlimited_caps(self):
-        with patch.object(
-            fair_use_mod.users_db, 'get_existing_user_subscription', side_effect=RuntimeError('read failed')
-        ):
-            assert fair_use_mod.fair_use_caps_for_user('u') == fair_use_mod.fair_use_caps_for_plan(
-                PlanType.unlimited_v2
-            )
-
-    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
-    @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
-    @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', set())
-    def test_hard_restriction_uses_plan_caps(self):
-        usage = _totals(daily_ms=3 * 60 * 60 * 1000, three_day_ms=9 * 60 * 60 * 1000, weekly_ms=11 * 60 * 60 * 1000)
+class TestHardRestrictionUsesPlanCaps:
+    @pytest.mark.parametrize(
+        'plan,window,cap_index',
+        [
+            (PlanType.unlimited_v2, 'daily_ms', 0),
+            (PlanType.unlimited_v2, 'three_day_ms', 1),
+            (PlanType.unlimited_v2, 'weekly_ms', 2),
+            (PlanType.basic, 'daily_ms', 0),
+            (PlanType.basic, 'three_day_ms', 1),
+            (PlanType.basic, 'weekly_ms', 2),
+            (PlanType.plus, 'daily_ms', 0),
+            (PlanType.plus, 'three_day_ms', 1),
+            (PlanType.plus, 'weekly_ms', 2),
+        ],
+    )
+    def test_blocks_only_above_the_active_plan_cap(self, plan, window, cap_index):
+        cap = fair_use_mod.fair_use_caps_for_plan(plan)[cap_index]
         state = {'stage': 'restrict', 'restrict_until': datetime.now(timezone.utc) + timedelta(days=1)}
-        with patch.object(fair_use_mod, 'fair_use_db') as fair_use_db, patch.object(
-            fair_use_mod, 'get_rolling_speech_ms', return_value=usage
-        ), patch.object(
-            fair_use_mod,
-            'fair_use_caps_for_user',
-            return_value=fair_use_mod.fair_use_caps_for_plan(PlanType.unlimited_v2),
+        subscription = SimpleNamespace(plan=plan)
+        with patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True), patch.object(
+            fair_use_mod, 'FAIR_USE_KILL_SWITCH', False
+        ), patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', set()), patch.object(
+            fair_use_mod, 'fair_use_db'
+        ) as fair_use_db, patch.object(
+            fair_use_mod, 'get_rolling_speech_ms'
+        ) as get_speech, patch.object(
+            fair_use_mod.users_db, 'get_existing_user_subscription', return_value=subscription
         ):
             fair_use_db.get_fair_use_state.return_value = state
+            get_speech.return_value = _totals(**{window: cap})
             assert fair_use_mod.get_hard_restriction_status('u') == (False, None)
 
-        with patch.object(fair_use_mod, 'fair_use_db') as fair_use_db, patch.object(
-            fair_use_mod, 'get_rolling_speech_ms', return_value=usage
-        ), patch.object(
-            fair_use_mod,
-            'fair_use_caps_for_user',
-            return_value=fair_use_mod.fair_use_caps_for_plan(PlanType.basic),
-        ):
-            fair_use_db.get_fair_use_state.return_value = state
+            get_speech.return_value = _totals(**{window: cap + 1})
             restricted, retry_after = fair_use_mod.get_hard_restriction_status('u')
             assert restricted is True
             assert retry_after is not None
