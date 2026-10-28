@@ -158,7 +158,8 @@ void main() {
     )));
     await tester.pumpAndSettle();
     expect(productBuilds, 0);
-    await tester.tap(find.byKey(const Key('deletion_status_retry')));
+    await tester
+        .tap(find.descendant(of: find.byKey(const Key('deletion_status_retry')), matching: find.byType(OmiButton)));
     await tester.pumpAndSettle();
     expect(productBuilds, 0);
     expect(find.text('Restore my account'), findsOneWidget);

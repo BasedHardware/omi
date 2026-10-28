@@ -45,10 +45,12 @@ class _RestoreAccountState extends State<RestoreAccount> {
           if (mounted) widget.onFinished();
         }
       } else {
-        OmiFeedback.error(context, context.l10n.deleteAccountFailed);
+        OmiFeedback.error(context, restoring ? context.l10n.somethingWentWrong : context.l10n.deleteAccountFailed);
       }
     } catch (_) {
-      if (mounted) OmiFeedback.error(context, context.l10n.deleteAccountFailed);
+      if (mounted) {
+        OmiFeedback.error(context, restoring ? context.l10n.somethingWentWrong : context.l10n.deleteAccountFailed);
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -172,15 +174,13 @@ class _AccountDeletionGateState extends State<AccountDeletionGate> {
           }
           return Scaffold(
             backgroundColor: OmiColors.surface0,
-            body: Center(
-              child: snapshot.connectionState != ConnectionState.done
-                  ? const OmiSpinner()
-                  : OmiButton.secondary(
-                      key: const Key('deletion_status_retry'),
-                      label: context.l10n.retry,
-                      onPressed: _retry,
-                    ),
-            ),
+            body: snapshot.connectionState != ConnectionState.done
+                ? const OmiLoadingState()
+                : OmiErrorState(
+                    key: const Key('deletion_status_retry'),
+                    message: context.l10n.somethingWentWrong,
+                    onRetry: _retry,
+                  ),
           );
         },
       );
