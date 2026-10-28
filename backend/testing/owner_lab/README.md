@@ -62,9 +62,12 @@ emails.
    ```
 
    The arm tree provides the product code under test (`utils/`, `models/`,
-   `database/`); the bench harness always runs from the tree this file lives
-   in. If the notes lane echoes the requested route instead of a billed model,
-   add `"billed_model_markers": ["gpt-6-luna", "omi:auto:conv-structure"]`.
+   `database/`). Each worker vendors only `testing/owner_lab` into a private
+   directory ahead of the arm tree on `sys.path`, so product imports resolve
+   from exactly one place — the arm's pinned checkout — and the harness can
+   never shadow it. If the notes lane echoes the requested route instead of a
+   billed model, add
+   `"billed_model_markers": ["gpt-6-luna", "omi:auto:conv-structure"]`.
 
 4. Gateway: reach the dev LLM gateway through your approved tunnel (a local
    `127.0.0.1` forward), export `OWNER_LAB_GATEWAY_URL` and point
@@ -89,6 +92,9 @@ OWNER_LAB_GATEWAY_URL=... OWNER_LAB_GATEWAY_TOKEN_FILE=... \
 .venv/bin/python -m testing.owner_lab.report /path/runs.jsonl --baseline baseline \
   --max-cost-per-run 0.006 --no-worse rejections,cost --out /path/report.md                   # offline report
 ```
+
+`report.py --prices input,cached,output` (USD per million tokens) re-splits
+the cost attribution when the bench ran on a non-default card.
 
 - **select** picks bench cases by tier (7 short / 7 medium / 6 long, filled to
   20) among conversations the eligibility gate would run, and lists labelled

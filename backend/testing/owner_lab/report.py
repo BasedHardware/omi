@@ -264,14 +264,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--no-worse', default='', help='comma-separated metrics, e.g. rejections,cost')
     parser.add_argument('--seed', type=int, default=BOOTSTRAP_SEED)
     parser.add_argument('--bootstrap', type=int, default=BOOTSTRAP_ITERATIONS)
+    parser.add_argument(
+        '--prices',
+        default=','.join(str(price) for price in PRICES),
+        help='input,cached,output USD per million tokens; match the card the bench ran on',
+    )
     parser.add_argument('--out', help='write the markdown report here')
     args = parser.parse_args(argv)
+    prices = tuple(float(part) for part in str(args.prices).split(','))
+    if len(prices) != 3 or any(price < 0 for price in prices):
+        raise SystemExit('--prices needs three nonnegative numbers: input,cached,output')
     rows = load_rows(args.results)
     arms = [arm for arm in per_arm(rows)]
     if args.baseline not in {arm['arm'] for arm in arms}:
         raise SystemExit(f'baseline {args.baseline} not in results')
     ratios = paired_ratios(rows, args.baseline, seed=args.seed, iterations=args.bootstrap)
-    split = cost_split(rows, args.baseline)
+    split = cost_split(rows, args.baseline, prices)
     no_worse = [m.strip() for m in args.no_worse.split(',') if m.strip()]
     gates = evaluate_gates(arms, ratios, max_cost_per_run=args.max_cost_per_run, no_worse=no_worse)
     markdown = render_markdown(rows, args.baseline, arms, ratios, split, gates)

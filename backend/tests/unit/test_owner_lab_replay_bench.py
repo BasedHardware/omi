@@ -33,9 +33,47 @@ def test_completed_keys_drive_resume(tmp_path):
     done = {'arm': 'on', 'id': 'c1', 'repeat': 0}
     results.write_text(json.dumps(done) + '\n')
     plan = replay_bench.interleave(['c1', 'c2'], ['baseline', 'on'], 1)
-    pending = [key for key in plan if key not in replay_bench.completed_keys(results)]
+    pending = replay_bench.pending_keys(plan, results)
     assert ('on', 'c1', 0) not in pending
-    assert len(pending) == len(plan) - 1
+    assert pending == [key for key in plan if key != ('on', 'c1', 0)]
+
+
+def test_pending_keys_empty_results_runs_everything(tmp_path):
+    plan = replay_bench.interleave(['c1'], ['baseline', 'on'], 2)
+    assert replay_bench.pending_keys(plan, tmp_path / 'absent.jsonl') == plan
+
+
+def test_drive_exit_maps_states_to_documented_codes():
+    assert replay_bench.drive_exit('complete') == replay_bench.EXIT_OK
+    assert replay_bench.drive_exit('stopped') == replay_bench.EXIT_SPEND
+    assert replay_bench.drive_exit('failed') == replay_bench.EXIT_ERROR
+
+
+def test_append_row_creates_owner_only_results_file(tmp_path):
+    results = tmp_path / 'runs.jsonl'
+    replay_bench.append_row(results, {'arm': 'on', 'id': 'c1', 'repeat': 0})
+    assert results.stat().st_mode & 0o077 == 0  # rows carry conversation ids
+
+
+def test_vendor_harness_carries_no_product_packages():
+    vendor = replay_bench.vendor_harness()
+    assert {entry.name for entry in vendor.iterdir()} == {'testing'}
+    # No utils/models/database in the vendor: product imports can only resolve
+    # from the arm's pinned tree, so every arm measures its own code.
+    assert not (vendor / 'utils').exists()
+    assert (vendor / 'testing' / 'owner_lab' / 'replay_bench.py').exists()
+
+
+def test_worker_env_preserves_parent_values_and_strips_credentials(monkeypatch, tmp_path):
+    monkeypatch.setenv('OWNER_LAB_UID', 'uid-from-parent')
+    monkeypatch.setenv('GOOGLE_APPLICATION_CREDENTIALS', '/secrets.json')
+    monkeypatch.setenv('NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S', 'digest')
+    arm = replay_bench.Arm(name='on', adapter='m:a', tree=str(tmp_path), ref='r', env={'FLAG_X': 'true'})
+    env = replay_bench.worker_env(arm)
+    assert env['OWNER_LAB_UID'] == 'uid-from-parent'
+    assert 'GOOGLE_APPLICATION_CREDENTIALS' not in env
+    assert 'NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S' not in env
+    assert env['FLAG_X'] == 'true'
 
 
 def test_drive_retries_transport_and_stops_after_three_consecutive():
@@ -262,6 +300,13 @@ def test_cost_split_separates_volume_from_cache_share():
     # At the baseline cache share the off arm's cost gap collapses to the output tokens.
     assert split['off']['cost_at_baseline_cache_share'] == pytest.approx(split['base']['cost_per_run'])
     assert split['off']['cost_per_run'] > split['off']['cost_at_baseline_cache_share']
+
+
+def test_cost_split_accepts_custom_prices():
+    rows = [_row('base', 'c1', 0, 0.0)]
+    default = report.cost_split(rows, 'base')[0]['cost_per_run']
+    doubled = report.cost_split(rows, 'base', (0.20, 0.02, 1.20))[0]['cost_per_run']
+    assert doubled == pytest.approx(2 * default)
 
 
 def test_gates_fail_when_cost_or_ratio_is_significantly_worse():

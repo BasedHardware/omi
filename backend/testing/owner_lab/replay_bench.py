@@ -19,13 +19,16 @@ Exit codes: 0 ok, 2 terminal error, 3 transport stop (retryable),
 from __future__ import annotations
 
 import argparse
+import atexit
 import hashlib
 import importlib
 import json
 import os
+import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -51,6 +54,7 @@ SELECTION_ENV = 'OWNER_LAB_SELECTION'
 # A spend stop ends the bench; a transport drop may clear by itself (tunnel
 # reconnect), so only the driver decides to retry it. Anything else is terminal.
 STOP_EXIT = {'spend': EXIT_SPEND, 'transport': EXIT_TRANSPORT}
+DRIVE_EXIT = {'complete': EXIT_OK, 'stopped': EXIT_SPEND, 'failed': EXIT_ERROR}
 
 
 class ControlledStop(Exception):
@@ -346,6 +350,24 @@ def completed_keys(results_path: Path) -> set[tuple[str, str, int]]:
     return keys
 
 
+def pending_keys(plan: Sequence[tuple[str, str, int]], results_path: Path) -> list[tuple[str, str, int]]:
+    """The plan minus what the results file already records; restarting never re-runs a done key."""
+    done = completed_keys(results_path)
+    return [key for key in plan if key not in done]
+
+
+def drive_exit(state: str) -> int:
+    return DRIVE_EXIT[state]
+
+
+def append_row(results_path: Path, row: Mapping[str, Any]) -> None:
+    if not results_path.exists():
+        results_path.touch(0o600)  # run rows carry conversation ids: owner-only from creation
+    with results_path.open('a') as stream:
+        stream.write(json.dumps(row, default=str) + '\n')
+        stream.flush()
+
+
 def drive(
     plan: Sequence[tuple[str, str, int]],
     spawn: Callable[[tuple[str, str, int]], int],
@@ -375,12 +397,6 @@ def drive(
     return 'complete', ''
 
 
-def append_row(results_path: Path, row: Mapping[str, Any]) -> None:
-    with results_path.open('a') as stream:
-        stream.write(json.dumps(row, default=str) + '\n')
-        stream.flush()
-
-
 def fingerprint(body: Mapping[str, Any]) -> dict[str, Any]:
     encoded = json.dumps(body, sort_keys=True, ensure_ascii=False, default=str).encode()
     return {
@@ -391,6 +407,10 @@ def fingerprint(body: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def worker_env(arm: Arm) -> dict[str, str]:
+    """The parent environment minus credential-shaped keys, plus the arm overlay.
+
+    Callers must build this BEFORE replacing their own os.environ.
+    """
     env = dict(os.environ)
     for key in list(env):
         if key in ('GOOGLE_APPLICATION_CREDENTIALS', 'SERVICE_ACCOUNT_JSON') or key.endswith('_SERVE_UID_SHA256S'):
@@ -403,18 +423,32 @@ def arm_backend_root(arm: Arm) -> Path:
     return Path(arm.tree) / 'backend'
 
 
+def vendor_harness() -> Path:
+    """A private copy of this harness package; product code resolves from the arm tree only.
+
+    The copy holds ONLY ``testing/owner_lab`` — never a second ``backend`` — so
+    ``utils``, ``models`` and ``database`` imports have exactly one source: the
+    arm's pinned tree. Without this, a full harness backend first on ``sys.path``
+    would make every arm measure the harness tree's code.
+    """
+    source = Path(__file__).resolve().parent
+    vendor = Path(tempfile.mkdtemp(prefix='owner-lab-bench-'))
+    shutil.copytree(source, vendor / 'testing' / 'owner_lab', ignore=shutil.ignore_patterns('__pycache__'))
+    atexit.register(shutil.rmtree, vendor, True)
+    return vendor
+
+
 def worker(config_path: Path, arm_name: str, mode: str, case_id: str, repeat: int) -> int:
     config = BenchConfig.load(config_path)
     arm = next((arm for arm in config.arms if arm.name == arm_name), None)
     if arm is None:
         raise SystemExit(f'unknown arm {arm_name}')
     verify_arm_pin(arm)
+    env = worker_env(arm)  # snapshot the parent environment before replacing it
     os.environ.clear()
-    os.environ.update(worker_env(arm))
+    os.environ.update(env)
     os.environ[ARM_ENV] = arm.name
-    # The bench harness always runs from this tree; product code (utils/, models/,
-    # database/) resolves from the arm's pinned tree.
-    sys.path[:0] = [str(Path(__file__).resolve().parents[2]), str(arm_backend_root(arm))]
+    sys.path[:0] = [str(vendor_harness()), str(arm_backend_root(arm))]
     base = config_path.parent
     paths = config.resolve(base)
     os.environ[SELECTION_ENV] = str(paths['selection'])
@@ -508,16 +542,16 @@ def run_bench(config_path: Path) -> int:
         raise SystemExit('no selection; run the select mode first')
     arm_names = [arm.name for arm in config.arms]
     plan = interleave(selection['ids'], arm_names, config.repeats)
-    pending = [key for key in plan if key not in completed_keys(paths['results'])]
+    pending = pending_keys(plan, paths['results'])
     print(f'PLAN runs={len(plan)} pending={len(pending)} arms={arm_names} repeats={config.repeats}', flush=True)
 
     def spawn(key: tuple[str, str, int]) -> int:
         arm_name, case_id, repeat = key
         return subprocess.call(worker_command(config_path, arm_name, 'run', case_id, repeat))
 
-    state, detail = drive(plan, spawn)
+    state, detail = drive(pending, spawn)
     print(f'BENCH {state.upper()} {detail}'.rstrip(), flush=True)
-    return EXIT_OK if state == 'complete' else EXIT_ERROR
+    return drive_exit(state)
 
 
 def compare_parity(fingerprints: Mapping[str, Sequence[Mapping[str, Any]]]) -> list[dict[str, Any]]:
@@ -573,6 +607,7 @@ def main(argv: list[str] | None = None) -> int:
         return run_bench(config_path)
     if args.mode == 'parity':
         return run_parity(config_path)
+    config = BenchConfig.load(config_path)
     arm = config.arms[0]
     return subprocess.call(worker_command(config_path, arm.name, args.mode, '', 0))
 
