@@ -97,7 +97,8 @@ abstract final class ValueMomentPaywall {
     final usage = context.read<UsageProvider>();
     if (usage.subscription == null) {
       await usage.fetchSubscription().timeout(const Duration(seconds: 6), onTimeout: () {});
-      if (!context.mounted) return;
+      // A tapped Upgrade (e.g. "Processing paused") may have opened the plans sheet meanwhile.
+      if (!context.mounted || PaywallPacing.shownRecently()) return;
     }
     if (!eligible(usage, moment)) return;
     await SharedPreferencesUtil().saveBool(_spentKey(moment), true);

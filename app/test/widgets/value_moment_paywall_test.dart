@@ -110,6 +110,7 @@ void main() {
 
     test('paying, hidden-subscription-UI and not-yet-loaded readers get neither', () {
       for (final response in [
+        _response(plan: PlanType.unlimitedV2),
         _response(plan: PlanType.unlimited),
         _response(plan: PlanType.plus),
         _response(plan: PlanType.unknown('future_tier')),
@@ -176,6 +177,22 @@ void main() {
     ValueMomentPaywall.offer(PaywallMoment.freeCap,
         conversation: _conversation(locked: true), queue: queue, open: open);
     PaywallPacing.markShown();
+    await settle(tester);
+    expect(opened, isEmpty);
+  });
+
+  testWidgets('a plans sheet opened while the cap offer loads the subscription cancels it', (tester) async {
+    usage.dispose();
+    // The reader taps Upgrade on "Processing paused" while the subscription is still loading.
+    usage = UsageProvider(subscriptionRequest: () async {
+      PaywallPacing.markShown();
+      return _response();
+    });
+    await host(tester);
+    expect(
+        ValueMomentPaywall.offer(PaywallMoment.freeCap,
+            conversation: _conversation(locked: true), usage: usage, queue: queue, open: open),
+        isTrue);
     await settle(tester);
     expect(opened, isEmpty);
   });
