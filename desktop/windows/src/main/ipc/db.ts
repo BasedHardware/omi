@@ -20,7 +20,7 @@ import {
   type RecoveryStatus
 } from './dbRecovery'
 import { captureError } from '../sentry'
-import { wipeUserDataOn } from './dbWipe'
+import { REWIND_IMAGE_PATHS_SQL, restoreRewindFramesOn, wipeUserDataOn } from './dbWipe'
 import { ByokKeyStore } from '../agentKernel/byokStore'
 import { McpKeyStore } from '../mcp/mcpKeyStore'
 import {
@@ -535,6 +535,39 @@ function get(): Database.Database {
       VALUES (new.id, new.ocr_text, new.window_title, new.app);
     END;
 
+    -- --- Owner transitions (INV-AUTH-1): sign-out PARKS the rewind index ------
+    -- macOS implements sign-out as an owner transition that preserves the prior
+    -- owner's rewind store (per-owner RewindDatabase,
+    -- RewindDatabase.retargetEffectiveOwner): the store is retargeted away, never
+    -- destroyed. Windows shares one store, so the boundary moves rows instead:
+    -- dbWipe.wipeUserDataOn parks the outgoing owner's rewind_frames rows here
+    -- (same transaction as the rest of the wipe; still invisible to any other
+    -- account), and dbWipe.restoreRewindFramesOn moves them back when that owner
+    -- signs in again (FTS rebuilds via the triggers above; the embedding backfill
+    -- re-embeds rows whose vectors were wiped at park time). The JPEGs under
+    -- rewind/ never move. Parked rows are NOT wiped on sign-out (deleting them
+    -- IS the silent-history-loss bug this table exists to prevent) and they age
+    -- out only through normal retention after restore.
+    CREATE TABLE IF NOT EXISTS rewind_frames_parked (
+      owner_uid TEXT NOT NULL,
+      ts INTEGER NOT NULL,
+      app TEXT NOT NULL DEFAULT '',
+      window_title TEXT NOT NULL DEFAULT '',
+      process_name TEXT NOT NULL DEFAULT '',
+      ocr_text TEXT NOT NULL DEFAULT '',
+      -- Per-line OCR bounding boxes (same shape as rewind_frames.ocr_lines_json,
+      -- added there by ensureColumn) so the search-highlight overlay survives a
+      -- park/restore round-trip, not just the flattened ocr_text.
+      ocr_lines_json TEXT,
+      image_path TEXT NOT NULL,
+      width INTEGER NOT NULL DEFAULT 0,
+      height INTEGER NOT NULL DEFAULT 0,
+      indexed INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_rewind_frames_parked_owner ON rewind_frames_parked(owner_uid, ts);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_rewind_frames_parked_owner_path
+      ON rewind_frames_parked(owner_uid, image_path);
+
     -- (Track 4's rewind_embeddings / rewind_embedding_vectors are created by
     -- applyRewindEmbeddingSchema() above, not here — they need a drop-first
     -- migration that must not be interleaved with this block.)
@@ -998,8 +1031,10 @@ export function setAppMeta(key: string, value: string): void {
 // Clear every user-scoped table on sign-out (see dbWipe.ts for scope + rationale).
 // wipeUserDataOn lives in the better-sqlite3-free dbWipe.ts so it is unit-testable
 // under plain-node vitest, which can't load this module's Electron-ABI native dep.
-export async function wipeUserData(): Promise<void> {
-  wipeUserDataOn(get())
+// The signing-out owner's uid parks their rewind index instead of deleting it
+// (INV-AUTH-1 owner transition) -- null falls back to the destructive wipe.
+export async function wipeUserData(ownerUid?: string | null): Promise<void> {
+  wipeUserDataOn(get(), { rewindOwnerUid: ownerUid ?? null })
   // BYOK provider keys live in a separate encrypted file (not SQLite), but they
   // are user-scoped too: drop them on an account wipe so a different account on
   // this install never inherits — or transmits — the prior user's provider keys.
@@ -1017,6 +1052,14 @@ export async function wipeUserData(): Promise<void> {
   } catch {
     /* best-effort */
   }
+}
+
+// A returning owner signs in: move their parked rewind frames back into the live
+// index (see the INV-AUTH-1 note in dbWipe.ts). Idempotent: nothing parked for
+// this uid restores nothing, so every sign-in can call it. Returns the number
+// of rows restored.
+export function restoreRewindFramesForOwner(ownerUid: string): number {
+  return restoreRewindFramesOn(get(), ownerUid)
 }
 
 export function getFileIndexStats(): { filesIndexed: number; byType: Record<string, number> } {
@@ -1566,26 +1609,23 @@ export function getRewindFrameOcrLines(id: number): OcrLine[] {
 }
 
 /** Image paths of frames captured in [fromMs, toMs) — used by the orphaned-JPEG
- *  sweep to tell a crash-orphaned file apart from one with a live DB row. */
+ *  sweep and the disk rebuild to tell a crash-orphaned file apart from one the
+ *  database still owns. Covers PARKED rows too (REWIND_IMAGE_PATHS_SQL): after a
+ *  sign-out parks the prior owner's index, their JPEGs have no live row, and a
+ *  keep-set that ignored the parked table would let the sweep delete the files
+ *  the park exists to preserve. */
 export function rewindImagePathsBetween(fromMs: number, toMs: number): string[] {
   return (
-    cachedStmt(get(), 'SELECT image_path FROM rewind_frames WHERE ts >= ? AND ts < ?').all(
-      fromMs,
-      toMs
-    ) as { image_path: string }[]
+    cachedStmt(get(), REWIND_IMAGE_PATHS_SQL).all(fromMs, toMs, fromMs, toMs) as {
+      image_path: string
+    }[]
   ).map((r) => r.image_path)
 }
 
 export function deleteRewindFramesOlderThan(cutoffTs: number): RewindFrame[] {
   const d = get()
-  const select = cachedStmt(
-    d,
-    `SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE ts < ?`
-  )
-  const del = cachedStmt(
-    d,
-    'DELETE FROM rewind_frames WHERE ts < ?'
-  )
+  const select = cachedStmt(d, `SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE ts < ?`)
+  const del = cachedStmt(d, 'DELETE FROM rewind_frames WHERE ts < ?')
   const pruneOlderThan = d.transaction((cutoff: number) => {
     const doomed = select.all(cutoff) as RewindFrame[]
     del.run(cutoff)

@@ -199,3 +199,56 @@ describe('selectOrphanFiles at the grace boundary', () => {
     expect(selectOrphanFiles(args(oldNameOldMtime))).toEqual([oldNameOldMtime.fullPath])
   })
 })
+
+// The retireBeforeMs bound is the defense-in-depth for the sign-out incident: a
+// wipe of rewind_frames left every historical JPEG unindexed, and the grace-only
+// sweep then mass-deleted them minutes later. A no-row file younger than the
+// retention cutoff is now kept (rebuildIndex.ts can re-associate it); only files
+// past the cutoff (which normal retention would have retired anyway) are swept.
+describe('selectOrphanFiles retention bound (sign-out index-reset regression)', () => {
+  const DAY = 24 * 60 * 60 * 1000
+  const RETENTION_CUTOFF = NOW - 14 * DAY // retentionDays = 14
+
+  const argsWithBound = (f: SweepFile) => ({
+    files: [f],
+    dbImagePaths: new Set<string>(),
+    nowMs: NOW,
+    graceMs: 60_000,
+    retireBeforeMs: RETENTION_CUTOFF
+  })
+
+  it('KEEPS a 5-day-old unindexed file (the incident: an index reset must not arm the sweep)', () => {
+    const f = file(NOW - 5 * DAY)
+    // Pre-fix behavior deleted it here: the sweep converts an index wipe into
+    // permanent file loss. With the bound it stays until the rebuild re-associates it.
+    expect(selectOrphanFiles(argsWithBound(f))).toEqual([])
+  })
+
+  it('still sweeps a 20-day-old no-row file (crash-orphan cleanup survives)', () => {
+    const f = file(NOW - 20 * DAY)
+    expect(selectOrphanFiles(argsWithBound(f))).toEqual([f.fullPath])
+  })
+
+  it('deletes at exactly the cutoff, keeps one millisecond younger', () => {
+    const atCutoff = file(RETENTION_CUTOFF)
+    expect(selectOrphanFiles(argsWithBound(atCutoff))).toEqual([atCutoff.fullPath])
+
+    const insideCutoff = file(RETENTION_CUTOFF + 1)
+    expect(selectOrphanFiles(argsWithBound(insideCutoff))).toEqual([])
+  })
+
+  it('bound uses the NEWER of filename and mtime like the grace check', () => {
+    // 20-day-old name but fresh mtime: the newest signal is inside retention.
+    const f = file(NOW - 20 * DAY, NOW - 1_000)
+    expect(selectOrphanFiles(argsWithBound(f))).toEqual([])
+  })
+
+  it('omitting the bound restores the legacy grace-only behavior', () => {
+    // Documents why the param is optional: tests pinning the pre-bound contract
+    // (all the cases above) still run unmodified, and the sweep always passes it.
+    const f = file(NOW - 5 * DAY)
+    expect(
+      selectOrphanFiles({ files: [f], dbImagePaths: new Set(), nowMs: NOW, graceMs: 60_000 })
+    ).toEqual([f.fullPath])
+  })
+})

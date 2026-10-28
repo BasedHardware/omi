@@ -96,8 +96,11 @@ export async function signOutUser(): Promise<void> {
   // the session is still valid: teardownUserData wipes the local keys, and this
   // DELETE drops the matching backend enrollment so this account isn't left
   // "enrolled" with no keys (which would 403 its own next requests). Best-effort.
+  // The uid is read at the same moment: it parks this account's rewind index for
+  // its return (INV-AUTH-1 owner transition, see dbWipe.ts).
   const token = await auth.currentUser?.getIdToken().catch(() => undefined)
-  await teardownUserData()
+  const uid = auth.currentUser?.uid ?? null
+  await teardownUserData(uid)
   if (token) {
     try {
       await window.omi.byokDeactivate(token)
