@@ -179,7 +179,7 @@ def test_prod_pool_placement_preserves_current_cpu_pools(chart):
 def test_parakeet_scales_conservatively_without_relaxing_admission():
     objects = render('parakeet')
     hpa = objects['HorizontalPodAutoscaler']['spec']
-    assert hpa['minReplicas'] == 8
+    assert hpa['minReplicas'] == 4
     assert hpa['maxReplicas'] == 12
     assert hpa['behavior']['scaleUp'] == {
         'stabilizationWindowSeconds': 0,
