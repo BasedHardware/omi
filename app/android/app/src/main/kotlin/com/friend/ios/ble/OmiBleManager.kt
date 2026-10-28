@@ -146,6 +146,13 @@ class OmiBleManager private constructor(private val application: Application) {
     fun lastAudioNotificationAgeMs(address: String): Long? =
         connectedGatts[address.uppercase()]?.let { lastAudioNotification.ageMs(address.uppercase(), it, SystemClock.elapsedRealtime()) }
 
+    internal fun recordAudioNotification(address: String, gatt: BluetoothGatt, identityEpoch: Long, atMs: Long) {
+        synchronized(DeviceHealthPersistence) {
+            if (!DeviceHealthPersistence.enabled(application) || identityEpoch != DeviceHealthPersistence.epoch(application)) return
+            lastAudioNotification.record(address.uppercase(), gatt, atMs)
+        }
+    }
+
     private var bondCompletionCallback: ((Boolean) -> Unit)? = null
     private var bondTimeoutRunnable: Runnable? = null
     private var bondingAddress: String? = null
@@ -340,6 +347,7 @@ class OmiBleManager private constructor(private val application: Application) {
         cleanupPeripheral(addr)
         connectedGatts[addr]?.close()
         connectedGatts.remove(addr)
+        lastAudioNotification.forget(addr)
     }
 
     fun isPeripheralConnected(address: String): Boolean {
@@ -737,6 +745,9 @@ class OmiBleManager private constructor(private val application: Application) {
         batteryHistoryRecorder.retire()
         chargingState.clear()
         lastAudioNotification.clear()
+        // An identity change may leave a live link in place. Bind it afresh,
+        // without carrying any prior audio observation into the new identity.
+        connectedGatts.forEach { (addr, gatt) -> lastAudioNotification.begin(addr, gatt) }
     }
 
     private val batteryHistoryRecorder by lazy {
@@ -805,7 +816,7 @@ class OmiBleManager private constructor(private val application: Application) {
                 BluetoothProfile.STATE_CONNECTED -> {
                     Log.i(TAG, "Connected to $address, discovering services")
                     connectedGatts[address] = gatt
-                    lastAudioNotification.forget(address)
+                    lastAudioNotification.begin(address, gatt)
 
                     // Discover services
                     enqueueCommand {
@@ -881,12 +892,13 @@ class OmiBleManager private constructor(private val application: Application) {
         }
 
         override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
+            val identityEpoch = DeviceHealthPersistence.epoch(application)
             if (connectedGatts[gatt.device.address.uppercase()] !== gatt) return
             val address = gatt.device.address.uppercase()
             val serviceUuid = characteristic.service.uuid.toString().lowercase()
             val charUuid = characteristic.uuid.toString().lowercase()
-            if (charUuid == "19b10001-e8f2-537e-4f6c-d104768a1214" && value.isNotEmpty() && DeviceHealthPersistence.enabled(application)) {
-                lastAudioNotification.record(address, gatt, SystemClock.elapsedRealtime())
+            if (charUuid == "19b10001-e8f2-537e-4f6c-d104768a1214" && value.isNotEmpty()) {
+                recordAudioNotification(address, gatt, identityEpoch, SystemClock.elapsedRealtime())
             }
 
             if (characteristic.uuid == BATTERY_LEVEL_CHAR_UUID && value.isNotEmpty()) {
@@ -984,10 +996,16 @@ internal enum class FirmwareReadOutcome { ATTEMPTED, SUCCEEDED, TIMEOUT, REJECTE
 
 /** Only the current GATT object may lend its monotonic audio age to an event. */
 internal class GenerationAudioAge<T : Any> {
-    private val samples = mutableMapOf<String, Pair<T, Long>>()
-    @Synchronized fun record(address: String, generation: T, atMs: Long) { samples[address] = generation to atMs }
+    private val samples = mutableMapOf<String, Pair<T, Long?>>()
+    @Synchronized fun begin(address: String, generation: T) { samples[address] = generation to null }
+    @Synchronized fun record(address: String, generation: T, atMs: Long) {
+        // A delayed callback may neither replace a newer generation's sample
+        // nor recreate an observation after its GATT object has been closed.
+        if (samples[address]?.first === generation) samples[address] = generation to atMs
+    }
     @Synchronized fun ageMs(address: String, generation: T, nowMs: Long): Long? = samples[address]?.let {
-        if (it.first === generation && nowMs >= it.second) nowMs - it.second else null
+        val atMs = it.second
+        if (it.first === generation && atMs != null && nowMs >= atMs) nowMs - atMs else null
     }
     @Synchronized fun forget(address: String) { samples.remove(address) }
     @Synchronized fun clear() { samples.clear() }

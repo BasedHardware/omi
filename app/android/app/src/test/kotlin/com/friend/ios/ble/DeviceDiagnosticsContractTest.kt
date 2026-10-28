@@ -7,6 +7,9 @@ import org.json.JSONObject
 import android.app.Activity
 import android.app.Application
 import android.content.Context
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothGattCallback
+import android.os.SystemClock
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
@@ -34,13 +37,20 @@ class DeviceDiagnosticsContractTest {
         val old = Any()
         val current = Any()
         assertNull(samples.ageMs("device", old, 100))
+        samples.begin("device", old)
         samples.record("device", old, 100)
         assertEquals(50L, samples.ageMs("device", old, 150))
         assertNull(samples.ageMs("device", current, 150))
         samples.forget("device")
         assertNull(samples.ageMs("device", old, 150))
+        samples.begin("device", current)
         samples.record("device", current, 200)
+        samples.record("device", old, 220)
+        assertEquals(50L, samples.ageMs("device", current, 250))
         assertNull(samples.ageMs("device", current, 199))
+        samples.forget("device")
+        samples.record("device", current, 300)
+        assertNull(samples.ageMs("device", current, 300))
         samples.clear()
         assertNull(samples.ageMs("device", current, 300))
     }
@@ -184,6 +194,35 @@ class DeviceDiagnosticsContractTest {
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [35])
 class FeedbackDiagnosticsServiceParityTest {
+    @Test fun `a callback captured before retirement cannot record in the next identity`() {
+        val app = RuntimeEnvironment.getApplication()
+        OmiBleManager.initialize(app)
+        val manager = OmiBleManager.instance
+        val address = "00:11:22:33:44:55"
+        val gatt = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(address)
+            .connectGatt(app, false, object : BluetoothGattCallback() {}) ?: error("Robolectric GATT unavailable")
+        manager.connectedGatts[address] = gatt
+        DeviceHealthPersistence.setPolicy(app, true, 7, true)
+        manager.recordAudioNotification(address, gatt, 7, SystemClock.elapsedRealtime())
+        assertNotNull(manager.lastAudioNotificationAgeMs(address))
+        // The callback already captured epoch 7, then waited behind retirement.
+        lateinit var delayed: Thread
+        synchronized(DeviceHealthPersistence) {
+            delayed = Thread { manager.recordAudioNotification(address, gatt, 7, SystemClock.elapsedRealtime()) }
+            delayed.start()
+            DeviceHealthPersistence.setPolicy(app, true, 8, true)
+        }
+        delayed.join(5000)
+        assertFalse(delayed.isAlive)
+        assertNull(manager.lastAudioNotificationAgeMs(address))
+        manager.recordAudioNotification(address, gatt, 8, SystemClock.elapsedRealtime())
+        assertNotNull(manager.lastAudioNotificationAgeMs(address))
+        manager.closeGatt(address)
+        manager.recordAudioNotification(address, gatt, 8, SystemClock.elapsedRealtime())
+        assertNull(manager.lastAudioNotificationAgeMs(address))
+        DeviceHealthPersistence.setPolicy(app, false, 9, true)
+    }
+
     @Test fun `persisted feedback evidence exports with service present and absent and obeys retirement`() {
         val app = RuntimeEnvironment.getApplication()
         OmiBleManager.initialize(app)
