@@ -25,9 +25,7 @@ class TestAppToolsSchemaAndGuards:
 
     def test_create_pydantic_model_from_schema_none_properties(self):
         # Must not raise AttributeError when properties or required is None
-        model = self.mod._create_pydantic_model_from_schema(
-            "test_tool", {"properties": None, "required": None}
-        )
+        model = self.mod._create_pydantic_model_from_schema("test_tool", {"properties": None, "required": None})
         assert model is not None
         instance = model()
         assert instance is not None
@@ -88,8 +86,11 @@ class TestAppToolsSchemaAndGuards:
             patch.object(self.mod, "record_app_webhook_success"),
             patch("httpx.AsyncClient", return_value=client),
         ):
-            self.mod.agent_config_context.set(top_level_config)
-            result = await structured.ainvoke({})
+            token = self.mod.agent_config_context.set(top_level_config)
+            try:
+                result = await structured.ainvoke({})
+            finally:
+                self.mod.agent_config_context.reset(token)
 
         assert "pong" in result
         sent_body = client.request.call_args.kwargs["json"]
@@ -173,3 +174,52 @@ class TestAppToolsSchemaAndGuards:
             tools = self.mod.load_app_tools("uid_test")
             assert len(tools) == 1
             assert tools[0].name == "app_test_valid_tool"
+
+    @pytest.mark.asyncio
+    async def test_call_tool_endpoint_preserves_wire_key_fidelity(self):
+        """Raw schema parameter names (e.g. 'user-id', 'custom.param') must appear
+        bit-for-bit as JSON keys in the HTTP request payload sent to the app endpoint."""
+        tool = ChatTool(
+            name="lookup",
+            description="lookup",
+            endpoint="https://example.com/lookup",
+            method="POST",
+            parameters={
+                "properties": {
+                    "user-id": {"type": "string", "description": "hyphenated key"},
+                    "q.param": {"type": "string", "description": "dotted key"},
+                },
+                "required": ["user-id"],
+            },
+        )
+        structured = self.mod.create_app_tool(tool, "app_wire", "WireApp")
+        response = MagicMock(status_code=200)
+        response.json.return_value = {"result": "found"}
+        client = AsyncMock()
+        client.request = AsyncMock(return_value=response)
+        client.__aenter__ = AsyncMock(return_value=client)
+        client.__aexit__ = AsyncMock(return_value=False)
+
+        with (
+            patch.object(self.mod, "is_app_webhook_disabled", return_value=False),
+            patch.object(self.mod, "get_cached_user_geolocation", return_value=None),
+            patch.object(self.mod, "get_webhook_circuit_breaker", return_value=_allowing_breaker()),
+            patch.object(self.mod, "record_app_webhook_success"),
+            patch("httpx.AsyncClient", return_value=client),
+        ):
+            token = self.mod.agent_config_context.set({"configurable": {"user_id": "u_wire"}})
+            try:
+                result = await structured.ainvoke({"user-id": "abc-123", "q.param": "hello"})
+            finally:
+                self.mod.agent_config_context.reset(token)
+
+        assert "found" in result
+        sent_body = client.request.call_args.kwargs["json"]
+        # The exact raw schema keys must be present — not sanitized versions
+        assert "user-id" in sent_body, f"Expected 'user-id' in payload, got keys: {list(sent_body.keys())}"
+        assert sent_body["user-id"] == "abc-123"
+        assert "q.param" in sent_body, f"Expected 'q.param' in payload, got keys: {list(sent_body.keys())}"
+        assert sent_body["q.param"] == "hello"
+        # Sanitized versions must NOT be present
+        assert "user_id" not in sent_body or sent_body.get("user_id") != "abc-123"
+        assert "q_param" not in sent_body

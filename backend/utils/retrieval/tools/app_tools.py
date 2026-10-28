@@ -118,7 +118,6 @@ _MAX_TOOL_STATUS_MESSAGES = 2048
 _tool_status_messages: Dict[str, str] = {}
 
 
-
 def _clean_identifier(name: Any, fallback: str = "item") -> str:
     """Sanitize arbitrary strings into valid Python identifiers and tool name components."""
     if not isinstance(name, str) or not name.strip():
@@ -129,6 +128,7 @@ def _clean_identifier(name: Any, fallback: str = "item") -> str:
     if cleaned[0].isdigit():
         cleaned = f"n_{cleaned}"
     return cleaned
+
 
 def _remember_tool_status(tool_name: str, status_message: str) -> None:
     # Re-inserting refreshes recency; evict the oldest entry once the cap is reached.
@@ -181,13 +181,22 @@ def _create_pydantic_model_from_schema(tool_name: str, parameters: Dict[str, Any
         else:
             py_type = str
 
-        clean_field_name = _clean_identifier(param_name, "field")
-        # Create field with or without default
+        # Keep the raw parameter name as the field key so that the HTTP payload
+        # preserves the exact schema keys the app endpoint expects (e.g. "user-id",
+        # "q.query").  Pydantic v2's create_model accepts non-identifier field names.
+        # Sanitization with _clean_identifier is applied only where a valid Python
+        # identifier is truly required: the model class name and the StructuredTool name.
+        if param_name in field_definitions:
+            logger.warning(
+                "Duplicate parameter name %r in tool %r schema — later definition wins",
+                param_name,
+                tool_name,
+            )
         if is_required:
-            field_definitions[clean_field_name] = (py_type, Field(..., description=param_desc))
+            field_definitions[param_name] = (py_type, Field(..., description=param_desc))
         else:
             # For optional fields, wrap in Optional and provide None default
-            field_definitions[clean_field_name] = (Optional[py_type], Field(default=None, description=param_desc))
+            field_definitions[param_name] = (Optional[py_type], Field(default=None, description=param_desc))
 
     # Create a unique, valid model name
     clean_model_base = _clean_identifier(tool_name, "AppTool")
