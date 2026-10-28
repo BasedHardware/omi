@@ -11885,5 +11885,8 @@
     "onTheWayDayQueued": "U redu čekanja",
     "onTheWayNoDate": "Bez datuma",
     "onTheWayFootnote": "Snimci koji ne uspiju nastavljaju s pokušajima u pozadini. Za sve što ne možemo pretvoriti u tekst automatski nam se prijavljuje.",
-    "onTheWayDetailsForSupport": "Detalji za podršku"
+    "onTheWayDetailsForSupport": "Detalji za podršku",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 kratki snimak je skriven} other{Skriveni kratki snimci: {count}}}",
+    "homeNoiseFoldShow": "Prikaži",
+    "homeNoiseFoldHide": "{count, plural, =1{Sakrijte 1 kratki snimak} other{Sakrijte kratke snimke: {count}}}"
 }

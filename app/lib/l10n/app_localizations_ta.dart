@@ -14761,4 +14761,29 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'ஆதரவுக்கான விவரங்கள்';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count குறுகிய பதிவுகள் மறைக்கப்பட்டன',
+      one: '1 குறுகிய பதிவு மறைக்கப்பட்டது',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'காட்டவும்';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count குறுகிய பதிவுகளை மறைக்கவும்',
+      one: '1 குறுகிய பதிவை மறைக்கவும்',
+    );
+    return '$_temp0';
+  }
 }

@@ -4459,5 +4459,8 @@
     "onTheWayDayQueued": "In de wachtrij",
     "onTheWayNoDate": "Geen datum",
     "onTheWayFootnote": "Opnames die mislukken, blijven op de achtergrond opnieuw proberen. Alles wat we niet kunnen transcriberen, wordt automatisch aan ons gemeld.",
-    "onTheWayDetailsForSupport": "Details voor support"
+    "onTheWayDetailsForSupport": "Details voor support",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 korte clip verborgen} other{{count} korte clips verborgen}}",
+    "homeNoiseFoldShow": "Tonen",
+    "homeNoiseFoldHide": "{count, plural, =1{Verberg 1 korte clip} other{Verberg {count} korte clips}}"
 }

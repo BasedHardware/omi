@@ -14696,4 +14696,29 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'Detalji za podršku';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kratkih isječaka skriveno',
+      one: '1 kratki isječak skriven',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Prikaži';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Skrij $count kratkih isječaka',
+      one: 'Skrij 1 kratki isječak',
+    );
+    return '$_temp0';
+  }
 }

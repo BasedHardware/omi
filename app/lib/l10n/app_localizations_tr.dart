@@ -14673,4 +14673,29 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'Destek için ayrıntılar';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kısa kayıt gizlendi',
+      one: '1 kısa kayıt gizlendi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Göster';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kısa kaydı gizle',
+      one: '1 kısa kaydı gizle',
+    );
+    return '$_temp0';
+  }
 }

@@ -14655,4 +14655,29 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'جزئیات برای پشتیبانی';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count کلیپ کوتاه مخفی شده‌اند',
+      one: '۱ کلیپ کوتاه مخفی شده',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'نمایش';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'مخفی‌کردن $count کلیپ کوتاه',
+      one: 'مخفی‌کردن ۱ کلیپ کوتاه',
+    );
+    return '$_temp0';
+  }
 }

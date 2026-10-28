@@ -14669,4 +14669,29 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'Detaljer för support';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count korta klipp dolda',
+      one: '1 kort klipp dolt',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Visa';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Dölj $count korta klipp',
+      one: 'Dölj 1 kort klipp',
+    );
+    return '$_temp0';
+  }
 }

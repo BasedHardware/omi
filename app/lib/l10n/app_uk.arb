@@ -4459,5 +4459,8 @@
     "onTheWayDayQueued": "У черзі",
     "onTheWayNoDate": "Без дати",
     "onTheWayFootnote": "Невдалі записи продовжать повторні спроби у фоновому режимі. Все, що ми не зможемо розшифрувати, автоматично повідомляється нам.",
-    "onTheWayDetailsForSupport": "Подробиці для підтримки"
+    "onTheWayDetailsForSupport": "Подробиці для підтримки",
+    "homeNoiseFoldHidden": "{count, plural, =1{Приховано 1 короткий запис} other{Приховано {count} коротких записів}}",
+    "homeNoiseFoldShow": "Показати",
+    "homeNoiseFoldHide": "{count, plural, =1{Приховати 1 короткий запис} other{Приховати {count} коротких записів}}"
 }

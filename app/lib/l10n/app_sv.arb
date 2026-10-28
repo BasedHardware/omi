@@ -4459,5 +4459,8 @@
     "onTheWayDayQueued": "I kö",
     "onTheWayNoDate": "Inget datum",
     "onTheWayFootnote": "Inspelningar som misslyckas försöker igen i bakgrunden. Allt som vi inte kan transkribera rapporteras automatiskt till oss.",
-    "onTheWayDetailsForSupport": "Detaljer för support"
+    "onTheWayDetailsForSupport": "Detaljer för support",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 kort klipp dolt} other{{count} korta klipp dolda}}",
+    "homeNoiseFoldShow": "Visa",
+    "homeNoiseFoldHide": "{count, plural, =1{Dölj 1 kort klipp} other{Dölj {count} korta klipp}}"
 }

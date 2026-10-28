@@ -14653,4 +14653,29 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'Üksikasjad toe jaoks';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count lühikest klippi on peidetud',
+      one: '1 lühike klipp on peidetud',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Kuva';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Peida $count lühikest klippi',
+      one: 'Peida 1 lühike klipp',
+    );
+    return '$_temp0';
+  }
 }

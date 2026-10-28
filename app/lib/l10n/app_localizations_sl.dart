@@ -14688,4 +14688,29 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'Podrobnosti za podporo';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kratkih posnetkov skritih',
+      one: '1 kratek posnetek skrit',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Prikaži';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Skrij $count kratkih posnetkov',
+      one: 'Skrij 1 kratek posnetek',
+    );
+    return '$_temp0';
+  }
 }

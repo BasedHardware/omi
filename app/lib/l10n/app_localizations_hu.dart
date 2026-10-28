@@ -14718,4 +14718,29 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'Részletek az ügyfélszolgálatnak';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rövid felvétel elrejtve',
+      one: '1 rövid felvétel elrejtve',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Megjelenítés';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rövid felvétel elrejtése',
+      one: '1 rövid felvétel elrejtése',
+    );
+    return '$_temp0';
+  }
 }

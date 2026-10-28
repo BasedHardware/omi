@@ -11885,5 +11885,8 @@
     "onTheWayDayQueued": "रांगेत आहे",
     "onTheWayNoDate": "तारीख नाही",
     "onTheWayFootnote": "अपयशी ठरलेली रेकॉर्डिंग पार्श्वभूमीमध्ये पुन्हा प्रयत्न करत राहतात. आम्ही लिप्यंतरित करू न शकणारे मजकूर आपोआप आम्हाला नोंदवला जातो.",
-    "onTheWayDetailsForSupport": "समर्थनासाठी तपशील"
+    "onTheWayDetailsForSupport": "समर्थनासाठी तपशील",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 लहान क्लिप लपवले आहे} other{{count} लहान क्लिप्स लपवली आहेत}}",
+    "homeNoiseFoldShow": "दाखवा",
+    "homeNoiseFoldHide": "{count, plural, =1{1 लहान क्लिप लपवा} other{{count} लहान क्लिप्स लपवा}}"
 }

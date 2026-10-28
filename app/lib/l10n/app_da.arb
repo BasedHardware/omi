@@ -4501,5 +4501,8 @@
     "onTheWayDayQueued": "I kø",
     "onTheWayNoDate": "Ingen dato",
     "onTheWayFootnote": "Optagelser, der fejler, bliver ved med at prøve igen i baggrunden. Alt, hvad vi ikke kan transskribere, bliver automatisk rapporteret til os.",
-    "onTheWayDetailsForSupport": "Detaljer til support"
+    "onTheWayDetailsForSupport": "Detaljer til support",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 kort klip skjult} other{{count} korte klip skjult}}",
+    "homeNoiseFoldShow": "Vis",
+    "homeNoiseFoldHide": "{count, plural, =1{Skjul 1 kort klip} other{Skjul {count} korte klip}}"
 }

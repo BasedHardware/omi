@@ -4459,5 +4459,8 @@
     "onTheWayDayQueued": "排队中",
     "onTheWayNoDate": "无日期",
     "onTheWayFootnote": "失败的录音会在后台持续重试。我们无法转录的内容会自动报告给我们。",
-    "onTheWayDetailsForSupport": "支持详情"
+    "onTheWayDetailsForSupport": "支持详情",
+    "homeNoiseFoldHidden": "{count, plural, =1{已隐藏 1 段短录音} other{已隐藏 {count} 段短录音}}",
+    "homeNoiseFoldShow": "显示",
+    "homeNoiseFoldHide": "{count, plural, =1{隐藏 1 段短录音} other{隐藏 {count} 段短录音}}"
 }

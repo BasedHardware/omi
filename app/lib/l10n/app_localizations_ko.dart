@@ -14458,4 +14458,29 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => '고객지원용 세부 정보';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '짧은 클립 $count개 숨겨짐',
+      one: '짧은 클립 1개 숨겨짐',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => '표시';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '짧은 클립 $count개 숨기기',
+      one: '짧은 클립 1개 숨기기',
+    );
+    return '$_temp0';
+  }
 }

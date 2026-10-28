@@ -11885,5 +11885,8 @@
     "onTheWayDayQueued": "בתור",
     "onTheWayNoDate": "ללא תאריך",
     "onTheWayFootnote": "הקלטות שנכשלות ממשיכות לנסות שוב ברקע. כל מה שלא ניתן לתמלול מדווח לנו אוטומטית.",
-    "onTheWayDetailsForSupport": "פרטים לתמיכה"
+    "onTheWayDetailsForSupport": "פרטים לתמיכה",
+    "homeNoiseFoldHidden": "{count, plural, =1{קטע קצר 1 הוסתר} other{{count} קטעים קצרים הוסתרו}}",
+    "homeNoiseFoldShow": "הצג",
+    "homeNoiseFoldHide": "{count, plural, =1{הסתר קטע קצר 1} other{הסתר {count} קטעים קצרים}}"
 }

@@ -4459,5 +4459,8 @@
     "onTheWayDayQueued": "順番待ち",
     "onTheWayNoDate": "日付なし",
     "onTheWayFootnote": "失敗した録音はバックグラウンドで再試行を続けます。文字起こしできなかったものは自動的に報告されます。",
-    "onTheWayDetailsForSupport": "サポート用の詳細"
+    "onTheWayDetailsForSupport": "サポート用の詳細",
+    "homeNoiseFoldHidden": "{count, plural, =1{短いクリップ1件を非表示にしました} other{{count}件の短いクリップを非表示にしました}}",
+    "homeNoiseFoldShow": "表示",
+    "homeNoiseFoldHide": "{count, plural, =1{短いクリップ1件を非表示にする} other{{count}件の短いクリップを非表示にする}}"
 }

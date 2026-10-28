@@ -14588,4 +14588,29 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'รายละเอียดสำหรับฝ่ายสนับสนุน';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ซ่อนคลิปสั้นไว้ $count รายการ',
+      one: 'ซ่อนคลิปสั้นไว้ 1 รายการ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'แสดง';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ซ่อนคลิปสั้น $count รายการ',
+      one: 'ซ่อนคลิปสั้น 1 รายการ',
+    );
+    return '$_temp0';
+  }
 }

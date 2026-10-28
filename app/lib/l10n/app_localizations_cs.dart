@@ -14659,4 +14659,29 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'Podrobnosti pro podporu';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Skryto krátkých nahrávek: $count',
+      one: 'Skrytá 1 krátká nahrávka',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Zobrazit';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Skrýt krátké nahrávky: $count',
+      one: 'Skrýt 1 krátkou nahrávku',
+    );
+    return '$_temp0';
+  }
 }

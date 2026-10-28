@@ -14757,4 +14757,29 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'Λεπτομέρειες για την υποστήριξη';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Κρύφτηκαν $count σύντομα αποσπάσματα',
+      one: 'Κρύφτηκε 1 σύντομο απόσπασμα',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Εμφάνιση';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Απόκρυψη $count σύντομων αποσπασμάτων',
+      one: 'Απόκρυψη 1 σύντομου αποσπάσματος',
+    );
+    return '$_temp0';
+  }
 }
