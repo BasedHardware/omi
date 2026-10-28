@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "FC-episode-span-cap-misses-member-speech",
+  "violated_contract": "The maximum live-episode span applies to speech from every member conversation. A same-conversation fast path or a multi-conversation episode must not keep the occasion open beyond the cap.",
+  "canonical_prevention": "Check the episode's original start against every continued member's speech before accepting it. At or beyond the cap, close the old episode and open a new one for continued speech while preserving transcript receipt cursors. Prove the exact-cap boundary with a multi-conversation service test that verifies old notes remain and new speech lands in the new episode.",
+  "canonical_prevention_artifact": ["backend/tests/unit/test_episodes_service.py", "backend/tests/unit/test_episodes_policy_state.py"],
+  "evidence_prs": [],
+  "scope_hints": ["backend/utils/episodes/", "backend/tests/unit/test_episodes_service.py"],
+  "status": "open"
+}

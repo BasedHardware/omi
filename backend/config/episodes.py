@@ -126,9 +126,10 @@ LAST_CLOSED_CACHE_SECONDS = 30
 
 # --------------------------------------------------------------------------- moments
 
-# A moment ends when the live stream pauses for this long, or when it grows past
-# MOMENT_MAX_WORDS (a rollover), or after MOMENT_MAX_SECONDS of steady speech (an
-# interval), or when its conversation finalizes or its live session ends.
+# A moment ends when the live stream pauses for this long, when it grows past
+# MOMENT_MAX_WORDS (a rollover), after MOMENT_MAX_SECONDS of steady speech (an
+# interval), or when finalize/wrap-up consumes the remaining buffer. A session
+# end and conversation change preserve speech for the next same-episode moment.
 MOMENT_PAUSE_SECONDS = 45
 MOMENT_MAX_WORDS = 600
 # Continuous talk never pauses for 45 s and rarely reaches 600 words quickly; without a

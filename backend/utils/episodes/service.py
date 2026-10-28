@@ -398,6 +398,58 @@ def _closed_owner(
     return None
 
 
+def _select_carried_segments(
+    uid: str,
+    episode: Mapping[str, Any],
+    fragments: Sequence[Any],
+    c: Collaborators,
+    *,
+    all_shards: bool,
+) -> tuple[list[Mapping[str, Any]], dict[str, set[str]], dict[str, set[str]], dict[str, float]]:
+    """Select pending transcript groups already owned by the same episode.
+
+    Conversation-local cursors and receipts stay separate even when their text
+    is folded into one LLM update. A boundary that opened another episode never
+    calls this helper, so an earlier occasion's buffer remains for finalization.
+    """
+    members = set(episode.get('conversation_ids') or [])
+    applied = dict(episode.get('applied') or {})
+    selected_segments: list[Mapping[str, Any]] = []
+    receipt_ids: dict[str, set[str]] = {}
+    content_ids: dict[str, set[str]] = {}
+    applied_until: dict[str, float] = {}
+    for fragment in fragments:
+        conversation_id = str(getattr(fragment, 'conversation_id', '') or '')
+        if not conversation_id or conversation_id not in members:
+            continue
+        raw_segments = list(getattr(fragment, 'segments', ()) or ())
+        if not raw_segments:
+            continue
+        consumed, receipts_exist = episode_receipts.get_consumed_ids(
+            uid, conversation_id, all_shards=all_shards, firestore_client=c.firestore_client
+        )
+        if not receipts_exist:
+            consumed |= set(((episode.get('applied_segment_ids') or {}).get(conversation_id)) or [])
+        consumed_content, _ = episode_receipts.get_consumed_ids(
+            uid,
+            recovery.receipt_namespace(conversation_id),
+            all_shards=True,
+            firestore_client=c.firestore_client,
+        )
+        cursor = float(applied.get(conversation_id, -1.0))
+        chosen, ids, _ = recovery.select_segments(raw_segments, consumed, consumed_content, cursor, recovered=False)
+        if not chosen:
+            continue
+        selected_segments.extend(chosen)
+        receipt_ids.setdefault(conversation_id, set()).update(ids)
+        content_ids.setdefault(conversation_id, set()).update(recovery.content_receipts(chosen))
+        if not receipts_exist:
+            receipt_ids[conversation_id].update(consumed)
+        end_offset = max((_segment_end(segment) for segment in chosen), default=-1.0)
+        applied_until[conversation_id] = max(applied_until.get(conversation_id, -1.0), end_offset)
+    return selected_segments, receipt_ids, content_ids, applied_until
+
+
 def attach_conversation(
     uid: str,
     conversation_id: str,
@@ -427,13 +479,27 @@ def attach_conversation(
 def _attach_once(uid: str, conversation_id: str, source: Optional[str], started_at: datetime, c: Collaborators) -> str:
     now = _now(c)
     episode = episodes_db.get_current_episode(uid, firestore_client=c.firestore_client)
+    hard_cap_reopened = False
     if episode and conversation_id in (episode.get('conversation_ids') or []):
-        # Refresh before the lazy idle-close check, including short speech batches.
-        _retain_activity(uid, episode, conversation_id, started_at, c)
-        return 'attached'
+        if policy.hard_cap_due(episode, started_at):
+            metrics.record_boundary('close')
+            hard_cap_reopened = _close(uid, episode, 'hard_cap', c, now=now)
+            episode = (
+                None if hard_cap_reopened else episodes_db.get_current_episode(uid, firestore_client=c.firestore_client)
+            )
+            if episode and conversation_id in (episode.get('conversation_ids') or []):
+                # A concurrent writer kept this member in a live episode; preserve
+                # activity and let the next compare-and-swap moment check the cap.
+                _retain_activity(uid, episode, conversation_id, started_at, c)
+                return 'attached'
+            hard_cap_reopened = hard_cap_reopened or episode is None
+        else:
+            # Refresh before the lazy idle-close check, including short speech batches.
+            _retain_activity(uid, episode, conversation_id, started_at, c)
+            return 'attached'
     episode = _close_stale_current(uid, episode, c, now)
     owner = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
-    if owner and (episode is None or owner.get('closing_conversation_id') == conversation_id):
+    if owner and not hard_cap_reopened and (episode is None or owner.get('closing_conversation_id') == conversation_id):
         # Already owned by a closed episode (it finalized first, or its end closed it): never reopen
         # that one, and never carry it into the next.
         return 'attached'
@@ -609,7 +675,7 @@ def _record_moment_once(
         and moment.trigger != 'finalize'
         and any(str(s.get('text') or '').strip() for s in moment.segments)
     ):
-        episode = _retain_activity(uid, episode, moment.conversation_id, moment.ended_at, c)
+        episode = _retain_activity(uid, episode, moment.conversation_id, moment.current_ended_at or moment.ended_at, c)
     if not member_episode_id:
         episode = _close_stale_current(uid, episode, c, now)
     closed = episode if member_episode_id and not policy.is_live(episode) else None
@@ -669,17 +735,14 @@ def _record_moment_once(
     )
     if recovered and text.truncated:
         return 'error'  # Never consume recovered words the prompt did not carry.
-    if text.words == 0:
+    if text.words == 0 and not moment.carried:
         metrics.record_moment_update(trigger=moment.trigger, outcome='skipped_applied')
         return 'skipped_applied'
-    if not recovered and text.words < (FINALIZE_MIN_WORDS if moment.trigger == 'finalize' else MOMENT_MIN_WORDS):
-        metrics.record_moment_update(trigger=moment.trigger, outcome='skipped_short')
-        return 'skipped_short'
     facts = policy.MomentFacts(
         conversation_id=moment.conversation_id,
         source=moment.source,
-        started_at=moment.started_at,
-        ended_at=moment.ended_at,
+        started_at=moment.current_started_at or moment.started_at,
+        ended_at=moment.current_ended_at or moment.ended_at,
         calendar_identity=moment.calendar_identity,
         speakers=policy.speaker_keys(segments),
     )
@@ -695,6 +758,35 @@ def _record_moment_once(
             text = incremental.render_moment(
                 named, uid=uid, conversation_id=moment.conversation_id, owner_name=owner_name, voice_order=[]
             )
+
+    carried_segments: list[Mapping[str, Any]] = []
+    carried_receipts: dict[str, set[str]] = {}
+    carried_content: dict[str, set[str]] = {}
+    carried_applied: dict[str, float] = {}
+    if episode is not None and moment.carried:
+        carried_segments, carried_receipts, carried_content, carried_applied = _select_carried_segments(
+            uid,
+            episode,
+            moment.carried,
+            c,
+            all_shards=moment.trigger == 'finalize' or recovered,
+        )
+        if carried_segments:
+            named = _named_segments(uid, [*carried_segments, *segments], c)
+            text = incremental.render_moment(
+                named,
+                uid=uid,
+                conversation_id=moment.conversation_id,
+                owner_name=owner_name,
+                voice_order=(episode or {}).get('speaker_display_order') or [],
+            )
+
+    if text.words == 0:
+        metrics.record_moment_update(trigger=moment.trigger, outcome='skipped_applied')
+        return 'skipped_applied'
+    if not recovered and text.words < (FINALIZE_MIN_WORDS if moment.trigger == 'finalize' else MOMENT_MIN_WORDS):
+        metrics.record_moment_update(trigger=moment.trigger, outcome='skipped_short')
+        return 'skipped_short'
 
     state_updated_at = policy.utc(episode.get('state_updated_at')) if episode else None
     if (
@@ -731,7 +823,11 @@ def _record_moment_once(
         )
     except incremental.ModelCallFailed as failure:
         metrics.record_moment_update(
-            trigger=moment.trigger, outcome=failure.outcome, latency_seconds=failure.latency_seconds
+            trigger=moment.trigger,
+            outcome=failure.outcome,
+            input_tokens=failure.input_tokens,
+            output_tokens=failure.output_tokens,
+            latency_seconds=failure.latency_seconds,
         )
         if episode is None:
             # The notes failed, the occasion did not: open it without notes (a split already closed
@@ -765,14 +861,14 @@ def _record_moment_once(
         and heading
         and str(last.get('heading') or '').casefold() == heading.casefold()
     ):
-        last.update({'ended_at': moment.ended_at, 'end_offset': end_offset})
+        last.update({'ended_at': moment.current_ended_at or moment.ended_at, 'end_offset': end_offset})
     else:
         moments.append(
             {
                 'id': uuid4().hex[:12],
                 'conversation_id': moment.conversation_id,
-                'started_at': moment.started_at,
-                'ended_at': moment.ended_at,
+                'started_at': moment.current_started_at or moment.started_at,
+                'ended_at': moment.current_ended_at or moment.ended_at,
                 'start_offset': start_offset,
                 'end_offset': end_offset,
                 'heading': heading,
@@ -780,22 +876,34 @@ def _record_moment_once(
         )
     applied = dict(base.get('applied') or {})
     applied[moment.conversation_id] = max(float(applied.get(moment.conversation_id, -1.0)), end_offset)
+    for conversation_id, carried_end in carried_applied.items():
+        applied[conversation_id] = max(float(applied.get(conversation_id, -1.0)), carried_end)
     # Record only what this moment consumed: when receipts already exist their archives
     # hold the older ids, and re-recording them would duplicate every shard. A missing
     # receipt document adopts the legacy in-document ids on its first write instead.
     adopt = set() if receipts_exist else consumed
     receipt_ids = selected_ids | adopt
     segment_receipts = {moment.conversation_id: sorted(receipt_ids)} if receipt_ids else {}
-    if (
+    for conversation_id, ids in carried_receipts.items():
+        if ids:
+            segment_receipts[conversation_id] = sorted(set(segment_receipts.get(conversation_id, [])) | ids)
+    consumed_segments = [*carried_segments, *segments]
+    all_consumed_rendered = (
         not recovered
         and not text.truncated
-        and text.words == sum(len(str(s.get('text') or '').split()) for s in segments)
-    ):
+        and text.words == sum(len(str(s.get('text') or '').split()) for s in consumed_segments)
+    )
+    if all_consumed_rendered:
         selected_content = recovery.content_receipts(segments)
     if selected_content:
         segment_receipts[recovery.receipt_namespace(moment.conversation_id)] = sorted(selected_content)
+    if all_consumed_rendered:
+        for conversation_id, content_ids in carried_content.items():
+            if content_ids:
+                namespace = recovery.receipt_namespace(conversation_id)
+                segment_receipts[namespace] = sorted(set(segment_receipts.get(namespace, [])) | content_ids)
     usage = dict(base.get('usage') or {})
-    usage['calls'] = int(usage.get('calls') or 0) + 1
+    usage['calls'] = int(usage.get('calls') or 0) + result.model_calls
     usage['input_tokens'] = int(usage.get('input_tokens') or 0) + result.input_tokens
     usage['output_tokens'] = int(usage.get('output_tokens') or 0) + result.output_tokens
     last_activity = policy.utc(base.get('last_activity_at'))
@@ -807,7 +915,11 @@ def _record_moment_once(
         'usage': usage,
         'speaker_display_order': list(text.voice_order),
         'speaker_keys': sorted(set(base.get('speaker_keys') or []) | set(facts.speakers)),
-        'last_activity_at': max(moment.ended_at, last_activity) if last_activity else moment.ended_at,
+        'last_activity_at': (
+            max(moment.current_ended_at or moment.ended_at, last_activity)
+            if last_activity
+            else (moment.current_ended_at or moment.ended_at)
+        ),
         'calendar_identity': base.get('calendar_identity') or moment.calendar_identity,
     }
     if output_language:
@@ -916,6 +1028,11 @@ def close_on_finalize(
             return 'skipped_no_client'
         if not _finalize_closes(uid, trigger, source):
             return 'kept_open'
+        from utils.episodes.live import tracker
+
+        pending = tracker.flush(uid, conversation_id, trigger='finalize')
+        if pending is not None:
+            record_moment(uid, pending, c)
         episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
         return _close_for_finalize(uid, episode, conversation_id, trigger, c, _now(c))
     except Exception as error:
@@ -1427,6 +1544,14 @@ def wrap_up(
     if not episode:
         return None
     if episode.get('status') != 'live':
+        return episode
+    from utils.episodes.live import tracker
+
+    pending = tracker.flush(uid, trigger='finalize')
+    if pending is not None:
+        record_moment(uid, pending, c)
+    episode = episodes_db.get_episode(uid, episode_id, firestore_client=c.firestore_client)
+    if not episode or episode.get('status') != 'live':
         return episode
     now = _now(c)
     _close(

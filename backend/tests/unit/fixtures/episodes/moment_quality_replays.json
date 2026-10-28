@@ -1,0 +1,38 @@
+[
+  {
+    "name": "raw transcript quotation",
+    "transcript": "Others: No, do not send us again. Okay, where should I send?",
+    "bullets": ["No, do not send us again. Okay, where should I send?"],
+    "issues": ["verbatim_overlap"]
+  },
+  {
+    "name": "raw transcript quotation split across speaker lines",
+    "transcript": "Others: No, do not send us again.\nYou: Okay, where should I send?",
+    "bullets": ["No, do not send us again. Okay, where should I send?"],
+    "issues": ["verbatim_overlap"]
+  },
+  {
+    "name": "overlong marked quotation",
+    "transcript": "Minh said that the schedule remains provisional until the venue confirms its date.",
+    "bullets": ["Minh said the schedule is \"provisional until the venue confirms its date\"."],
+    "issues": ["quote_too_long"]
+  },
+  {
+    "name": "diarization style speaker label",
+    "transcript": "The invite went to the new address after lunch.",
+    "bullets": ["Others: The invite went to the new address."],
+    "issues": ["speaker_label"]
+  },
+  {
+    "name": "short paraphrase",
+    "transcript": "The meeting starts at ten and needs a larger room.",
+    "bullets": ["Move the meeting to a bigger space for its ten o'clock start."],
+    "issues": []
+  },
+  {
+    "name": "five word quotation is within the quote limit",
+    "transcript": "We will meet again next week.",
+    "bullets": ["They agreed \"we will meet again next\"."],
+    "issues": []
+  }
+]

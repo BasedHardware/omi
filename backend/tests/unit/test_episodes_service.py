@@ -15,6 +15,7 @@ from database import users as users_db
 from models.episode import Episode
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.episodes import incremental, service
+from utils.episodes.moment import MomentFragment
 from utils.episodes.service import Collaborators, MomentInput
 
 UID = 'uid-episodes'
@@ -738,6 +739,33 @@ def test_a_client_finalize_closes_the_live_episode_at_once_and_is_idempotent():
     assert [i['status'] for i in final['provisional_items']] == ['dropped']
 
 
+@pytest.mark.parametrize('close_via', ['client_finalize', 'wrap_up'])
+def test_explicit_finalize_and_wrap_up_flush_the_pending_live_moment(monkeypatch, close_via):
+    from utils.episodes.live import tracker
+
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Final group decision', 'bullets': ['They set a new review time']})
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    assert service.attach_conversation(UID, 'c1', 'omi', started_at=T0, collaborators=c) == 'opened'
+    pending = _moment('c1', minutes=1, trigger='finalize')
+    monkeypatch.setattr(tracker, 'flush', lambda _uid, *_a, **_kw: pending)
+
+    if close_via == 'client_finalize':
+        outcome = service.close_on_finalize(UID, 'c1', trigger='client_finalize', collaborators=c)
+        assert outcome == 'closed'
+        episode = episodes_db.get_episode_for_conversation(UID, 'c1', firestore_client=store)
+    else:
+        episode = episodes_db.get_current_episode(UID, firestore_client=store)
+        closed = service.wrap_up(UID, episode['id'], conversation_id='c1', collaborators=c)
+        assert closed['status'] == 'closed'
+        episode = closed
+
+    assert episode['status'] == 'closed'
+    assert episode['title'] == 'Final group decision'
+    assert episode['bullets'] == ['They set a new review time']
+    assert len(model.calls) == 1
+
+
 def test_an_ended_conversation_never_reopens_its_episode_and_the_next_words_open_a_new_one():
     store = StrictFirestore()
     model = FakeModel({'title': 'Lunch', 'bullets': ['A']}, {'title': 'Standup', 'bullets': ['S']})
@@ -936,6 +964,108 @@ def _attach(store, conversation_id, *, minutes, source='omi', now_minutes=None):
     return service.attach_conversation(
         UID, conversation_id, source, started_at=T0 + timedelta(minutes=minutes), collaborators=c
     )
+
+
+def test_hard_cap_rotates_a_multi_conversation_episode_when_a_member_keeps_talking():
+    store = StrictFirestore()
+    model = FakeModel(
+        {'title': 'First stretch', 'bullets': ['Notes before the cap']},
+        {'title': 'Next stretch', 'bullets': ['New speech after the cap']},
+    )
+    c = _collaborators(model, now=T0 + timedelta(minutes=1), store=store)
+    assert service.record_moment(UID, _moment('c1'), c) == 'applied'
+    c.now = lambda: T0 + timedelta(minutes=1, seconds=30)
+    assert (
+        service.attach_conversation(UID, 'c2', 'omi', started_at=T0 + timedelta(minutes=1, seconds=30), collaborators=c)
+        == 'joined'
+    )
+    old = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert old['conversation_ids'] == ['c1', 'c2']
+
+    after_cap = T0 + timedelta(seconds=config.MAX_EPISODE_SECONDS)
+    c.now = lambda: after_cap + timedelta(minutes=1)
+    post_cap = _moment(
+        'c2',
+        minutes=180,
+        trigger='interval',
+        text=(
+            'After the cap, everyone discussed the revised schedule, assigned preparation tasks, '
+            'and agreed to meet again next Wednesday for a quick status review before wrapping up the topic'
+        ),
+    )
+    assert service.record_moment(UID, post_cap, c) == 'applied'
+    closed = episodes_db.get_episode(UID, old['id'], firestore_client=store)
+    current = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert closed['status'] == 'closed' and closed['close_reason'] == 'hard_cap'
+    assert closed['conversation_ids'] == ['c1', 'c2'] and closed['bullets'] == ['Notes before the cap']
+    assert current['id'] != old['id'] and current['conversation_ids'] == ['c2']
+    assert current['started_at'] == after_cap
+    assert current['title'] == 'Next stretch' and current['usage']['calls'] == 1
+
+
+def test_same_episode_moment_applies_carried_speech_with_separate_cursors():
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Follow up', 'bullets': ['The group set a follow up for next week']})
+    c = _collaborators(model, now=T0, store=store)
+    assert service.attach_conversation(UID, 'c1', 'omi', started_at=T0, collaborators=c) == 'opened'
+    joined_at = T0 + timedelta(seconds=30)
+    c.now = lambda: joined_at
+    assert service.attach_conversation(UID, 'c2', 'omi', started_at=joined_at, collaborators=c) == 'joined'
+
+    carried_text = 'Earlier the group asked engineering to draft a migration plan for the next release.'
+    carried = MomentFragment(
+        conversation_id='c1',
+        source='omi',
+        segments=[{'id': 'carried-c1', 'text': carried_text, 'start': 0.0, 'end': 30.0}],
+        started_at=joined_at,
+        ended_at=T0 + timedelta(minutes=1),
+    )
+    current = MomentInput(
+        conversation_id='c2',
+        source='omi',
+        segments=[{'id': 'current-c2', 'text': LONG, 'start': 0.0, 'end': 30.0}],
+        started_at=T0 + timedelta(minutes=1),
+        ended_at=T0 + timedelta(minutes=2),
+        trigger='interval',
+        carried=(carried,),
+        current_started_at=T0 + timedelta(minutes=1),
+        current_ended_at=T0 + timedelta(minutes=2),
+    )
+    c.now = lambda: current.ended_at
+
+    assert service.record_moment(UID, current, c) == 'applied'
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['conversation_ids'] == ['c1', 'c2']
+    assert episode['applied']['c1'] == 30.0 and episode['applied']['c2'] == 30.0
+    prompt = str(model.calls[0])
+    assert carried_text in prompt and LONG in prompt
+    assert service.record_moment(UID, current, c) == 'skipped_applied'
+    assert len(model.calls) == 1
+
+
+def test_quality_retry_is_included_in_episode_model_call_usage():
+    store = StrictFirestore()
+    transcript = (
+        'The team decided to send the migration draft to engineering before Friday morning. '
+        'They will ask legal to review the updated timeline and confirm whether the launch can proceed next month '
+        'without delaying the customer training sessions.'
+    )
+    model = FakeModel(
+        {'title': 'Migration review', 'bullets': [transcript]},
+        {
+            'title': 'Migration review',
+            'bullets': [
+                'Engineering will review the draft while legal checks the timeline before next month customer training.'
+            ],
+        },
+    )
+    c = _collaborators(model, now=T0 + timedelta(minutes=1), store=store)
+
+    assert service.record_moment(UID, _moment(text=transcript), c) == 'applied'
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert len(model.calls) == 2
+    assert 'Quality correction required' in str(model.calls[1])
+    assert episode['usage'] == {'calls': 2, 'input_tokens': 800, 'output_tokens': 240}
 
 
 def test_first_words_open_the_episode_without_a_model_call():

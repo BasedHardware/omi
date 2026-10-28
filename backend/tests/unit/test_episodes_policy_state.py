@@ -173,6 +173,7 @@ def test_boundary_rules():
     assert parallel.action == 'continue' and parallel.parallel
     assert policy.boundary(_episode(), _moment(start_minutes=41)).reason == 'gap'
     assert policy.boundary(_episode(calendar_identity='evt-a'), _moment(calendar='evt-b')).reason == 'calendar_boundary'
+    assert policy.boundary(_episode(), _moment(start_minutes=180, end_minutes=180)).reason == 'hard_cap'
     assert policy.boundary(_episode(), _moment(start_minutes=170, end_minutes=181)).reason == 'hard_cap'
     full = _episode(moments=[{'id': str(i)} for i in range(config.MAX_MOMENTS)])
     assert policy.boundary(full, _moment()).reason == 'hard_cap'

@@ -78,6 +78,15 @@ def idle_close_due(episode: Optional[Mapping[str, Any]], now: datetime) -> bool:
     return last is not None and (now - last).total_seconds() >= CLOSE_GAP_SECONDS
 
 
+def hard_cap_due(episode: Optional[Mapping[str, Any]], at: datetime) -> bool:
+    """The hard span cap belongs to the whole episode, including every member conversation."""
+    if episode is None or not is_live(episode):
+        return False
+    started = utc(episode.get('started_at'))
+    point = utc(at)
+    return started is not None and point is not None and (point - started).total_seconds() >= MAX_EPISODE_SECONDS
+
+
 # Only silence ends are rejoinable by a late sync capture: a user close (finalize,
 # wrap-up) or a hard boundary (a meeting window, the caps, a decided move-on) is
 # an explicit end of the occasion, and a late WAL row never overrides it.
@@ -120,7 +129,7 @@ def boundary(episode: Optional[Mapping[str, Any]], moment: MomentFacts) -> Bound
         return Boundary(NEW)
     started = utc(episode.get('started_at')) or moment.started_at
     last = utc(episode.get('last_activity_at')) or started
-    if (moment.ended_at - started).total_seconds() > MAX_EPISODE_SECONDS:
+    if hard_cap_due(episode, max(moment.started_at, moment.ended_at)):
         return Boundary('close', 'hard_cap')
     if len(episode.get('moments') or []) >= MAX_MOMENTS:
         return Boundary('close', 'hard_cap')
