@@ -2049,3 +2049,41 @@ def test_held_budget_denial_never_reports_superseded_persistence(monkeypatch, la
         PROCESS_CONTEXT.reset(token)
     observer.assert_not_called()
     assert completed.structured.overview == 'Previous revision'
+
+
+@pytest.mark.parametrize('late_dispatch', [False, True])
+def test_held_raw_budget_denial_preserves_backlog_choice_authority(monkeypatch, late_dispatch):
+    from utils.conversations.summary_delivery import PROCESS_CONTEXT
+
+    raw = Conversation(
+        id='c',
+        status=ConversationStatus.processing,
+        source=ConversationSource.omi,
+        created_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
+        started_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 7, 14, 0, 1, tzinfo=timezone.utc),
+        structured=Structured(),
+        transcript_segments=[],
+    )
+    stored = raw.model_copy(update={'processing_deferred': True})
+    store = MagicMock(return_value=(stored, True))
+    monkeypatch.setattr(process_conversation, '_store_budget_waiting', store)
+    monkeypatch.setattr(process_conversation.funded_processing, 'enabled', lambda *_: True)
+    monkeypatch.setattr(process_conversation.funded_processing, 'processing_allowed', lambda *_: False)
+    observer = MagicMock()
+    token = PROCESS_CONTEXT.set({'sync_hold': True})
+    try:
+        if late_dispatch:
+
+            @process_conversation._preserve_capture_on_budget_denial
+            def dispatch(*a, **kw):
+                raise HTTPException(402, detail={'error': 'usage_budget_exhausted'})
+
+            result = dispatch('uid', 'en', raw, persistence_observer=observer)
+        else:
+            result = process_conversation.process_conversation('uid', 'en', raw, persistence_observer=observer)
+    finally:
+        PROCESS_CONTEXT.reset(token)
+    assert result.processing_deferred
+    store.assert_called_once()
+    observer.assert_called_once_with(True)

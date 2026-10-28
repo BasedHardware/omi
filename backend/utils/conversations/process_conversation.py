@@ -2538,12 +2538,13 @@ def _preserve_capture_on_budget_denial(function):
         except HTTPException as error:
             if not _is_funded_budget_denial(error):
                 raise
-            _defer_held_budget_denial()
             raw = (
                 _is_ingress_create(captured)
                 or captured.processing_deferred
                 or (captured.status == ConversationStatus.processing and captured.structured == Structured())
             )
+            if not raw:
+                _defer_held_budget_denial()
             persisted = False
             if raw:
                 captured, persisted = _store_budget_waiting(
@@ -2661,7 +2662,6 @@ def process_conversation(
     if funded_processing.enabled(uid, 'batch'):
         waiting = bool(getattr(conversation, 'processing_deferred', False))
         if (waiting and not backlog_authorized) or not funded_processing.processing_allowed(uid):
-            _defer_held_budget_denial()
             if silent_backfill:
                 raise RecoveryStructureUnavailableError('silent backfill processing budget unavailable')
             raw_capture = (
@@ -2676,6 +2676,7 @@ def process_conversation(
             # A retry/reprocess of an existing enriched row must not replace its
             # structure, discard state or derived-work markers with a raw shell.
             # Its transcript is already persisted by ingress; deny this attempt.
+            _defer_held_budget_denial()
             report_persistence(False, derived_effects=DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS)
             return conversation
         if waiting:

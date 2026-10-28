@@ -403,6 +403,11 @@ def test_lazy_effects_near_deadline_wait_for_late_hold_receipt(state, monkeypatc
     checkpoint = Mock()
     monkeypatch.setattr(processor, 'apply_settled_enrichment', apply)
     monkeypatch.setattr(lazy_enrichment.conversations_db, 'record_demand_enrichment_checkpoint', checkpoint)
+    monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'true')
+    monkeypatch.setenv('DEMAND_PROCESSING_PERCENT', '100')
+    from utils.conversations import demand_processing
+
+    monkeypatch.setattr(demand_processing, 'admit', lambda *_a, **_k: True)
     clock = [3540]
     monkeypatch.setattr(lazy_enrichment.time, 'time', lambda: clock[0])
     outbox.mark('user-1', 'c', 'en', now=2940, effects_only=True)
@@ -419,6 +424,11 @@ def test_lazy_effects_near_deadline_wait_for_late_hold_receipt(state, monkeypatc
     apply.assert_not_called()
     checkpoint.assert_not_called()
     assert rows[key]['lease_until'] == 0 and rows[key]['due_at'] == 3660
+    # User demand cannot bypass this new prerequisite on an early delivery.
+    clock[0] = 3541
+    assert deliver() == 'deferred'
+    apply.assert_not_called()
+    assert rows[key]['due_at'] == 3660
     # Passing the quiet deadline alone is insufficient: a cap/worker can delay notes.
     clock[0] = 4200
     assert deliver() == 'deferred'
@@ -495,3 +505,19 @@ def test_rollback_processing_settles_hold_before_lazy_effects(monkeypatch):
     monkeypatch.setattr(lazy_enrichment.conversations_db, 'record_demand_enrichment_checkpoint', Mock())
     lazy_enrichment.enrich_settled('user-1', 'parent', 'en')
     apply.assert_called_once()
+
+
+def test_deferred_effects_wake_respects_settlement_deadline_on_demand(state, monkeypatch):
+    from utils.conversations import demand_processing
+    from tests.unit.test_sync_reprocess_coalesce import _ENQUEUE
+
+    rows, tasks = state
+    outbox.mark('u', 'c', 'en', now=100, effects_only=True)
+    current = dict(tasks[-1], deferred_reason='not_due', due_at=950, task_due_at=950)
+    schedule = Mock(return_value=True)
+    monkeypatch.setattr(demand_processing, 'schedule', schedule)
+    _ENQUEUE(current)
+    assert not schedule.call_args.kwargs['effects_only']
+    assert schedule.call_args.kwargs['not_before'] == 950
+    assert not outbox.effects_may_run_early(current)
+    assert outbox.effects_may_run_early(dict(current, deferred_reason=None))

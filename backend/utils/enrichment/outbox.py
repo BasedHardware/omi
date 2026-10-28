@@ -221,6 +221,11 @@ def _wake_exists(row: Row) -> bool:
     return named_task_exists(row['dispatch']['queue'], _task_name(row))
 
 
+def effects_may_run_early(row: Any) -> bool:
+    # Explicit demand may skip the idle wait, never a worker's settlement fence.
+    return bool(row.get('effects_only') and not row.get('deferred_reason'))
+
+
 def _enqueue(row: dict[str, Any]) -> None:
     from utils.cloud_tasks import enqueue_named_task
 
@@ -252,13 +257,13 @@ def _enqueue(row: dict[str, Any]) -> None:
         dispatch,
         name,
         not_before=row['due_at'],
-        effects_only=bool(row.get('effects_only')),
+        effects_only=effects_may_run_early(row),
         immediate=bool(row.get('immediate')),
     ):
         return
     from config.demand_processing import enabled
 
-    eager_recovery = bool(row.get('effects_only')) and enabled(row['uid'])
+    eager_recovery = effects_may_run_early(row) and enabled(row['uid'])
     enqueue_named_task(
         dispatch['queue'],
         handler,
@@ -520,7 +525,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
         stamp_claim_policy(row, cache, stamps)
         if row.get('sync_hold') and not processing_hold.enabled():
             row['due_at'] = current
-        if row['due_at'] > current and (not row.get('effects_only') or not enabled(row['uid'])):
+        if row['due_at'] > current and (not effects_may_run_early(row) or not enabled(row['uid'])):
             row.update(task_token=uuid.uuid4().hex, task_due_at=row['due_at'])
             return row, ('deferred', row)
 
@@ -944,6 +949,7 @@ def mark_effects(uid: str, conversation_id: str, language: str, *, immediate: bo
         conversation_id=conversation_id,
         language=language,
         effects_only=True,
+        deferred_reason=None,
         immediate=immediate,
         task_token=uuid.uuid4().hex,
         due_at=current + quiet_seconds,

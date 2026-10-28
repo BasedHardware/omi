@@ -246,7 +246,7 @@ class FirestoreEnrichmentOutbox:
             outbox.stamp_claim_policy(row, cache, stamps)
             if row.get('sync_hold') and not outbox.processing_hold.enabled():
                 row['due_at'] = now
-            if row['due_at'] > now and (not row.get('effects_only') or not enabled(row['uid'])):
+            if row['due_at'] > now and (not outbox.effects_may_run_early(row) or not enabled(row['uid'])):
                 row.update(task_token=uuid.uuid4().hex, task_due_at=row['due_at'])
                 return row, (Outcome.DEFERRED, row)
             row.update(
