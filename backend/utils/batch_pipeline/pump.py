@@ -8,6 +8,7 @@ from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import replace
 from typing import Any
+from database.batch_privacy_attempt import with_batch_privacy_attempt
 
 from config.batch_pipeline import MAX_PUBLISH_CONCURRENCY, publish_concurrency as configured_publish_concurrency
 from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
@@ -263,6 +264,7 @@ class Pump:
             type(error).__name__,
         )
 
+    @with_batch_privacy_attempt
     async def _flight(self, stop_event: asyncio.Event | None) -> int:
         now = time.time()
         snapshot = (

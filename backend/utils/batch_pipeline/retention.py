@@ -17,9 +17,11 @@ from google.api_core.exceptions import FailedPrecondition, NotFound
 from google.cloud import firestore
 
 from config.batch_language_recovery import language_guarded, words_repair_eligible, REPAIR_EPOCH, REPAIR_PROVIDER
+from config.firestore_read_levers import lever_enabled
 from config.policy import RecoveryPolicy
 from database import batch_pipeline_privacy_queries as queries
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed, privacy_owner_key
+from database.batch_privacy_attempt import current_attempt
 from database.batch_pipeline_shadow_hook import mirror_refresh
 
 from utils.batch_pipeline.upload_policy import UPLOAD_PENDING_SECONDS
@@ -445,24 +447,34 @@ def cleanup_completed_artifacts(
 
 
 def batch_artifact_authorize(store: Any, item: Any, *, snapshots: dict | None = None):
-    """B's required authorize(item) callback, using uncached transactional reads."""
+    """Authorize artifact IO; full-row exports always use live transactional reads."""
     from utils.batch_pipeline.artifacts import ProtectionContext
 
     @firestore.transactional
     def authorize(transaction):
         loaded = {}
+        # The ordinary artifact callback returns only ProtectionContext, whose
+        # protection level is read live below. It does not export full rows.
+        # Staging/enrichment callers requesting snapshots retain the exact walk.
+        decision_only = (
+            snapshots is None and current_attempt() is not None and lever_enabled('bpp_generation_memo', item.owner_id)
+        )
         generation = assert_batch_write_allowed(
             store.client,
             transaction,
             item.owner_id,
             conversation_ids=(item.conversation_id,) if item.conversation_id else (),
             expected_generation=item.privacy_generation,
-            snapshots=loaded,
+            snapshots=None if decision_only else loaded,
         )
         if snapshots is not None:
             snapshots.clear()
             snapshots.update(loaded)
-        user = loaded['user']
+        user = (
+            store.client.collection('users').document(item.owner_id).get(transaction=transaction).to_dict() or {}
+            if decision_only
+            else loaded['user']
+        )
         return ProtectionContext(user.get('data_protection_level', 'enhanced'), generation)
 
     return authorize(store.client.transaction())
