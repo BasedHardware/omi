@@ -353,7 +353,15 @@ def complete(uid: str, conversation_id: str) -> bool:
     )
 
 
-def close_oversized_in_progress_conversation(uid: str, conversation_id: str, *, quiet_for: timedelta) -> str:
+def close_oversized_in_progress_conversation(
+    uid: str,
+    conversation_id: str,
+    *,
+    quiet_for: timedelta | None = None,
+    firestore_client: Any = None,
+    recovery_fences: bool = False,
+    recovery_cutoff: datetime | None = None,
+) -> str:
     """Close a live-capture row that can never be finalized because it is at Firestore's 1 MiB ceiling.
 
     The only lifecycle edge from ``in_progress`` straight to ``completed``, and
@@ -363,7 +371,14 @@ def close_oversized_in_progress_conversation(uid: str, conversation_id: str, *, 
     kept as-is; the row becomes a visible conversation without a generated
     summary. Returns a bounded outcome token (``OversizedInProgressOutcome``).
     """
-    return oversized_terminal_db.complete_oversized_in_progress_conversation(uid, conversation_id, quiet_for=quiet_for)
+    return oversized_terminal_db.complete_oversized_in_progress_conversation(
+        uid,
+        conversation_id,
+        quiet_for=quiet_for,
+        firestore_client=firestore_client,
+        recovery_fences=recovery_fences,
+        recovery_cutoff=recovery_cutoff,
+    )
 
 
 def rollback_processing_admission(uid: str, conversation_id: str) -> bool:

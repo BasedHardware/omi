@@ -5,8 +5,6 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from google.api_core.exceptions import InvalidArgument
-
 from config.listen_quiet_finalization import enabled
 from database import conversation_quiet_checks as checks_db
 from utils.account_cutover.access import should_skip_background_account_mutation
@@ -16,6 +14,7 @@ from utils.cloud_tasks import (
     is_listen_finalization_dispatch_enabled,
 )
 from utils.conversations import lifecycle
+from utils.conversations.finalization_failure import classify_finalization_failure
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.metrics import CONVERSATION_ORPHANED_UNFINALIZED
 from utils.observability.fallback import record_fallback
@@ -106,31 +105,79 @@ def run(job_id: str, generation: int, *, firestore_client: Any = None) -> str:
             require_expired_recording_lease=True,
             firestore_client=firestore_client,
         )
-    except InvalidArgument as error:
-        # Imported at the call: unit suites stub database._client without this predicate.
-        from database._client import is_document_size_limit_error
-
-        if not is_document_size_limit_error(error):
+    except Exception as error:
+        failure = classify_finalization_failure(error, check['conversation_id'])
+        if failure.reason != DOCUMENT_SIZE_LIMIT:
             raise
-        # The conversation row sits at Firestore's 1 MiB ceiling, so the
-        # admission stamp can never be written: every reserved wake would fail
-        # the same way (#23341). Retire the successor this run already
-        # dispatched instead of answering 5xx into an endless retry; the
-        # conversation itself is left untouched.
+        if not failure.conversation_at_size_limit:
+            # The 400 names a different document: this admission can never
+            # commit and closing this conversation would not shrink that
+            # document. Retire the check as held (#23353) instead of answering
+            # 5xx into an endless redelivery; the conversation is untouched.
+            checks_db.stop_quiet_check(
+                job_id,
+                check['dispatch_generation'],
+                failure_code=DOCUMENT_SIZE_LIMIT,
+                firestore_client=firestore_client,
+            )
+            record_fallback(
+                component='conversation_finalization',
+                from_mode='quiet_check',
+                to_mode='held',
+                reason=DOCUMENT_SIZE_LIMIT,
+                outcome='exhausted',
+                log=logger,
+            )
+            logger.warning(
+                'event=quiet_finalization outcome=held reason=%s generation=%s document=%s',
+                DOCUMENT_SIZE_LIMIT,
+                generation,
+                failure.document,
+            )
+            return DOCUMENT_SIZE_LIMIT
+        # The row sits at Firestore's 1 MiB document ceiling: the finalization
+        # binding grows the document, so every redelivery of this check fails
+        # identically (the grpc_helpers InvalidArgument 400 group). Close it
+        # through the lifecycle owner's in_progress terminal — the one write
+        # the document still accepts — fenced by the check's own absolute
+        # recovery cutoff, the instant the failed admission already proved the
+        # row stale against, like the live listen path's _close_oversized.
+        close = lifecycle.close_oversized_in_progress_conversation(
+            check['uid'],
+            check['conversation_id'],
+            recovery_cutoff=check['recovery_cutoff'],
+            firestore_client=firestore_client,
+            recovery_fences=True,
+        )
+        logger.warning(
+            'Quiet finalization hit the document size limit conversation=%s close=%s',
+            check['conversation_id'],
+            close,
+        )
+        if close not in {'closed', 'missing'}:
+            # Any bounded refusal (an active writer, a row that shrank below
+            # the ceiling, a new durable owner) leaves the check armed: each
+            # changes what the next replay must do.
+            return f'oversized_{close}'
+        if close == 'closed':
+            # Count the degraded terminal only when it was actually taken,
+            # matching the live listen path's _close_oversized.
+            record_fallback(
+                component='pusher',
+                from_mode='quiet_finalization_admission',
+                to_mode='unstampable_terminal',
+                reason=DOCUMENT_SIZE_LIMIT,
+                outcome='degraded',
+                log=logger,
+            )
+        # Terminal or gone. Retire the check — recording the size-limit code,
+        # like the held path — so the reconciler cannot re-arm an admission
+        # that can never commit.
         checks_db.stop_quiet_check(
             job_id,
             check['dispatch_generation'],
             failure_code=DOCUMENT_SIZE_LIMIT,
             firestore_client=firestore_client,
         )
-        record_fallback(
-            component='conversation_finalization',
-            from_mode='quiet_check',
-            to_mode='held',
-            reason=DOCUMENT_SIZE_LIMIT,
-            outcome='exhausted',
-            log=logger,
-        )
-        logger.warning('event=quiet_finalization outcome=held reason=%s generation=%s', DOCUMENT_SIZE_LIMIT, generation)
-        return DOCUMENT_SIZE_LIMIT
+        return f'oversized_{close}'
     return result['status']

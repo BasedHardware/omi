@@ -7109,6 +7109,33 @@ conversation identity does not suppress the old row's obligation. Desktop
 clean-close and multichannel processing keep their existing paths. Their
 existing job bindings also fence any quiet check of the same row.
 
+An at-ceiling row is the one admission that can never commit: the finalization
+binding grows the document, so a document at Firestore's 1 MiB limit fails
+every redelivery identically (the `grpc_helpers.py` `InvalidArgument` 400
+group). When that admission fails with the row's own document-size rejection,
+the worker closes the row through the lifecycle owner's oversized in-progress
+terminal (`close_oversized_in_progress_conversation` with
+`recovery_fences=True`) instead of redelivering the 400 forever. That close is
+a separate transaction which re-asserts the admission fences — the row is still
+`in_progress` with no durable job, untouched since the check's own recovery
+cutoff, its recording-session lease is no longer live, no account-deletion
+marker blocks access, and its estimated size is still within the terminal
+headroom of the ceiling. It returns the same bounded outcome tokens as the
+live-listen sweep's oversized close plus `recording_active` and
+`account_deleting`. Only `closed` counts the degraded terminal
+(`omi_fallback_total{component="pusher",from_mode="quiet_finalization_admission",to_mode="unstampable_terminal"}`).
+`closed` and `missing` stop the due index — the admission can never commit, so
+a further wake is pure redelivery debt; every refusal outcome leaves the check
+armed, because an active writer, a row that shrank below the ceiling or a new
+durable owner each change what the next replay must do. The refusals resolve
+without operator action: a live lease expires, and a deletion finishes and
+removes the marker. The closed row is the same kept-content terminal as the
+live-listen path: a visible conversation with its transcript and no generated
+summary, memories or action items. A size rejection naming a different
+document cannot be fixed by closing this row, so that check retires as held
+(`last_failure_code=document_size_limit`, the row untouched) rather than
+answering 5xx into an endless redelivery.
+
 Only opaque job ID and dispatch generation enter Cloud Tasks. Session setup
 stamps only a boolean BYOK requirement; credential-free recovery creates a
 blocked BYOK job, never substitutes platform credentials. Each check
