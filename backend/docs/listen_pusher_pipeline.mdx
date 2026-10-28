@@ -791,13 +791,29 @@ cannot be reopened:
   verify re-list stay the only authority on what survived; the linked-original
   scan (`raw-sync`, `raw-mobile-batch`) absorbs the same 404 for the identical
   reason.
-- A momentary storage fault — 503/504/500, or the GCS SDK's drained-retry
-  envelope around one — defers the sweep to the next teardown, rollover-loser
-  cleanup or reclamation (`Unreferenced audio sweep deferred behind a storage
-  blip`, WARNING, no traceback, no degradation event). The classification set
-  is the shared availability classifier the Firestore writers use
-  (`is_transient_availability_error`); permanent refusals and unknown
-  failures keep the failed-write arm.
+- A momentary storage fault defers the sweep — and the deferral owns its
+  convergence. The classification set is the GCS SDK's own retry predicate
+  (`google.cloud.storage.retry._RETRYABLE_TYPES`): 429 rate limits, 500, 502
+  bad gateways, 503, both 504 spellings (`DeadlineExceeded`,
+  `GatewayTimeout`), the SDK's drained-retry envelope around any of them, and
+  the transport-level failures the storage client raises through `requests`
+  (connection resets, chunked-encoding breaks, request timeouts) plus the
+  auth-transport envelope. Earlier deployments classified this boundary with
+  the Firestore availability trio (503/504/500 only), so every 429, 502 and
+  transport reset escaped as an unknown failure — a full ERROR traceback plus
+  an `omi_fallback_total` exhausted event on the already-committed delete
+  (prod backend-listen 2026-10: `Failed to reclaim unreferenced audio`
+  ×122/30m). The deferral logs once (`Unreferenced audio sweep deferred
+  behind a storage blip`, WARNING, no traceback, no degradation event) and
+  then re-arms the same sweep on a detached daemon thread (two further
+  passes, five seconds apart); a terminal empty generation earns no later
+  reclamation — the row is gone, so no serving path revisits the prefixes —
+  and the old wait-for-the-next-sweep deferral never converged. A retry that
+  still blips keeps pausing within its budget; one that meets a permanent
+  refusal or fails its last pass reports loudly through the same arms
+  (`Unreferenced audio sweep retry exhausted`). Permanent refusals (4xx
+  policy, permission, bad request) and non-transport unknown failures keep
+  the failed-write arm and never re-arm.
 
 When the private-cloud flush writes `audio_files` onto a conversation that a
 mid-session delete removes between the flush's existence read and its commit,

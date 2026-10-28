@@ -37,7 +37,15 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from google.api_core.exceptions import BadRequest, Forbidden, RetryError, ServiceUnavailable
+from google.api_core.exceptions import (
+    BadGateway,
+    BadRequest,
+    Forbidden,
+    GatewayTimeout,
+    RetryError,
+    ServiceUnavailable,
+    TooManyRequests,
+)
 from google.cloud.exceptions import NotFound
 
 from utils.conversations import lifecycle as lifecycle_service
@@ -240,6 +248,19 @@ def _fallback_spy(monkeypatch) -> list[dict[str, str]]:
     return events
 
 
+@pytest.fixture(autouse=True)
+def _bounded_retry_stub(monkeypatch):
+    """The deferral's retry stays a stub in this file: it pins the boundary's
+    classification, not the retry mechanics — those live in the rate-limit
+    file, and no test here may arm a real daemon thread."""
+    monkeypatch.setattr(
+        lifecycle_service,
+        '_schedule_sweep_retry',
+        lambda *a, **k: True,
+        raising=False,
+    )
+
+
 def test_residual_sweep_keeps_the_committed_delete_classified_as_retained(
     monkeypatch, caplog, _generation_without_registered_audio
 ):
@@ -260,7 +281,7 @@ def test_genuine_sweep_failure_keeps_the_failed_write_classification(
     monkeypatch, caplog, _generation_without_registered_audio
 ):
     def failing(*a, **k):
-        raise ConnectionError('storage unavailable')
+        raise PermissionError('bucket policy refuses the sweep')
 
     monkeypatch.setattr(lifecycle_service, 'delete_conversation_audio_files', failing, raising=False)
     fallbacks = _fallback_spy(monkeypatch)
@@ -610,7 +631,11 @@ def test_unknown_storage_failure_keeps_the_failed_write_classification(monkeypat
 
 def test_classifier_draws_the_deferral_boundary_exactly():
     assert lifecycle_service._is_storage_blip(ServiceUnavailable('blip'))
+    assert lifecycle_service._is_storage_blip(TooManyRequests('429: rate limited'))
+    assert lifecycle_service._is_storage_blip(BadGateway('502: bad gateway'))
+    assert lifecycle_service._is_storage_blip(GatewayTimeout('504: gateway timeout'))
     assert lifecycle_service._is_storage_blip(RetryError('drained', ServiceUnavailable('blip')))
+    assert lifecycle_service._is_storage_blip(RetryError('drained', BadGateway('502')))
     assert not lifecycle_service._is_storage_blip(
         RetryError('drained', None)
     ), 'a cause-less envelope carries no transient evidence'
@@ -618,7 +643,9 @@ def test_classifier_draws_the_deferral_boundary_exactly():
     assert not lifecycle_service._is_storage_blip(Forbidden('policy')), 'a permanent refusal keeps the failed-write arm'
     assert not lifecycle_service._is_storage_blip(BadRequest('bad request'))
     assert not lifecycle_service._is_storage_blip(NotFound('gone')), 'a 404 is the delete\u2019s success, not a blip'
-    assert not lifecycle_service._is_storage_blip(ConnectionError('transport gone'))
+    assert not lifecycle_service._is_storage_blip(
+        PermissionError('refused')
+    ), 'a non-transport unknown keeps the failed-write arm'
 
 
 # ── J. Convergence: the deferred residue is reclaimed by the next sweep ─────

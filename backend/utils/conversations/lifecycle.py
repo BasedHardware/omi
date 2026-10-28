@@ -13,10 +13,21 @@ from utils.observability.sync_phases import sync_phase
 import logging
 import os
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 from contextlib import contextmanager
-from typing import Any, Mapping, Optional
+from typing import Any, Callable, Mapping, Optional
 
+from google.api_core.exceptions import (
+    BadGateway,
+    DeadlineExceeded,
+    GatewayTimeout,
+    InternalServerError,
+    RetryError,
+    ServiceUnavailable,
+    TooManyRequests,
+)
+from google.auth.exceptions import TransportError
 from database import conversation_finalization_jobs as jobs_db
 from database import conversations as conversations_db
 from database import oversized_conversation_terminal as oversized_terminal_db
@@ -857,16 +868,120 @@ def _is_residual_audio_sweep(error: BaseException) -> bool:
     return isinstance(error, RuntimeError) and 'owner storage purge left' in str(error)
 
 
+def _blip_cause(error: BaseException) -> BaseException | None:
+    """The fault a drained ``google.api_core`` retry budget last saw.
+
+    Same one-level read the Firestore writers' classifier uses: ``cause`` is
+    the documented accessor and the raise site chains the source, so
+    ``__cause__`` covers an envelope type the pinned SDK pins differently.
+    The read stays local to this seam because it is consumed only here; the
+    Firestore classifier keeps its own.
+    """
+    if isinstance(error, RetryError):
+        cause = getattr(error, 'cause', None)
+        if cause is not None:
+            return cause
+    return error.__cause__
+
+
 def _is_storage_blip(error: BaseException) -> bool:
     """Recognize the storage's momentary faults as sweep-deferrable.
 
-    The same availability set the rest of the backend retries (503
-    ``ServiceUnavailable``, 504 ``DeadlineExceeded``, 500
-    ``InternalServerError``, including one wrapped in the SDK's drained
-    ``RetryError``) applies to GCS reads and writes exactly as it does to
-    Firestore, and the GCS SDK's own retry budget sits under this boundary.
+    The GCS SDK itself retries a wider set than Firestore's availability trio
+    (``google.cloud.storage.retry._RETRYABLE_TYPES``), and this boundary is a
+    GCS call path, not a Firestore one, so the sweep's deferral boundary
+    follows the GCS predicate: 429 ``TooManyRequests``, 500, 502
+    ``BadGateway``, 503 ``ServiceUnavailable``, 504 (both the ``DeadlineExceeded``
+    and ``GatewayTimeout`` spellings), the SDK's drained-retry envelope when
+    its cause is in that set, plus the transport-level failures the storage
+    client raises through ``requests`` (connection resets, chunked-encoding
+    breaks, timeouts) and the auth-transport ``TransportError`` envelope.
+    Permanent refusals (4xx policy, permission, bad request) and unknown
+    failures still fall through to the failed-write arm.
     """
-    return is_transient_availability_error(error)
+    if isinstance(
+        error,
+        (
+            TooManyRequests,
+            BadGateway,
+            GatewayTimeout,
+            DeadlineExceeded,
+            InternalServerError,
+            ServiceUnavailable,
+            ConnectionError,
+            TransportError,
+        ),
+    ):
+        return True
+    if isinstance(error, RetryError):
+        cause = _blip_cause(error)
+        return cause is not None and _is_storage_blip(cause)
+    # The storage client raises the ``requests`` transport family (connection
+    # resets, chunked-encoding breaks, request timeouts) from listing pages
+    # and streaming calls. This file may not import ``requests`` — the utils
+    # tree keeps the sync HTTP client out of the async service (the
+    # no-requests guard pins it) — so the family is recognized structurally:
+    # every member lives in ``requests.exceptions`` and none is a base class
+    # of anything else in that module, so matching the module prefix is
+    # identity-exact without the import.
+    module = type(error).__module__
+    if module == 'requests.exceptions' or module.startswith('requests.exceptions.'):
+        return True
+    return False
+
+
+# The deferral owns its convergence: a sweep deferred behind a blip re-attacks
+# its own prefixes after a short pause instead of waiting for a reclamation
+# that, for a terminal (already-deleted) empty generation, never comes — the
+# row is gone, so no serving path revisits it and the bytes would outlive every
+# reader. The retry is deliberately lean: same arguments, bounded attempts,
+# daemon thread, and a final exhaustion that keeps the loud classification.
+_SWEEP_RETRY_DELAY_SECONDS = 5.0
+_SWEEP_RETRY_MAX_PASSES = 2
+_SWEEP_RETRY_THREAD_NAME = 'unreferenced-audio-sweep-retry'
+
+
+def _schedule_sweep_retry(
+    attempt: Callable[..., None],
+    args: tuple,
+    *,
+    passes: int = _SWEEP_RETRY_MAX_PASSES,
+    delay: float = _SWEEP_RETRY_DELAY_SECONDS,
+    start_thread: Callable[..., Any] = threading.Thread,
+    sleep: Callable[[float], None] = time.sleep,
+) -> bool:
+    """Arm one detached daemon pass that re-attacks the deferred sweep.
+
+    Returns ``True`` when the retry thread was started. The pass sleeps, then
+    repeats the exact same sweep (``attempt(*args)``); if it still blips it
+    sleeps again and finishes the remaining passes — the classifier at the
+    boundary of each attempt owns every classification, so a retry that sees a
+    permanent failure logs it loudly via the same arms instead of silently
+    dying inside a daemon thread.
+    """
+
+    def _run() -> None:
+        remaining = passes
+        while remaining:
+            remaining -= 1
+            sleep(delay)
+            try:
+                attempt(*args)
+                return
+            except Exception as retry_error:
+                if not _is_storage_blip(retry_error) or not remaining:
+                    logger.error(
+                        'Unreferenced audio sweep retry exhausted uid=%s conversation_id=%s',
+                        args[0] if args else '?',
+                        args[1] if len(args) > 1 else '?',
+                        exc_info=retry_error,
+                    )
+                    return
+                # Still blipping with passes left: sleep again and re-attack.
+
+    thread = start_thread(target=_run, name=_SWEEP_RETRY_THREAD_NAME, daemon=True)
+    thread.start()
+    return True
 
 
 def _discard_unreferenced_audio(
@@ -910,21 +1025,23 @@ def _discard_unreferenced_audio(
             )
             return
         if _is_storage_blip(error):
-            # A momentary storage fault — 503/504/500 or its drained-retry
-            # envelope — under a sweep whose authoritative outcome already
+            # A momentary storage fault — the GCS SDK's own retryable set
+            # (429/5xx), its drained-retry envelope around one, or a transport
+            # reset — under a sweep whose authoritative outcome already
             # committed. The row is gone, so nothing can be kept consistent
-            # with it: deferring the sweep to the next teardown, rollover-loser
-            # cleanup or reclamation keeps the committed delete classified as
-            # successful, exactly like the residual arm above, instead of a
-            # traceback and an ``omi_fallback_total`` exhausted event on every
-            # failing attempt. The orphaned bytes stay until the next sweep
-            # re-attacks them — no serving path reads them, the generation is
-            # terminal.
+            # with it: instead of waiting for a reclamation that a terminal
+            # empty generation never earns (no serving path revisits it), this
+            # deferral re-attacks its own prefixes after a short pause on a
+            # detached daemon thread. The committed delete stays classified as
+            # successful, exactly like the residual arm above — a bounded
+            # deferral with an owner, not a traceback and an
+            # ``omi_fallback_total`` exhausted event on every failing attempt.
             logger.warning(
                 'Unreferenced audio sweep deferred behind a storage blip uid=%s conversation_id=%s',
                 uid,
                 conversation_id,
             )
+            _schedule_sweep_retry(delete_conversation_audio_files, (uid, conversation_id))
             return
         # The row is already gone, so there is nothing left to keep consistent
         # with; a failed sweep just leaves the orphan this call meant to reclaim.
