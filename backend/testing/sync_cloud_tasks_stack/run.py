@@ -964,6 +964,7 @@ def _retry_budget_terminalizes_truthfully(stack: Stack) -> None:
 
 
 def _concurrent_delivery_is_lease_fenced(stack: Stack) -> None:
+    """Hold paid STT inside the upload lease, independently of full-note settlement."""
     if stack.gate_dir is None:
         raise StackFailure('concurrent scenario requires a processor gate')
     uid = stack.scenario_uid('concurrent')
@@ -976,14 +977,12 @@ def _concurrent_delivery_is_lease_fenced(stack: Stack) -> None:
     thread = threading.Thread(target=first_delivery, daemon=True)
     thread.start()
     try:
-        _wait_until(
-            lambda: (stack.gate_dir / 'entered').exists() or bool(first_result), label='first worker processor gate'
-        )
+        _wait_until(lambda: (stack.gate_dir / 'entered').exists() or bool(first_result), label='first worker STT gate')
     except StackFailure as exc:
         raise StackFailure(f'{exc}; {_processor_gate_diagnostics(stack.state_dir, first_result)}') from None
     if not (stack.gate_dir / 'entered').exists():
         raise StackFailure(
-            'first worker returned before processor gate; ' + _processor_gate_diagnostics(stack.state_dir, first_result)
+            'first worker returned before STT gate; ' + _processor_gate_diagnostics(stack.state_dir, first_result)
         )
     second = _deliver_task(task, retry_count=1)
     if second.status_code != 409 or second.json().get('status') != 'locked':
