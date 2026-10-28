@@ -26,6 +26,7 @@ def lane(monkeypatch):
     if not host.startswith(('127.0.0.1:', 'localhost:')):
         pytest.skip('loopback Firestore emulator required; no cloud fallback')
     monkeypatch.delenv('BATCH_SHARD_SPREAD_ENABLED', raising=False)
+    monkeypatch.setenv('BATCH_PIPELINE_CONTENTION_RETRY_ENABLED', 'true')
     clients = [firestore.Client(project='demo-shard-spread', credentials=AnonymousCredentials()) for _ in range(4)]
     namespace = f'batch_pipeline_test_{uuid.uuid4().hex}'
     stores = [FirestoreStore(namespace, firestore_client=client) for client in clients]

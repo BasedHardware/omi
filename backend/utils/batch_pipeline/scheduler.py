@@ -314,8 +314,12 @@ class Scheduler:
             excluded = set()
             busy = False
             for _ in range(128):
-                options = {'worker_id': self.worker_id, 'exclude': excluded} if spread else {}
-                shard = self.store.control_candidate(int(priority), self.pool, now, **options)
+                if spread:
+                    shard = self.store.control_candidate(
+                        int(priority), self.pool, now, worker_id=self.worker_id, exclude=excluded
+                    )
+                else:
+                    shard = self.store.control_candidate(int(priority), self.pool, now)
                 if shard is None:
                     break
                 receipt, eligible = self._pull_shard(now, shard, priority, max_seconds, shared_gpu_id)
