@@ -180,6 +180,17 @@ def test_photo_marker_survives_real_prepare_read_without_fetching_subcollection(
     assert len(reads) == 1 and row == before
 
 
+@pytest.mark.parametrize('kind', ['media', 'noise'])
+@pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
+def test_photos_only_conversation_is_never_suppressed_by_media_gate(monkeypatch, kind, mode):
+    monkeypatch.setenv(FLAG, mode)
+    row = {'id': 'synthetic-photo-only', 'has_photos': True, 'content_kind': kind, 'transcript_segments': []}
+    before = deepcopy(row)
+    for consumer in ('memories', 'daily_summary', 'recap', 'action_items'):
+        assert not media_consumers.is_excluded(UID, row, consumer=consumer)
+    assert row == before
+
+
 def test_manual_media_protection_keeps_the_existing_scoped_duration_floor(monkeypatch):
     monkeypatch.setenv(FLAG, 'serve')
     row = source('media')

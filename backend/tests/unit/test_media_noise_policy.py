@@ -472,6 +472,7 @@ def test_curation_restores_consumer_eligibility(monkeypatch):
 @pytest.mark.parametrize('mode', ['shadow', 'serve'])
 def test_photo_marker_protects_without_loading_photo_contents(monkeypatch, mode):
     conversation = mock_inputs(monkeypatch)
+    conversation.transcript_segments = []
     conversation.has_photos = True
     conversation.content_kind = 'media'
     monkeypatch.setenv(FLAG, mode)
