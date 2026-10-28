@@ -234,7 +234,9 @@ async def test_sim_1028_modulate_never_becomes_sole_primary_while_soniox_trials(
             for _ in range(3):
                 await pod.vote(SONIOX.id, _uid(1200 + i), False)
         assert pod.stage(SONIOX.id) == 100
-        await pod.vote(MODULATE.id, _uid(2000), False)  # the hold lifts: not sole anymore
+        # With a full-share provider back, normal cohort admission resumes.
+        uid = next(_uid(i) for i in range(2000, 3000) if assigned(_uid(i), 'stt-reentry:' + MODULATE.id, 25))
+        await pod.vote(MODULATE.id, uid, False)  # the hold lifts: not sole anymore
         assert pod.stage(MODULATE.id) == 100
         assert pod.primary() in {SONIOX.id, MODULATE.id}
     else:
