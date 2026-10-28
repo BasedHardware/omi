@@ -32,6 +32,8 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   @override
   bool get isConnected => false;
   @override
+  bool get isSyncStalled => false; // The watchdog's stall (#15501) is not under test here.
+  @override
   bool get isConnecting => false;
   @override
   int get batteryLevel => 0;
