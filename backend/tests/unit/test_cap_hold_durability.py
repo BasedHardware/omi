@@ -27,7 +27,7 @@ _EMPTY_FLEET = {
 @pytest.fixture(autouse=True)
 def _fleet_snapshot_stays_local(monkeypatch):
     # Reset the process-local snapshot gate so every test schedules one snapshot.
-    cap_hold_redrive._snapshot_gate.update(inflight=False, attempt_at=0.0)
+    cap_hold_redrive._snapshot_gate.update(inflight=False, attempt_at=None)
     monkeypatch.setattr(cap_hold_redrive.store, 'fleet_snapshot', lambda firestore_client=None: dict(_EMPTY_FLEET))
     # Subscription priority is part of the sweep; keep the unit lane hermetic.
     monkeypatch.setattr(cap_hold_redrive.users_db, 'get_user_valid_subscription', lambda uid, **_: None)

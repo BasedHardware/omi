@@ -4,7 +4,7 @@ import asyncio
 import logging
 import os
 import time
-from typing import Any
+from typing import Any, TypedDict
 
 from database import cap_hold_redrive as store, users as users_db
 from utils.executors import db_executor, run_blocking, start_background_task, storage_executor
@@ -21,10 +21,17 @@ CHOICES_PAGE_CEILING = 8
 OWNER_ITEMS_CEILING = 10
 FLEET_SNAPSHOT_INTERVAL_SECONDS = 600.0
 FLEET_SNAPSHOT_WAIT_CEILING = 300.0
+
+
+class _SnapshotGate(TypedDict):
+    inflight: bool
+    attempt_at: float | None
+
+
 # Process-local gate: one fleet aggregation at a time, no more often than the
-# configured interval. The scheduler serializes sweeps of one job, but a slow
-# snapshot must not stack a second aggregation behind itself.
-_snapshot_gate = {'inflight': False, 'attempt_at': 0.0}
+# configured interval. None means no attempt has run yet, including on a newly
+# started process whose monotonic clock is still below the interval.
+_snapshot_gate: _SnapshotGate = {'inflight': False, 'attempt_at': None}
 
 
 def enabled() -> bool:
@@ -129,7 +136,10 @@ def _schedule_fleet_snapshot() -> asyncio.Task[Any] | None:
     if not fleet_snapshot_enabled():
         return None
     now = time.monotonic()
-    if _snapshot_gate['inflight'] or now - _snapshot_gate['attempt_at'] < fleet_snapshot_interval():
+    last_attempt_at = _snapshot_gate['attempt_at']
+    if _snapshot_gate['inflight'] or (
+        last_attempt_at is not None and now - last_attempt_at < fleet_snapshot_interval()
+    ):
         return None
     _snapshot_gate.update(inflight=True, attempt_at=now)
     return start_background_task(_run_fleet_snapshot(), name='cap_hold_fleet_snapshot')

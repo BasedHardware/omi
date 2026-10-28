@@ -20,7 +20,7 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 169,
-  "count": 176,
+  "count": 178,
   "names": {
     "BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED": {"owner": "langexcl / batch rollout lead", "review_by": "2026-11-15"},
     "BATCH_PIPELINE_API_URL": {"seeded": "2026-10-25"},
@@ -79,7 +79,9 @@
     "BUCKET_BATCH_PIPELINE": {"seeded": "2026-10-25"},
     "BUCKET_PRIVATE_CLOUD_SYNC": {"seeded": "2026-10-25"},
     "CAP_HOLD_DURABLE_REDRIVE_ENABLED": {"seeded": "2026-10-25"},
+    "CAP_HOLD_FLEET_SNAPSHOT_ENABLED": {"owner": "sync lane", "review_by": "2026-11-15"},
     "CAP_HOLD_LIVE_FRAGMENT_ENABLED": {"seeded": "2026-10-25"},
+    "CAP_HOLD_REDRIVE_PARALLEL_DRAIN_ENABLED": {"owner": "sync lane", "review_by": "2026-11-15"},
     "CONVERSATION_SPEAKER_ANCHOR_SECONDS": {"seeded": "2026-10-25"},
     "CONVERSATION_SPEAKER_SIGNIFICANT_SECONDS": {"seeded": "2026-10-25"},
     "DEEPGRAM_API_KEY": {"seeded": "2026-10-25"},
