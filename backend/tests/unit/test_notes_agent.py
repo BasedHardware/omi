@@ -21,6 +21,7 @@ from utils.llm import notes_agent as agent
 from utils.llm import notes_agent_policy as policy
 from utils.llm import notes_agent_prompt as prompt
 from utils.llm import notes_agent_serving as serving
+from utils.llm import notes_packet
 from utils.llm import shaped_agent
 from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
 from utils.llm.meeting_notes_rich_prompts import NotesFrameImage
@@ -533,6 +534,7 @@ def test_repair_keeps_only_new_commitments():
 
 
 def test_synthetic_replay_through_shaped_notes_writer(monkeypatch):
+    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'serve')
     fixture = json.loads(FIXTURE.read_text())
     lines = [f'[{sid} {spk}] {text}' for sid, spk, text in fixture['segments']] * fixture['repeat']
     prefix = build_conversation_prompt_prefix(
@@ -548,13 +550,17 @@ def test_synthetic_replay_through_shaped_notes_writer(monkeypatch):
         known_spellings='Known spellings\n{"spelling": "Quorbi"}',
     )
     frame = NotesFrameImage(data_url='data:image/jpeg;base64,AAAA', **fixture['frame'])
-    turns = iter(fixture['turns'])
     seen = []
+    seeds = []
 
     def fake_complete(model, *, cache_options=None, cache_key=None):
+        turns = iter(fixture['turns'])
         seen.append((cache_options, cache_key))
 
         async def complete(messages, tool_choice):
+            if not seeds:
+                seed = messages[2]['content']
+                seeds.append(seed[0]['text'] if isinstance(seed, list) else seed)
             turn = next(turns)
             return agent.CompletionTurn(
                 tool_calls=[
@@ -581,26 +587,43 @@ def test_synthetic_replay_through_shaped_notes_writer(monkeypatch):
     monkeypatch.setattr(tools.calendar_db, 'get_meetings_in_time_range', lambda *a, **k: [])
     monkeypatch.setattr(tools.screen_activity_db, 'get_screen_activity', lambda *a, **k: [])
     monkeypatch.setattr(tools, 'load_people_documents', lambda uid: [{'id': 'p1', 'name': 'Maya Okafor'}])
+    monkeypatch.setattr(notes_packet, 'get_evidence', lambda *args: None)
+    monkeypatch.setattr(notes_packet, 'notes_people', lambda *args: [])
 
-    structured = notes._get_shaped_conversation_notes(
-        prefix,
-        uid=OWNER,
-        started_at=START,
-        finished_at=START + timedelta(minutes=25),
-        language_code='en',
-        tz='UTC',
-        task_intelligence_capture=False,
-        existing_action_items=[{'description': 'Follow up on Quorbi pilot pricing'}],
-        screen_frames=(frame,),
-        roster=MeetingRoster((RosterEntry('Maya Okafor', None, None, 'human', 'screen_activity'),), None, False),
-        rich_context_enabled=False,
-    )
-    assert structured.title.startswith('Maya Okafor')
-    assert [participant.name for participant in structured.participants] == ['Maya Okafor']
-    assert structured.participants[0].evidence.startswith('Zoom tile')
-    assert all(nested_bullet_count(section.body_markdown) for section in structured.sections)
-    assert [item.description for item in structured.action_items] == ['Check the firmware fix status with the team']
-    assert seen and seen[0][0] == serving.EXPLICIT_CACHE_OPTIONS and seen[0][1].startswith(prompt.PROMPT_VERSION)
+    outputs = []
+    for dedupe in ('false', 'true'):
+        outcome = 'removed' if dedupe == 'true' else 'retained'
+        before_count = serving.CAPTURE_SEEDS.labels(outcome)._value.get()
+        monkeypatch.setenv('CONVERSATION_NOTES_CAPTURE_DEDUPE_ENABLED', dedupe)
+        seeds.clear()
+        structured = notes._get_shaped_conversation_notes(
+            prefix,
+            uid=OWNER,
+            started_at=START,
+            finished_at=START + timedelta(minutes=25),
+            language_code='en',
+            output_language_code='en',
+            tz='UTC',
+            task_intelligence_capture=False,
+            existing_action_items=[{'description': 'Follow up on Quorbi pilot pricing'}],
+            screen_frames=(frame,),
+            roster=MeetingRoster((RosterEntry('Maya Okafor', None, None, 'human', 'screen_activity'),), None, False),
+            rich_context_enabled=False,
+        )
+        assert structured.title.startswith('Maya Okafor')
+        assert ('"capture_evidence":' in seeds[0]) is (dedupe == 'false')
+        assert 'Thanks for jumping on' in seeds[0]
+        assert serving.CAPTURE_SEEDS.labels(outcome)._value.get() == before_count + 1
+        assert [participant.name for participant in structured.participants] == ['Maya Okafor']
+        assert structured.participants[0].evidence.startswith('Zoom tile')
+        assert all(nested_bullet_count(section.body_markdown) for section in structured.sections)
+        assert [item.description for item in structured.action_items] == ['Check the firmware fix status with the team']
+        assert seen and seen[0][0] == serving.EXPLICIT_CACHE_OPTIONS and seen[0][1].startswith(prompt.PROMPT_VERSION)
+        # The writer stamps each newly created task with wall-clock time;
+        # compare every content/policy field while excluding that run timestamp.
+        assert all(item.created_at is not None for item in structured.action_items)
+        outputs.append(structured.model_dump(mode='json', exclude={'action_items': {'__all__': {'created_at'}}}))
+    assert outputs[0] == outputs[1]
 
 
 def test_writer_keeps_one_shot_when_agent_declines(monkeypatch):
