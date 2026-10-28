@@ -10,7 +10,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 
 from database.messaging import MessagingStore, TURN_TIMEOUT_SECONDS
-from utils.messaging.identity import key
+from utils.messaging.identity import key, coerce_utc_datetime
 from models.chat import SendMessageRequest
 from utils.chat_turn import run_chat_turn
 from utils.executors import db_executor, postprocess_executor, run_blocking, start_background_task
@@ -202,12 +202,14 @@ class Gateway:
         if claimed is None:
             return False
         path, payload = claimed
-        from utils.messaging.metrics import QUEUE_AGE
-
-        QUEUE_AGE.labels(self.adapter.channel).observe(
-            max(0, (datetime.now(timezone.utc) - datetime.fromisoformat(payload['received_at'])).total_seconds())
-        )
         try:
+            from utils.messaging.metrics import QUEUE_AGE
+
+            received_dt = coerce_utc_datetime(payload.get('received_at'))
+            if received_dt is not None:
+                QUEUE_AGE.labels(self.adapter.channel).observe(
+                    max(0, (datetime.now(timezone.utc) - received_dt).total_seconds())
+                )
             async with asyncio.timeout(TURN_TIMEOUT_SECONDS):
                 return await self._process_claimed(path, payload)
         except BaseException as error:
@@ -224,11 +226,7 @@ class Gateway:
             # drain, admits it once the surface is free. A wake fault must not
             # replace the turn's own result.
             try:
-                clock = payload.get('received_at')
-                body = payload
-                if isinstance(clock, str):
-                    body = dict(payload, received_at=datetime.fromisoformat(clock))
-                await self._wake_pending(ChannelMessage(**body), skip_path=path)
+                await self._wake_pending(inbox_message(payload), skip_path=path)
             except Exception as error:
                 logging.getLogger(__name__).warning(
                     'Messaging next-head wake failed provider=%s error_type=%s',

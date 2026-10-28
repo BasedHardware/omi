@@ -10,6 +10,7 @@ from dataclasses import replace
 from utils.executors import db_executor, run_blocking
 from utils.messaging.contracts import Artifact, ChannelMessage, InboundAttachment
 from utils.messaging.adapters.media import MediaPreparationError
+from utils.messaging.identity import coerce_utc_datetime
 from utils.messaging.metrics import FAILURES
 from utils.observability.fallback import record_fallback
 
@@ -18,9 +19,17 @@ VOICE_DISABLED_REPLY = 'Voice notes are turned off for this chat. Send a text me
 
 def inbox_message(payload):
     payload = dict(payload)
-    payload['received_at'] = datetime.fromisoformat(payload['received_at'])
-    payload['media'] = tuple(Artifact(**a) for a in payload.get('media', ()))
-    payload['attachments'] = tuple(InboundAttachment(**a) for a in payload.get('attachments', ()))
+    clock = coerce_utc_datetime(payload.get('received_at'))
+    if clock is None:
+        raise ValueError('received_at must be timezone aware')
+    payload['received_at'] = clock
+    payload['media'] = tuple(
+        a if isinstance(a, Artifact) else Artifact(**a) for a in (payload.get('media') or ())
+    )
+    payload['attachments'] = tuple(
+        a if isinstance(a, InboundAttachment) else InboundAttachment(**a)
+        for a in (payload.get('attachments') or ())
+    )
     return ChannelMessage(**payload)
 
 
