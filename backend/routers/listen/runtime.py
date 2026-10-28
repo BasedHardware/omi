@@ -835,9 +835,9 @@ class ListenSessionRuntime:
                     else:
                         self.state.fair_use_track_dg_usage = False
                         self.state.fair_use_dg_budget_exhausted = False
-                    # Hard anti-abuse daily audio ceiling (all plans): once over the ceiling,
+                    # Hard anti-abuse daily audio ceiling: once over the plan-aware ceiling,
                     # stop forwarding audio to STT for the rest of the day. Reuses the same
-                    # gate the restrict stage uses, so no socket close / reconnect loop.
+                    # gate as sync admission, so there is no socket close / reconnect loop.
                     if is_daily_audio_ceiling_exceeded(self.request.uid, speech_totals=totals):
                         if not self.state.fair_use_dg_budget_exhausted:
                             logger.info('Fair-use daily audio ceiling reached uid=%s', self.request.uid)

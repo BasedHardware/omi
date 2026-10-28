@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "catalog_revision": 12,
+  "catalog_revision": 14,
   "authority": {
     "plan_identity": "catalog",
     "price_identity": "repository_ledger",
@@ -32,11 +32,18 @@
           "rolling_week": 36000000
         }
       },
+      "plus_transcription": {
+        "speech_milliseconds": {
+          "rolling_day": 86400000,
+          "rolling_three_days": 190800000,
+          "rolling_week": 313200000
+        }
+      },
       "unlimited_transcription": {
         "speech_milliseconds": {
-          "rolling_day": 14400000,
-          "rolling_three_days": 57600000,
-          "rolling_week": 72000000
+          "rolling_day": 129600000,
+          "rolling_three_days": 262800000,
+          "rolling_week": 493200000
         }
       }
     },
@@ -412,7 +419,7 @@
       ],
       "desktop_profile": "desktop_free",
       "conditional_desktop_profiles": [],
-      "fair_use_profile": "metered_transcription",
+      "fair_use_profile": "plus_transcription",
       "phone_calls_profile": "paid",
       "allocations": {
         "transcription": {

@@ -23,6 +23,7 @@ from utils.fair_use import (
     FAIR_USE_DAILY_SPEECH_MS,
     FAIR_USE_3DAY_SPEECH_MS,
     FAIR_USE_WEEKLY_SPEECH_MS,
+    fair_use_caps_for_user,
 )
 
 logger = logging.getLogger(__name__)
@@ -271,6 +272,7 @@ def get_my_fair_use_status(uid: str = Depends(get_current_user_uid)):
     daily_ms = speech.get('daily_ms', 0)
     three_day_ms = speech.get('three_day_ms', 0)
     weekly_ms = speech.get('weekly_ms', 0)
+    daily_cap_ms, three_day_cap_ms, weekly_cap_ms = fair_use_caps_for_user(uid)
 
     # DG budget (only meaningful for restrict stage, but always returned for frontend simplicity)
     dg_budget = get_dg_budget_status(uid)
@@ -282,14 +284,14 @@ def get_my_fair_use_status(uid: str = Depends(get_current_user_uid)):
         'speech_hours_3day': round(three_day_ms / 3600000, 2),
         'speech_hours_weekly': round(weekly_ms / 3600000, 2),
         'limits': {
-            'daily_hours': round(FAIR_USE_DAILY_SPEECH_MS / 3600000, 2),
-            'three_day_hours': round(FAIR_USE_3DAY_SPEECH_MS / 3600000, 2),
-            'weekly_hours': round(FAIR_USE_WEEKLY_SPEECH_MS / 3600000, 2),
+            'daily_hours': round(daily_cap_ms / 3600000, 2),
+            'three_day_hours': round(three_day_cap_ms / 3600000, 2),
+            'weekly_hours': round(weekly_cap_ms / 3600000, 2),
         },
         'usage_pct': {
-            'daily': round(daily_ms / FAIR_USE_DAILY_SPEECH_MS * 100, 1) if FAIR_USE_DAILY_SPEECH_MS else 0,
-            'three_day': round(three_day_ms / FAIR_USE_3DAY_SPEECH_MS * 100, 1) if FAIR_USE_3DAY_SPEECH_MS else 0,
-            'weekly': round(weekly_ms / FAIR_USE_WEEKLY_SPEECH_MS * 100, 1) if FAIR_USE_WEEKLY_SPEECH_MS else 0,
+            'daily': round(daily_ms / daily_cap_ms * 100, 1) if daily_cap_ms else 0,
+            'three_day': round(three_day_ms / three_day_cap_ms * 100, 1) if three_day_cap_ms else 0,
+            'weekly': round(weekly_ms / weekly_cap_ms * 100, 1) if weekly_cap_ms else 0,
         },
         'dg_budget': dg_budget,
         'message': _user_facing_message(stage, case_ref),

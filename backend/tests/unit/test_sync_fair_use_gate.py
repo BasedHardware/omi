@@ -291,6 +291,18 @@ class TestIsHardRestrictedGate:
 class TestHardRestrictionRetryAfter:
     """Test Retry-After calculation for hard-restricted sync users."""
 
+    @pytest.fixture(autouse=True)
+    def _patch_default_user_caps(self, monkeypatch):
+        monkeypatch.setattr(
+            fair_use_mod,
+            'fair_use_caps_for_user',
+            lambda _uid: (
+                fair_use_mod.FAIR_USE_DAILY_SPEECH_MS,
+                fair_use_mod.FAIR_USE_3DAY_SPEECH_MS,
+                fair_use_mod.FAIR_USE_WEEKLY_SPEECH_MS,
+            ),
+        )
+
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
     @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', set())
