@@ -141,6 +141,10 @@ class OmiBleManager private constructor(private val application: Application) {
     val rssiHistory = java.util.concurrent.ConcurrentHashMap<String, java.util.ArrayDeque<Pair<Long, Int>>>()
     val chargingState = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
     private val lastDiagnosticsReadUptime = mutableMapOf<String, Long>()
+    private val lastAudioNotification = GenerationAudioAge<BluetoothGatt>()
+
+    fun lastAudioNotificationAgeMs(address: String): Long? =
+        connectedGatts[address.uppercase()]?.let { lastAudioNotification.ageMs(address.uppercase(), it, SystemClock.elapsedRealtime()) }
 
     private var bondCompletionCallback: ((Boolean) -> Unit)? = null
     private var bondTimeoutRunnable: Runnable? = null
@@ -382,25 +386,30 @@ class OmiBleManager private constructor(private val application: Application) {
 
     // ── Characteristic operations ──
 
-    fun readFirmwareDiagnosticsIfDue(address: String, completion: (Result<ByteArray>) -> Unit) {
+    internal fun readFirmwareDiagnosticsIfDue(address: String, outcome: (FirmwareReadOutcome, String?) -> Unit, completion: (Result<ByteArray>) -> Unit) {
         mainHandler.post {
             val addr = address.uppercase()
-            val gatt = connectedGatts[addr] ?: return@post
-            val characteristic = findCharacteristic(gatt, DIAGNOSTICS_SERVICE, DIAGNOSTICS_CHAR) ?: return@post
+            val gatt = connectedGatts[addr] ?: run { outcome(FirmwareReadOutcome.SKIPPED, "no_link"); return@post }
+            val characteristic = findCharacteristic(gatt, DIAGNOSTICS_SERVICE, DIAGNOSTICS_CHAR)
+                ?: run { outcome(FirmwareReadOutcome.UNSUPPORTED, null); return@post }
             val now = SystemClock.elapsedRealtime()
             val last = lastDiagnosticsReadUptime[addr]
-            if (last != null && now - last < 15 * 60_000L) return@post
+            if (last != null && now - last < 15 * 60_000L) { outcome(FirmwareReadOutcome.SKIPPED, "throttled"); return@post }
             val key = "$addr:$DIAGNOSTICS_SERVICE:$DIAGNOSTICS_CHAR".lowercase()
-            if (readCompletions.containsKey(key)) return@post
+            if (readCompletions.containsKey(key)) { outcome(FirmwareReadOutcome.SKIPPED, "in_flight"); return@post }
             lastDiagnosticsReadUptime[addr] = now
+            outcome(FirmwareReadOutcome.ATTEMPTED, null)
             lateinit var command: Runnable
             lateinit var timeout: Runnable
+            var failureOutcome = FirmwareReadOutcome.REJECTED
             val callback: (Result<ByteArray>) -> Unit = { result ->
                 mainHandler.removeCallbacks(timeout)
+                outcome(if (result.isSuccess) FirmwareReadOutcome.SUCCEEDED else failureOutcome, null)
                 completion(result)
             }
             timeout = Runnable {
                 if (readCompletions.remove(key, callback)) {
+                    failureOutcome = FirmwareReadOutcome.TIMEOUT
                     callback(Result.failure(Exception("Diagnostics read timed out")))
                     completeCommand(command)
                 }
@@ -727,6 +736,7 @@ class OmiBleManager private constructor(private val application: Application) {
     fun retireDeviceHealth() {
         batteryHistoryRecorder.retire()
         chargingState.clear()
+        lastAudioNotification.clear()
     }
 
     private val batteryHistoryRecorder by lazy {
@@ -795,6 +805,7 @@ class OmiBleManager private constructor(private val application: Application) {
                 BluetoothProfile.STATE_CONNECTED -> {
                     Log.i(TAG, "Connected to $address, discovering services")
                     connectedGatts[address] = gatt
+                    lastAudioNotification.forget(address)
 
                     // Discover services
                     enqueueCommand {
@@ -874,6 +885,9 @@ class OmiBleManager private constructor(private val application: Application) {
             val address = gatt.device.address.uppercase()
             val serviceUuid = characteristic.service.uuid.toString().lowercase()
             val charUuid = characteristic.uuid.toString().lowercase()
+            if (charUuid == "19b10001-e8f2-537e-4f6c-d104768a1214" && value.isNotEmpty() && DeviceHealthPersistence.enabled(application)) {
+                lastAudioNotification.record(address, gatt, SystemClock.elapsedRealtime())
+            }
 
             if (characteristic.uuid == BATTERY_LEVEL_CHAR_UUID && value.isNotEmpty()) {
                 persistBatteryReading(address, value[0].toInt() and 0xFF)
@@ -964,4 +978,17 @@ class OmiBleManager private constructor(private val application: Application) {
             }
         }
     }
+}
+
+internal enum class FirmwareReadOutcome { ATTEMPTED, SUCCEEDED, TIMEOUT, REJECTED, UNSUPPORTED, SKIPPED }
+
+/** Only the current GATT object may lend its monotonic audio age to an event. */
+internal class GenerationAudioAge<T : Any> {
+    private val samples = mutableMapOf<String, Pair<T, Long>>()
+    @Synchronized fun record(address: String, generation: T, atMs: Long) { samples[address] = generation to atMs }
+    @Synchronized fun ageMs(address: String, generation: T, nowMs: Long): Long? = samples[address]?.let {
+        if (it.first === generation && nowMs >= it.second) nowMs - it.second else null
+    }
+    @Synchronized fun forget(address: String) { samples.remove(address) }
+    @Synchronized fun clear() { samples.clear() }
 }
