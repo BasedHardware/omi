@@ -128,3 +128,28 @@ processing, even through configuration; recall gains cannot authorize promotion.
 counts cannot establish false-owner safety by themselves; David gates shipping
 only after label review and consistent provider/source results. Set authoritative
 mode back to `incumbent` for rollback; existing manual assignments still win.
+
+**Degradation telemetry is one event per call, not per sidecar.** A read or
+rewrite that inspects hundreds of sidecars used to emit one
+`omi_fallback_event … outcome=degraded` and one
+`event=speaker_grouping_storage …` warning per failing sidecar, so one
+conversation-wide failure mode (envelopes that no longer authenticate, an
+oversized envelope) produced a per-segment warning storm on every read —
+prod backend-listen 2026-10-28: the `outcome=evidence_unavailable` family
+climbed through ~1.6k+/hour (968 → 1659 → ~1.9k across 12:00–14:30 UTC).
+Both `protect_segments` and `reveal_segments` now emit exactly one
+degradation event per call. The warning carries the failing-sidecar count
+(`segments=N`, the blast radius the storm obscured) and the most
+instructive fault shape (`fault=` one of `oversized`, `key_unavailable`,
+`unwritable`, `unknown` — what the codec could verify about the failure,
+not root-cause truth). Drop semantics are unchanged: a failing sidecar
+still contributes nothing and never blocks the transcript write or read.
+
+Failure-Class: FC-optional-evidence-telemetry-reports-per-victim — the
+optional grouping sidecar's degraded outcome was reported once per failing
+victim instead of once per failing operation, so a conversation-wide
+read-path failure (one fault shape repeated across every sidecar of one
+transcript) multiplied a single degradation into a per-segment warning and
+`omi_fallback_total` storm that grew with conversation length and read
+frequency; the aggregation now reports the operation once, with the victim
+count and fault shape as bounded detail.
