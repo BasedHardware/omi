@@ -312,7 +312,7 @@ guidance.
   Open Settings) — then the system prompt. A screen's Continue asks, in row order, for every
   permission still askable (`requestMissingOnboardingPermissions`), then moves on whatever the
   reader chose.
-- First-run exception (`pages/onboarding/permissions/permissions_widget.dart`): one switch card per
+- First-run exception (the yinka onboarding variant's permissions step, `pages/onboarding/variants/yinka/permissions_widget.dart`): one switch card per
   permission; toggling a card shows its system prompt. Continue unlocks once every card is
   **answered**, never only when granted: a "no" turns the card orange (notifications red with
   "Tap to fix", which opens Settings) and the reader moves on. Bluetooth is asked as the app
