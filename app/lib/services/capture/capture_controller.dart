@@ -2069,7 +2069,6 @@ class CaptureController extends ChangeNotifier
     await _streamButtonTaps(deviceId);
   }
 
-
   Future<void> _streamButtonTaps(String deviceId) async {
     final connection = await _ensureDeviceConnection(deviceId);
     if (connection == null) {
