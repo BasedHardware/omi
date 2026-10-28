@@ -80,7 +80,7 @@ import 'production_shell.dart';
 /// comparable across builds on the same physical device only. Simulator debug
 /// is explicitly marked as scenario qualification, never profile acceptance.
 /// Windows in receipt order; perf_sim_report.py's SCENARIOS must match.
-const heavyScenarioCount = 8;
+const heavyScenarioCount = 9;
 
 void main() {
   final binding = HeavyProfileBinding();
@@ -185,9 +185,9 @@ void main() {
       await walService.syncs.phone.walReady;
       await globalNavigatorKey.currentContext!.read<SyncProvider>().initialized;
       await _awaitCondition(
-          () => globalNavigatorKey.currentContext!.read<SyncProvider>().allWals.length == heavyWalCount,
-          timeout: const Duration(seconds: 15));
-      expect(globalNavigatorKey.currentContext!.read<SyncProvider>().allWals.length, heavyWalCount,
+          () => globalNavigatorKey.currentContext!.read<SyncProvider>().allWals.length == heavyIndexWalCount,
+          timeout: const Duration(seconds: 60));
+      expect(globalNavigatorKey.currentContext!.read<SyncProvider>().allWals.length, heavyIndexWalCount,
           reason: 'Home must observe the real heavy WAL inventory');
       final settled = await _awaitCondition(
           () => conversations.conversations.length >= heavyConversationCount && !conversations.isLoadingConversations,
@@ -365,9 +365,22 @@ void main() {
       await _idle(const Duration(seconds: 1));
       results['device_settings_on_the_way'] = await collector.end();
       debugPrint('HEAVY_STAGE device_settings_on_the_way complete');
+
+      // 12. Home left alone while sync refreshes the inventory, as every sync phase end and upload
+      //    callback does. No input and little to draw: what this window measures is main-isolate
+      //    stalls (the field watchdog's 'idle' lag), which frame timings cannot see.
+      collector.begin('home_idle_sync_refresh');
+      final syncForIdle = globalNavigatorKey.currentContext!.read<SyncProvider>();
+      for (var i = 0; i < 5; i++) {
+        mark('home_idle_sync_refresh.refresh.$i');
+        await syncForIdle.refreshWals();
+        await _idle(const Duration(seconds: 3));
+      }
+      results['home_idle_sync_refresh'] = await collector.end();
+      debugPrint('HEAVY_STAGE home_idle_sync_refresh complete');
     })();
 
-    // 12. Receipt: engine frame statistics per scenario.
+    // 13. Receipt: engine frame statistics per scenario.
     final receipt = <String, Object?>{
       'schema': 'omi-mobile-perf-sim/v2',
       'frame_policy': 'framework-requested/v1',
@@ -387,6 +400,7 @@ void main() {
         'conversations': heavyConversationCount,
         'detail_segments': heavyDetailSegments,
         'wals': heavyWalCount,
+        if (heavySyncedWalCount > 0) 'synced_wals': heavySyncedWalCount,
         'wal_files': walFileCount,
         'people': 40,
         'task_items': 50,

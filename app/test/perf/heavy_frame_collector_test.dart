@@ -51,4 +51,18 @@ void main() {
     expect(result['total_p50_us'], 546);
     expect(HeavyFrameCollector.frameTotalUs(frame(1000)), frame(1000).totalSpan.inMicroseconds);
   });
+
+  test('stall probe counts only ticks blocked past 50 ms and sums the 100 ms ones', () {
+    final probe = HeavyStallProbe();
+    var now = 0;
+    for (final gapMs in [20, 20, 70, 20, 160, 20, 1630]) {
+      now += gapMs * 1000;
+      probe.record(now);
+    }
+    final result = probe.stop();
+    expect(result['stalls_over_50ms'], 3);
+    expect(result['stalls_over_100ms'], 2);
+    expect(result['stall_blocked_over_100ms_us'], 140000 + 1610000);
+    expect(result['worst_stall_us'], 1610000);
+  });
 }
