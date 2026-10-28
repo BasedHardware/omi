@@ -486,6 +486,7 @@ and an explicit empty literal renders as `''`.
 | `OPEN_LOOPS_ENABLED` | Default on; extract open-loop fields in the notes call, persist them server-only, and run the once-per-day open-loop daily pass | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `PARAKEET_STREAM_ALLOCATION_PERCENT` | Allocate streaming sessions to Parakeet | backend | env | closed | 100 | 100 (gke/parakeet, parakeet (chart)) | 100 (gke/parakeet, parakeet (chart)) | — | keep | keep | — | dazheng |
 | `PARAKEET_WINDOW_ALLOCATION_PERCENT` | Allocate live sessions to Parakeet window | backend | env | closed | declared | 1 (backend-listen (chart), gke/backend-listen) | 100 (backend-listen (chart), gke/backend-listen) | — | keep | keep | — | dazheng |
+| `PARAKEET_WINDOW_FIRST_TEXT_CUT_ENABLED` | Default-on first-text release of a nonempty held Parakeet startup answer before the 12-second watchdog; false restores startup sentence holding | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED` | Default on; internal live-window POSTs use ready GPU pods with per-pod 2-5 minute adaptive quarantine and one different-pod retry inside the original budget | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED` | Default on unless false; a stranded-flush window answer whose text fell beyond the posted fragment settles like an empty answer instead of holding replay until replay_ring_overflow | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `PINNED_SPEAKER_PRIOR_ENABLED` | Turn near-misses on pinned people into suggestions and record voice candidates for the suggestion card (never loosens auto-labels) | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -930,6 +931,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `OPEN_LOOPS_ENABLED` — Default on; extract open-loop fields in the notes call, persist them server-only, and run the once-per-day open-loop daily pass (fail: open)
 - `PARAKEET_DIARIZATION` — Enable prerecorded Parakeet diarization (fail: closed)
 - `PARAKEET_USE_V2` — Select Parakeet prerecorded v2 pipeline (fail: open)
+- `PARAKEET_WINDOW_FIRST_TEXT_CUT_ENABLED` — Default-on first-text release of a nonempty held Parakeet startup answer before the 12-second watchdog; false restores startup sentence holding (fail: open)
 - `PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED` — Default on; internal live-window POSTs use ready GPU pods with per-pod 2-5 minute adaptive quarantine and one different-pod retry inside the original budget (fail: open)
 - `PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED` — Default on unless false; a stranded-flush window answer whose text fell beyond the posted fragment settles like an empty answer instead of holding replay until replay_ring_overflow (fail: open)
 - `PINNED_SPEAKER_PRIOR_ENABLED` — Turn near-misses on pinned people into suggestions and record voice candidates for the suggestion card (never loosens auto-labels) (fail: open)
