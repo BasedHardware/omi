@@ -230,19 +230,20 @@ def test_spend_denial_does_not_erase_an_already_generated_day(producer, monkeypa
 def test_media_dependency_delegates_to_v2_and_preserves_rollback(monkeypatch):
     from utils.conversations import media_consumers
 
+    monkeypatch.delenv('MEDIA_NOISE_MODE', raising=False)
     calls = []
 
     def policy(uid, row, **kwargs):
         calls.append(kwargs['consumer'])
-        return row.get('content_kind') == 'media'
+        return row.get('content_kind') == 'media' and refactor_modes.serving_for('MEDIA_NOISE_MODE', uid)
 
     monkeypatch.setattr(media_consumers, '_policy', lambda: policy)
     rows = [{'content_kind': 'media'}, {'content_kind': 'conversation'}]
     assert media_consumers.eligible_conversations('synthetic-owner', rows) == rows
-    assert calls == []
+    assert calls == ['daily_summary', 'daily_summary']
     monkeypatch.setenv('MEDIA_NOISE_MODE', 'serve')
     assert media_consumers.eligible_conversations('synthetic-owner', rows) == rows[1:]
-    assert calls == ['daily_summary', 'daily_summary']
+    assert calls == ['daily_summary'] * 4
 
 
 def test_mode_rollback_resumes_pending_stub_in_place(producer, monkeypatch):
