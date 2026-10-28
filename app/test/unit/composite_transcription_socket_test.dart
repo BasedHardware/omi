@@ -284,6 +284,27 @@ void main() {
       await socket.stop();
     });
 
+    test('an Omi socket error mid-session does not tear down the composite', () async {
+      final primary = _ScriptedSocket();
+      final secondary = _ScriptedSocket();
+      final listener = _RecordingListener();
+      final socket = build(primary, secondary)..setListener(listener);
+
+      expect(await socket.connect(), isTrue);
+      secondary.emitError(StateError('Omi connection failed'), StackTrace.current);
+
+      expect(socket.status, PureSocketStatus.connected);
+      expect(socket.secondaryDegraded, isTrue);
+      expect(listener.closed, isEmpty);
+      expect(primary.status, PureSocketStatus.connected);
+
+      final audio = Uint8List.fromList([4, 2]);
+      socket.send(audio);
+      expect(primary.sent, [same(audio)]);
+      expect(secondary.sent, isEmpty);
+      await socket.stop();
+    });
+
     test('the custom STT socket closing still tears everything down', () async {
       final primary = _ScriptedSocket();
       final secondary = _ScriptedSocket();
@@ -576,6 +597,11 @@ class _ScriptedSocket implements IPureSocket {
   void emitClosed([int? code]) {
     _status = PureSocketStatus.disconnected;
     _listener?.onClosed(code);
+  }
+
+  void emitError(Object error, StackTrace trace) {
+    _status = PureSocketStatus.disconnected;
+    _listener?.onError(error, trace);
   }
 }
 
