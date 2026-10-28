@@ -294,7 +294,9 @@ async def test_finalization_evaluates_capture_group_primary_notes_refresh(harnes
 
 def test_group_notes_refresh_persists_notes_without_derived_fanout(harness, monkeypatch):
     original = row('pendant', 'omi')
-    original['transcript_segments'] = [{'text': 'We reviewed the launch plan.', 'start': 0, 'end': 60, 'speaker_id': 0}]
+    original['transcript_segments'] = [
+        {'text': 'We reviewed the launch plan.', 'start': 0, 'end': 60, 'speaker_id': 0, 'is_user': False}
+    ]
     harness.rows[path('pendant')] = deepcopy(original)
     conversation = finalizer.deserialize_conversation(original)
     original_segments = deepcopy(conversation.transcript_segments)
