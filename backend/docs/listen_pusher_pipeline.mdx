@@ -7839,13 +7839,19 @@ smart-merge decision before the donor's first processing; that is step 2.
 
 Successful automatic processing stores a content digest, word count and union
 speech duration in `sync_processing_hold.full_snapshot`, after processing and its existing effects return, through a
-revision-fenced completion transaction. Failures retain the normal retry debt. Unchanged content buys no further run. Late content
+revision-fenced completion transaction that rechecks the account-deletion marker before writing. Failures retain the normal retry debt. A paid-budget denial on an already summarized row reschedules the held obligation, preserving the only wake for late content until funding allows processing. Raw captures keep the existing budget-waiting/backlog-choice path. Unchanged content buys no further run. Late content
 must add at least 30 seconds of speech or 80 words; it receives the same quiet
 window and at most one automatic re-finalization per canonical conversation.
 Small changes accumulate against the last processed snapshot. Explicit Process
 Now, client finalize, first-open and user reprocess retain their immediate
 paths and satisfy a pending hold when they succeed, without consuming the automatic late budget. A full snapshot receipt survives lost outbox acknowledgements and
 subsequent appends. Content is always retained even after the automatic cap.
+
+Lazy memory/task effects reload the row and defer while its sync hold remains
+active, including when late content arrives near the old effects deadline.
+Passing the quiet deadline alone is insufficient: full processing must settle
+first. Demand priority cannot bypass this prerequisite. A new settled effects
+mark clears the deferral and uses the updated notes/transcript fingerprint.
 
 No current WAL producer provides a contiguous device upload watermark. A
 future `sync_processing_hold.upload_watermark_at`, if supplied, must pass
@@ -7854,9 +7860,12 @@ Until that producer exists, quiet time plus the hard ceiling are the available
 settling evidence; one uploaded file is never treated as a watermark.
 
 Rollback: set `SYNC_PROCESSING_HOLD_ENABLED=false`. New intake resumes legacy
-coalescing configuration; queued held obligations drain on their next wake
-without the hold admission. Smart-merge refresh returns to its immediate path.
-No backfill, historical-data mutation or production change is required.
+coalescing configuration. On its next bounded discovery pass, the sweeper
+shortens queued holds to now and rotates their future task names, preserving
+active leases and unrelated schedules. Successful automatic and explicit
+processing still settle existing hold receipts with the switch off so lazy
+effects can resume. Smart-merge refresh returns to its immediate path.
+No backfill or historical-data mutation is required.
 
 `omi_sync_processing_hold_total{outcome}` reports bounded admission outcomes
 (`quiet_wait`, `watermark_wait`, `ready`, `max_hold`, `unchanged`, `immaterial`,
