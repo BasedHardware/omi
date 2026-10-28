@@ -1069,7 +1069,15 @@ def test_persisted_fingerprinted_audio_file_survives_precise_source_aliases(remo
     accepted = b'\x09\x00' * 16000
     _legacy_chunk(remote, 1000.00025, accepted, is_batch=is_batch)
     invalidate_pack_index(remote, 'owner', 'conversation')
-    old_file = pusher.conversations_db.create_audio_files_from_chunks('owner', 'conversation')[0].model_dump()
+    # Explicitly construct the historical filename-clock stamp. New identity
+    # listings stay on the sample clock even before any raw fragment exists.
+    legacy_sources = [
+        {**chunk, 'timestamp': chunk.get('legacy_timestamp', chunk['timestamp'])}
+        for chunk in storage.list_audio_chunks('owner', 'conversation', source_identity=True)
+    ]
+    old_file = pusher.conversations_db._finalize_audio_file_group(
+        'owner', 'conversation', legacy_sources, []
+    ).model_dump()
     assert old_file['chunk_timestamps'] == [1000] and old_file['source_fingerprint']
     count = round((1000.00025 - raw_start) * 16000)
     prefix = b'\x01\x00' * count

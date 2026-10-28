@@ -448,6 +448,10 @@ def _audio_merge_task_id(payload: Dict[str, Any]) -> str:
     suffix = f"-d{int(payload['requested_at'] // 3600)}" if payload.get('on_demand') else ''
     if not payload.get('on_demand') and payload.get('playback_epoch'):
         suffix = f"-r{payload['playback_epoch']}"
+    if payload.get('recovery_epoch'):
+        # The failed marker generation is stable across polls and hour changes.
+        # One failed retry rewrites the marker and starts a fresh cooldown.
+        suffix = f"-r{payload['recovery_epoch']}"
     if payload.get('schema_version') == 2:
         return f"amc-{payload['conversation_id']}-{payload['fingerprint']}{suffix}"
     return f"am-{payload['conversation_id']}-{payload['audio_file_id']}{suffix}"
