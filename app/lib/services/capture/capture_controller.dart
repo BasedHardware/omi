@@ -2222,8 +2222,6 @@ class CaptureController extends ChangeNotifier
     // double tap
     if (buttonState == 2) {
       Logger.debug("Double tap detected");
-
-      // Guard: ignore if already processing a button event
       if (_isProcessingButtonEvent) {
         Logger.debug("Double tap: already processing, ignoring");
         return;
@@ -2232,7 +2230,6 @@ class CaptureController extends ChangeNotifier
       int doubleTapAction = SharedPreferencesUtil().doubleTapAction;
 
       if (doubleTapAction == 1) {
-        // Pause/resume recording
         Logger.debug("Double tap: toggling pause/mute");
         _isProcessingButtonEvent = true;
         if (isPaused) {
@@ -2276,9 +2273,17 @@ class CaptureController extends ChangeNotifier
       return;
     }
 
-    // Single tap (buttonState == 1) - toggle voice question mode
-    // Tap once to start, tap again to end
     if (buttonState == 1) {
+      final onboardingAsk = deviceOnboardingProvider?.isOnboardingActive == true &&
+          deviceOnboardingProvider!.currentStep == DeviceOnboardingProvider.askQuestionStep;
+      final singleTap = resolveSingleTapActionForSession(
+        SharedPreferencesUtil().singleTapAction,
+        onboardingAskQuestionStep: onboardingAsk,
+      );
+      if (singleTap != ButtonAction.askQuestion) {
+        _runButtonAction(singleTap, trackDoubleTap: false);
+        return;
+      }
       debugPrint("Single tap detected");
       if (_voiceCommandSession == null) {
         final autoSubmittedAt = _lastVoiceCommandAutoSubmitAt;
@@ -2286,10 +2291,7 @@ class CaptureController extends ChangeNotifier
           _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.autoEndGrace);
           return;
         }
-        // Start voice question session (new toggle mode)
         debugPrint("Starting voice question session (toggle mode)");
-        // Cut off any in-flight voice playback from a prior reply so the
-        // new recording starts clean.
         if (OmiVoicePlaybackService.instance.isSpeaking) {
           OmiVoicePlaybackService.instance.interrupt(source: VoiceReplyPlaybackInterruptSource.newVoiceQuery);
         }
@@ -2310,7 +2312,6 @@ class CaptureController extends ChangeNotifier
       return;
     }
 
-    // Legacy support: start long press (for voice commands) - older firmware
     if (buttonState == 3 && _voiceCommandSession == null) {
       debugPrint("Legacy: Long press start detected");
       _voiceCommandSession = _now();
@@ -2322,8 +2323,6 @@ class CaptureController extends ChangeNotifier
       _playSpeakerHaptic(deviceId, 1);
     }
 
-    // Legacy support: release (end voice command) - older firmware
-    // End on release if a voice command session is active
     if (buttonState == 5 &&
         _voiceCommandSession != null &&
         _voiceCommandTrigger == _VoiceCommandTrigger.legacyLongPress) {
