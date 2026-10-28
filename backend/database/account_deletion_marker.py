@@ -62,7 +62,7 @@ def account_deletion_blocks_user_work(uid: str, *, firestore_client: Any | None 
     restored/pre-acceptance statuses permit work. An unavailable authority
     raises so callers cannot silently process a deleting account.
     """
-    if not isinstance(uid, str) or not uid.strip():
+    if not uid or not uid.strip():
         raise ValueError('uid is required')
     return account_deletion_blocks_access(get_user_deletion_wipe_status(uid, firestore_client=firestore_client))
 

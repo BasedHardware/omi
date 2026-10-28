@@ -437,8 +437,6 @@ def run_day3_reengagement(
         logger.info('day3 re-engagement: closed by authority; no user work performed')
         return summary
 
-    client = firestore_client if firestore_client is not None else db
-
     for facts in candidates:
         if account_deletion_blocks_user_work(facts.uid):
             continue
