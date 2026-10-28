@@ -2037,6 +2037,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     // the rest of the drain: the manifest is immutable per conversation, so a
     // later remainder must not claim one covering only part of it.
     final unclaimableConversationIds = <String>{};
+    // Per-recording share of this pass; see [maxBatchesPerRecordingPerDrain].
+    final groupBatchCounts = <String, int>{};
+    final deferredGroups = <String>{};
     while (true) {
       if (!_isCurrent(generation)) break;
       // Re-snapshot between batches so a newly captured WAL can preempt an
@@ -2046,6 +2049,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           .where((wal) =>
               isAutoUploadEligible(wal, nowSeconds: batchNowSeconds) &&
               !attemptedWalIds.contains(walAttemptKey(wal)) &&
+              !deferredGroups.contains(recordingGroupKey(wal)) &&
               (wal.status != WalStatus.uploadRejected || refusalRetries < walMaxRefusalRetriesPerDrain))
           .toList();
       final pending = candidates.where((wal) => !liveCaptureOnly || isLiveCaptureWal(wal, batchNowSeconds)).toList();
@@ -2056,6 +2060,21 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           .any((wal) => wal.status == WalStatus.uploadRejected || isolateAfterRefusal.contains(walAttemptKey(wal)))) {
         batch = [batch.first];
       }
+      final drainGroup = recordingGroupKey(batch.first);
+      if ((groupBatchCounts[drainGroup] ?? 0) >= maxBatchesPerRecordingPerDrain &&
+          pending.any((wal) => recordingGroupKey(wal) != drainGroup)) {
+        // This recording spent its share while others still wait: defer its
+        // remainder to a later pass instead of letting it own every
+        // interrupted drain. Oldest-first resumes with it on the next pass.
+        deferredGroups.add(drainGroup);
+        DebugLogManager.logEvent('local_upload_recording_deferred', {
+          'group': drainGroup,
+          'batchesAttempted': groupBatchCounts[drainGroup],
+          'pendingBehind': pending.where((wal) => recordingGroupKey(wal) != drainGroup).length,
+        });
+        continue;
+      }
+      groupBatchCounts[drainGroup] = (groupBatchCounts[drainGroup] ?? 0) + 1;
       if (batch.first.status == WalStatus.uploadRejected) refusalRetries++;
       attemptedWalIds.addAll(batch.map(walAttemptKey));
       final batchConversationId = batch.first.conversationId;

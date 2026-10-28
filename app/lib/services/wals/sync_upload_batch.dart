@@ -131,6 +131,22 @@ String? _walLocationBatchKey(Wal wal) {
   return '${geolocation.time?.toUtc().toIso8601String()}|${geolocation.latitude}|${geolocation.longitude}';
 }
 
+/// The upload grouping key shared by every WAL of one recording: conversation,
+/// recording session, batch family and location — exactly the tuple
+/// [nextSyncUploadBatch] groups a batch by. The drain's per-recording share
+/// cap counts batches with this key.
+String recordingGroupKey(Wal wal) =>
+    '${wal.conversationId}|${wal.recordingSessionId}|${isMobileStandardBatchWal(wal)}|${_walLocationBatchKey(wal) ?? ''}';
+
+/// Batches one recording may consume before a drain with other recordings
+/// waiting moves on to them (36 × 300s = 3h of audio). Oldest-first ordering
+/// is kept for the 30-day backfill deadline, but a pathological recording
+/// (hours of overnight noise) otherwise monopolizes every interrupted pass —
+/// each restart re-enters it at the head — and the small recordings behind it
+/// starve (#14688). A drain with nothing else pending keeps its full-pass
+/// order, so a lone backlog is never throttled.
+const maxBatchesPerRecordingPerDrain = 36;
+
 /// Upload priority for a pending set: live capture first (newest first), then
 /// the historical backlog oldest first.
 ///
