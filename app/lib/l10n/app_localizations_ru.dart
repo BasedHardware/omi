@@ -8874,12 +8874,12 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Чат: \$$used / \$$limit использовано в этом месяце';
+    return 'Чат: $used / $limit использовано в этом месяце';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Чат: \$$used использовано в этом месяце';
+    return 'Чат: $used использовано в этом месяце';
   }
 
   @override
@@ -13346,6 +13346,30 @@ class AppLocalizationsRu extends AppLocalizations {
   String get paywallOutlineHeadline => 'Больше не упускайте ни слова.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/год',
+        'other': '/месяц',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/год',
+        'other': '/месяц',
+      },
+    );
+    return '$days дней бесплатно, затем $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -14708,6 +14732,31 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'Подробности для поддержки';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Скрыто $count коротких записей',
+      one: 'Скрыта 1 короткая запись',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Показать';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Скрыть $count коротких записей',
+      one: 'Скрыть 1 короткую запись',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get voiceProfileCardDismissed => 'Голосовой профиль можно настроить в любое время в Настройках.';

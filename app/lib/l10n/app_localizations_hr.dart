@@ -8873,12 +8873,12 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit iskorišteno ovog mjeseca';
+    return 'Chat: $used / $limit iskorišteno ovog mjeseca';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used iskorišteno ovog mjeseca';
+    return 'Chat: $used iskorišteno ovog mjeseca';
   }
 
   @override
@@ -13335,6 +13335,30 @@ class AppLocalizationsHr extends AppLocalizations {
   String get paywallOutlineHeadline => 'Nikad više ne propustite ni riječ.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/godina',
+        'other': '/mjesec',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/godina',
+        'other': '/mjesec',
+      },
+    );
+    return '$days dana besplatno, zatim $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -14696,6 +14720,31 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'Detalji za podršku';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kratkih isječaka skriveno',
+      one: '1 kratki isječak skriven',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Prikaži';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Skrij $count kratkih isječaka',
+      one: 'Skrij 1 kratki isječak',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get voiceProfileCardDismissed => 'Glasovni profil možete postaviti bilo kada u Postavkama.';

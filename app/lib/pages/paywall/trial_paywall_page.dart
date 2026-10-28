@@ -7,11 +7,12 @@ import 'package:omi/pages/paywall/paywall_checkout.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/billing_price.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 /// Variant `trial`: a free-trial paywall shown once right after sign-up. A feature carousel, a
 /// timeline of what happens on which date, the Unlimited feature list, month/year, and a
-/// "Try for $0.00" button that opens the shared Stripe checkout with a trial. Light canvas on
+/// "Try for a formatted zero amount" button that opens the shared Stripe checkout with a trial. Light canvas on
 /// purpose: it sits between the light onboarding steps. Prices come from the catalog.
 class TrialPaywallPage extends StatefulWidget {
   const TrialPaywallPage({super.key, required this.source, this.offer, this.checkout, this.now});
@@ -93,7 +94,7 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
   Future<void> _purchase(PaywallOffer offer) async {
     final price = _yearly ? (offer.yearly ?? offer.monthly) : (offer.monthly ?? offer.yearly);
     if (price == null || _locked) return;
-    // Never open a checkout that would charge at once under a $0 trial button.
+    // Never open a checkout that would charge at once under a free-trial button.
     if (widget.checkout == null && context.read<UsageProvider>().subscription?.trialEligible != true) {
       OmiFeedback.error(context, context.l10n.couldNotProcessSubscription);
       return;
@@ -119,9 +120,6 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
       if (mounted) setState(() => _busy = false);
     }
   }
-
-  static String _money(int minor, String currency) =>
-      NumberFormat.simpleCurrency(name: currency.toUpperCase(), decimalDigits: 2).format(minor / 100);
 
   @override
   Widget build(BuildContext context) {
@@ -151,8 +149,9 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
             final loading = offer == null && widget.offer == null && usage.isLoadingPlans;
             final yearly = offer?.yearly;
             final monthly = offer?.monthly;
-            final currency = (yearly ?? monthly)?.currency ?? 'usd';
-            final zero = _money(0, currency);
+            final selected = _yearly ? (yearly ?? monthly) : (monthly ?? yearly);
+            final currency = selected?.currency ?? 'usd';
+            final zero = formatBillingPrice(0, currency);
             final yearlySaving = yearly != null && monthly != null && monthly.amountMinor * 12 > yearly.amountMinor
                 ? monthly.amountMinor * 12 - yearly.amountMinor
                 : null;
@@ -204,7 +203,8 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
                             _TimelineRow(
                               icon: Icons.check_circle_outline_rounded,
                               title: l10n.paywallTrialInDaysTitle(TrialPaywallPage.trialDays),
-                              body: l10n.paywallTrialEndsBody,
+                              body: selected?.trialLabel(context, TrialPaywallPage.trialDays) ??
+                                  l10n.paywallTrialEndsBody,
                               date: onDay(TrialPaywallPage.trialDays),
                               emphasis: _TimelineEmphasis.plain,
                               last: true,
@@ -249,7 +249,7 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
                                             child: _PlanCard(
                                               key: const Key('trial_paywall_monthly'),
                                               title: l10n.billingMonthly,
-                                              price: _money(monthly.amountMinor, monthly.currency),
+                                              price: formatBillingPrice(monthly.amountMinor, monthly.currency),
                                               footnote: l10n.paywallTrialBilledMonthly,
                                               selected: !_yearly || yearly == null,
                                               onTap: () => setState(() => _yearly = false),
@@ -261,14 +261,15 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
                                             child: _PlanCard(
                                               key: const Key('trial_paywall_yearly'),
                                               title: l10n.billingYearly,
-                                              price: _money(yearly.amountMinor, yearly.currency),
+                                              price: formatBillingPrice(yearly.amountMinor, yearly.currency),
                                               wasPrice: monthly == null
                                                   ? null
-                                                  : _money(monthly.amountMinor * 12, monthly.currency),
+                                                  : formatBillingPrice(monthly.amountMinor * 12, monthly.currency),
                                               footnote: l10n.paywallTrialBilledYearly,
                                               saving: yearlySaving == null
                                                   ? null
-                                                  : l10n.paywallTrialSaveAmount(_money(yearlySaving, yearly.currency)),
+                                                  : l10n.paywallTrialSaveAmount(
+                                                      formatBillingPrice(yearlySaving, yearly.currency)),
                                               selected: _yearly || monthly == null,
                                               onTap: () => setState(() => _yearly = true),
                                             ),
@@ -285,6 +286,15 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      if (selected != null) ...[
+                        Text(
+                          selected.trialLabel(context, TrialPaywallPage.trialDays),
+                          key: const Key('trial_paywall_price_terms'),
+                          textAlign: TextAlign.center,
+                          style: OmiType.subhead.copyWith(color: _Paper.text, fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 10),
+                      ],
                       _Button(
                         key: const Key('trial_paywall_cta'),
                         label: l10n.paywallTrialCta(zero),

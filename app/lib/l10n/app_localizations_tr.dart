@@ -8856,12 +8856,12 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Sohbet: \$$used / \$$limit bu ay kullanıldı';
+    return 'Sohbet: $used / $limit bu ay kullanıldı';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Sohbet: \$$used bu ay kullanıldı';
+    return 'Sohbet: $used bu ay kullanıldı';
   }
 
   @override
@@ -13315,6 +13315,30 @@ class AppLocalizationsTr extends AppLocalizations {
   String get paywallOutlineHeadline => 'Bir daha tek kelimeyi bile kaçırma.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/yıl',
+        'other': '/ay',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/yıl',
+        'other': '/ay',
+      },
+    );
+    return '$days gün ücretsiz, ardından $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -14673,6 +14697,31 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'Destek için ayrıntılar';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kısa kayıt gizlendi',
+      one: '1 kısa kayıt gizlendi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Göster';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kısa kaydı gizle',
+      one: '1 kısa kaydı gizle',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get voiceProfileCardDismissed => 'Ses profilini istediğin zaman Ayarlar\'dan kurabilirsin.';

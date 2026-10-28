@@ -8867,12 +8867,12 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Чат: \$$used / \$$limit выкарыстана ў гэтым месяцы';
+    return 'Чат: $used / $limit выкарыстана ў гэтым месяцы';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Чат: \$$used выкарыстана ў гэтым месяцы';
+    return 'Чат: $used выкарыстана ў гэтым месяцы';
   }
 
   @override
@@ -13334,6 +13334,30 @@ class AppLocalizationsBe extends AppLocalizations {
   String get paywallOutlineHeadline => 'Больш не прапусціце ніводнага слова.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/год',
+        'other': '/месяц',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/год',
+        'other': '/месяц',
+      },
+    );
+    return '$days дзён бясплатна, потым $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -14694,6 +14718,31 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'Падрабязнасці для падтрымкі';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Схаваныя кароткія запісы: $count',
+      one: '1 кароткі запіс схаваны',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Паказаць';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Схаваць кароткія запісы: $count',
+      one: 'Схаваць 1 кароткі запіс',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get voiceProfileCardDismissed => 'Профіль голасу заўсёды можна наладзіць у Наладах.';

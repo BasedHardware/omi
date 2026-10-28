@@ -8845,12 +8845,12 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit käytetty tässä kuussa';
+    return 'Chat: $used / $limit käytetty tässä kuussa';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used käytetty tässä kuussa';
+    return 'Chat: $used käytetty tässä kuussa';
   }
 
   @override
@@ -13305,6 +13305,30 @@ class AppLocalizationsFi extends AppLocalizations {
   String get paywallOutlineHeadline => 'Älä enää koskaan missaa sanaakaan.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/vuosi',
+        'other': '/kuukausi',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/vuosi',
+        'other': '/kuukausi',
+      },
+    );
+    return '$days päivää ilmaiseksi, sitten $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -14665,6 +14689,31 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'Tiedot tukea varten';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count lyhyttä leikettä piilotettu',
+      one: '1 lyhyt leike piilotettu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Näytä';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Piilota $count lyhyttä leikettä',
+      one: 'Piilota 1 lyhyt leike',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get voiceProfileCardDismissed => 'Voit määrittää ääniprofiilin milloin tahansa asetuksissa.';

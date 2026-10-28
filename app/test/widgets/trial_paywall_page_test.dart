@@ -44,18 +44,18 @@ void main() {
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull, reason: 'slide ${i + 2} overflowed at ${size.width}');
       }
-      expect(find.text('Try for \$0.00'), findsOneWidget);
+      expect(find.text('Try for US\$0.00'), findsOneWidget);
     });
   }
 
   testWidgets('scrolling to the plans shows both prices and the yearly saving', (tester) async {
     await _pump(tester, const Size(320, 568));
     final vertical = find.byWidgetPredicate((w) => w is Scrollable && w.axisDirection == AxisDirection.down);
-    await tester.scrollUntilVisible(find.text('\$29.99'), 200, scrollable: vertical.first);
+    await tester.scrollUntilVisible(find.text('US\$29.99'), 200, scrollable: vertical.first);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    expect(find.text('\$29.99'), findsOneWidget);
-    expect(find.text('\$269.91'), findsOneWidget);
-    expect(find.textContaining('Save \$89.97'), findsOneWidget);
+    expect(find.text('US\$29.99'), findsOneWidget);
+    expect(find.text('US\$269.91'), findsOneWidget);
+    expect(find.textContaining('Save US\$89.97'), findsOneWidget);
   });
 }

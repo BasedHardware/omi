@@ -8850,12 +8850,12 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Ћаскање: \$$used / \$$limit искоришћено овог месеца';
+    return 'Ћаскање: $used / $limit искоришћено овог месеца';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Ћаскање: \$$used искоришћено овог месеца';
+    return 'Ћаскање: $used искоришћено овог месеца';
   }
 
   @override
@@ -13310,6 +13310,30 @@ class AppLocalizationsSr extends AppLocalizations {
   String get paywallOutlineHeadline => 'Никада више не пропустите ни реч.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/година',
+        'other': '/месец',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/година',
+        'other': '/месец',
+      },
+    );
+    return '$days дана бесплатно, затим $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -14667,6 +14691,31 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'Детаљи за подршку';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count кратких снимака је скривено',
+      one: 'Скривен је 1 кратак снимак',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Прикажи';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Сакриј $count кратких снимака',
+      one: 'Сакриј 1 кратак снимак',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get voiceProfileCardDismissed => 'Гласовни профил можете подесити било када у Подешавањима.';

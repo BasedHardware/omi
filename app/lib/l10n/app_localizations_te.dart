@@ -8894,12 +8894,12 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'చాట్: \$$used / \$$limit ఈ నెల ఉపయోగించబడింది';
+    return 'చాట్: $used / $limit ఈ నెల ఉపయోగించబడింది';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'చాట్: \$$used ఈ నెల ఉపయోగించబడింది';
+    return 'చాట్: $used ఈ నెల ఉపయోగించబడింది';
   }
 
   @override
@@ -13354,6 +13354,30 @@ class AppLocalizationsTe extends AppLocalizations {
   String get paywallOutlineHeadline => 'ఇకపై ఒక్క మాట కూడా మిస్ అవ్వకండి.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/సంవత్సరం',
+        'other': '/నెల',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/సంవత్సరం',
+        'other': '/నెల',
+      },
+    );
+    return '$days రోజులు ఉచితం, ఆపై $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -14722,6 +14746,31 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'సపోర్ట్ కోసం వివరాలు';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count చిన్న క్లిప్‌లు దాచబడ్డాయి',
+      one: '1 చిన్న క్లిప్ దాచబడింది',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'చూపండి';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count చిన్న క్లిప్‌లను దాచండి',
+      one: '1 చిన్న క్లిప్‌ను దాచండి',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get voiceProfileCardDismissed => 'సెట్టింగ్‌లలో ఎప్పుడైనా వాయిస్ ప్రొఫైల్ సెటప్ చేయవచ్చు.';

@@ -8783,12 +8783,12 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'الدردشة: \$$used / \$$limit مُستخدم هذا الشهر';
+    return 'الدردشة: $used / $limit مُستخدم هذا الشهر';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'الدردشة: \$$used مُستخدم هذا الشهر';
+    return 'الدردشة: $used مُستخدم هذا الشهر';
   }
 
   @override
@@ -13227,6 +13227,30 @@ class AppLocalizationsAr extends AppLocalizations {
   String get paywallOutlineHeadline => 'لا تفوّت كلمة واحدة بعد الآن.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/سنة',
+        'other': '/شهر',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/سنة',
+        'other': '/شهر',
+      },
+    );
+    return '$days أيام مجانًا، ثم $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -14577,6 +14601,31 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'تفاصيل لفريق الدعم';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'تم إخفاء $count من المقاطع الصوتية القصيرة',
+      one: 'تم إخفاء مقطع صوتي قصير واحد',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'إظهار';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'إخفاء $count من المقاطع الصوتية القصيرة',
+      one: 'إخفاء مقطع صوتي قصير واحد',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get voiceProfileCardDismissed => 'يمكنك إعداد بصمة صوتك في أي وقت من الإعدادات.';

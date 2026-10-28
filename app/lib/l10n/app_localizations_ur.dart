@@ -8861,12 +8861,12 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'چیٹ: \$$used / \$$limit اس مہینے استعمال ہوا';
+    return 'چیٹ: $used / $limit اس مہینے استعمال ہوا';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'چیٹ: \$$used اس مہینے استعمال ہوا';
+    return 'چیٹ: $used اس مہینے استعمال ہوا';
   }
 
   @override
@@ -13315,6 +13315,30 @@ class AppLocalizationsUr extends AppLocalizations {
   String get paywallOutlineHeadline => 'اب ایک لفظ بھی نہ چھوڑیں۔';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/سال',
+        'other': '/مہینہ',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/سال',
+        'other': '/مہینہ',
+      },
+    );
+    return '$days دن مفت، پھر $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -14673,6 +14697,31 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'سپورٹ کے لیے تفصیلات';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count مختصر کلپس چھپائے گئے',
+      one: '1 مختصر کلپ چھپایا گیا',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'دکھائیں';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count مختصر کلپس چھپائیں',
+      one: '1 مختصر کلپ چھپائیں',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get voiceProfileCardDismissed => 'آپ کسی بھی وقت سیٹنگز میں وائس پروفائل سیٹ کر سکتے ہیں۔';

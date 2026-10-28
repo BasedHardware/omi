@@ -8915,12 +8915,12 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'அரட்டை: \$$used / \$$limit இந்த மாதம் பயன்படுத்தப்பட்டது';
+    return 'அரட்டை: $used / $limit இந்த மாதம் பயன்படுத்தப்பட்டது';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'அரட்டை: \$$used இந்த மாதம் பயன்படுத்தப்பட்டது';
+    return 'அரட்டை: $used இந்த மாதம் பயன்படுத்தப்பட்டது';
   }
 
   @override
@@ -13392,6 +13392,30 @@ class AppLocalizationsTa extends AppLocalizations {
   String get paywallOutlineHeadline => 'இனி ஒரு வார்த்தையையும் தவறவிடாதீர்கள்.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/ஆண்டு',
+        'other': '/மாதம்',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/ஆண்டு',
+        'other': '/மாதம்',
+      },
+    );
+    return '$days நாட்கள் இலவசம், பின்னர் $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -14761,6 +14785,31 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'ஆதரவுக்கான விவரங்கள்';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count குறுகிய பதிவுகள் மறைக்கப்பட்டன',
+      one: '1 குறுகிய பதிவு மறைக்கப்பட்டது',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'காட்டவும்';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count குறுகிய பதிவுகளை மறைக்கவும்',
+      one: '1 குறுகிய பதிவை மறைக்கவும்',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get voiceProfileCardDismissed => 'அமைப்புகளில் எப்போது வேண்டுமானாலும் குரல் சுயவிவரத்தை அமைக்கலாம்.';
