@@ -415,7 +415,7 @@ void main() {
     late List<Widget> leadingItems;
     late List<String> leadingItemIds;
 
-    Future<void> pumpTranscript(WidgetTester tester, {bool settle = true}) async {
+    Future<void> pumpTranscript(WidgetTester tester, {bool settle = true, double height = 320}) async {
       await tester.pumpWidget(
         MaterialApp(
           localizationsDelegates: const [
@@ -427,7 +427,7 @@ void main() {
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: SizedBox(
-              height: 320,
+              height: height,
               child: TranscriptWidget(
                 key: const ValueKey('live-transcript-test-session'),
                 segments: segments,
@@ -489,6 +489,9 @@ void main() {
                   },
                 ))),
       ));
+      // pumpWidget renders exactly one frame: the newest row must already paint.
+      expect(find.text('large-999').hitTestable(), findsOneWidget);
+      expect(built.length, lessThan(40));
       await tester.pumpAndSettle();
       expect(built.length, lessThan(40));
       expect(built, contains(999));
@@ -497,17 +500,36 @@ void main() {
       debugPrint('TRANSCRIPT_OPEN row_builds=${built.length} history=1000');
     });
 
-    testWidgets('short live transcripts keep their chronological start at the top', (tester) async {
-      segments = [segmentFor('short', 0)];
-      await pumpTranscript(tester);
-      expect(tester.getTopLeft(find.byKey(const ValueKey('transcript_header'))).dy,
-          closeTo(tester.getTopLeft(find.byType(CustomScrollView)).dy, 0.1));
-      expect(controller.position.maxScrollExtent, 0);
-    });
+    for (final fixture in ['single segment', 'multiple segments', 'photos and segments']) {
+      testWidgets('short live $fixture paint at the top on the first frame', (tester) async {
+        segments = [
+          segmentFor('short-first', 0)..text = 'First short line',
+          if (fixture != 'single segment') segmentFor('short-last', 1)..text = 'Last short line',
+        ];
+        if (fixture == 'photos and segments') {
+          leadingItemIds = ['photo'];
+          leadingItems = const [SizedBox(key: ValueKey('short-photo'), height: 56)];
+        }
+        // Include both rows, the photo (when present), and the standard footer.
+        await pumpTranscript(tester, settle: false, height: 600);
+        expect(find.text('First short line', findRichText: true).hitTestable(), findsOneWidget);
+        if (segments.length > 1) {
+          expect(find.text('Last short line', findRichText: true).hitTestable(), findsOneWidget);
+        }
+        final viewport = tester.getRect(find.bySubtype<CustomScrollView>());
+        expect(tester.getTopLeft(find.byKey(const ValueKey('transcript_header'))).dy, closeTo(viewport.top, 0.1));
+        if (fixture == 'photos and segments') {
+          final photo = tester.getRect(find.byKey(const ValueKey('short-photo')));
+          expect(photo.top, greaterThanOrEqualTo(viewport.top));
+          expect(photo.bottom, lessThan(viewport.bottom));
+        }
+        expect(controller.position.maxScrollExtent, 0);
+      });
+    }
 
     testWidgets('a remount after appends preserves the reader and the scroll origin', (tester) async {
       await pumpTranscript(tester);
-      await tester.drag(find.byType(CustomScrollView), const Offset(0, 260));
+      await tester.drag(find.bySubtype<CustomScrollView>(), const Offset(0, 260));
       await tester.pumpAndSettle();
       segments = [...segments, segmentFor('after-open', 0)];
       contentVersion++;
@@ -562,7 +584,7 @@ void main() {
 
     testWidgets('a fresh transcript load starts at the latest segment', (tester) async {
       await pumpTranscript(tester);
-      await tester.drag(find.byType(CustomScrollView), const Offset(0, 260));
+      await tester.drag(find.bySubtype<CustomScrollView>(), const Offset(0, 260));
       await tester.pumpAndSettle();
 
       expect(scrollState.isAtBottom, isFalse);
@@ -579,7 +601,7 @@ void main() {
 
     testWidgets('the jump control animates to the latest segment and hides', (tester) async {
       await pumpTranscript(tester);
-      await tester.drag(find.byType(CustomScrollView), const Offset(0, 260));
+      await tester.drag(find.bySubtype<CustomScrollView>(), const Offset(0, 260));
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const ValueKey('transcript_jump_to_latest')));
@@ -592,7 +614,7 @@ void main() {
 
     testWidgets('manual scrolling up stays put while live transcript grows', (tester) async {
       await pumpTranscript(tester);
-      await tester.drag(find.byType(CustomScrollView), const Offset(0, 260));
+      await tester.drag(find.bySubtype<CustomScrollView>(), const Offset(0, 260));
       await tester.pumpAndSettle();
 
       final preservedOffset = controller.offset;
@@ -621,7 +643,7 @@ void main() {
 
     testWidgets('manual scrolling up stays put when live content arrives mid-gesture', (tester) async {
       await pumpTranscript(tester);
-      final gestureStart = tester.getCenter(find.byType(CustomScrollView));
+      final gestureStart = tester.getCenter(find.bySubtype<CustomScrollView>());
       final gesture = await tester.startGesture(gestureStart);
       for (var step = 0; step < 5; step++) {
         await gesture.moveBy(const Offset(0, 52));
@@ -680,7 +702,7 @@ void main() {
       // The reader starts dragging up slowly from the live edge. The first
       // pixels stay inside the at-bottom band where a lost gesture used to be
       // forgotten and re-pinned by the next live tick.
-      final gesture = await tester.startGesture(tester.getCenter(find.byType(CustomScrollView)));
+      final gesture = await tester.startGesture(tester.getCenter(find.bySubtype<CustomScrollView>()));
       for (var step = 0; step < 3; step++) {
         await gesture.moveBy(const Offset(0, 12));
         await tester.pump(const Duration(milliseconds: 40));
@@ -726,7 +748,7 @@ void main() {
 
     testWidgets('same-ID growth of the live segment holds an unfollowed reading position', (tester) async {
       await pumpTranscript(tester);
-      await tester.drag(find.byType(CustomScrollView), const Offset(0, 260));
+      await tester.drag(find.bySubtype<CustomScrollView>(), const Offset(0, 260));
       await tester.pumpAndSettle();
 
       final preservedOffset = controller.offset;
@@ -822,13 +844,13 @@ void main() {
 
     testWidgets('layout changes restore the same transcript anchor instead of a raw offset', (tester) async {
       await pumpTranscript(tester);
-      await tester.drag(find.byType(CustomScrollView), const Offset(0, 260));
+      await tester.drag(find.bySubtype<CustomScrollView>(), const Offset(0, 260));
       await tester.pumpAndSettle();
 
       final anchorId = scrollState.anchorSegmentId;
       expect(anchorId, isNotNull);
       final anchorFinder = find.byKey(ValueKey('transcript-segment-$anchorId'));
-      final anchorTop = tester.getTopLeft(anchorFinder).dy - tester.getTopLeft(find.byType(CustomScrollView)).dy;
+      final anchorTop = tester.getTopLeft(anchorFinder).dy - tester.getTopLeft(find.bySubtype<CustomScrollView>()).dy;
       expect(scrollState.anchorViewportOffset, closeTo(anchorTop, 5));
 
       layoutIdentity = 'photo-timeline';
@@ -838,7 +860,7 @@ void main() {
       await pumpTranscript(tester);
 
       expect(scrollState.anchorSegmentId, anchorId);
-      final restoredTop = tester.getTopLeft(anchorFinder).dy - tester.getTopLeft(find.byType(CustomScrollView)).dy;
+      final restoredTop = tester.getTopLeft(anchorFinder).dy - tester.getTopLeft(find.bySubtype<CustomScrollView>()).dy;
       // Sliver layout may round the restored edge by the four-point separator,
       // but it must keep the same segment at the same reading position.
       expect(restoredTop, closeTo(anchorTop, 5));
@@ -847,13 +869,13 @@ void main() {
 
     testWidgets('deleting the first segment preserves a later reading anchor', (tester) async {
       await pumpTranscript(tester);
-      await tester.drag(find.byType(CustomScrollView), const Offset(0, 260));
+      await tester.drag(find.bySubtype<CustomScrollView>(), const Offset(0, 260));
       await tester.pumpAndSettle();
 
       final anchorId = scrollState.anchorSegmentId;
       expect(anchorId, isNotNull);
       final anchorFinder = find.byKey(ValueKey('transcript-segment-$anchorId'));
-      final anchorTop = tester.getTopLeft(anchorFinder).dy - tester.getTopLeft(find.byType(CustomScrollView)).dy;
+      final anchorTop = tester.getTopLeft(anchorFinder).dy - tester.getTopLeft(find.bySubtype<CustomScrollView>()).dy;
       expect(scrollState.anchorViewportOffset, closeTo(anchorTop, 5));
 
       segments = segments.skip(1).toList();
@@ -861,7 +883,7 @@ void main() {
       await pumpTranscript(tester);
 
       expect(scrollState.anchorSegmentId, anchorId);
-      final restoredTop = tester.getTopLeft(anchorFinder).dy - tester.getTopLeft(find.byType(CustomScrollView)).dy;
+      final restoredTop = tester.getTopLeft(anchorFinder).dy - tester.getTopLeft(find.bySubtype<CustomScrollView>()).dy;
       // Sliver layout may round the restored edge by the four-point separator,
       // but it must keep the same segment at the same reading position.
       expect(restoredTop, closeTo(anchorTop, 5));
