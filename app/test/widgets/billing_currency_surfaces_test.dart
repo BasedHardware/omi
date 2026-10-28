@@ -389,48 +389,50 @@ void main() {
     });
   }
 
-  testWidgets('legacy JPY management keeps whole yen and the selected price ID', (tester) async {
-    final usage = _usage(jpy: true);
-    const monthly =
-        PaywallPrice(priceId: 'price_jpy_fixture_month', interval: 'month', amountMinor: 4800, currency: 'jpy');
-    const yearly =
-        PaywallPrice(priceId: 'price_jpy_fixture_year', interval: 'year', amountMinor: 43200, currency: 'jpy');
-    usage.debugSetAvailablePlans({
-      'plans': [_row(yearly), _row(monthly)]
+  for (final locale in [const Locale('en', 'US'), const Locale('en', 'CA')]) {
+    testWidgets('$locale legacy JPY management keeps whole yen and the selected price ID', (tester) async {
+      final usage = _usage(jpy: true);
+      const monthly =
+          PaywallPrice(priceId: 'price_jpy_fixture_month', interval: 'month', amountMinor: 4800, currency: 'jpy');
+      const yearly =
+          PaywallPrice(priceId: 'price_jpy_fixture_year', interval: 'year', amountMinor: 43200, currency: 'jpy');
+      usage.debugSetAvailablePlans({
+        'plans': [_row(yearly), _row(monthly)]
+      });
+      await _pump(tester, locale, usage, const _Plans(), size: const Size(430, 1200));
+      expect(find.textContaining('¥43,200'), findsWidgets);
+      expect(find.textContaining('¥4,800'), findsWidgets);
+      expect(find.textContaining('US\$'), findsNothing);
+      await _capture(tester, '${locale}_jpy_manage');
+      await _tap(tester, find.widgetWithText(PlanOptionCard, 'Omi Pro · Monthly'));
+      await tester.tap(find.byKey(const Key('plans_sheet_upgrade_button')));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.textContaining('¥4,800'), findsWidgets);
+      expect(usage.sessions, isEmpty, reason: 'existing subscription management must confirm before mutation');
     });
-    await _pump(tester, const Locale('en', 'CA'), usage, const _Plans(), size: const Size(430, 1200));
-    expect(find.textContaining('¥43,200'), findsWidgets);
-    expect(find.textContaining('¥4,800'), findsWidgets);
-    expect(find.textContaining('US\$'), findsNothing);
-    await _capture(tester, 'en_CA_jpy_manage');
-    await _tap(tester, find.widgetWithText(PlanOptionCard, 'Omi Pro · Monthly'));
-    await tester.tap(find.byKey(const Key('plans_sheet_upgrade_button')));
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(find.textContaining('¥4,800'), findsWidgets);
-    expect(usage.sessions, isEmpty, reason: 'existing subscription management must confirm before mutation');
-  });
 
-  testWidgets('V2 JPY current line formats raw catalog yen and ignores stale formatted text', (tester) async {
-    final json =
-        jsonDecode(File('test/fixtures/storefront_v2/legacy_neo.json').readAsStringSync()) as Map<String, dynamic>;
-    final current = json['current'] as Map<String, dynamic>;
-    current.addAll({
-      'amount_minor': 4800,
-      'currency': 'jpy',
-      'line': 'WRONG USD',
-      'line_template': "You're on Neo · {price}/mo · renews Nov 1"
+    testWidgets('$locale V2 JPY current line formats raw catalog yen and ignores stale formatted text', (tester) async {
+      final json =
+          jsonDecode(File('test/fixtures/storefront_v2/legacy_neo.json').readAsStringSync()) as Map<String, dynamic>;
+      final current = json['current'] as Map<String, dynamic>;
+      current.addAll({
+        'amount_minor': 4800,
+        'currency': 'jpy',
+        'line': 'WRONG USD',
+        'line_template': "You're on Neo · {price}/mo · renews Nov 1"
+      });
+      final data = PlanStorefront.fromJson(json);
+      await _pump(
+          tester,
+          locale,
+          _usage(jpy: true),
+          StorefrontPlansContent(
+              storefront: data, onRetry: () async {}, onSelect: (_, __) async {}, onManage: () async {}));
+      expect(find.textContaining('¥4,800'), findsOneWidget);
+      expect(find.textContaining('WRONG'), findsNothing);
+      await _capture(tester, '${locale}_jpy_v2_manage');
     });
-    final data = PlanStorefront.fromJson(json);
-    await _pump(
-        tester,
-        const Locale('en', 'CA'),
-        _usage(jpy: true),
-        StorefrontPlansContent(
-            storefront: data, onRetry: () async {}, onSelect: (_, __) async {}, onManage: () async {}));
-    expect(find.textContaining('¥4,800'), findsOneWidget);
-    expect(find.textContaining('WRONG'), findsNothing);
-    await _capture(tester, 'en_CA_jpy_v2_manage');
-  });
+  }
 
   test('V2 price templates use raw minor amounts for offers and confirmations', () {
     final price = StorefrontPrice.fromJson({

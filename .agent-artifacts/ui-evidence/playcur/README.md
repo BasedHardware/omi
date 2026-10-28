@@ -25,7 +25,7 @@ the hosted production URL and Stripe cart require separate device acceptance.
 | Plans | [PNG](016-mobile-android-en-us-plans.png) | [PNG](004-mobile-android-en-ca-plans.png) |
 | Promo entry | [PNG](017-mobile-android-en-us-promo.png) | [PNG](005-mobile-android-en-ca-promo.png) |
 | Retention | [PNG](018-mobile-android-en-us-retention.png) | [PNG](006-mobile-android-en-ca-retention.png) |
-| JPY manage | — | [v1](001-mobile-android-en-ca-jpy-manage.png), [v2](002-mobile-android-en-ca-jpy-v2-manage.png) |
+| JPY manage | [v1](054-mobile-android-en-us-jpy-manage.png), [v2](055-mobile-android-en-us-jpy-v2-manage.png) | [v1](001-mobile-android-en-ca-jpy-manage.png), [v2](002-mobile-android-en-ca-jpy-v2-manage.png) |
 | V2 monthly / yearly | [Monthly](029-mobile-android-en-us-v2-plans-month.png), [Yearly](030-mobile-android-en-us-v2-plans-year.png) | [Monthly](027-mobile-android-en-ca-v2-plans-month.png), [Yearly](028-mobile-android-en-ca-v2-plans-year.png) |
 
 ## Native Android verification

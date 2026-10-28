@@ -371,6 +371,20 @@
       "description": "Android API 36 dev fixture; en_US Plan and Usage, uncapped USD chat budget; agent-flutter capture, no account/session",
       "captured_by": "agent",
       "source": "visual-audit"
+    },
+    {
+      "file": "054-mobile-android-en-us-jpy-manage.png",
+      "platform": "mobile-android",
+      "description": "en_US jpy_manage; rendered production widget with hermetic legacy JPY data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "055-mobile-android-en-us-jpy-v2-manage.png",
+      "platform": "mobile-android",
+      "description": "en_US jpy_v2_manage; rendered production widget with hermetic legacy JPY data",
+      "captured_by": "agent",
+      "source": "visual-audit"
     }
   ]
 }
