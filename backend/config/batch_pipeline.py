@@ -162,6 +162,10 @@ def shared_live_enabled() -> bool:
 SCHEDULER_SHARDS = 64
 
 
+def shard_spread_enabled() -> bool:
+    return os.getenv('BATCH_SHARD_SPREAD_ENABLED', 'true').strip().lower() != 'false'
+
+
 def scheduler_control_key(hashed_owner: str) -> str:
     """Pure shard identity shared by scheduling and privacy cleanup."""
     return f'scheduler_{int(hashed_owner[:8], 16) % SCHEDULER_SHARDS:02d}'

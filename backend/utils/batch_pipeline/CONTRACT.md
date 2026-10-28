@@ -43,6 +43,19 @@ record. Live transcription is a preview; the batch result is the record.
   exhaustion. `BATCH_PIPELINE_CONTENTION_RETRY_ENABLED=false` restores the old
   transaction behavior. Other `InvalidArgument` and application errors are not
   retried or quarantined as poison without unit-specific evidence.
+  Pullers take a token-fenced, 30s `pull_claims/scheduler_NN` lease with a
+  single compare-and-swap (create or update-time precondition), without
+  a claim transaction/retry loop, before
+  touching control/queue/job metadata. The pull transaction verifies that
+  token and releases it atomically; an error leaves a bounded claim for
+  expiry/takeover. Followers only read hints or the claim, never write control.
+  Equal-service candidates use worker affinity; service remains the primary
+  fairness key, and busy higher-priority work prevents backfill bypass.
+  `BATCH_SHARD_SPREAD_ENABLED=false` restores legacy pulls (Helm:
+  `worker.shardSpreadEnabled=false`). Retry logs include only static
+  `operation=batch_claim|batch_pull shard=scheduler_NN`, never worker/user IDs.
+  The existing Sync Cloud Tasks batch emulator gate runs the three-puller
+  concurrency regression after its process-level batch scenarios.
 - **Receipts**: durable upload status via `intake.py:durable_status`
   (`failed` + `failed_segments` + `batch_worker_quarantined` only for terminal
   quarantine); VAD/silence evidence in the result payload (`contracts.py:projection_speech_spans`);
