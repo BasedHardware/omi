@@ -931,7 +931,12 @@ class AndroidTests(unittest.TestCase):
         production = {
             "track": "production",
             "releases": [
-                {"name": "1.0.577 (1500)", "versionCodes": ["1500"], "status": "completed"},
+                {
+                    "name": "1.0.577 (1500)",
+                    "versionCodes": ["1500"],
+                    "status": "completed",
+                    "releaseNotes": [{"language": "en-US", "text": "Base release notes"}],
+                },
                 staged,
             ],
         }
@@ -957,17 +962,77 @@ class AndroidTests(unittest.TestCase):
         )
         body = client.edits().tracks().update.call_args.kwargs["body"]
         self.assertEqual(body["track"], "production")
-        self.assertEqual(len(body["releases"]), 1)
-        superseding = body["releases"][0]
+        # tracks.update replaces the whole releases list: the completed base
+        # release must ride along unchanged or the ~99% of users on it lose
+        # their release — exactly one inProgress candidate remains.
+        self.assertEqual(len(body["releases"]), 2)
+        superseding, base = body["releases"]
+        self.assertEqual(
+            base,
+            {
+                "name": "1.0.577 (1500)",
+                "versionCodes": ["1500"],
+                "status": "completed",
+                "releaseNotes": [{"language": "en-US", "text": "Base release notes"}],
+            },
+        )
         self.assertEqual(superseding["status"], "inProgress")
         self.assertEqual(superseding["versionCodes"], ["1527"])
         self.assertRegex(superseding["name"], r"^1\.0\.579 \(gate \d{4}-\d{2}-\d{2}-\d{4}\)$")
         # The candidate ships its own What's New; the stale held release's text
         # must not survive the replacement.
         self.assertEqual(superseding["releaseNotes"], [{"language": "en-US", "text": "Currency fix"}])
+        self.assertEqual([r for r in body["releases"] if r["status"] == "inProgress"], [superseding])
         client.edits().commit.assert_called_once_with(
             packageName="com.friend.ios", editId="edit", changesNotSentForReview=True
         )
+
+    def test_held_mode_supersede_retains_a_multi_code_completed_base(self):
+        # A multi-APK base release keeps every version code through the
+        # supersede; dropping a variant would strand its devices.
+        client = Mock()
+        staged = {
+            "name": "1.0.578 (gate 2026-10-27-0900)",
+            "versionCodes": ["1522"],
+            "status": "inProgress",
+            "userFraction": 0.01,
+        }
+        base = {
+            "name": "1.0.577 (1500)",
+            "versionCodes": ["1500", "1499"],
+            "status": "completed",
+            "releaseNotes": [{"language": "en-US", "text": "Base release notes"}],
+            "inAppUpdatePriority": 3,
+        }
+        production = {"track": "production", "releases": [base, staged]}
+        internal = {
+            "track": "internal",
+            "releases": [{"name": "1.0.579 (1527)", "versionCodes": ["1527"], "status": "completed"}],
+        }
+        tracks = {"internal": internal, "alpha": {"track": "alpha", "releases": []}, "production": production}
+        with tempfile.TemporaryDirectory() as tmp:
+            release = Path(tmp) / "1.0.579.json"
+            release.write_text(json.dumps({"version": "1.0.579", "date": "2026-10-28", "changes": ["Currency fix"]}))
+            with patch.object(promote, "CHANGES_NOT_SENT_FOR_REVIEW", True), patch.object(
+                promote, "play_edit", return_value=(client, "edit")
+            ), patch.object(promote, "play_track", side_effect=lambda c, e, name: tracks[name]), patch.object(
+                train, "ensure_release_notes", return_value=release
+            ), patch.object(promote, "require_notes", return_value="Currency fix"), patch.dict(
+                train.os.environ, {"TRAIN_PIN_ANDROID": "1.0.579/1527"}
+            ):
+                summary = train.run_android(dry_run=False, release_date="2026-10-28")
+        self.assertEqual(
+            summary,
+            "android=staged-superseded 1.0.578 1522 -> 1.0.579 1527 @1% (held; send for review in Console)",
+        )
+        body = client.edits().tracks().update.call_args.kwargs["body"]
+        self.assertEqual(len(body["releases"]), 2)
+        superseding, base_in_put = body["releases"]
+        self.assertEqual(base_in_put, base)
+        self.assertEqual(base_in_put["versionCodes"], ["1500", "1499"])
+        self.assertEqual(superseding["status"], "inProgress")
+        self.assertEqual(superseding["versionCodes"], ["1527"])
+        self.assertEqual(superseding["userFraction"], 0.01)
 
     def test_held_mode_supersede_keeps_the_fraction_exactly(self):
         # A mid-ladder held fraction (10%) is preserved as 10% — the supersede

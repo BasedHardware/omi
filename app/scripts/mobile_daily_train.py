@@ -1026,8 +1026,9 @@ def plan_held_supersede(
     could never reach it — discarding the pending change in Play Console reverts
     the track and the train parks again). When the staged release is
     train-written and the operator gate's pin names a strictly newer build, one
-    held commit replaces it at the SAME userFraction: exposure never rises, and
-    the operator still presses Send for review in Play Console.
+    held commit replaces it at the SAME userFraction — the completed base
+    release rides along unchanged, so exposure never rises — and the operator
+    still presses Send for review in Play Console.
 
     The Play API cannot tell a held-pending commit from a live staged rollout —
     both read `inProgress` at the same fraction — so the gate receipt in the
@@ -1196,13 +1197,15 @@ def run_android(*, dry_run: bool, release_date: str, advance_only: bool = False)
                         candidate.version_code,
                         source_track=candidate.track,
                     )
-                    # The same single-inProgress-release PUT every ladder hop
-                    # uses: Play keeps the completed base release serving the
-                    # rest of production while the held staged entry is
-                    # replaced by the candidate. No base_release — the old
-                    # staged release's metadata and What's-New belong to the
-                    # old version; the candidate ships its own collected notes
-                    # and a fresh gate receipt.
+                    # tracks.update replaces the whole releases list, so every
+                    # other production release rides along unchanged — above all
+                    # the completed base release the users outside the staged
+                    # fraction keep serving from; exposure never changes. No
+                    # base_release for the written release: the old staged
+                    # release's metadata and What's-New belong to the old
+                    # version; the candidate ships its own collected notes and
+                    # a fresh gate receipt.
+                    retained = [dict(release) for release in _releases(production, "production") if release is not staged]
                     promote.submit_android(
                         client,
                         edit_id,
@@ -1212,6 +1215,7 @@ def run_android(*, dry_run: bool, release_date: str, advance_only: bool = False)
                         status="inProgress",
                         user_fraction=current,
                         release_name=_staged_name_with_receipt(candidate.version),
+                        retained_releases=retained,
                     )
                 except promote.PromotionError as exc:
                     raise TrainError(str(exc)) from exc

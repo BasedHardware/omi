@@ -113,9 +113,10 @@ on, the consequences below apply:
   Play Console. One parked shape got an escape (2026-10-29): when the staged
   release is itself a train-written held commit and the gate's pin names a
   strictly newer build (higher version AND higher version code), the train
-  supersedes it — one held commit that replaces the staged release with the
-  pinned candidate at the SAME userFraction (exposure never rises, the
-  completed base release stays, a fresh gate receipt is stamped) and the
+  supersedes it — one held commit whose PUT carries the completed base
+  release unchanged (Play's `tracks.update` replaces the whole releases list)
+  plus exactly one `inProgress` release with the pinned candidate at the SAME
+  userFraction (exposure never rises, a fresh gate receipt is stamped) and the
   operator still presses Send for review (summary
   `android=staged-superseded <old> -> <new> @<fraction> (held; send for
   review in Console)`). The Play API cannot distinguish a held-pending
