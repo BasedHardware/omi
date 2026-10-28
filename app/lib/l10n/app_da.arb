@@ -4512,5 +4512,15 @@
     "onTheWayDetailsForSupport": "Detaljer til support",
     "homeNoiseFoldHidden": "{count, plural, =1{1 kort klip skjult} other{{count} korte klip skjult}}",
     "homeNoiseFoldShow": "Vis",
-    "homeNoiseFoldHide": "{count, plural, =1{Skjul 1 kort klip} other{Skjul {count} korte klip}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Skjul 1 kort klip} other{Skjul {count} korte klip}}",
+    "singlePress": "Single Press",
+    "singlePressAction": "Single Press Action",
+    "triplePress": "Triple Press",
+    "triplePressAction": "Triple Press Action",
+    "longPress": "Long Press",
+    "turnOnOff": "Turn On/Off",
+    "askQuestion": "Ask Question",
+    "longPressPowerWarning": "Long press powers the device on/off and cannot be customized.",
+    "triplePressDevKitOnly": "DevKit Only",
+    "triplePressDevKitWarning": "Triple press requires compatible DevKit firmware."
 }

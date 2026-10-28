@@ -4470,5 +4470,15 @@
     "onTheWayDetailsForSupport": "サポート用の詳細",
     "homeNoiseFoldHidden": "{count, plural, =1{短いクリップ1件を非表示にしました} other{{count}件の短いクリップを非表示にしました}}",
     "homeNoiseFoldShow": "表示",
-    "homeNoiseFoldHide": "{count, plural, =1{短いクリップ1件を非表示にする} other{{count}件の短いクリップを非表示にする}}"
+    "homeNoiseFoldHide": "{count, plural, =1{短いクリップ1件を非表示にする} other{{count}件の短いクリップを非表示にする}}",
+    "singlePress": "Single Press",
+    "singlePressAction": "Single Press Action",
+    "triplePress": "Triple Press",
+    "triplePressAction": "Triple Press Action",
+    "longPress": "Long Press",
+    "turnOnOff": "Turn On/Off",
+    "askQuestion": "Ask Question",
+    "longPressPowerWarning": "Long press powers the device on/off and cannot be customized.",
+    "triplePressDevKitOnly": "DevKit Only",
+    "triplePressDevKitWarning": "Triple press requires compatible DevKit firmware."
 }

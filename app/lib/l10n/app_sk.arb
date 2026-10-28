@@ -4470,5 +4470,15 @@
     "onTheWayDetailsForSupport": "Detaily pre podporu",
     "homeNoiseFoldHidden": "{count, plural, =1{1 skrytá krátka nahrávka} other{Skrytých krátkych nahrávok: {count}}}",
     "homeNoiseFoldShow": "Zobraziť",
-    "homeNoiseFoldHide": "{count, plural, =1{Skryť 1 krátku nahrávku} other{Skryť {count} krátkych nahrávok}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Skryť 1 krátku nahrávku} other{Skryť {count} krátkych nahrávok}}",
+    "singlePress": "Single Press",
+    "singlePressAction": "Single Press Action",
+    "triplePress": "Triple Press",
+    "triplePressAction": "Triple Press Action",
+    "longPress": "Long Press",
+    "turnOnOff": "Turn On/Off",
+    "askQuestion": "Ask Question",
+    "longPressPowerWarning": "Long press powers the device on/off and cannot be customized.",
+    "triplePressDevKitOnly": "DevKit Only",
+    "triplePressDevKitWarning": "Triple press requires compatible DevKit firmware."
 }

@@ -4470,5 +4470,15 @@
     "onTheWayDetailsForSupport": "Λεπτομέρειες για την υποστήριξη",
     "homeNoiseFoldHidden": "{count, plural, =1{Κρύφτηκε 1 σύντομο απόσπασμα} other{Κρύφτηκαν {count} σύντομα αποσπάσματα}}",
     "homeNoiseFoldShow": "Εμφάνιση",
-    "homeNoiseFoldHide": "{count, plural, =1{Απόκρυψη 1 σύντομου αποσπάσματος} other{Απόκρυψη {count} σύντομων αποσπασμάτων}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Απόκρυψη 1 σύντομου αποσπάσματος} other{Απόκρυψη {count} σύντομων αποσπασμάτων}}",
+    "singlePress": "Single Press",
+    "singlePressAction": "Single Press Action",
+    "triplePress": "Triple Press",
+    "triplePressAction": "Triple Press Action",
+    "longPress": "Long Press",
+    "turnOnOff": "Turn On/Off",
+    "askQuestion": "Ask Question",
+    "longPressPowerWarning": "Long press powers the device on/off and cannot be customized.",
+    "triplePressDevKitOnly": "DevKit Only",
+    "triplePressDevKitWarning": "Triple press requires compatible DevKit firmware."
 }

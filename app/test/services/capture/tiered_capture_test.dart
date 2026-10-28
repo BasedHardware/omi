@@ -181,6 +181,9 @@ void main() {
           coordinator.dispose();
         }
         await resume;
+        if (control == 'doubleTap') {
+          await world.elapse(const Duration(milliseconds: 600));
+        }
         await world.settle();
         await world.controller.pendingSourceSwitch;
         expect(world.controller.silencePaused, false);
