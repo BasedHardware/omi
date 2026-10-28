@@ -26,12 +26,6 @@ def jobs(text):
 PR_SCHEMA_WRITERS = {"gcp_firestore_indexes.yml"}
 
 INTENTIONAL_BUDGET_CHANGES = {
-    # Dart Analyze & Tests: two attempts (run 40683994921, attempts 1 and 2)
-    # completed all 7,920 Flutter tests successfully, but the 30-minute job
-    # ceiling cancelled the enclosing job during post-action cleanup. The
-    # complete walls were 30:03 and 30:06; 35 minutes leaves bounded cleanup
-    # headroom without changing the historical p50 budget of 17 minutes.
-    ("mobile-app-checks.yml", "analyze-and-test", "timeout-minutes"): "35",
     # iOS Compile Check: the 40-min ceiling sat below the measured cold path
     # (39:25 real steps + ~1 min post-job Post Setup Flutter cache save, run
     # 39634604539 attempt 1), cancelling a healthy cold job after every real
