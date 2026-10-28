@@ -9,7 +9,7 @@ import hashlib
 import logging
 from dataclasses import replace
 from abc import ABC, abstractmethod
-from typing import Any, Callable, ContextManager
+from typing import Any, Awaitable, Callable, ContextManager
 
 from config import live_stt_state
 from config.live_stt_resilience import (
@@ -83,6 +83,13 @@ COST_CACHE_CAP = 4096
 CAS = """
 local current = redis.call('GET', KEYS[1])
 if (current or '') ~= ARGV[1] then return 0 end
+local mode_keys = tonumber(ARGV[8]) or #KEYS
+if ARGV[7] then
+    local dependencies = cjson.decode(ARGV[7])
+    for index, expected in ipairs(dependencies) do
+        if (redis.call('GET', KEYS[mode_keys + index]) or '') ~= expected then return 0 end
+    end
+end
 local encoded = ARGV[2]
 local ttl = tonumber(ARGV[3])
 local result = 1
@@ -90,7 +97,7 @@ if ARGV[4] == 'hold' then
     local guard = false
     local guard_indices = cjson.decode(ARGV[6])
     local full_share = false
-    for index = 2, #KEYS, 2 do
+    for index = 2, mode_keys, 2 do
         local global = redis.call('GET', KEYS[index])
         local language = redis.call('GET', KEYS[index + 1])
         local stage = math.min(global and cjson.decode(global).stage or 100,
@@ -108,7 +115,7 @@ if ARGV[4] == 'hold' then
 end
 redis.call('SET', KEYS[1], encoded)
 if ttl > 0 then redis.call('EXPIRE', KEYS[1], ttl) end
-if #KEYS == 2 then
+if tonumber(ARGV[4]) then
     local clock = redis.call('TIME')
     local now = tonumber(clock[1]) + tonumber(clock[2]) / 1000000
     local seconds = tonumber(ARGV[4])
@@ -388,26 +395,31 @@ class CostHealthMixin(ABC):
     def _failover_surge_open(self, target: str, now: float) -> bool:
         return failover_surge_censor_enabled() and now < self._cost_surge_until.get(target, 0.0)
 
-    async def _fresh_failover_surge(self, target: str, now: float, identity: str) -> bool:
-        """A failed vote must see source benches committed before its Redis time.
+    async def _fresh_failover_surge(self, target: str, now: float, identity: str) -> tuple[bool, dict[str, str]]:
+        """Probe the source deadlines that the target CAS must fence.
 
-        Snapshot cadence is not a censor boundary: a different pod can bench
-        a source and overload this target before this pod's next refresh.
+        Snapshot cadence is not a censor boundary. The CAS validates these
+        exact values, and every rejected CAS retry probes again.
         """
         if not failover_surge_censor_enabled():
-            return False
+            return False, {}
         sources = [entry for entry in registry() if entry.id != target]
+        dependencies = {}
         if sources:
+            keys = [live_stt_state.cost_surge_key(entry) for entry in sources]
             try:
-                values = await self._redis().mget([live_stt_state.cost_surge_key(entry) for entry in sources])
+                values = await self._redis().mget(keys)
             except Exception as exc:
                 raise _RedisCallFailed('Redis surge MGET failed') from exc
             if self._check_identity() != identity:
                 raise _IdentityChanged('live STT state identity changed')
+            dependencies = {
+                key: raw.decode() if isinstance(raw, bytes) else raw or '' for key, raw in zip(keys, values)
+            }
             for source, raw in zip(sources, values):
                 if raw:
                     self._open_failover_surge(source.id, float(raw))
-        return self._failover_surge_open(target, now)
+        return self._failover_surge_open(target, now), dependencies
 
     def _sole_primary_blocked(self, target: str, stages: dict[str, int]) -> bool:
         """Held target may not become the only stage-100 share (2026-10-28)."""
@@ -672,6 +684,7 @@ class CostHealthMixin(ABC):
         on_identity_changed: Callable[[str], None] | None = None,
         hold_update: Callable[[GateState], GateState] | None = None,
         promotion_targets: tuple[str, ...] | None = None,
+        surge_probe: Callable[[], Awaitable[dict[str, str]]] | None = None,
     ) -> GateState:
         identity = self._check_identity()
         if expected_identity is not None and identity != expected_identity:
@@ -681,6 +694,7 @@ class CostHealthMixin(ABC):
             raise RuntimeError('cost state target not in registry')
         redis_key = live_stt_state.cost_key(target, key[1])
         for _ in range(5):
+            dependencies = await surge_probe() if surge_probe is not None else {}
             try:
                 raw = await self._redis().get(redis_key)
             except Exception as exc:
@@ -736,6 +750,12 @@ class CostHealthMixin(ABC):
                         held = hold_update(old)
                         keys += [live_stt_state.cost_key(entry, lang) for entry in others for lang in ('all', key[1])]
                         extra = ['hold', json.dumps(held.encode(), separators=(',', ':')), json.dumps(guard_indices)]
+                mode_keys = len(keys)
+                keys.extend(dependencies)
+                # Reserve the three mode arguments even for ordinary votes.
+                # The CAS validates every source deadline used by the probe;
+                # a bench between MGET and CAS retries with a fresh probe.
+                extra = [*extra, *([''] * (3 - len(extra))), json.dumps(list(dependencies.values())), mode_keys]
                 committed = await self._redis().eval(
                     CAS,
                     len(keys),
@@ -815,7 +835,13 @@ class CostHealthMixin(ABC):
             if expected_identity is not None and identity != expected_identity:
                 raise _IdentityChanged('live STT state identity changed')
             now = await self._server_now(identity)
-            surge = failed and await self._fresh_failover_surge(target, now, identity)
+            surge = False
+
+            async def probe() -> dict[str, str]:
+                nonlocal surge
+                surge, dependencies = await self._fresh_failover_surge(target, now, identity)
+                return dependencies
+
             entry = self._cost_target(target)
             guarded = sole_primary_hold_enabled() and entry is not None and entry.family == SOLE_PRIMARY_FAMILY
             for lang in ('all', language):
@@ -863,6 +889,7 @@ class CostHealthMixin(ABC):
                     on_identity_changed=record_drop,
                     hold_update=(lambda state: update(state, hold=True)) if guarded else None,
                     promotion_targets=promotion_targets,
+                    surge_probe=probe if failed else None,
                 )
                 if write_committed and write_dropped:
                     return

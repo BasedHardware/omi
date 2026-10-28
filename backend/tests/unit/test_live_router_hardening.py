@@ -85,25 +85,31 @@ class MemoryRedis:
         expected, new, _ttl = args[_numkeys : _numkeys + 3]
         if self.data.get(key, '') != expected:
             return 0
+        mode = args[_numkeys + 3] if len(args) > _numkeys + 3 else ''
+        mode_keys = int(args[_numkeys + 7]) if len(args) > _numkeys + 7 else _numkeys
+        if len(args) > _numkeys + 7:
+            for index, value in enumerate(json.loads(args[_numkeys + 6])):
+                actual = self.data.get(args[mode_keys + index], '')
+                if (actual.decode() if isinstance(actual, bytes) else actual) != value:
+                    return 0
         result = 1
-        if _numkeys > 2:
-            mode, held, guard_indices = args[_numkeys + 3 :]
-            assert mode == 'hold'
+        if mode == 'hold':
+            held, guard_indices = args[_numkeys + 4 : _numkeys + 6]
             stages = {
                 index
                 + 1: min(
                     json.loads(self.data.get(args[index], '{"stage":100}'))['stage'],
                     json.loads(self.data.get(args[index + 1], '{"stage":100}'))['stage'],
                 )
-                for index in range(1, _numkeys, 2)
+                for index in range(1, mode_keys, 2)
             }
             if any(stages[index] >= 5 for index in json.loads(guard_indices)) and all(
                 stage < 100 for stage in stages.values()
             ):
                 new, result = held, 2
         self.data[key] = new
-        if _numkeys == 2:
-            self.data[args[1]] = str(self.clock() + int(args[_numkeys + 3]))
+        if str(mode).isdigit():
+            self.data[args[1]] = str(self.clock() + int(mode))
         return result
 
     @staticmethod

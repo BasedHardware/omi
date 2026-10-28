@@ -168,6 +168,77 @@ async def test_failed_votes_see_a_source_bench_before_the_next_snapshot():
     assert json.loads(first.pod._redis().data[live_stt_state.cost_key(SONIOX, 'all')])['stage'] == 100
 
 
+@pytest.mark.asyncio
+async def test_source_bench_between_surge_read_and_cas_retries_with_censor():
+    clock = [10_000.0]
+    source_key = live_stt_state.cost_key(PARAKEET, 'all')
+    source_surge = live_stt_state.cost_surge_key(PARAKEET)
+    target_key = live_stt_state.cost_key(SONIOX, 'all')
+
+    class BenchRaceRedis(MemoryRedis):
+        raced = False
+
+        async def eval(self, script, numkeys, *args):
+            if not self.raced and args[0] == target_key:
+                self.raced = True
+                await super().eval(
+                    CAS,
+                    2,
+                    source_key,
+                    source_surge,
+                    self.data.get(source_key, ''),
+                    json.dumps(GateState(stage=0, generation=1).encode()),
+                    0,
+                    5400,
+                )
+            return await super().eval(script, numkeys, *args)
+
+    pod = _Pod(lambda: clock[0])
+    redis = BenchRaceRedis(clock=lambda: clock[0])
+    pod.pod._redis = lambda: redis
+    state = GateState(
+        n=1000, failures=7, evidence=(0.0, 0.0, 9.0), recent_failures=tuple(f'{i:016x}' for i in range(7))
+    )
+    _seed(redis, SONIOX, state)
+    await pod.refresh()
+    await pod.vote(SONIOX.id, 'eighth-failure', True)
+    assert redis.raced
+    for lang in ('all', 'en'):
+        saved = GateState.decode(json.loads(redis.data[live_stt_state.cost_key(SONIOX, lang)]))
+        assert saved.stage == 100 and saved.n == 1001 and saved.failures == 8
+        assert saved.recent_failures[-1].startswith('!')
+    assert live_stt_state.cost_surge_key(SONIOX) not in redis.data  # no transient target bench committed
+
+
+@pytest.mark.asyncio
+async def test_real_lua_cas_rejects_changed_source_deadline_without_side_effects():
+    async with fakeredis.aioredis.FakeRedis(decode_responses=True) as redis:
+        key, source_surge = live_stt_state.cost_key(SONIOX, 'all'), live_stt_state.cost_surge_key(PARAKEET)
+        old = GateState(
+            n=1000, failures=7, evidence=(0.0, 0.0, 9.0), recent_failures=tuple(f'{i:016x}' for i in range(7))
+        )
+        plain = transition(old, True, 1000, witness='a' * 16)
+        censored = transition(old, True, 1000, witness='a' * 16, failover_surge=True)
+        assert plain.stage == 0 and censored.stage == 100
+        raw = json.dumps(old.encode())
+        await redis.set(key, raw)
+        await redis.set(source_surge, '15400')  # committed after a probe observed absence
+        assert (
+            await redis.eval(
+                CAS, 2, key, source_surge, raw, json.dumps(plain.encode()), 0, '', '', '', json.dumps(['']), 1
+            )
+            == 0
+        )
+        assert await redis.get(key) == raw
+        assert (
+            await redis.eval(
+                CAS, 2, key, source_surge, raw, json.dumps(censored.encode()), 900, '', '', '', json.dumps(['15400']), 1
+            )
+            == 1
+        )
+        assert GateState.decode(json.loads(await redis.get(key))).stage == 100
+
+
 @pytest.mark.parametrize(
     'language,exclude_by',
     [('ar', 'capability'), ('en', 'ramp'), ('en', 'capacity'), ('en', 'cohort'), ('en', 'account')],

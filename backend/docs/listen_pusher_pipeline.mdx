@@ -7631,6 +7631,9 @@ A cost-gate bench atomically records a 90-minute source deadline in a separate
 identity-scoped Redis key. Snapshot refresh shares it with cold pods even after
 the source begins recovery. Failed shared writes also read persisted deadlines
 before transitioning, so a stale snapshot cannot miss a new bench.
+The same target-state CAS compares every source deadline used for that vote;
+a changed deadline rejects the write without side effects and re-probes on
+each bounded retry. A source bench cannot slip between the read and commit.
 During that window, failures on other targets keep
 their denominator, failure rate, CUSUM and sustained breadth, but are excluded
 from the eight-failure burst count. A fixed-width `!` marker in recent failure
