@@ -153,6 +153,7 @@ def _protected_from_stored_media(conversation: Any) -> bool:
     """
     if (
         value(conversation, 'sync_relevance_user_kept')
+        or value(conversation, 'has_photos')
         or value(conversation, 'photos')
         or value(conversation, 'user_title')
     ):

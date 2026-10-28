@@ -83,7 +83,12 @@ def classify_for_processing(uid: str, conversation: Any, *, user_kept: bool = Fa
         # A previous classification is not proof about a later transcript revision.
         # In particular, missing evidence on restore must not retain an exclusion.
         conversation.content_kind = None
-    if user_kept or value(conversation, 'photos') or value(conversation, 'user_title'):
+    if (
+        user_kept
+        or value(conversation, 'has_photos')
+        or value(conversation, 'photos')
+        or value(conversation, 'user_title')
+    ):
         if serving_for(FLAG, uid):
             conversation.content_kind = 'conversation'
         observe('classification', 'agree')
@@ -119,7 +124,12 @@ def classify_for_processing(uid: str, conversation: Any, *, user_kept: bool = Fa
             evidence=evidence,
             screen_rows=screen_rows,
             boundaries=boundaries,
-            protected=bool(user_kept or value(conversation, 'photos') or value(conversation, 'user_title')),
+            protected=bool(
+                user_kept
+                or value(conversation, 'has_photos')
+                or value(conversation, 'photos')
+                or value(conversation, 'user_title')
+            ),
         )
     except Exception:
         observe('classification', 'error')

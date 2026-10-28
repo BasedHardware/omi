@@ -469,6 +469,18 @@ def test_curation_restores_consumer_eligibility(monkeypatch):
     assert conversation.content_kind == 'conversation'
 
 
+@pytest.mark.parametrize('mode', ['shadow', 'serve'])
+def test_photo_marker_protects_without_loading_photo_contents(monkeypatch, mode):
+    conversation = mock_inputs(monkeypatch)
+    conversation.has_photos = True
+    conversation.content_kind = 'media'
+    monkeypatch.setenv(FLAG, mode)
+    monkeypatch.setenv(FLAG + '_SHADOW_PERCENT', '100')
+    monkeypatch.setattr(adapter, '_speaker_evidence', lambda *_: pytest.fail('photo protection read evidence'))
+    assert adapter.minimum_for_processing('synthetic-owner', conversation) is None
+    assert conversation.content_kind == ('conversation' if mode == 'serve' else 'media')
+
+
 def test_failed_inputs_abstain_without_logging_payload(monkeypatch, caplog):
     conversation = mock_inputs(monkeypatch)
 

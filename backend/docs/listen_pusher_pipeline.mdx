@@ -7475,11 +7475,14 @@ when `SPEAKER_EVIDENCE_MODE` is off. Automatic sources read at most four
 conversation documents, reusing each document within the admission call;
 explicit user assertions retain their separate authority. The read bound counts
 distinct readable source documents, so repeated evidence for one source reads
-it once. Stored keep/restore markers, photos and user titles outrank an older
+it once. Stored keep/restore and `has_photos` markers, inline photos and user
+titles outrank an older
 media label at every derived gate. Current manual owner anchors use P2's scoped
 roles and the existing owner-duration floor; ambiguous/unscoped manual owner
 anchors abstain from media exclusion without granting owner attribution. These
 read-time protections never rewrite the stored classification.
+The photo marker protects without fetching the photos subcollection; both the
+classification adapter and required-memory read path honor it.
 Media admission does
 not confer owner attribution: the independent speaker policy still consumes
 P2's shared `owner_attribution` role projection when serving. Outside serving,

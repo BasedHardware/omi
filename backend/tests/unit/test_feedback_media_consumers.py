@@ -159,6 +159,27 @@ def test_current_user_authority_overrides_stale_media_for_every_consumer(monkeyp
     assert len(reads) == 1 and row == before
 
 
+@pytest.mark.parametrize('kind', ['media', 'noise'])
+@pytest.mark.parametrize('speaker_mode', ['off', 'serve'])
+def test_photo_marker_survives_real_prepare_read_without_fetching_subcollection(monkeypatch, kind, speaker_mode):
+    monkeypatch.setenv(FLAG, 'serve')
+    monkeypatch.setenv('SPEAKER_EVIDENCE_MODE', speaker_mode)
+    row = source(kind)
+    row.update(has_photos=True, data_protection_level='standard')
+    before = deepcopy(row)
+    prepare = conversations.prepare_conversation_for_read
+    client, reads = client_for(monkeypatch, {'source': row})
+    monkeypatch.setattr(conversations, 'prepare_conversation_for_read', prepare)
+    # Use the real undecorated production read boundary: photo contents remain
+    # in their subcollection. This client cannot perform collection queries.
+    prepared = prepare(row, UID, firestore_client=client)
+    assert prepared['has_photos'] is True and not prepared.get('photos')
+    for consumer in ('memories', 'daily_summary', 'recap', 'action_items'):
+        assert not media_consumers.is_excluded(UID, prepared, consumer=consumer)
+    assert admission.source_revisions(UID, item(), db_client=client) == {f'users/{UID}/conversations/source': NOW}
+    assert len(reads) == 1 and row == before
+
+
 def test_manual_media_protection_keeps_the_existing_scoped_duration_floor(monkeypatch):
     monkeypatch.setenv(FLAG, 'serve')
     row = source('media')
