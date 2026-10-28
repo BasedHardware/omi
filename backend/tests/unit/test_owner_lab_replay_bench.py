@@ -55,6 +55,14 @@ def test_append_row_creates_owner_only_results_file(tmp_path):
     assert results.stat().st_mode & 0o077 == 0  # rows carry conversation ids
 
 
+def test_append_row_tightens_a_permissive_existing_file(tmp_path):
+    results = tmp_path / 'runs.jsonl'
+    results.write_text('')
+    results.chmod(0o644)  # e.g. created before the owner-only rule
+    replay_bench.append_row(results, {'arm': 'on', 'id': 'c1', 'repeat': 0})
+    assert results.stat().st_mode & 0o077 == 0
+
+
 def test_vendor_harness_carries_no_product_packages():
     vendor = replay_bench.vendor_harness()
     assert {entry.name for entry in vendor.iterdir()} == {'testing'}
@@ -307,6 +315,24 @@ def test_cost_split_accepts_custom_prices():
     default = report.cost_split(rows, 'base')[0]['cost_per_run']
     doubled = report.cost_split(rows, 'base', (0.20, 0.02, 1.20))[0]['cost_per_run']
     assert doubled == pytest.approx(2 * default)
+
+
+def test_custom_prices_reprice_every_section_including_gates(tmp_path, capsys):
+    results = tmp_path / 'runs.jsonl'
+    rows = [
+        _row('base', 'c1', 0, 999.0, prompt=1000, cached=0, completion=0),
+        _row('on', 'c1', 0, 999.0, prompt=1000, cached=0, completion=0),
+    ]
+    results.write_text('\n'.join(json.dumps(row) for row in rows) + '\n')
+    code = report.main(
+        [str(results), '--baseline', 'base', '--prices', '0.20,0.02,1.20', '--max-cost-per-run', '0.0001']
+    )
+    out = capsys.readouterr().out
+    assert code == 1
+    # 1000 uncached prompt tokens at $0.20/M reprice to $0.0002, over the $0.0001 ceiling.
+    assert '$0.00020' in out
+    assert 'FAIL: max-cost-per-run base' in out
+    assert '999.0' not in out  # the stale stored cost never leaks into the report
 
 
 def test_gates_fail_when_cost_or_ratio_is_significantly_worse():

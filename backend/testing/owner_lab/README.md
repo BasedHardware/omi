@@ -93,8 +93,10 @@ OWNER_LAB_GATEWAY_URL=... OWNER_LAB_GATEWAY_TOKEN_FILE=... \
   --max-cost-per-run 0.006 --no-worse rejections,cost --out /path/report.md                   # offline report
 ```
 
-`report.py --prices input,cached,output` (USD per million tokens) re-splits
-the cost attribution when the bench ran on a non-default card.
+`report.py --prices input,cached,output` (USD per million tokens) reprices
+every stored run from its token counts when the bench ran on a non-default
+card, so the per-arm table, paired ratios, gates and the cost split all use
+the same card.
 
 - **select** picks bench cases by tier (7 short / 7 medium / 6 long, filled to
   20) among conversations the eligibility gate would run, and lists labelled

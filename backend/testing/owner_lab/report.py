@@ -256,6 +256,15 @@ def render_markdown(
     return '\n'.join(lines)
 
 
+def cost_from_tokens(row: Mapping[str, Any], prices: tuple[float, float, float]) -> float:
+    """Per-run cost recomputed from the row's token counts at the given card."""
+    price_in, price_cached, price_out = prices
+    prompt = row.get('prompt_tokens') or 0
+    cached = min(prompt, row.get('cached_tokens') or 0)
+    output = row.get('completion_tokens') or 0
+    return ((prompt - cached) * price_in + cached * price_cached + output * price_out) / 1e6
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument('results', help='results JSONL (outside the repository)')
@@ -275,6 +284,10 @@ def main(argv: list[str] | None = None) -> int:
     if len(prices) != 3 or any(price < 0 for price in prices):
         raise SystemExit('--prices needs three nonnegative numbers: input,cached,output')
     rows = load_rows(args.results)
+    if tuple(prices) != PRICES:
+        # One card for everything: the override reprices every stored row so the
+        # per-arm table, paired ratios, gates and the split cannot disagree.
+        rows = [{**row, 'cost': cost_from_tokens(row, tuple(prices))} for row in rows]
     arms = [arm for arm in per_arm(rows)]
     if args.baseline not in {arm['arm'] for arm in arms}:
         raise SystemExit(f'baseline {args.baseline} not in results')

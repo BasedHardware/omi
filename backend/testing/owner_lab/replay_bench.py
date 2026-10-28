@@ -361,8 +361,10 @@ def drive_exit(state: str) -> int:
 
 
 def append_row(results_path: Path, row: Mapping[str, Any]) -> None:
-    if not results_path.exists():
-        results_path.touch(0o600)  # run rows carry conversation ids: owner-only from creation
+    # Run rows carry conversation ids: owner-only at creation, and a file
+    # inherited with looser permissions tightens on resume rather than persisting.
+    results_path.touch(0o600, exist_ok=True)
+    results_path.chmod(0o600)
     with results_path.open('a') as stream:
         stream.write(json.dumps(row, default=str) + '\n')
         stream.flush()
