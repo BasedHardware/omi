@@ -187,7 +187,9 @@ Future<int> seedHeavyWals() async {
     wals.add(wal);
   }
   for (var i = 0; i < heavySyncedWalCount; i++) {
-    // Older than the backlog, uploaded and transcribed long ago; their audio is gone.
+    // Older than the backlog, uploaded and transcribed long ago; their audio is gone. syncedAt 0 is
+    // the legacy stamp the synced-copy retention sweep never removes, which is how a long-lived
+    // phone keeps tens of thousands of synced records; a dated stamp would be swept at startup.
     final timerStart =
         heavySeedDate.subtract(Duration(minutes: 20 * (heavyWalCount + i))).millisecondsSinceEpoch ~/ 1000;
     wals.add(Wal(
@@ -199,7 +201,7 @@ Future<int> seedHeavyWals() async {
       device: 'phone',
       deviceModel: 'Perf fixture',
       ownerUid: heavyFixtureUid,
-      syncedAt: timerStart + 600,
+      syncedAt: 0,
     ));
   }
   for (final entry in files.entries) {
