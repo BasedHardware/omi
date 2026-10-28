@@ -23,6 +23,11 @@ _EXPLICIT_TARGET = re.compile(
     r'(?:means|refers to)\s+|\b(?:asked|requested)\s+(?:me\s+)?(?:for\s+)?(?:a\s+)?(?:callback|call back)\b',
     re.I,
 )
+_SUBJECT_REFERENCE = re.compile(
+    r'^(?:speaker\s*\d+|the other (?:speaker|person|one)|another speaker)\s+'
+    r'(?:to\s+)?(?:send|email|share|bring|move|put|do|review|check)\b',
+    re.I,
+)
 _GENERIC = frozenset(
     'i me my you your he him his she her we us our they their it this that them here there the a an to for of on in with '
     'will would should can could said says send email share bring move put do review check '
@@ -57,7 +62,10 @@ def unresolved_reference(
     if _meaningful(text):
         return None  # A concrete description is not rejected for mentioning a label.
     evidence = ' '.join((context, *source_texts))
-    if _meaningful(evidence) and (not placeholder or _EXPLICIT_TARGET.search(evidence)):
+    # A promisor label is left to the shared role projection. Resolving the
+    # object's pronoun does not promote that unknown voice to any identity.
+    target_placeholder = placeholder and not _SUBJECT_REFERENCE.match(text)
+    if _meaningful(evidence) and (not target_placeholder or _EXPLICIT_TARGET.search(evidence)):
         return None
     return 'unresolved_reference'
 
