@@ -19,9 +19,9 @@ _DEICTIC_ONLY = re.compile(
     re.I,
 )
 _GENERIC = frozenset(
-    'i you he she we they it this that them here there the a an to for of on in with '
+    'i me my you your he him his she her we us our they their it this that them here there the a an to for of on in with '
     'will would should can could said says send email share bring move put do review check '
-    'follow up speaker person other another one task agreed promised please'.split()
+    'follow up call ask asked speaker person other another one task agreed promised please'.split()
 )
 
 
@@ -46,7 +46,7 @@ def unresolved_reference(
     if not placeholder and not _DEICTIC_ONLY.fullmatch(text):
         return None
     evidence = ' '.join((context, *source_texts))
-    meaningful = {word.casefold() for word in re.findall(r'\w+', evidence)} - _GENERIC
+    meaningful = {word.casefold() for word in re.findall(r'\w+', _PLACEHOLDER.sub('', evidence))} - _GENERIC
     if meaningful:
         return None
     return 'unresolved_reference'

@@ -18,7 +18,7 @@
   {"description":"Follow up on this","context":"The invoice remains unpaid","reason":null},
   {"description":"Call the other speaker","context":"Ayşe asked for a callback","reason":null},
   {"description":"Send it here","context":"Please send it here","reason":"unresolved_reference"},
-  {"description":"Call the other speaker","context":"The other speaker said I should call","reason":null},
+  {"description":"Call the other speaker","context":"The other speaker said I should call","reason":"unresolved_reference"},
   {"description":"Review this","source_texts":["The budget spreadsheet needs approval"],"reason":null},
   {"description":"Send it","source_texts":["I will send it"],"reason":"unresolved_reference"},
   {"description":"दूध खरीदना","reason":null},
