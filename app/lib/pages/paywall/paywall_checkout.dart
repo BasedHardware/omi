@@ -53,9 +53,10 @@ abstract final class PaywallCheckout {
       final session = await provider.createUserCheckoutSession(priceId: priceId, trialDays: trialDays);
       if (!context.mounted) return PaywallCheckoutOutcome.cancelled;
       if (session != null && session['error'] == true) {
+        // Checkout's 409 is an existing subscription, not a pending cancellation.
         report(
-          isPendingCancelConflict(session['status_code'])
-              ? l10n.resubscribeFirstToChangePlans
+          session['status_code'] == 409
+              ? l10n.checkoutExistingSubscription
               : session['detail'] as String? ?? l10n.couldNotProcessSubscription,
           error: true,
         );
@@ -105,8 +106,8 @@ abstract final class PaywallCheckout {
   }
 }
 
-/// The tier a free user is offered: the catalog's Unlimited tier, as two prices (month, year).
-/// Null until the catalog has loaded; a catalog without an Unlimited tier yields no offer.
+/// The tier a free user is offered: the catalog's Omi Pro (`unlimited_v2`) tier, as two prices
+/// (month, year). Null until the catalog has loaded; a catalog without Omi Pro yields no offer.
 @immutable
 class PaywallOffer {
   const PaywallOffer({
@@ -123,7 +124,7 @@ class PaywallOffer {
   /// True when this offer is the price already on a cancellation-pending subscription.
   final bool resubscribe;
 
-  /// Prefers the current Unlimited tier, then legacy Unlimited, then the most expensive tier.
+  /// Only Omi Pro is offered; a retired tier is never a fallback.
   /// While a cancellation is pending, the offer is that subscription's current price instead,
   /// or null when the catalog does not contain it.
   static PaywallOffer? fromCatalog(
@@ -136,20 +137,9 @@ class PaywallOffer {
     final plans = raw.whereType<Map>().map((plan) => Map<String, dynamic>.from(plan)).toList();
     if (plans.isEmpty) return null;
     if (cancelAtPeriodEnd) return _currentPriceOffer(plans, currentPriceId);
-    final byTier = <String, List<Map<String, dynamic>>>{};
-    for (final plan in plans) {
-      final tier = plan['plan_id'];
-      byTier.putIfAbsent(tier is String && tier.isNotEmpty ? tier : 'unlimited', () => []).add(plan);
-    }
-    String? tierId;
-    for (final preferred in const ['unlimited_v2', 'unlimited']) {
-      if (byTier.containsKey(preferred)) {
-        tierId = preferred;
-        break;
-      }
-    }
-    tierId ??= byTier.keys.reduce((a, b) => _maxAmount(byTier[a]!) >= _maxAmount(byTier[b]!) ? a : b);
-    final tierPlans = byTier[tierId]!;
+    const tierId = 'unlimited_v2';
+    final tierPlans = plans.where((plan) => plan['plan_id'] == tierId).toList();
+    if (tierPlans.isEmpty) return null;
     PaywallPrice? price(String interval) {
       for (final plan in tierPlans) {
         if (plan['interval'] != interval) continue;
@@ -180,6 +170,7 @@ class PaywallOffer {
       final amount = plan['unit_amount'];
       if (amount is! num) return null;
       final tier = plan['plan_id'];
+      if (tier is! String || tier.isEmpty) return null;
       final currency = plan['currency'];
       final price = PaywallPrice(
         priceId: currentPriceId,
@@ -188,7 +179,7 @@ class PaywallOffer {
         currency: currency is String && currency.isNotEmpty ? currency.toLowerCase() : 'usd',
       );
       return PaywallOffer(
-        tierId: tier is String && tier.isNotEmpty ? tier : 'unlimited',
+        tierId: tier,
         monthly: interval == 'month' ? price : null,
         yearly: interval == 'year' ? price : null,
         resubscribe: true,
@@ -196,9 +187,6 @@ class PaywallOffer {
     }
     return null;
   }
-
-  static num _maxAmount(List<Map<String, dynamic>> plans) =>
-      plans.map((plan) => plan['unit_amount']).whereType<num>().fold<num>(0, (a, b) => a > b ? a : b);
 
   /// Whole-percent saving of the yearly price against twelve monthly payments, or null.
   int? get yearlySavingPercent {

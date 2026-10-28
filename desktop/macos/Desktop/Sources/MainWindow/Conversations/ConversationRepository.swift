@@ -43,8 +43,9 @@ struct ConversationListQuery: Equatable {
   let starredOnly: Bool
   let date: Date?
   let folderId: String?
+  var includeDiscarded: Bool = false
 
-  var hasFilters: Bool { starredOnly || date != nil || folderId != nil }
+  var hasFilters: Bool { starredOnly || date != nil || folderId != nil || includeDiscarded }
 
   var dateRange: (start: Date?, end: Date?) {
     guard let date else { return (nil, nil) }
@@ -61,6 +62,12 @@ enum ConversationSnapshotSource: Equatable {
   case rollback
 }
 
+enum ConversationRestoreError: LocalizedError {
+  case stillDiscarded
+
+  var errorDescription: String? { "This conversation couldn't be restored. Try again." }
+}
+
 struct ConversationRepositorySnapshot: Equatable {
   let conversations: [ServerConversation]
   let count: Int?
@@ -73,7 +80,8 @@ protocol ConversationRemoteDataSource: Sendable {
   func list(query: ConversationListQuery, offset: Int, limit: Int) async throws -> [ServerConversation]
   func count(query: ConversationListQuery) async throws -> Int
   func detail(id: String) async throws -> ServerConversation
-  func search(text: String) async throws -> [ServerConversation]
+  func search(text: String, includeDiscarded: Bool) async throws -> [ServerConversation]
+  func restore(id: String) async throws -> ServerConversation
   func setStarred(id: String, starred: Bool) async throws -> ServerConversation
   func updateTitle(id: String, title: String) async throws -> ServerConversation
   func moveToFolder(id: String, folderId: String?) async throws -> ServerConversation
@@ -116,7 +124,7 @@ struct LiveConversationRemoteDataSource: ConversationRemoteDataSource {
       limit: limit,
       offset: offset,
       statuses: [.completed, .processing],
-      includeDiscarded: false,
+      includeDiscarded: query.includeDiscarded,
       startDate: range.start,
       endDate: range.end,
       folderId: query.folderId,
@@ -127,7 +135,7 @@ struct LiveConversationRemoteDataSource: ConversationRemoteDataSource {
   func count(query: ConversationListQuery) async throws -> Int {
     let range = query.dateRange
     return try await APIClient.shared.getConversationsCount(
-      includeDiscarded: false,
+      includeDiscarded: query.includeDiscarded,
       statuses: [.completed, .processing],
       startDate: range.start,
       endDate: range.end,
@@ -137,16 +145,20 @@ struct LiveConversationRemoteDataSource: ConversationRemoteDataSource {
   }
 
   func detail(id: String) async throws -> ServerConversation {
-    try await APIClient.shared.getConversation(id: id)
+    try await APIClient.shared.getConversation(id: id, includeDiscarded: true)
   }
 
-  func search(text: String) async throws -> [ServerConversation] {
+  func search(text: String, includeDiscarded: Bool) async throws -> [ServerConversation] {
     try await APIClient.shared.searchConversations(
       query: text,
       page: 1,
       perPage: 50,
-      includeDiscarded: false
+      includeDiscarded: includeDiscarded
     ).items
+  }
+
+  func restore(id: String) async throws -> ServerConversation {
+    try await APIClient.shared.restoreConversation(conversationId: id)
   }
 
   func setStarred(id: String, starred: Bool) async throws -> ServerConversation {
@@ -172,7 +184,8 @@ struct LiveConversationLocalDataSource: ConversationLocalDataSource {
     return try await TranscriptionStorage.shared.getLocalConversations(
       limit: 50,
       starredOnly: query.starredOnly,
-      folderId: query.folderId
+      folderId: query.folderId,
+      includeDiscarded: query.includeDiscarded
     )
   }
 
@@ -180,7 +193,8 @@ struct LiveConversationLocalDataSource: ConversationLocalDataSource {
     guard query.date == nil else { return 0 }
     return try await TranscriptionStorage.shared.getLocalConversationsCount(
       starredOnly: query.starredOnly,
-      folderId: query.folderId
+      folderId: query.folderId,
+      includeDiscarded: query.includeDiscarded
     )
   }
 
@@ -281,6 +295,8 @@ final class ConversationRepository {
   private var activeMutationTokens: [String: UUID] = [:]
   private var mutationWaiters: [String: [MutationWaiter]] = [:]
   private var deletionTokens: [String: UUID] = [:]
+  private var confirmedRestores: [String: ServerConversation] = [:]
+  private var confirmedRestoreRevisions: [String: Date] = [:]
   private var currentQuery: ConversationListQuery?
   private var nextPageOffset = 0
   private var isLoadingMore = false
@@ -363,7 +379,8 @@ final class ConversationRepository {
           // filter mid-mutation) paints the bare cached rows and visually reverts
           // the edit until the remote call lands.
           conversations = cached.map {
-            ConversationReconciliationPolicy.apply(mutation: pendingMutations[$0.id], to: $0)
+            ConversationReconciliationPolicy.apply(
+              mutation: pendingMutations[$0.id], to: confirmedRestores[$0.id] ?? $0)
           }
           count = cachedCount
           emit(.cache)
@@ -376,9 +393,10 @@ final class ConversationRepository {
     do {
       async let listTask = remote.list(query: query, offset: 0, limit: Self.pageSize)
       async let countTask = remote.count(query: query)
-      let server = try await listTask
+      let received = try await listTask
       let serverCount = try? await countTask
       guard generation == requestGeneration else { return }
+      let server = received.map(applyingConfirmedRestore)
 
       let result = ConversationReconciliationPolicy.mergeList(
         server: server,
@@ -432,8 +450,9 @@ final class ConversationRepository {
     defer { isLoadingMore = false }
 
     do {
-      let server = try await remote.list(query: query, offset: offset, limit: Self.pageSize)
+      let received = try await remote.list(query: query, offset: offset, limit: Self.pageSize)
       guard generation == requestGeneration, currentQuery == query else { return }
+      let server = received.map(applyingConfirmedRestore)
 
       let result = ConversationReconciliationPolicy.mergeList(
         server: server,
@@ -461,12 +480,13 @@ final class ConversationRepository {
     }
   }
 
-  func search(text: String) async throws -> [ServerConversation] {
+  func search(text: String, includeDiscarded: Bool = false) async throws -> [ServerConversation] {
     let session = cacheWriteScope.capture()
     searchGeneration += 1
     let generation = searchGeneration
-    let results = try await remote.search(text: text)
+    let received = try await remote.search(text: text, includeDiscarded: includeDiscarded)
     guard generation == searchGeneration else { throw CancellationError() }
+    let results = received.map(applyingConfirmedRestore)
     await storeInBackground(results, session: session)
     return results
   }
@@ -500,12 +520,15 @@ final class ConversationRepository {
     let session = cacheWriteScope.capture()
     if let cached = try? await local.detail(id: id) {
       try ensureCurrentSession(session)
-      onCached?(cached)
+      onCached?(
+        ConversationReconciliationPolicy.retainingLoadedTranscript(
+          server: confirmedRestores[id] ?? cached, current: cached))
     }
 
     do {
-      let server = try await remote.detail(id: id)
+      let received = try await remote.detail(id: id)
       try ensureCurrentSession(session)
+      let server = applyingConfirmedRestore(received)
       try? await local.store(server, scope: cacheWriteScope, generation: session)
       try ensureCurrentSession(session)
       if pendingMutations[id] != nil {
@@ -521,11 +544,12 @@ final class ConversationRepository {
       try ensureCurrentSession(session)
       if let cached = try? await local.detail(id: id) {
         try ensureCurrentSession(session)
-        return cached
+        return ConversationReconciliationPolicy.retainingLoadedTranscript(
+          server: confirmedRestores[id] ?? cached, current: cached)
       }
       try ensureCurrentSession(session)
       guard let seed else { throw error }
-      return seed
+      return confirmedRestores[id] ?? seed
     }
   }
 
@@ -541,6 +565,27 @@ final class ConversationRepository {
     try await mutate(id: id, operation: operation) {
       try await self.remote.updateTitle(id: id, title: title)
     }
+  }
+
+  /// Restore through the server's explicit keep path. Only publish/cache a
+  /// successful canonical response, fenced to the account that requested it.
+  func restore(id: String) async throws -> ServerConversation {
+    let session = cacheWriteScope.capture()
+    let token = await acquireMutationSlot(id: id)
+    defer { releaseMutationSlot(id: id, token: token) }
+    try ensureCurrentSession(session)
+    let restored = try await remote.restore(id: id)
+    try ensureCurrentSession(session)
+    guard restored.id == id, !restored.discarded, !restored.deleted else {
+      throw ConversationRestoreError.stillDiscarded
+    }
+    confirmedRestores[id] = restored
+    confirmedRestoreRevisions.removeValue(forKey: id)
+    try? await local.store(restored, scope: cacheWriteScope, generation: session)
+    try ensureCurrentSession(session)
+    replaceVisible(restored)
+    emit(.server)
+    return restored
   }
 
   /// Replace a conversation in local state with a freshly-fetched server
@@ -567,8 +612,14 @@ final class ConversationRepository {
     let removedVisibleRow = conversations.contains { $0.id == id }
     conversations.removeAll { $0.id == id }
     pendingMutations.removeValue(forKey: id)
-    if removedVisibleRow, let count {
-      self.count = max(0, count - 1)
+    if removedVisibleRow {
+      if let count {
+        self.count = max(0, count - 1)
+      }
+      // The server pages by offset; removing a loaded row shifts every
+      // older row up one slot, so the next loadMore() must start one
+      // position earlier or it skips the row that moved into view.
+      nextPageOffset = max(0, nextPageOffset - 1)
     }
     emit(.server)
   }
@@ -607,6 +658,8 @@ final class ConversationRepository {
     mutationWaiters = [:]
     activeMutationTokens = [:]
     deletionTokens = [:]
+    confirmedRestores = [:]
+    confirmedRestoreRevisions = [:]
     conversations = []
     count = nil
     isCountAuthoritative = false
@@ -770,8 +823,14 @@ final class ConversationRepository {
     guard matchesCurrentQuery(conversation) else {
       let removedVisibleRow = conversations.contains { $0.id == conversation.id }
       conversations.removeAll { $0.id == conversation.id }
-      if removedVisibleRow, let count {
-        self.count = max(0, count - 1)
+      if removedVisibleRow {
+        if let count {
+          self.count = max(0, count - 1)
+        }
+        // Same offset shift as `remove(id:)`: a row leaving the current
+        // filter (e.g. unstarring under Starred) vacates a loaded slot,
+        // so the next page must start one position earlier.
+        nextPageOffset = max(0, nextPageOffset - 1)
       }
       return
     }
@@ -788,6 +847,7 @@ final class ConversationRepository {
 
   private func matchesCurrentQuery(_ conversation: ServerConversation) -> Bool {
     guard let query = currentQuery else { return true }
+    if conversation.deleted || (!query.includeDiscarded && conversation.discarded) { return false }
     if query.starredOnly && !conversation.starred { return false }
     if let folderId = query.folderId, conversation.folderId != folderId { return false }
     if let date = query.date {
@@ -798,6 +858,28 @@ final class ConversationRepository {
       if conversationDate < start || conversationDate >= end { return false }
     }
     return true
+  }
+
+  /// A search index may lag the restore response. Never let an older hidden
+  /// hit undo that confirmed mutation; a newer server decision remains truth.
+  private func applyingConfirmedRestore(_ row: ServerConversation) -> ServerConversation {
+    guard let restored = confirmedRestores[row.id] else { return row }
+    // Reprocess can echo the pre-write revision (or omit it). Learn a revision
+    // floor only from a subsequent visible server row, never from that echo.
+    let newer = row.updatedAt.flatMap { incoming in confirmedRestoreRevisions[row.id].map { incoming > $0 } } ?? false
+    let current = row.updatedAt.map { incoming in restored.updatedAt.map { incoming >= $0 } ?? true } ?? false
+    if row.deleted || (row.discarded && newer) {
+      confirmedRestores.removeValue(forKey: row.id)
+      confirmedRestoreRevisions.removeValue(forKey: row.id)
+      return row
+    }
+    if !row.discarded && current {
+      let retained = ConversationReconciliationPolicy.retainingLoadedTranscript(server: row, current: restored)
+      confirmedRestores[row.id] = retained
+      confirmedRestoreRevisions[row.id] = row.updatedAt
+      return retained
+    }
+    return restored
   }
 
   private func storeInBackground(_ server: [ServerConversation], session: Int) async {

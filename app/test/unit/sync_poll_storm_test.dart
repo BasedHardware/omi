@@ -7,11 +7,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/providers/local_recordings_provider.dart';
+import 'package:omi/services/wals/native_recording_intake.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/wals/wal_backlog_telemetry.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/sync_job_poller.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
@@ -27,6 +29,23 @@ class _Listener implements IWalSyncListener {
   void onWalUpdated() {}
   @override
   void onWalSynced(Wal wal, {ServerConversation? conversation}) {}
+}
+
+class _CountingPoller extends SyncJobPoller {
+  _CountingPoller({required DateTime Function() clock}) : super(clock: clock);
+  int attempts = 0;
+
+  @override
+  Future<SyncJobFetch> fetch(String jobId, Future<SyncJobFetch> Function(String) fetcher) {
+    attempts++;
+    return super.fetch(jobId, fetcher);
+  }
+}
+
+class _AccountSwitchListener extends _Listener {
+  void Function()? onSynced;
+  @override
+  void onWalSynced(Wal wal, {ServerConversation? conversation}) => onSynced?.call();
 }
 
 Wal pending(int i) => Wal(
@@ -140,6 +159,130 @@ void main() {
     }
     expect(requests, lessThanOrEqualTo(18), reason: 'baseline makes 50 x 5 = 250 requests in 50 seconds');
     expect(sync.testWals.every((wal) => wal.status == WalStatus.uploaded), isTrue);
+  });
+
+  test('large reconcile backlog visits only one due batch and eventually acknowledges every job', () async {
+    final poller = _CountingPoller(clock: () => now);
+    final summaries = <RegisteredEvent>[];
+    var requests = 0;
+    var maxActive = 0;
+    var active = 0;
+    final sync = LocalWalSyncImpl(
+      _Listener(),
+      now: () => now,
+      jobPoller: poller,
+      backlogTelemetry: WalBacklogTelemetry(emit: summaries.add),
+      persistWals: (_) async {},
+      jobStatusFetcher: (id) async {
+        requests++;
+        active++;
+        if (active > maxActive) maxActive = active;
+        await Future<void>.delayed(Duration.zero);
+        active--;
+        return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: id, status: 'completed'));
+      },
+    );
+    sync.testWals = List.generate(127, pending);
+    for (var pass = 0; pass < 8; pass++) {
+      final before = poller.attempts;
+      await sync.reconcileUploadedWals();
+      expect(poller.attempts - before, lessThanOrEqualTo(SyncJobPoller.maxRequestsPerMinute));
+      final after = poller.attempts;
+      await sync.reconcileUploadedWals();
+      expect(poller.attempts, after, reason: 'budget-denied jobs never enter fetch or emit transient diagnostics');
+      now = now.add(const Duration(minutes: 1));
+    }
+    expect(requests, 127);
+    expect(poller.attempts, requests);
+    expect(maxActive, 1);
+    expect(sync.testWals, hasLength(127));
+    expect(sync.testWals.map((wal) => wal.status), everyElement(WalStatus.synced));
+    expect(sync.testWals.map((wal) => wal.syncedAt), everyElement(greaterThan(0)));
+    expect(summaries.whereType<WalReconcilePollSummary>(), hasLength(7));
+    expect(summaries.whereType<WalReconcilePollSummary>().fold<int>(0, (n, e) => n + e.polledJobs), 126);
+    expect(summaries.first.properties, {
+      'backlog_jobs': 127,
+      'polled_jobs': 18,
+      'transient_jobs': 0,
+      'throttled_jobs': 0,
+      'missing_confirmation_jobs': 0,
+      'locally_deferred_jobs': 109,
+    });
+  });
+
+  test('real reconciliation summarizes actual transient and throttle results without acknowledging audio', () async {
+    final events = <RegisteredEvent>[];
+    var requests = 0;
+    final sync = LocalWalSyncImpl(
+      _Listener(),
+      now: () => now,
+      backlogTelemetry: WalBacklogTelemetry(emit: events.add),
+      persistWals: (_) async {},
+      jobStatusFetcher: (_) async {
+        requests++;
+        return requests == 2
+            ? SyncJobFetch.throttled(
+                SyncRateLimitedException(kind: SyncRateLimitKind.edgeThrottle, retryAfterSeconds: 60))
+            : const SyncJobFetch(SyncJobFetchOutcome.transient);
+      },
+    );
+    sync.testWals = List.generate(50, pending);
+    await sync.reconcileUploadedWals();
+    expect(requests, 2);
+    expect(events.single.properties, {
+      'backlog_jobs': 50,
+      'polled_jobs': 2,
+      'transient_jobs': 1,
+      'throttled_jobs': 1,
+      'missing_confirmation_jobs': 0,
+      'locally_deferred_jobs': 48,
+    });
+    expect(sync.testWals.map((w) => w.status), everyElement(WalStatus.uploaded));
+    await sync.reconcileUploadedWals();
+    expect(events, hasLength(1));
+  });
+
+  test('a synchronous account cutover during completion cannot emit the prior account poll counts', () async {
+    final events = <RegisteredEvent>[];
+    final listener = _AccountSwitchListener();
+    final sync = LocalWalSyncImpl(
+      listener,
+      now: () => now,
+      backlogTelemetry: WalBacklogTelemetry(emit: events.add),
+      persistWals: (_) async {},
+      jobStatusFetcher: (id) async =>
+          SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: id, status: 'completed')),
+    );
+    listener.onSynced = sync.clearUserData;
+    sync.testWals = List.generate(50, pending);
+    await sync.reconcileUploadedWals();
+    expect(sync.testWals, isEmpty);
+    expect(sync.testRetiredWals, hasLength(50));
+    expect(events, isEmpty, reason: 'the old generation cannot attribute counts to the successor identity');
+  });
+
+  test('unconfirmed missing jobs are not reported as network transients', () async {
+    final events = <RegisteredEvent>[];
+    final sync = LocalWalSyncImpl(
+      _Listener(),
+      now: () => now,
+      backlogTelemetry: WalBacklogTelemetry(emit: events.add),
+      persistWals: (_) async {},
+      jobStatusFetcher: (_) async => const SyncJobFetch(SyncJobFetchOutcome.notFound),
+    );
+    sync.testWals = [pending(0)];
+    await sync.reconcileUploadedWals();
+    expect(events.single.properties, {
+      'backlog_jobs': 1,
+      'polled_jobs': 1,
+      'transient_jobs': 0,
+      'throttled_jobs': 0,
+      'missing_confirmation_jobs': 1,
+      'locally_deferred_jobs': 0,
+    });
+    expect(sync.testWals.single.status, WalStatus.uploaded);
+    await sync.reconcileUploadedWals();
+    expect(events, hasLength(1), reason: 'the local confirmation cooldown is not a failed network attempt');
   });
 
   test('127 restored uploads recover without deleting audio or letting a queued job starve siblings', () async {
@@ -525,82 +668,50 @@ void main() {
           expect(files.single.existsSync(), isTrue);
           return UploadFilesResult.queued('replacement');
         });
-    final provider = LocalRecordingsProvider(uploadGate: gate);
-    provider.jobStatusFetcherOverride = (_) async => const SyncJobFetch(SyncJobFetchOutcome.notFound);
-    addTearDown(provider.dispose);
-    await provider.refresh();
-    await provider.reconcileForTesting();
+    final sync = LocalWalSyncImpl(_Listener(),
+        uploadGate: gate,
+        now: () => now,
+        freeDiskBytes: () async => 4 * 1024 * 1024 * 1024,
+        jobStatusFetcher: (_) async => const SyncJobFetch(SyncJobFetchOutcome.notFound));
+    await sync.loadForOnDeviceWorker();
+    await NativeRecordingIntake(sync).scan();
+    await sync.reconcileUploadedWals();
     expect(uploads, 0);
     now = now.add(const Duration(minutes: 5));
-    await provider.reconcileForTesting();
+    await sync.reconcileUploadedWals();
+    await sync.syncAll();
     expect(File('${dir.path}/$name').existsSync(), isTrue);
     expect(uploads, 1);
-    expect(jsonDecode(SharedPreferencesUtil().getString('localRecordingJobs'))[name], 'replacement');
+    expect((await sync.getAllWals()).single.jobId, 'replacement');
+    expect(SharedPreferencesUtil().getString('localRecordingJobs'), isEmpty);
   });
 
-  testWidgets('Transcribe Later timer and WAL wakes share the singleton 18/min budget', (tester) async {
-    final requests = <DateTime>[];
-    var phoneRequests = 0;
-    var walRequests = 0;
-    late LocalRecordingsProvider provider;
-    late LocalWalSyncImpl sync;
-    await tester.runAsync(() async {
-      final jobs = <String, String>{};
-      for (var i = 0; i < 7; i++) {
-        final name = 'audio_omibatchphone_opus_fs320_16000_1_fs320_${1720000001 + i}.bin';
-        await File('${dir.path}/$name').writeAsBytes([4, 0, 0, 0, 1, 2, 3, 4]);
-        jobs[name] = 'phone-$i';
-      }
-      SharedPreferencesUtil().uid = 'owner';
-      await SharedPreferencesUtil().saveString('batchAudioDir', dir.path);
-      await SharedPreferencesUtil().saveString('localRecordingJobs', jsonEncode(jobs));
-      // Construct on the widget zone below so its production 15s timer is virtual.
-    });
-    final timerZone = Zone.current;
-    provider = LocalRecordingsProvider(periodic: (duration, callback) {
-      expect(duration, const Duration(seconds: 15));
-      // Directory IO finishes outside the widget zone; keep the actual Timer
-      // in the virtual clock's zone without manually driving reconciliation.
-      return timerZone.run(() => Timer.periodic(duration, callback));
-    });
-    provider.jobStatusFetcherOverride = (id) async {
-      phoneRequests++;
-      requests.add(now);
-      return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: id, status: 'processing'));
-    };
-    sync = LocalWalSyncImpl(_Listener(),
+  test('migrated native jobs and device jobs share one reconciliation pass and budget', () async {
+    const name = 'audio_omibatchphone_opus_16000_1_fs320_1720000001.bin';
+    await File('${dir.path}/$name').writeAsBytes([1, 0, 0, 0, 5]);
+    SharedPreferencesUtil().uid = 'owner';
+    await SharedPreferencesUtil().saveString('batchAudioDir', dir.path);
+    await SharedPreferencesUtil().saveString('localRecordingJobs', jsonEncode({name: 'phone-job'}));
+    var requests = 0;
+    final sync = LocalWalSyncImpl(_Listener(),
         now: () => now,
+        freeDiskBytes: () => Future.value(4 * 1024 * 1024 * 1024),
         jobPoller: SyncJobPoller.instance,
-        persistWals: (_) async {},
         jobStatusFetcher: (id) async {
-          walRequests++;
-          requests.add(now);
+          requests++;
           return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: id, status: 'processing'));
         });
+    await sync.loadForOnDeviceWorker();
     sync.testWals = List.generate(50, pending);
-    await tester.runAsync(() async {
-      await provider.refresh();
-      await provider.reconcileForTesting();
-      await sync.reconcileUploadedWals();
-    });
-    expect(phoneRequests, 7);
-    expect(walRequests, 11);
-    for (var tick = 0; tick < 8; tick++) {
-      now = now.add(const Duration(seconds: 15));
-      await tester.pump(const Duration(seconds: 15));
-      // Let the timer's asynchronous directory scan finish, flushing both IO
-      // and widget-zone microtasks. Never call reconcile to drive this owner.
-      for (var attempt = 0; attempt < 100 && provider.isReconcilingForTesting; attempt++) {
-        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 1)));
-        await tester.pump();
-      }
-      expect(provider.isReconcilingForTesting, isFalse);
-      await tester.runAsync(() => sync.reconcileUploadedWals());
-      expect(requests.where((time) => time.isAfter(now.subtract(const Duration(minutes: 1)))).length,
-          lessThanOrEqualTo(18));
-    }
-    expect(phoneRequests, greaterThan(7), reason: 'the production timer resumes polling after the window');
-    provider.dispose();
+    await NativeRecordingIntake(sync).scan();
+    await Future.wait([sync.reconcileUploadedWals(), sync.reconcileUploadedWals()]);
+    expect(requests, 18);
+    await sync.reconcileUploadedWals();
+    expect(requests, 18);
+    now = now.add(const Duration(minutes: 1));
+    await sync.reconcileUploadedWals();
+    expect(requests, 36);
+    expect((await sync.getAllWals()).where((w) => w.filePath == name).single.jobId, 'phone-job');
   });
 
   test('server hint bounds a single job independently of the request budget', () async {

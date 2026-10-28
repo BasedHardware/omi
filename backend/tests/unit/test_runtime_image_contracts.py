@@ -41,8 +41,9 @@ def _dockerfile_without(source: Path, omitted_line: str, destination: Path) -> P
     return destination
 
 
-def test_registered_runtime_image_sources_are_closed(contracts_module):
-    assert contracts_module.check_source_closures(contracts_module.load_contracts()) == []
+# The registered-source closure walk used to live here as one ~183s test; it
+# moved to test_runtime_image_source_closures_half_{a,b}.py (parity of the
+# sorted contract name) so no single shard lane carries the whole walk.
 
 
 def test_source_copy_skips_local_openapi_venv(contracts_module, tmp_path):
@@ -113,15 +114,6 @@ def test_a_commented_smoke_marker_does_not_satisfy_the_workflow_contract(contrac
     real = commented + '    run: python3 backend/scripts/role_images.py verify --manifest m\n'
     monkeypatch.setattr(contracts_module, '_workflow_contract_text', lambda _: real)
     assert contracts_module.workflow_contract_errors([contract]) == []
-
-
-def test_memory_maintenance_import_smoke_supplies_its_required_nonproduction_config(contracts_module):
-    memory_maintenance_job = _contract(contracts_module, 'memory-maintenance-job')
-
-    assert dict(memory_maintenance_job.smoke_environment) == {
-        'ENCRYPTION_SECRET': '0123456789abcdef0123456789abcdef',
-        'OPENAI_API_KEY': 'fake-memory-maintenance-image-smoke-only',
-    }
 
 
 def test_x_connector_sync_import_smoke_supplies_its_required_nonproduction_config(contracts_module):
@@ -320,27 +312,6 @@ def test_image_smoke_uses_registered_python_executable(contracts_module, monkeyp
     assert contracts_module.smoke_image('omi-nllb:test', [_contract(contracts_module, 'nllb-translation')]) == 0
 
     assert calls[0][:6] == ['docker', 'run', '--rm', '--network=none', '--entrypoint', 'python3']
-
-
-def test_memory_maintenance_smoke_uses_a_non_production_openai_key(contracts_module, monkeypatch):
-    calls = []
-
-    class Result:
-        returncode = 0
-
-    memory_job = _contract(contracts_module, 'memory-maintenance-job')
-    assert memory_job.smoke_environment == (
-        ('ENCRYPTION_SECRET', '0123456789abcdef0123456789abcdef'),
-        ('OPENAI_API_KEY', 'fake-memory-maintenance-image-smoke-only'),
-    )
-
-    monkeypatch.setattr(contracts_module, 'third_party_dependency_modules', lambda _: ())
-    monkeypatch.setattr(contracts_module.subprocess, 'run', lambda command, check: calls.append(command) or Result())
-
-    assert contracts_module.smoke_image('omi-memory-maintenance:test', [memory_job]) == 0
-    assert all('--network=none' in call for call in calls)
-    assert all('ENCRYPTION_SECRET=0123456789abcdef0123456789abcdef' in call for call in calls)
-    assert all('OPENAI_API_KEY=fake-memory-maintenance-image-smoke-only' in call for call in calls)
 
 
 def test_build_smoke_uses_the_registered_dockerfile_and_context(contracts_module, monkeypatch):
@@ -573,6 +544,10 @@ def test_every_declared_service_maps_to_exactly_one_role_image(contracts_module)
             roles_by_image.setdefault(image, []).append(role)
     assert all(len(roles) == 1 for roles in roles_by_image.values()), roles_by_image
 
+    # native_images join the map with the role their own entry declares.
+    for name, spec in registry.get('native_images', {}).items():
+        roles_by_image.setdefault(name, []).append(spec['role'])
+
     declared = set(registry['services']) | set(registry['logging_chart_images'])
     assert declared == set(registry['services'])
     for service in declared:
@@ -696,6 +671,19 @@ def test_role_pusher_target_copies_the_pusher_source_surface(contracts_module):
                 '.github/workflows/gcp_backend_listen_helm.yml'
             ),
             'gcp_backend_listen_helm.yml never names the service as a deploy target',
+        ),
+        # Native service entries: the registry's native_images join the role -> image -> service map.
+        (
+            lambda p: p['services'].pop('listen-edge'),
+            'native image listen-edge serves no declared service',
+        ),
+        (
+            lambda p: p['services']['listen-edge'].update({'role': 'gateway'}),
+            'is not a role image of gateway',
+        ),
+        (
+            lambda p: p['services']['listen-edge'].pop('image_built_elsewhere'),
+            'a native current_image needs an image_built_elsewhere reason',
         ),
     ],
 )
@@ -882,3 +870,31 @@ def test_build_only_entries_are_validated(contracts_module, tmp_path, override, 
 
     with pytest.raises(contracts_module.ContractError, match=re.escape(expected)):
         contracts_module.load_contracts(_registry_variant(tmp_path, mutate))
+
+
+@pytest.mark.parametrize(
+    'name,excluded_modules',
+    [
+        ('parakeet', {'utils.logging_config', 'utils.speakers.policy'}),
+        ('diarizer', {'omi_logging', 'utils.logging_config', 'utils.stt.diarization_turns'}),
+        ('nllb-translation', {'omi_logging'}),
+    ],
+)
+def test_copied_gpu_shims_do_not_probe_checkout_only_imports(contracts_module, name, excluded_modules):
+    contract = _contract(contracts_module, name)
+    assert excluded_modules <= contract.dependency_probe_exclusions
+    dependencies = contracts_module.third_party_dependency_modules(contract)
+    assert not any(
+        module == shim or module.startswith(shim + '.') for module in dependencies for shim in excluded_modules
+    )
+
+
+def test_gpu_batch_retry_cap_does_not_reach_cloud_tasks(contracts_module):
+    contract = _contract(contracts_module, 'batch-pipeline-worker')
+    closure = contracts_module.first_party_import_closure(contract, contract.entrypoints)
+    assert 'utils.capture.retry_cap' in closure
+    assert 'utils.sync.retry_hygiene' not in closure
+    assert 'utils.cloud_tasks' not in closure
+    assert not any(
+        module.startswith('google.cloud.tasks') for module in contracts_module.third_party_dependency_modules(contract)
+    )

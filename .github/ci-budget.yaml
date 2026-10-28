@@ -237,7 +237,7 @@
       "matrix_size": 1,
       "needs": "ci-tier",
       "owner": "CI maintainers",
-      "rationale": "#21780 runs 38823920783/38827426342 hit the 10m whole-job ceiling; the second completed all 2040 assertions in 535.44s before setup/cleanup pushed it over. A bounded 15m ceiling admits the complete suite. Retain the 3m p50 improvement target and existing runner, triggers, matrix and daily forecast. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
+      "rationale": "#21780 runs 38823920783/38827426342 hit the 10m whole-job ceiling; the second completed all 2040 assertions in 535.44s before setup/cleanup pushed it over. A bounded 15m ceiling admits the complete suite. Retain the 3m p50 improvement target and existing runner, triggers, matrix and daily forecast. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). 2026-10-26 memory-maintenance-job retirement removes the deleted gcp_memory_maintenance_job*.yml paths from this trigger.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -265,7 +265,7 @@
       "matrix_size": 6,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "#21237: run 38168319908 selected 1727 files; four shard contract walls were 710/472/772/651s. Six shards reduce 432 files to at most 288, forecasting about 8 minutes per runner including fixed preflight/typecheck work. The 720-second regression gate is unchanged; fanout raises aggregate forecast from 36 to 48 Linux runner-minutes per run without relaxing coverage or isolation. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
+      "rationale": "#21237: run 38168319908 selected 1727 files; four shard contract walls were 710/472/772/651s. Six shards reduce 432 files to at most 288, forecasting about 8 minutes per runner including fixed preflight/typecheck work. The 720-second regression gate is unchanged; fanout raises aggregate forecast from 36 to 48 Linux runner-minutes per run without relaxing coverage or isolation. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). 2026-10-26 memory-maintenance-job retirement removes the deleted gcp_memory_maintenance_job*.yml paths from this trigger.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -288,7 +288,7 @@
         "backend-unit-guardrails"
       ],
       "owner": "CI maintainers",
-      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily run over the PR M forecast of 116 until the next weekly audit P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
+      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily run over the PR M forecast of 116 until the next weekly audit P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). 2026-10-26 memory-maintenance-job retirement removes the deleted gcp_memory_maintenance_job*.yml paths from this trigger.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -307,7 +307,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily label read over the PR M forecast of 118 until the next weekly audit P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
+      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily label read over the PR M forecast of 118 until the next weekly audit P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). 2026-10-26 memory-maintenance-job retirement removes the deleted gcp_memory_maintenance_job*.yml paths from this trigger.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1233,7 +1233,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend_listen_helm.yml/deploy-neg-coverage-exporter": {
-      "budget_p50_minutes": 10,
+      "budget_p50_minutes": 11,
       "display_name": "Deploy NEG coverage exporter",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1,
@@ -1242,7 +1242,7 @@
       "matrix_size": 1,
       "needs": "helm-upgrade",
       "owner": "Omi backend maintainers",
-      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger",
+      "rationale": "Production-only follow-up after a successful listen rollout; the resolver emits its image-tag output only for explicit deploys, while kept-tag and rollback paths leave it empty. Budget covers WIF setup and the exporter Helm rollout capped at five minutes, with no PR-run cost. B5 (2026-10-19) adds the break_glass_lock dispatch input, no new trigger. 2026-10-22 plan D D2 adds the listen_edge_image_digest dispatch input; this job is unchanged and stays manual-only with no PR runs, and the one-minute bump records the trigger change",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1251,7 +1251,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend_listen_helm.yml/helm-upgrade": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 15,
       "display_name": "helm-upgrade",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1,
@@ -1260,7 +1260,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. B5 (2026-10-19) adds the break_glass_lock dispatch input, no new trigger. 2026-10-22 plan D D2 adds the listen_edge_image_digest dispatch input: when set, the job also admits the digest (one image-config read) and helm-upgrades backend/charts/listen-edge with a 600-second rollout wait after the listen rollout; manual-only, no PR runs, 15-minute placeholder p50",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1269,7 +1269,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend_pusher.yml/deploy": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1,
@@ -1278,7 +1278,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger. 2026-10-22 plan B B3 adds the pusher_role_image_digest dispatch input (development-only backend-pusher role-image opt-in, blank by default) and admits backend-pusher qualifications; the job stays manual-only with no PR runs, and the one-minute bump records the trigger change",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1287,7 +1287,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend_pusher_auto_deploy.yml/deploy": {
-      "budget_p50_minutes": 6,
+      "budget_p50_minutes": 7,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -1296,7 +1296,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. 2026-10-21 plan B B2: pusher/Dockerfile now copies backend/omi_logging.py, so that file joins the qualification trigger closure; main-push only, the one-minute bump records the trigger change",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. 2026-10-21 plan B B2: pusher/Dockerfile now copies backend/omi_logging.py, so that file joins the qualification trigger closure; main-push only, the one-minute bump records the trigger change. 2026-10-22 plan B B3: a qualification may name the backend-pusher role image, so backend/Dockerfile.roles joins the trigger closure; expected runs stay main-push-driven with no PR runs, and the one-minute bump records the trigger change",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1305,7 +1305,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_cloud_run_metrics_egress.yml/deploy": {
-      "budget_p50_minutes": 15,
+      "budget_p50_minutes": 16,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -1314,7 +1314,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Planning budget increased from 5 to 15 minutes for pinned base/candidate render verification, operator-created replica validation, frontend rollout and authenticated query probes; the trigger now also spans resilience.json and the GMP frontend overlay; main/dev or explicit prod only, not a measured p50.",
+      "rationale": "Planning budget increased from 15 to 16 minutes: the trigger now also spans verify_pusher_live_alert_route.py and mute-timings.json so import-path fixes re-provision alerts on main; pinned base/candidate render verification, operator-created replica validation, frontend rollout and authenticated query probes unchanged; main/dev or explicit prod only, not a measured p50.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1323,7 +1323,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_cloud_run_metrics_egress.yml/provision-live-alerts": {
-      "budget_p50_minutes": 7,
+      "budget_p50_minutes": 8,
       "display_name": "provision-live-alerts",
       "expected_runs_class": "non-pr",
       "expected_runs_per_day": 0,
@@ -1332,7 +1332,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Planning budget increased from 5 to 7 minutes for canary-first import/readback and live-STT coverage; the trigger now spans both resilience.json and the GMP frontend overlay; no PR execution and no new runner.",
+      "rationale": "Planning budget increased from 7 to 8 minutes: the import now ensures referenced mute timings exist before any rule write (dev Grafana froze qualification on 2026-10-25 without it) and the trigger spans verify_pusher_live_alert_route.py and mute-timings.json; canary-first import/readback and live-STT coverage unchanged; no PR execution and no new runner.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1377,7 +1377,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_diarizer.yml/deploy": {
-      "budget_p50_minutes": 20,
+      "budget_p50_minutes": 21,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1,
@@ -1386,7 +1386,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger. 2026-10-24 adds the diarizer-batch service option (W1: a CI path for the prod-omi-diarizer-batch Helm release, still manual-only dispatch); the one-minute bump records the trigger change",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1416,13 +1416,67 @@
       "budget_p50_minutes": 5,
       "display_name": "apply_field_exemptions",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 0.1,
       "if": "github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && github.event.inputs.operation == 'field-exemptions' && github.event.inputs.environment == 'prod'",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "No executable PR path: existing event/ref conditions remain main/manual-only. The workflow-level budget validator requires a positive PR sentinel for every job once a PR trigger exists; 0.1/day conservatively accounts for these skipped jobs.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_firestore_indexes.yml/plan_pr_indexes": {
+      "budget_p50_minutes": 1,
+      "display_name": "plan_pr_indexes",
+      "expected_runs_class": "planned-index-prs",
+      "expected_runs_per_day": 2,
+      "if": "github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.base.ref == 'main'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "Backend schema maintainers",
+      "rationale": "Credential-free JSON diff on registry/manifest PR events; two index PR updates/day budget.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_firestore_indexes.yml/prebuild_pr_development_indexes": {
+      "budget_p50_minutes": 2,
+      "display_name": "prebuild_pr_development_indexes",
+      "expected_runs_class": "planned-index-prs",
+      "expected_runs_per_day": 2,
+      "if": "needs.plan_pr_indexes.outputs.eligible == 'true'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "plan_pr_indexes",
+      "owner": "Backend schema maintainers",
+      "rationale": "P65: start only additive PR index builds asynchronously, two updates/day; no runner polling for READY. Existing deploy readiness enforces READY after merge. Automatic development schema writer.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_firestore_indexes.yml/prebuild_pr_prod_indexes": {
+      "budget_p50_minutes": 2,
+      "display_name": "prebuild_pr_prod_indexes",
+      "expected_runs_class": "planned-index-prs",
+      "expected_runs_per_day": 2,
+      "if": "needs.plan_pr_indexes.outputs.eligible == 'true'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "plan_pr_indexes",
+      "owner": "Backend schema maintainers",
+      "rationale": "P65: start only additive PR index builds asynchronously, two updates/day; no runner polling for READY. Existing deploy readiness enforces READY after merge. Required prod Environment approval.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1434,13 +1488,13 @@
       "budget_p50_minutes": 5,
       "display_name": "reconcile_composite_indexes",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 0.1,
       "if": "github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event.inputs.operation == 'composite-indexes')",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "No executable PR path: existing event/ref conditions remain main/manual-only. The workflow-level budget validator requires a positive PR sentinel for every job once a PR trigger exists; 0.1/day conservatively accounts for these skipped jobs.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1452,13 +1506,13 @@
       "budget_p50_minutes": 5,
       "display_name": "reconcile_development_composite_indexes",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 0.1,
       "if": "github.ref == 'refs/heads/main' && github.event_name == 'push'",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "No executable PR path: existing event/ref conditions remain main/manual-only. The workflow-level budget validator requires a positive PR sentinel for every job once a PR trigger exists; 0.1/day conservatively accounts for these skipped jobs.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1470,13 +1524,13 @@
       "budget_p50_minutes": 5,
       "display_name": "reject_nonprod_field_exemptions",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 0.1,
       "if": "github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && github.event.inputs.operation == 'field-exemptions' && github.event.inputs.environment != 'prod'",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "No executable PR path: existing event/ref conditions remain main/manual-only. The workflow-level budget validator requires a positive PR sentinel for every job once a PR trigger exists; 0.1/day conservatively accounts for these skipped jobs.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1520,8 +1574,26 @@
       },
       "runs_on": "ubuntu-latest"
     },
-    "gcp_llm_gateway.yml/deploy": {
+    "gcp_incluster_guards.yml/deploy": {
       "budget_p50_minutes": 5,
+      "display_name": "deploy",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 0,
+      "if": "inputs.environment != 'prod' || github.ref == 'refs/heads/main'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "Backend infrastructure",
+      "rationale": "Manual independent guard-only Helm release; no image build or serving rollout; zero PR runs.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_llm_gateway.yml/deploy": {
+      "budget_p50_minutes": 6,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1,
@@ -1530,7 +1602,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger. 2026-10-22 plan B B3 adds the gateway_image_digest dispatch input (backend-gateway role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1539,7 +1611,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_llm_gateway.yml/record_break_glass": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "record_break_glass",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1,
@@ -1548,43 +1620,7 @@
       "matrix_size": 1,
       "needs": "deploy",
       "owner": "CI maintainers",
-      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "gcp_memory_maintenance_job.yml/deploy": {
-      "budget_p50_minutes": 5,
-      "display_name": "deploy",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": null,
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": [],
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "gcp_memory_maintenance_job_auto_dev.yml/deploy": {
-      "budget_p50_minutes": 5,
-      "display_name": "deploy",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": null,
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": [],
-      "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger. 2026-10-22 plan B B3 adds the gateway_image_digest dispatch input (backend-gateway role-image opt-in, blank by default); the audit job still runs only on a break-glass dispatch with no PR runs, and the one-minute bump records the trigger change",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -3383,7 +3419,7 @@
     "backend-unit-tests.yml": {
       "name": "Backend Unit Tests",
       "owner": "CI maintainers",
-      "rationale": "#11183 includes the manual X connector job deployment workflow in backend contract CI; one additional daily run over the PR M forecast is budgeted conservatively. The 2026-10-18 JIT retirement removes the deleted local QA harness from this workflow's path filter. P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged.",
+      "rationale": "#11183 includes the manual X connector job deployment workflow in backend contract CI; one additional daily run over the PR M forecast is budgeted conservatively. The 2026-10-18 JIT retirement removes the deleted local QA harness from this workflow's path filter. P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged. The 2026-10-26 memory-maintenance-job retirement drops the deleted gcp_memory_maintenance_job*.yml paths from this trigger.",
       "triggers": {
         "pull_request": {
           "paths": [
@@ -3420,8 +3456,6 @@
             ".github/workflows/gcp_firestore_indexes.yml",
             ".github/workflows/gcp_backend*.yml",
             ".github/workflows/gcp_llm_gateway.yml",
-            ".github/workflows/gcp_memory_maintenance_job.yml",
-            ".github/workflows/gcp_memory_maintenance_job_auto_dev.yml",
             ".github/workflows/gcp_notifications_job.yml",
             ".github/workflows/gcp_x_connector_sync_job.yml",
             ".github/scripts/check_backend_deploy_source_admission.py",
@@ -3475,8 +3509,6 @@
             ".github/workflows/gcp_firestore_indexes.yml",
             ".github/workflows/gcp_backend*.yml",
             ".github/workflows/gcp_llm_gateway.yml",
-            ".github/workflows/gcp_memory_maintenance_job.yml",
-            ".github/workflows/gcp_memory_maintenance_job_auto_dev.yml",
             ".github/workflows/gcp_notifications_job.yml",
             ".github/workflows/gcp_x_connector_sync_job.yml",
             ".github/scripts/check_backend_deploy_source_admission.py",
@@ -4378,7 +4410,7 @@
     "gcp_backend_listen_helm.yml": {
       "name": "Upgrade Backend Listen Helm Chart",
       "owner": "CI maintainers",
-      "rationale": "B5 prod-train lock (2026-10-19): break_glass_lock dispatch input added; triggers otherwise unchanged",
+      "rationale": "B5 prod-train lock (2026-10-19): break_glass_lock dispatch input added; triggers otherwise unchanged. 2026-10-22 plan D D2 (lane p41-d2): listen_edge_image_digest dispatch input (blank by default) rolls backend/charts/listen-edge by admitted digest after the listen rollout; no new event trigger, no PR runs",
       "triggers": {
         "push": {
           "branches": [
@@ -4455,6 +4487,12 @@
               "description": "Short-SHA image to deploy (blank keeps the running image). Prod requires an ancestor of main.",
               "required": "false"
             },
+            "listen_edge_image_digest": {
+              "default": "",
+              "description": "Plan D D2: listen-edge image to roll, gcr.io/<project>/listen-edge@sha256:<digest> from a build-only train summary; it must have been built from a commit the checked-out source contains (blank leaves the listen-edge release untouched)",
+              "required": "false",
+              "type": "string"
+            },
             "mode": {
               "default": "deploy",
               "description": "deploy applies the chart; rollback restores an earlier Helm revision",
@@ -4484,7 +4522,7 @@
     "gcp_backend_pusher.yml": {
       "name": "Deploy Backend Pusher to GKE",
       "owner": "CI maintainers",
-      "rationale": "B5 prod-train lock (2026-10-19): break_glass_lock dispatch input added; triggers otherwise unchanged",
+      "rationale": "B5 prod-train lock (2026-10-19): break_glass_lock dispatch input added; triggers otherwise unchanged. 2026-10-22 plan B B3 adds the pusher_role_image_digest dispatch input (development-only backend-pusher role-image opt-in, blank by default); manual dispatch only, no PR runs",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -4529,6 +4567,11 @@
               "description": "Production Pusher only: exact digest from a successful automatic development qualification",
               "required": "false"
             },
+            "pusher_role_image_digest": {
+              "default": "",
+              "description": "Development Pusher only: backend-pusher role-image digest sha256:<64 hex> from a build-only run of this SHA (blank = build and deploy today image)",
+              "required": "false"
+            },
             "release_version": {
               "default": "",
               "description": "Release version (optional)",
@@ -4552,7 +4595,7 @@
     "gcp_backend_pusher_auto_deploy.yml": {
       "name": "Auto Deploy Backend Pusher to GKE (Development)",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory. 2026-10-21 plan B B2: backend/omi_logging.py added to the pusher source-closure paths",
+      "rationale": "Initial workflow inventory. 2026-10-21 plan B B2: backend/omi_logging.py added to the pusher source-closure paths. 2026-10-22 plan B B3: backend/Dockerfile.roles added \u2014 a qualification may name the backend-pusher role image, so its image definition joins the bake trigger closure",
       "triggers": {
         "push": {
           "branches": [
@@ -4569,6 +4612,7 @@
             "backend/pusher/**",
             "backend/omi_logging.py",
             "backend/charts/pusher/**",
+            "backend/Dockerfile.roles",
             ".dockerignore",
             "backend/scripts/verify_pusher_source_closure.py",
             "backend/scripts/verify_pusher_live_deployment_gate.py",
@@ -4594,7 +4638,7 @@
     "gcp_cloud_run_metrics_egress.yml": {
       "name": "Deploy Cloud Run Metrics Egress",
       "owner": "CI maintainers",
-      "rationale": "Existing main/dev and explicit protected prod workflow; triggers now span the GMP frontend overlay and resilience.json, and render/query-path gates add work without adding runners or PR events.",
+      "rationale": "Existing main/dev and explicit protected prod workflow; triggers now also span verify_pusher_live_alert_route.py and mute-timings.json so alert-import fixes re-provision Grafana on main; render/query-path gates add work without adding runners or PR events.",
       "triggers": {
         "push": {
           "branches": [
@@ -4606,7 +4650,9 @@
             "backend/charts/monitoring/alerts/live-stt.json",
             "backend/charts/monitoring/alerts/resilience.json",
             "backend/charts/monitoring/live-alert-gate.json",
+            "backend/charts/monitoring/mute-timings.json",
             "backend/charts/monitoring/gmp/frontend-values.prod.yaml",
+            "backend/scripts/verify_pusher_live_alert_route.py",
             ".github/workflows/gcp_cloud_run_metrics_egress.yml"
           ]
         },
@@ -4678,7 +4724,7 @@
     "gcp_diarizer.yml": {
       "name": "Deploy Diarizer to GKE",
       "owner": "CI maintainers",
-      "rationale": "B5 prod-train lock and worker digest promotion (2026-10-19): break_glass_lock and image_digest dispatch inputs added; triggers otherwise unchanged",
+      "rationale": "B5 prod-train lock and worker digest promotion (2026-10-19): break_glass_lock and image_digest dispatch inputs added. 2026-10-24: diarizer-batch service option added so the prod-omi-diarizer-batch Helm release has a CI deploy path (W1); triggers otherwise unchanged",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -4718,6 +4764,7 @@
               "description": "Select the GPU service to deploy",
               "options": [
                 "diarizer",
+                "diarizer-batch",
                 "batch-pipeline-worker"
               ],
               "required": "true",
@@ -4777,8 +4824,22 @@
     "gcp_firestore_indexes.yml": {
       "name": "Reconcile Firestore Indexes",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "P65: prebuild additive same-repository index PRs during review; main/manual reconciliation and required prod approval remain. No new images or vendor calls.",
       "triggers": {
+        "pull_request": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "backend/database/firestore_index_registry.py",
+            "firestore.indexes.json"
+          ],
+          "types": [
+            "opened",
+            "synchronize",
+            "reopened"
+          ]
+        },
         "push": {
           "branches": [
             "main"
@@ -4889,10 +4950,48 @@
         }
       }
     },
+    "gcp_incluster_guards.yml": {
+      "name": "Deploy In-cluster Safety Guards",
+      "owner": "Backend infrastructure",
+      "rationale": "Manual independent guard-only Helm release; no image build or serving rollout; zero PR runs.",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "dry_run": {
+              "default": "false",
+              "description": "Kill switch for HPA writes (development always dry runs)",
+              "required": "true",
+              "type": "boolean"
+            },
+            "enabled": {
+              "default": "true",
+              "description": "Enable guard resources (false removes this release's guards)",
+              "required": "true",
+              "type": "boolean"
+            },
+            "environment": {
+              "default": "development",
+              "description": "Environment for the independent guard release",
+              "options": [
+                "development",
+                "prod"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "source_sha": {
+              "description": "Full merged source SHA (must be an ancestor of main)",
+              "required": "true",
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
     "gcp_llm_gateway.yml": {
       "name": "Deploy LLM Gateway to GKE",
       "owner": "CI maintainers",
-      "rationale": "B5 prod-train lock (2026-10-19): break_glass_lock dispatch input added; triggers otherwise unchanged",
+      "rationale": "B5 prod-train lock (2026-10-19): break_glass_lock dispatch input added; triggers otherwise unchanged. 2026-10-22 plan B B3 adds the gateway_image_digest dispatch input (backend-gateway role-image opt-in, blank by default); manual dispatch only, no PR runs",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -4927,6 +5026,11 @@
               "required": "true",
               "type": "choice"
             },
+            "gateway_image_digest": {
+              "default": "",
+              "description": "Role-image opt-in: backend-gateway digest sha256:<64 hex> from a build-only run of the admitted SHA (blank = build and deploy today image)",
+              "required": "false"
+            },
             "release_sha": {
               "default": "",
               "description": "Production only: exact main SHA with a successful first-attempt Release Eligibility proof",
@@ -4939,55 +5043,6 @@
               "type": "boolean"
             }
           }
-        }
-      }
-    },
-    "gcp_memory_maintenance_job.yml": {
-      "name": "Deploy Memory Maintenance Job to Cloud RUN",
-      "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
-      "triggers": {
-        "workflow_dispatch": {
-          "inputs": {
-            "branch": {
-              "default": "main",
-              "description": "Branch to deploy from",
-              "required": "true",
-              "type": "string"
-            },
-            "environment": {
-              "default": "development",
-              "description": "Select the environment to deploy to",
-              "options": [
-                "development",
-                "prod"
-              ],
-              "required": "true",
-              "type": "choice"
-            },
-            "release_version": {
-              "default": "",
-              "description": "Release version (optional)",
-              "required": "false"
-            }
-          }
-        }
-      }
-    },
-    "gcp_memory_maintenance_job_auto_dev.yml": {
-      "name": "Auto Deploy Memory Maintenance Job to Development",
-      "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
-      "triggers": {
-        "push": {
-          "branches": [
-            "main"
-          ],
-          "paths": [
-            "backend/**",
-            ".github/workflows/gcp_memory_maintenance_job.yml",
-            ".github/workflows/gcp_memory_maintenance_job_auto_dev.yml"
-          ]
         }
       }
     },

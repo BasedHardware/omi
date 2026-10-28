@@ -44,8 +44,12 @@ def _load(name, source, monkeypatch, namespace=None):
     # The immutable snapshot predates graduation. Pin its removed recovery
     # switch to the shipped ON behavior without restoring a production API.
     source = source.replace('from config.sync_assignment_recovery import sync_assignment_recovery_enabled\n', '')
+    # Adapt only the import path after verifying the immutable snapshot hash.
+    source = source.replace('from utils.conversation_continuity import', 'from models.conversation_continuity import')
     module.sync_assignment_recovery_enabled = lambda: True
     module.capture_evidence_dark_write_enabled = lambda: True
+    # Historical snapshot only: its retired timer is not a production seam.
+    module.schedule_syncing_temporal_file_deletion = lambda _path: None
     exec(compile(source, name, 'exec', flags=0x1000000), module.__dict__)
     return module
 
@@ -75,7 +79,7 @@ def _rows(store):
 
 
 def _intake(module, store, incoming, *, candidate_id=None, target_id=None):
-    return module.assign_in_transaction(
+    result = module.assign_in_transaction(
         store.transaction(),
         store.collection('users').document('u'),
         incoming,
@@ -85,6 +89,10 @@ def _intake(module, store, incoming, *, candidate_id=None, target_id=None):
         encode=deepcopy,
         invalidate=lambda payload: None,
     )
+    # Match lifecycle intake: consume the transient observation before the
+    # returned conversation reaches enrichment or behavioral parity checks.
+    result[0].pop('_sync_projected_size_bucket', None)
+    return result
 
 
 def _drive(module, patch, store, texts, assignment_module, capture_enabled):
@@ -92,7 +100,6 @@ def _drive(module, patch, store, texts, assignment_module, capture_enabled):
     from utils.conversations import lifecycle
 
     patch.setattr(module, 'get_syncing_file_temporal_signed_url', lambda _path: 'file://x')
-    patch.setattr(module, 'schedule_syncing_temporal_file_deletion', lambda _path: None)
     patch.setattr(module, 'get_prerecorded_service', lambda _lang: ('deepgram', 'cfg', 'nova-3'))
     patch.setattr(module, 'prerecorded', lambda *args, **kwargs: (['w'], 'en'))
     patch.setattr(
@@ -315,7 +322,22 @@ def test_process_segment_saved_rows_results_finish_and_log_bytes_match_main(
                         'response': response,
                         'rows': _rows(store),
                         'finish': calls,
-                        'logs': [record.getMessage() for record in caplog.records],
+                        # Shadow comparison telemetry is new; serving events,
+                        # persisted rows and results must retain their old bytes.
+                        # The episodes intake attach (with its capability-marker
+                        # read) is likewise new additive telemetry, not a sync
+                        # serving change.
+                        'logs': [
+                            record.getMessage()
+                            for record in caplog.records
+                            if not record.getMessage().startswith(
+                                (
+                                    'event=refactor_shadow ',
+                                    'event=episodes_client_seen_',
+                                    'event=episode_sync_intake_attach',
+                                )
+                            )
+                        ],
                     }
                 )
             )

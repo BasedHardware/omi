@@ -36,19 +36,27 @@ private final class MusicTally: NSObject, SNResultsObserving {
 /// existing UI / DB pipeline (`handleBackendSegments`) is unchanged.
 ///
 /// Enabled via `OMI_LOCAL_STT=1` (or `defaults write <bundle> useLocalSTT -bool true`). No network,
-/// no Deepgram. Model weights (~600 MB–1.2 GB) download from HuggingFace on first run and are cached.
+/// no Deepgram. Model weights (~600 MB–1.25 GB) download from HuggingFace on first run and are cached.
+/// The model follows the language (`STTLanguageCapability`): en → v2, ja → tdtJa, European → v3.
 final class LocalTranscriptionService: @unchecked Sendable {
 
   typealias SegmentsHandler = @MainActor ([TranscriptionService.BackendSegment]) -> Void
 
+  struct WindowTranscript: Sendable {
+    let text: String
+    let confidence: Double
+    let rtfx: Double
+  }
+  typealias WindowTranscriber = @Sendable ([Float]) async throws -> WindowTranscript
+
   private struct DrainSnapshot {
-    let manager: AsrManager
+    let transcribe: WindowTranscriber
     let window: [Float]
     let startSec: Double
     let durSec: Double
   }
 
-  private let language: String
+  private let language: STTLanguageCapability.Selection
   /// Source-based diarization: mic = the user ("You"), system audio = another speaker.
   private let isUser: Bool
   private let speakerLabel: String
@@ -85,7 +93,7 @@ final class LocalTranscriptionService: @unchecked Sendable {
   /// 30 s of the ~100 ms frames capture delivers.
   private static let roomLevelHistoryFrames = 300
 
-  private var asrManager: AsrManager?
+  private var transcribeWindow: WindowTranscriber?
   private var onSegments: SegmentsHandler?
   /// Fired (on the main actor) if the Parakeet model fails to download/load. Lets AppState
   /// fall back to cloud STT instead of silently producing a blank transcript.
@@ -94,24 +102,29 @@ final class LocalTranscriptionService: @unchecked Sendable {
   // 16 kHz mono Float32 sample buffer, guarded by `lock`.
   private let lock = NSLock()
   private var buffer: [Float] = []
-  private var isReady = false
   private var isFlushing = false
   /// Set false when retiring the service (stop/finish) so no new samples enter the buffer while
   /// the final drain is in flight — otherwise audio captured during the ~100ms drain (capture is
   /// still running across a finishConversation rotation) would be appended past the snapshot and
   /// silently dropped.
   private var acceptingAudio = true
-  private var emittedSeconds = 0.0  // absolute start offset of the next emitted segment
+  private var emittedSamples = 0
+  private var captureTimeline = CaptureAudioTimeline()
   /// RMS of each recently appended capture frame, guarded by `lock`; the room's background level.
   private var recentFrameRMS: [Float] = []
 
   private var pumpTask: Task<Void, Never>?
 
-  init(language: String = "en", isUser: Bool = true) {
+  init(
+    language: STTLanguageCapability.Selection = .english, isUser: Bool = true,
+    transcribeWindow: WindowTranscriber? = nil, onSegments: SegmentsHandler? = nil
+  ) {
     self.language = language
     self.isUser = isUser
     self.speakerLabel = isUser ? "SPEAKER_00" : "SPEAKER_01"
     self.speakerId = isUser ? 0 : 1
+    self.transcribeWindow = transcribeWindow
+    self.onSegments = onSegments
   }
 
   /// Begin loading the model (async) and start the periodic flush loop.
@@ -123,6 +136,7 @@ final class LocalTranscriptionService: @unchecked Sendable {
 
     Task { [weak self] in
       guard let self else { return }
+      if self.lock.withLock({ self.transcribeWindow != nil }) { return }
       do {
         // Test hook: force a model-load failure to exercise the cloud fallback path.
         // Toggle with env OMI_FORCE_PARAKEET_FAIL=1 or `defaults write <bundle> forceParakeetFail -bool true`.
@@ -133,15 +147,26 @@ final class LocalTranscriptionService: @unchecked Sendable {
             domain: "LocalTranscriptionService", code: -1,
             userInfo: [NSLocalizedDescriptionKey: "forced model-load failure (OMI_FORCE_PARAKEET_FAIL)"])
         }
-        // v2 = English-only (better recall); v3 = 25 European languages.
-        let version: AsrModelVersion = self.language.hasPrefix("en") ? .v2 : .v3
+        // `resolveMode` routes uncovered languages to cloud; a mid-session language change can
+        // still re-arm this service, so fail to cloud rather than decode with the wrong model.
+        guard let version = Self.modelVersion(for: self.language) else {
+          throw NSError(
+            domain: "LocalTranscriptionService", code: -2,
+            userInfo: [NSLocalizedDescriptionKey: "no on-device model for language \(self.language.effective)"])
+        }
         let started = Date()
         let models = try await AsrModels.downloadAndLoad(version: version)
         let manager = AsrManager()
         try await manager.loadModels(models)
+        let hint = self.decodeHint
         self.lock.withLock {
-          self.asrManager = manager
-          self.isReady = true
+          self.transcribeWindow = { samples in
+            // Fresh decoder state per window prevents state drift across unrelated utterances.
+            var state = try TdtDecoderState()
+            let result = try await manager.transcribe(samples, decoderState: &state, language: hint)
+            return WindowTranscript(
+              text: result.text, confidence: Double(result.confidence), rtfx: Double(result.rtfx))
+          }
         }
         log(
           "LocalTranscriptionService: Parakeet \(version) ready in \(String(format: "%.1f", Date().timeIntervalSince(started)))s"
@@ -164,6 +189,18 @@ final class LocalTranscriptionService: @unchecked Sendable {
     }
   }
 
+  static func modelVersion(for language: STTLanguageCapability.Selection) -> AsrModelVersion? {
+    switch language.onDeviceModel {
+    case .englishV2: return .v2
+    case .europeanV3: return .v3
+    case .japanese: return .tdtJa
+    case nil: return nil
+    }
+  }
+
+  /// v3's script filter keeps e.g. Polish out of Cyrillic tokens; v2 and tdtJa ignore the hint.
+  private var decodeHint: Language? { language.decodeHint.flatMap(Language.init(rawValue:)) }
+
   /// Feed 16 kHz mono Int16 little-endian PCM — the same `Data` the WebSocket path sends.
   func appendAudio(_ data: Data) {
     let floats = Self.int16ToFloat32(data)
@@ -177,6 +214,13 @@ final class LocalTranscriptionService: @unchecked Sendable {
           recentFrameRMS.removeFirst(recentFrameRMS.count - Self.roomLevelHistoryFrames)
         }
       }
+    }
+  }
+
+  /// Record gate pauses without inserting silence or retiring the session's recognizer.
+  func setCapturePaused(_ paused: Bool, at now: Date) {
+    lock.withLock {
+      captureTimeline.setPaused(paused, at: now, capturedSamples: emittedSamples + buffer.count)
     }
   }
 
@@ -202,7 +246,7 @@ final class LocalTranscriptionService: @unchecked Sendable {
   func finish() async {
     pumpTask?.cancel()
     pumpTask = nil
-    // Stop buffering new audio first so the single drain below captures the complete buffer —
+    // Stop buffering new audio first so final draining sees the complete buffer —
     // capture can still be running (finishConversation rotation) and would otherwise append
     // past the drain snapshot.
     lock.withLock { acceptingAudio = false }
@@ -217,14 +261,17 @@ final class LocalTranscriptionService: @unchecked Sendable {
       if !busy { break }
       try? await Task.sleep(nanoseconds: 100_000_000)
     }
-    await drain(force: true)
+    // A capture gap can split the buffered tail into several windows. A filtered window
+    // still consumes audio; keep going until no further window can be taken.
+    while await drain(force: true) {}
   }
 
-  /// Transcribe one window (or whatever remains, when `force`) and emit a segment.
-  private func drain(force: Bool) async {
+  /// Consume one gap-bounded window. Returns true even when its transcript is filtered out.
+  @discardableResult
+  private func drain(force: Bool) async -> Bool {
     guard
       let snapshot = lock.withLock({
-        guard isReady, let manager = asrManager, !isFlushing else { return nil as DrainSnapshot? }
+        guard let transcribe = transcribeWindow, !isFlushing else { return nil as DrainSnapshot? }
         // Drop silence sitting ahead of the first speech, advancing the cursor over it so
         // absolute timestamps stay exact. Otherwise quiet counts against the 10 s cap and
         // the window fills partway through the next sentence — observed live cutting
@@ -234,7 +281,7 @@ final class LocalTranscriptionService: @unchecked Sendable {
         let lead = Self.leadingSilenceSamples(buffer, chunk: sampleRate / 10, keep: 2, floor: quiet)
         if lead > 0 {
           buffer.removeFirst(lead)
-          emittedSeconds += Double(lead) / Double(sampleRate)
+          emittedSamples += lead
         }
         let available = buffer.count
         // Three ways a window closes: it filled, the speaker paused, or the session is
@@ -245,20 +292,23 @@ final class LocalTranscriptionService: @unchecked Sendable {
           minSamples: Int(Double(sampleRate) * minUtteranceSeconds),
           floor: quiet
         )
-        let ready = available >= windowSamples || endpointed || (force && available > 0)
+        let untilGap = captureTimeline.samplesUntilNextGap(after: emittedSamples)
+        let endsAtGap = untilGap.map { $0 <= available } ?? false
+        let ready = available >= windowSamples || endpointed || endsAtGap || (force && available > 0)
         guard ready else { return nil }
         // A pause-closed window takes the whole buffer: the boundary is the silence itself,
         // so leaving a remainder would just split the next utterance at an arbitrary point.
-        let take = (force || endpointed) ? available : windowSamples
+        let desiredTake = (force || endpointed) ? available : windowSamples
+        let take = min(available, desiredTake, untilGap ?? available)
         let window = Array(buffer.prefix(take))
         buffer.removeFirst(take)
-        let startSec = emittedSeconds
+        let startSec = captureTimeline.timestamp(at: emittedSamples, sampleRate: sampleRate)
         let durSec = Double(take) / Double(sampleRate)
-        emittedSeconds += durSec
+        emittedSamples += take
         isFlushing = true
-        return DrainSnapshot(manager: manager, window: window, startSec: startSec, durSec: durSec)
+        return DrainSnapshot(transcribe: transcribe, window: window, startSec: startSec, durSec: durSec)
       })
-    else { return }
+    else { return false }
 
     defer {
       lock.withLock { isFlushing = false }
@@ -269,7 +319,7 @@ final class LocalTranscriptionService: @unchecked Sendable {
     // transcribed". A low floor lets normal mic speech through; hallucinations on near-silence
     // are filtered below by the model's own confidence score instead.
     let rms = Self.rms(snapshot.window)
-    guard rms > Self.speechFloor else { return }
+    guard rms > Self.speechFloor else { return true }
 
     // Music/video gate: don't turn songs, TV, or videos playing through *system audio* into
     // "conversations" — only real conversations/calls should be transcribed. Applied to the
@@ -279,19 +329,15 @@ final class LocalTranscriptionService: @unchecked Sendable {
       log(
         String(
           format: "LocalTranscriptionService[sys]: skipped %.1fs music/video window (rms=%.4f)", snapshot.durSec, rms))
-      return
+      return true
     }
 
     do {
-      // Fresh decoder state per window. Persisting TdtDecoderState across arbitrary 10 s
-      // windows makes the transducer decoder drift — it starts looping ("...AND AND AND"),
-      // Title-Casing every word, and emitting gibberish. Independent per-window decode is stable.
-      var ds = try TdtDecoderState()
-      let result = try await snapshot.manager.transcribe(snapshot.window, decoderState: &ds, language: nil)
+      let result = try await snapshot.transcribe(snapshot.window)
 
       var text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
       // Silence makes the TDT decoder emit just "." / "..." — drop windows with no real speech.
-      guard text.contains(where: { $0.isLetter || $0.isNumber }) else { return }
+      guard text.contains(where: { $0.isLetter || $0.isNumber }) else { return true }
       // NOTE: confidence is logged (below) but NOT yet used to gate — we don't know its scale
       // for real speech vs noise-hallucinations. Once the logs show the distribution we add a
       // confidence floor here to catch near-silence gibberish without dropping quiet speech.
@@ -324,6 +370,7 @@ final class LocalTranscriptionService: @unchecked Sendable {
     } catch {
       logError("LocalTranscriptionService: transcribe failed", error: error)
     }
+    return true
   }
 
   static func rms(_ samples: ArraySlice<Float>) -> Float {

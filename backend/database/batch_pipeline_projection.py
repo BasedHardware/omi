@@ -15,8 +15,10 @@ from database.batch_pipeline_policy import load_stage_policy
 from database.batch_pipeline_shadow_hook import mirror_refresh
 from config.policy import ProjectionPolicy
 from database.fsr_read_cache import writing
+from database.monthly_usage_totals import queue_increment
 from database.batch_pipeline_store import FirestoreStore
-from database.batch_pipeline_privacy import assert_batch_write_allowed
+from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked, BatchPrivacyReason
+from database.batch_pipeline_projection_privacy import HOLD_REASONS
 from database.sync_ledger import (
     BATCH_PARTIAL_STATUS,
     batch_projection_ledger_owner_matches,
@@ -85,9 +87,26 @@ class ProjectionStore:
 
     def read(self, segment_id: str) -> tuple[dict[str, Any], dict[str, Any], ProjectionBinding]:
         # This snapshot is a fetch hint only. Every mutation rereads it atomically.
-        job = self.ref('jobs', segment_id).get().to_dict() or {}
+        job: dict[str, Any] = self.ref('jobs', segment_id).get().to_dict() or {}
         if job.get('projection_binding') and (job.get('policy_parts') or {}).get('projection') is None:
-            job, _ = load_stage_policy(self.store, segment_id, 'projection')
+            try:
+                job, _ = load_stage_policy(self.store, segment_id, 'projection')
+            except BatchPrivacyBlocked as error:
+                if error.reason != BatchPrivacyReason.CONVERSATION_DELETED and error.reason not in HOLD_REASONS:
+                    raise
+                # Deletion may win before the projection policy was first
+                # pinned. No policy or source mutation is allowed then. These
+                # local code defaults only drive no-text settlement/replay;
+                # Projector must never assign a job carrying this hint.
+                job = {
+                    **job,
+                    **(
+                        {'_projection_privacy_deleted': True}
+                        if error.reason == BatchPrivacyReason.CONVERSATION_DELETED
+                        else {'_projection_privacy_refusal': error.reason.value}
+                    ),
+                    'policy_parts': {**(job.get('policy_parts') or {}), 'projection': ProjectionPolicy().to_dict()},
+                }
         entry = self.ref('results', segment_id).get().to_dict() or {}
         if not entry or not job.get('projection_binding'):
             raise ProjectionBlocked('committed result and durable intake binding required')
@@ -132,6 +151,64 @@ class ProjectionStore:
             session.prepare(transaction)
 
         self.run(read, policy=session.policy)
+
+    def settle_deleted_output(self, segment_id, binding, now, receipt, *, part_index=None, policy=None):
+        """Retire only an already-assigned output, preserving all input speech accounting."""
+        output = receipt.get('conversation_id')
+        if not output:
+            return
+        user = self.client.collection('users').document(binding.owner_id)
+        candidate = output
+        seen = set()
+        # Cheap read hint; the mutation below rechecks the complete fence in
+        # its transaction. Follow server redirects exactly as the privacy guard.
+        while candidate and candidate not in seen and len(seen) < 256:
+            seen.add(candidate)
+            if user.collection('deleted_conversations').document(candidate).get().exists:
+                break
+            row = user.collection('conversations').document(candidate).get().to_dict() or {}
+            candidate = row.get('sync_merged_into') if row.get('deleted') else None
+        else:
+            return
+        if not candidate or not user.collection('deleted_conversations').document(candidate).get().exists:
+            return
+        policy = policy or self.policy(segment_id)
+
+        @firestore.transactional
+        def commit(transaction):
+            session = self.session(segment_id, binding, now, part_index=part_index, policy=policy)
+            session.prepare(transaction, replay=False)
+            current = session.receipt()
+            if current.get('conversation_id') != output:
+                return current
+            try:
+                session.guard(transaction, [output])
+            except BatchPrivacyBlocked as error:
+                if error.reason != BatchPrivacyReason.CONVERSATION_DELETED or not error.conversation_id:
+                    raise
+                if (
+                    not user.collection('deleted_conversations')
+                    .document(error.conversation_id)
+                    .get(transaction=transaction)
+                    .exists
+                ):
+                    raise
+            else:
+                return current
+            settled = {
+                **current,
+                'state': 'ready',
+                'conversation_id': None,
+                'audio_required': False,
+                'enrichment_required': False,
+                'disposition': 'output_deleted',
+            }
+            session.write_receipt(transaction, settled)
+            return settled
+
+        settled = self.run(commit, policy=policy)
+        receipt.update(settled)
+        self._mirror(binding)
 
     def acknowledge(self, segment_id: str, binding: ProjectionBinding, now: float, *, policy=None):
 
@@ -183,36 +260,48 @@ class ProjectionStore:
         if not reprocess.owns_runtime():
             raise RuntimeError('sync reprocess projection requires production or a Firestore emulator')
         policy = policy or self.policy(segment_id)
-        document_id = reprocess.key(binding.owner_id, canonical)
         outbox = FirestoreEnrichmentOutbox(self.client)
 
         def commit(transaction):
             session = self.session(segment_id, binding, now, part_index=part_index, policy=policy)
             session.prepare(transaction, replay=False)
-            session.guard(transaction, [canonical])
             receipt = dict(session.receipt())
+            output_ids = [r['conversation_id'] for r in receipt.get('size_rollover_outputs', [])] or [canonical]
+            session.guard(transaction, output_ids)
             if receipt.get('state') == 'ready':
                 return None
             backfill = session.job.get('priority') != 0
             # The enrichment obligation and its exactly-once projection
             # receipt commit together, fenced against account deletion.
+            completed = receipt.get('size_rollover_enriched', [])
+            output_id = next(cid for cid in output_ids if cid not in completed)
             result = outbox.enqueue(
-                document_id,
+                reprocess.key(binding.owner_id, output_id),
                 binding.owner_id,
-                {'conversation_id': canonical, 'language': language},
+                {'conversation_id': output_id, 'language': language},
                 now + settle_seconds(),
                 tx=_ClientTransaction(self.client, transaction),
                 now=now,
                 new_dispatch=self._backfill_dispatch if backfill else None,
-                snapshot_summary=True,  # E1: the first-summary policy is snapshotted on the obligation
+                snapshot_summary=True,
             )
-            receipt.update(state='ready', conversation_id=canonical)
+            completed = [*completed, output_id]
+            finished = len(completed) == len(output_ids)
+            if len(output_ids) > 1:
+                receipt['size_rollover_enriched'] = completed
+            receipt.update(state='ready' if finished else 'persisted', conversation_id=canonical)
             session.write_receipt(transaction, receipt)
-            return result
+            return result, finished
 
-        result = self.run(firestore.transactional(commit), policy=policy)
-        if result is not None and result.wake_token:
-            outbox.wake(result.row_id, result.wake_token)  # Durable before wake; the sweep repairs a miss.
+        while True:
+            committed = self.run(firestore.transactional(commit), policy=policy)
+            if committed is None:
+                break
+            result, finished = committed
+            if result.wake_token:
+                outbox.wake(result.row_id, result.wake_token)  # Durable before wake; the sweep repairs a miss.
+            if finished:
+                break
         self._mirror(binding)  # after the wake: the first-summary dispatch path never waits on the shadow
 
     @staticmethod
@@ -252,7 +341,9 @@ class ProjectionStore:
             return run_transactional(self.client, operation)
         return run_with_transaction_contention_retry(
             self.client.transaction,
-            lambda transaction: run_transactional(self.client, operation, initial_transaction=transaction),
+            # attempts=1: the outer budget owns every attempt, so an expired
+            # chain costs one bounded outer retry instead of inner restarts.
+            lambda transaction: run_transactional(self.client, operation, initial_transaction=transaction, attempts=1),
             operation_name='batch_projection',
         )
 
@@ -270,6 +361,11 @@ class ProjectionStore:
             held = False
             for sibling in binding.segment_ids:
                 job = self.ref('jobs', sibling).get(transaction=transaction).to_dict() or {}
+                result = self.ref('results', sibling).get(transaction=transaction).to_dict() or {}
+                if (result.get('projection') or {}).get('state') == 'quarantined':
+                    if not job.get('projection_binding') or normalized_binding(job['projection_binding']) != binding:
+                        raise ProjectionBlocked('quarantined sibling binding mismatch')
+                    held = True
                 if job.get('state') == 'quarantined':
                     if (
                         not job.get('projection_binding')
@@ -324,7 +420,8 @@ class ProjectionStore:
             return None
         charged = ledger.get('usage_committed_seconds', 0.0) if ledger.get('status') == BATCH_PARTIAL_STATUS else 0.0
         steps, step_times = charge_chain(ledger) if ledger.get('status') == BATCH_PARTIAL_STATUS else ([0.0], [])
-        if binding.native_record:
+        intake = self.ref('intakes', binding.job_id).get().to_dict() or {}
+        if binding.native_record and intake.get('server_batch_only') is not True:
             return {
                 'seconds': seconds,
                 'source': 'realtime',
@@ -339,7 +436,6 @@ class ProjectionStore:
         updates = {}
         if int(seconds) - int(charged) > 0 and ledger.get('status') != 'completed':
             # Lane 6 ruling B(a): bill a cap-hold unit to its funded month across a rollover.
-            intake = self.ref('intakes', binding.job_id).get().to_dict() or {}
             stamp = usage_stamp(stamp, intake.get('usage_period'))
             from database.llm_usage import resolve_usage_plan_id
             from database.hourly_usage_updates import prepare_hourly_usage_updates
@@ -399,6 +495,7 @@ class ProjectionStore:
                 receipts.extend(parts.values() if parts else [receipt])
             new, updated = self._visible(transaction, binding, receipts)
             superseded_count = sum(receipt.get('disposition') == 'superseded' for receipt in receipts)
+            deleted_output_count = sum(receipt.get('disposition') == 'output_deleted' for receipt in receipts)
             # Re-read canonical deletion fences before publishing any visible IDs.
             session.guard(transaction, (*new, *updated))
             result = {
@@ -409,7 +506,12 @@ class ProjectionStore:
                 'errors': [],
                 'outcome': (
                     'success'
-                    if new or updated or erased_count or terminal_empty_count or superseded_count
+                    if new
+                    or updated
+                    or erased_count
+                    or terminal_empty_count
+                    or superseded_count
+                    or deleted_output_count
                     else 'expected_silence'
                 ),
             }
@@ -417,10 +519,27 @@ class ProjectionStore:
                 result['no_recoverable_speech_segments'] = terminal_empty_count
             if superseded_count:
                 result['superseded_segments'] = superseded_count
+            if deleted_output_count:
+                result['deleted_output_segments'] = deleted_output_count
+            if (
+                not new
+                and not updated
+                and any(receipt.get('privacy_reason') == 'conversation_deleted' for receipt in receipts)
+            ):
+                result['reason_code'] = 'conversation_deleted'
             if session.ledger.get('status') == 'completed':
                 old = session.ledger.get('result')
-                if not is_valid_completed_sync_content_result(old):
+                if not isinstance(old, dict) or not is_valid_completed_sync_content_result(old):
                     raise ProjectionBlocked('invalid existing ledger completion')
+                if deleted_output_count:
+                    # Preserve historical usage; publish only destinations that
+                    # remain visible after the user's output deletion.
+                    old = {
+                        **old,
+                        'new_memories': new,
+                        'updated_memories': updated,
+                        'deleted_output_segments': deleted_output_count,
+                    }
                 return old, False, 0
             # Part-level attribution need not sum to the worker's speech union
             # for older receipts. The immutable result summary owns metering.
@@ -464,7 +583,8 @@ class ProjectionStore:
         """Earlier receipt IDs can have become bridge donors. Follow the same
         server redirects, retaining only visible canonical IDs."""
         mapped = []
-        for receipt in receipts:
+        outputs = [output for receipt in receipts for output in (receipt.get('size_rollover_outputs') or [receipt])]
+        for receipt in outputs:
             cid = receipt.get('conversation_id')
             original_id = cid
             seen = set()
@@ -508,6 +628,12 @@ class ProjectionStore:
                 .document(accounting['hour'])
             )
             transaction.set(usage_ref, accounting['updates'], merge=True)
+            queue_increment(
+                transaction,
+                self.client.collection('users').document(binding.owner_id),
+                datetime.strptime(accounting['hour'], '%Y-%m-%d-%H'),
+                accounting['updates'],
+            )
         # Every charge boundary and when it committed, so fair use can re-issue
         # each recent step's once-key: a write lost after any earlier commit
         # still lands on a later attempt while that key is live.
@@ -658,7 +784,8 @@ OPERATOR_INTENTS = ('speech_redrive', 'terminal_disposition', 'silence_dispositi
 def held_without_recovery(job: dict) -> bool:
     """A quarantined unit that nothing automatic will change.
 
-    Its one paid recovery settled without words (``failed_held``), or its
+    Its recovery settled without words or hit the hard independent duration
+    limit before spending (``failed_held``), or its
     recorded recovery policy is off and no paid call was ever authorized. Either
     way its encrypted audio stays server-side for a reviewed operator redrive.
     """

@@ -79,6 +79,9 @@ _DEMAND_LISTEN_ONLY = frozenset(
         'STT_LIVE_DEMAND_MIN_DWELL_SECONDS',
     }
 )
+# Only listen WebSocket reconnects run the stale-page scanner. Pusher consumes
+# admitted jobs; this kill switch must not disable their finalization/retries.
+_RECONNECT_RECOVERY_LISTEN_ONLY = frozenset({'STALE_IN_PROGRESS_RECOVERY_ENABLED'})
 # main.py owns sync intake, recovery RPC and serving startup. pusher.main mounts
 # none of those surfaces and never starts the dedicated GPU process.
 _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
@@ -146,7 +149,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             # Sync HTTP intake is mounted by main.py; pusher mounts no sync router.
             "SYNC_FINALIZE_TARGET_RECOVERY_ENABLED",
             "ACCOUNT_CUTOVER_ENFORCEMENT",
-            "DEEPGRAM_SELF_HOSTED_ENABLED",
             "DESKTOP_UPDATE_POINTERS_MODE",
             "DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE",
             # Legacy mobile HTTP TTS rollback; pusher mounts no TTS router.
@@ -176,7 +178,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             # Reconnect admission is local to the /v4/listen runtime; pusher does not open client listen sockets.
             "LISTEN_RECONNECT_BUDGET_PER_MIN",
             "MCP_OAUTH_CHATGPT_CLIENT_SECRET",
-            "MEMORY_CANONICAL_MAINTENANCE_ENABLED",
             "MEMORY_TYPESENSE_COLLECTION",
             "OMI_FIRESTORE_DATA_PLANE_PROJECT",
             "OMI_PARITY_PACK_ALLOWED_PRINCIPALS",
@@ -210,6 +211,7 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _TRANSLATION_LISTEN_ONLY
     | _REVIEW_SURFACE_LISTEN_ONLY
     | _DEMAND_LISTEN_ONLY
+    | _RECONNECT_RECOVERY_LISTEN_ONLY
     | _BATCH_PIPELINE_LISTEN_ONLY,
     "prod": frozenset(
         {
@@ -218,6 +220,10 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "MOBILE_STANDARD_BATCH_ENABLED",
             "MOBILE_STANDARD_BATCH_PERCENT",
             "MOBILE_STANDARD_BATCH_UIDS",
+            # Only listen reads the mobile server-batch-only cohort: server_batch.selected via
+            # request_eligible and via eligible <- create_in_progress_conversation, both called only
+            # from routers/listen. Pusher's finalizer uses owned/has_audio and never admits capture.
+            "SERVER_BATCH_ONLY_MOBILE_PERCENT",
             # Managed listen-only STT rollout; pusher is not a live audio receiver.
             "PARAKEET_BATCH_PRESSURE_MIN_REPLICAS",
             "PARAKEET_BATCH_PRESSURE_POOL_HOST",
@@ -232,9 +238,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PARAKEET_WINDOW_MAX_CONTEXT_SECONDS",
             "PARAKEET_WINDOW_PACE_SECONDS",
             "PARAKEET_WINDOW_POST_TIMEOUT_SECONDS",
-            # Pusher runs keyless on Workload Identity; listen still mounts the nik-164 key until
-            # its own cut-over (credential hygiene D4 phase 2), which removes this entry.
-            "SERVICE_ACCOUNT_JSON",
             "SONIOX_CIRCUIT_COOLDOWN_SECONDS",
             "SONIOX_CIRCUIT_FAILURE_THRESHOLD",
             "STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS",
@@ -282,7 +285,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "FAIR_USE_WEEKLY_SPEECH_MS",
             "GCP_LOCATION",
             "GEMINI_API_KEY",
-            "GOOGLE_APPLICATION_CREDENTIALS",
             "HOSTED_PUSHER_API_URL",
             "HOSTED_TRANSLATION_API_URL",
             "HOSTED_VAD_API_URL",
@@ -292,7 +294,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "LISTEN_RECONNECT_BUDGET_PER_MIN",
             "MCP_OAUTH_CHATGPT_CLIENT_SECRET",
             "MCP_OAUTH_CLIENTS_JSON",
-            "MEMORY_CANONICAL_MAINTENANCE_ENABLED",
             "MEMORY_TYPESENSE_COLLECTION",
             "MEMORY_V3_CURSOR_SECRET",
             "OMI_FIRESTORE_DATA_PLANE_PROJECT",
@@ -323,6 +324,7 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _TRANSLATION_LISTEN_ONLY
     | _REVIEW_SURFACE_LISTEN_ONLY
     | _DEMAND_LISTEN_ONLY
+    | _RECONNECT_RECOVERY_LISTEN_ONLY
     | (_BATCH_PIPELINE_LISTEN_ONLY - {'BATCH_PIPELINE_UID_ALLOWLIST'}),
 }
 
@@ -346,7 +348,6 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     # Pusher retains its cloud/BYOK credential; listen has no managed cloud key.
     "prod": frozenset(
         {
-            "DEEPGRAM_API_KEY",
             # Late identity retries are scheduled only by prod pusher audio drain.
             "OWNER_IDENTITY_RETRY_COALESCE_ENABLED",
             "REDIS_DB_HOST",

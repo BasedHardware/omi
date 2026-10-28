@@ -336,6 +336,7 @@ class TestModelQosProfiles:
             'conv_structure',
             'conv_app_result',
             'daily_summary',
+            'open_loop_daily',
             'external_structure',
             'memories',
             'x_memory_extraction_flex',
@@ -378,6 +379,7 @@ class TestModelQosProfiles:
             'persona_chat',
             'sync_redrive_title',
             'episode_incremental',
+            'open_loop_card',
         }
         expected_openai = {
             **{feature: (LUNA_MODEL, 'openai') for feature in luna_features},
@@ -863,7 +865,7 @@ class TestExpandedCallsiteCoverage:
             assert key in calls, f"Missing get_llm('{key}') in conversation_processing.py"
         # The shaped writer replaces the legacy writer's duplicate feature callsite.
         assert calls.count('conv_structure') == 1
-        assert calls.count('conv_app_select') == 2, "conv_app_select should appear exactly twice"
+        assert calls.count('conv_app_select') == 1, "conv_app_select should appear exactly once"
 
     def test_memories_all_keys(self):
         import re

@@ -21,15 +21,16 @@ import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_d
 import 'package:omi/pages/settings/device/device_control_sheets.dart';
 import 'package:omi/pages/settings/device/device_info_groups.dart';
 import 'package:omi/pages/settings/device/device_live_sections.dart';
+import 'package:omi/pages/settings/device/heard_today.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
-import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/pages/settings/device/device_page_header.dart';
 import 'package:omi/pages/settings/device_diagnostics.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/devices.dart';
@@ -42,6 +43,7 @@ import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/firmware_update_build_policy.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -667,7 +669,7 @@ extension _DeviceLiveSections on _DeviceSettingsState {
   Widget _liveSections({required bool connected, required int batteryLevel, required bool isCharging}) {
     const gap = SizedBox(height: OmiSpacing.xxl);
     return Builder(builder: (context) {
-      // One WAL pass per sync notification, shared by Stats and Right now.
+      // One WAL pass per sync notification, shared by the stat row's tiles.
       // Capture/episode updates subscribe below this builder and never rescan it;
       // deviceCatchUpLocal memoizes on the WAL list identity, so a progress-only
       // notify reuses the last snapshot instead of rescanning, and the server
@@ -690,71 +692,152 @@ extension _DeviceLiveSections on _DeviceSettingsState {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (connected) ...[
-            Builder(
-                builder: (context) => DeviceStatsRow(
-                      batteryLevel: batteryLevel,
-                      isCharging: isCharging,
-                      heardTodaySeconds: _heardTodaySeconds(context),
-                      onDeviceSeconds: local.onDeviceSeconds,
-                    )),
-            gap,
-          ],
+          // Catching up lives in the stat row, so the row stays while audio is still on its
+          // way even with the device disconnected.
           ListenableBuilder(
             listenable: _pendingWork,
             builder: (context, _) {
-              final rightNow =
-                  _rightNow(context, local: local, serverProcessing: serverProcessing, syncStatus: syncStatus);
-              return rightNow.hasContent ? Column(children: [rightNow, gap]) : const SizedBox.shrink();
+              final catchUp =
+                  _catchUp(context, local: local, serverProcessing: serverProcessing, syncStatus: syncStatus);
+              if (!connected && catchUp == null) return const SizedBox.shrink();
+              final online = context.select<ConnectivityProvider?, bool>((c) => c?.isConnected ?? true);
+              return Column(children: [
+                Builder(
+                    builder: (context) => DeviceStatsRow(
+                          batteryLevel: connected ? batteryLevel : 0,
+                          isCharging: isCharging,
+                          heardTodaySeconds: _heardTodaySeconds(context),
+                          onDeviceSeconds: local.onDeviceSeconds,
+                          phoneQueueSeconds: local.onPhoneSeconds,
+                          catchUpSeconds: catchUp?.seconds,
+                          // Uploads need only a connection; that is the one thing it can wait on.
+                          catchUpCaption: online ? l10n.deviceCatchUpOnItsWay : l10n.deviceCatchUpWhenOnline,
+                          onOpenCatchUp: () => routeToPage(context, OnTheWayPage(pendingWork: _pendingWork)),
+                        )),
+                gap,
+              ]);
             },
           ),
+          Builder(builder: (context) {
+            final rightNow = _rightNow(context);
+            return rightNow.hasContent ? Column(children: [rightNow, gap]) : const SizedBox.shrink();
+          }),
         ],
       );
     });
   }
 
-  /// Speech heard today, by the conversation list's own length rule.
+  /// Speech heard today: transcript time inside today's local day across the
+  /// loaded conversations, plus the active live episode's own interval since
+  /// its start or anchor, merged so nothing is counted twice. A pendant that
+  /// streams without a break files its conversations under the session's start
+  /// day, so bucketing by that day hid today's speech.
   int _heardTodaySeconds(BuildContext context) {
+    final liveEpisodeStart = _liveEpisodeStart(context);
     return context.select<ConversationProvider?, int>((conversations) {
-      final today = DateUtils.dateOnly(DateTime.now());
-      return (conversations?.groupedConversations[today] ?? const <ServerConversation>[])
-          .where((c) => !c.discarded)
-          .fold<int>(0, (sum, c) => sum + c.getDurationInSeconds());
+      return heardTodaySpeechSeconds(
+        conversations: conversations == null
+            ? const []
+            : [
+                ...conversations.groupedConversations.values.expand((group) => group),
+                ...conversations.processingConversations,
+              ],
+        now: DateTime.now(),
+        liveEpisodeStart: liveEpisodeStart,
+      );
     });
   }
 
-  DeviceRightNowGroup _rightNow(BuildContext context,
+  /// The active live episode's own start: the server episode's start, kept
+  /// stable by the shared anchor across reconnects and restarts. Null when no
+  /// episode is live. Never the capture session's origin
+  /// (`liveCaptureStartedAt`): a pendant that streams without a break never
+  /// resets it, so it would name the whole session as heard.
+  DateTime? _liveEpisodeStart(BuildContext context) {
+    final episodes = _maybeProvider<EpisodeProvider>(context, listen: false);
+    if (episodes == null || !episodes.enabled) return null;
+    final capture = _maybeProvider<CaptureProvider>(context, listen: false);
+    return context.select<EpisodeProvider, DateTime?>((e) => _anchoredLiveEpisodeStart(e, capture, DateTime.now()));
+  }
+
+  static DateTime? _anchoredLiveEpisodeStart(EpisodeProvider e, CaptureProvider? capture, DateTime now) {
+    final episode = e.live;
+    if (episode == null) return null;
+    if (capture == null) return episode.startedAt.isAfter(now) ? null : episode.startedAt;
+    final elapsed = EpisodePresentation.elapsed(episode, capture, now, anchor: e.liveAnchor);
+    return elapsed.inSeconds <= 0 ? null : now.subtract(elapsed);
+  }
+
+  /// Everything still on its way to becoming conversations, from the shared WAL snapshot plus
+  /// server work; null when nothing is.
+  DeviceCatchUpSummary? _catchUp(BuildContext context,
       {required DeviceCatchUpLocal local, required bool serverProcessing, required String syncStatus}) {
     final conversations = context.watch<ConversationProvider?>();
+    return DeviceCatchUpSummary.from(
+      local: local,
+      serverProcessing: serverProcessing,
+      // Local or phone-run work reads On the Way's own stage; server work the
+      // phone did not start has no local stage to report.
+      status: local.hasPending || serverProcessing ? syncStatus : context.l10n.processing,
+      pending: _pendingWork.pending,
+      conversations: conversations?.conversations ?? const [],
+      processing: conversations?.processingConversations ?? const [],
+    );
+  }
+
+  DeviceRightNowGroup _rightNow(BuildContext context) {
     final capture = context.read<CaptureProvider?>();
-    // Only the visible source and running length depend on capture, not its
-    // transcript text, socket state, or BLE/network rate samples.
-    final (source, _) = context.select<CaptureProvider?, (String?, double)>(
-      (c) => (c?.liveCaptureSource, c?.segments.lastOrNull?.end ?? 0),
+    // Only the visible source, its running length and its audio health depend on
+    // capture, not its transcript text, socket state, or BLE/network rate samples.
+    final (source, _, pendantFailed, pendantVerified, reconnecting) =
+        context.select<CaptureProvider?, (String?, DateTime?, bool, bool, bool)>(
+      (c) => (
+        c?.liveCaptureSource,
+        c?.liveCaptureStartedAt,
+        c?.pendantCaptureActionRequired ?? false,
+        c?.pendantCaptureVerified ?? true,
+        c?.pendantReconnectInFlight ?? false,
+      ),
     );
     final deviceStreaming = source != null && source != 'phone';
     final episodes = _maybeProvider<EpisodeProvider>(context);
     final live = episodes != null && episodes.enabled && deviceStreaming ? episodes.live : null;
     final l10n = context.l10n;
+    // The pendant's own audio health names the row: a confirmed-subscription quiet
+    // is Listening with a running length, a wait shows no length, and an exhausted
+    // recovery is a failure with the one action that can fix it.
+    final noAudio = deviceStreaming && pendantFailed;
+    final connecting = deviceStreaming && !pendantFailed && !pendantVerified;
     return DeviceRightNowGroup(
-      liveTitle: live == null ? null : (live.title.isEmpty ? l10n.episodeListeningNow : live.title),
-      liveLength: live == null || capture == null
+      liveTitle: noAudio
+          ? l10n.captureNoAudioFromPendant
+          : live == null
+              ? null
+              : (live.title.isEmpty ? l10n.episodeListeningNow : live.title),
+      liveSubtitle: noAudio
+          ? l10n.captureNoAudioDetail
+          : connecting
+              ? l10n.captureConnecting
+              : null,
+      liveProblem: noAudio,
+      // No tap while a reconnect runs: the controller ignores one anyway, and the
+      // row saying nothing is quieter than a second teardown racing the first.
+      onFixProblem: noAudio && capture != null && !reconnecting
+          ? () {
+              OmiHaptics.medium();
+              final message = l10n.somethingWentWrong;
+              capture.reconnectRecordingPendant().catchError((Object error) {
+                AppSnackbar.showSnackbar(message);
+              });
+            }
+          : null,
+      liveLengthNow: live == null || capture == null || connecting
           ? null
-          : EpisodePresentation.runningLength(EpisodePresentation.elapsed(live, capture, episodes!.now()), l10n),
+          : (_) => EpisodePresentation.runningLength(
+              EpisodePresentation.elapsed(live, capture, episodes!.now(), anchor: episodes.liveAnchor), l10n),
       onOpenLive: capture == null
           ? null
           : () => routeToPage(context, LiveEpisodePage(topConversationId: capture.topConversationId)),
-      catchingUp: DeviceCatchUpSummary.from(
-        local: local,
-        serverProcessing: serverProcessing,
-        // Local or phone-run work reads On the Way's own stage; server work the
-        // phone did not start has no local stage to report.
-        status: local.hasPending || serverProcessing ? syncStatus : l10n.processing,
-        pending: _pendingWork.pending,
-        conversations: conversations?.conversations ?? const [],
-        processing: conversations?.processingConversations ?? const [],
-      ),
-      onOpenCatchingUp: () => routeToPage(context, OnTheWayPage(pendingWork: _pendingWork)),
     );
   }
 

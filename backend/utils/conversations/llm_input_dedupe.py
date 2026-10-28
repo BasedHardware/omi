@@ -6,6 +6,8 @@ objects fail closed instead of silently stringifying two distinct inputs alike.
 
 from __future__ import annotations
 
+from config.refactor_modes import serving_for
+
 import dataclasses
 import hashlib
 import json
@@ -30,6 +32,16 @@ from utils.sync.repeat_work_metrics import record_feature
 
 SKIPPED = Counter(
     'conversation_llm_input_dedupe_skipped_total', 'Successful conversation feature input reused', ['feature']
+)
+MISSES = Counter(
+    'conversation_llm_input_dedupe_misses_total',
+    'Conversation feature calls evaluated with no reusable input',
+    ['feature'],
+)
+CHECKPOINT_ERRORS = Counter(
+    'conversation_llm_input_dedupe_checkpoint_errors_total',
+    'Input hash matched but the stored output checkpoint was unusable',
+    ['feature'],
 )
 NOTES_HASH = 'notes_llm_input_hash'
 NOTES_OUTPUT_HASH = 'notes_llm_output_hash'
@@ -78,6 +90,17 @@ def implementation_digest(feature: str) -> str:
         'llm/working_observations.py',
         'llm/conversation_processing.py',
         'llm/conversation_notes_prompts.py',
+        'llm/notes_packet.py',
+        'llm/action_item_v2.py',
+        'llm/notes_output.py',
+        'llm/notes_lengths.py',
+        'llm/notes_effort.py',
+        'llm/notes_output_contract.py',
+        'llm/notes_identity.py',
+        'llm/output_language.py',
+        'llm/speaker_evidence_prompt.py',
+        'llm/notes_short_clip.py',
+        'llm/notes_language_inputs.py',
         'llm/conversation_title_people.py',
         'llm/meeting_notes_rich_prompts.py',
         'llm/meeting_notes_presentation.py',
@@ -129,15 +152,26 @@ def _stored(uid: str, conversation: Any, *, db_client: Any = None) -> dict[str, 
     return row
 
 
+def _notes_packet_identity(uid: str) -> dict[str, Any]:
+    from config.refactor_modes import serving_for
+    from utils.llm.notes_packet import PACKET_VERSION
+
+    serving = serving_for('NOTES_PACKET_V2_MODE', uid)
+    return {'mode': 'serve' if serving else 'legacy', 'version': PACKET_VERSION if serving else 1}
+
+
 def notes(uid: str, conversation: Any, prefix: Any, generate, hashes: dict[str, str] | None, **kwargs):
+    open_loop_out = kwargs.pop('open_loop_out', None)
     if not dedupe_enabled() or hashes is None:
-        return generate(prefix, uid=uid, **kwargs)
+        return generate(prefix, uid=uid, open_loop_out=open_loop_out, **kwargs)
     digest = fingerprint(
         'notes',
         {
             'prefix': prefix,
             **({'content_revision': getattr(conversation, 'sync_content_revision', None)} if revision_reuse() else {}),
             'arguments': kwargs,
+            'notes_packet': _notes_packet_identity(uid),
+            'action_items_v2': serving_for('ACTION_ITEMS_V2_MODE', uid),
             'tier_escalation': os.getenv('NOTES_TIER_ESCALATION_ENABLED', ''),
             'shaped_notes_mode': os.getenv('OMI_SHAPED_AGENT_MODE', 'off'),
             'notes_agent': os.getenv('CONVERSATION_NOTES_AGENT_ENABLED', 'true').strip().lower(),
@@ -145,7 +179,8 @@ def notes(uid: str, conversation: Any, prefix: Any, generate, hashes: dict[str, 
     )
     row = _stored(uid, conversation) if getattr(conversation, 'id', None) else {}
     saved = None
-    if row.get(NOTES_HASH) == digest and row.get(NOTES_OUTPUT_HASH) and not row.get('discarded'):
+    matched_input = row.get(NOTES_HASH) == digest and not row.get('discarded')
+    if matched_input and row.get(NOTES_OUTPUT_HASH):
         from pydantic import ValidationError
 
         try:
@@ -161,8 +196,11 @@ def notes(uid: str, conversation: Any, prefix: Any, generate, hashes: dict[str, 
         SKIPPED.labels(feature='notes').inc()
         record_feature(uid, conversation, 'notes', 'reused')
     else:
+        if matched_input:
+            CHECKPOINT_ERRORS.labels(feature='notes').inc()
+        MISSES.labels(feature='notes').inc()
         record_feature(uid, conversation, 'notes', 'invoked')
-        output = generate(prefix, uid=uid, **kwargs)
+        output = generate(prefix, uid=uid, open_loop_out=open_loop_out, **kwargs)
     hashes[NOTES_HASH] = digest
     hashes[NOTES_OUTPUT_HASH] = output_fingerprint(output)
     return output
@@ -211,6 +249,8 @@ def l1_input(uid: str, conversation: Any, inputs: Any, *, db_client: Any = None)
     matched = _stored(uid, conversation, db_client=db_client).get(L1_HASH) == digest
     if matched:
         SKIPPED.labels(feature='l1').inc()
+    else:
+        MISSES.labels(feature='l1').inc()
     record_feature(uid, conversation, 'l1', 'reused' if matched else 'invoked')
     return digest, matched
 

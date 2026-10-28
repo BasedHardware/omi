@@ -112,13 +112,19 @@ void main() {
   late DeviceService service;
 
   final mockedChannels = <String>{};
+  final reconnectConfigurations = <Object?>[];
 
   void mockBleHostApi(String method) {
     final channel = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.$method';
     mockedChannels.add(channel);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMessageHandler(
       channel,
-      (ByteData? message) async => BleHostApi.pigeonChannelCodec.encodeMessage(<Object?>[null]),
+      (ByteData? message) async {
+        if (method == 'configureSavedReconnect') {
+          reconnectConfigurations.add(BleHostApi.pigeonChannelCodec.decodeMessage(message));
+        }
+        return BleHostApi.pigeonChannelCodec.encodeMessage(<Object?>[null]);
+      },
     );
   }
 
@@ -131,8 +137,10 @@ void main() {
   });
 
   setUp(() async {
+    reconnectConfigurations.clear();
     mockBleHostApi('stopScan');
     mockBleHostApi('startScan');
+    mockBleHostApi('configureSavedReconnect');
     final audio = _device(audioId);
     final glass = _device(glassId, type: DeviceType.openglass);
     SharedPreferences.setMockInitialValues({});
@@ -230,6 +238,9 @@ void main() {
 
     await service.forgetDevice(audioId);
 
+    expect(reconnectConfigurations, <Object?>[
+      <Object?>[audioId, false],
+    ]);
     expect(service.connectionFor(audioId), isNull);
     expect(built[audioId]!.transport.disposed, isTrue);
     expect(service.connectionFor(glassId)?.status, DeviceConnectionState.connected);

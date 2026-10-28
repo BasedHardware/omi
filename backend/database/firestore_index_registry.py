@@ -6,8 +6,14 @@ Index-only requirements stay explicit until callers migrate to query specs.
 from __future__ import annotations
 
 from typing import Any
+from database.mcp_read_queries import (
+    MCP_DAILY_RECORDINGS_QUERY,
+    MCP_MEMORY_FILTER_QUERIES,
+    MCP_CONVERSATION_CARD_QUERY_SPECS,
+)
 from database.review_queries import REVIEW_QUERY_SPECS
 from database.sync_pipeline_indexes import SYNC_PIPELINE_INDEX_REQUIREMENTS
+from database.batch_pipeline_indexes import BATCH_PIPELINE_INDEX_REQUIREMENTS
 from database.messaging_queries import MESSAGING_INDEX_REQUIREMENTS, MESSAGING_FIELD_REQUIREMENTS
 from .firestore_query_types import (
     FieldIndexRequirement,
@@ -33,24 +39,7 @@ def _contains(field_path: str) -> FirestoreIndexField:
 # These explicit requirements preserve the current deployed index set while
 # callers migrate one compound serving query at a time into QUERY_SPECS.
 INDEX_ONLY_REQUIREMENTS = (
-    *(
-        FirestoreIndexRequirement(
-            f'{stage}_batch_ramp_owner_load',
-            f'batch_pipeline_{stage}_jobs',
-            'COLLECTION',
-            (_asc('owner_id'), _asc('enqueued_at'), _asc('__name__')),
-        )
-        for stage in ('prod', 'dev')
-    ),
-    *(
-        FirestoreIndexRequirement(
-            f'{stage}_batch_ready_predecessor',
-            f'batch_pipeline_{stage}_jobs',
-            'COLLECTION',
-            (_asc('owner_key'), _asc('priority'), _asc('state'), _asc('next'), _asc('__name__')),
-        )
-        for stage in ('prod', 'dev')
-    ),
+    *BATCH_PIPELINE_INDEX_REQUIREMENTS,
     *SYNC_PIPELINE_INDEX_REQUIREMENTS,
     *MESSAGING_INDEX_REQUIREMENTS,
     FirestoreIndexRequirement(
@@ -1382,6 +1371,18 @@ REVIEW_QUEUE_BY_STATUS_ID_QUERY = FirestoreQuerySpec(
     ),
 )
 
+DUE_IN_PROGRESS_CONTENT_QUERY = FirestoreQuerySpec(
+    identifier='conversations_in_progress_content_due',
+    collection_group='conversations',
+    query_scope='COLLECTION_GROUP',
+    filters=(
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('has_content', '==', 'has_content'),
+        FirestoreQueryFilter('finished_at', '<=', 'content_due_before'),
+    ),
+    index_fields=(_asc('status'), _asc('has_content'), _asc('finished_at'), _asc('__name__')),
+)
+
 STALE_IN_PROGRESS_CONVERSATIONS_QUERY = FirestoreQuerySpec(
     identifier='conversations_in_progress_by_finished_at',
     collection_group='conversations',
@@ -1391,6 +1392,18 @@ STALE_IN_PROGRESS_CONVERSATIONS_QUERY = FirestoreQuerySpec(
         _asc('status'),
         _asc('finished_at'),
         _asc('__name__'),
+    ),
+)
+
+STALE_RECOVERY_PAGE_QUERY = FirestoreQuerySpec(
+    identifier='conversations_stale_recovery_newest_page',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('status', '==', 'status'), FirestoreQueryFilter('finished_at', '<', 'cutoff')),
+    index_fields=(
+        _asc('status'),
+        _desc('finished_at'),
+        _desc('__name__'),
     ),
 )
 
@@ -1447,35 +1460,6 @@ CONVERSATIONS_COUNT_CREATED_RANGE_QUERY = FirestoreQuerySpec(
     ),
     index_fields=(_asc('discarded'), _asc('created_at'), _asc('__name__')),
 )
-
-MCP_CONVERSATION_CARD_QUERY_SPECS: dict[tuple[bool, bool, bool], FirestoreQuerySpec] = {}
-for _has_categories in (False, True):
-    for _has_start_date in (False, True):
-        for _has_end_date in (False, True):
-            _suffixes = []
-            _filters = [
-                FirestoreQueryFilter('discarded', '==', 'discarded'),
-                FirestoreQueryFilter('status', '==', 'status'),
-            ]
-            _index_fields = [_asc('discarded'), _asc('status')]
-            if _has_categories:
-                _suffixes.append('category')
-                _filters.append(FirestoreQueryFilter('structured.category', 'in', 'categories'))
-                _index_fields.append(_asc('structured.category'))
-            if _has_start_date:
-                _suffixes.append('start')
-                _filters.append(FirestoreQueryFilter('created_at', '>=', 'start_date'))
-            if _has_end_date:
-                _suffixes.append('end')
-                _filters.append(FirestoreQueryFilter('created_at', '<=', 'end_date'))
-            _variant = '_'.join(_suffixes) or 'all'
-            MCP_CONVERSATION_CARD_QUERY_SPECS[(_has_categories, _has_start_date, _has_end_date)] = FirestoreQuerySpec(
-                identifier=f'mcp_conversation_cards_{_variant}',
-                collection_group='conversations',
-                query_scope='COLLECTION',
-                filters=tuple(_filters),
-                index_fields=tuple((*_index_fields, _desc('created_at'), _desc('__name__'))),
-            )
 
 # Sync safety-WAL binding: the newest rollover generations of one recording that
 # started before the upload's audio ends (utils/sync/recording_lineage.py).
@@ -1742,6 +1726,40 @@ FINALIZATION_OLDEST_NONTERMINAL_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('status'), _asc('created_at'), _asc('__name__')),
 )
 
+# WQ13: candidate filters are read-only and gated independently of loop leases.
+FINALIZATION_BYOK_ABANDONMENT_QUERY = FirestoreQuerySpec(
+    identifier='finalization_byok_active_candidates',
+    collection_group='conversation_finalization_jobs',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('requires_byok', '==', 'requires_byok'),
+        FirestoreQueryFilter('status', 'in', 'statuses'),
+    ),
+    index_fields=(_asc('requires_byok'), _asc('status'), _asc('__name__')),
+)
+
+FINALIZATION_BYOK_RECLAIM_QUERY = FirestoreQuerySpec(
+    identifier='finalization_byok_reclaim_candidates',
+    collection_group='conversation_finalization_jobs',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('requires_byok', '==', 'requires_byok'),
+        FirestoreQueryFilter('status', '==', 'status'),
+    ),
+    index_fields=(_asc('requires_byok'), _asc('status'), _asc('created_at'), _asc('__name__')),
+)
+
+FINALIZATION_STALE_IN_PROGRESS_QUERY = FirestoreQuerySpec(
+    identifier='finalization_stale_in_progress_candidates',
+    collection_group='conversations',
+    query_scope='COLLECTION_GROUP',
+    filters=(
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('finished_at', '<=', 'finished_before'),
+    ),
+    index_fields=(_asc('status'), _asc('finished_at'), _asc('__name__')),
+)
+
 CONVERSATION_KEYFRAME_JOBS_DEVICE_STATE_QUERY = FirestoreQuerySpec(
     identifier='conversation_keyframe_jobs_device_state',
     collection_group='conversation_keyframe_jobs',
@@ -1901,6 +1919,24 @@ CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('discarded'), _asc('source'), _asc('status'), _desc('created_at'), _desc('__name__')),
 )
 
+CONVERSATIONS_SMART_MERGE_PARTITION_QUERY = FirestoreQuerySpec(
+    identifier='conversations_smart_merge_device_preceding',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(
+        *CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY.filters,
+        FirestoreQueryFilter('client_device_id', '==', 'client_device_id'),
+    ),
+    index_fields=(
+        _asc('discarded'),
+        _asc('source'),
+        _asc('status'),
+        _asc('client_device_id'),
+        _desc('created_at'),
+        _desc('__name__'),
+    ),
+)
+
 
 CONVERSATION_PHOTOS_NAME_RANGE_QUERY = FirestoreQuerySpec(
     identifier='conversation_photos_name_range_export',
@@ -1914,6 +1950,8 @@ CONVERSATION_PHOTOS_NAME_RANGE_QUERY = FirestoreQuerySpec(
 )
 
 QUERY_SPECS = (
+    MCP_DAILY_RECORDINGS_QUERY,
+    *MCP_MEMORY_FILTER_QUERIES.values(),
     *REVIEW_QUERY_SPECS,
     ACTION_ITEMS_CANONICAL_COMPLETION_COUNT_QUERY,
     CONVERSATION_PHOTOS_NAME_RANGE_QUERY,
@@ -1959,7 +1997,9 @@ QUERY_SPECS = (
     EXPIRY_URGENT_SHORT_TERM_BY_STORED_EXPIRY_QUERY,
     ACTIVE_ATTENTION_OVERRIDE_QUERY,
     LEGACY_CONVERSATION_RECOVERY_QUERY,
+    DUE_IN_PROGRESS_CONTENT_QUERY,
     STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
+    STALE_RECOVERY_PAGE_QUERY,
     CONVERSATIONS_BY_STATUS_FINISHED_AFTER_QUERY,
     SCREEN_ACTIVITY_KEYWORD_RANGE_QUERY,
     CHAT_FIRST_DEFERRALS_DUE_QUERY,
@@ -1978,6 +2018,9 @@ QUERY_SPECS = (
     *MCP_CONVERSATION_CARD_QUERY_SPECS.values(),
     SYNC_RECORDING_LINEAGE_QUERY,
     FINALIZATION_OLDEST_NONTERMINAL_QUERY,
+    FINALIZATION_BYOK_ABANDONMENT_QUERY,
+    FINALIZATION_BYOK_RECLAIM_QUERY,
+    FINALIZATION_STALE_IN_PROGRESS_QUERY,
     CONVERSATION_KEYFRAME_JOBS_DEVICE_STATE_QUERY,
     SCREEN_ACTIVITY_KEYFRAME_QUERY,
     FRAME_VISION_OUTPUT_EXPIRY_QUERY,
@@ -1987,6 +2030,7 @@ QUERY_SPECS = (
     DAY3_REENGAGEMENT_RETURNED_CONVERSATIONS_QUERY,
     DAILY_SUMMARY_RECIPIENTS_QUERY,
     CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY,
+    CONVERSATIONS_SMART_MERGE_PARTITION_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)

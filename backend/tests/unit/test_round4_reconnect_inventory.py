@@ -273,13 +273,13 @@ def _old_peer_wiring(mp, old_pusher, old_storage):
     for attr in (
         'get_audio_bytes_webhook_seconds',
         'is_audio_bytes_app_enabled',
-        'is_audio_merge_dispatch_enabled',
         'schedule_person_voice_learning_retry',
         'run_authorized_person_learning',
         'PUSHER_ACTIVE_WS_CONNECTIONS',
         'PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS',
     ):
         mp.setattr(old_pusher, attr, getattr(f.pusher, attr))
+    mp.setattr(old_pusher, 'is_audio_merge_dispatch_enabled', lambda: False)
     if old_storage is not None:
         mp.setattr(old_storage, '_get_storage_client', lambda: storage_module._get_storage_client())
         mp.setattr(old_storage, 'private_cloud_sync_bucket', storage_module.private_cloud_sync_bucket)
@@ -1137,7 +1137,7 @@ def test_inventory_overlapping_spanless_objects_refuse(round4_stage):
 
 
 @pytest.mark.parametrize('mutate_index', [0, 1])
-def test_inventory_generation_mutation_before_prefetch_refuses(mutate_index, round4_stage):
+def test_inventory_generation_mutation_refuses_reads_but_not_disjoint_unused_tail(mutate_index, round4_stage):
     mp = pytest.MonkeyPatch()
     try:
         store, diarizer, lists, bucket = _inventory_base(mp)
@@ -1169,9 +1169,17 @@ def test_inventory_generation_mutation_before_prefetch_refuses(mutate_index, rou
 
         mp.setattr(storage_module, 'list_audio_chunks', mutate_after_list)
         _resolve_stage(mp, conv, store, diarizer, round4_stage)
-        assert diarizer.calls == 0
-        assert store.get('c1') is None
-        assert conv.speaker_resolution.status != 'resolved'
+        if mutate_index == 0:
+            # The generation-pinned object actually needed for both windows raced.
+            assert diarizer.calls == 0
+            assert store.get('c1') is None
+            assert conv.speaker_resolution.status != 'resolved'
+        else:
+            # The tail begins after both windows: it is not downloaded or used.
+            assert diarizer.calls == 2
+            assert conv.speaker_resolution.status == 'resolved'
+            cache = stagemod.stage.decode_cache(store.get('c1'))
+            assert [int(np.argmax(v)) for _, v in cache.values()] == [0, 1]
     finally:
         mp.undo()
 

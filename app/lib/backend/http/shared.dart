@@ -1045,12 +1045,18 @@ Stream<String> makeStreamingApiCall({
   String body = '',
   String method = 'POST',
   ApiStreamingSeams? seams,
+  Future<void>? cancelSignal,
 }) async* {
   // Setup-deadline abort (same rationale as the multipart variant): the POST
   // must die with the wait, or a retry can submit the chat turn twice. Armed
   // before the try so the error handlers can cancel it.
   final setupAbort = Completer<void>();
   final setupAbortTimer = Timer(ApiClient.streamSetupTimeout, () {
+    if (!setupAbort.isCompleted) setupAbort.complete();
+  });
+  // The caller's stop aborts the request at any point, including mid-body, so
+  // the server sees the disconnect and stops generating.
+  cancelSignal?.then((_) {
     if (!setupAbort.isCompleted) setupAbort.complete();
   });
   try {
@@ -1137,6 +1143,7 @@ Stream<String> makeMultipartStreamingApiCall({
   Map<String, String> fields = const {},
   String fileFieldName = 'files',
   ApiStreamingSeams? seams,
+  Future<void>? abort,
 }) async* {
   // Setup-deadline abort: without this, the timeout below abandons the wait
   // but the POST keeps running and can still reach the server — a retry then
@@ -1171,7 +1178,9 @@ Stream<String> makeMultipartStreamingApiCall({
           fields: fields,
           fileFieldName: fileFieldName,
           method: 'POST',
-          abortTrigger: setupAbort.future,
+          // A caller's abort (for example a total response deadline) also ends the
+          // request mid-body, so a stalled stream cannot keep the turn running.
+          abortTrigger: abort == null ? setupAbort.future : Future.any([setupAbort.future, abort]),
         );
 
     var response = await send(await buildRequest()).timeout(ApiClient.streamSetupTimeout);

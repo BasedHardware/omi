@@ -5,11 +5,13 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
+import 'package:omi/ui/ui.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/conversation_speakers.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/folder.dart';
@@ -43,6 +45,7 @@ import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
+import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/services/wals/wal.dart' show Wal;
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -52,7 +55,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 
 /// Home scroll guards around a conversation detail visit (P36).
 ///
-/// Home with a live capture animates continuously (the live dot pulses), so
+/// Home with a live capture can animate continuously, so
 /// `transientCallbackCount` never reaches zero there. Opening a row must not
 /// hand the scheduler an idle-priority task: `SchedulerBinding._runTasks`
 /// re-arms a zero-delay timer every event-loop turn while an animation keeps
@@ -230,15 +233,16 @@ TranscriptSegment _segment(int i) => TranscriptSegment(
       end: i * 8.0 + 7,
     );
 
-ServerConversation _conversation(int i, {int segmentCount = 0}) {
+ServerConversation _conversation(int i, {int segmentCount = 0, String? salience}) {
   final created = _seedNow.subtract(Duration(hours: 3 * i));
   return ServerConversation(
     id: 'conv-$i',
+    speakerResolution: const ConversationSpeakers(status: 'resolved', participantSpeakerIds: [0]),
     createdAt: created,
     startedAt: created,
     finishedAt: created.add(const Duration(minutes: 22)),
-    structured: Structured('Conversation $i', 'Overview $i.', emoji: '🧠', category: 'other'),
-    transcriptSegments: [for (var j = 0; j < segmentCount; j++) _segment(j)],
+    structured: Structured('Conversation $i', 'Overview $i.', emoji: '🧠', category: 'other', salience: salience),
+    transcriptSegments: [for (var j = 0; j < segmentCount; j++) _segment(j)..isUser = salience != 'background'],
   );
 }
 
@@ -256,10 +260,14 @@ Episode _liveEpisode() => Episode(
       stateUpdatedAt: _seedNow,
     );
 
-/// Home as David sees it: a pendant streaming into a live episode (the pulsing
+/// Home as David sees it: a pendant streaming into a live episode (the live
 /// row), 30 conversations as the list endpoint projects them (two lines each),
 /// and the detail endpoint hydrating an opened one with its full transcript.
 class _Home {
+  _Home({this.background = const {}});
+
+  /// Conversations whose notes call them background (Episodes M3).
+  final Set<int> background;
   DateTime now = _seedNow;
   late final _LiveCapture capture = _LiveCapture();
   late final EpisodeProvider episodes = EpisodeProvider(
@@ -270,7 +278,10 @@ class _Home {
     clock: () => now,
   );
   late final ConversationProvider conversations = ConversationProvider(isSignedIn: () => false)
-    ..conversations = [for (var i = 0; i < 30; i++) _conversation(i, segmentCount: 2)]
+    ..conversations = [
+      for (var i = 0; i < 30; i++)
+        _conversation(i, segmentCount: 2, salience: background.contains(i) ? 'background' : null),
+    ]
     ..groupConversationsByDate()
     ..conversationDetailsFetcherOverride = (id) async => hydrated(int.parse(id.substring('conv-'.length)));
 
@@ -321,6 +332,10 @@ Widget _app(_Home home) {
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: const [Locale('en')],
       home: Scaffold(
+        // Home's live row no longer pulses (David, 10-27: no dot in the tile). A breathing dot
+        // stands in for any running Home animation, so the scheduler guards run as on device
+        // while something animates.
+        floatingActionButton: const OmiBreathingDot(live: true),
         body: ConversationsPage(
           requestInitialLoad: false,
           loadRecaps: () async => (items: <DailySummary>[], ok: true),
@@ -334,18 +349,18 @@ Widget _app(_Home home) {
   );
 }
 
-Future<_Home> _pumpHome(WidgetTester tester) async {
+Future<_Home> _pumpHome(WidgetTester tester, {Set<int> background = const {}}) async {
   tester.view.physicalSize = const Size(800, 1600);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-  final home = _Home();
+  final home = _Home(background: background);
   await tester.pumpWidget(_app(home));
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 300));
   expect(find.byType(LiveEpisodeRow), findsOneWidget, reason: 'Home must show the live episode row');
   expect(find.byType(ConversationListItem), findsWidgets);
-  expect(tester.binding.transientCallbackCount, greaterThan(0), reason: 'the live dot must be pulsing');
+  expect(tester.binding.transientCallbackCount, greaterThan(0), reason: 'Home must be animating');
   return home;
 }
 
@@ -423,6 +438,33 @@ void main() {
     VisibilityDetectorController.instance.updateInterval = const Duration(milliseconds: 500);
   });
 
+  testWidgets('a conversation the person just ended shows as a processing row under the live row', (tester) async {
+    final home = await _pumpHome(tester);
+    home.conversations.addProcessingConversation(OptimisticProcessingPlaceholder.conversation());
+    await tester.pump();
+    final row = find.byKey(const Key('home_processing_row'));
+    expect(row, findsOneWidget);
+    expect(find.descendant(of: row, matching: find.text('Processing…')), findsOneWidget);
+    expect(tester.getTopLeft(row).dy, greaterThan(tester.getTopLeft(find.byType(LiveEpisodeRow)).dy));
+    expect(tester.getTopLeft(row).dy, lessThan(tester.getTopLeft(find.byKey(const ValueKey('conv-0'))).dy));
+    // The server's row replaces it, then the finished conversation takes its own row.
+    home.conversations.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
+    await tester.pump();
+    expect(find.byKey(const Key('home_processing_row')), findsNothing);
+    await _drainAndUnmount(tester);
+  });
+
+  testWidgets('background conversations leave Home for the daily recap, with no line or toggle', (tester) async {
+    // Today holds conv-0 (12:30), conv-1 (09:30), conv-2 (06:30) and conv-3 (03:30).
+    await _pumpHome(tester, background: {1, 2});
+    expect(find.byKey(const ValueKey('conv-1')), findsNothing);
+    expect(find.byKey(const ValueKey('conv-2')), findsNothing);
+    expect(find.byKey(const ValueKey('conv-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('conv-3')), findsOneWidget);
+    expect(find.textContaining('Also:'), findsNothing);
+    await _drainAndUnmount(tester);
+  });
+
   testWidgets('opening a row hands the scheduler no idle task while Home animates, and still reports the open',
       (tester) async {
     await _pumpHome(tester);
@@ -443,7 +485,7 @@ void main() {
 
     await AnalyticsManager.flushPending(force: true);
     expect(analytics.events, contains('Conversation List Item Clicked'),
-        reason: 'the open must still be reported while the live dot animates');
+        reason: 'the open must still be reported while Home animates');
     await _drainAndUnmount(tester);
   });
 

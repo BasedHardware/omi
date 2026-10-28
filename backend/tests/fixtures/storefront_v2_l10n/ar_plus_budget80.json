@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "catalog_revision": 10,
+  "catalog_revision": 12,
   "show_subscription_ui": true,
   "header": "لقد استخدمت 80% من استخدام هذا الشهر",
   "current": {

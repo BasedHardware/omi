@@ -15,6 +15,8 @@ import sys
 import types
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
@@ -113,6 +115,15 @@ finally:
 
 def _valid(aid, completed=False):
     return {'id': aid, 'description': 'do a thing', 'completed': completed}
+
+
+@pytest.fixture(autouse=True)
+def untracked_list_version():
+    # This fixture stubs all utils modules. An unconfigured MagicMock would
+    # look like a 304 response and bypass the source-validation path under test.
+    check = types.SimpleNamespace(active=False, not_modified=None, finish=MagicMock())
+    with patch.object(ai_mod.ListVersionCheck, 'start', return_value=check):
+        yield
 
 
 def test_conversation_list_skips_malformed_not_500():

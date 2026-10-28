@@ -49,21 +49,24 @@ Scenarios cover:
 
 1. fresh admission, rejected unauthenticated worker delivery, durable
    completion/readback, once-only fair-use meter, and terminal duplicate ACK;
-2. failure after terminalization keeps staged material until a retry performs
-   exact-job cleanup without reprocessing;
+2. failure after terminalization keeps staged material; retry does not
+   reprocess it or release unarchived source audio;
 3. a pre-ledger failure returns the job to queue, then skips its durable
    processed-segment checkpoint without another STT call or fair-use charge;
 4. a post-ledger failure returns the job to queue, then a later delivery
    converges the completed ledger without reprocessing;
 5. a first pipeline success on the final Cloud Tasks delivery converges its
    completed ledger rather than publishing a false terminal failure;
-6. retry-budget exhaustion becomes a truthful durable failure;
+6. retry-budget exhaustion becomes a truthful durable failure and retains its source;
 7. concurrent worker deliveries are fenced by the real Redis run lock;
 8. a lost create-task acknowledgement converges through named-task
    `AlreadyExists`, never falls back inline, and later completes; and
 9. a missing staged blob follows the real expired-input failure path without
    invoking STT; and
-10. a lifecycle-fenced processor result is terminally acknowledged, releases
+10. an archived all-success completion stores the byte-bound custody receipt
+    beside the completed ledger result, removes redundant staging and keeps
+    the original archive across duplicate delivery; and
+11. a lifecycle-fenced processor result is terminally acknowledged, releases
     its exact backfill slot, and keeps duplicate delivery from re-running the
     provider pipeline.
 

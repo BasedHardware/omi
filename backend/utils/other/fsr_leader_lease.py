@@ -1,4 +1,7 @@
-"""Best-effort fleet maintenance admission, default off; Redis outages fail open.
+"""Best-effort fleet maintenance admission; Redis outages fail open.
+
+Production coordination defaults on independently of read-optimization cohorts.
+FSR_MAINTENANCE_COORDINATION_ENABLED=false restores per-replica execution.
 
 The opaque owner token fences renew/release, and a monotonically increasing
 generation identifies each ownership epoch. A separate tick key limits recovery
@@ -89,6 +92,16 @@ return 0
 
 
 def singleton_loops_enabled() -> bool:
+    # A read-cache rollback must not multiply maintenance scans by the number
+    # of replicas. Keep the legacy cohort for non-production qualification,
+    # with a separate, explicit kill switch for coordination itself.
+    override = os.getenv('FSR_MAINTENANCE_COORDINATION_ENABLED', '').strip().lower()
+    if override in {'false', '0', 'off', 'no'}:
+        return False
+    deployment = os.getenv('OMI_DEPLOYMENT', '').strip().lower()
+    production = os.getenv('OMI_ENV_STAGE', '').strip().lower() == 'prod' and deployment in {'', 'prod', 'production'}
+    if override in {'true', '1', 'on', 'yes'} or production:
+        return True
     identity = os.getenv('HOSTNAME') or f'{os.getenv("K_REVISION", "local")}:{socket.gethostname()}'
     return lever_enabled('singleton_loops', identity)
 

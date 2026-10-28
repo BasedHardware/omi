@@ -2,12 +2,32 @@
 
 from datetime import datetime, timezone
 
-from tests.support.firestore_query_drivers import DriverEntry, CoveredByEntry
+from tests.support.firestore_query_drivers import DriverEntry, CoveredByEntry, ref_collection
 
 
 def entries():
     namespaces = ['batch_pipeline_prod', 'batch_pipeline_dev']
     return (
+        DriverEntry(
+            'database.batch_pipeline_store.ready_for_capacity',
+            domains={'namespace': namespaces, 'priority': [0, 1, 2]},
+            neutrals={'now': (1.0, 'availability cutoff only')},
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreStore.ready_for_capacity',
+            covered_by=('database.batch_pipeline_store.ready_for_capacity',),
+            reason='thin adapter forwards the client, namespace, priority and availability cutoff',
+            expect_observed=False,
+            body_digest='975eabd92f43ba5da3d847439f4d8e3592525ccd31c11dcac6463365535eac10',
+        ),
+        DriverEntry(
+            'utils.batch_pipeline.redrive_scope.owner_jobs',
+            base={'collection': ref_collection('batch_pipeline_prod_jobs'), 'uid': 'synthetic-owner'},
+            neutrals={
+                'page_size': (200, 'bounded page size only'),
+                'read_budget': (20000, 'aggregate scan bound only'),
+            },
+        ),
         DriverEntry('database.batch_pipeline_shadow.pool_busy', domains={'namespace': namespaces}),
         DriverEntry(
             'database.batch_pipeline_shadow.stale_jobs',
@@ -98,7 +118,12 @@ def entries():
             domains={
                 'namespace': namespaces,
                 'after': [None, (2.0, 'result-100')],
-                'states': [('pending', 'persisted', 'ready'), ('pending',), ('persisted', 'ready')],
+                'states': [
+                    ('pending', 'persisted', 'ready'),
+                    ('pending',),
+                    ('persisted', 'ready'),
+                    ('pending', 'persisted', 'ready', 'quarantine_held'),
+                ],
             },
             neutrals={'limit': (100, 'bounded page size only')},
         ),

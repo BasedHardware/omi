@@ -18,7 +18,8 @@ class GoogleTasksService {
   }
 
   /// Start OAuth authentication flow (get URL from backend)
-  Future<bool> authenticate() => launchIntegrationOAuth(() => getOAuthUrl('google_tasks'));
+  Future<bool> authenticate({bool Function()? isCurrent}) =>
+      launchIntegrationOAuth(() => getOAuthUrl('google_tasks'), isCurrent: isCurrent);
 
   /// Handle OAuth callback (tokens stored in backend Firebase)
   Future<bool> handleCallback() async {

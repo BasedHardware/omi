@@ -1,4 +1,11 @@
 from models.developer_transcript import SimpleTranscriptSegment
+from routers import developer_segments
+from routers.developer_segments_models import (
+    CreateConversationFromTranscriptRequest,
+    DevTranscriptSegment,
+    CaptureEvidenceLineage,
+    CaptureEvidenceLineageUnit,
+)
 import json
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -19,11 +26,13 @@ import database.daily_summaries as daily_summaries_db
 from database._client import db
 from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
+from utils.list_version_check import ListVersionCheck
 
 from models.calendar_context import DevCalendarMeetingContext
 from models.folder import Folder
 from models.goal import GoalHistoryEntryResponse, GoalMetric
 from models.daily_summary import DailySummariesResponse, DailySummaryResponse
+from utils.daily_summary_validation import DailySummaryUnavailable, read_daily_summary_page, require_daily_summary
 from utils.client_device import resolve_client_device_from_request
 from utils.product_metrics import extract_app_build, extract_client_kind, record_product_event
 from utils.goals_response import list_developer_goals, normalize_goal_history_entry, normalize_goal_response
@@ -92,7 +101,6 @@ from utils.conversations.projection_payload import (
 )
 from utils.conversations.transcript_hash import (
     stored_transcript_segment,
-    transcript_sha256,
     transcript_sha256_for_binding,
 )
 from utils.conversations import lifecycle as lifecycle_service
@@ -852,9 +860,16 @@ def get_action_items(
     # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
     offset, limit = external_lists.clamp_list_page(offset, limit, 1000)
     observe_action_items_page(limit, offset)
+    version_check = ListVersionCheck.start(request, uid, 'action_items')
+    if version_check.not_modified is not None:
+        return version_check.not_modified
     with read_component(ReadComponent.OTHER):
         budget = list_read_budget_for_request(request, route='developer-action-items', owner_uid=uid, context=auth)
-        cached = external_lists.cached_external_list(request, response, auth, locals())
+        cached = (
+            external_lists.cached_external_list(request, response, auth, locals())
+            if not (version_check.active and 'lp1-' in request.headers.get('if-none-match', ''))
+            else None
+        )
         observe_action_items_shape(
             conversation_id is not None, start_date is not None or end_date is not None, completed, cached is not None
         )
@@ -875,6 +890,7 @@ def get_action_items(
     valid_action_items = external_lists.validate_developer_action_items(action_items, ActionItemResponse, uid, logger)
     observe_action_items_rows('returned', len(valid_action_items))
     finish_list_budget(response, budget)
+    version_check.finish(response, truncated=budget.truncated)
     return valid_action_items
 
 
@@ -1192,116 +1208,6 @@ class UpdateConversationRequest(BaseModel):
         return _optional_patch_text(value, 'title')
 
 
-class DevTranscriptSegment(BaseModel):
-    stt_provider: Optional[str] = Field(default=None, max_length=120)
-    model_config = ConfigDict(title='CreateConversationTranscriptSegment')
-
-    text: str = Field(description="The text spoken in this segment")
-    speaker: Optional[str] = Field(
-        default='SPEAKER_00', description="Speaker identifier (e.g., 'SPEAKER_00', 'SPEAKER_01')"
-    )
-    speaker_id: Optional[int] = Field(default=None, description="Numeric speaker ID")
-    is_user: bool = Field(default=False, description="Whether this segment is from the user")
-    person_id: Optional[str] = Field(default=None, description="ID of person speaking (if known)")
-    start: float = Field(description="Start time in seconds (e.g., 0.0, 1.5, 60.2)")
-    end: float = Field(description="End time in seconds (e.g., 1.5, 3.0, 65.8)")
-
-
-class CaptureEvidenceLineageUnit(BaseModel):
-    id: str = Field(min_length=1, max_length=64)
-    start_ms: int = Field(ge=0)
-    end_ms: int = Field(gt=0)
-
-
-class CaptureEvidenceLineage(BaseModel):
-    version: Literal[1] = 1
-    capability: Literal['stable_artifact']
-    capture_root: str = Field(min_length=1, max_length=200)
-    clock_domain: Literal['desktop_session_ms']
-    lineage: Literal['complete', 'incomplete']
-    units: List[CaptureEvidenceLineageUnit] = Field(max_length=64)
-
-
-class CreateConversationFromTranscriptRequest(BaseModel):
-    model_config = ConfigDict(title='CreateConversationFromTranscriptRequest')
-
-    transcript_segments: List[DevTranscriptSegment] = Field(
-        description="List of transcript segments with speaker and timing info", min_length=1, max_length=500
-    )
-    client_processing: Optional[Any] = Field(
-        default=None,
-        description=(
-            "Untrusted client-authored display projection. Accepted as a raw payload "
-            "and validated in the handler: a malformed projection is dropped and the "
-            "conversation still lands. Display only — never an input to intelligence."
-        ),
-    )
-    capture_evidence: Optional[CaptureEvidenceLineage] = None
-    client_session_id: Optional[str] = Field(
-        default=None,
-        validation_alias=AliasChoices('client_session_id', 'client_conversation_id', 'session_id', 'client_id'),
-        min_length=1,
-        max_length=200,
-        description="Stable client-generated session ID. When provided, retries return the same conversation ID.",
-    )
-    source: Optional[ConversationSource] = Field(
-        default=ConversationSource.phone,
-        description="Source of the conversation (e.g., omi, friend, openglass, phone, external_integration)",
-    )
-    started_at: Optional[datetime] = Field(default=None, description="When conversation started (defaults to now)")
-    finished_at: Optional[datetime] = Field(
-        default=None, description="When conversation finished (calculated from segments duration if not provided)"
-    )
-    language: Optional[str] = Field(default='en', description="Language code (ISO 639-1, e.g., 'en', 'es', 'fr')")
-    geolocation: Optional[GeolocationInput] = Field(default=None, description="Geolocation where conversation occurred")
-    client_device_id: Optional[str] = Field(default=None, description="Capture device id ({platform}_{hash})")
-    client_platform: Optional[str] = Field(default=None, description="Client platform (ios/android/macos)")
-    conversation_role: Literal['ambient', 'meeting'] = 'ambient'
-    folder_id: Optional[str] = Field(
-        default=None,
-        min_length=1,
-        max_length=200,
-        description="ID of one of your folders (GET /v1/dev/user/folders). Files the conversation there instead of "
-        "letting AI pick a folder.",
-    )
-    calendar_meeting_context: Optional[DevCalendarMeetingContext] = Field(
-        default=None,
-        description="Calendar meeting this conversation belongs to. Used as context for the summary and to identify "
-        "participants, like the meetings Omi reads from a connected calendar.",
-    )
-    # Optional for backwards compatibility. When supplied, rotation fragments
-    # are persisted but do not create a notes-ready receipt.
-    # Plain string, not a Literal: this is opaque client-versioned metadata
-    # (only 'max_duration_rotation' is ever compared downstream), and a closed
-    # enum here previously fell out of sync with the desktop client's finalization
-    # reasons, causing every upload carrying a newer reason to fail with a 422.
-    conversation_finalization_reason: Optional[str] = None
-
-    @field_validator('client_session_id')
-    @classmethod
-    def normalize_client_session_id(cls, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return None
-        value = value.strip()
-        if not value:
-            raise ValueError('client_session_id cannot be empty')
-        return value
-
-    @field_validator('started_at', 'finished_at')
-    @classmethod
-    def require_timezone_offset(cls, value: Optional[datetime]) -> Optional[datetime]:
-        """Reject offset-naive timestamps with a 422 instead of a 500.
-
-        A naive ``finished_at`` against the tz-aware ``started_at`` default (or
-        the reverse) makes the handler's ``finished_at <= started_at`` check
-        raise TypeError — an uncaught 500 on a malformed body. Both from-segments
-        routes (developer and first-party) share this model, so both get the 422.
-        """
-        if value is not None and value.tzinfo is None:
-            raise ValueError('must include a timezone offset (e.g. 2026-09-11T12:00:00Z)')
-        return value
-
-
 class DeveloperFolder(BaseModel):
     model_config = ConfigDict(title='DeveloperFolder')
 
@@ -1340,13 +1246,13 @@ def get_developer_daily_summaries(
     status = 500
     returned_count = 0
     try:
-        summaries = daily_summaries_db.get_daily_summaries(
-            auth.uid,
-            limit=limit,
-            offset=offset,
-            start_date=start_date,
-            end_date=end_date,
-        )
+        try:
+            summaries = read_daily_summary_page(
+                auth.uid, limit=limit, offset=offset, start_date=start_date, end_date=end_date, request=request
+            )
+        except DailySummaryUnavailable:
+            status = 503
+            raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
         returned_count = len(summaries)
         status = 200
         return {'summaries': summaries}
@@ -1381,9 +1287,14 @@ def get_developer_daily_summary(
         if not summary:
             status = 404
             raise HTTPException(status_code=404, detail='Daily summary not found')
+        try:
+            validated = require_daily_summary(summary, uid=auth.uid, operation='developer_detail')
+        except DailySummaryUnavailable:
+            status = 503
+            raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
         status = 200
         returned_count = 1
-        return summary
+        return validated
     finally:
         _audit_developer_read(
             request=request,
@@ -1664,7 +1575,7 @@ def get_conversations(
         unlocked_conversations = [conv for conv in conversations if not conv.get('is_locked', False)]
 
         for conv in unlocked_conversations:
-            conv.update(conversation_participants(conv))
+            conv.update(conversation_participants(conv, include_display=False))
             conv['transcript_included'] = include_transcript
 
         # Remove transcript_segments if not requested
@@ -1672,7 +1583,7 @@ def get_conversations(
             for conv in unlocked_conversations:
                 conv.pop('transcript_segments', None)
         else:
-            populate_speaker_names(uid, unlocked_conversations)
+            populate_speaker_names(uid, unlocked_conversations, preserve_api_values=True)
 
         populate_folder_names(uid, unlocked_conversations)
 
@@ -1819,7 +1730,7 @@ def get_conversation_endpoint(
             check_conversation_transcript_read_limit(auth, request=request)
 
         conversation = conversations_db.get_conversation(uid, conversation_id)
-        if not conversation:
+        if not conversation or conversation.get('deleted', False):
             status = 404
             returned_count = 0
             raise HTTPException(status_code=404, detail="Conversation ID not found or unknown conversation sub-route")
@@ -1832,14 +1743,14 @@ def get_conversation_endpoint(
 
         from utils.mcp_server.helpers import conversation_participants
 
-        conversation.update(conversation_participants(conversation))
+        conversation.update(conversation_participants(conversation, include_display=False))
         conversation['transcript_included'] = include_transcript
 
         # Remove transcript_segments if not requested
         if not include_transcript:
             conversation.pop('transcript_segments', None)
         else:
-            populate_speaker_names(uid, [conversation])
+            populate_speaker_names(uid, [conversation], preserve_api_values=True)
 
         populate_folder_names(uid, [conversation])
 
@@ -1968,16 +1879,13 @@ def _bind_projection_to_segments(
     row must bind through ``transcript_sha256_for_binding``, which refuses a
     legacy row whose identity was written before canonicalization: there, a
     matching digest would not imply matching rendered attribution. Request
-    segments are not stored yet -- they are canonicalized on write -- so they
-    bind with the plain client-reproducible digest.
+    segments have already been canonicalized by ingest. Both paths share the
+    fail-closed scope guard without changing the client-reproducible encoding.
     """
-    if stored:
-        expected = transcript_sha256_for_binding(segments or [])
-        if expected is None:
-            _log_client_projection_rejected('stored_transcript_not_canonical', raw)
-            return None
-    else:
-        expected = transcript_sha256(segments or [])
+    expected = transcript_sha256_for_binding(segments or [])
+    if expected is None:
+        _log_client_projection_rejected('stored_transcript_not_canonical' if stored else 'unsafe_ingest_binding', raw)
+        return None
     if expected != projection.transcript_sha256:
         _log_client_projection_rejected('hash_mismatch', raw)
         return None
@@ -2107,6 +2015,25 @@ def _apply_late_from_segments_context(
 
 
 def _create_conversation_from_segments(
+    uid: str, request: CreateConversationFromTranscriptRequest, **kwargs
+) -> ConversationResponse:
+    if request.chunk_index is not None:
+        conversation_id = _from_segments_conversation_id(uid, request.client_session_id)
+        if conversation_tombstones.is_deleted(uid, conversation_id) or conversation_tombstones.is_deleted(
+            uid, request.client_session_id
+        ):
+            return ConversationResponse(id=conversation_id, status='deleted', discarded=True)
+        return developer_segments.continuation(
+            uid,
+            request,
+            conversation_id,
+            lambda assembled: _ingest_conversation_from_segments(uid, assembled, **kwargs),
+            ConversationResponse,
+        )
+    return _ingest_conversation_from_segments(uid, request, **kwargs)
+
+
+def _ingest_conversation_from_segments(
     uid: str,
     request: CreateConversationFromTranscriptRequest,
     *,
@@ -2121,8 +2048,12 @@ def _create_conversation_from_segments(
     if not request.transcript_segments or len(request.transcript_segments) == 0:
         raise HTTPException(status_code=422, detail="transcript_segments cannot be empty")
 
-    if len(request.transcript_segments) > 500:
+    if request.chunk_count is None and len(request.transcript_segments) > 500:
         raise HTTPException(status_code=422, detail="Maximum 500 transcript segments allowed")
+
+    request, covered_response = developer_segments.admit_segments(uid, request, ConversationResponse)
+    if covered_response is not None:
+        return covered_response
 
     # Validate segments
     for idx, segment in enumerate(request.transcript_segments):
@@ -2550,7 +2481,7 @@ def delete_conversation_endpoint(
     - **conversation_id**: The ID of the conversation to delete
     """
     conversation = conversations_db.get_conversation(uid, conversation_id)
-    if not conversation:
+    if not conversation or conversation.get('deleted', False):
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
@@ -2595,7 +2526,7 @@ def update_conversation_endpoint(
     - **discarded**: Whether the conversation is discarded (optional)
     """
     conversation = conversations_db.get_conversation(uid, conversation_id)
-    if not conversation:
+    if not conversation or conversation.get('deleted', False):
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")

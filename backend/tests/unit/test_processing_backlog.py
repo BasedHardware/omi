@@ -351,6 +351,29 @@ def test_cap_denial_preserves_existing_enrichment_and_discard_state(monkeypatch,
     monkeypatch.setattr(pipeline.lifecycle_service, 'persist_processed_conversation', persist)
     monkeypatch.setattr(pipeline, '_enrich_meeting_context', Mock(side_effect=AssertionError('funded work')))
     dispositions, persistence = [], []
+    if trigger is pipeline.ProcessingTrigger.SILENT_BACKFILL:
+        # Silent backfill is the one trigger whose cap denial must not return
+        # the preserved row: its caller is a leased historical finalization
+        # job, and a quiet return (or the budget-waiting store the generic
+        # path takes for a raw row) would let the finalizer close the job as a
+        # successful backfill. It raises the recovery failure before any
+        # persistence instead (#23260), so the same preservation invariant is
+        # asserted through the raise: no funded work, no write, no observer
+        # events, and the row's enrichment and discard state untouched.
+        with pytest.raises(pipeline.RecoveryStructureUnavailableError):
+            pipeline.process_conversation(
+                'synthetic',
+                'en',
+                conv,
+                trigger=trigger,
+                persistence_observer=persistence.append,
+                derived_effects_disposition_observer=dispositions.append,
+            )
+        assert conv.model_dump() == before
+        assert persistence == []
+        assert dispositions == []
+        persist.assert_not_called()
+        return
     result = pipeline.process_conversation(
         'synthetic',
         'en',

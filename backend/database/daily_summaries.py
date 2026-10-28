@@ -27,10 +27,15 @@ users/{uid}/desktop_daily_usage/{date}__{client_device_id}
 
 from datetime import datetime, timezone
 from collections.abc import Mapping
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Callable, Dict, List, Optional, cast
 
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud import firestore
+from google.api_core.exceptions import FailedPrecondition
+from utils.observability.fallback import record_fallback
+from utils.other.list_budget import ListReadBudget, budgeted_stream_iter
+from database.firestore_index_registry import MCP_DAILY_RECORDINGS_QUERY
+import logging
 from ._client import db, get_firestore_client
 from . import redis_db
 
@@ -171,6 +176,9 @@ def get_daily_summaries(
     offset: int = 0,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    *,
+    record_filter: Optional[Callable[[Dict[str, Any]], bool]] = None,
+    read_budget: Optional[ListReadBudget] = None,
 ) -> List[Dict[str, Any]]:
     """
     Get list of daily summaries for a user, ordered by date descending.
@@ -181,6 +189,8 @@ def get_daily_summaries(
         offset: Number of summaries to skip
         start_date: Filter summaries from this date (YYYY-MM-DD)
         end_date: Filter summaries until this date (YYYY-MM-DD)
+        record_filter: Optional response predicate, applied before the returned-row offset/limit.
+        read_budget: Bounds the filtered scan's time and total documents, including skipped rows.
 
     Returns:
         List of summary data dicts
@@ -194,13 +204,33 @@ def get_daily_summaries(
         query = query.where(filter=FieldFilter('date', '<=', end_date))
 
     query = query.order_by('date', direction=firestore.Query.DESCENDING)
-    query = query.limit(limit).offset(offset)
+    if record_filter is None:
+        query = query.limit(limit).offset(offset)
 
     summaries: List[Dict[str, Any]] = []
-    for doc in query.stream():
-        raw: object = doc.to_dict()
-        if isinstance(raw, dict):
-            summaries.append(cast(Dict[str, Any], raw))
+    stream = budgeted_stream_iter(query, read_budget)
+    skipped = 0
+    try:
+        for doc in stream:
+            raw: object = doc.to_dict()
+            if not isinstance(raw, dict):
+                continue
+            row = cast(Dict[str, Any], raw)
+            if record_filter is not None:
+                if not record_filter(row):
+                    continue
+                if skipped < offset:
+                    skipped += 1
+                    continue
+            summaries.append(row)
+            if len(summaries) >= limit:
+                break
+    finally:
+        # The filtered projection stops its one ordered stream as soon as the page is full;
+        # it does not reissue growing offset queries or retain skipped documents in memory.
+        close = getattr(stream, 'close', None)
+        if close is not None:
+            close()
     return summaries
 
 
@@ -270,3 +300,48 @@ def get_summaries_count(uid: str) -> int:
     count_query = user_ref.collection(DAILY_SUMMARIES_COLLECTION).count()
     result = count_query.get()
     return int(result[0][0].value or 0)
+
+
+def get_day_recording_count(uid: str, start: datetime, end: datetime, *, firestore_client: Any = None) -> int:
+    """Aggregate all non-discarded recordings by started_at, independent of list caps."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    collection = client.collection('users').document(uid).collection('conversations')
+    query = MCP_DAILY_RECORDINGS_QUERY.build(
+        collection, {'start': start, 'end': end, 'discarded': False}, field_filter_factory=FieldFilter
+    )
+    try:
+        return int(query.count().get()[0][0].value or 0)
+    except FailedPrecondition:
+        record_fallback(
+            component='daily_summary',
+            from_mode='indexed',
+            to_mode='scan',
+            reason='other',
+            outcome='degraded',
+            log=logging.getLogger(__name__),
+        )
+        # Single-field fallback works during index rollout. Never turn a capped
+        # scan into a count: fail explicitly if this fallback cannot finish.
+        snapshots = list(
+            collection.where(filter=FieldFilter('started_at', '>=', start))
+            .where(filter=FieldFilter('started_at', '<=', end))
+            .select(['discarded'])
+            .limit(10001)
+            .stream()
+        )
+        if len(snapshots) > 10000:
+            raise RuntimeError('daily_recording_count_incomplete: required index is not ready')
+        return sum(1 for snapshot in snapshots if (snapshot.to_dict() or {}).get('discarded') is False)
+
+
+def get_daily_summary_generation_status(uid: str, date: str, *, firestore_client: Any = None) -> Optional[dict]:
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    snapshot = client.collection('users').document(uid).collection('daily_summary_generation').document(date).get()
+    return snapshot.to_dict() if snapshot.exists else None
+
+
+def set_daily_summary_generation_status(uid: str, date: str, status: str, *, firestore_client: Any = None) -> None:
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    client.collection('users').document(uid).collection('daily_summary_generation').document(date).set(
+        {'status': status, 'updated_at': datetime.now(timezone.utc), 'generated_at': None}
+    )

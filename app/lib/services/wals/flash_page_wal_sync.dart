@@ -1,9 +1,7 @@
+import 'package:omi/services/wals/local_wal_sync.dart';
 import 'dart:async';
-import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -727,95 +725,28 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
     }
   }
 
-  /// Saves a batch of frames to disk and registers with LocalWalSync for later upload.
   Future<String> _saveBatchToFile(
-    List<List<int>> frames,
-    int timestampMs,
-    Wal sourceWal,
-    int admittedGeneration,
-  ) async {
-    if (frames.isEmpty) throw StateError('refusing to persist an empty batch');
-
+      List<List<int>> frames, int timestampMs, Wal sourceWal, int admittedGeneration) async {
     final localSync = _localSync;
-    if (localSync == null) {
-      throw StateError('LocalWalSync unavailable; batch cannot be proven durable');
-    }
-    var bytes = 0;
-    for (final f in frames) {
-      bytes += 4 + f.length;
-    }
-    if (!await localSync.ensureStorageAdmission(bytes: bytes, admittedGeneration: admittedGeneration)) {
-      throw StateError('storage admission refused (cap/disk reserve)');
-    }
-
-    try {
-      final tempDir = await getApplicationDocumentsDirectory();
-      String fileName;
-      var seq = 0;
-      do {
-        final random = DateTime.now().microsecondsSinceEpoch % 10000;
-        fileName = 'audio_limitless_opus_16000_1_fs320_r${random}_${seq++}_$timestampMs.bin';
-      } while (await File('${tempDir.path}/$fileName').exists());
-      final filePath = '${tempDir.path}/$fileName';
-
-      final data = BytesBuilder();
-      for (final frame in frames) {
-        data.add([
-          frame.length & 0xFF,
-          (frame.length >> 8) & 0xFF,
-          (frame.length >> 16) & 0xFF,
-          (frame.length >> 24) & 0xFF,
-        ]);
-        data.add(frame);
-      }
-      final file = File(filePath);
-      await file.writeAsBytes(data.toBytes(), flush: true);
-
-      await _registerChunkWithLocalSync(fileName, timestampMs, frames.length, sourceWal, admittedGeneration);
-
-      return filePath;
-    } catch (e) {
-      localSync.releaseStorageAdmission(bytes);
-      rethrow;
-    }
-  }
-
-  Future<void> _registerChunkWithLocalSync(
-    String fileName,
-    int timestampMs,
-    int frameCount,
-    Wal sourceWal,
-    int admittedGeneration,
-  ) async {
-    final localSync = _localSync;
-    if (localSync == null) {
-      throw StateError('LocalWalSync unavailable; chunk cannot be proven durable');
-    }
-
-    int seconds = (frameCount / 50).ceil();
-    if (seconds < 1) seconds = 1;
-
-    Wal localWal = Wal(
-      codec: BleAudioCodec.opus,
-      channel: 1,
-      sampleRate: 16000,
-      timerStart: timestampMs ~/ 1000,
-      filePath: fileName,
-      storage: WalStorage.disk,
-      status: WalStatus.miss,
-      device: sourceWal.device,
-      deviceModel: sourceWal.deviceModel ?? "Limitless",
-      seconds: seconds,
-      totalFrames: frameCount,
-      syncedFrameOffset: 0,
-      originalStorage: WalStorage.flashPage,
-    );
-
-    await localSync.addExternalWal(localWal, admittedGeneration: admittedGeneration);
-    if (!await localSync.hasDurableWal(localWal, admittedGeneration: admittedGeneration)) {
-      throw StateError('WAL not durable after registration');
-    }
-    Logger.debug("FlashPageSync: Registered chunk (ts: $timestampMs, ${seconds}s) with LocalWalSync");
+    if (localSync == null) throw StateError('LocalWalSync unavailable; batch cannot be proven durable');
+    var seq = 0;
+    final saved = await localSync.persistDeviceChunk(
+        source: sourceWal,
+        frames: frames,
+        timerStart: timestampMs ~/ 1000,
+        admittedGeneration: admittedGeneration,
+        nextCollisionSequence: () => seq++,
+        originalStorage: WalStorage.flashPage,
+        codec: BleAudioCodec.opus,
+        channel: 1,
+        sampleRate: 16000,
+        seconds: (frames.length / 50).ceil().clamp(1, 1 << 31),
+        deviceModel: sourceWal.deviceModel ?? 'Limitless',
+        fileName: () {
+          final random = DateTime.now().microsecondsSinceEpoch % 10000;
+          return 'audio_limitless_opus_16000_1_fs320_r${random}_${seq++}_$timestampMs.bin';
+        });
+    return (await Wal.getFilePath(saved.filePath))!;
   }
 
   @override

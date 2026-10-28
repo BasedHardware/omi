@@ -17,7 +17,8 @@ export 'package:omi/backend/http/api/conversations.dart'
         SyncRateLimitKind,
         SyncUploadHttpException,
         SyncRecoveryWindowExceededException,
-        isPacedBackfillReasonCode;
+        SyncInvalidCaptureTimeException,
+        isPacedSyncAdmissionReasonCode;
 
 abstract class IWalSyncProgressListener {
   void onWalSyncedProgress(
@@ -87,6 +88,11 @@ abstract class LocalWalSync implements IWalSync {
   /// (e.g. right after the user enables it). Best-effort; returns the number
   /// of local copies removed.
   Future<int> applySyncedCopyRetention();
+
+  /// Deletes every local recording (index entry and file) owned by [uid],
+  /// whether active, retired or foreign. Called when that account is deleted
+  /// from this phone. Returns the number of records removed.
+  Future<int> purgeAccountWals(String uid);
 
   /// Ingest a pre-processed audio frame from an AudioSource.
   /// The frame contains headerless payload and a source-specific sync key.

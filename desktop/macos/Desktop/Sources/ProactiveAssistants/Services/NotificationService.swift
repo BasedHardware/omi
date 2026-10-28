@@ -302,10 +302,6 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         )
 
         metadata.onInteraction?(.opened)
-        if case .openProactivityItem(let target) = metadata.action {
-          ProactivityNotificationAdapter.open(target)
-          break
-        }
         switch Self.openAction(
           assistantId: assistantId,
           title: title,

@@ -70,9 +70,13 @@ def test_only_user_actions_skip_assessment():
     keep = {trigger for trigger, mode in PROCESSING_MODES.items() if mode.relevance is RelevancePolicy.KEEP}
     # SERVER_RECOVERY is not a user action, but it repairs a stale row the
     # pipeline never successfully finished; letting relevance discard the only
-    # recovered copy would defeat the recovery itself. SMART_MERGE refreshes a
-    # survivor whose fragments were each already assessed and kept. BACKLOG_CHOICE
-    # carries an explicit user/upgrade choice to process a retained recording.
+    # recovered copy would defeat the recovery itself. SILENT_BACKFILL is the
+    # same repair for stuck historical rows, admitted as substantive by a
+    # separately approved threshold before any paid work; a post-hoc discard
+    # would spend the finalization and drop the only recovered copy. SMART_MERGE
+    # refreshes a survivor whose fragments were each already assessed and kept.
+    # BACKLOG_CHOICE carries an explicit user/upgrade choice to process a
+    # retained recording.
     assert keep == {
         ProcessingTrigger.FIRST_OPEN,
         ProcessingTrigger.USER_REPROCESS,
@@ -80,6 +84,7 @@ def test_only_user_actions_skip_assessment():
         ProcessingTrigger.SMART_MERGE,
         ProcessingTrigger.SERVER_RECOVERY,
         ProcessingTrigger.BACKLOG_CHOICE,
+        ProcessingTrigger.SILENT_BACKFILL,
     }
 
 
@@ -128,7 +133,11 @@ def test_long_speech_is_kept_by_rule_without_a_model_call():
 
 
 def test_rule_discard_still_yields_to_a_calendar_meeting():
-    decision, model, calendar = _decide(texts=('hmm',), calendar=MagicMock(return_value=True))
+    # Filler-only but above the short-clip floor: below the floor a meeting no
+    # longer stands a scrap up as a standalone conversation.
+    filler = ('yeah okay sure right alright yeah okay sure right alright yeah okay',)
+
+    decision, model, calendar = _decide(texts=filler, speech_seconds=60.0, calendar=MagicMock(return_value=True))
 
     assert (decision.verdict, decision.decided_by, decision.reason) == ('keep', 'override', 'calendar_overlap')
     model.assert_not_called()

@@ -21,6 +21,7 @@ from services.conversation_finalization import (
 from utils.cloud_tasks import verify_listen_finalization_cloud_tasks_oidc
 from utils.account_cutover.access import should_skip_background_account_mutation
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations import quiet_finalization
 from utils.conversations.processing_trigger import trigger_for_finalization_job
 from utils.conversations.recovery import RecoveryStructureUnavailableError, recovery_minimum_terminal_enabled
 from utils.conversations.finalizer import (
@@ -29,6 +30,7 @@ from utils.conversations.finalizer import (
     finalize_persisted_conversation,
 )
 from utils.executors import db_executor, postprocess_executor, sync_executor, run_blocking
+from utils.llm.gateway_error_contract import byok_failure_class_of
 from utils.metrics import LISTEN_FINALIZATION_RETRIES_TOTAL
 from utils.observability.journeys import (
     record_capture_finalization_terminal,
@@ -151,6 +153,12 @@ async def run_listen_finalization_job(
         return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_payload'})
 
     job_id, dispatch_generation = parsed
+    if job_id.startswith('merge-'):
+        status = await lifecycle_service.merge_jobs.run(job_id, dispatch_generation)
+        return JSONResponse(status_code=200, content={'status': status})
+    if job_id.startswith('quiet-'):
+        status = await run_blocking(db_executor, quiet_finalization.run, job_id, dispatch_generation)
+        return JSONResponse(status_code=200, content={'status': status})
     from utils.conversations.demand_processing import admit
 
     if not await run_blocking(db_executor, admit, job_id, token=dispatch_generation):
@@ -302,9 +310,16 @@ async def run_listen_finalization_job(
                 job_id, dispatch_generation, claimed_lease_epoch, task_retry_count, failed_attempts, 'processing_failed'
             )
             if terminal:
-                logger.error(
-                    'listen finalization final attempt failed job_hash=%s failure=processing_failed',
+                # A BYOK provider failure is the user's own account state even at
+                # dead-letter terminality; keep it out of severity>=ERROR counts.
+                byok_class = byok_failure_class_of(error)
+                log = logger.error if byok_class is None else logger.warning
+                log(
+                    'listen finalization final attempt failed job_hash=%s failure=processing_failed '
+                    'byok=%s failure_class=%s',
                     finalization_diagnostic_id(job_id),
+                    byok_class is not None,
+                    byok_class or 'none',
                 )
                 return JSONResponse(status_code=200, content={'status': 'dead_letter'})
             return JSONResponse(status_code=500, content={'status': 'retry'})

@@ -18,6 +18,7 @@ from datetime import tzinfo
 from typing import Any, Callable, Iterable, List, Optional, cast
 
 from config.summary_guarantee import enabled
+from models.conversation_emoji import fallback_emoji
 from models.conversation_enums import CategoryEnum
 from models.structured import Structured
 
@@ -145,7 +146,8 @@ def build_deterministic_minimum_structured(
     tz_name_provider: Optional[Callable[[], Optional[str]]] = None,
 ) -> Structured:
     """The whole §1.7 row: deterministic title, empty overview, category ``other``,
-    no action items, no events. Every other field keeps its model default.
+    the category's fallback emoji, no action items, no events. Every other field
+    keeps its model default.
 
     ``uid`` is the conversation owner. ``title_provenance`` is stamped only for an
     owner in the first-summary cohort; an unknown owner (None) gets no stamp.
@@ -160,6 +162,10 @@ def build_deterministic_minimum_structured(
             tz_name_provider=tz_name_provider,
         ),
         overview='',
+        # The category's deterministic emoji, not whatever the schema default is:
+        # an intake minimum that omitted this pinned the "unset" brain on every
+        # sync-created conversation (2026-10-24).
+        emoji=fallback_emoji('', MINIMUM_CATEGORY),
         # The typed SDK model owns an equivalent CategoryEnum class while the
         # backend's canonical enum remains the public domain authority. Pydantic
         # converts the canonical str-enum at this boundary before validation.

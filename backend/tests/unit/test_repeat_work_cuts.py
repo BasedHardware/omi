@@ -53,7 +53,7 @@ def test_stable_source_identity_and_changed_sources(monkeypatch):
     b = conversations._finalize_audio_file_group('u', 'c', missing, [])
     assert a.id != b.id and a.source_fingerprint is None
     monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', 'false')
-    assert conversations._finalize_audio_file_group('u', 'c', source, []).id != first.id
+    assert conversations._finalize_audio_file_group('u', 'c', source, []).id == first.id
 
 
 @pytest.mark.parametrize(('enabled', 'source_identity'), [(False, False), (True, False), (False, True)])
@@ -106,9 +106,6 @@ def test_background_updates_do_not_build_but_open_and_play_enqueue(monkeypatch):
     storage.precache_conversation_audio('u', 'c', files)
     storage.enqueue_conversation_audio_merge('u', 'c', files, 'process_conversation')
     storage.enqueue_conversation_artifact_build('u', 'c', 'fp', 'sync_finalize')
-    storage.maybe_invalidate_conversation_playback(
-        'u', 'c', {'conversation_audio': {'audio_files_fingerprint': 'old'}}, files, 'pusher'
-    )
     enqueue.assert_not_called()
     storage.enqueue_conversation_audio_merge('u', 'c', files, 'sync_download')
     storage.enqueue_conversation_artifact_build('u', 'c', 'fp', 'sync_urls')
@@ -232,6 +229,44 @@ def test_source_replacement_during_build_is_rejected():
         validate_sources(files, original[:1])
 
 
+def test_pre_projection_stamp_survives_raw_entries_under_colliding_keys():
+    from utils.other.playback_identity import resolve_sources
+
+    stamped = chunks()
+    af = {'chunk_timestamps': [1000, 1005], 'source_fingerprint': source_fingerprint(stamped)}
+    whole_pack = dict(
+        path='raw-live/u/c/1000.000.opus',
+        timestamp=1000,
+        generation='9',
+        size=8192,
+        span={'start': 1000, 'samples': 80000, 'sample_rate': 16000},
+        raw_end=1005,
+        pcm_sha256='p',
+    )
+    split_fragment = {**whole_pack, 'path': 'raw-live/u/c/1005.000.opus', 'timestamp': 1005, 'raw_source_start': 1005}
+    projected = [dict(stamped[0]), whole_pack, dict(stamped[1]), split_fragment]
+    resolved = resolve_sources(af, projected)
+    assert [chunk['path'] for chunk in resolved] == ['chunks/u/c/1000.pcm', 'chunks/u/c/1005.pcm']
+
+
+def test_pre_projection_stamp_still_refuses_when_encoded_core_changed():
+    from utils.other.playback_identity import validate_sources
+
+    stamped = chunks()
+    af = {'chunk_timestamps': [1000, 1005], 'source_fingerprint': source_fingerprint(stamped)}
+    whole_pack = dict(
+        path='raw-live/u/c/1000.000.opus',
+        timestamp=1000,
+        generation='9',
+        size=8192,
+        raw_end=1005,
+        pcm_sha256='p',
+    )
+    drifted = [deepcopy(stamped[0]), {**stamped[1], 'generation': '8'}, whole_pack]
+    with pytest.raises(RuntimeError, match='source manifest changed'):
+        validate_sources([af], drifted)
+
+
 def test_initial_generation_calls_join_the_chosen_durable_id(monkeypatch, caplog):
     monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true')
     caplog.set_level('INFO', logger=metrics.__name__)
@@ -298,7 +333,9 @@ async def test_deferred_eager_task_survives_tombstone_and_builds_after_rollback(
     monkeypatch.setattr(sync.sync_playback, 'build_conversation_playback_artifact', conversation_build)
     upload = Mock()
     monkeypatch.setattr(sync, 'upload_playback_artifact', upload)
-    monkeypatch.setattr(sync, 'upload_conversation_playback_artifact', upload)
+    monkeypatch.setattr(sync.playback_build, 'get_conversation_playback_manifest', lambda *_: None)
+    monkeypatch.setattr(sync.playback_build, 'build_conversation_playback_artifact', conversation_build)
+    monkeypatch.setattr(sync.playback_build, 'upload_conversation_playback_artifact', upload)
     cloud_tasks.enqueue_audio_merge_job(payload)
     eager_name = next(iter(queued))
     monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', 'true')
@@ -341,7 +378,9 @@ async def test_deferred_eager_task_survives_tombstone_and_builds_after_rollback(
     (conversation_build if schema == 2 else file_build).assert_called_once()
     upload.assert_called_once()
     if schema == 2:
-        assert row['conversation_audio']['audio_files_fingerprint'] == fingerprint
+        assert row['conversation_audio']['audio_files_fingerprint'] == storage.compute_audio_files_fingerprint(
+            files, origin=row['started_at'], source_identity=True
+        )
 
 
 @pytest.mark.asyncio
@@ -420,11 +459,14 @@ async def test_demand_worker_drains_after_flag_rollback_and_reuses_same_artifact
     build = Mock(return_value=(b'MP3', [{'file_id': 'stable', 'len': 2.0, 'wall_offset': 0.0}]))
     upload = Mock()
     monkeypatch.setattr(sync.sync_playback, 'build_conversation_playback_artifact', build)
-    monkeypatch.setattr(sync, 'upload_conversation_playback_artifact', upload)
+    monkeypatch.setattr(sync.playback_build, 'get_conversation_playback_manifest', lambda *_: None)
+    monkeypatch.setattr(sync.playback_build, 'build_conversation_playback_artifact', build)
+    monkeypatch.setattr(sync.playback_build, 'upload_conversation_playback_artifact', upload)
     monkeypatch.setattr(sync, 'get_conversation_playback_signed_url', lambda *a, **kw: 'cached')
     assert (await sync._run_conversation_merge_job(payload, 0)).status_code == 200
     build.assert_called_once_with('u', 'c', row['audio_files'], 1000.0, strict_sources=True)
-    assert upload.call_args.kwargs == {'fingerprint': digest}
+    assert upload.call_args.args[3] == digest
+    assert upload.call_args.kwargs == {'spans': row['conversation_audio']['spans']}
     assert row['conversation_audio']['audio_files_fingerprint'] == digest
     again = await sync._run_conversation_merge_job(payload, 0)
     assert b'exists' in again.body

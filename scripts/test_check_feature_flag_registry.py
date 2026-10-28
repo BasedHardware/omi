@@ -36,7 +36,7 @@ def flag(key: str = "EXAMPLE_ENABLED", **overrides: object) -> dict[str, object]
         "fail": "closed",
         "owner": "tester",
         "created": "2026-08-01",
-        "review_by": "2026-10-15",
+        "review_by": "2026-11-15",
         "decision": "pending",
         "terminal": terminal,
     }
@@ -68,6 +68,34 @@ class RegistryFixture(unittest.TestCase):
         self.write("backend/service.py", "import os\nENABLED_NAME = 'EXAMPLE_ENABLED'\nos.getenv(ENABLED_NAME)\n")
         self.write("config/feature-flags.yaml", self.yaml([flag()]))
 
+    def test_shared_boolean_parser_fail_field_is_enforced(self) -> None:
+        with mock.patch("check_feature_flag_registry.parser_defaults", return_value={"EXAMPLE_ENABLED": "open"}):
+            errors, _ = check(self.root, check_render=False, as_of=date(2026, 10, 1))
+        self.assertTrue(any("EXAMPLE_ENABLED: fail must be open" in error for error in errors))
+
+    def test_renderer_checks_and_generates_parser_fail_field(self) -> None:
+        self.write(
+            "backend/config/refactor_modes.py",
+            "def default_on(name, *, environ=None): return True\n"
+            "def default_off(name, *, environ=None): return False\n",
+        )
+        self.write(
+            "backend/config/example.py",
+            "from config.refactor_switches import default_on\ndef enabled(): return default_on('EXAMPLE_ENABLED', False)\n",
+        )
+        renderer = Path(__file__).with_name("render_feature_flag_registry.py")
+        import sys
+
+        command = [sys.executable, str(renderer), "--root", str(self.root), "--as-of", "2026-10-01"]
+        checked = subprocess.run(command + ["--check-parsers"], capture_output=True, text=True)
+        self.assertEqual(checked.returncode, 1, checked.stdout + checked.stderr)
+        self.assertIn("EXAMPLE_ENABLED", checked.stderr)
+        rendered = subprocess.run(command, capture_output=True, text=True)
+        self.assertEqual(rendered.returncode, 0, rendered.stdout + rendered.stderr)
+        checked = subprocess.run(command + ["--check-parsers"], capture_output=True, text=True)
+        self.assertEqual(checked.returncode, 0, checked.stdout + checked.stderr)
+        self.assertEqual(load_registry(self.root / "config/feature-flags.yaml")["flags"][0]["fail"], "open")
+
     def tearDown(self) -> None:
         self.temp.cleanup()
 
@@ -95,12 +123,17 @@ class RegistryFixture(unittest.TestCase):
         )
 
     def errors(self) -> list[str]:
-        return check(self.root, check_render=False)[0]
+        return check(self.root, check_render=False, as_of=date(2026, 10, 1))[0]
 
     def test_kill_after_readout_is_a_reviewed_nonterminal_experiment(self) -> None:
         self.write("backend/docs/experiment.md", "Pre-registered readout")
-        row = flag(lifecycle="experiment", decision="kill_after_readout", terminal="undecided",
-                   review_by="2026-10-30", prereg="backend/docs/experiment.md")
+        row = flag(
+            lifecycle="experiment",
+            decision="kill_after_readout",
+            terminal="undecided",
+            review_by="2026-10-30",
+            prereg="backend/docs/experiment.md",
+        )
         self.assertEqual(validate_registry({"flags": [row], "ignore": [], "retired": []}, root=self.root), [])
         for changes in ({"terminal": "off"}, {"lifecycle": "rollout"}):
             errors = validate_registry({"flags": [{**row, **changes}], "ignore": [], "retired": []}, root=self.root)
@@ -151,6 +184,25 @@ class RegistryFixture(unittest.TestCase):
             self.assertIn(f"unregistered feature flag: {key}", errors)
         self.assertIn("desktop/macos/Desktop/Sources/Feature.swift:1", errors)
         self.assertIn("web/admin/src/flags.ts:1", errors)
+
+    def test_dart_kill_switch_constant_is_cataloged(self) -> None:
+        self.write(
+            "app/lib/services/experiments/watch_copy_dedupe.dart",
+            "class Policy { static const killSwitchFlag = 'watch_copy_dedupe_off'; }\n",
+        )
+        self.assertIn("unregistered feature flag: watch_copy_dedupe_off", "\n".join(self.errors()))
+        kill = flag(
+            "watch_copy_dedupe_off",
+            kind="posthog",
+            surfaces=["mobile"],
+            lifecycle="ops_kill",
+            decision="keep",
+            terminal="keep",
+            posthog={"row": "expected", "role": "kill"},
+        )
+        kill.pop("review_by")
+        self.write("config/feature-flags.yaml", self.yaml([flag(), kill]))
+        self.assertEqual([], self.errors())
 
     def test_swift_sdk_constant_read_is_a_real_surface_not_an_unconditional_declaration(self) -> None:
         key = "fixture-remote-stop"
@@ -385,7 +437,7 @@ class RegistryFixture(unittest.TestCase):
             ".github/actions/deploy/action.yml",
             'run: gcloud run services update backend-listen --update-env-vars "EXAMPLE_PERCENT=10,EXAMPLE_UID_ALLOWLIST=uid"\n',
         )
-        errors, _ = check(self.root, check_render=False)
+        errors, _ = check(self.root, check_render=False, as_of=date(2026, 10, 1))
         self.assertIn("duplicate ramp/allowlist declaration: EXAMPLE_PERCENT", "\n".join(errors))
         self.assertIn("duplicate ramp/allowlist declaration: EXAMPLE_UID_ALLOWLIST", "\n".join(errors))
 
@@ -399,7 +451,7 @@ class RegistryFixture(unittest.TestCase):
 
     def test_rendered_doc_mismatch_requires_regeneration(self) -> None:
         self.write("backend/docs/feature-flag-registry.md", "<!-- feature-flag-registry as-of: 2026-09-24 -->\nstale\n")
-        self.assertIn("rendered doc drift", "\n".join(check(self.root)[0]))
+        self.assertIn("rendered doc drift", "\n".join(check(self.root, as_of=date(2026, 10, 1))[0]))
 
     def test_renderer_resolves_shared_cohort_mapping(self) -> None:
         tree = _parse_mapping(
@@ -515,7 +567,7 @@ class RegistryFixture(unittest.TestCase):
         )
         registry = load_registry(self.root / "config/feature-flags.yaml")
         self.write("backend/docs/feature-flag-registry.md", render(self.root, registry, date(2026, 9, 24)))
-        self.assertEqual(check(self.root)[0], [])
+        self.assertEqual(check(self.root, as_of=date(2026, 10, 1))[0], [])
 
     def test_retired_name_must_not_be_read_and_is_exempt_from_stale(self) -> None:
         old = {

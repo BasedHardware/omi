@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:math';
 
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 // Phase 4.1 — Structured, ActionItem, AppResponse, and Event are kept as deliberate
@@ -16,6 +15,12 @@ import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 typedef Section = wire.GeneratedSection;
 
 class Structured {
+  /// The neutral emoji for a row where nothing chose one (server
+  /// `models.conversation_emoji.NEUTRAL_EMOJI`). 🧠 is the server's
+  /// "extraction omitted the field" sentinel and must not be the
+  /// missing/empty fallback here.
+  static const String neutralEmoji = '💬';
+
   int id = 0;
 
   String title;
@@ -29,24 +34,30 @@ class Structured {
 
   List<Event> events = [];
 
-  Structured(this.title, this.overview, {this.id = 0, this.emoji = '', this.category = 'other'});
+  /// 'highlight' or 'background' from the notes pass (Episodes M3); null on legacy notes.
+  String? salience;
+
+  Structured(this.title, this.overview, {this.id = 0, this.emoji = '', this.category = 'other', this.salience});
+
+  bool get isBackground => salience == 'background';
 
   getEmoji() {
     try {
       if (emoji.isNotEmpty) return utf8.decode(emoji.toString().codeUnits);
-      return ['🧠', '😎', '🧑‍💻', '🚀'][Random().nextInt(4)];
+      return neutralEmoji;
     } catch (e) {
-      // return ['🧠', '😎', '🧑‍💻', '🚀'][Random().nextInt(4)];
       return emoji; // should return random?
     }
   }
 
   static Structured fromJson(Map<String, dynamic> json) {
+    final emojiSource = json['emoji'];
     var structured = Structured(
       json['title'] ?? '',
       json['overview'] ?? '',
-      emoji: json['emoji'] ?? '🧠',
+      emoji: emojiSource is String && emojiSource.trim().isNotEmpty ? emojiSource : neutralEmoji,
       category: json['category'] ?? 'other',
+      salience: json['salience'] is String ? json['salience'] as String : null,
     );
     final sections = json['sections'];
     if (sections is List) {
@@ -115,6 +126,7 @@ class Structured {
       generated.overview,
       emoji: generated.emoji,
       category: generated.category,
+      salience: generated.salience,
     );
     structured.sections = generated.sections?.toList() ?? [];
     structured.actionItems = generated.actionItems?.indexed
@@ -164,6 +176,7 @@ class Structured {
               })
           .toList(),
       'events': events.map((event) => event.toJson()).toList(),
+      if (salience != null) 'salience': salience,
     };
   }
 
@@ -176,6 +189,7 @@ class Structured {
       sections: sections.toList(),
       actionItems: actionItems.map((item) => item.toGenerated()).toList(),
       events: events.map((event) => event.toGenerated()).toList(),
+      salience: salience,
     );
   }
 }

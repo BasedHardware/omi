@@ -1,5 +1,6 @@
 """Unit tests for calendar meetings UTC normalization, duration validation, and query filter ordering."""
 
+import warnings
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
@@ -53,7 +54,9 @@ def test_list_meetings_applies_where_filters_in_utc_before_limit(monkeypatch):
     calls = []
 
     class FakeQuery:
-        def where(self, field, op, value):
+        def where(self, field=None, op=None, value=None, *, filter=None):
+            if filter is not None:
+                field, op, value = filter.field_path, filter.op_string, filter.value
             calls.append(('where', field, op, value))
             return self
 
@@ -81,3 +84,66 @@ def test_list_meetings_applies_where_filters_in_utc_before_limit(monkeypatch):
     assert calls[1] == ('where', 'start_time', '<=', datetime(2026, 9, 24, 18, 0, 0, tzinfo=timezone.utc))
     assert calls[2] == ('order_by', 'start_time')
     assert calls[3] == ('limit', 10)
+
+
+def test_query_helpers_emit_no_positional_filter_userwarning(monkeypatch):
+    """Positional ``.where(field, op, value)`` makes google-cloud-firestore emit a
+    UserWarning per call; on prod backend-listen those warnings surface as stderr
+    ERROR lines (~78% of the listener-error gate volume) and swamp it. Every query
+    helper here must build filters with the ``filter=FieldFilter(...)`` keyword.
+    The shared fake mirrors the SDK warning, so error-on-UserWarning fails at the
+    exact regression site."""
+    from tests.unit.fixtures.generic_firestore_fake import FakeFirestore
+
+    meeting = {
+        'calendar_event_id': 'ev-1',
+        'calendar_source': 'gcal',
+        'title': 'Standup',
+        'start_time': datetime(2026, 9, 24, 9, 0, 0, tzinfo=timezone.utc),
+        'end_time': datetime(2026, 9, 24, 9, 30, 0, tzinfo=timezone.utc),
+    }
+    fake = FakeFirestore(docs={'users/uid-1/meetings/m-1': meeting})
+
+    class BatchStub:
+        def __init__(self):
+            self.deleted = []
+
+        def delete(self, ref):
+            self.deleted.append(ref)
+
+        def commit(self):
+            pass
+
+    class DbStub:
+        def __init__(self):
+            self.batches = []
+
+        def batch(self):
+            batch = BatchStub()
+            self.batches.append(batch)
+            return batch
+
+    monkeypatch.setattr(calendar_db, 'db', DbStub())
+    monkeypatch.setattr(
+        calendar_db,
+        '_get_meetings_collection',
+        lambda uid: fake.collection('users').document(uid).collection('meetings'),
+    )
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('error', UserWarning)
+        assert calendar_db.get_meeting_id_by_calendar_event('uid-1', 'ev-1', 'gcal') == 'm-1'
+        listed = calendar_db.list_meetings(
+            'uid-1',
+            start_date=datetime(2026, 9, 24, 8, 0, 0),
+            end_date=datetime(2026, 9, 24, 10, 0, 0),
+            limit=10,
+        )
+        assert [item['id'] for item in listed] == ['m-1']
+        assert calendar_db.delete_old_meetings('uid-1', datetime(2026, 9, 25, tzinfo=timezone.utc)) == 1
+        overlapping = calendar_db.get_meetings_in_time_range(
+            'uid-1',
+            datetime(2026, 9, 24, 9, 15, 0, tzinfo=timezone.utc),
+            datetime(2026, 9, 24, 9, 45, 0, tzinfo=timezone.utc),
+        )
+        assert [item['id'] for item in overlapping] == ['m-1']

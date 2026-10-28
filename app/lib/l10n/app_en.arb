@@ -935,9 +935,9 @@
     "@remembering": {
         "description": "Remembering stat title"
     },
-    "unlimitedPlan": "Unlimited Plan",
+    "unlimitedPlan": "Omi Pro",
     "@unlimitedPlan": {
-        "description": "Unlimited plan name"
+        "description": "Plan name shown after a successful purchase; Omi Pro is a product name and is not translated"
     },
     "managePlan": "Manage Plan",
     "@managePlan": {
@@ -975,7 +975,7 @@
     "@upgrade": {
         "description": "Upgrade button"
     },
-    "upgradeToUnlimited": "Upgrade to Unlimited",
+    "upgradeToUnlimited": "Upgrade to Omi Pro",
     "@upgradeToUnlimited": {
         "description": "Message shown on locked memory items"
     },
@@ -3693,7 +3693,7 @@
     "@pro": {
         "description": "Badge label for pro/unlimited users"
     },
-    "upgradeToPro": "Upgrade to Pro",
+    "upgradeToPro": "Upgrade to Omi Pro",
     "@upgradeToPro": {
         "description": "Subscription banner button text"
     },
@@ -4982,9 +4982,9 @@
     "@trainingDataProgram": {
         "description": "Label for training data program"
     },
-    "getOmiUnlimitedFree": "Get Omi Unlimited for free by contributing your data to train AI models.",
+    "getOmiUnlimitedFree": "Get Omi Pro for free by contributing your data to train AI models.",
     "@getOmiUnlimitedFree": {
-        "description": "Description for getting Omi Unlimited free by contributing data"
+        "description": "Description for getting Omi Pro free by contributing data"
     },
     "trainingDataBullets": "• Your data helps improve AI models\n• Only non-sensitive data is shared",
     "@trainingDataBullets": {
@@ -5203,6 +5203,10 @@
     "continueText": "Continue",
     "@continueText": {
         "description": "Continue button text"
+    },
+    "checkoutExistingSubscription": "You already have a subscription. Manage your current subscription instead of starting a new one.",
+    "@checkoutExistingSubscription": {
+        "description": "Checkout is blocked because an existing subscription must be managed, not purchased a second time. Not the pending-cancellation upgrade error."
     },
     "resubscribeFirstToChangePlans": "Resubscribe first to change plans.",
     "@resubscribeFirstToChangePlans": {
@@ -10308,6 +10312,10 @@
     "@transcriptionUnavailableRecordingSaved": {
         "description": "Live-capture empty state when the plan is out of transcription credits"
     },
+    "captureNoAudioFromPendant": "No audio from pendant",
+    "@captureNoAudioFromPendant": {
+        "description": "Capture status when the pendant is connected but its audio never arrived and automatic recovery is exhausted. Same wording as the Live Activity notice."
+    },
     "capturing": "Capturing",
     "@capturing": {
         "description": "Live-capture app bar title while both audio and photos are being captured"
@@ -11488,9 +11496,9 @@
     "@downgradeToFreemiumAction": {
         "description": "Button that moves the user from a paid plan to the free tier"
     },
-    "getFreeUnlimitedAccess": "Get Free Unlimited Access",
+    "getFreeUnlimitedAccess": "Get Omi Pro Free",
     "@getFreeUnlimitedAccess": {
-        "description": "Title of the training-data opt-in card offering free unlimited access"
+        "description": "Title of the training-data opt-in card offering free Omi Pro"
     },
     "shareDataForTraining": "Share data for training",
     "@shareDataForTraining": {
@@ -13194,6 +13202,14 @@
     "@captureWedgeBleExplanation": {
         "description": "Details sheet body for a BLE-health capture recovery episode: what stalled, that audio is safe, and what retry does."
     },
+    "captureConnecting": "Connecting…",
+    "@captureConnecting": {
+        "description": "Capture status while a pendant link is being verified: no Listening claim and no timer until the subscription is confirmed (CaptureIngressHealth)."
+    },
+    "captureNoAudioDetail": "Pendant connected, but no audio is reaching your phone",
+    "@captureNoAudioDetail": {
+        "description": "Detail line under the no-audio-from-pendant warning: the link is fine, the audio is not flowing."
+    },
     "captureIngressNeedsReconnect": "Audio isn't reaching the app — reconnect your Omi",
     "@captureIngressNeedsReconnect": {
         "description": "Capture recovery banner title for an ingress_recovery_failed episode: automatic recovery is exhausted, so the reader must manually reconnect the device. Not a retry affordance and not an in-progress claim."
@@ -13229,14 +13245,6 @@
     "captureStorageAlmostFull": "Storage almost full",
     "@captureStorageAlmostFull": {
         "description": "Transcribe Later card for a pendant, line 2: the pendant's own storage is almost full."
-    },
-    "capturePendantDisconnectedDetail": "Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.",
-    "@capturePendantDisconnectedDetail": {
-        "description": "Details sheet from the Home live capture card when the pendant disconnected in the middle of a capture."
-    },
-    "capturePendantDisconnectedShort": "Omi reconnects on its own",
-    "@capturePendantDisconnectedShort": {
-        "description": "Listening pill, after the status, when the pendant dropped and is not reconnecting yet: the one-line reassurance. The details sheet has the full explanation."
     },
     "participantsSummaryUncounted": "{name} + others",
     "@participantsSummaryUncounted": {
@@ -14651,14 +14659,6 @@
     "@playbackAudioNetworkFailed": {
         "description": "Inline label when fetching the audio URLs fails on transport"
     },
-    "forYou": "For You",
-    "@forYou": {
-        "description": "Home proactivity feed section title"
-    },
-    "stopThese": "Stop These",
-    "@stopThese": {
-        "description": "Disable the producer of a For You card"
-    },
     "dismiss": "Dismiss",
     "@dismiss": {
         "description": "Hide a For You card"
@@ -15486,7 +15486,7 @@
     },
     "chatAppsProPerkText": "Text Omi from Telegram and iMessage",
     "chatAppsVoiceNotesSubtitle": "Send a voice note and Omi will answer it.",
-    "chatAppsPartOfPro": "Chat apps are part of Pro",
+    "chatAppsPartOfPro": "Chat apps are part of Omi Pro",
     "chatAppsMessagesApp": "Messages",
     "@chatAppsShowInApp": {
         "description": "Switch title"
@@ -16269,9 +16269,9 @@
     "@syncDetailsCopy": {
         "description": "Sync details button that copies the diagnostics text to the clipboard."
     },
-    "chatAppsChannelPlanRequired": "Available on Operator and Architect",
+    "chatAppsChannelPlanRequired": "Available on Omi Pro",
     "@chatAppsChannelPlanRequired": {
-        "description": "Chat apps row subtitle when the channel (iMessage) needs the Operator or Architect plan; plan names are not translated"
+        "description": "Chat apps row subtitle when the channel (iMessage) needs the Omi Pro plan; the plan name is not translated"
     },
     "chatAppsAtCapacity": "{app} is at capacity",
     "@chatAppsAtCapacity": {
@@ -16448,43 +16448,6 @@
     "onTheWayRecordingCount": "{count, plural, =1{1 recording} other{{count} recordings}}",
     "@onTheWayRecordingCount": {
         "description": "On the Way: how many recordings, in the summary line and a day header (e.g. '11 recordings')",
-        "placeholders": {
-            "count": {
-                "type": "int"
-            }
-        }
-    },
-    "onTheWaySummary": "{totals} on the way",
-    "@onTheWaySummary": {
-        "description": "On the Way summary line at the top. totals is the recording count and total length, e.g. '45 recordings · 8h 54m'",
-        "placeholders": {
-            "totals": {
-                "type": "String",
-                "example": "45 recordings · 8h 54m"
-            }
-        }
-    },
-    "onTheWayUploadingCount": "{count} uploading",
-    "@onTheWayUploadingCount": {
-        "description": "On the Way summary and day header: how many recordings are still syncing to Omi",
-        "placeholders": {
-            "count": {
-                "type": "int"
-            }
-        }
-    },
-    "onTheWayAlmostReadyCount": "{count} almost ready",
-    "@onTheWayAlmostReadyCount": {
-        "description": "On the Way summary and day header: how many recordings are being turned into conversations",
-        "placeholders": {
-            "count": {
-                "type": "int"
-            }
-        }
-    },
-    "onTheWayNeedsAttentionCount": "{count, plural, =1{1 needs attention} other{{count} need attention}}",
-    "@onTheWayNeedsAttentionCount": {
-        "description": "On the Way summary and day header, in warning colour: how many recordings Omi refused or could not sync",
         "placeholders": {
             "count": {
                 "type": "int"
@@ -16969,7 +16932,7 @@
     "@onDeviceOptionChargingBody": {
         "description": "Explains the on-phone transcription option that runs while the phone charges"
     },
-    "onDeviceUpgradeBody": "Upgrade to Pro for speaker separation and higher accuracy",
+    "onDeviceUpgradeBody": "Upgrade to Omi Pro for speaker separation and higher accuracy",
     "@onDeviceUpgradeBody": {
         "description": "Explains what upgrading the plan gives"
     },
@@ -17229,7 +17192,7 @@
     "@onDeviceRedoWithCloud": {
         "description": "Button: transcribe and summarize this conversation again in Omi's cloud"
     },
-    "onDeviceRedoHint": "Upgrade to Pro for speaker separation and higher accuracy",
+    "onDeviceRedoHint": "Upgrade to Omi Pro for speaker separation and higher accuracy",
     "@onDeviceRedoHint": {
         "description": "Hint under the Redo with Omi Cloud button"
     },
@@ -17553,15 +17516,29 @@
             }
         }
     },
+    "episodeNotesUnavailable": "Running notes aren’t updating. View the transcript for now.",
+    "episodeCaptureFor": "Capturing · {duration}",
+    "@episodeCaptureFor": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "episodePrevious": "Previous episode",
+    "captureChunksPending": "Chunks pending: {pending}",
+    "@captureChunksPending": {
+        "placeholders": {
+            "pending": {
+                "type": "int"
+            }
+        }
+    },
     "episodeNotesSoon": "Running notes appear after the first few minutes of talk.",
     "@episodeNotesSoon": {
         "description": "Shown in the running notes card before the first notes exist."
     },
-    "episodeOpenAll": "Open All",
-    "@episodeOpenAll": {
-        "description": "Opens the full live transcript from its preview on a live episode."
-    },
-    "episodeWrapUpNow": "Wrap Up Now",
+    "episodeWrapUpNow": "Wrap up now",
     "@episodeWrapUpNow": {
         "description": "Button that ends a live episode now and makes its full notes."
     },
@@ -17668,5 +17645,284 @@
     "deviceControls": "Controls",
     "@deviceControls": {
         "description": "Device page section: controls such as pausing recording."
+    },
+    "homeBackgroundLine": "Also: {items}",
+    "@homeBackgroundLine": {
+        "description": "Home, under a day header: one line listing that day's background conversations (TV playing, a passing remark), each as its title and length, joined by ' · '. Tapping it shows them. Episodes beta only.",
+        "placeholders": {
+            "items": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceOnboardingPressButtonTitle": "Press the button on your Omi",
+    "@deviceOnboardingPressButtonTitle": {
+        "description": "Device walkthrough, Ask Omi step: PressButtonTitle"
+    },
+    "deviceOnboardingPressButtonSubtitle": "One short press. Then ask anything.",
+    "@deviceOnboardingPressButtonSubtitle": {
+        "description": "Device walkthrough, Ask Omi step: PressButtonSubtitle"
+    },
+    "deviceOnboardingAskNowTitle": "Ask your question",
+    "@deviceOnboardingAskNowTitle": {
+        "description": "Device walkthrough, Ask Omi step: AskNowTitle"
+    },
+    "deviceOnboardingAskNowSubtitle": "Say it out loud. Omi is listening.",
+    "@deviceOnboardingAskNowSubtitle": {
+        "description": "Device walkthrough, Ask Omi step: AskNowSubtitle"
+    },
+    "deviceOnboardingPressAgainHint": "Done? Press the button again to send.",
+    "@deviceOnboardingPressAgainHint": {
+        "description": "Device walkthrough, Ask Omi step: PressAgainHint"
+    },
+    "trialUpsellTitle": "You've been upgraded to {days} days free",
+    "@trialUpsellTitle": {
+        "description": "Pocket onboarding arm: trialUpsellTitle",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "trialUpsellBody": "{days} days of Omi Pro, on us. We'll remind you before anything is charged. Cancel anytime.",
+    "@trialUpsellBody": {
+        "description": "Pocket onboarding arm: trialUpsellBody",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "trialUpsellClaim": "Claim my {days}-day trial",
+    "@trialUpsellClaim": {
+        "description": "Pocket onboarding arm: trialUpsellClaim",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "settingsUpgradeTrialSubtitle": "Start your {days}-day free trial",
+    "@settingsUpgradeTrialSubtitle": {
+        "description": "Pocket onboarding arm: settingsUpgradeTrialSubtitle",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "pairingPowerOnTitle": "Power on your Omi",
+    "@pairingPowerOnTitle": {
+        "description": "Pocket onboarding arm: pairingPowerOnTitle"
+    },
+    "pairingPowerOnSubtitle": "Press the button once and keep it near your phone.",
+    "@pairingPowerOnSubtitle": {
+        "description": "Pocket onboarding arm: pairingPowerOnSubtitle"
+    },
+    "walkthroughBackgroundRecordingNote": "That's it. Omi will keep recording your conversations in the background.",
+    "@walkthroughBackgroundRecordingNote": {
+        "description": "Pocket onboarding arm: walkthroughBackgroundRecordingNote"
+    },
+    "noThanks": "No thanks",
+    "@noThanks": {
+        "description": "Pocket onboarding arm: noThanks"
+    },
+    "recapInTheBackground": "In the background",
+    "@recapInTheBackground": {
+        "description": "Daily recap section listing the day's background conversations, which Home no longer shows"
+    },
+    "retentionOfferAccept": "Stay for {percent}% off",
+    "@retentionOfferAccept": {
+        "description": "Primary button on the last cancel step: keep the subscription with a discount",
+        "placeholders": {
+            "percent": {
+                "type": "int"
+            }
+        }
+    },
+    "retentionOfferBody": "Stay and pay {price} a month for the next {months} months.",
+    "@retentionOfferBody": {
+        "description": "Offer shown on the last cancel step; price is the discounted monthly price",
+        "placeholders": {
+            "price": {
+                "type": "String"
+            },
+            "months": {
+                "type": "int"
+            }
+        }
+    },
+    "retentionOfferApplied": "Done. {percent}% off your next {months} months.",
+    "@retentionOfferApplied": {
+        "description": "Toast after accepting the stay offer",
+        "placeholders": {
+            "percent": {
+                "type": "int"
+            },
+            "months": {
+                "type": "int"
+            }
+        }
+    },
+    "othersSpeakerLabel": "Others",
+    "@othersSpeakerLabel": {
+        "description": "Collective label for unidentified voices with too little evidence in an over-split transcript; not a participant count."
+    },
+    "livePreviewListening": "Listening… words appear here as you speak.",
+    "@livePreviewListening": {
+        "description": "Live preview is running on the phone but no words have been recognized yet"
+    },
+    "livePreviewStarting": "Starting live preview…",
+    "@livePreviewStarting": {
+        "description": "The on-device live preview engine is starting"
+    },
+    "openLoopAnswerDone": "Done",
+    "@openLoopAnswerDone": {
+        "description": "Answer button on an open-loop Review card: the follow-up happened."
+    },
+    "openLoopAnswerRemind": "Remind me later",
+    "@openLoopAnswerRemind": {
+        "description": "Answer button on an open-loop Review card: ask again in two days."
+    },
+    "openLoopAnswerDrop": "Drop it",
+    "@openLoopAnswerDrop": {
+        "description": "Answer button on an open-loop Review card: stop asking about this follow-up."
+    },
+    "syncRejectionInvalidDate": "Invalid recording date",
+    "@syncRejectionInvalidDate": {
+        "description": "A recording whose capture date the server refused"
+    },
+    "syncDeleteKeptUploading": "Some parts are still uploading and were kept",
+    "@syncDeleteKeptUploading": {
+        "description": "Shown when a block Delete skipped members that are still uploading, so only the refused idle members were deleted"
+    },
+    "syncRejectionServer": "Rejected by server",
+    "@syncRejectionServer": {
+        "description": "The server refused this upload"
+    },
+    "syncRejectionTooLarge": "Too large",
+    "@syncRejectionTooLarge": {
+        "description": "The audio file is too large to upload"
+    },
+    "deviceOnPhoneQueue": "{duration} on phone",
+    "@deviceOnPhoneQueue": {
+        "description": "Audio queued on the phone waiting to upload, with its duration",
+        "placeholders": {
+            "duration": {}
+        }
+    },
+    "syncCardUploadsPaused": "Uploads paused for a moment — they'll resume automatically",
+    "@syncCardUploadsPaused": {
+        "description": "Upload cooldown copy for a per-account dispatch hold, not server capacity"
+    },
+    "episodeContinues": "Continues “{title}”",
+    "@episodeContinues": {
+        "description": "Pill under the live duration: this capture continues the previous episode.",
+        "placeholders": {
+            "title": {}
+        }
+    },
+    "episodeLiveSince": "· since {time}",
+    "@episodeLiveSince": {
+        "description": "The wall-clock start of the live session, after its running length.",
+        "placeholders": {
+            "time": {}
+        }
+    },
+    "episodeNotesStartWithTranscript": "Notes start when the final transcript arrives.",
+    "@episodeNotesStartWithTranscript": {
+        "description": "Quiet line when no on-device notes can be drafted."
+    },
+    "episodeOnDeviceNotesFootnote": "Drafted on your phone as you talk. The full notes arrive with the final transcript.",
+    "@episodeOnDeviceNotesFootnote": {
+        "description": "Footnote under on-device live notes."
+    },
+    "episodeOnThisPhone": "On this phone",
+    "@episodeOnThisPhone": {
+        "description": "Tag on notes drafted on-device from the live preview."
+    },
+    "episodeOpenTranscript": "Open transcript",
+    "@episodeOpenTranscript": {
+        "description": "Link from the Summary live card to the Transcript tab."
+    },
+    "liveCardTitle": "Live",
+    "@liveCardTitle": {
+        "description": "Title of the live preview card on the Summary tab."
+    },
+    "livePreviewBehind": "Final transcript about {duration} behind",
+    "@livePreviewBehind": {
+        "description": "Quiet line: how far the final transcript lags the live preview.",
+        "placeholders": {
+            "duration": {}
+        }
+    },
+    "livePreviewCatchingUp": "Final transcript catching up",
+    "@livePreviewCatchingUp": {
+        "description": "Quiet line when the final-transcript lag is unknown."
+    },
+    "livePreviewNoEngineBody": "Your words show up here a minute or two after you say them.",
+    "@livePreviewNoEngineBody": {
+        "description": "No-engine preview card body."
+    },
+    "livePreviewNoEngineTitle": "Recording safely",
+    "@livePreviewNoEngineTitle": {
+        "description": "No-engine preview card title."
+    },
+    "livePreviewOnPhoneDivider": "Live on this phone",
+    "@livePreviewOnPhoneDivider": {
+        "description": "Divider between the final transcript and the on-device preview lines."
+    },
+    "livePreviewTurnOnLiveText": "Turn on live text",
+    "@livePreviewTurnOnLiveText": {
+        "description": "Link to the speech settings where the platform can deep-link to them."
+    },
+    "deviceCatchUpOnItsWay": "on its way",
+    "@deviceCatchUpOnItsWay": {
+        "description": "Lowercase caption on the Device Settings 'Catching up' stat tile, under a duration like '8h 14m': the recordings are uploading by themselves. A chevron follows; tapping opens the On the Way page."
+    },
+    "deviceCatchUpWhenOnline": "when online",
+    "@deviceCatchUpWhenOnline": {
+        "description": "Lowercase caption on the Device Settings 'Catching up' stat tile, under a duration like '8h 14m', while the phone has no internet: the recordings will upload once it is back online. A chevron follows."
+    },
+    "onTheWayCatchingUp": "{duration} catching up",
+    "@onTheWayCatchingUp": {
+        "description": "Headline of the On the Way page: how much recorded audio is still uploading or being turned into conversations. {duration} is like '8h 14m'.",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "onTheWayUploadsByItself": "Uploads by itself. Conversations fill in as it lands.",
+    "@onTheWayUploadsByItself": {
+        "description": "One quiet line under the On the Way headline and progress bar: the user does not need to do anything; conversations appear as the audio arrives on the server."
+    },
+    "onTheWayUploadsWhenOnline": "Uploads by itself once you're back online. Conversations fill in as it lands.",
+    "@onTheWayUploadsWhenOnline": {
+        "description": "The same line under the On the Way headline while the phone has no internet connection."
+    },
+    "onTheWayDayUploading": "Uploading",
+    "@onTheWayDayUploading": {
+        "description": "Short status at the right of one day's row on On the Way: that day's recordings are uploading right now."
+    },
+    "onTheWayDayNext": "Next",
+    "@onTheWayDayNext": {
+        "description": "Short status at the right of one day's row on On the Way: that day's recordings upload next (next in line, not a 'Next' button)."
+    },
+    "onTheWayDayQueued": "Queued",
+    "@onTheWayDayQueued": {
+        "description": "Short status at the right of one day's row on On the Way: that day's recordings are waiting their turn to upload."
+    },
+    "onTheWayNoDate": "No date",
+    "@onTheWayNoDate": {
+        "description": "Title of the On the Way row for recordings whose recording time is unknown (for example a device clock that was never set), in place of 'Today' or a weekday."
+    },
+    "onTheWayFootnote": "Recordings that fail keep retrying in the background. Anything we can't transcribe is reported to us automatically.",
+    "@onTheWayFootnote": {
+        "description": "Footnote under the list of days on the On the Way page. 'We/us' is the Omi team."
+    },
+    "onTheWayDetailsForSupport": "Details for support",
+    "@onTheWayDetailsForSupport": {
+        "description": "Small text link at the bottom of On the Way, and the title of the page it opens: a plain technical list of every pending recording with its status codes, meant for the support team."
     }
 }

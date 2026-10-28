@@ -122,7 +122,13 @@ startupProbe:
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
-  minReplicas: 1
+  # Two warm replicas: the p99-latency HPA crossed its 2s target ~23x/day
+  # (7d, 2026-10-19..26), and every 1->2 scale-up booted a fresh T4 node
+  # (~4-6 min cold start, 32-57 distinct VMs/day billed on vad-pool-v2).
+  # A floor of 2 keeps burst headroom warm, removes the 1<->2 flap and
+  # measured slightly CHEAPER (node-hours 59.8/day -> ~53/day floor 48).
+  # Rollback: minReplicas back to 1 and redeploy.
+  minReplicas: 2
   maxReplicas: 10
   behavior:
     scaleDown:

@@ -1,23 +1,31 @@
 # As-captured audio and backend-sync cost trial
 
-Owner: David approves cohorts; Claude deploys and ramps. All new writes and
-routing trials default off. Canonical capture stays in `BUCKET_PRIVATE_CLOUD_SYNC`
-(the existing US multi-region bucket), indefinitely except user-requested conversation/account deletion.
+Owner: David approves cohorts; Claude deploys and ramps. Canonical capture stays
+in `BUCKET_PRIVATE_CLOUD_SYNC` (the existing US multi-region bucket), indefinitely
+except user-requested conversation/account deletion.
 Training use is **not authorized** by storage consent. No age deletion or
 historical rewrite is part of this change.
 
 ## Phases and compatibility
 
-The common deterministic cohort uses `AUDIO_ARCHIVE_PERCENT` (0) and
-`AUDIO_ARCHIVE_UID_ALLOWLIST` (empty). Each phase also needs its own enable:
+Per David's 2026-10-22 as-captured ruling (P71), `AUDIO_ARCHIVE_LIVE_ENABLED`
+and `AUDIO_ARCHIVE_READ_ENABLED` default **on** as fleet kill switches: the
+original Opus capture is dual-written next to the decoded PCM everywhere, and
+readers prefer it, without a percent cohort. Setting either to `false` is the
+rollback. The remaining phases stay default-off staged rollouts behind their
+enable plus the common deterministic cohort (`AUDIO_ARCHIVE_PERCENT` (0),
+`AUDIO_ARCHIVE_UID_ALLOWLIST` (empty)) — except STOP_PCM and REGIONAL_CACHE,
+which ramp against their own percent (`AUDIO_ARCHIVE_STOP_PCM_PERCENT`,
+`AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT`) because COALESCE pins the shared
+`AUDIO_ARCHIVE_PERCENT` at 100 fleet-wide:
 
 | Enable | Behavior |
 | --- | --- |
-| `AUDIO_ARCHIVE_LIVE_ENABLED` | Dual-write original Opus WAL packets or lossless PCM FLAC alongside today's PCM. Packs are bounded at 16 MiB, partitioned by owner/conversation/UTC hour/channel; tails flush on disconnect. |
-| `AUDIO_ARCHIVE_READ_ENABLED` | Prefer checksum-verified raw coverage for span-bearing legacy chunks in merge, playback, and final-pass consumers of the shared decoder. Missing/incomplete raw keeps PCM. |
-| `AUDIO_ARCHIVE_STOP_PCM_ENABLED` | Requires READ; skip a PCM batch only after committed raw verifies complete coverage and the live capture-PCM SHA matches (or raw decode matches every byte). Missing raw, checksum, rate, span, or decode mismatch retains today's write. |
+| `AUDIO_ARCHIVE_LIVE_ENABLED` (default on) | Dual-write original Opus WAL packets or lossless PCM FLAC alongside today's PCM. Packs are bounded at 16 MiB, partitioned by owner/conversation/UTC hour/channel; tails flush on disconnect. |
+| `AUDIO_ARCHIVE_READ_ENABLED` (default on) | Prefer checksum-verified raw coverage for span-bearing legacy chunks in merge, playback, and final-pass consumers of the shared decoder. Missing/incomplete raw keeps PCM. |
+| `AUDIO_ARCHIVE_STOP_PCM_ENABLED` + `AUDIO_ARCHIVE_STOP_PCM_PERCENT` (default off/0) | Requires READ; ramps against its own percent (not `AUDIO_ARCHIVE_PERCENT`, which COALESCE pins at 100). Skip a PCM batch only after committed raw verifies complete coverage and the live capture-PCM SHA matches (or raw decode matches every byte). Missing raw, checksum, rate, span, or decode mismatch retains today's write. |
 | `AUDIO_ARCHIVE_SYNC_ENABLED` | v1/v2 SD/offline uploads archive original file bytes before decode/acceptance; lossy backend Opus chunks become derived renditions. Existing mobile-batch archival remains mandatory. |
-| `AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED` | Route merged/playback caches, sync renditions and new intake staging to `BUCKET_AUDIO_DERIVED`. Canonical raw stays multi-region. |
+| `AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED` + `AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT` (default off/0) | Route merged/playback caches, sync renditions and new intake staging to `BUCKET_AUDIO_DERIVED`. Canonical raw stays multi-region. Ramps against its own percent (not `AUDIO_ARCHIVE_PERCENT`, which COALESCE pins at 100, or the enable flag would be an instant 100% cutover). |
 | `AUDIO_ARCHIVE_COALESCE_ENABLED` | Share concurrent identical file rebuild results, including failures; released admission permits retry. Existing fingerprint-named Cloud Tasks and distributed conversation leases still cover cross-instance rebuilds. |
 | `AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED` | Route admitted merge tasks to `AUDIO_MERGE_WORKER_URL` (full `/v2/audio-merge-jobs/run` URL). Non-admitted tasks retain `AUDIO_MERGE_HANDLER_URL`. |
 
@@ -81,13 +89,17 @@ invoker SA and its endpoint-specific OIDC audience. Configure
 named task before the cohort ramp. Do not enable a worker without runtime-image,
 identity, index-readiness and route qualification.
 
-First deploy this SHA at the default 8Gi through GitHub Actions. For the
-separate memory trial, the lead creates a tagged **no-traffic** 6Gi revision
-from that already-built same-SHA image, routes at most 5% to it and waits ≥12h.
-Only after qualification/full promotion set GitHub environment variable
-`BACKEND_SYNC_MEMORY=6Gi` for future deployments; the backend-stack action validates only `6Gi|8Gi` and defaults
-to `8Gi`. The deployment remains through the existing release admission and
-GitHub Actions workflow. Rollback: restore `8Gi`, redeploy the admitted image.
+First deploy this SHA at the prod default memory (6Gi since the 2026-10-24
+costcut promotion; development keeps 8Gi) through GitHub Actions. For a
+separate memory trial, the lead creates a tagged **no-traffic** revision at
+the trial size from that already-built same-SHA image, routes at most 5% to it
+and waits ≥12h. Only after qualification/full promotion change the prod
+fallback here (or set GitHub environment variable `BACKEND_SYNC_MEMORY`)
+for future deployments; the backend-stack action validates
+`4Gi|6Gi|8Gi`. Since the 2026-10-24 costcut, the manual workflow's fallback is `6Gi`
+for prod and `8Gi` for development, and the dev-only deploys (auto-dev) keep the action's
+`8Gi` default. The deployment remains through the existing release admission and
+GitHub Actions workflow. Rollback: redeploy the admitted image at the prior size.
 Watch memory peak, OOMs, queue age and retry rate; 4.9 GiB is an observed sample
 peak, not qualification for the largest batch.
 

@@ -34,6 +34,12 @@ class DailySummaryDayStatsPayload(BaseModel):
     action_items_created: int = 0
     watching_minutes: int = 0
     proactive_moments: int = 0
+    memories_learned_count: Optional[int] = None
+    summarized_conversations: Optional[int] = None
+    watching_minutes_unit: str = 'minutes'
+    watching_minutes_basis: Optional[str] = None
+    watching_coverage: Optional[str] = None
+    reported_device_watching_minutes: Optional[int] = None
 
 
 class DailySummaryPayload(BaseModel):

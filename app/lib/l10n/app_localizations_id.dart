@@ -712,7 +712,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get remembering => 'Mengingat';
 
   @override
-  String get unlimitedPlan => 'Paket Tanpa Batas';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'Kelola Paket';
@@ -734,7 +734,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get upgrade => 'Tingkatkan';
 
   @override
-  String get upgradeToUnlimited => 'Tingkatkan ke tanpa batas';
+  String get upgradeToUnlimited => 'Tingkatkan ke Omi Pro';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3157,7 +3157,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Tingkatkan ke Pro';
+  String get upgradeToPro => 'Tingkatkan ke Omi Pro';
 
   @override
   String get getOmiDevice => 'Dapatkan Perangkat Omi';
@@ -4280,8 +4280,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get trainingDataProgram => 'Program Data Pelatihan';
 
   @override
-  String get getOmiUnlimitedFree =>
-      'Dapatkan Omi Unlimited gratis dengan menyumbangkan data Anda untuk melatih model AI.';
+  String get getOmiUnlimitedFree => 'Dapatkan Omi Pro gratis dengan menyumbangkan data Anda untuk melatih model AI.';
 
   @override
   String get trainingDataBullets => '• Datamu membantu meningkatkan model AI\n• Hanya data non-sensitif yang dibagikan';
@@ -4426,6 +4425,10 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get continueText => 'Lanjutkan';
+
+  @override
+  String get checkoutExistingSubscription =>
+      'Anda sudah memiliki langganan. Kelola langganan saat ini alih-alih memulai yang baru.';
 
   @override
   String get resubscribeFirstToChangePlans => 'Berlangganan lagi dulu untuk mengubah paket.';
@@ -8598,6 +8601,9 @@ class AppLocalizationsId extends AppLocalizations {
       'Transkripsi tidak tersedia — perekaman berlanjut dan audio Anda tersimpan.';
 
   @override
+  String get captureNoAudioFromPendant => 'Tidak ada audio dari liontin';
+
+  @override
   String get capturing => 'Merekam';
 
   @override
@@ -9658,7 +9664,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get downgradeToFreemiumAction => 'Turunkan ke versi gratis';
 
   @override
-  String get getFreeUnlimitedAccess => 'Dapatkan akses tanpa batas gratis';
+  String get getFreeUnlimitedAccess => 'Dapatkan Omi Pro gratis';
 
   @override
   String get shareDataForTraining => 'Bagikan data untuk pelatihan';
@@ -11090,6 +11096,12 @@ class AppLocalizationsId extends AppLocalizations {
       'Sambungan Bluetooth ke Omi Anda terhenti, sehingga audio tidak sampai ke aplikasi. Omi terus merekam di perangkat dan akan disinkronkan setelah sambungan pulih. Mencoba lagi menyambungkan ulang tautan; jika terus gagal, periksa perangkat Anda di Setelan > Perangkat.';
 
   @override
+  String get captureConnecting => 'Menyambungkan…';
+
+  @override
+  String get captureNoAudioDetail => 'Pendant terhubung, tetapi tidak ada audio yang mencapai ponsel Anda';
+
+  @override
   String get captureIngressNeedsReconnect => 'Audio tidak mencapai aplikasi — sambungkan ulang Omi Anda';
 
   @override
@@ -11118,13 +11130,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Penyimpanan hampir penuh';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Liontin kehilangan koneksi dengan ponsel ini. Omi akan menyambung kembali sendiri saat liontin menyala dan berada di dekat Anda. Semua yang direkam sebelumnya aman.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi akan menyambung kembali sendiri';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12256,12 +12261,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get playbackAudioNetworkFailed => 'Periksa Koneksi';
 
   @override
-  String get forYou => 'Untuk Anda';
-
-  @override
-  String get stopThese => 'Hentikan Ini';
-
-  @override
   String get dismiss => 'Tutup';
 
   @override
@@ -12865,7 +12864,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'Kirim catatan suara dan Omi akan menjawabnya.';
 
   @override
-  String get chatAppsPartOfPro => 'Aplikasi chat adalah bagian dari Pro';
+  String get chatAppsPartOfPro => 'Aplikasi chat adalah bagian dari Omi Pro';
 
   @override
   String get chatAppsMessagesApp => 'Pesan';
@@ -13499,7 +13498,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get syncDetailsCopy => 'Salin detail untuk dukungan';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Tersedia di Operator dan Architect';
+  String get chatAppsChannelPlanRequired => 'Tersedia di Omi Pro';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -13634,32 +13633,6 @@ class AppLocalizationsId extends AppLocalizations {
       locale: localeName,
       other: '$count rekaman',
       one: '1 rekaman',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String onTheWaySummary(String totals) {
-    return '$totals dalam perjalanan';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return '$count sedang diunggah';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return '$count hampir siap';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count perlu perhatian',
-      one: '1 perlu perhatian',
     );
     return '$_temp0';
   }
@@ -14014,7 +13987,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'Berjalan saat ponsel mengisi daya.';
 
   @override
-  String get onDeviceUpgradeBody => 'Upgrade ke Pro untuk pemisahan pembicara dan akurasi lebih tinggi';
+  String get onDeviceUpgradeBody => 'Upgrade ke Omi Pro untuk pemisahan pembicara dan akurasi lebih tinggi';
 
   @override
   String get onDeviceAtCapFooter => 'Tidak ada yang hilang. Anda dapat mengubahnya di Pengaturan › Transkripsi.';
@@ -14197,7 +14170,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Ulangi dengan Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Upgrade ke Pro untuk pemisahan pembicara dan akurasi lebih tinggi';
+  String get onDeviceRedoHint => 'Upgrade ke Omi Pro untuk pemisahan pembicara dan akurasi lebih tinggi';
 
   @override
   String get onDeviceKeepEverything => 'Simpan semuanya di ponsel ini';
@@ -14430,10 +14403,23 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get episodeNotesSoon => 'Catatan muncul setelah beberapa menit pertama percakapan.';
+  String get episodeNotesUnavailable => 'Catatan langsung tidak diperbarui. Lihat transkrip untuk sementara.';
 
   @override
-  String get episodeOpenAll => 'Buka Semua';
+  String episodeCaptureFor(String duration) {
+    return 'Merekam · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Episode sebelumnya';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Bagian tertunda: $pending';
+  }
+
+  @override
+  String get episodeNotesSoon => 'Catatan muncul setelah beberapa menit pertama percakapan.';
 
   @override
   String get episodeWrapUpNow => 'Selesaikan Sekarang';
@@ -14496,4 +14482,195 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get deviceControls => 'Kontrol';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Juga: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'Tekan tombol di Omi kamu';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'Satu tekanan singkat. Lalu tanyakan apa saja.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'Ajukan pertanyaanmu';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'Ucapkan dengan lantang. Omi mendengarkan.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'Selesai? Tekan tombol lagi untuk mengirim.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'Kamu dapat $days hari gratis';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days hari Omi Pro gratis dari kami. Kami ingatkan sebelum ada tagihan. Batalkan kapan saja.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'Ambil uji coba $days hari';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'Mulai uji coba gratis $days hari';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Nyalakan Omi kamu';
+
+  @override
+  String get pairingPowerOnSubtitle => 'Tekan tombol sekali dan dekatkan ke ponsel.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => 'Selesai. Omi akan terus merekam percakapanmu di latar belakang.';
+
+  @override
+  String get noThanks => 'Tidak, terima kasih';
+
+  @override
+  String get recapInTheBackground => 'Di latar belakang';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Tetap dengan diskon $percent%';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Tetap dan bayar $price per bulan selama $months bulan ke depan.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Selesai. Diskon $percent% untuk $months bulan ke depan.';
+  }
+
+  @override
+  String get othersSpeakerLabel => 'Lainnya';
+
+  @override
+  String get livePreviewListening => 'Listening… words appear here as you speak.';
+
+  @override
+  String get livePreviewStarting => 'Starting live preview…';
+
+  @override
+  String get openLoopAnswerDone => 'Selesai';
+
+  @override
+  String get openLoopAnswerRemind => 'Ingatkan saya nanti';
+
+  @override
+  String get openLoopAnswerDrop => 'Abaikan';
+
+  @override
+  String get syncRejectionInvalidDate => 'Tanggal perekaman tidak valid';
+
+  @override
+  String get syncDeleteKeptUploading => 'Beberapa bagian masih diunggah dan tetap disimpan';
+
+  @override
+  String get syncRejectionServer => 'Ditolak oleh server';
+
+  @override
+  String get syncRejectionTooLarge => 'Terlalu besar';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration di ponsel';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Unggahan dijeda sejenak — akan dilanjutkan otomatis';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Melanjutkan “$title”';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· sejak $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Catatan dimulai saat transkrip final tiba.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Disusun di ponselmu sementara kamu bicara. Catatan lengkap tiba bersama transkrip final.';
+
+  @override
+  String get episodeOnThisPhone => 'Di ponsel ini';
+
+  @override
+  String get episodeOpenTranscript => 'Buka transkrip';
+
+  @override
+  String get liveCardTitle => 'Langsung';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Transkrip final tertunda sekitar $duration';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'Transkrip final sedang menyusul';
+
+  @override
+  String get livePreviewNoEngineBody => 'Kata-katamu muncul di sini satu hingga dua menit setelah kamu mengucapkannya.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Merekam dengan aman';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Langsung di ponsel ini';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Aktifkan teks langsung';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'dalam perjalanan';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'saat online';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return 'Masih memproses $duration';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'Mengunggah sendiri. Percakapan terisi seiring datangnya.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Mengunggah sendiri setelah Anda kembali online. Percakapan terisi seiring datangnya.';
+
+  @override
+  String get onTheWayDayUploading => 'Mengunggah';
+
+  @override
+  String get onTheWayDayNext => 'Berikutnya';
+
+  @override
+  String get onTheWayDayQueued => 'Dalam antrean';
+
+  @override
+  String get onTheWayNoDate => 'Tanpa tanggal';
+
+  @override
+  String get onTheWayFootnote =>
+      'Rekaman yang gagal terus dicoba ulang di latar belakang. Apa pun yang tidak bisa kami transkripsikan akan otomatis dilaporkan ke kami.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Detail untuk dukungan';
 }

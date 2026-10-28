@@ -115,11 +115,9 @@ def test_enabled_chart_pins_gpu_pool_image_and_age_autoscaling():
     assert env['BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED'] == 'false'
     hpa = manifests['HorizontalPodAutoscaler']['spec']
     assert hpa['minReplicas'] == 1 and hpa['behavior']['scaleDown']['stabilizationWindowSeconds'] == 300
-    assert {m['external']['metric']['selector']['matchLabels']['priority'] for m in hpa['metrics']} == {
-        'fresh',
-        'recent',
-        'deep',
-    }
+    assert len(hpa['metrics']) == 1
+    assert hpa['metrics'][0]['external']['metric']['name'] == 'omi_batch_pipeline_admissible_ready_units'
+    assert hpa['metrics'][0]['external']['target'] == {'type': 'AverageValue', 'averageValue': '16'}
     assert all(
         m['external']['metric']['selector']['matchLabels']['worker_release'] == 'synthetic-worker'
         for m in hpa['metrics']
@@ -181,17 +179,20 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     assert account['name'] == 'batch-pipeline-worker'
     assert account['annotations']['iam.gke.io/gcp-service-account'] == gsa
 
-    deployment = manifests['Deployment']
+    deployments = [doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment']
+    deployment = next(doc for doc in deployments if doc['metadata']['name'] == 'synthetic-worker')
     assert deployment['spec']['progressDeadlineSeconds'] == 2400
     pod = deployment['spec']['template']['spec']
-    # Prod runs a fixed two-worker floor (one L4 node each); dev stays at one.
-    assert deployment['spec']['replicas'] == (2 if environment == 'prod' else 1)
+    if environment == 'prod':
+        assert len(deployments) == 1 and deployment['spec']['replicas'] == 4
+        assert 'omi.ai/required-companion-deployment' not in deployment['metadata'].get('annotations', {})
+    else:
+        assert len(deployments) == 1 and deployment['spec']['replicas'] == 1
     assert pod['serviceAccountName'] == 'batch-pipeline-worker'
-    assert pod['nodeSelector'] == {
-        'cloud.google.com/gke-nodepool': 'batch-pipeline-pool',
-        'service': 'batch-pipeline',
-        'env': stage,
-    }
+    expected_selector = {'service': 'batch-pipeline', 'env': stage}
+    if environment == 'dev':
+        expected_selector['cloud.google.com/gke-nodepool'] = 'batch-pipeline-pool'
+    assert pod['nodeSelector'] == expected_selector
     assert {(item['key'], item['operator'], item['value'], item['effect']) for item in pod['tolerations']} == {
         ('omi.ai/batch-pipeline', 'Equal', 'true', 'NoSchedule'),
         ('nvidia.com/gpu', 'Equal', 'present', 'NoSchedule'),
@@ -222,6 +223,76 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     project_id = 'based-hardware-dev' if environment == 'dev' else 'based-hardware'
     assert container['image'] == f"gcr.io/{project_id}/batch-pipeline-worker@sha256:{'b' * 64}"
     assert 'HorizontalPodAutoscaler' not in manifests
+
+
+def test_balanced_pools_have_distinct_ownership_and_shared_fresh_queue_scope():
+    result = render(
+        '-f',
+        str(CHART / 'prod_omi_batch-pipeline-worker_values.yaml'),
+        '--set-string',
+        'image.digest=sha256:' + 'b' * 64,
+        '--set',
+        'autoscaling.enabled=true,autoscaling.balancedPools.enabled=true',
+    )
+    assert result.returncode == 0, result.stderr
+    docs = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
+    deployments = {d['metadata']['name']: d for d in docs if d['kind'] == 'Deployment'}
+    hpas = {d['metadata']['name']: d for d in docs if d['kind'] == 'HorizontalPodAutoscaler'}
+    monitors = {d['metadata']['name']: d for d in docs if d['kind'] == 'PodMonitoring'}
+    assert deployments.keys() == hpas.keys() == monitors.keys() == {'synthetic-worker', 'synthetic-worker-spot'}
+    for name, pool in [
+        ('synthetic-worker', 'batch-pipeline-pool'),
+        ('synthetic-worker-spot', 'batch-pipeline-pool-spot'),
+    ]:
+        d, h, monitor = deployments[name], hpas[name]['spec'], monitors[name]['spec']
+        pod = d['spec']['template']
+        assert d['spec']['selector']['matchLabels'] == pod['metadata']['labels'] == monitor['selector']['matchLabels']
+        assert pod['metadata']['labels']['app.kubernetes.io/instance'] == name
+        assert pod['spec']['nodeSelector']['cloud.google.com/gke-nodepool'] == pool
+        assert 'topologySpreadConstraints' not in pod['spec']
+        assert d['spec']['strategy']['type'] == 'Recreate'
+        assert pod['spec']['terminationGracePeriodSeconds'] == 1500
+        env = {v['name']: v.get('value') for v in pod['spec']['containers'][0]['env']}
+        assert env['BATCH_PIPELINE_WORKER_RELEASE'] == 'synthetic-worker'
+        assert env['BATCH_PIPELINE_STAGE_PROFILING_ENABLED'] == 'true'
+        assert env['BATCH_PIPELINE_PERCENT'] == '0'
+        assert h['scaleTargetRef']['name'] == name
+        assert h['minReplicas'] == 1 and h['maxReplicas'] == 12
+        assert h['behavior']['scaleDown']['stabilizationWindowSeconds'] == 300
+        for metric in h['metrics']:
+            labels = metric['external']['metric']['selector']['matchLabels']
+            assert labels['worker_release'] == 'synthetic-worker' and labels['namespace'] == 'synthetic'
+            assert 'priority' not in labels
+            assert metric['external']['target'] == {'type': 'AverageValue', 'averageValue': '32'}
+    assert (
+        deployments['synthetic-worker']['metadata']['annotations']['omi.ai/required-companion-deployment']
+        == 'synthetic-worker-spot'
+    )
+
+
+@pytest.mark.parametrize(
+    'setting',
+    [
+        'autoscaling.enabled=false',
+        'autoscaling.minReplicas=1',
+        'autoscaling.maxReplicas=23',
+        'autoscaling.maxReplicas=0',
+        'autoscaling.balancedPools.spotNodePool=batch-pipeline-pool',
+        'autoscaling.targetQueuedUnitsPerWorker=0',
+    ],
+)
+def test_balanced_pools_refuse_unsafe_or_ambiguous_budgets(setting):
+    result = render(
+        '-f',
+        str(CHART / 'prod_omi_batch-pipeline-worker_values.yaml'),
+        '--set-string',
+        'image.digest=sha256:' + 'b' * 64,
+        '--set',
+        'autoscaling.enabled=true,autoscaling.balancedPools.enabled=true',
+        '--set',
+        setting,
+    )
+    assert result.returncode != 0
 
 
 @pytest.mark.parametrize('service,timeout', [('batch-pipeline-worker', '2400s'), ('diarizer', '600s')])
@@ -315,6 +386,7 @@ def test_production_worker_policy_binding_matches_accepted_identity():
     assert env['BATCH_PIPELINE_ENABLED'] == 'false'
     assert env['BATCH_PIPELINE_API_URL'] == config['worker']['apiUrl'] == config['worker']['audience']
     assert env['BATCH_PIPELINE_WORKER_AUDIENCE'] == config['worker']['audience']
+    assert docs['Deployment']['spec']['replicas'] == 4
     assert 'HorizontalPodAutoscaler' not in docs
 
 

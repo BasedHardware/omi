@@ -403,7 +403,7 @@ class TestRosterPromptPrefix:
 
         return build_conversation_prompt_prefix(
             conversation_id='conv-rich',
-            transcript='[s1 0] hello everyone\n[s2 1] hi',
+            transcript='[s1 c0] hello everyone\n[s2 c1] hi',
             started_at=START,
             timezone_name='UTC',
             language_code='en',
@@ -424,7 +424,7 @@ class TestRosterPromptPrefix:
         assert 'PARTICIPANTS\n- David Zheng | Acme | owner | via macos_calendar' in prefix.context
         assert '- Ash Kalb | Fulcra Dynamics | human | via macos_calendar' in prefix.context
         # One unresolved cluster + exactly one unbound named human → bound.
-        assert 'spk 1 Ash Kalb' in prefix.context
+        assert 'spk c1 Ash Kalb' in prefix.context
 
     def test_strict_guard_leaves_cluster_unbound_when_ai_present(self):
         roster = _roster(
@@ -437,8 +437,8 @@ class TestRosterPromptPrefix:
         prefix = self._build(roster=roster, speaker_map={0: 'David', 1: None})
         # One unresolved cluster and one unbound named human, but the AI agent
         # could be that cluster's true identity → never bind.
-        assert 'spk 1 ?' in prefix.context
-        assert 'spk 1 Ash Kalb' not in prefix.context
+        assert 'spk c1 ?' in prefix.context
+        assert 'spk c1 Ash Kalb' not in prefix.context
         assert '- Boardy | - | ai agent | via macos_calendar' in prefix.context
 
     def test_strict_guard_leaves_cluster_unbound_with_nameless_human(self):
@@ -450,8 +450,8 @@ class TestRosterPromptPrefix:
             ]
         )
         prefix = self._build(roster=roster, speaker_map={0: 'David', 1: None})
-        assert 'spk 1 ?' in prefix.context
-        assert 'spk 1 Ash Kalb' not in prefix.context
+        assert 'spk c1 ?' in prefix.context
+        assert 'spk c1 Ash Kalb' not in prefix.context
 
     def test_desktop_remote_cluster_demoted_when_channel_is_mixed(self):
         roster = _roster(
@@ -466,7 +466,7 @@ class TestRosterPromptPrefix:
             speaker_map={0: 'David', 1: 'Ash Kalb'},
             desktop_capture=True,
         )
-        assert 'spk 1 ?' in prefix.context
+        assert 'spk c1 ?' in prefix.context
         assert 'remote audio channel' in prefix.context
         assert 'Priya Rao' in prefix.context
 
@@ -485,8 +485,8 @@ class TestRosterPromptPrefix:
             speaker_map={0: 'David', 1: 'Boardy'},
             desktop_capture=True,
         )
-        assert 'spk 1 Boardy' not in prefix.context
-        assert 'spk 1 ?' in prefix.context
+        assert 'spk c1 Boardy' not in prefix.context
+        assert 'spk c1 ?' in prefix.context
         assert 'remote audio channel; may contain several people' in prefix.context
 
         # The same roster with the cluster left unresolved also cannot bind to
@@ -496,16 +496,15 @@ class TestRosterPromptPrefix:
             speaker_map={0: 'David', 1: None},
             desktop_capture=True,
         )
-        assert 'spk 1 Boardy' not in prefix.context
-        assert 'spk 1 ?' in prefix.context
+        assert 'spk c1 Boardy' not in prefix.context
+        assert 'spk c1 ?' in prefix.context
 
-    def test_flag_off_prefix_is_the_legacy_rendering(self):
+    def test_flag_off_prefix_still_uses_safe_presentation_keys(self):
         context = _context(
             [MeetingParticipant(name='David'), MeetingParticipant(name='Ash Kalb', email='ash@fulcra.com')]
         )
         prefix = self._build(calendar_context=context, speaker_map={0: 'David', 1: None})
-        # Literal baseline of the legacy rendering: original metadata lines and
-        # the transcript, byte-for-byte. The one-name guard still binds.
+        # Flag-off keeps metadata and the one-name guard, with safe opaque voice keys.
         assert prefix.context == (
             'CONVERSATION METADATA\n'
             '- Captured at: Tue 18 Aug 2026, 14:00 UTC\n'
@@ -513,11 +512,11 @@ class TestRosterPromptPrefix:
             '- Participants: David, Ash Kalb <ash@fulcra.com>\n'
             '- Platform: Zoom\n'
             '- Meeting notes: Not specified\n'
-            'spk 0 David\n'
-            'spk 1 Ash Kalb\n'
+            'spk c0 David\n'
+            'spk c1 Ash Kalb\n'
             '\n'
             'FULL TRANSCRIPT\n'
-            '[s1 0] hello everyone\n[s2 1] hi'
+            '[s1 c0] hello everyone\n[s2 c1] hi'
         )
 
 
@@ -889,7 +888,7 @@ class TestRichFailOpen:
         conversation = ExternalIntegrationCreateConversation(
             source=ConversationSource.external_integration,
             text_source=ExternalIntegrationConversationSource.audio,
-            text='[s1 0] hello everyone',
+            text='[s1 c0] hello everyone',
             started_at=START,
         ).model_copy(
             update={'calendar_meeting_context': _context([MeetingParticipant(name='Ash Kalb', email='ash@fulcra.com')])}
@@ -910,14 +909,15 @@ class TestRichFailOpen:
         assert 'PARTICIPANTS' not in captured['prefix'].context
 
 
-def test_rich_prompt_anchors_still_match_legacy_wording():
-    """The rich rewrite anchors on exact legacy text and only logs on drift; pin it here."""
+def test_rich_prompt_composes_named_blocks_and_keeps_general_rules():
+    """Changing a named block cannot silently leave half of the legacy contract."""
     from utils.llm import meeting_notes_rich_prompts as rich
+    from utils.llm import conversation_notes_prompts as general
     from utils.llm.conversation_processing import _conversation_notes_static_instructions
 
     base = _conversation_notes_static_instructions('FORMAT')
-    assert rich._LEGACY_NOTE_BODY_OPENING in base
-    assert rich._LEGACY_SELECT_THREADS in base
+    assert general.NOTE_BODY_OPENING in base
+    assert general.SELECT_THREADS in base
     text = rich.rich_static_instructions('FORMAT', _conversation_notes_static_instructions)
-    assert rich._RICH_NOTE_BODY_OPENING in text and rich._LEGACY_NOTE_BODY_OPENING not in text
-    assert rich._RICH_SELECT_THREADS in text and rich._LEGACY_SELECT_THREADS not in text
+    assert rich._RICH_NOTE_BODY_OPENING in text and general.NOTE_BODY_OPENING not in text
+    assert rich._RICH_SELECT_THREADS in text and general.SELECT_THREADS not in text

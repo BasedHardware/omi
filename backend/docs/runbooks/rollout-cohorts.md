@@ -215,3 +215,15 @@ backend/.venv/bin/python backend/scripts/rollout_cohort.py \
    tombstone and takes effect after up to 60 seconds plus a bounded in-flight
    read; it is an intentional membership change, never part of seeding. Already-
    admitted obligations keep their existing draining rules.
+
+### Dream outage handling
+
+Dream distinguishes unknown membership from a negative grant. Its independent
+`all`/paid eligibility policy survives membership read failures, with no invented
+allowlist or on-demand grant. An allowlist-only pass waits without deleting its
+due row on a read failure. Empty discovery emits
+`event=dream_cohort_health outcome=empty`; an unavailable read emits
+`outcome=unavailable`, plus `omi_fallback_total` with
+`from_mode=dream_cohort,to_mode=declared_eligibility`. These are operational
+failures to investigate, never proof that the whole fleet was intentionally
+excluded. Ordinary canonical memory intake does not depend on this cohort.

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from utils.conversations import quiet_finalization
+
 import asyncio
 import logging
 import os
@@ -19,6 +21,9 @@ from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
 from database.live_language_profile import get_live_language_sessions
 from config.rollout_cohorts import warm_rollout_cohorts
+from config.occasion_conversations import occasion_timeout
+from utils.episodes import client_gate as episode_client_gate
+from models.capture_coverage import CaptureCommittedEvent
 from models.message_event import (
     FREEMIUM_ACTION_SETUP_ON_DEVICE_STT,
     FreemiumThresholdReachedEvent,
@@ -31,6 +36,8 @@ from utils.analytics import billable_transcription_seconds, record_usage
 from utils.usage_provenance import live_usage_metadata
 from utils.apps import is_audio_bytes_app_enabled, get_enabled_apps
 from utils.sync.mobile_standard_batch import mobile_standard_batch_enabled, mobile_standard_batch_rollout_enabled
+from config.server_batch import owned as server_batch_owned
+from routers.listen.local_preview import renew_local_preview
 from utils.observability.fallback import record_fallback
 from utils.async_tasks import WebSocketTaskSupervisor, drain_tasks, wait_for_event
 from utils.byok import get_byok_keys
@@ -59,6 +66,7 @@ from utils.onboarding import OnboardingHandler
 from utils.observability.journeys import ClientJourneyAttempt
 from utils.observability.listen_close import CLOSE_FRAME_DRAIN_SECONDS, note_ws_close, record_listen_ws_close
 from utils.observability.listen_loop import ensure_loop_lag_probe
+from utils.observability.live_speaker_ordinals import LiveSpeakerOrdinalTracker, record_live_speaker_ordinals
 from utils.observability.routing_cohort import RoutingCohort, current_routing_cohort
 from utils.observability.transcription import (
     LiveSTTAttempt,
@@ -182,6 +190,7 @@ class ListenSessionRuntime:
         )
         self.client_kind = resolve_client_kind_from_headers(request.websocket.headers)
         self.use_custom_stt = request.custom_stt_mode.value == 'enabled'
+        self.server_batch_byok = bool(get_byok_keys())
         self.pusher_enabled = PUSHER_ENABLED
         self.is_multi_channel = request.channels >= 2
         self.language = request.language
@@ -195,8 +204,13 @@ class ListenSessionRuntime:
         self.translation_language: Optional[str] = None
         self.user_has_credits = True
         self.private_cloud_sync_enabled = False
+        # Mobile local-preview lane, pinned once before STT starts (routers/listen/local_preview.py).
+        self.local_preview_batch = False
+        self.server_batch_only = False
+        self.server_batch_initialized = False
         self.has_speech_profile = False
         self.conversation_creation_timeout = request.conversation_timeout
+        self.occasion_mode = False
         self.lc3_frame_duration_us: Optional[int] = None
         self.task_supervisor = WebSocketTaskSupervisor(
             uid=request.uid, label='listen', gauge=BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
@@ -217,6 +231,7 @@ class ListenSessionRuntime:
         self.transcripts: Any = None
         self.conversations: Any = None
         self.parity_capture = ListenParityCapture(None)
+        self.speaker_ordinal_tracker = LiveSpeakerOrdinalTracker()
 
     def _build_components(self) -> None:
         channels = build_channel_config(self.request.source or 'phone_call') if self.is_multi_channel else []
@@ -236,11 +251,13 @@ class ListenSessionRuntime:
     async def drain(self, tasks: List[asyncio.Task[Any]], *, timeout: float, label: str) -> None:
         await drain_tasks(tasks, timeout=timeout, label=label, cancel=False)
 
-    async def asend_event(self, event: MessageEvent) -> bool:
+    async def asend_event(self, event: MessageEvent | CaptureCommittedEvent) -> bool:
         if not self.state.active:
             return False
         try:
-            await self.request.websocket.send_json(event.to_json())
+            await self.request.websocket.send_json(
+                event.model_dump(mode='json') if isinstance(event, CaptureCommittedEvent) else event.to_json()
+            )
             return True
         except WebSocketDisconnect:
             self.state.active = False
@@ -253,7 +270,7 @@ class ListenSessionRuntime:
             logger.error('Listen event delivery failed type=%s', type(error).__name__)
         return False
 
-    def send_event(self, event: MessageEvent) -> None:
+    def send_event(self, event: MessageEvent | CaptureCommittedEvent) -> None:
         if self.state.active:
             self.spawn(self.asend_event(event), name='message_event')
 
@@ -273,7 +290,7 @@ class ListenSessionRuntime:
 
     def start_live_transcription(self) -> None:
         """Accept the journey once the listen socket has received real audio."""
-        if self.use_custom_stt:
+        if self.use_custom_stt or getattr(self, 'server_batch_only', False):
             return
         if self.state.live_transcription_attempt is None:
             self.state.live_transcription_attempt = LiveSTTAttempt(
@@ -438,7 +455,7 @@ class ListenSessionRuntime:
         self._session_transcript_outcome_recorded = True
         # getattr: harness-constructed runtimes may predate this field; a real
         # session always sets it in __init__ and defaults to counting.
-        if getattr(self, 'use_custom_stt', False):
+        if getattr(self, 'use_custom_stt', False) or getattr(self, 'server_batch_only', False):
             return
         try:
             outcome = self._session_transcript_outcome()
@@ -698,6 +715,13 @@ class ListenSessionRuntime:
         self.conversation_creation_timeout = effective_conversation_timeout(
             request.conversation_timeout, self.is_multi_channel
         )
+        # Occasion conversations (Episodes M3): for the episodes beta cohort a live conversation
+        # spans the whole occasion, so lulls and reconnects inside the window continue it.
+        self.occasion_mode = not self.is_multi_channel and bool(
+            await self.persistence.call(episode_client_gate.occasion_mode, request.uid, request.source)
+        )
+        if self.occasion_mode:
+            self.conversation_creation_timeout = occasion_timeout(self.conversation_creation_timeout)
         decision = normalize_codec_frame(request.codec)
         self.request = replace(request, codec=decision.codec)
         self.lc3_frame_duration_us = decision.lc3_frame_duration_us
@@ -834,7 +858,9 @@ class ListenSessionRuntime:
         if admission is not None:
             await admission.refresh(force=bool(invalidated), subscription=subscription)
             if getattr(self.receiver, 'cap_paused', False) and admission.managed:
-                await self.receiver.initialize_stt()
+                if await self.receiver.initialize_stt() and not getattr(self.receiver, 'cap_paused', False):
+                    self.receiver.note_deferred_stream_opened()
+                    self.receiver.ensure_live_demand_routing()
         credit_admission = (
             admission
             if admission is not None
@@ -897,6 +923,8 @@ class ListenSessionRuntime:
                     logger.error('Silent-user notification refresh failed type=%s', type(error).__name__)
 
     async def _flush_usage(self, *, final: bool) -> int:
+        if getattr(self, 'server_batch_only', False):
+            return 0  # Batch projection owns transcription usage; no live provider ran.
         if self.state.fair_use_track_dg_usage and self.state.dg_usage_ms_pending:
             await self.persistence.call(record_dg_usage_ms, self.request.uid, self.state.dg_usage_ms_pending)
             self.state.dg_usage_ms_pending = 0
@@ -977,6 +1005,11 @@ class ListenSessionRuntime:
         return seconds
 
     async def refresh_mobile_batch_admission(self) -> None:
+        if renew_local_preview(self):
+            # The local-preview lane owns its own admission (batch lane + private
+            # sync, pinned at session start). Integrations degrade by ruling.
+            self.mobile_standard_batch = True
+            return
         if mobile_standard_batch_rollout_enabled():
             await warm_rollout_cohorts(self.request.uid)
         # Conservatively retain live delivery for ANY enabled integration. This
@@ -1096,6 +1129,13 @@ class ListenSessionRuntime:
         if self.use_custom_stt:
             # Custom-STT clients produce their own transcripts; no backend provider serves.
             return MessageServiceStatusEvent(status='ready')
+        if getattr(self.receiver, 'cloud_live_suppressed', False):
+            # Deferred stream: nothing serves yet, so name no provider.
+            return MessageServiceStatusEvent(
+                status='ready',
+                mobile_standard_batch=getattr(self, 'mobile_standard_batch', False),
+                local_preview=True if getattr(self, 'local_preview_batch', False) else None,
+            )
         serving = self.receiver._serving_provider()
         selected = getattr(self.stt_service_selected, 'value', self.stt_service_selected)
         fell_back = bool(serving) and bool(selected) and serving != selected
@@ -1154,9 +1194,9 @@ class ListenSessionRuntime:
             current_routing_cohort.set(self._routing_cohort)
             if not await self.receiver.initialize_stt():
                 return
-            demand = getattr(self.receiver, 'live_demand', None)
-            if demand is not None:
-                background.append(self.task_supervisor.create_lifetime_task(demand.run(), name='live_demand_routing'))
+            demand_task = self.receiver.ensure_live_demand_routing()
+            if demand_task is not None:
+                background.append(demand_task)
             record_listen_session_accepted(
                 source=self.request.source,
                 platform=self.client_device_context.platform,
@@ -1380,22 +1420,32 @@ class ListenSessionRuntime:
                         conversation_id,
                         read_site=FirestoreReadSite.LISTEN_RUNTIME_TEARDOWN,
                     )
+                    if conversation and conversation.get('source') in {'omi', 'phone'} and quiet_finalization.enabled():
+                        try:
+                            await self.persistence.call(
+                                quiet_finalization.arm,
+                                self.request.uid,
+                                conversation_id,
+                                self.conversation_creation_timeout,
+                                requires_byok=bool(get_byok_keys()),
+                            )
+                        except Exception as error:
+                            logger.error('Quiet disconnect check persistence failed type=%s', type(error).__name__)
                     finalization_reason = getattr(self.state, 'finalization_reason', None)
                     if conversation and finalization_reason:
-                        external_data = dict(conversation.get('external_data') or {})
-                        external_data['conversation_finalization_reason'] = finalization_reason
                         await self.persistence.call(
                             conversations_db.update_conversation,
                             self.request.uid,
                             conversation_id,
-                            {'external_data': external_data},
+                            {'external_data.conversation_finalization_reason': finalization_reason},
                         )
-                        conversation['external_data'] = external_data
-                    if (
-                        conversation
-                        and self.state.close_code == 1000
-                        and getattr(conversation.get('source'), 'value', conversation.get('source')) == 'desktop'
-                        and (conversation.get('transcript_segments') or conversation.get('photos'))
+                    if conversation and (
+                        server_batch_owned(conversation)
+                        or (
+                            self.state.close_code == 1000
+                            and getattr(conversation.get('source'), 'value', conversation.get('source')) == 'desktop'
+                            and (conversation.get('transcript_segments') or conversation.get('photos'))
+                        )
                     ):
                         await self.transcripts.flush_speaker_assignments(conversation_id)
                         if await self.conversations.process_conversation(conversation_id):
@@ -1423,6 +1473,9 @@ class ListenSessionRuntime:
             await self.language_observations.summarize(None if owner_persistence_blocked else self.request.uid)
         if not owner_persistence_blocked:
             await self.task_supervisor.drain_all(timeout=5.0, cancel=True)
+        # After the transcript loop drained and before the matcher's maps clear:
+        # the ordinal ledger needs both the final segments and final naming.
+        record_live_speaker_ordinals(getattr(self, 'speaker_ordinal_tracker', None), self.speakers)
         self.receiver.clear()
         self.transcripts.clear()
         self.speakers.clear()

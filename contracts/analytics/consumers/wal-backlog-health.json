@@ -1,0 +1,11 @@
+{
+  "id": "wal-backlog-health",
+  "kind": "question",
+  "owner": "dazheng",
+  "events": ["pendantFramesDropped", "walReconcilePollSummary"],
+  "namespace_property": "$app_namespace",
+  "question": "For each mobile build, sum dropped frames by reason and anomalous reconcile admitted/transient/throttle/missing-confirmation/deferred counts. Routine polling is excluded. The SQLite query is only the executable presence/cohort oracle; posthog_query is the operational count aggregation.",
+  "zero_policy": "No rows is unknown until release identity, analytics consent/delivery and the external 100 percent ingestion keep-list are verified. Count-cap drops should remain zero after the hotfix.",
+  "query": "contracts/analytics/consumers/wal-backlog-health.sql",
+  "posthog_query": "SELECT event, coalesce(properties['reason'], 'not_applicable') AS reason, sum(toInt(coalesce(properties['count'], 0))) AS dropped_frames, sum(toInt(coalesce(properties['polled_jobs'], 0))) AS polled_jobs, sum(toInt(coalesce(properties['transient_jobs'], 0))) AS transient_jobs, sum(toInt(coalesce(properties['throttled_jobs'], 0))) AS throttled_jobs, sum(toInt(coalesce(properties['missing_confirmation_jobs'], 0))) AS missing_confirmation_jobs, sum(toInt(coalesce(properties['locally_deferred_jobs'], 0))) AS locally_deferred_jobs FROM events WHERE event IN ('Pendant Frames Dropped', 'WAL Reconcile Poll Summary') AND properties['$app_namespace'] = '{app_namespace}' AND properties['build_number'] = '{build_number}' GROUP BY event, reason"
+}

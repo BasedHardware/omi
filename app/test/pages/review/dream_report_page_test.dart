@@ -6,6 +6,7 @@ import 'package:omi/backend/http/api/dream.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/dream_report.dart';
 import 'package:omi/backend/schema/gen/dream_wire.g.dart' as wire;
+import 'package:omi/backend/schema/open_loops.dart';
 import 'package:omi/backend/schema/review.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/review/dream_report_page.dart';
@@ -192,6 +193,7 @@ void main() {
         isEligible: () => true,
         reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
         loadItems: () async => const ApiSuccess(ReviewItemsResponse(items: [], remainingToday: 0)),
+        loadOpenLoopCards: () async => const ApiSuccess(OpenLoopCardsResponse(cards: [])),
       );
       await tester.pumpWidget(ChangeNotifierProvider<ReviewProvider>.value(
         value: provider,

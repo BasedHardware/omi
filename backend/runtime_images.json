@@ -98,7 +98,7 @@
         "backend/deploy/messaging/maintenance-job.json",
         "backend/scripts/messaging_operations.py"
       ],
-      "image_built_elsewhere": "The Cloud Run job runs the admitted backend image (ADMITTED_BACKEND_IMAGE) that backend deploys built; messaging_operations.py reconciles it. The GKE chart is disabled (values.yaml enabled: false)."
+      "image_built_elsewhere": "The Cloud Run job runs the admitted backend image (ADMITTED_BACKEND_IMAGE) that backend deploys built, or the backend-workers role digest a build-only train published (plan B B3); messaging_operations.py admits exactly those two repositories and reconciles the job. The GKE chart is disabled (values.yaml enabled: false)."
     },
     "backend-listen": {
       "platform": "gke",
@@ -110,6 +110,16 @@
         ".github/workflows/gcp_backend.yml",
         ".github/workflows/gcp_backend_listen_helm.yml"
       ]
+    },
+    "listen-edge": {
+      "platform": "gke",
+      "role": "realtime",
+      "image": "listen-edge",
+      "current_image": "listen-edge",
+      "current_deploy": [
+        ".github/workflows/gcp_backend_listen_helm.yml"
+      ],
+      "image_built_elsewhere": "The listen workflow rolls the listen-edge GKE chart by an admitted digest (LISTEN_EDGE_IMAGE_DIGEST); build-only role-image trains (role_images.yml, gcp_backend.yml) build, probe and publish the native image, and the deploy never builds it."
     },
     "pusher": {
       "platform": "gke",
@@ -397,32 +407,6 @@
       }
     },
     {
-      "name": "memory-maintenance-job",
-      "dockerfile": "backend/modal/Dockerfile.memory_maintenance_job",
-      "deployment_workflows": [
-        ".github/workflows/gcp_memory_maintenance_job_auto_dev.yml",
-        ".github/workflows/gcp_memory_maintenance_job.yml"
-      ],
-      "build_context": ".",
-      "source_root": "backend",
-      "entrypoint_source_root": "backend/modal",
-      "workdir": "/app",
-      "entrypoints": [
-        "memory_maintenance_job"
-      ],
-      "image_import_smoke": true,
-      "smoke_environment": {
-        "ENCRYPTION_SECRET": "0123456789abcdef0123456789abcdef",
-        "OPENAI_API_KEY": "fake-memory-maintenance-image-smoke-only"
-      },
-      "dependency_probe_smoke": true,
-      "pull_request_smoke": true,
-      "dependency_probe_exclusions": {
-        "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; job images use its built-in fallback."
-      },
-      "outside_role_split": "Scheduled Cloud Run job with its own image; joins the workers role only if it moves onto the workers queue consumer."
-    },
-    {
       "name": "x-connector-sync-job",
       "dockerfile": "backend/modal/Dockerfile.x_connector_sync_job",
       "deployment_workflows": [
@@ -583,7 +567,8 @@
       "image_import_smoke": false,
       "dependency_probe_smoke": true,
       "dependency_probe_exclusions": {
-        "utils.logging_config": "The parakeet checkout shim omi_logging_config.py re-exports this module. The image overwrites that shim with logging_config.py because the NeMo image already binds the name utils, and the -I probe cannot see /app."
+        "utils.logging_config": "The parakeet checkout shim omi_logging_config.py re-exports this module. The image overwrites that shim with logging_config.py because the NeMo image already binds the name utils, and the -I probe cannot see /app.",
+        "utils.speakers.policy": "The parakeet checkout shim omi_speaker_policy.py re-exports this module. The image overwrites that shim with utils/speakers/policy.py (Dockerfile COPY) because the NeMo image already binds the name utils, and the -I probe cannot see /app."
       },
       "pull_request_smoke": false
     },
@@ -624,5 +609,14 @@
       "pull_request_smoke": true,
       "outside_role_split": "Plugins service outside backend/; not part of the backend role split."
     }
-  ]
+  ],
+  "logging_configmap_charts": {
+    "incluster-guards": {
+      "template": "templates/guard.yaml",
+      "entrypoint": "/guard/guard.py",
+      "source": "files/guard.py",
+      "logging": "files/omi_logging.py",
+      "volume": "script"
+    }
+  }
 }

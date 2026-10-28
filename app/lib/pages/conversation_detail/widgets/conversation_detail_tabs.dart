@@ -45,29 +45,34 @@ class ConversationDetailTabs extends StatelessWidget {
             Expanded(
               child: Align(
                 alignment: AlignmentDirectional.centerStart,
-                child: TabBar(
-                  controller: controller,
-                  isScrollable: true,
-                  tabAlignment: TabAlignment.start,
-                  padding: EdgeInsets.zero,
-                  labelPadding: const EdgeInsetsDirectional.only(end: 22),
-                  indicatorSize: TabBarIndicatorSize.label,
-                  indicator: UnderlineTabIndicator(borderSide: BorderSide(color: OmiColors.textPrimary, width: 2)),
-                  dividerHeight: 0,
-                  labelColor: OmiColors.textPrimary,
-                  unselectedLabelColor: ConversationDetailInk.label,
-                  labelStyle: style,
-                  unselectedLabelStyle: style,
-                  overlayColor: const WidgetStatePropertyAll(Colors.transparent),
-                  splashFactory: NoSplash.splashFactory,
-                  onTap: (index) {
-                    OmiHaptics.selection();
-                    onTap(index);
-                  },
-                  tabs: [
-                    Tab(key: const Key('conversation_tab_summary'), height: 44, text: l10n.summary),
-                    Tab(key: const Key('conversation_tab_transcript'), height: 44, text: l10n.transcript),
-                  ],
+                // The 44 pt tabs hold their labels up to this scale; past it the labels stop
+                // growing instead of clipping, as the system's own tab bars do.
+                child: MediaQuery.withClampedTextScaling(
+                  maxScaleFactor: 1.6,
+                  child: TabBar(
+                    controller: controller,
+                    isScrollable: true,
+                    tabAlignment: TabAlignment.start,
+                    padding: EdgeInsets.zero,
+                    labelPadding: const EdgeInsetsDirectional.only(end: 22),
+                    indicatorSize: TabBarIndicatorSize.label,
+                    indicator: UnderlineTabIndicator(borderSide: BorderSide(color: OmiColors.textPrimary, width: 2)),
+                    dividerHeight: 0,
+                    labelColor: OmiColors.textPrimary,
+                    unselectedLabelColor: ConversationDetailInk.label,
+                    labelStyle: style,
+                    unselectedLabelStyle: style,
+                    overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+                    splashFactory: NoSplash.splashFactory,
+                    onTap: (index) {
+                      OmiHaptics.selection();
+                      onTap(index);
+                    },
+                    tabs: [
+                      Tab(key: const Key('conversation_tab_summary'), height: 44, text: l10n.summary),
+                      Tab(key: const Key('conversation_tab_transcript'), height: 44, text: l10n.transcript),
+                    ],
+                  ),
                 ),
               ),
             ),

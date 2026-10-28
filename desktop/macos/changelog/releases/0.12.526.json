@@ -1,0 +1,7 @@
+{
+  "version": "0.12.526",
+  "date": "2026-10-23",
+  "changes": [
+    "Keep non-Omi chat message saves from consuming Omi question allowance and count multi-round Omi tool turns once per prompt."
+  ]
+}

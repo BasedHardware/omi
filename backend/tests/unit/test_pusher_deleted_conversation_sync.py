@@ -67,10 +67,10 @@ class SequencedWebSocket:
 
 @pytest.fixture
 def private_cloud_session(monkeypatch):
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
     """Drive a private-cloud sync session where each audio frame flushes immediately."""
     monkeypatch.setattr(pusher, 'get_audio_bytes_webhook_seconds', lambda uid: None)
     monkeypatch.setattr(pusher, 'is_audio_bytes_app_enabled', lambda uid: False)
-    monkeypatch.setattr(pusher, 'is_audio_merge_dispatch_enabled', lambda: False)
     monkeypatch.setattr(pusher.users_db, 'get_user_private_cloud_sync_enabled', lambda uid: True)
     monkeypatch.setattr(pusher.users_db, 'get_data_protection_level', lambda uid: 'standard')
     monkeypatch.setattr(pusher, 'PUSHER_ACTIVE_WS_CONNECTIONS', MagicMock())
@@ -86,7 +86,9 @@ def private_cloud_session(monkeypatch):
     uploaded: list[str] = []
     fallbacks: list[dict] = []
 
-    def upload(chunks, uid, conversation_id, protection_level, *, sample_rate):
+    def upload(chunks, uid, conversation_id, protection_level, *, sample_rate, **_kwargs):
+        # The pusher upload path passes flush-policy keywords (reconcile_prefix);
+        # this mock records the upload without binding the call signature.
         assert sample_rate == SAMPLE_RATE
         uploaded.append(conversation_id)
 
@@ -154,21 +156,20 @@ async def test_applied_manifest_schedules_learning_retry(private_cloud_session, 
 
 
 @pytest.mark.asyncio
-async def test_learning_retry_runs_before_playback_invalidation(private_cloud_session, monkeypatch):
+async def test_manifest_refresh_does_not_rebuild_playback(private_cloud_session, monkeypatch):
+    from utils.other import storage
+
     calls = []
     monkeypatch.setattr(pusher, 'schedule_person_voice_learning_retry', lambda uid, cid: calls.append('retry'))
-    monkeypatch.setattr(pusher, 'is_audio_merge_dispatch_enabled', lambda: True)
-    monkeypatch.setattr(
-        pusher.conversations_db, 'get_conversation_audio_stamp', lambda uid, cid: {'conversation_audio': {}}
-    )
-
-    def invalidate(uid, cid, stamp, files, reason):
-        calls.append('invalidate')
-        raise RuntimeError('playback store down')
-
-    monkeypatch.setattr(pusher, 'maybe_invalidate_conversation_playback', invalidate)
+    stamp_read = MagicMock(side_effect=AssertionError('flush must not inspect playback'))
+    enqueue = MagicMock(side_effect=AssertionError('flush must not re-encode the conversation'))
+    monkeypatch.setattr(pusher.conversations_db, 'get_conversation_audio_stamp', stamp_read)
+    monkeypatch.setattr(storage, 'enqueue_conversation_artifact_build', enqueue)
     websocket = private_cloud_session['run'](conversation_exists=True)
 
     await pusher._websocket_util_trigger(websocket, UID, SAMPLE_RATE)
 
-    assert calls[:2] == ['retry', 'invalidate']
+    assert calls == ['retry', 'retry']
+    assert private_cloud_session['uploaded'] == [CONVERSATION_ID, CONVERSATION_ID]
+    stamp_read.assert_not_called()
+    enqueue.assert_not_called()

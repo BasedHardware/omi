@@ -25,6 +25,7 @@ def _field(item: Any, name: str) -> Any:
 def filter_extracted_items(uid: str, items: Sequence[Any]) -> list[Any]:
     named = any(normalized_name(_field(item, 'owner_name')) not in UNKNOWN_OWNERS | OWNER_ALIASES for item in items)
     profile_name = get_user_full_name(uid) if named else None
+    # refactor: superseded by utils.llm.action_item_v2 when ACTION_ITEMS_V2_MODE=serve
     kept = []
     counts = {'other_owner': 0, 'status_statement': 0}
     for item in items:
@@ -38,13 +39,23 @@ def filter_extracted_items(uid: str, items: Sequence[Any]) -> list[Any]:
         if count:
             OMI_ACTION_ITEM_EXTRACTION_DROPPED_TOTAL.labels(reason=reason).inc(count)
             logger.info('event=action_item_extraction_dropped reason=%s count=%d', reason, count)
-    return kept
+    from utils.llm.action_item_v2 import select_items
+
+    return select_items(uid, items, kept, profile_name)
 
 
 def action_items_for_write(
     uid: str, conversation: Any, now: datetime, canonical_fields: Callable[[Any, Any], dict[str, Any]]
 ) -> list[dict[str, Any]]:
     """Project only admitted extraction items to the shared initial/refresh write payload."""
+    from config.refactor_modes import serving_for
+
+    from utils.conversations.media_consumers import is_excluded
+
+    if is_excluded(uid, conversation, consumer='action_items'):
+        return []
+    if serving_for('ACTION_ITEMS_V2_MODE', uid) and not conversation.id:
+        raise ValueError('extracted action items require conversation provenance')
     return [
         {
             'description': action_item.description,
@@ -53,9 +64,10 @@ def action_items_for_write(
             'updated_at': action_item.updated_at or now,
             'due_at': action_item.due_at,
             'completed_at': action_item.completed_at,
-            'conversation_id': conversation.id,
             'is_locked': conversation.is_locked,
+            'conversation_id': conversation.id,
             **canonical_fields(action_item, conversation),
+            **({'conversation_id': conversation.id} if serving_for('ACTION_ITEMS_V2_MODE', uid) else {}),
         }
         for action_item in filter_extracted_items(uid, conversation.structured.action_items)
     ]

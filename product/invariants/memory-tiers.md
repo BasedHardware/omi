@@ -12,6 +12,15 @@ default access policy of Short-term + Long-term.
 - Make Archive part of default chat/agent/MCP/third-party memory access without
   an explicit Archive operation and applicable policy.
 
+Under the authorized 2026-10-23 incident mitigation, while
+`MEMORY_UNDECIDED_VISIBLE` is on, unresolved Review remains Short-term.
+The mitigation may also project historical rows parked in Archive
+with `promotion.route=review` as Short-term under `MEMORY_UNDECIDED_VISIBLE`.
+It preserves the stored audit trail and all status, source, sensitivity, owner
+rejection and product-grant fences. No other Archive outcome gains default
+access. The guard recognizes only that exact gated reclassification and checks
+that widening its route condition remains an offender.
+
 ## Surfaces
 
 - Backend memory APIs and storage

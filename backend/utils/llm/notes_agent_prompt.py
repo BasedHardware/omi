@@ -20,11 +20,12 @@ import json
 from typing import Any, Mapping, Optional
 
 from models.conversation_enums import CategoryEnum
+from models.structured_extraction import SALIENCE_DESCRIPTION
 from utils.llm.conversation_notes_prompts import ACTION_ITEM_EXTRACTION_RULES
 from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT
 from utils.llm.shaped_agent import model_json
 
-PROMPT_VERSION = 'notes-agent-v5'
+PROMPT_VERSION = 'notes-agent-v7'
 SUBMIT = 'submit_notes'
 VIEW_SCREENSHOT = 'view_screenshot'
 OWNER_PROFILE_CHARACTERS = 1500
@@ -60,16 +61,14 @@ EVIDENCE
   name from general knowledge; omit an unclear incidental name instead of guessing.
 - Speaker keys are diarization clusters, not names: `spk k` entries and the `k` in `[segment-id k]` turn headers
   identify clusters (`?` = unresolved). Never write a cluster key, `spk`, `Speaker N` or `SPEAKER_00` in the notes.
-- NAME THE OTHER SPEAKER whenever the evidence supports it; a role description ("an unnamed candidate") is
-  a failure when the evidence names them. Strong evidence, especially when the transcript has one other voice:
-  a call window or chat titled with one person during the call (`people_on_screen` evidence `call_window`), a
-  profile page such as LinkedIn opened just before or during the call (`profile_page`), the human attendee on
-  the calendar event, a People record matching a name said aloud, or an earlier meeting with the same person.
-  Combine the transcript with this evidence; it does not have to be said aloud. AI notetakers and matchmakers
-  (Boardy, Otter, Fireflies, Read.ai and similar) are never the other speaker.
-- Record every person you name in `participants` with the transcript speaker key they map to and one line of
-  evidence, and use the name in the title and notes. Never list the owner, and never invent a name: when
-  evidence does not name someone, leave them out of `participants` and describe them by role.
+- A name identifies a speaker only with a resolved voice binding or the user's affirmative correction.
+  Calendar attendees and call tiles establish attendance/spelling, not which voice said a statement. A People
+  record, personal lexicon, account profile, memory or past meeting never identifies an unresolved voice.
+- A name merely mentioned in the transcript may refer to a third party. Preserve names as heard with a hedge
+  when useful, but never promote that mention to a verified speaker identity or expand it from People alone.
+- Record evidenced non-owner participants with their speaker key and evidence. Otherwise omit the participant
+  and attribute the statement as "someone said". Lead the title with the topic
+  whenever the counterpart's identity is unverified; do not put a guessed or hedged identity in the title.
 - A calendar invitee or screen listing alone is not proof of attendance; never infer an absence or no-show from it.
 - Keep proposals, decisions, intentions and completed work distinct, and keep tense and hedges. A suggestion is
   not a decision; "I'll add it" is an intention, not done work. Do not attach a detail to the wrong company,
@@ -93,6 +92,11 @@ FORMAT
   `action_items`.
 - title: at most 70 characters and specific. Lead with the counterpart's name when known; never use the owner's
   own name. overview: one or two plain sentences.
+- emoji: exactly one emoji that represents the conversation.
+- salience: "highlight" for any conversation the owner engages in with another person, with real back-and-forth,
+  whatever the topic (including chores, errands and casual time at home), and for meetings, calls, plans, ideas
+  or tasks. "background" is only for audio the owner is not engaged in: media/TV, ambient chatter, other people
+  talking or an isolated passing remark. If owner engagement is uncertain, use "highlight".
 - When the transcript has `[segment-id k]` headers, cite the smallest sufficient exact ids in source_segment_ids
   (for `[s01234 0]` cite "s01234"). Never put ids in prose; never invent them.
 
@@ -142,8 +146,9 @@ SUBMIT_SCHEMA = _fn(
     {
         'title': {'type': 'string', 'description': 'At most 70 characters'},
         'overview': _STR,
-        'emoji': _STR,
+        'emoji': {'type': 'string', 'description': 'An emoji to represent the conversation'},
         'category': {'type': 'string', 'enum': [item.value for item in CategoryEnum]},
+        'salience': {'type': 'string', 'enum': ['highlight', 'background'], 'description': SALIENCE_DESCRIPTION},
         'participants': {
             'type': 'array',
             'items': {
@@ -243,36 +248,6 @@ READ_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
 
 TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (*READ_TOOL_SCHEMAS, SUBMIT_SCHEMA)
 READ_TOOL_NAMES = frozenset(schema['function']['name'] for schema in READ_TOOL_SCHEMAS)
-
-
-def length_guide(words: int) -> str:
-    """Body-length target scaled to the transcript: about 1.3-1.4x the one-shot notes on long meetings."""
-    if words < 500:
-        return 'Use 1-2 sections and about 80-150 words in total.'
-    if words < 1500:
-        return 'Use 3-4 sections and about 250-400 words in total; never more than 450.'
-    if words < 5000:
-        return 'Use 4-6 sections and about 550-800 words in total; never more than 900.'
-    return 'Use 5-7 sections and about 750-1000 words in total; never more than 1100.'
-
-
-def length_floor(words: int) -> int:
-    """Below this a long meeting's note is missing threads the owner wanted."""
-    if words < 1500:
-        return 0
-    if words < 5000:
-        return 480
-    return 650
-
-
-def length_ceiling(words: int) -> int:
-    if words < 500:
-        return 170
-    if words < 1500:
-        return 450
-    if words < 5000:
-        return 900
-    return 1100
 
 
 def _with_breakpoint(text: str) -> list[dict[str, Any]]:

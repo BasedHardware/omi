@@ -59,13 +59,16 @@ final _now = DateTime.now();
 final _today = DateTime(_now.year, _now.month, _now.day);
 DateTime _at(int daysAgo, int hour, int minute) => DateTime(_now.year, _now.month, _now.day - daysAgo, hour, minute);
 
-Wal _wal(DateTime start, int minutes, WalStatus status, {WalStorage storage = WalStorage.disk}) => Wal(
+Wal _wal(DateTime start, int minutes, WalStatus status,
+        {WalStorage storage = WalStorage.disk, String? rejectionReason}) =>
+    Wal(
       timerStart: start.millisecondsSinceEpoch ~/ 1000,
       codec: BleAudioCodec.opus,
       seconds: minutes * 60,
       status: status,
       storage: storage,
       device: 'pendant',
+      uploadRejectionReason: rejectionReason,
     );
 
 ServerConversation _convo(String id, String title, String emoji, DateTime at, int minutes) => ServerConversation(
@@ -286,11 +289,11 @@ final offlineProcessingScenarios = <AuditScenario>[
             _wal(_at(0, 15, 0), 70, WalStatus.miss, storage: WalStorage.sdcard),
             _wal(_at(0, 11, 0), 110, WalStatus.miss, storage: WalStorage.sdcard),
           ]));
-      expect(find.text('Catching up'), findsOneWidget);
-      expect(find.byKey(const Key('device_catching_up_status')), findsOneWidget);
+      final tile = find.byKey(const Key('device_stat_catching_up'));
+      expect(tile, findsOneWidget);
       expect(find.byType(LinearProgressIndicator), findsNothing);
-      expect(find.byKey(const Key('device_catching_up_span')), findsOneWidget);
-      await a.shot('Large backlog lives on Device with its status and audio span');
+      expect(find.descendant(of: tile, matching: find.text('3h')), findsOneWidget);
+      await a.shot('Large backlog is the Catching up tile: a duration, no stage or span');
     },
   ),
   for (final multiple in [false, true])
@@ -309,14 +312,13 @@ final offlineProcessingScenarios = <AuditScenario>[
               startedAt: _at(0, 11, 0),
               durationSeconds: 720),
         ]);
-        expect(find.text('Catching up'), findsOneWidget);
-        expect(find.text('Processing'), findsOneWidget);
-        expect(find.byKey(const Key('device_catching_up_on_the_way')), findsOneWidget);
-        await a.shot('Server work stays visible on Device until it finishes');
-        await a.tester.tap(find.byKey(const Key('device_catching_up_on_the_way')));
+        expect(find.descendant(of: find.byKey(const Key('device_stat_catching_up')), matching: find.text('12m')),
+            findsOneWidget);
+        await a.shot('Server work stays on the Catching up tile until it finishes');
+        await a.tester.tap(find.byKey(const Key('device_stat_catching_up')));
         await a.settle();
         expect(find.byType(OnTheWayPage), findsOneWidget);
-        await a.shot('The card opens On the Way', step: 'on-the-way');
+        await a.shot('The tile opens On the Way', step: 'on-the-way');
       },
     ),
   AuditScenario(
@@ -324,7 +326,7 @@ final offlineProcessingScenarios = <AuditScenario>[
     title: 'On the Way',
     page: 'lib/pages/conversations/on_the_way_page.dart (OnTheWayPage)',
     state: 'One recording transcribing, one uploading from the phone, one still on the pendant, '
-        'and one the server refused',
+        'and three the server refused: too old, an invalid capture date, and too large',
     run: (a) async {
       final sync = _SyncAuditProvider(
         phase: SyncPhase.uploadingToCloud,
@@ -333,6 +335,8 @@ final offlineProcessingScenarios = <AuditScenario>[
           _wal(_at(0, 17, 58), 3, WalStatus.miss)..isSyncing = true,
           _wal(_at(0, 17, 40), 1, WalStatus.miss, storage: WalStorage.sdcard),
           _wal(_at(2, 9, 0), 5, WalStatus.outsideRecoveryWindow),
+          _wal(_at(2, 8, 30), 2, WalStatus.uploadRejected, rejectionReason: WalUploadRejection.invalidCaptureTime),
+          _wal(_at(2, 8, 0), 4, WalStatus.uploadRejected, rejectionReason: WalUploadRejection.tooLarge),
         ],
       );
       await a.pump(
@@ -341,8 +345,8 @@ final offlineProcessingScenarios = <AuditScenario>[
         providers: [ChangeNotifierProvider<SyncProvider>.value(value: sync)],
       );
       expect(find.text('On the Way'), findsOneWidget);
-      expect(find.text('Sync details'), findsOneWidget);
-      await a.shot('Open On the Way from the device catch-up card');
+      expect(find.text('Details for support'), findsOneWidget);
+      await a.shot('Open On the Way from the device Catching up tile');
     },
   ),
   AuditScenario(

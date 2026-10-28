@@ -447,11 +447,17 @@ def _verify_qualified_source_closure(
     qualified_sha: str,
     checked_out_sha: str,
     checkout_repository: Path,
+    image_repository: Any = "",
 ) -> list[str]:
     closure_script = ROOT / "backend/scripts/verify_pusher_source_closure.py"
+    command = [sys.executable, str(closure_script)]
+    # Plan B B3: a qualification naming the backend-pusher role image compares
+    # that image's closure (Dockerfile.roles pusher target), not the fat one.
+    if isinstance(image_repository, str) and image_repository:
+        command += ["--image-repository", image_repository]
     try:
         closure = subprocess.run(
-            [sys.executable, str(closure_script)],
+            command,
             capture_output=True,
             text=True,
             check=False,
@@ -508,7 +514,7 @@ def validate(
     run: dict[str, Any],
     *,
     expected_digest: str,
-    expected_repository: str,
+    expected_repository: str | tuple[str, ...] | list[str],
     expected_workflow_id: int,
     expected_run_id: int,
     expected_canary_workflow_id: int,
@@ -525,6 +531,11 @@ def validate(
     """Return every missing immutable-promotion proof without exposing secrets."""
 
     errors: list[str] = []
+    # Plan B B3: the development qualification may name the fat ``pusher`` image
+    # or its ``backend-pusher`` role image; the receipt must name the same one.
+    admitted_repositories = (
+        (expected_repository,) if isinstance(expected_repository, str) else tuple(expected_repository)
+    )
     expected_fields = {
         "schema_version",
         "qualification_status",
@@ -561,8 +572,9 @@ def validate(
     if not DIGEST_RE.fullmatch(expected_digest):
         errors.append("requested production digest must be an exact sha256 digest")
 
-    if evidence.get("image_repository") != expected_repository:
-        errors.append("qualification evidence repository does not match the development Pusher registry")
+    qualified_repository = evidence.get("image_repository")
+    if qualified_repository not in admitted_repositories:
+        errors.append("qualification evidence repository is not an admitted development Pusher registry")
     if evidence.get("run_id") != expected_run_id:
         errors.append("qualification evidence run_id does not match the selected workflow run")
 
@@ -601,7 +613,7 @@ def validate(
     if deployment_receipt.get("environment") != "development":
         errors.append("deployment receipt must describe development")
     receipt_image = deployment_receipt.get("image") if isinstance(deployment_receipt.get("image"), dict) else {}
-    if receipt_image != {"repository": expected_repository, "digest": expected_digest}:
+    if receipt_image != {"repository": qualified_repository, "digest": expected_digest}:
         errors.append("deployment receipt image does not match the exact qualified candidate")
     if deployment_receipt.get("source_sha") != source_sha or deployment_receipt.get("run_id") != expected_run_id:
         errors.append("deployment receipt source or run does not match qualification evidence")
@@ -703,7 +715,14 @@ def validate(
         and SHA_RE.fullmatch(expected_canary_source_sha)
         and source_sha != expected_canary_source_sha
     ):
-        errors.extend(_verify_qualified_source_closure(source_sha, expected_canary_source_sha, checkout_repository))
+        errors.extend(
+            _verify_qualified_source_closure(
+                source_sha,
+                expected_canary_source_sha,
+                checkout_repository,
+                image_repository=evidence.get("image_repository"),
+            )
+        )
     return errors
 
 
@@ -720,7 +739,11 @@ def main() -> int:
     parser.add_argument("--expected-final-repository", default="")
     parser.add_argument("--run-json", type=Path, required=True)
     parser.add_argument("--expected-digest", required=True)
-    parser.add_argument("--expected-repository", required=True)
+    parser.add_argument(
+        "--expected-repository",
+        required=True,
+        help="admitted development registries, comma-separated (pusher, backend-pusher)",
+    )
     parser.add_argument("--expected-workflow-id", type=int, required=True)
     parser.add_argument("--expected-run-id", type=int, required=True)
     parser.add_argument("--expected-canary-workflow-id", type=int, default=0)
@@ -736,7 +759,7 @@ def main() -> int:
             load_json(args.canary_run_json) if args.canary_run_json else {},
             load_json(args.run_json),
             expected_digest=args.expected_digest,
-            expected_repository=args.expected_repository,
+            expected_repository=tuple(item for item in args.expected_repository.split(",") if item),
             expected_workflow_id=args.expected_workflow_id,
             expected_run_id=args.expected_run_id,
             expected_canary_workflow_id=args.expected_canary_workflow_id,

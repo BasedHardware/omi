@@ -1,3 +1,4 @@
+import 'package:omi/models/voice_question_result.dart';
 import 'package:omi/models/plan_storefront.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -48,7 +49,8 @@ typedef ChatReplyStreamer = Stream<ServerMessageChunk> Function(
   ChatPageContext? context,
   String? chatSessionId,
 });
-typedef VoiceReplyStreamer = Stream<ServerMessageChunk> Function(List<File> files, {String? language});
+typedef VoiceReplyStreamer = Stream<ServerMessageChunk> Function(List<File> files,
+    {String? language, Future<void>? abort});
 typedef VoiceAudioFileSaver = Future<File> Function(List<List<int>> bytes, int startTime, int frameSize);
 
 class _ChatTelemetryAttempt {
@@ -126,6 +128,29 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
 
   bool showTypingIndicator = false;
   bool sendingMessage = false;
+
+  /// Set while a typed reply streams; completing it stops that reply.
+  Completer<void>? _replyCancel;
+  ProductOutcome _replyStopOutcome = ProductOutcome.cancelled;
+  Completer<void>? _replyDone;
+
+  /// True while a typed reply can be stopped (Stop, or a new message that replaces it).
+  bool get canStopReply => _replyCancel != null && !_replyCancel!.isCompleted;
+
+  /// Stops the typed reply in progress and completes once that turn has wound down.
+  /// Text already streamed stays on screen; an empty placeholder is removed.
+  /// [superseded] marks a stop caused by the user sending a new message.
+  Future<void> stopReply({bool superseded = false}) {
+    final cancel = _replyCancel;
+    final done = _replyDone;
+    if (cancel == null || done == null) return Future.value();
+    if (!cancel.isCompleted) {
+      _replyStopOutcome = superseded ? ProductOutcome.superseded : ProductOutcome.cancelled;
+      cancel.complete();
+    }
+    return done.future;
+  }
+
   double aiStreamProgress = 1.0;
   bool agentThinkingAfterText = false;
 
@@ -348,6 +373,12 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
       }
       notifyListeners();
     }
+  }
+
+  /// The poster frame of a picked video once its upload has finished, else null.
+  File? videoPosterFor(File selected) {
+    final path = _uploadedBySelection[selected]?.localPreviewPath;
+    return path == null ? null : File(path);
   }
 
   bool isFileUploading(String id) {
@@ -584,11 +615,18 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
     if (appId == 'no_selected') {
       appId = null;
     }
-    // Use local file paths as thumbnails so images display immediately
+    // Show local previews so attachments display immediately. Pair each upload with the
+    // file it came from: uploads finish out of order. A video gets its poster frame, never
+    // the clip itself, which an image decoder cannot read.
+    final sourceByUpload = Map<MessageFile, File>.identity();
+    _uploadedBySelection.forEach((source, uploaded) => sourceByUpload[uploaded] = source);
     List<MessageFile> localFiles = List.from(uploadedFiles);
-    for (int i = 0; i < localFiles.length && i < selectedFiles.length; i++) {
-      if (localFiles[i].mimeTypeToFileType() == 'image') {
-        localFiles[i].thumbnail = selectedFiles[i].path;
+    for (final file in localFiles) {
+      if (file.isVideo) {
+        if (file.localPreviewPath != null) file.thumbnail = file.localPreviewPath;
+      } else if (file.mimeTypeToFileType() == 'image') {
+        final source = sourceByUpload[file];
+        if (source != null && !isChatVideo(source.path)) file.thumbnail = source.path;
       }
     }
     var message = ServerMessage(
@@ -626,23 +664,46 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
     const TypedEvents().emit(PendantVoiceQuestionDropped(reason: reason));
   }
 
-  Future sendVoiceMessageStreamToServer(
+  // A total response deadline: think/data heartbeats cannot keep a tutorial
+  // question pending forever. The deadline aborts the HTTP request and settles at
+  // once: it never waits for upstream cleanup, which can be stalled on body I/O,
+  // and nothing the request produces afterwards is read.
+  Stream<ServerMessageChunk> _voiceReplyWithDeadline(File file) async* {
+    final abort = Completer<void>();
+    final iterator = StreamIterator(_voiceReplyStreamer([file], abort: abort.future));
+    final deadline = Completer<bool>();
+    final timer = Timer(_voiceReplyTimeout, () {
+      if (!abort.isCompleted) abort.complete();
+      deadline.completeError(TimeoutException('Voice reply deadline'));
+    });
+    try {
+      while (await Future.any([iterator.moveNext(), deadline.future])) {
+        yield iterator.current;
+      }
+    } finally {
+      timer.cancel();
+      if (!abort.isCompleted) abort.complete();
+      unawaited(iterator.cancel().catchError((Object _) {}));
+    }
+  }
+
+  Future<VoiceQuestionResult> sendVoiceMessageStreamToServer(
     List<List<int>> audioBytes, {
     Function? onFirstChunkRecived,
     Future<void> Function()? onNoSpeech,
     BleAudioCodec? codec,
     bool playResponseAudio = false,
   }) async {
-    if (chatAtCap != null) return;
+    if (chatAtCap != null) return const VoiceQuestionResult.failed(VoiceQuestionFailure.quota);
     // Re-entry guard so a duplicated end-of-session signal from the device
     // button can't kick off two parallel voice replies.
     if (_voiceSendInFlight || sendingMessage || showTypingIndicator) {
       _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.sendInFlight);
-      return;
+      return const VoiceQuestionResult.failed(VoiceQuestionFailure.busy);
     }
     if (audioBytes.isEmpty) {
       _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.emptyFrames);
-      return;
+      return const VoiceQuestionResult.failed(VoiceQuestionFailure.noSpeech);
     }
     _voiceSendInFlight = true;
     _readAloud.newQuery();
@@ -675,12 +736,12 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
         audioBytes,
         DateTime.now().millisecondsSinceEpoch ~/ 1000 - (audioBytes.length / 100).ceil(),
         codec?.getFrameSize() ?? 160,
-      );
+      ).timeout(_voiceReplyTimeout);
     } catch (_) {
       _voiceSendInFlight = false;
       _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.audioSaveFailed);
       chatAttempt.complete(ProductOutcome.failure, failure: ProductFailure.unknown);
-      return;
+      return const VoiceQuestionResult.failed(VoiceQuestionFailure.unavailable);
     }
 
     String chatTargetId = currentAppId ?? 'omi';
@@ -703,13 +764,29 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
     // Voice response playback is triggered only from the Omi device-button
     // path (capture_provider). The chat-screen mic input does not pass
     // playResponseAudio=true.
-    final String playbackMessageId = message.id;
+    // Placeholder chat rows share an id. Playback cancellation must name this
+    // request so delayed cleanup cannot stop a later question's response.
+    final playbackMessageId = 'pendant:${const Uuid().v4()}';
+    var playbackAuthorized = playResponseAudio;
+    void stopPlayback(VoiceReplyPlaybackInterruptSource source) {
+      playbackAuthorized = false;
+      if (!playResponseAudio) return;
+      // Audio cleanup is best effort, not tutorial completion authority. A
+      // stalled native stop must not hold Processing or the voice busy guard.
+      unawaited(OmiVoicePlaybackService.instance
+          .interruptResponse(messageId: playbackMessageId, source: source)
+          .catchError((Object error) => Logger.warning('Voice reply cleanup failed: ${error.runtimeType}')));
+    }
+
+    String? question;
     try {
       if (playResponseAudio) {
-        await OmiVoicePlaybackService.instance.beginResponse(messageId: playbackMessageId);
+        await OmiVoicePlaybackService.instance
+            .beginResponse(messageId: playbackMessageId, canBegin: () => playbackAuthorized)
+            .timeout(_voiceReplyTimeout);
       }
       bool firstChunkRecieved = false;
-      await for (var chunk in _voiceReplyStreamer([file]).timeout(_voiceReplyTimeout)) {
+      await for (var chunk in _voiceReplyWithDeadline(file)) {
         if (!firstChunkRecieved &&
             [
               MessageChunkType.message,
@@ -766,10 +843,13 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
             unawaited(_readAloud.readFinalReply(message.text, generation: readAloudGeneration));
           }
           notifyListeners();
-          return;
+          return message.text.trim().isEmpty
+              ? const VoiceQuestionResult.failed(VoiceQuestionFailure.unavailable)
+              : VoiceQuestionResult.answered(message.text, question: question);
         }
 
         if (chunk.type == MessageChunkType.message) {
+          if (chunk.message?.sender == MessageSender.human) question = chunk.message!.text;
           voiceMessages.insert(aiIndex, chunk.message!);
           aiIndex++;
           notifyListeners();
@@ -780,13 +860,11 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
           if (chunk.errorCode == 'no_speech') {
             final l10n = globalNavigatorKey.currentContext?.l10n;
             message.text = l10n?.voiceQuestionNoSpeech ?? "Didn't catch that — try again";
-            if (playResponseAudio) {
-              await OmiVoicePlaybackService.instance.interrupt(source: VoiceReplyPlaybackInterruptSource.streamError);
-            }
+            stopPlayback(VoiceReplyPlaybackInterruptSource.streamError);
             if (onNoSpeech != null) await onNoSpeech();
             completeChat(ProductOutcome.empty);
             notifyListeners();
-            return;
+            return const VoiceQuestionResult.failed(VoiceQuestionFailure.noSpeech);
           }
           if (_tryParseQuotaError(chunk.text) || chunk.errorCode == 'quota_exceeded') {
             _chatQuotaExceeded = true;
@@ -794,33 +872,27 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
             message.text = chatAtCap?.title ??
                 l10n?.chatQuotaExceededReply ??
                 "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
-            if (playResponseAudio) {
-              await OmiVoicePlaybackService.instance.interrupt(source: VoiceReplyPlaybackInterruptSource.quotaError);
-            }
+            stopPlayback(VoiceReplyPlaybackInterruptSource.quotaError);
             notifyListeners();
             setShowTypingIndicator(false);
             _logChatFailure(ChatStreamFailureClass.quota, stage: 'voice_stream');
             completeChat(ProductOutcome.failure, failure: ProductFailure.quota);
-            return;
+            return const VoiceQuestionResult.failed(VoiceQuestionFailure.quota);
           }
           final failure = _chunkFailureClass(chunk);
           _logChatFailure(failure, stage: 'voice_stream');
           _markReplyFailed(message, _FailedReply(failure: failure));
-          if (playResponseAudio) {
-            await OmiVoicePlaybackService.instance.interrupt(source: VoiceReplyPlaybackInterruptSource.streamError);
-          }
+          stopPlayback(VoiceReplyPlaybackInterruptSource.streamError);
           completeChat(ProductOutcome.failure, failure: _productFailureFor(failure));
           notifyListeners();
-          return;
+          return const VoiceQuestionResult.failed(VoiceQuestionFailure.unavailable);
         }
       }
     } catch (e) {
       final failure = classifyChatStreamFailure(e);
       _logChatFailure(failure.kind, stage: 'voice_transport', status: failure.statusCode);
       _markReplyFailed(message, _FailedReply(failure: failure.kind));
-      if (playResponseAudio) {
-        await OmiVoicePlaybackService.instance.interrupt(source: VoiceReplyPlaybackInterruptSource.streamError);
-      }
+      stopPlayback(VoiceReplyPlaybackInterruptSource.streamError);
       completeChat(ProductOutcome.failure, failure: _productFailureFor(failure.kind));
       notifyListeners();
     } finally {
@@ -829,11 +901,10 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
     }
 
     if (!chatAttemptCompleted) {
-      if (playResponseAudio) {
-        await OmiVoicePlaybackService.instance.interrupt(source: VoiceReplyPlaybackInterruptSource.streamError);
-      }
+      stopPlayback(VoiceReplyPlaybackInterruptSource.streamError);
       completeChat(ProductOutcome.failure, failure: ProductFailure.incomplete);
     }
+    return const VoiceQuestionResult.failed(VoiceQuestionFailure.unavailable);
   }
 
   Future sendMessageStreamToServer(String text, {ChatPageContext? context}) => _streamReply(text, context: context);
@@ -881,6 +952,10 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
       _finishChatTelemetryAttempt(responseMessageId, outcome, failure: failure);
     }
 
+    final cancel = Completer<void>();
+    final done = Completer<void>();
+    _replyCancel = cancel;
+    _replyDone = done;
     var message = ServerMessage.empty(appId: currentAppId);
     messages.add(message);
     final aiIndex = messages.length - 1;
@@ -907,94 +982,124 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
 
     try {
       await prepareChatSession();
-      await for (var chunk in (replyStreamOverride ?? sendMessageStreamServer)(
-        text,
-        appId: currentAppId,
-        filesId: fileIds,
-        context: context,
-        chatSessionId: chatSessionId,
-      )) {
-        if (chunk.type == MessageChunkType.think) {
-          flushBuffer();
-          message.thinkings.add(chunk.text);
-          if (message.text.isNotEmpty) {
-            agentThinkingAfterText = true;
-          }
-          notifyListeners();
-          continue;
-        }
-
-        if (chunk.type == MessageChunkType.memory) {
-          message.memoryAction = chunk.text;
-          notifyListeners();
-          continue;
-        }
-
-        if (chunk.type == MessageChunkType.data) {
-          if (agentThinkingAfterText) {
-            agentThinkingAfterText = false;
-            notifyListeners();
-          }
-          textBuffer += chunk.text;
-          timer ??= Timer.periodic(const Duration(milliseconds: 100), (_) {
+      final override = replyStreamOverride;
+      final replies = override != null
+          ? override(text, appId: currentAppId, filesId: fileIds, context: context, chatSessionId: chatSessionId)
+          : sendMessageStreamServer(
+              text,
+              appId: currentAppId,
+              filesId: fileIds,
+              context: context,
+              chatSessionId: chatSessionId,
+              cancelSignal: cancel.future,
+            );
+      final iterator = StreamIterator(replies);
+      final stopped = cancel.future.then((_) => false);
+      try {
+        // Race each chunk against Stop so a reply that is still thinking stops at once.
+        while (await Future.any([iterator.moveNext(), stopped])) {
+          final chunk = iterator.current;
+          // A chunk that arrived alongside Stop (even an error) does not undo the stop.
+          if (cancel.isCompleted) break;
+          if (chunk.type == MessageChunkType.think) {
             flushBuffer();
-          });
-          continue;
-        }
-
-        timer?.cancel();
-        timer = null;
-        flushBuffer();
-
-        if (chunk.type == MessageChunkType.done) {
-          chunk.message!.memoryAction = message.memoryAction;
-          message = chunk.message!;
-          messages[aiIndex] = message;
-          _transferChatTelemetryAttempt(responseMessageId, message.id);
-          _finishChatTelemetryAttempt(message.id, ProductOutcome.success);
-          nameChatSession();
-          chatAttemptCompleted = true;
-          if (!readAloudDelivered) {
-            readAloudDelivered = true;
-            unawaited(_readAloud.readFinalReply(message.text, generation: readAloudGeneration));
+            message.thinkings.add(chunk.text);
+            if (message.text.isNotEmpty) {
+              agentThinkingAfterText = true;
+            }
+            notifyListeners();
+            continue;
           }
-          notifyListeners();
-          return;
-        }
 
-        if (chunk.type == MessageChunkType.error) {
-          if (_tryParseQuotaError(chunk.text) || chunk.errorCode == 'quota_exceeded') {
-            // Keep the user's message visible; replace AI placeholder with quota message
-            _chatQuotaExceeded = true;
-            final l10n = globalNavigatorKey.currentContext?.l10n;
-            message.text = chatAtCap?.title ??
-                l10n?.chatQuotaExceededReply ??
-                "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
-            _logChatFailure(ChatStreamFailureClass.quota, stage: 'stream');
-            completeChat(ProductOutcome.failure, failure: ProductFailure.quota);
+          if (chunk.type == MessageChunkType.memory) {
+            message.memoryAction = chunk.text;
+            notifyListeners();
+            continue;
+          }
+
+          if (chunk.type == MessageChunkType.data) {
+            if (agentThinkingAfterText) {
+              agentThinkingAfterText = false;
+              notifyListeners();
+            }
+            textBuffer += chunk.text;
+            timer ??= Timer.periodic(const Duration(milliseconds: 100), (_) {
+              flushBuffer();
+            });
+            continue;
+          }
+
+          timer?.cancel();
+          timer = null;
+          flushBuffer();
+
+          if (chunk.type == MessageChunkType.done) {
+            chunk.message!.memoryAction = message.memoryAction;
+            message = chunk.message!;
+            messages[aiIndex] = message;
+            _transferChatTelemetryAttempt(responseMessageId, message.id);
+            _finishChatTelemetryAttempt(message.id, ProductOutcome.success);
+            nameChatSession();
+            chatAttemptCompleted = true;
+            if (!readAloudDelivered) {
+              readAloudDelivered = true;
+              unawaited(_readAloud.readFinalReply(message.text, generation: readAloudGeneration));
+            }
             notifyListeners();
             return;
           }
-          final failure = _chunkFailureClass(chunk);
-          _logChatFailure(failure, stage: 'stream');
-          _markReplyFailed(message, _FailedReply(text: text, context: context, fileIds: fileIds, failure: failure));
-          completeChat(ProductOutcome.failure, failure: _productFailureFor(failure));
-          notifyListeners();
-          return;
+
+          if (chunk.type == MessageChunkType.error) {
+            if (_tryParseQuotaError(chunk.text) || chunk.errorCode == 'quota_exceeded') {
+              // Keep the user's message visible; replace AI placeholder with quota message
+              _chatQuotaExceeded = true;
+              final l10n = globalNavigatorKey.currentContext?.l10n;
+              message.text = chatAtCap?.title ??
+                  l10n?.chatQuotaExceededReply ??
+                  "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
+              _logChatFailure(ChatStreamFailureClass.quota, stage: 'stream');
+              completeChat(ProductOutcome.failure, failure: ProductFailure.quota);
+              notifyListeners();
+              return;
+            }
+            final failure = _chunkFailureClass(chunk);
+            _logChatFailure(failure, stage: 'stream');
+            _markReplyFailed(message, _FailedReply(text: text, context: context, fileIds: fileIds, failure: failure));
+            completeChat(ProductOutcome.failure, failure: _productFailureFor(failure));
+            notifyListeners();
+            return;
+          }
         }
+      } finally {
+        unawaited(iterator.cancel().catchError((_) {}));
       }
     } catch (e) {
-      final failure = classifyChatStreamFailure(e);
-      _logChatFailure(failure.kind, stage: 'transport', status: failure.statusCode);
-      _markReplyFailed(message, _FailedReply(text: text, context: context, fileIds: fileIds, failure: failure.kind));
-      completeChat(ProductOutcome.failure, failure: _productFailureFor(failure.kind));
-      notifyListeners();
+      // After Stop the abort surfaces as a transport error; it is the stop, not a failure.
+      if (!cancel.isCompleted) {
+        final failure = classifyChatStreamFailure(e);
+        _logChatFailure(failure.kind, stage: 'transport', status: failure.statusCode);
+        _markReplyFailed(message, _FailedReply(text: text, context: context, fileIds: fileIds, failure: failure.kind));
+        completeChat(ProductOutcome.failure, failure: _productFailureFor(failure.kind));
+        notifyListeners();
+      }
     } finally {
       timer?.cancel();
       flushBuffer();
+      if (cancel.isCompleted && !chatAttemptCompleted) {
+        // Stopped: keep what was already shown, drop an empty placeholder.
+        if (message.text.trim().isEmpty) messages.remove(message);
+        message.thinkings.clear();
+        agentThinkingAfterText = false;
+        completeChat(_replyStopOutcome);
+      }
+      if (identical(_replyCancel, cancel)) {
+        _replyCancel = null;
+        _replyDone = null;
+      }
       aiStreamProgress = 1.0;
       setShowTypingIndicator(false);
       setSendingMessage(false);
+      if (!done.isCompleted) done.complete();
     }
     if (!chatAttemptCompleted) {
       _logChatFailure(ChatStreamFailureClass.server, stage: 'eof');

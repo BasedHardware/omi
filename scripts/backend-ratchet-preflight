@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Fast lane over backend ratchets that the changed-file pre-push suite only
+# discovers per path: every
+# tests/unit/test_*ratchet*.py (real-clock budget, batch-stage env,
+# datetime-sort sentinel, isinstance-return) plus the reason-label enum guard
+# the selector attaches to every backend Python change
+# (backend/scripts/select_backend_unit_tests.py). Runs them through
+# backend/test.sh with BACKEND_UNIT_TEST_FILE_LIST so the file-isolation
+# runner and its timing guard are the same ones CI uses. Include slow-marked
+# selected ratchets (notably the real-clock budget scan), while excluding
+# integration tests. Deliberately skips backend/test-preflight.sh: that env
+# validator fails on unrelated missing tools (pyright, black, redis-cli) and
+# test.sh sets its own required env.
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+# shellcheck source=dev-harness/_resolve_python.sh
+source scripts/dev-harness/_resolve_python.sh
+BACKEND_PYTHON="$(dev_harness_canonical_python || true)"
+if [ -z "$BACKEND_PYTHON" ] || [ ! -x "$BACKEND_PYTHON" ]; then
+  echo "FAIL: backend ratchet preflight requires the canonical backend/.venv interpreter." >&2
+  echo "      Create it with: make setup" >&2
+  exit 1
+fi
+
+LIST="$(mktemp "${TMPDIR:-/tmp}/omi-backend-ratchet-tests.XXXXXX")"
+FAST_LIST="$(mktemp "${TMPDIR:-/tmp}/omi-backend-ratchet-fast.XXXXXX")"
+SLOW_LIST="$(mktemp "${TMPDIR:-/tmp}/omi-backend-ratchet-slow.XXXXXX")"
+trap 'rm -f "$LIST" "$FAST_LIST" "$SLOW_LIST"' EXIT
+
+shopt -s nullglob
+for test_file in backend/tests/unit/test_*ratchet*.py; do
+  relative_path="${test_file#backend/}"
+  printf '%s\n' "$relative_path" >> "$LIST"
+  if [ "$relative_path" = "tests/unit/test_real_clock_budget_ratchet.py" ]; then
+    printf '%s\n' "$relative_path" >> "$SLOW_LIST"
+  else
+    printf '%s\n' "$relative_path" >> "$FAST_LIST"
+  fi
+done
+shopt -u nullglob
+# Guard tests without a *ratchet* name that CI attaches to backend changes.
+printf '%s\n' 'tests/unit/test_reason_label_enums.py' >> "$LIST"
+printf '%s\n' 'tests/unit/test_reason_label_enums.py' >> "$FAST_LIST"
+sort -u "$LIST" -o "$LIST"
+sort -u "$FAST_LIST" -o "$FAST_LIST"
+sort -u "$SLOW_LIST" -o "$SLOW_LIST"
+
+COUNT=$(wc -l < "$LIST" | tr -d ' ')
+if [ "$COUNT" -eq 0 ]; then
+  echo "FAIL: no backend ratchet guard tests found under backend/tests/unit/." >&2
+  exit 1
+fi
+echo "Running $COUNT backend ratchet guard test file(s) through backend/test.sh."
+
+STARTED=$SECONDS
+# Background priority (darwin taskpolicy -b, elsewhere nice -n 19), the same
+# OMI_PREFLIGHT_BACKGROUND knob pr_preflight.run_local_checks honors; the
+# orchestrator invoking this through make already wraps it, double-wrapping is
+# harmless.
+RUNNER=()
+if [ "${OMI_PREFLIGHT_BACKGROUND:-1}" != "0" ] && [ "${OMI_PREFLIGHT_BACKGROUND:-1}" != "false" ]; then
+  if [ "$(uname -s)" = "Darwin" ] && [ -x /usr/bin/taskpolicy ]; then
+    RUNNER=(/usr/bin/taskpolicy -b)
+  elif command -v nice >/dev/null 2>&1; then
+    RUNNER=(nice -n 19)
+  fi
+fi
+
+run_test_list() {
+  local test_list="$1"
+  local cpu_budget="${2:-}"
+  if [ -n "$cpu_budget" ]; then
+    "${RUNNER[@]+"${RUNNER[@]}"}" bash -c '
+      cd backend
+      BACKEND_UNIT_TEST_FILE_LIST="$1" BACKEND_PYTEST_MARK_EXPR="not integration" \
+        BACKEND_FAST_UNIT_FAIL_SECONDS="$3" PYTHON="$2" bash test.sh
+    ' ratchet "$test_list" "$BACKEND_PYTHON" "$cpu_budget"
+  else
+    "${RUNNER[@]+"${RUNNER[@]}"}" bash -c '
+      cd backend
+      BACKEND_UNIT_TEST_FILE_LIST="$1" BACKEND_PYTEST_MARK_EXPR="not integration" PYTHON="$2" bash test.sh
+    ' ratchet "$test_list" "$BACKEND_PYTHON"
+  fi
+}
+
+set +e
+run_test_list "$FAST_LIST"
+STATUS=$?
+if [ "$STATUS" -eq 0 ] && [ -s "$SLOW_LIST" ]; then
+  # This intentional slow-marked AST scan measured 1.97s CPU; isolate it with
+  # a 5s per-test CPU ceiling instead of the 1s fast-unit default, which would
+  # reject the guard itself despite the full ratchet gate staying under 60s.
+  run_test_list "$SLOW_LIST" 5.0
+  STATUS=$?
+fi
+set -e
+ELAPSED=$((SECONDS - STARTED))
+
+if [ "$STATUS" -ne 0 ]; then
+  echo "Backend ratchet preflight failed in ${ELAPSED}s." >&2
+  exit "$STATUS"
+fi
+echo "Backend ratchet preflight passed: $COUNT file(s) in ${ELAPSED}s."

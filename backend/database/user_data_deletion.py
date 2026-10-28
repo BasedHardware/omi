@@ -4,8 +4,12 @@ from collections.abc import Callable
 import logging
 from typing import Any
 
+from database.quiet_check_retirement import stop_quiet_checks_for_account
 from database._client import get_data_plane_firestore_client
+from database.memory_collections import RELEASED_MEMORY_CHANGE_HEAD
+from database.people_generation import generation_ref
 from database.staged_promote_cache import invalidate_around_write
+from config.list_projection import STATE_COLLECTION, ROW_COLLECTIONS
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +43,20 @@ def purge_user_subtree(uid: str, client: Any, delete_collection: Callable) -> di
     # A historical-source-index bump or build (database/memories.py) can land
     # after memory_state was walked; the doc holds only hashes, but drop it too.
     user_ref.collection('memory_state').document('historical_source_index').delete()
+    # Atomic source deletes also maintain this derived head. Erase it after
+    # every source collection, including when memory_state was visited first.
+    user_ref.collection('memory_state').document(RELEASED_MEMORY_CHANGE_HEAD).delete()
+    # Source deletes can rotate these content-free heads after their collection
+    # was walked, including a retry whose root user document is already absent.
+    for family in ROW_COLLECTIONS:
+        user_ref.collection(STATE_COLLECTION).document(family).delete()
+
+    # People deletes can recreate their content-free generation head after
+    # people_meta was enumerated. Missing metadata never authorizes memo reuse.
+    generation_ref(user_ref).delete()
 
     if root_exists:
         logger.info(f"Deleting user document: {uid}")
         user_ref.delete()
+    stop_quiet_checks_for_account(uid, firestore_client=client)
     return {'status': 'ok', 'message': 'Account deleted successfully'}

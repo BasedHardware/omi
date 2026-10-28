@@ -147,6 +147,13 @@ from utils.other.notifications import (
 from models.notification_message import NotificationMessage
 from models.daily_summary import DailySummariesResponse, DailySummaryResponse
 from utils.daily_summary_search import DAILY_SUMMARY_SEARCH_WINDOW, filter_daily_summaries
+from utils.daily_summary_validation import (
+    DailySummaryUnavailable,
+    read_daily_summary_page,
+    require_daily_summary,
+    validate_daily_summaries,
+)
+from utils.other.daily_recap import delivery_allowed as daily_summary_delivery_allowed
 from utils.memory.learned_today import memories_learned_payload, memory_review_card_block
 from utils.other import endpoints as auth
 from utils.other.list_budget import finish_list_budget
@@ -1902,6 +1909,11 @@ def test_daily_summary(
         memories_learned=_memories_learned_payload(uid, conversations, start_date_utc, end_date_utc),
     )
 
+    # Validate before storing or sending anything, as in the shared scheduled/on-demand producer.
+    try:
+        require_daily_summary(summary_data, uid=uid, operation='test_generation_candidate')
+    except DailySummaryUnavailable:
+        raise HTTPException(status_code=502, detail='Daily recap generation returned invalid data') from None
     # Store in database
     summary_id = daily_summaries_db.create_daily_summary(uid, summary_data)
 
@@ -2038,14 +2050,19 @@ class CreateDailySummaryRequest(BaseModel):
 
 @router.get('/v1/users/daily-summaries', tags=['v1'], response_model=DailySummariesResponse)
 def get_daily_summaries(
-    limit: int = Query(30, ge=1, le=100), offset: int = Query(0, ge=0), uid: str = Depends(auth.get_current_user_uid)
+    limit: int = Query(30, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    uid: str = Depends(auth.get_current_user_uid),
+    request: Request = None,
 ):
     """
     Get list of daily summaries for the authenticated user.
     Returns summaries in reverse chronological order.
     """
-    summaries = daily_summaries_db.get_daily_summaries(uid, limit=limit, offset=offset)
-    return {'summaries': summaries}
+    try:
+        return {'summaries': read_daily_summary_page(uid, limit=limit, offset=offset, request=request)}
+    except DailySummaryUnavailable:
+        raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
 
 
 @router.post('/v1/users/daily-summaries', tags=['v1'], response_model=DailySummaryResponse)
@@ -2084,8 +2101,11 @@ def create_user_daily_summary(
 
     date_str = target_date.strftime('%Y-%m-%d')
     existing = daily_summaries_db.get_daily_summary_by_date(uid, date_str)
-    if existing:
-        return existing
+    if existing and daily_summary_delivery_allowed(uid, existing):
+        try:
+            return require_daily_summary(existing, uid=uid, operation='create_existing').model_dump(exclude_unset=True)
+        except DailySummaryUnavailable:
+            raise HTTPException(status_code=503, detail='Stored daily recap data is temporarily unavailable') from None
 
     require_generated_compute(uid, 'daily_summary')
     cooldown_key = f'daily_summary_create:{uid}:{date_str}'
@@ -2096,13 +2116,20 @@ def create_user_daily_summary(
         )
 
     start_date_utc, end_date_utc = local_day_bounds_utc(target_date, time_zone_name)
-    record, declined = generate_daily_summary_on_demand(uid, date_str, start_date_utc, end_date_utc)
+    try:
+        record, declined = generate_daily_summary_on_demand(uid, date_str, start_date_utc, end_date_utc)
+    except DailySummaryUnavailable:
+        raise HTTPException(status_code=502, detail='Daily recap generation returned invalid data') from None
     if record:
+        try:
+            validated = require_daily_summary(record, uid=uid, operation='create_result')
+        except DailySummaryUnavailable:
+            raise HTTPException(status_code=502, detail='Daily recap generation returned invalid data') from None
         # The cooldown exists to rate-limit LLM spend, so it is armed by a generation that
         # happened. Arming it before the call charged the user for attempts that cost nothing
         # and left them 429'd for 30s after a 400 they could have fixed by recording something.
         set_generic_cache(cooldown_key, {'at': datetime.utcnow().isoformat()}, ttl=_REGENERATE_COOLDOWN_SECONDS)
-        return record
+        return validated.model_dump(exclude_unset=True)
 
     if declined == DAILY_SUMMARY_DECLINE_LOCKED:
         # Another writer — almost always the cron for the same day — is mid-generation. That is a
@@ -2128,7 +2155,12 @@ def search_daily_summaries(
     Only the latest 365 summaries are scanned.
     """
     summaries = daily_summaries_db.get_daily_summaries(uid, limit=DAILY_SUMMARY_SEARCH_WINDOW, offset=0)
-    return {'summaries': filter_daily_summaries(summaries, query, limit)}
+    try:
+        valid = validate_daily_summaries(summaries, uid=uid, operation='search')
+    except DailySummaryUnavailable:
+        raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
+    filtered = filter_daily_summaries([item.model_dump() for item in valid], query, limit)
+    return {'summaries': [DailySummaryResponse.model_validate(item) for item in filtered]}
 
 
 @router.get('/v1/users/daily-summaries/{summary_id}', tags=['v1'], response_model=DailySummaryResponse)
@@ -2139,7 +2171,10 @@ def get_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_
     summary = daily_summaries_db.get_daily_summary(uid, summary_id)
     if not summary:
         raise HTTPException(status_code=404, detail='Daily summary not found')
-    return summary
+    try:
+        return require_daily_summary(summary, uid=uid, operation='detail')
+    except DailySummaryUnavailable:
+        raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
 
 
 @router.patch('/v1/users/daily-summaries/{summary_id}/visibility', tags=['v1'], response_model=UserStatusResponse)
@@ -2264,10 +2299,19 @@ def regenerate_daily_summary(
         summary_data['created_at'] = summary['created_at']
     summary_data['regenerated_at'] = datetime.utcnow().isoformat()
 
+    try:
+        validated = require_daily_summary({**summary_data, 'id': summary_id}, uid=uid, operation='regenerate_result')
+    except DailySummaryUnavailable:
+        raise HTTPException(status_code=502, detail='Daily recap generation returned invalid data') from None
     daily_summaries_db.update_daily_summary(uid, summary_id, summary_data)
 
     refreshed = daily_summaries_db.get_daily_summary(uid, summary_id)
-    return refreshed or {**summary_data, 'id': summary_id}
+    if not refreshed:
+        return validated.model_dump(exclude_unset=True)
+    try:
+        return require_daily_summary(refreshed, uid=uid, operation='regenerate_readback').model_dump(exclude_unset=True)
+    except DailySummaryUnavailable:
+        raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
 
 
 @router.get('/v1/daily-summaries/{summary_id}/shared', tags=['v1'], response_model=DailySummaryResponse)
@@ -2295,7 +2339,12 @@ def get_shared_daily_summary(summary_id: str):
         'decisions_made',
         'knowledge_nuggets',
     }
-    return {k: v for k, v in summary.items() if k in _PUBLIC_FIELDS}
+    try:
+        return require_daily_summary(
+            {k: v for k, v in summary.items() if k in _PUBLIC_FIELDS}, uid=uid, operation='shared'
+        )
+    except DailySummaryUnavailable:
+        raise HTTPException(status_code=404, detail='Daily summary not found') from None
 
 
 # ***********************************

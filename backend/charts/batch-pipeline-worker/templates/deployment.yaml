@@ -1,3 +1,4 @@
+{{- define "batch-pipeline-worker.deployment" -}}
 {{- if .Values.enabled }}
 {{- if eq .Values.stage "prod" }}
 {{- if or (not (regexMatch "^https://[^/]+/?$" .Values.worker.apiUrl)) (ne .Values.worker.audience .Values.worker.apiUrl) }}
@@ -16,7 +17,12 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}
+  name: {{ .instance.name }}
+  {{- if and .Values.autoscaling.balancedPools.enabled (eq .instance.name .Release.Name) }}
+  annotations:
+    # The existing deployment reporter verifies the required Spot sibling too.
+    omi.ai/required-companion-deployment: {{ printf "%s-spot" .Release.Name | quote }}
+  {{- end }}
 spec:
   # L4 scale-from-zero, image pull and joint model startup exceeded 600s in dev.
   # Recreate also waits for old pods to drain (terminationGracePeriodSeconds 1500)
@@ -31,16 +37,16 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: batch-pipeline-worker
-      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/instance: {{ .instance.name }}
   template:
     metadata:
       labels:
         app.kubernetes.io/name: batch-pipeline-worker
-        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/instance: {{ .instance.name }}
     spec:
       serviceAccountName: {{ required "dedicated Workload Identity serviceAccountName required" .Values.serviceAccountName }}
       terminationGracePeriodSeconds: 1500
-      {{- with .Values.nodeSelector }}
+      {{- with .instance.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
@@ -55,6 +61,9 @@ spec:
           ports:
             - {name: http, containerPort: 8080}
           env:
+            {{- if ne .Values.worker.stageProfilingEnabled nil }}
+            - {name: BATCH_PIPELINE_STAGE_PROFILING_ENABLED, value: {{ .Values.worker.stageProfilingEnabled | quote }}}
+            {{- end }}
             - {name: STT_CAP_DISPATCH_ENFORCEMENT, value: {{ .Values.worker.capDispatchEnforcement | quote }}}
             - {name: STT_CAP_DISPATCH_COHORT, value: {{ .Values.worker.capDispatchCohort | quote }}}
             - {name: STT_CAP_DISPATCH_LANES, value: {{ .Values.worker.capDispatchLanes | quote }}}
@@ -70,7 +79,9 @@ spec:
             - {name: BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED, value: {{ .Values.worker.diarizeSpeechOnlyEnabled | quote }}}
             - {name: BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED, value: {{ .Values.worker.shortSpeechSingleEnabled | quote }}}
             - {name: BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED, value: {{ .Values.worker.emptyAsrDispositionEnabled | quote }}}
+            - {name: BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED, value: {{ .Values.worker.emptyAsrSafetyNetEnabled | quote }}}
             - {name: BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED, value: {{ .Values.worker.emptyAsrRecoveryEnabled | quote }}}
+            - {name: BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED, value: {{ .Values.worker.independentLanguageRecoveryEnabled | quote }}}
             - {name: BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED, value: {{ .Values.worker.correctnessMetricsEnabled | quote }}}
             - {name: BATCH_PIPELINE_HEAD_PRIORITY_ENABLED, value: {{ .Values.worker.headPriorityEnabled | quote }}}
             # Pump flights per GPU: claim and publication overlap the exclusive chain; "1" is the serial kill switch.
@@ -124,4 +135,12 @@ spec:
       volumes:
         - name: model-cache
           emptyDir: {sizeLimit: 30Gi}
+{{- end }}
+{{- end }}
+{{- if .Values.enabled }}
+{{- $root := . }}
+{{- range $instance := (include "batch-pipeline-worker.instances" . | fromYamlArray) }}
+{{ include "batch-pipeline-worker.deployment" (dict "Values" $root.Values "Release" $root.Release "instance" $instance) }}
+---
+{{- end }}
 {{- end }}

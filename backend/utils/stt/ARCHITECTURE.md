@@ -130,7 +130,11 @@ that file can stay under the line ratchet; the functions keep one-line
 pointers back to this section.
 
 `connect_stt_socket_with_fallback` connects the selected primary before audio
-starts, walking the configured fallbacks. `STT_SERVICE_MODELS` states an ordered
+starts, walking the configured fallbacks. Deepgram is retired (2026-08-27, no
+contract): it is absent from `config/stt_provider_policy.py`, selection never
+admits a `dg-*` model, and startup logs an error if a chain still lists one.
+The incident narratives below that name Deepgram are history.
+`STT_SERVICE_MODELS` states an ordered
 preference, so a primary that cannot open a socket must advance to the next
 configured provider instead of failing the session — a Deepgram account
 rejecting every connect with HTTP 402 otherwise takes the whole deployment's
@@ -391,14 +395,22 @@ admitted window before the dwell holds at its stage. Per-witness votes stay
 capped at three admitted success/failure outcomes per trial window, so one
 repeated caller can neither fill the sample nor be a majority. Promotion also
 requires the majority-failure fraction across trial users at or under the gate;
-broad failures (at least four majority-failing users) re-bench, and anonymous
+broad failures (at least four majority-failing users) re-bench after 100
+admitted outcomes in the current trial window and the same CUSUM burst evidence
+as stage 100, or via the fast outage path after 20 admitted outcomes with at
+least 25% attributable failures. The earlier 30/60-vote rate-only rejection is disabled by default;
+`STT_ROUTING_RECOVERY_SAMPLE_GUARD_ENABLED=false` restores it. Anonymous
 simulation outcomes cannot promote because breadth cannot be proven. A witness
 whose three-outcome cap is already spent admits nothing new, but its return
 still re-evaluates the frozen cohort: once dwell has elapsed it promotes from
 the admitted evidence and the vote is counted `user_cap`, not `applied`. Held
 windows reset at 120/240 admitted outcomes. Re-entry remains 5 → 25 → 100 with
-shared leases, generation fences and a 300-second initial cooldown doubling to
-four hours.
+shared leases and generation fences. A full clean recovery clears the failure
+history. The first full-traffic bench keeps its existing 300-second initial
+cooldown and four-hour ceiling; guarded recovery re-benches have a six-hour ceiling.
+They advance two cooldown exponents per rejection to keep the chronic-provider
+daily disruption budget despite the larger minimum sample. A clean ramp to 100
+resets this history; the first recovery after a single false bench is unchanged.
 Expensive benches receive no primary probes when a cheaper target can serve.
 
 Reproduce the v6 calibration from `backend/`:

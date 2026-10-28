@@ -1,10 +1,12 @@
 """Backend-only spend policy RPC. GPU images must not import Redis/provider code."""
 
+from utils.observability.stt_cap_dispatch import DispatchPath, DispatchReason, record_decision
+
 import math
 import time
 
-from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
-from utils.stt_cap_dispatch import sync_allowed
+from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
+from utils.stt_cap_dispatch import sync_admission
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from utils.batch_pipeline.scheduler import owns_lease
 from utils.fair_use import get_hard_restriction_status, is_daily_audio_ceiling_exceeded
@@ -22,9 +24,16 @@ def admitted_as_byok(job: object) -> bool:
     return isinstance(policy, dict) and policy.get('provider_reason') == 'byok'
 
 
+def batch_admission(job: dict, seconds: float, provider: str, *, path: DispatchPath) -> tuple[bool, str]:
+    """Spend gate with its bounded DispatchReason surfaced for the durable per-unit record."""
+    if admitted_as_byok(job):
+        return record_decision(path, True, DispatchReason.BYOK), DispatchReason.BYOK.value
+    return sync_admission(job['owner_id'], seconds, provider, lane='batch', path=path)
+
+
 def authorize(store, leases: list[dict], *, now: float | None = None) -> dict:
     current = time.time() if now is None else now
-    allowed, retries = [], {}
+    allowed, retries, held_reason = [], {}, {}
     for lease in leases:
         segment, token = lease['segment_id'], lease['token']
         try:
@@ -47,13 +56,20 @@ def authorize(store, leases: list[dict], *, now: float | None = None) -> dict:
                 retries[segment] = 30
                 continue
             job, binding, intake = snapshot
-            if (
-                cap_dispatch_enabled(job['owner_id'], 'batch')
-                and not admitted_as_byok(job)
-                and not sync_allowed(job['owner_id'], float(job.get('duration_seconds', 0)), 'parakeet', lane='batch')
-            ):
-                retries[segment] = 60
-                continue
+            # Latest admission decision, not a sticky last denial: the same
+            # transaction that seals (or defers) the unit records {reason,
+            # outcome, at} so an outside reader can tell an exhausted-owner
+            # hold from a wedge without inventing an age TTL.
+            allow_reason = 'scope_disabled'
+            if cap_dispatch_enabled(job['owner_id'], 'batch'):
+                permitted, reason = batch_admission(
+                    job, float(job.get('duration_seconds', 0)), 'parakeet', path=DispatchPath.BATCH_GPU
+                )
+                if not permitted:
+                    retries[segment] = 60
+                    held_reason[segment] = reason
+                    continue
+                allow_reason = reason
             # The recorded sync lane picks the spend policy, not the GPU
             # priority: fresh-lane catch-up leases at RECENT after fresh
             # uploads but keeps the fresh-audio fair-use checks.
@@ -67,9 +83,11 @@ def authorize(store, leases: list[dict], *, now: float | None = None) -> dict:
                 restricted, retry_after = get_hard_restriction_status(job['owner_id'])
                 if restricted:
                     retries[segment] = max(1, min(86400, retry_after or 3600))
+                    held_reason[segment] = 'fair_use_restricted'
                     continue
                 if is_daily_audio_ceiling_exceeded(job['owner_id']):
                     retries[segment] = retry_after_next_utc_day()
+                    held_reason[segment] = 'daily_audio_ceiling'
                     continue
             else:
                 # Speech is unknown before GPU VAD. Reserve an upper bound
@@ -82,6 +100,7 @@ def authorize(store, leases: list[dict], *, now: float | None = None) -> dict:
                 )
                 if not reservation.allowed:
                     retries[segment] = max(1, min(86400, reservation.retry_after or 3600))
+                    held_reason[segment] = 'backfill_reservation'
                     continue
 
             def seal(tx):
@@ -89,6 +108,8 @@ def authorize(store, leases: list[dict], *, now: float | None = None) -> dict:
                 if not owns_lease(latest, token, time.time() if now is None else current):
                     return False
                 latest['compute_admission_token'] = token
+                latest['compute_decision'] = {'reason': allow_reason, 'outcome': 'allowed', 'at': current}
+                latest.pop('last_policy_hold', None)  # an allow ends the parked hold
                 tx.put('jobs', segment, latest)
                 return True
 
@@ -98,7 +119,10 @@ def authorize(store, leases: list[dict], *, now: float | None = None) -> dict:
                 retries[segment] = 30
         except BatchPrivacyBlocked:
             retries[segment] = 30
+            held_reason[segment] = 'privacy_blocked'
         except Exception:
-            # Policy backend failure is never permission to spend GPU capacity.
+            # Policy backend failure is never permission to spend GPU capacity,
+            # and never a durable decision either: an unevaluated unit stays
+            # unclassified for outside readers (BLIND), not falsely held/allowed.
             retries[segment] = 30
-    return {'allowed': allowed, 'retry_after': retries}
+    return {'allowed': allowed, 'retry_after': retries, 'held_reason': held_reason}

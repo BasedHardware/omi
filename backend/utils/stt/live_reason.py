@@ -34,7 +34,11 @@ def normalize_live_stt_reason(*reasons: str | None, default: str = 'connection_l
     Callers pass socket-owned causes before observer symptoms. An unknown
     serving-socket death is connection_lost (a provider failure); explicit
     session/account causes retain their own censored token. Text/no-text use
-    their own outcome token. Unknown connect configuration uses 'other'.
+    their own outcome token. ``other`` is the fallback metric's bucket, not a
+    latchable cause: it may be passed through when a socket already holds it,
+    but a miss never degrades to it — that is how untyped Soniox leg deaths
+    became the largest ``reason=other`` family after the live-tail catch-up
+    train (P59, 2026-10-22).
     """
     for reason in reasons:
         if isinstance(reason, str) and reason in LIVE_STT_REASONS:
@@ -45,4 +49,7 @@ def normalize_live_stt_reason(*reasons: str | None, default: str = 'connection_l
         # Behaviour-neutral: the label stays `default`; the miss is counted
         # under family=live_stt (omi_reason_unknown_total and omi_reason_total).
         reason_label(ReasonFamily.LIVE_STT, next(reason for reason in reasons if reason is not None), LiveSttReason)
+    if default == 'other':
+        # The bucket token stays reserved for record_fallback's own bounding.
+        return 'connection_lost'
     return default if default in LIVE_STT_REASONS else 'connection_lost'

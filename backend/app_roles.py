@@ -59,6 +59,8 @@ from routers import (
     enrichment,
     apps,
     payment,
+    retention_offer,
+    redeem_code,
     storefront,
     integration,
     conversations,
@@ -125,7 +127,7 @@ from routers import (
     conversation_finalization,
     pending_work,
     episodes,
-    commitment_followup,
+    boundary_evidence,
     public_shared_conversation_chat,
     screen_frames,
     csat,
@@ -216,8 +218,8 @@ ROUTER_MOUNTS: tuple[Mount, ...] = (
     Mount(desktop_prompts),
     Mount(conversation_finalization, roles=EVERY),  # Cloud Tasks; listen enqueues
     Mount(pending_work),
+    Mount(boundary_evidence),
     Mount(episodes),  # main #22877 via sync 15 (same position as main.py)
-    Mount(commitment_followup),
     Mount(trends),
     Mount(other, roles=EVERY),  # health and readiness
     Mount(firmware),
@@ -233,6 +235,8 @@ ROUTER_MOUNTS: tuple[Mount, ...] = (
     Mount(oauth),
     Mount(auth),
     Mount(payment),
+    Mount(retention_offer),
+    Mount(redeem_code),
     Mount(storefront),
     Mount(api_key_management, attr='mcp_router'),
     Mount(mcp),

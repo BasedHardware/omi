@@ -320,6 +320,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
             _recordResultViewed(provider, identityEpoch);
           }),
         );
+      } else if (provider.conversation.transcriptCarried) {
+        // The lines on screen were kept across a list refresh and may be stale: re-read quietly.
+        unawaited(provider.refreshConversation());
       } else if (provider.conversation.appResults.isEmpty) {
         final conversationId = provider.conversation.id;
         if (conversationProvider.getConversationDateAndIndexById(conversationId) != null) {
@@ -422,11 +425,14 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
   }
 
   /// Backgrounding the app ends a speaker-labeling pass like Done: one summary update, landing on
-  /// this page if the reader comes back.
+  /// this page if the reader comes back. Coming back re-reads the conversation.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) {
       _detailProvider.confirmSpeakerLabelingSession(conversationId: widget.conversation.id);
+    } else if (state == AppLifecycleState.resumed) {
+      // The list refresh on resume does not carry the transcript; re-read what is on screen.
+      unawaited(_detailProvider.refreshConversation());
     }
   }
 

@@ -1,8 +1,10 @@
 """One owner session, two independent verifiers, one reversible effect boundary."""
 
 from utils.generated_compute import generated_compute_allowed, generated_compute_configured
+from config.vertex_reservations import PROBE_SECONDS, PROBE_TIMEOUT_SECONDS
 
 import asyncio
+import time
 import logging
 from datetime import datetime, timezone
 from collections import Counter
@@ -21,9 +23,10 @@ from config.dream_agent import (
     on_demand_enabled,
     PASS_TIMEOUT_SECONDS,
     DRAIN_TIMEOUT_SECONDS,
+    FINISH_MARGIN_SECONDS,
 )
 from database import dream_scheduler, dream_store, dream_turns, legal_holds, review_store
-from config.rollout_cohorts import warm_rollout_cohorts
+from config.rollout_cohorts import warm_rollout_cohorts, RolloutCohortUnavailable
 from database.dream_dirty import dream_writing
 from database.legal_holds import DestructiveOperationInProgress, LegalHoldActive
 from models.agent_tools import HarnessQuestion
@@ -31,6 +34,7 @@ from models.agent_edit import HarnessEdit
 from utils.agent_capabilities import tools as dream_tools
 from utils.agent_capabilities import verifiers
 from utils import dream_review_policy, dream_capacity, dream_harness_transport, dream_seed, dream_verify
+from utils import dream_required_intake
 from utils.dream_cost import (
     conservative_attempt_micro,
     minute_burndown_tokens,
@@ -44,6 +48,8 @@ from utils.dream_metrics import record_pass, error_code, record_reclaimed
 from database.dream_effect_fence import ACTIVE_RUN
 from utils.executors import db_executor, run_blocking
 from utils.model_text import ContextWindow
+from utils.memory.required_intake import retry_sweep
+from utils.memory.canonical_consolidation import complete_receipted_required_intake
 
 TAIL_BUDGET_NOTICE_THRESHOLD = 0.20
 logger = logging.getLogger(__name__)
@@ -185,7 +191,14 @@ async def run_session(
     }
     session = Session(
         uid,
-        OwnerSearch(uid),
+        OwnerSearch(
+            uid,
+            required_candidates={
+                ref: row[dream_required_intake.MARKER]
+                for ref, row in records.items()
+                if dream_required_intake.MARKER in row
+            },
+        ),
         limits,
         seed,
         authority='dream',
@@ -195,6 +208,7 @@ async def run_session(
         # Dream reviews the owner's day: temporal search defaults to the trailing 24 hours.
         context_window=ContextWindow.trailing_day(label='dream day'),
     )
+    session.counters['search_embedding_token_upper_bound'] += seed.get('required_intake_embedding_tokens', 0)
     stage = 'session'
 
     async def active():
@@ -204,6 +218,8 @@ async def run_session(
             raise ValueError('dream_disabled')
         if lease is not None:
             await run_blocking(db_executor, dream_store.assert_lease, uid, lease['run_id'])
+        if seed.get('required_intake_candidates'):
+            await run_blocking(db_executor, dream_required_intake.assert_owner_active, uid)
         stage = previous
 
     session.check_active = active
@@ -586,7 +602,10 @@ async def run_session(
                     # The default two-verifier path records unverified and does not
                     # enqueue it. A non-default chain's unverified result uses the
                     # same offer path as a split. Disagreement is never offered.
-                    if decision == 'disagree' or (decision == 'unverified' and default_policy):
+                    if item.kind == 'resolve_required_memory' and (decision != 'agree' or not auto_allowed):
+                        # A split never spills hidden submissions into Review.
+                        report['outcomes'].append({'key': item.key, 'kind': item.kind, 'status': 'intake_deferred'})
+                    elif decision == 'disagree' or (decision == 'unverified' and default_policy):
                         report['outcomes'].append(
                             {'key': item.key, 'kind': item.kind, 'status': 'verifier_' + decision}
                         )
@@ -712,7 +731,25 @@ async def run_pass(
     await warm_rollout_cohorts(uid)
     # Reject stale queue entries before capacity waits or owner-data loading.
     # Synthetic canaries have separate, authoritative admission in acquire().
-    if not canary and not may_be_eligible(uid):
+    try:
+        owner_eligible = canary or may_be_eligible(uid)
+    except RolloutCohortUnavailable:
+        # Keep the due row: an unreadable cohort is retryable, not a revocation.
+        from utils.observability.fallback import record_fallback
+
+        logger.error('event=dream_admission outcome=waiting reason=eligibility_unavailable')
+        record_fallback(
+            component='agent_tools',
+            from_mode='dream_admission',
+            to_mode='retry_eligibility',
+            reason='unavailable',
+            outcome='degraded',
+            log=logger,
+        )
+        report = {'status': 'waiting', 'reason': 'eligibility_unavailable'}
+        record_pass(report)
+        return report
+    if not owner_eligible:
         report = {'status': 'not_admitted', 'reason': 'ineligible'}
         record_pass(report)
         if not dry_run:
@@ -754,6 +791,13 @@ async def run_pass(
                 report = {'status': 'not_admitted'}
                 record_pass(report)
                 return report
+        if not dry_run and not canary:
+            assert lease is not None
+            intake_scope = ACTIVE_RUN.set((uid, lease['run_id']))
+            try:
+                seed, records = await dream_required_intake.prepare(uid, seed, records, limits, OwnerSearch(uid))
+            finally:
+                ACTIVE_RUN.reset(intake_scope)
         if limits.bucket == 'empty' and not seed.get('targets'):
             report: dict[str, Any] = {
                 'status': 'not_admitted',
@@ -831,22 +875,36 @@ async def run_pass(
             await dream_capacity.release(slot)
 
 
-RESERVED_RECHECKS = 4
 RESERVED_RECHECK_SECONDS = 30
+# A previous replica can leave a full discovery lease after an inconclusive
+# probe or shutdown. Wait for its expiry, one bounded probe, and a final read.
+RESERVED_RECHECKS = (PROBE_SECONDS + PROBE_TIMEOUT_SECONDS) // RESERVED_RECHECK_SECONDS + 1
+# A pass starting late in the drain gets only the drain's remaining budget, so
+# it ends through its own deadline (and finish) instead of being cancelled by the
+# drain's outer timeout; below this floor the owner waits for the next sweep.
+MIN_PASS_SECONDS = 300
 
 
 async def drain(*, limit=5000):
-    if not enabled() or limit <= 0:
+    if limit <= 0:
         return []
     results = []
+    drain_deadline = time.monotonic() + DRAIN_TIMEOUT_SECONDS
     try:
         async with asyncio.timeout(DRAIN_TIMEOUT_SECONDS):
+            # Required intake has its own Flex route and no Dream capacity or
+            # paid-cohort dependency. Discover owed owners before model waits.
+            await retry_sweep(limit=min(limit, 4990), complete_owner=complete_receipted_required_intake)
+            if not enabled():
+                return results
             reserved_open = await dream_capacity.available_model(mode='reserved') is not None
             if not reserved_open and not on_demand_enabled():
                 # The first check can only start the probe that refreshes stale evidence; recheck
                 # before giving up the hourly sweep.
                 for _ in range(RESERVED_RECHECKS):
                     await asyncio.sleep(RESERVED_RECHECK_SECONDS)
+                    if not enabled():
+                        return results
                     if await dream_capacity.available_model(mode='reserved') is not None:
                         reserved_open = True
                         break
@@ -860,8 +918,13 @@ async def drain(*, limit=5000):
             async def worker():
                 for uid in owners:
                     while enabled():
+                        remaining = drain_deadline - time.monotonic() - FINISH_MARGIN_SECONDS
+                        if remaining < MIN_PASS_SECONDS:
+                            # Too little drain budget left for a useful pass; the owner stays
+                            # due and runs with a full window next sweep.
+                            return
                         try:
-                            report = await run_pass(uid)
+                            report = await run_pass(uid, timeout_seconds=int(min(PASS_TIMEOUT_SECONDS, remaining)))
                         except Exception as exc:
                             _log_pass_failure(exc, stage='pass')
                             report = {

@@ -1094,7 +1094,12 @@ def test_connected_seconds_counts_open_wall_time_once(monkeypatch):
     from utils.observability import demand_cohort
 
     def value():
-        return REGISTRY.get_sample_value('omi_soniox_connected_seconds_total', {'demand_cohort': 'ineligible'}) or 0.0
+        return (
+            REGISTRY.get_sample_value(
+                'omi_soniox_connected_seconds_total', {'demand_cohort': 'ineligible', 'origin': 'initial'}
+            )
+            or 0.0
+        )
 
     clock = [1000.0]
     monkeypatch.setattr(demand_cohort, 'monotonic', lambda: clock[0])
@@ -1126,7 +1131,13 @@ def test_connected_seconds_stop_while_idle_closed(monkeypatch):
     from utils.observability import demand_cohort
 
     def value():
-        return REGISTRY.get_sample_value('omi_soniox_connected_seconds_total', {'demand_cohort': 'ineligible'}) or 0.0
+        return sum(
+            REGISTRY.get_sample_value(
+                'omi_soniox_connected_seconds_total', {'demand_cohort': 'ineligible', 'origin': origin}
+            )
+            or 0.0
+            for origin in demand_cohort.TRANSPORT_ORIGINS
+        )
 
     async def run():
         socket, idle, _, peers, _, tick = build(monkeypatch, seconds=20)
@@ -1146,5 +1157,32 @@ def test_connected_seconds_stop_while_idle_closed(monkeypatch):
         await idle.drain_and_close()
         assert value() == pytest.approx(before + 26)
         assert len(peers) == 2
+
+    asyncio.run(run())
+
+
+def test_failed_reopen_latches_a_typed_death_reason(monkeypatch):
+    """P59: an unclassifiable reopen failure must never latch the `other`
+    metric bucket — this reason rides the leg into every later failover hop
+    (2026-10-22: from=soniox to=soniox reason=other became the largest
+    Soniox death family on the live-tail catch-up train)."""
+
+    async def run():
+        from utils.stt.live_reason import LIVE_STT_REASONS
+
+        socket, idle, _, peers, _, tick = build(monkeypatch, fail=True)
+        silence = b'\x00\x00' * 1600
+        socket.send(silence, wall_time=100)
+        tick[0] += 3
+        socket.send(silence, wall_time=103)
+        await idle._close_task
+        assert socket.send(b'\x01\x00' * 1600, wall_time=104)
+        assert not await socket.complete_send()
+
+        assert idle.is_connection_dead
+        assert idle.typed_death_reason in LIVE_STT_REASONS
+        assert idle.typed_death_reason != 'other'
+        assert idle.idle_reopen_failed
+        await idle.drain_and_close()
 
     asyncio.run(run())

@@ -23,6 +23,7 @@ from google.api_core import exceptions as google_exceptions
 
 import database.conversations as conversations_db
 from database import conversation_tombstones
+from database.conversation_merge_policy import source_has_merge_receipt
 from database._client import db as firestore_db
 from database.vector_db import delete_action_item_vectors_batch, delete_vector
 from models.audio_file import AudioFile
@@ -143,6 +144,7 @@ def validate_merge_compatibility(
 
     Rejection criteria (hard failures):
     - Less than 2 conversations
+    - Duplicate conversations
     - Any conversation is a soft-deleted tombstone
     - Any conversation is locked
     - Any conversation is not completed (processing/merging/in_progress)
@@ -152,6 +154,12 @@ def validate_merge_compatibility(
     """
     if len(conversations) < 2:
         return False, "At least 2 conversations required to merge", None
+
+    conv_ids = [conv.get("id") for conv in conversations if conv.get("id")]
+    if len(conv_ids) != len(set(conv_ids)):
+        return False, "Cannot merge duplicate conversations.", None
+    if len(set(conv_ids)) < 2:
+        return False, "At least 2 distinct conversations required to merge.", None
 
     # Check none are soft-deleted. A soft-deleted tombstone is invisible to the
     # user, so merging it resurrects deleted content into a new visible
@@ -163,6 +171,9 @@ def validate_merge_compatibility(
     for conv in conversations:
         if conv.get("deleted"):
             return False, "Cannot merge a deleted conversation.", None
+
+    if any(source_has_merge_receipt(conv) for conv in conversations):
+        return False, "A conversation is already incorporated into a merged result.", None
 
     # Check none are locked
     for conv in conversations:
@@ -204,7 +215,11 @@ def perform_merge_async(
     uid: str,
     conversation_ids: List[str],
     reprocess: bool = True,
-) -> None:
+    *,
+    merge_job_id: str | None = None,
+    merge_lease_epoch: int = 0,
+    merge_target_id: str | None = None,
+) -> bool | None:
     """
     Background task to perform conversation merge.
 
@@ -223,11 +238,16 @@ def perform_merge_async(
         reprocess: Whether to process merged conversation (generate summary, etc.)
     """
     from utils.conversations.process_conversation import process_conversation
-    from utils.notifications import send_merge_completed_message
+    from utils.notification_dispatch import dispatch_merge_completed
+
+    def checkpoint(phase: str | None = None) -> None:
+        if merge_job_id is not None:
+            lifecycle_service.merge_jobs.checkpoint(merge_job_id, merge_lease_epoch, phase)
 
     new_conversation_id: Optional[str] = None
     failure_phase = MergeFailurePhase.BEFORE_SOURCE_DELETION
     try:
+        checkpoint()
         # 1. Fetch all source conversations
         conversations = []
         for conv_id in conversation_ids:
@@ -237,7 +257,13 @@ def perform_merge_async(
 
         if len(conversations) < 2:
             logger.error(f"Merge failed: Not enough conversations found for uid={uid}")
-            _handle_merge_failure(uid, conversation_ids)
+            checkpoint() if merge_job_id else _handle_merge_failure(uid, conversation_ids)
+            return
+
+        unique_conv_ids = {conv.get("id") for conv in conversations if conv.get("id")}
+        if len(unique_conv_ids) < 2 or len(conversations) != len(unique_conv_ids):
+            logger.error(f"Merge failed: Duplicate or insufficient unique conversations found for uid={uid}")
+            checkpoint() if merge_job_id else _handle_merge_failure(uid, conversation_ids)
             return
 
         # A source can be soft-deleted between admission (validate_merge_compatibility
@@ -246,7 +272,12 @@ def perform_merge_async(
         # transcript/photos/audio into a new visible conversation. Abort rather than merge.
         if any(conv.get("deleted") for conv in conversations):
             logger.error(f"Merge aborted: a source was deleted after admission uid={uid}")
-            _handle_merge_failure(uid, conversation_ids)
+            checkpoint() if merge_job_id else _handle_merge_failure(uid, conversation_ids)
+            return
+
+        if any(source_has_merge_receipt(conv) for conv in conversations):
+            logger.error(f"Merge aborted: a source was already incorporated into another target uid={uid}")
+            checkpoint() if merge_job_id else _handle_merge_failure(uid, conversation_ids)
             return
 
         # Normalise timestamp fields once so the sort key, max() reducer,
@@ -266,8 +297,14 @@ def perform_merge_async(
         merged_photos = _collect_all_photos(uid, sorted_convs)
 
         # 3. Generate new conversation ID and copy audio chunks
-        new_conversation_id = str(uuid.uuid4())
-        merged_audio_files = _copy_audio_chunks_for_merge(uid, sorted_convs, new_conversation_id)
+        checkpoint('target_started')
+        new_conversation_id = merge_target_id or str(uuid.uuid4())
+        # skip_existing: merge retries and re-processing campaigns re-copy
+        # every chunk unconditionally otherwise, creating a superseded
+        # generation per object per run (the 10-16..19 CloneObject burst).
+        # The bridge copy skips a destination already holding the same bytes
+        # and preconditions concurrent writers on the destination generation.
+        merged_audio_files = _copy_audio_chunks_for_merge(uid, sorted_convs, new_conversation_id, skip_existing=True)
 
         # 4. Determine basic fields from source conversations
         # Use earliest conversation's dates. created_at fallback uses
@@ -344,6 +381,7 @@ def perform_merge_async(
         # 7. Save stub conversation to database. The modeled field's None
         # default is omitted, never stamped: persist is merge=True, so a
         # dumped None would become an explicit Firestore key.
+        checkpoint()
         lifecycle_service.create_processing_conversation(uid, omit_null_processing_state(new_conversation.model_dump()))
 
         # Build the conversation-level playback artifact for the merged conversation.
@@ -386,12 +424,14 @@ def perform_merge_async(
 
         from database.review_overlay_merge import transfer
 
+        checkpoint('source_retraction')
         if transfer(
             uid,
             [c['id'] for c in sorted_convs],
             new_conversation_id,
             placements=segment_placements,
             firestore_client=firestore_db,
+            **({'merge_job_id': merge_job_id, 'merge_lease_epoch': merge_lease_epoch} if merge_job_id else {}),
         ):
             # Undo receipts now name the merged record. Recovery must retain it.
             failure_phase = MergeFailurePhase.SOURCE_DELETION_STARTED
@@ -420,6 +460,7 @@ def perform_merge_async(
                 nonlocal failure_phase
                 failure_phase = MergeFailurePhase.SOURCE_DELETION_STARTED
 
+            checkpoint()
             _delete_conversation_and_related_data(
                 uid,
                 conv["id"],
@@ -429,13 +470,20 @@ def perform_merge_async(
             )
 
         # 10. Send FCM notification
-        send_merge_completed_message(uid, new_conversation_id, conversation_ids)
+        dispatch_merge_completed(uid, new_conversation_id, conversation_ids)
 
         logger.info(
             f"Merge completed: uid={uid}, new_id={new_conversation_id}, merged={len(conversation_ids)} conversations"
         )
 
+        return True if merge_job_id else None
+
     except Exception as e:
+        if merge_job_id is not None:
+            # Recovery alone owns rollback of durable claims. A stale worker
+            # must never complete sources belonging to a newer lease/job.
+            logger.warning('event=conversation_merge outcome=recovery_pending exception_type=%s', type(e).__name__)
+            return False
         logger.error(f"Merge failed with exception: {e}")
         import traceback
 
@@ -1035,7 +1083,7 @@ def _delete_conversation_and_related_data(
         logger.error(f"Error deleting conversation {conversation_id}: {e}")
 
 
-def _cleanup_merged_target_after_failure(uid: str, merged_conversation_id: str) -> bool:
+def cleanup_failed_merge_target(uid: str, merged_conversation_id: str) -> bool:
     """Retract merged-target memories and remove its artifacts.
 
     Returns True when cleanup completed. Canonical retraction failure aborts
@@ -1102,7 +1150,7 @@ def _handle_merge_failure(
     )
     if merged_conversation_id:
         if failure_phase == MergeFailurePhase.BEFORE_SOURCE_DELETION:
-            _cleanup_merged_target_after_failure(uid, merged_conversation_id)
+            cleanup_failed_merge_target(uid, merged_conversation_id)
         else:
             logger.error(
                 "Preserving merged target after source deletion started",
@@ -1117,3 +1165,8 @@ def _handle_merge_failure(
             lifecycle_service.complete(uid, conv_id)
         except Exception as e:
             logger.error(f"Error resetting status for {conv_id}: {e}")
+
+
+def delete_merged_source(uid: str, conversation_id: str, target_id: str) -> None:
+    """Replay the existing idempotent derived/source retraction for a sealed merge."""
+    _delete_conversation_and_related_data(uid, conversation_id, merged_into=target_id)

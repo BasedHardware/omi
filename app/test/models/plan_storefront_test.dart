@@ -13,7 +13,7 @@ Map<String, dynamic> fixture([String name = 'plus_monthly_yearly_toggle']) =>
 void main() {
   test('schema version 2 parses deck fields and rejects every other version', () {
     final data = PlanStorefront.fromJson(fixture());
-    expect(data.catalogRevision, 10);
+    expect(data.catalogRevision, 12);
     expect(data.header, 'Choose your plan');
     expect(data.current!.line, r"You're on Plus · $19.99/mo · renews Nov 1");
     expect(data.current!.legacyNote, isNull);
@@ -172,7 +172,7 @@ void main() {
     expect(plus.shouldGate('screen_context', livePlan: PlanType.architect), isFalse);
   });
 
-  test('non-ladder and unknown plans are not gated', () {
+  test('Omi Pro, legacy Neo and unknown plans are not gated', () {
     for (final planId in ['unlimited', 'unlimited_v2', 'future_desktop']) {
       final json = fixture();
       json['current']['plan_id'] = planId;
@@ -260,6 +260,9 @@ void main() {
     final architectMonth = priced('architect_month', 'month');
     final architect = tier('architect', [architectMonth, priced('architect_year', 'year')]);
     final basic = tier('basic', [priced('basic_month', 'month')]);
+    final omiProMonth = priced('omi_pro_month', 'month');
+    final omiProYear = priced('omi_pro_year', 'year');
+    final omiPro = tier('unlimited_v2', [omiProMonth, omiProYear]);
 
     final cases = <(
       String,
@@ -271,6 +274,37 @@ void main() {
       bool,
       bool
     )>[
+      for (final plan in [PlanType.basic, PlanType.plus, PlanType.operator, PlanType.architect, PlanType.unlimited])
+        (
+          '${plan.wireName} may move to Omi Pro',
+          StorefrontCheckoutDecision.checkout,
+          current(plan.wireName, priceId: '${plan.wireName}_month'),
+          plan,
+          omiPro,
+          omiProMonth,
+          false,
+          false
+        ),
+      (
+        'Omi Pro monthly to annual',
+        StorefrontCheckoutDecision.checkout,
+        current('unlimited_v2', priceId: omiProMonth.id),
+        PlanType.unlimitedV2,
+        omiPro,
+        omiProYear,
+        false,
+        false
+      ),
+      (
+        'Omi Pro never moves down to a retired tier',
+        StorefrontCheckoutDecision.refuse,
+        current('unlimited_v2', priceId: omiProMonth.id),
+        PlanType.unlimitedV2,
+        architect,
+        architectMonth,
+        false,
+        false
+      ),
       (
         'plus monthly to annual',
         StorefrontCheckoutDecision.checkout,
@@ -692,7 +726,7 @@ void main() {
         .whereType<File>()
         .where((file) => file.path.endsWith('.json'))
         .map((file) => file.uri.pathSegments.last.replaceFirst('.json', ''));
-    expect(names, hasLength(16));
+    expect(names, hasLength(17));
     for (final name in names) {
       final data = PlanStorefront.fromJson(fixture(name));
       expect(data.tiers.where((tier) => tier.isCurrent), isNotEmpty, reason: name);

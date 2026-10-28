@@ -698,9 +698,9 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/a6/53/d78dc063216e62f
 
 [[packages]]
 name = "pyjwt"
-version = "2.12.0"
-sdist = { url = "https://files.pythonhosted.org/packages/a8/10/e8192be5f38f3e8e7e046716de4cae33d56fd5ae08927a823bb916be36c1/pyjwt-2.12.0.tar.gz", upload-time = 2026-03-12T17:15:30Z, size = 102511, hashes = { sha256 = "2f62390b667cd8257de560b850bb5a883102a388829274147f1d724453f8fb02" } }
-wheels = [{ url = "https://files.pythonhosted.org/packages/15/70/70f895f404d363d291dcf62c12c85fdd47619ad9674ac0f53364d035925a/pyjwt-2.12.0-py3-none-any.whl", upload-time = 2026-03-12T17:15:29Z, size = 29700, hashes = { sha256 = "9bb459d1bdd0387967d287f5656bf7ec2b9a26645d1961628cda1764e087fd6e" } }]
+version = "2.15.1"
+sdist = { url = "https://files.pythonhosted.org/packages/43/ea/5194e52748b0da83d71e082d75496eaec6e58f419f5e184786ded517e6a9/pyjwt-2.15.1.tar.gz", upload-time = 2026-09-28T18:40:42.598678Z, size = 121252, hashes = { sha256 = "4f259e80cdfb6b3fc18a7de51fd1ef9ec79652f25019bae68975ca2468a34df8" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/50/ca/44de4e75f8aadc457f0634be3b542815078ded46dca30efb960edeecad6e/pyjwt-2.15.1-py3-none-any.whl", upload-time = 2026-09-28T18:40:41.429003Z, size = 33860, hashes = { sha256 = "42d59d631f7768a1028a64c7ff581a9bf7519804daf91fc5b6c56e30eec5e193" } }]
 
 [[packages]]
 name = "pyparsing"

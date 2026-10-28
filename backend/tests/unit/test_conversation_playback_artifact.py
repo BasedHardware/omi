@@ -101,13 +101,14 @@ def test_span_math_collapses_inter_part_gap(monkeypatch):
     assert round(spans[-1]['wall_offset'] + spans[-1]['len'], 3) == 215.0
 
 
-def test_parts_sorted_by_first_chunk_timestamp(monkeypatch):
+@pytest.mark.parametrize('equal_start', [False, True])
+def test_parts_sorted_by_first_chunk_timestamp(monkeypatch, equal_start):
     monkeypatch.setattr(playback, 'AudioSegment', _FakeAudioSegment)
     monkeypatch.setattr(playback, 'download_audio_chunks_and_merge', _fake_download)
 
     # Input deliberately unordered; spans must come out in wall order.
     audio_files = [
-        {'id': 'B', 'chunk_timestamps': [1200.0]},
+        {'id': 'B', 'chunk_timestamps': [1000.0 if equal_start else 1200.0]},
         {'id': 'A', 'chunk_timestamps': [1000.0]},
     ]
     _, spans = playback.build_conversation_playback_artifact('u', 'c', audio_files, 990.0)
@@ -251,6 +252,87 @@ def test_finalize_audio_file_group_handles_explicit_none_size():
 
 
 # ---------------------------------------------------------------------------
+# capture-skew playback timing: persisted normalized starts drive wall offsets
+# ---------------------------------------------------------------------------
+
+
+def _chunk(timestamp, playback_start=..., samples=160000):
+    span = {'start': timestamp, 'samples': samples, 'sample_rate': 16000}
+    if playback_start is not ...:
+        span['playback_start'] = playback_start
+    return {'timestamp': timestamp, 'path': f'chunks/u/c/{timestamp}.opus', 'size': 3200, 'span': span}
+
+
+def test_finalize_audio_file_group_sets_playback_start_when_every_chunk_carries_it():
+    audio_file = conversations_db._finalize_audio_file_group(
+        'uid',
+        'conversation',
+        [_chunk(1171.0, playback_start=1000.0), _chunk(1201.0, playback_start=1030.0)],
+        [],
+    )
+
+    assert audio_file.playback_start == 1000.0
+    assert audio_file.chunk_timestamps == [1171.0, 1201.0]  # raw keys unchanged
+
+
+def test_finalize_audio_file_group_drops_playback_start_when_a_chunk_lacks_it():
+    # One legacy chunk in the group leaves the part's wall basis undefined —
+    # mixing clocks would misplace every chunk after it.
+    audio_file = conversations_db._finalize_audio_file_group(
+        'uid',
+        'conversation',
+        [_chunk(1171.0, playback_start=1000.0), _chunk(1201.0)],
+        [],
+    )
+
+    assert audio_file.playback_start is None
+    assert audio_file.chunk_spans is not None
+
+
+def test_finalize_audio_file_group_without_spans_has_no_playback_start():
+    audio_file = conversations_db._finalize_audio_file_group(
+        'uid',
+        'conversation',
+        [{'timestamp': 1000.0, 'size': 3200}, {'timestamp': 1005.0, 'size': 3200}],
+        [],
+    )
+
+    assert audio_file.playback_start is None
+
+
+def test_skewed_part_wall_offset_uses_persisted_playback_start(monkeypatch):
+    """A +171 s skewed private-cloud chunk yields wall_offset ~0, not ~171.
+
+    Chunk keys stay on the raw capture clock; the part's persisted normalized
+    playback start is what the conversation's server-clock started_at compares
+    against. A part without the persisted basis keeps the legacy raw math.
+    """
+    pcm = {1171.0: b'\x01' * 320_000, 1300.0: b'\x02' * 320_000}
+
+    def fake_download(uid, conversation_id, timestamps, fill_gaps=True, sample_rate=16000):
+        first = sorted(timestamps)[0]
+        if first not in pcm:
+            raise FileNotFoundError(f'no chunks at {first}')
+        return pcm[first]
+
+    monkeypatch.setattr(playback, 'AudioSegment', _FakeAudioSegment)
+    monkeypatch.setattr(playback, 'download_audio_chunks_and_merge', fake_download)
+
+    audio_files = [
+        # Skewed capture: raw keys at +171 s, normalized start persisted.
+        {'id': 'SKEWED', 'chunk_timestamps': [1171.0], 'playback_start': 1000.0},
+        # Legacy capture on the same conversation: no persisted basis.
+        {'id': 'LEGACY', 'chunk_timestamps': [1300.0]},
+    ]
+    _mp3, spans = playback.build_conversation_playback_artifact('u', 'c', audio_files, 1000.0)
+
+    assert spans == [
+        {'file_id': 'SKEWED', 'wall_offset': 0.0, 'artifact_offset': 0.0, 'len': 10.0},
+        {'file_id': 'LEGACY', 'wall_offset': 300.0, 'artifact_offset': 10.0, 'len': 10.0},
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Handler v2 source-structure assertions (routers/sync.py imports the world)
 # ---------------------------------------------------------------------------
 
@@ -278,7 +360,7 @@ def test_conversation_merge_handler_structure():
 
     # Upload precedes the doc stamp so a stamped fingerprint implies a servable blob.
     body = source.split('async def _run_conversation_merge_job', 1)[1]
-    upload_pos = body.index('upload_conversation_playback_artifact')
+    upload_pos = body.index('playback_build.ensure_conversation_artifact')
     stamp_pos = body.index("'conversation_audio': {")
     assert upload_pos < stamp_pos
 

@@ -18,6 +18,7 @@ dependencies:
   connectivity_plus: ^6.0.3
   flutter_provider_utilities: ^1.0.6
   clock: ^1.1.1
+  characters: ^1.4.0
 
   # Localizations
   flutter_localizations:
@@ -153,6 +154,8 @@ dependency_overrides:
       path: opus_flutter_android
 
 dev_dependencies:
+  flutter_driver:
+    sdk: flutter
   flutter_launcher_icons: 0.13.1
   google_sign_in_ios: 5.7.5
   flutter_lints: ^4.0.0
@@ -212,34 +215,11 @@ flutter:
     - assets/models/silero_vad.onnx
     - assets/images/stars.png
     - assets/images/herologo.png
-    - assets/fonts/
     - assets/images/
     - assets/test/tts_progressive_probe.mp3
     - assets/integration_app_logos/
     - assets/competitor-logos/
     - shorebird.yaml
-  fonts:
-    - family: "SF Pro Display"
-      fonts:
-        - asset: assets/fonts/SFPRODISPLAYTHINITALIC.OTF
-          weight: 100
-          style: italic
-        - asset: assets/fonts/SFPRODISPLAYLIGHTITALIC.OTF
-          weight: 300
-          style: italic
-        - asset: assets/fonts/SFPRODISPLAYREGULAR.OTF
-        - asset: assets/fonts/SFPRODISPLAYHEAVYITALIC.OTF
-          style: italic
-        - asset: assets/fonts/SFPRODISPLAYMEDIUM.OTF
-          weight: 500
-        - asset: assets/fonts/SFPRODISPLAYSEMIBOLDITALIC.OTF
-          weight: 600
-          style: italic
-        - asset: assets/fonts/SFPRODISPLAYBOLD.OTF
-          weight: 700
-        - asset: assets/fonts/SFPRODISPLAYBLACKITALIC.OTF
-          weight: 900
-          style: italic
 
 flutter_gen:
   output: lib/gen/

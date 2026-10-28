@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from google.cloud import firestore
+from google.cloud.firestore_v1 import FieldFilter
 from google.api_core.exceptions import NotFound
 from prometheus_client import Counter
 
@@ -24,6 +25,7 @@ from config.firestore_read_levers import lever_enabled
 from config.sync_owner_concurrency import backlog_threshold, preparation_width
 from utils.sync import stage as sync_stage
 from utils.sync.backfill_order import newest_first
+from utils.sync.retry_hygiene import dispatch_cap
 
 logger = logging.getLogger(__name__)
 OWNER_REPAIRED = Counter('sync_backfill_owner_repaired', 'Missing backfill owners recreated')
@@ -75,7 +77,7 @@ def _pending_ref(client: Any, uid: str, job_id: str) -> Any:
 
 
 def _pending_for_uid(client: Any, uid: str) -> Any:
-    return client.collection(PENDING_COLLECTION).where('uid', '==', uid)
+    return client.collection(PENDING_COLLECTION).where(filter=FieldFilter('uid', '==', uid))
 
 
 def _data(snapshot: Any) -> dict[str, Any]:
@@ -283,7 +285,7 @@ def due_pending(
     client = firestore_client or get_firestore_client()
     docs = (
         client.collection(PENDING_COLLECTION)
-        .where('reconcile_at', '<=', now or _now())
+        .where(filter=FieldFilter('reconcile_at', '<=', now or _now()))
         .limit(max(1, min(limit, 500)))
         .stream()
     )
@@ -602,7 +604,10 @@ def due_owners(
     _require_production()
     client = firestore_client or get_firestore_client()
     docs = (
-        client.collection(COLLECTION).where('reconcile_at', '<=', now or _now()).limit(max(1, min(limit, 500))).stream()
+        client.collection(COLLECTION)
+        .where(filter=FieldFilter('reconcile_at', '<=', now or _now()))
+        .limit(max(1, min(limit, 500)))
+        .stream()
     )
     return [{'uid': doc.id, **_data(doc)} for doc in docs]
 
@@ -753,7 +758,7 @@ def owner_release_due(
 def redrive_job(
     uid: str, job_id: str, epoch: int, *, firestore_client: Any = None, now: Optional[datetime] = None
 ) -> Optional[dict[str, Any]]:
-    """Retry dispatch without fencing queued work; fence expired running work."""
+    """Retry queued dispatch within its cap; fence expired running work."""
     _require_production()
     client = firestore_client or get_firestore_client()
     root = _root(client, uid)
@@ -769,15 +774,14 @@ def redrive_job(
         deadline = owner.get(deadline_field)
         if not isinstance(deadline, datetime) or deadline > current:
             return None
-        # Queue latency is not evidence that a worker lost ownership. Preserve
-        # its epoch until delivery, even across repeated uncertain enqueues.
+        cap = dispatch_cap(uid, owner) if dispatching else None
+        if cap is not None and cap.reached and cap.serving:
+            return None  # The reconciler owns the fenced terminal handoff.
+        # refactor: superseded by retry_hygiene when CAPTURE_COVERAGE_MODE=serve
+        # Preserve epochs across uncertain enqueues: queue latency is not lost ownership.
         next_epoch = epoch if dispatching else epoch + 1
-        # Separate task identity from execution fencing. A fresh named attempt
-        # also recovers tasks deleted/exhausted before begin_job (name tombstones).
         dispatch_attempt = int(owner.get('dispatch_attempt') or 0) + 1 if dispatching else 0
-        # A budget-deferred job redrives from this original payload, which
-        # carries no chain count; re-attach the count persisted at deferral
-        # time so the replacement chain stays bounded across lease expiry.
+        # Restore the persisted budget chain count across lease expiry.
         payload = dict(owner['active_payload'])
         deferrals = owner.get('active_budget_deferrals')
         if isinstance(deferrals, int) and not isinstance(deferrals, bool) and deferrals > 0:

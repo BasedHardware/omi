@@ -616,18 +616,25 @@ def install_fake_firestore_transactions(monkeypatch: Any, store: Any) -> _Transa
     cross-worker storage proof.
     """
 
-    from database import conversation_finalization_jobs, recording_sessions
+    from database import (
+        conversation_finalization_jobs,
+        conversation_quiet_checks,
+        quiet_check_retirement,
+        recording_sessions,
+    )
 
     transactional_store = _TransactionalFirestore(store)
 
-    monkeypatch.setattr(conversation_finalization_jobs, 'get_firestore_client', lambda: transactional_store)
-    monkeypatch.setattr(recording_sessions, 'get_firestore_client', lambda: transactional_store)
-    monkeypatch.setattr(
+    # Quiet custody and its post-admission retirement share the same staged
+    # transaction protocol as the durable finalization/recording reducers.
+    for module in (
         conversation_finalization_jobs,
-        'firestore',
-        _FirestoreTransactionFacade(conversation_finalization_jobs.firestore),
-    )
-    monkeypatch.setattr(recording_sessions, 'firestore', _FirestoreTransactionFacade(recording_sessions.firestore))
+        conversation_quiet_checks,
+        quiet_check_retirement,
+        recording_sessions,
+    ):
+        monkeypatch.setattr(module, 'get_firestore_client', lambda: transactional_store)
+        monkeypatch.setattr(module, 'firestore', _FirestoreTransactionFacade(module.firestore))
     return transactional_store
 
 

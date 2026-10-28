@@ -12,30 +12,37 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Optional, Sequence
 
-from langchain_openai import ChatOpenAI
+from prometheus_client import Counter as PromCounter
 
 from utils.byok import has_byok_keys
 from utils.conversations.notes_agent_tools import NotesToolbox, build_packet, owner_profile
 from utils.llm.meeting_notes_rich_prompts import NotesFrameImage
 from utils.llm.notes_agent import langchain_complete, record_decision, record_run, run_notes_agent
+from config.refactor_modes import serving_for
+from utils.llm.notes_packet import select_notes_packet
+from utils.llm.notes_identity import notes_identity
 from utils.llm.notes_agent_policy import plan_notes_agent
+from utils.llm.notes_lengths import length_guide
 from utils.llm.notes_agent_prompt import (
     PROMPT_VERSION,
     cache_key_material,
     conversation_seed,
-    length_guide,
     owner_message,
 )
 from utils.llm.prompt_cache import (
     EXPLICIT_CACHE_OPTIONS,
-    gpt56_explicit_cache_enabled,
     model_supports_explicit_cache,
     prefix_cache_key,
 )
+from utils.llm.gateway_client import GatewayContextChatOpenAI
 from utils.llm.shaped_notes_transport import isolated_notes_model
 from utils.observability.fallback import record_fallback
+from utils.observability.reasons import NotesAgentTransportReason, ReasonFamily, reason_label
 
 logger = logging.getLogger(__name__)
+TRANSPORT_SKIPS = PromCounter(
+    'omi_notes_agent_transport_skips_total', 'Agentic notes skipped by transport eligibility reason', ['reason']
+)
 
 # Speech rate used only to bound the screen/calendar window when the caller has no end time.
 _WORDS_PER_MINUTE = 150
@@ -57,8 +64,19 @@ def naming_leads(packet: Mapping[str, Any]) -> list[str]:
 
 
 def transport_ready(model: Any) -> bool:
-    """Tools ride only the managed OpenAI-compatible gateway lane; BYOK and direct routes stay one-shot."""
-    return isinstance(model, ChatOpenAI) and gpt56_explicit_cache_enabled() and not has_byok_keys()
+    """Only the gateway client has the tool transport this agent requires."""
+    return isinstance(model, GatewayContextChatOpenAI) and not has_byok_keys()
+
+
+def transport_skip_reason(uid: Optional[str], model: Any) -> Optional[str]:
+    """Low-cardinality reason this request cannot use the owner tools."""
+    if not uid:
+        return 'missing_owner'
+    if has_byok_keys():
+        return 'byok'
+    if not isinstance(model, GatewayContextChatOpenAI):
+        return 'unsupported_model'
+    return None
 
 
 def _window_end(started_at: datetime, finished_at: Any, words: int) -> datetime:
@@ -77,10 +95,11 @@ def agentic_notes_payload(
     capture_evidence: str,
     words: int,
     frames: Sequence[NotesFrameImage],
-    kwargs: Mapping[str, Any],
+    kwargs: dict[str, Any],
 ) -> Optional[dict[str, Any]]:
     """A validated ``submit_notes`` payload, or None to keep the one-shot path."""
     roster = kwargs.get('roster')
+    transport_skip = transport_skip_reason(uid, model)
     decision = plan_notes_agent(
         uid=uid,
         conversation_id=prefix.conversation_id,
@@ -88,9 +107,15 @@ def agentic_notes_payload(
         has_calendar=roster is not None,
         has_call_screen=bool(frames) or bool(kwargs.get('desktop_meeting_capture')),
         capture_sources=len(kwargs.get('capture_sources') or ()) or 1,
-        transport_ready=bool(uid) and transport_ready(model),
+        transport_ready=transport_skip is None,
     )
     record_decision(decision.reason)
+    if decision.reason == 'transport':
+        TRANSPORT_SKIPS.labels(
+            reason=reason_label(
+                ReasonFamily.NOTES_AGENT_TRANSPORT, transport_skip or 'unsupported_model', NotesAgentTransportReason
+            )
+        ).inc()
     if not decision.run or decision.budget is None or not uid:
         return None
     budget = decision.budget
@@ -126,6 +151,11 @@ def agentic_notes_payload(
             frames=frames,
             capture_sources=tuple(kwargs.get('capture_sources') or ()),
         )
+        packet = select_notes_packet(
+            packet, prefix=prefix, uid=uid, capture_evidence=capture_evidence, words=words, inputs=kwargs
+        )
+        identity = notes_identity(prefix, kwargs, packet)
+        kwargs['notes_identity'] = identity
         seed = conversation_seed(packet, capture_evidence, explicit_cache=explicit_cache)
         toolbox = NotesToolbox(
             uid=uid,
@@ -134,6 +164,7 @@ def agentic_notes_payload(
             finished_at=finished_at,
             frames=tuple(frames),
             seen_conversations=set(seen),
+            identity=identity,
         )
         # Per-user routing key over the stable bytes only; the gateway scopes it to the owner again.
         cache_key = (
@@ -148,6 +179,7 @@ def agentic_notes_payload(
                     cache_key=cache_key,
                 )
                 return await run_notes_agent(
+                    uid=uid,
                     owner=owner,
                     seed=seed,
                     complete=complete,
@@ -156,7 +188,10 @@ def agentic_notes_payload(
                     transcript_words=words,
                     open_tasks=open_tasks,
                     owner_names=owner_names,
-                    naming_leads=naming_leads(packet),
+                    naming_leads=() if serving_for('NOTES_PACKET_V2_MODE', uid) else naming_leads(packet),
+                    contract_v2=serving_for('NOTES_PACKET_V2_MODE', uid),
+                    transcript_segment_ids=prefix.transcript_segment_ids,
+                    identity=identity,
                 )
 
         result = asyncio.run(invoke())

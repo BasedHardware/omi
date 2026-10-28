@@ -348,6 +348,8 @@ def search_conversations(
     start_date: Optional[int] = None,
     end_date: Optional[int] = None,
     speaker_id: Optional[str] = None,
+    *,
+    include_locked: bool = False,
 ) -> Dict[str, Any]:
     # page/per_page arrive from SearchRequest where both are Optional and unbounded, so None, 0,
     # negative, or a huge value would otherwise TypeError here (len(...) >= per_page / page + 1) or trip
@@ -401,7 +403,7 @@ def search_conversations(
         for item in results.get('hits', []):
             doc: Dict[str, Any] = item.get('document', {})
             # Exclude locked conversations entirely to prevent inference leaks
-            if doc.get('is_locked', False):
+            if doc.get('is_locked', False) and not include_locked:
                 continue
             try:
                 # Convert all three into locals first, then assign, so a hit that fails partway is

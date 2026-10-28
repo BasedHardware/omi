@@ -35,6 +35,9 @@ def forbidden(*args, **kwargs):
 
 @pytest.fixture(autouse=True)
 def revision_from_row(monkeypatch):
+    # Pin the original re-home/owner policy; new language admission ordering
+    # is covered through the real router in test_batch_admission_language_router.
+    monkeypatch.setenv('BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED', 'false')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setattr(
         StrictFirestoreSnapshot,
@@ -545,3 +548,52 @@ def test_sweep_apply_refuses_a_read_only_tier(monkeypatch, capsys):
     monkeypatch.setenv('GCP_AGENT_TIER', 'ro-prod')
     assert sweep_module.main(['--env', 'prod', '--apply']) == 2
     assert 'operator tier' in capsys.readouterr().err
+
+
+# --- batch language eligibility at the ownerless-upload claim (lead 41e13b, scope 304254) ---------
+
+
+def _batch_policy():
+    from dataclasses import replace
+
+    from config.policy import resolve_batch_policy
+
+    return replace(resolve_batch_policy(UID), batch_enabled=True, live_admission_enabled=True)
+
+
+async def _claim_owner(monkeypatch, language, mode):
+    client = _client(None, status='completed', language=language)
+    claimed = []
+    monkeypatch.setattr(
+        live_upload, 'claim_record_lane_owner', lambda uid, cid, owner, expected, **kw: claimed.append(owner) or R2
+    )
+    monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: SimpleNamespace(client=client))
+    monkeypatch.setattr(live_upload, 'record_capture_eligible', lambda *a, **k: False)
+    route = await _route(None, legacy_mode=mode, policy=_batch_policy())
+    return route, claimed
+
+
+async def test_a_known_unsupported_conversation_language_takes_legacy_at_on(monkeypatch):
+    monkeypatch.delenv('BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED', raising=False)
+    route, claimed = await _claim_owner(monkeypatch, 'ja', LegacySyncMode.ON)
+    assert route is RecordUploadRoute.LEGACY and claimed == ['legacy_final_pass_v1']
+
+
+@pytest.mark.parametrize('language', [None, '', 'multi', 'auto', 'und', 'en', 'es'])
+async def test_unknown_or_supported_conversation_language_keeps_the_batch_owner_at_on(monkeypatch, language):
+    monkeypatch.delenv('BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED', raising=False)
+    route, claimed = await _claim_owner(monkeypatch, language, LegacySyncMode.ON)
+    assert route is RecordUploadRoute.BATCH and claimed == ['batch_sync_v1']
+
+
+@pytest.mark.parametrize('mode', [LegacySyncMode.DRAINING, LegacySyncMode.DARK])
+async def test_a_known_unsupported_language_keeps_the_batch_owner_outside_on(monkeypatch, mode):
+    monkeypatch.delenv('BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED', raising=False)
+    route, claimed = await _claim_owner(monkeypatch, 'ja', mode)
+    assert route is RecordUploadRoute.BATCH and claimed == ['batch_sync_v1']
+
+
+async def test_eligibility_kill_switch_off_restores_the_batch_owner_at_on(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED', 'false')
+    route, claimed = await _claim_owner(monkeypatch, 'ja', LegacySyncMode.ON)
+    assert route is RecordUploadRoute.BATCH and claimed == ['batch_sync_v1']

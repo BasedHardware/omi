@@ -8,22 +8,28 @@ and dead letters have no TTL: accepted audio must not silently expire.
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 import hashlib
+import logging
 import os
 from typing import Any
 from urllib.parse import urlsplit
 
-from google.api_core.exceptions import NotFound
+from google.api_core.exceptions import FailedPrecondition, NotFound
 from google.cloud import firestore
 
+from config.batch_language_recovery import language_guarded, words_repair_eligible, REPAIR_EPOCH, REPAIR_PROVIDER
 from config.policy import RecoveryPolicy
 from database import batch_pipeline_privacy_queries as queries
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed, privacy_owner_key
 from database.batch_pipeline_shadow_hook import mirror_refresh
 
 from utils.batch_pipeline.upload_policy import UPLOAD_PENDING_SECONDS
+from utils.batch_pipeline.voice_centroids import deadline as voice_deadline, FINALIZED_TTL
+from utils.audio_cleanup_custody import cleanup_hold_reason
 
 ARTIFACT_RETENTION = timedelta(hours=24)
 RECEIPT_RETENTION = timedelta(days=45)
+HOLD_RECHECK = timedelta(hours=1)
+logger = logging.getLogger(__name__)
 
 
 def delete_batch_object(uid: str, uri: str) -> None:
@@ -75,7 +81,7 @@ def register_batch_artifact(
     Caller repeats the privacy guard after storage IO. The pre-upload reference
     remains retryable during any storage/metadata crash, even if the job is gone.
     """
-    if kind not in {'audio', 'result', 'results'}:
+    if kind not in {'audio', 'result', 'results', 'voice_evidence'}:
 
         raise ValueError('unknown artifact kind')
     artifact_id = hashlib.sha256(f'{segment_id}\0{uri}'.encode()).hexdigest()
@@ -94,6 +100,32 @@ def register_batch_artifact(
         if shadow and job.get('owner_key') != privacy_owner_key(uid):
             raise BatchPrivacyBlocked('shadow_artifact_owner')
         binding = job.get('projection_binding') or {}
+        voice_write = kind == 'voice_evidence'
+        projected_ids = []
+        voice_due = None
+        if voice_write:
+            result = (
+                client.collection(f'{namespace}_results').document(segment_id).get(transaction=transaction).to_dict()
+                or {}
+            )
+            receipts = list((result.get('projection_parts') or {}).values()) or [result.get('projection') or {}]
+            projected_ids = [
+                r['conversation_id']
+                for r in receipts
+                if r.get('conversation_id') and (r.get('speaker_scope') or '').startswith('final:batch:')
+            ]
+            if (
+                not projected_ids
+                or binding.get('private_cloud_sync_enabled') is not False
+                or item is None
+                or datetime.now(timezone.utc).timestamp() + UPLOAD_PENDING_SECONDS >= voice_deadline(item.capture_at)
+            ):
+                raise PermissionError('voice evidence requires current sync-off batch projection')
+            voice_due = datetime.fromtimestamp(voice_deadline(item.capture_at), timezone.utc)
+            if result.get('expires_at'):
+                voice_due = min(voice_due, result['expires_at'] - RECEIPT_RETENTION + timedelta(seconds=FINALIZED_TTL))
+            if datetime.now(timezone.utc) + timedelta(seconds=UPLOAD_PENDING_SECONDS) >= voice_due:
+                raise PermissionError('voice evidence upload cannot finish within retention window')
         conversation_ids = [
             value
             for value in (
@@ -102,7 +134,7 @@ def register_batch_artifact(
                 getattr(item, 'conversation_id', None),
             )
             if value
-        ]
+        ] + projected_ids
         assert_batch_write_allowed(
             client, transaction, uid, conversation_ids=conversation_ids, expected_generation=expected_generation
         )
@@ -148,11 +180,25 @@ def register_batch_artifact(
         )
         redrive = job.get('speech_redrive') or {}
         redrive_write = (
-            policy.speech_empty_multilingual
+            (
+                (policy.speech_empty_multilingual and redrive.get('paid_epoch') == 2)
+                or (
+                    policy.recovery_enabled
+                    and redrive.get('paid_epoch') == REPAIR_EPOCH
+                    and redrive.get('provider') == REPAIR_PROVIDER
+                    and words_repair_eligible(job)
+                )
+                or (
+                    policy.recovery_enabled
+                    and language_guarded(job)
+                    and recovery.get('provider') == 'modulate'
+                    and redrive.get('paid_epoch') == 3
+                    and redrive.get('provider') == 'soniox'
+                )
+            )
             and job.get('state') == 'quarantined'
             and job.get('recovery_state') in {'held', 'failed_held'}
             and redrive.get('state') == 'running'
-            and redrive.get('paid_epoch') == 2
             and redrive.get('privacy_generation') == expected_generation
             and bool(redrive.get('token'))
             and uri.endswith(f"/{redrive['token']}.enc")
@@ -165,6 +211,7 @@ def register_batch_artifact(
             and not disposition_write
             and not redrive_write
             and not terminal_write
+            and not voice_write
         ):
             raise BatchPrivacyBlocked('result_lease_lost')
         if job and not shadow and job.get('owner_id') != uid:
@@ -182,8 +229,11 @@ def register_batch_artifact(
                     'conversation_ids': conversation_ids,
                     'uri': uri,
                     'kind': kind,
+                    'capture_at': getattr(item, 'capture_at', None) or job.get('capture_at'),
+                    'duration_seconds': getattr(item, 'duration_seconds', None) or job.get('duration_seconds'),
                     'privacy_generation': expected_generation,
                     'write_pending_until': datetime.now(timezone.utc) + timedelta(seconds=UPLOAD_PENDING_SECONDS),
+                    **({'cleanup_after': voice_due} if voice_write else {}),
                     **(
                         {'shadow': True, 'cleanup_after': datetime.now(timezone.utc) + timedelta(hours=1)}
                         if shadow
@@ -232,6 +282,11 @@ def expire_completed_segment(store: Any, uid: str, segment_id: str, now: float) 
         touched.extend(('artifacts', artifact.id) for artifact in artifacts)
         for artifact in artifacts:
             metadata = artifact.to_dict() or {}
+            if metadata.get('kind') == 'voice_evidence':
+                if metadata.get('uri'):
+                    due = min(metadata['cleanup_after'], completed_at + timedelta(seconds=FINALIZED_TTL))
+                    transaction.update(artifact.reference, {'cleanup_after': due})
+                continue
             # The native audio artifact is a small reference manifest. Keep its
             # proof through the receipt window so a first late WAL can prove
             # coverage without reprocessing retained audio. GPU results keep
@@ -272,6 +327,26 @@ def run_retention_transaction(client: Any, operation: Callable[[Any], Any]) -> A
     )
 
 
+def _flag_invalid_cleanup_receipt(artifact: Any, now: datetime, reason: str) -> bool:
+    """Park inconsistent metadata without overwriting a newer privacy request."""
+    updated = False
+    try:
+        artifact.reference.update(
+            {
+                'cleanup_error': reason,
+                'cleanup_flagged_at': now,
+                'cleanup_after': firestore.DELETE_FIELD,
+                'expires_at': firestore.DELETE_FIELD,
+            },
+            option=firestore.LastUpdateOption(artifact.update_time),
+        )
+        updated = True
+    except (NotFound, FailedPrecondition):
+        pass
+    logger.warning('event=batch_cleanup outcome=retained reason=%s', reason)
+    return updated
+
+
 def cleanup_completed_artifacts(
     store: Any,
     now: datetime,
@@ -285,11 +360,70 @@ def cleanup_completed_artifacts(
     try:
         for artifact in queries.due_artifacts(store.client, store.namespace, now, limit):
             data = artifact.to_dict() or {}
+            erasure_requested = data.get('erasure_requested') is True
+            uri = data.get('uri')
+            uid = data.get('owner_id')
+            if not isinstance(uri, str) or not uri.strip():
+                if (
+                    erasure_requested
+                    and isinstance(uid, str)
+                    and uid
+                    and data.get('owner_key') == privacy_owner_key(uid)
+                ):
+                    # Explicit privacy intent erases metadata too. No URI is
+                    # fabricated and no object outside that intent is touched.
+                    artifact.reference.delete()
+                    touched.append(('artifacts', artifact.id))
+                    cleaned += 1
+                    continue
+                invalid_reason = 'missing_uri'
+            elif not isinstance(uid, str) or not uid or data.get('owner_key') != privacy_owner_key(uid):
+                invalid_reason = 'owner_mismatch'
+            else:
+                invalid_reason = None
+            if invalid_reason:
+                # A malformed/previously cleaned receipt is not delete authority.
+                # Park and flag it so it cannot starve every subsequent due page.
+                if _flag_invalid_cleanup_receipt(artifact, now, invalid_reason):
+                    touched.append(('artifacts', artifact.id))
+                continue
+            if not erasure_requested and data.get('kind') != 'voice_evidence':
+                capture_at, duration = data.get('capture_at'), data.get('duration_seconds')
+                if capture_at is None or duration is None:
+                    job = (
+                        store.client.collection(f'{store.namespace}_jobs')
+                        .document(data.get('segment_id') or artifact.id)
+                        .get()
+                        .to_dict()
+                        or {}
+                    )
+                    if job and job.get('owner_id') != uid:
+                        if _flag_invalid_cleanup_receipt(artifact, now, 'capture_owner_mismatch'):
+                            touched.append(('artifacts', artifact.id))
+                        continue
+                    capture_at = job.get('capture_at') if capture_at is None else capture_at
+                    duration = job.get('duration_seconds') if duration is None else duration
+                reason = cleanup_hold_reason(capture_at, duration)
+                if reason:
+                    try:
+                        artifact.reference.update(
+                            {
+                                'cleanup_hold': reason,
+                                'cleanup_after': now + HOLD_RECHECK,
+                                'expires_at': firestore.DELETE_FIELD,
+                            },
+                            option=firestore.LastUpdateOption(artifact.update_time),
+                        )
+                        touched.append(('artifacts', artifact.id))
+                    except (NotFound, FailedPrecondition):
+                        pass
+                    logger.info('event=batch_cleanup outcome=held reason=%s', reason)
+                    continue
             delete_uri(data['owner_id'], data['uri'])
             touched.append(('artifacts', artifact.id))
             # Deletion races must never recreate a purged metadata document.
             try:
-                if data.get('erasure_requested') or data.get('shadow'):
+                if erasure_requested or data.get('shadow'):
                     artifact.reference.delete()
                     cleaned += 1
                     continue
@@ -297,6 +431,7 @@ def cleanup_completed_artifacts(
                     {
                         'uri': firestore.DELETE_FIELD,
                         'cleanup_after': firestore.DELETE_FIELD,
+                        'cleanup_hold': firestore.DELETE_FIELD,
                         'expires_at': now + RECEIPT_RETENTION,
                     }
                 )

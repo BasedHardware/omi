@@ -32,10 +32,15 @@ class _LocalSyncs {
   _LocalSyncs(this.phone);
 
   final LocalWalSyncImpl phone;
+  bool get isStorageSyncing => false;
+  bool get isSdCardSyncing => false;
 
   Future<List<Wal>> getAllWals() => phone.getAllWals();
 
   Future<dynamic> syncAll({IWalSyncProgressListener? progress}) => phone.syncAll(progress: progress);
+
+  Future<dynamic> syncWal({required Wal wal, IWalSyncProgressListener? progress}) =>
+      phone.syncWal(wal: wal, progress: progress);
 
   FlashSyncStallReason get flashStallReason => FlashSyncStallReason.none;
 }
@@ -66,6 +71,7 @@ void main() {
 
   late Directory tempDir;
   late List<List<String>> uploads;
+  Object? uploadFailure;
   late SyncUploadGate gate;
   late LocalWalSyncImpl localSync;
   SyncProvider? provider;
@@ -86,6 +92,7 @@ void main() {
     await WalFileManager.init();
 
     uploads = [];
+    uploadFailure = null;
     gate = SyncUploadGate(
       limiter: SyncRateLimiter.instance,
       uploader: (files,
@@ -98,6 +105,7 @@ void main() {
           claimLiveCapture = false,
           geolocation}) async {
         uploads.add([for (final file in files) file.uri.pathSegments.last]);
+        if (uploadFailure != null) throw uploadFailure!;
         return UploadFilesResult.queued('job-${uploads.length}');
       },
       fairUseStatusLoader: () async => {'stage': 'none'},
@@ -178,5 +186,103 @@ void main() {
 
     expect(uploads, isEmpty);
     expect(tooOld.status, WalStatus.outsideRecoveryWindow);
+  });
+
+  test('a manual retry leaves quiet persisted refusals and permanent audio verdicts retained', () async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final rejected = (await diskWal('audio_refused.bin', timerStart: now - 600))..markUploadRejected();
+    final restored = Wal.fromJson(rejected.toJson());
+    final tooOld = (await diskWal('audio_expired.bin', timerStart: now - 900))..markOutsideRecoveryWindow();
+    final localOnly = (await diskWal('audio_private.bin', timerStart: now - 1200))
+      ..markUploadRejected()
+      ..onDeviceOnly = true;
+    final unsupported = (await diskWal('audio_unsupported.bin', timerStart: now - 1500))..markUnsupportedAudio();
+    final syncProvider = await start([restored, tooOld, localOnly, unsupported]);
+
+    await syncProvider.syncWals();
+    expect(uploads, isEmpty, reason: 'automatic wakes must not re-arm historical refusals');
+    expect(syncProvider.retryableAttentionWals, isEmpty);
+    await syncProvider.retryNeedsAttentionWals();
+
+    expect(uploads, isEmpty);
+    expect(restored.status, WalStatus.uploadRejected);
+    expect(restored.timerStart, rejected.timerStart);
+    expect(tooOld.status, WalStatus.outsideRecoveryWindow);
+    expect(localOnly.status, WalStatus.uploadRejected);
+    expect(unsupported.status, WalStatus.unsupportedAudio);
+    expect(File('${tempDir.path}/audio_refused.bin').existsSync(), isTrue);
+  });
+
+  test('a refusal does not create an error card or an immediate manual retry', () async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final wal = await diskWal('audio_card_retry.bin', timerStart: now - 600);
+    final syncProvider = await start([wal]);
+    uploadFailure = const SyncUploadHttpException(400, 'request refused');
+    await syncProvider.syncWals();
+    expect(wal.status, WalStatus.uploadRejected);
+    expect(syncProvider.syncState.hasError, isFalse);
+
+    uploadFailure = null;
+    await syncProvider.retrySync();
+
+    expect(uploads, [
+      ['audio_card_retry.bin']
+    ]);
+    expect(wal.status, WalStatus.uploadRejected);
+    expect(File('${tempDir.path}/audio_card_retry.bin').existsSync(), isTrue);
+  });
+
+  test('the error card retry never re-sends a too-large refusal', () async {
+    // The failed sync the banner reports is the 413 itself: the bytes cannot
+    // shrink, so the banner's Retry must skip it and leave the row's Delete
+    // as the only way out.
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final wal = await diskWal('audio_card_too_large.bin', timerStart: now - 600);
+    final syncProvider = await start([wal]);
+    uploadFailure = const SyncUploadHttpException(413, 'Audio file is too large to upload');
+    await syncProvider.syncWal(wal);
+    expect(wal.status, WalStatus.uploadRejected);
+    expect(wal.uploadRejectionReason, WalUploadRejection.tooLarge);
+    expect(syncProvider.syncState.hasError, isFalse);
+    expect(syncProvider.failedWal, isNull);
+
+    uploadFailure = null;
+    await syncProvider.retrySync();
+
+    expect(uploads, hasLength(1), reason: 'a retry cannot change the bytes');
+    expect(wal.status, WalStatus.uploadRejected);
+  });
+
+  test('deterministic refusals aggregate without requesting user attention', () async {
+    // 413 is deterministic: the same bytes are the same size, so the card's
+    // retry-all must skip it and leave it to the row's Delete.
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final tooLarge = (await diskWal('audio_too_large.bin', timerStart: now - 600))
+      ..markUploadRejected(reasonCode: WalUploadRejection.tooLarge);
+    final invalidDate = (await diskWal('audio_bad_date.bin', timerStart: now - 900))
+      ..markUploadRejected(reasonCode: WalUploadRejection.invalidCaptureTime);
+    final syncProvider = await start([tooLarge, invalidDate]);
+
+    expect(syncProvider.needsAttentionWalsCount, 0);
+    expect(syncProvider.corruptedWals, isEmpty);
+    expect(syncProvider.corruptedStatusCount, 0);
+    expect(syncProvider.clearableWalsCount, 2, reason: 'an explicit storage clear still includes retained refusals');
+    expect(syncProvider.refusalSummary.count, 2);
+    expect(syncProvider.retryableAttentionWals, isEmpty);
+
+    await syncProvider.retryNeedsAttentionWals();
+
+    expect(uploads, isEmpty);
+    expect(tooLarge.status, WalStatus.uploadRejected, reason: 'a retry cannot change the bytes');
+  });
+  test('daily eligible refusal is picked up by the provider drain with no other work', () async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final refused = (await diskWal('daily.bin', timerStart: now - 600))..markUploadRejected(nowSeconds: now - 86401);
+    final syncProvider = await start([refused]);
+    await syncProvider.drainForTesting();
+    expect(uploads, [
+      ['daily.bin']
+    ]);
+    expect(refused.status, WalStatus.uploaded);
   });
 }

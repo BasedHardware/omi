@@ -707,7 +707,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get remembering => 'זיכור';
 
   @override
-  String get unlimitedPlan => 'תוכנית בלתי מוגבלת';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'נהל תוכנית';
@@ -729,7 +729,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get upgrade => 'שדרוג';
 
   @override
-  String get upgradeToUnlimited => 'שדרג לבלתי מוגבל';
+  String get upgradeToUnlimited => 'שדרג ל-Omi Pro';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3135,7 +3135,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'שדרג ל-Pro';
+  String get upgradeToPro => 'שדרג ל-Omi Pro';
 
   @override
   String get getOmiDevice => 'קנה מכשיר Omi';
@@ -4247,7 +4247,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get trainingDataProgram => 'תוכנית נתוני הדרכה';
 
   @override
-  String get getOmiUnlimitedFree => 'קבל Omi Unlimited בחינם על ידי תרומת הנתונים שלך לאימון מודלי AI.';
+  String get getOmiUnlimitedFree => 'קבל Omi Pro בחינם על ידי תרומת הנתונים שלך לאימון מודלי AI.';
 
   @override
   String get trainingDataBullets => '• הנתונים שלך עוזרים לשפר את מודלי ה-AI\n• רק נתונים לא רגישים משותפים';
@@ -4388,6 +4388,9 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get continueText => 'המשך';
+
+  @override
+  String get checkoutExistingSubscription => 'כבר יש לך מנוי. אפשר לנהל את המנוי הקיים במקום להתחיל מנוי חדש.';
 
   @override
   String get resubscribeFirstToChangePlans => 'הירשמו מחדש קודם כדי לשנות תוכנית.';
@@ -8527,6 +8530,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get transcriptionUnavailableRecordingSaved => 'התמלול אינו זמין — ההקלטה ממשיכה והאודיו שלך נשמר.';
 
   @override
+  String get captureNoAudioFromPendant => 'אין שמע מהתליון';
+
+  @override
   String get capturing => 'מתבצעת הקלטה';
 
   @override
@@ -9578,7 +9584,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get downgradeToFreemiumAction => 'מעבר לגרסה החינמית';
 
   @override
-  String get getFreeUnlimitedAccess => 'קבלו גישה בלתי מוגבלת בחינם';
+  String get getFreeUnlimitedAccess => 'קבלו את Omi Pro בחינם';
 
   @override
   String get shareDataForTraining => 'שיתוף נתונים לאימון';
@@ -11000,6 +11006,12 @@ class AppLocalizationsHe extends AppLocalizations {
       'חיבור ה-Bluetooth ל-Omi שלך נקטע, לכן השמע לא מגיע לאפליקציה. Omi ממשיך להקליט במכשיר ויסתנכרן ברגע שהחיבור יחזור. ניסיון חוזר מחבר מחדש את הקישור; אם זה ממשיך להיכשל, בדוק את המכשיר בהגדרות > מכשיר.';
 
   @override
+  String get captureConnecting => 'מתחבר…';
+
+  @override
+  String get captureNoAudioDetail => 'התליון מחובר, אבל שמע לא מגיע לטלפון שלך';
+
+  @override
   String get captureIngressNeedsReconnect => 'האודיו לא מגיע לאפליקציה — חבר מחדש את ה-Omi';
 
   @override
@@ -11028,13 +11040,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'האחסון כמעט מלא';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'התליון איבד את החיבור לטלפון הזה. Omi יתחבר מחדש מעצמו כשהתליון דלוק וקרוב. כל מה שהוקלט עד עכשיו שמור.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi יתחבר מחדש מעצמו';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12161,12 +12166,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get playbackAudioNetworkFailed => 'בדקו את החיבור';
 
   @override
-  String get forYou => 'בשבילך';
-
-  @override
-  String get stopThese => 'הפסקת אלה';
-
-  @override
   String get dismiss => 'סגירה';
 
   @override
@@ -12763,7 +12762,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'שלחו הודעה קולית ו-Omi יענה עליה.';
 
   @override
-  String get chatAppsPartOfPro => 'אפליקציות צ\'אט הן חלק מ-Pro';
+  String get chatAppsPartOfPro => 'אפליקציות צ\'אט הן חלק מ-Omi Pro';
 
   @override
   String get chatAppsMessagesApp => 'הודעות';
@@ -13394,7 +13393,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get syncDetailsCopy => 'העתקת פרטים לתמיכה';
 
   @override
-  String get chatAppsChannelPlanRequired => 'זמין ב-Operator וב-Architect';
+  String get chatAppsChannelPlanRequired => 'זמין ב-Omi Pro';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -13529,32 +13528,6 @@ class AppLocalizationsHe extends AppLocalizations {
       locale: localeName,
       other: '$count הקלטות',
       one: 'הקלטה אחת',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String onTheWaySummary(String totals) {
-    return '$totals בדרך';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'בהעלאה: $count';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'כמעט מוכנות: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count דורשות תשומת לב',
-      one: 'אחת דורשת תשומת לב',
     );
     return '$_temp0';
   }
@@ -13903,7 +13876,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'פועל בזמן שהטלפון נטען.';
 
   @override
-  String get onDeviceUpgradeBody => 'שדרגו ל-Pro להפרדה בין דוברים ולדיוק גבוה יותר';
+  String get onDeviceUpgradeBody => 'שדרגו ל-Omi Pro להפרדה בין דוברים ולדיוק גבוה יותר';
 
   @override
   String get onDeviceAtCapFooter => 'שום דבר לא הולך לאיבוד בכל מקרה. אפשר לשנות זאת בהגדרות › תמלול.';
@@ -14084,7 +14057,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'ביצוע מחדש עם Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'שדרגו ל-Pro להפרדה בין דוברים ולדיוק גבוה יותר';
+  String get onDeviceRedoHint => 'שדרגו ל-Omi Pro להפרדה בין דוברים ולדיוק גבוה יותר';
 
   @override
   String get onDeviceKeepEverything => 'לשמור הכול בטלפון הזה';
@@ -14314,10 +14287,23 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get episodeNotesSoon => 'ההערות יופיעו אחרי הדקות הראשונות של השיחה.';
+  String get episodeNotesUnavailable => 'ההערות בזמן אמת אינן מתעדכנות. בינתיים אפשר לצפות בתמלול.';
 
   @override
-  String get episodeOpenAll => 'פתח הכול';
+  String episodeCaptureFor(String duration) {
+    return 'הקלטה · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'הפרק הקודם';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'מקטעים ממתינים: $pending';
+  }
+
+  @override
+  String get episodeNotesSoon => 'ההערות יופיעו אחרי הדקות הראשונות של השיחה.';
 
   @override
   String get episodeWrapUpNow => 'סכם עכשיו';
@@ -14380,4 +14366,192 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get deviceControls => 'פקדים';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'גם: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'לחץ על הכפתור ב‑Omi';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'לחיצה קצרה אחת. ואז שאל מה שתרצה.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'שאל את השאלה שלך';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'אמור זאת בקול. Omi מקשיב.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'סיימת? לחץ שוב על הכפתור כדי לשלוח.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'שודרגת ל‑$days ימים חינם';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days ימים של Omi Pro עלינו. נזכיר לך לפני כל חיוב. ביטול בכל עת.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'קבל ניסיון של $days ימים';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'התחל ניסיון חינם של $days ימים';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'הפעל את ה‑Omi';
+
+  @override
+  String get pairingPowerOnSubtitle => 'לחץ פעם אחת על הכפתור והשאר אותו קרוב לטלפון.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => 'זהו. Omi ימשיך להקליט את השיחות שלך ברקע.';
+
+  @override
+  String get noThanks => 'לא, תודה';
+
+  @override
+  String get recapInTheBackground => 'ברקע';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'הישארו עם $percent% הנחה';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'הישארו ושלמו $price לחודש ב-$months החודשים הבאים.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'בוצע. $percent% הנחה ב-$months החודשים הבאים.';
+  }
+
+  @override
+  String get othersSpeakerLabel => 'אחרים';
+
+  @override
+  String get livePreviewListening => 'Listening… words appear here as you speak.';
+
+  @override
+  String get livePreviewStarting => 'Starting live preview…';
+
+  @override
+  String get openLoopAnswerDone => 'בוצע';
+
+  @override
+  String get openLoopAnswerRemind => 'הזכר לי מאוחר יותר';
+
+  @override
+  String get openLoopAnswerDrop => 'ותר על זה';
+
+  @override
+  String get syncRejectionInvalidDate => 'תאריך הקלטה לא תקין';
+
+  @override
+  String get syncDeleteKeptUploading => 'חלקים מסוימים עדיין בהעלאה ונשמרו';
+
+  @override
+  String get syncRejectionServer => 'נדחה על ידי השרת';
+
+  @override
+  String get syncRejectionTooLarge => 'גדול מדי';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration בטלפון';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'ההעלאות הושהו לרגע — הן יימשכו אוטומטית';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'ממשיך את “$title”';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· מ-$time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'הפתקים מתחילים כשמגיע התמליל הסופי.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote => 'נערכות בטלפון שלך בזמן שאתה מדבר. הפתקים המלאים מגיעים עם התמליל הסופי.';
+
+  @override
+  String get episodeOnThisPhone => 'בטלפון הזה';
+
+  @override
+  String get episodeOpenTranscript => 'פתח תמליל';
+
+  @override
+  String get liveCardTitle => 'בשידור חי';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'התמליל הסופי בפיגור של כ-$duration';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'התמליל הסופי מתעדכן';
+
+  @override
+  String get livePreviewNoEngineBody => 'המילים שלך מופיעות כאן דקה או שתיים אחרי שאמרת אותן.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'מקליט בבטחה';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'בשידור חי בטלפון הזה';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'הפעל טקסט חי';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'בדרך';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'כשיש חיבור';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return 'נותרו $duration לעיבוד';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'מעלה לבד. השיחות מושלמות בהדרגה כשההקלטות מגיעות.';
+
+  @override
+  String get onTheWayUploadsWhenOnline => 'מעלה לבד ברגע שתחזור החיבור. השיחות מושלמות בהדרגה כשההקלטות מגיעות.';
+
+  @override
+  String get onTheWayDayUploading => 'מועלה';
+
+  @override
+  String get onTheWayDayNext => 'הבא בתור';
+
+  @override
+  String get onTheWayDayQueued => 'בתור';
+
+  @override
+  String get onTheWayNoDate => 'ללא תאריך';
+
+  @override
+  String get onTheWayFootnote => 'הקלטות שנכשלות ממשיכות לנסות שוב ברקע. כל מה שלא ניתן לתמלול מדווח לנו אוטומטית.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'פרטים לתמיכה';
 }

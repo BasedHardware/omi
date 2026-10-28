@@ -73,6 +73,9 @@ ingress:
           pathType: Prefix
         - path: /v3/stream
           pathType: Prefix
+        # Spoken-language gate for prerecorded routing (backend shadow/enforce callers).
+        - path: /v2/language
+          pathType: Prefix
         - path: /health
           pathType: Prefix
 
@@ -190,23 +193,25 @@ prometheus-adapter:
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
-  # Dark: one-line activation after mixed-load live-latency qualification.
-  # Roll back to false to restore the existing External Value latency guard.
-  workloadOnly: false
+  # P77r retry proposal: install the relative-refusal guard before activating.
+  # Rollback: restore minReplicas=12 and workloadOnly=false together.
+  workloadOnly: true
   # The ratified 2 active requests / 35% GPU targets trigger scale-out;
   # they are not hard per-pod capacity. Five to seven pods carry the 7-day peak.
-  # Floor 3 controls idle cost; cap 12 gives the demand-routing ramp headroom.
-  minReplicas: 3
+  # Floor 8 retains warm headroom; cap 12 bounds burst scale-out.
+  minReplicas: 8
   maxReplicas: 12
   behavior:
     scaleUp:
       stabilizationWindowSeconds: 0
+      selectPolicy: Max
       policies:
       - type: Pods
-        value: 1
-        # Request the next replica sooner. A new GPU pod is not serving until
-        # startup succeeds. Cold starts still need the qualified floor and fallback.
-        periodSeconds: 60
+        value: 4
+        # Permit 8 -> 12 on the next recommendation (normally a 15s HPA sync),
+        # without a minute-long rate limit. This is a replica-request budget,
+        # not a readiness SLA: adapter lag, GPU scheduling and startup still apply.
+        periodSeconds: 15
     scaleDown:
       stabilizationWindowSeconds: 900
       policies:

@@ -138,11 +138,11 @@ export function planDisplayName(plan: PlanIdentity): string {
     case 'basic':
       return 'Free';
     case 'operator':
-      return 'Pro';
+      return 'Operator';
     case 'unlimited':
       return 'Neo';
     case 'unlimited_v2':
-      return 'Unlimited';
+      return 'Omi Pro';
     default:
       return plan.id.charAt(0).toUpperCase() + plan.id.slice(1);
   }
@@ -273,6 +273,14 @@ export interface UpgradeSubscriptionResponse {
   message?: string;
   days_remaining?: number;
   scheduled_start?: number;
+}
+
+export interface RedeemCodeResponse {
+  status: string;
+  percent_off?: number | null;
+  amount_off?: number | null;
+  currency?: string | null;
+  applies_at?: number | null;
 }
 
 export interface Person {

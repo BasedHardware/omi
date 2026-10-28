@@ -713,7 +713,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get remembering => 'Hatırlama';
 
   @override
-  String get unlimitedPlan => 'Sınırsız Plan';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'Planı Yönet';
@@ -735,7 +735,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get upgrade => 'Yükselt';
 
   @override
-  String get upgradeToUnlimited => 'Sınırsıza yükselt';
+  String get upgradeToUnlimited => 'Omi Pro\'ya Yükselt';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3160,7 +3160,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Pro\'ya Yükselt';
+  String get upgradeToPro => 'Omi Pro\'ya Yükselt';
 
   @override
   String get getOmiDevice => 'Omi Cihazı Edinin';
@@ -4284,7 +4284,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get getOmiUnlimitedFree =>
-      'Verilerinizi AI modellerini eğitmek için katkıda bulunarak Omi Unlimited\'ı ücretsiz alın.';
+      'Verilerinizi AI modellerini eğitmek için katkıda bulunarak Omi Pro\'yu ücretsiz alın.';
 
   @override
   String get trainingDataBullets =>
@@ -4429,6 +4429,10 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get continueText => 'Devam Et';
+
+  @override
+  String get checkoutExistingSubscription =>
+      'Zaten bir aboneliğiniz var. Yeni bir abonelik başlatmak yerine mevcut aboneliğinizi yönetin.';
 
   @override
   String get resubscribeFirstToChangePlans => 'Plan değiştirmek için önce yeniden abone olun.';
@@ -8606,6 +8610,9 @@ class AppLocalizationsTr extends AppLocalizations {
       'Transkripsiyon kullanılamıyor — kayıt devam ediyor ve sesiniz kaydediliyor.';
 
   @override
+  String get captureNoAudioFromPendant => 'Kolyeden ses gelmiyor';
+
+  @override
   String get capturing => 'Kaydediliyor';
 
   @override
@@ -9664,7 +9671,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get downgradeToFreemiumAction => 'Ücretsiz sürüme geç';
 
   @override
-  String get getFreeUnlimitedAccess => 'Ücretsiz sınırsız erişim kazan';
+  String get getFreeUnlimitedAccess => 'Omi Pro\'yu ücretsiz kazan';
 
   @override
   String get shareDataForTraining => 'Eğitim için veri paylaş';
@@ -11096,6 +11103,12 @@ class AppLocalizationsTr extends AppLocalizations {
       'Omi cihazınızdaki Bluetooth bağlantısı kesildi, bu nedenle ses uygulamaya ulaşmıyor. Omi cihazda kaydetmeye devam ediyor ve bağlantı geri geldiğinde senkronize olacak. Yeniden denemek bağlantıyı yeniden kurar; başarısız olmaya devam ederse Ayarlar > Cihaz bölümünden cihazınızı kontrol edin.';
 
   @override
+  String get captureConnecting => 'Bağlanıyor…';
+
+  @override
+  String get captureNoAudioDetail => 'Kolye bağlı, ancak telefonunuza hiçbir ses ulaşmıyor';
+
+  @override
   String get captureIngressNeedsReconnect => 'Ses uygulamaya ulaşmıyor — Omi\'nizi yeniden bağlayın';
 
   @override
@@ -11124,13 +11137,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get captureStorageAlmostFull => 'Depolama neredeyse dolu';
-
-  @override
-  String get capturePendantDisconnectedDetail =>
-      'Kolyenin bu telefonla bağlantısı kesildi. Kolye açık ve yakındayken Omi kendiliğinden yeniden bağlanır. Bundan önce kaydedilen her şey güvende.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi kendiliğinden yeniden bağlanır';
 
   @override
   String participantsSummaryUncounted(String name) {
@@ -12261,12 +12267,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get playbackAudioNetworkFailed => 'Bağlantıyı Kontrol Edin';
 
   @override
-  String get forYou => 'Sizin İçin';
-
-  @override
-  String get stopThese => 'Bunları Durdur';
-
-  @override
   String get dismiss => 'Gizle';
 
   @override
@@ -12869,7 +12869,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'Sesli not gönder, Omi yanıtlasın.';
 
   @override
-  String get chatAppsPartOfPro => 'Sohbet uygulamaları Pro\'nun bir parçasıdır';
+  String get chatAppsPartOfPro => 'Sohbet uygulamaları Omi Pro\'nun bir parçasıdır';
 
   @override
   String get chatAppsMessagesApp => 'Mesajlar';
@@ -13502,7 +13502,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get syncDetailsCopy => 'Destek için ayrıntıları kopyala';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Operator ve Architect planlarında kullanılabilir';
+  String get chatAppsChannelPlanRequired => 'Omi Pro planında kullanılabilir';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -13637,32 +13637,6 @@ class AppLocalizationsTr extends AppLocalizations {
       locale: localeName,
       other: '$count kayıt',
       one: '1 kayıt',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String onTheWaySummary(String totals) {
-    return '$totals yolda';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return '$count yükleniyor';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return '$count neredeyse hazır';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count ilgi bekliyor',
-      one: '1 ilgi bekliyor',
     );
     return '$_temp0';
   }
@@ -14013,7 +13987,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'Telefonunuz şarj olurken çalışır.';
 
   @override
-  String get onDeviceUpgradeBody => 'Konuşmacı ayrımı ve daha yüksek doğruluk için Pro\'ya yükseltin';
+  String get onDeviceUpgradeBody => 'Konuşmacı ayrımı ve daha yüksek doğruluk için Omi Pro\'ya yükseltin';
 
   @override
   String get onDeviceAtCapFooter =>
@@ -14196,7 +14170,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Omi Cloud ile Yeniden Yap';
 
   @override
-  String get onDeviceRedoHint => 'Konuşmacı ayrımı ve daha yüksek doğruluk için Pro\'ya yükseltin';
+  String get onDeviceRedoHint => 'Konuşmacı ayrımı ve daha yüksek doğruluk için Omi Pro\'ya yükseltin';
 
   @override
   String get onDeviceKeepEverything => 'Her şeyi bu telefonda tut';
@@ -14429,10 +14403,23 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get episodeNotesSoon => 'Notlar konuşmanın ilk birkaç dakikasından sonra görünür.';
+  String get episodeNotesUnavailable => 'Canlı notlar güncellenmiyor. Şimdilik dökümü görüntüleyin.';
 
   @override
-  String get episodeOpenAll => 'Tümünü Aç';
+  String episodeCaptureFor(String duration) {
+    return 'Kaydediliyor · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Önceki bölüm';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Bekleyen parçalar: $pending';
+  }
+
+  @override
+  String get episodeNotesSoon => 'Notlar konuşmanın ilk birkaç dakikasından sonra görünür.';
 
   @override
   String get episodeWrapUpNow => 'Şimdi Bitir';
@@ -14495,4 +14482,195 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get deviceControls => 'Kontroller';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Ayrıca: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'Omi\'nin düğmesine bas';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'Kısa bir basış. Sonra istediğini sor.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'Sorunu sor';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'Yüksek sesle söyle. Omi dinliyor.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'Bitti mi? Göndermek için düğmeye tekrar bas.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return '$days gün ücretsiz kazandın';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days gün Omi Pro bizden. Ücret alınmadan önce hatırlatırız. İstediğin zaman iptal et.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return '$days günlük denemeyi al';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return '$days günlük ücretsiz denemeyi başlat';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Omi\'ni aç';
+
+  @override
+  String get pairingPowerOnSubtitle => 'Düğmeye bir kez bas ve telefonunun yanında tut.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => 'Bu kadar. Omi konuşmalarını arka planda kaydetmeye devam edecek.';
+
+  @override
+  String get noThanks => 'Hayır, teşekkürler';
+
+  @override
+  String get recapInTheBackground => 'Arka planda';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return '%$percent indirimle kal';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Kal ve ayda $price öde, önümüzdeki $months ay boyunca.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Tamam. %$percent indirim, önümüzdeki $months ay.';
+  }
+
+  @override
+  String get othersSpeakerLabel => 'Diğerleri';
+
+  @override
+  String get livePreviewListening => 'Listening… words appear here as you speak.';
+
+  @override
+  String get livePreviewStarting => 'Starting live preview…';
+
+  @override
+  String get openLoopAnswerDone => 'Tamamlandı';
+
+  @override
+  String get openLoopAnswerRemind => 'Daha sonra hatırlat';
+
+  @override
+  String get openLoopAnswerDrop => 'Yoksay';
+
+  @override
+  String get syncRejectionInvalidDate => 'Geçersiz kayıt tarihi';
+
+  @override
+  String get syncDeleteKeptUploading => 'Bazı parçalar hâlâ yükleniyor ve tutuldu';
+
+  @override
+  String get syncRejectionServer => 'Sunucu tarafından reddedildi';
+
+  @override
+  String get syncRejectionTooLarge => 'Çok büyük';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return 'telefonda $duration';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Yüklemeler kısa süreliğine duraklatıldı — otomatik olarak devam edecek';
+
+  @override
+  String episodeContinues(Object title) {
+    return '“$title” devam ediyor';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· $time’den beri';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Notlar, nihai transkript geldiğinde başlar.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Konuşurken telefonunda hazırlanıyor. Tam notlar nihai transkriptle birlikte gelecek.';
+
+  @override
+  String get episodeOnThisPhone => 'Bu telefonda';
+
+  @override
+  String get episodeOpenTranscript => 'Transkripti aç';
+
+  @override
+  String get liveCardTitle => 'Canlı';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Nihai transkript yaklaşık $duration geride';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'Nihai transkript yaklaşıyor';
+
+  @override
+  String get livePreviewNoEngineBody => 'Sözlerin, söyledikten bir iki dakika sonra burada görünür.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Güvenle kaydediyor';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Bu telefonda canlı';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Canlı metni aç';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'yolda';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'çevrimiçi olunca';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration hâlâ işleniyor';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'Kendiliğinden yüklenir. Ulaştıkça görüşmeler tamamlanır.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Tekrar çevrimiçi olduğunuzda kendiliğinden yüklenir. Ulaştıkça görüşmeler tamamlanır.';
+
+  @override
+  String get onTheWayDayUploading => 'Yükleniyor';
+
+  @override
+  String get onTheWayDayNext => 'Sırada';
+
+  @override
+  String get onTheWayDayQueued => 'Kuyrukta';
+
+  @override
+  String get onTheWayNoDate => 'Tarih yok';
+
+  @override
+  String get onTheWayFootnote =>
+      'Başarısız olan kayıtlar arka planda yeniden denenmeye devam eder. Transkriptini çıkaramadığımız her şey bize otomatik olarak bildirilir.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Destek için ayrıntılar';
 }

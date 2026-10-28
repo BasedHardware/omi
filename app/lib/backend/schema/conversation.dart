@@ -392,6 +392,9 @@ class ServerConversation {
   ConversationStatus status;
   bool discarded;
   final bool deleted;
+  final String? syncMergedInto;
+  bool get isMergedDonor => syncMergedInto != null && syncMergedInto!.isNotEmpty;
+  bool get isHiddenFromDefaultList => discarded || deleted || isMergedDonor;
   final bool isLocked;
   bool starred;
   String? folderId;
@@ -423,6 +426,11 @@ class ServerConversation {
   // local label
   bool isNew = false;
 
+  /// Local, never serialized: the transcript was kept from an earlier detail read because a list
+  /// refresh carried none (see [keepingTranscriptOf]). It may be out of date, so the detail page
+  /// re-reads the conversation instead of trusting it.
+  bool transcriptCarried = false;
+
   ServerConversation({
     required this.id,
     required this.createdAt,
@@ -440,6 +448,7 @@ class ServerConversation {
     this.conversationAudio,
     this.discarded = false,
     this.deleted = false,
+    this.syncMergedInto,
     this.source,
     this.language,
     this.externalIntegration,
@@ -457,6 +466,53 @@ class ServerConversation {
     this.processingDeferred = false,
     this.captureCoverage,
   });
+
+  /// List rows omit transcript_segments ("unknown/not loaded, not an empty transcript"), while the
+  /// detail page loads the transcript once and reads it back from the provider's list. A refreshed
+  /// row with no transcript therefore keeps the one [loaded] already has. A locked row is redacted
+  /// on purpose and keeps nothing.
+  ServerConversation keepingTranscriptOf(ServerConversation? loaded) {
+    if (transcriptSegments.isNotEmpty || isLocked) return this;
+    if (loaded == null || loaded.transcriptSegments.isEmpty) return this;
+    return withTranscriptSegments(loaded.transcriptSegments)..transcriptCarried = true;
+  }
+
+  /// This conversation with [segments] as its transcript; every other field is carried over.
+  ServerConversation withTranscriptSegments(List<TranscriptSegment> segments) => ServerConversation(
+        id: id,
+        createdAt: createdAt,
+        onDeviceProvenance: onDeviceProvenance,
+        clientProcessing: clientProcessing,
+        structured: structured,
+        startedAt: startedAt,
+        finishedAt: finishedAt,
+        transcriptSegments: segments,
+        appResults: appResults,
+        suggestedSummarizationApps: suggestedSummarizationApps,
+        geolocation: geolocation,
+        photos: photos,
+        audioFiles: audioFiles,
+        conversationAudio: conversationAudio,
+        discarded: discarded,
+        deleted: deleted,
+        syncMergedInto: syncMergedInto,
+        source: source,
+        language: language,
+        externalIntegration: externalIntegration,
+        calendarEvent: calendarEvent,
+        status: status,
+        isLocked: isLocked,
+        starred: starred,
+        folderId: folderId,
+        visibility: visibility,
+        siriVisibilityValid: siriVisibilityValid,
+        matchSnippets: matchSnippets,
+        captureGroup: captureGroup,
+        speakerResolution: speakerResolution,
+        summaryRetryable: summaryRetryable,
+        processingDeferred: processingDeferred,
+        captureCoverage: captureCoverage,
+      )..isNew = isNew;
 
   factory ServerConversation.fromJson(Map<String, dynamic> json) {
     final normalized = Map<String, dynamic>.from(json);
@@ -492,6 +548,7 @@ class ServerConversation {
       structured: structured,
       geolocation: json['geolocation'] is Map<String, dynamic> ? Geolocation.fromJson(json['geolocation']) : null,
       deleted: json['deleted'] ?? false,
+      syncMergedInto: json['sync_merged_into'] as String?,
       siriVisibilityValid: json['siri_visibility_valid'] != false &&
           (json['visibility'] == null || const ['private', 'shared', 'public'].contains(json['visibility'])),
       matchSnippets: snippets,
@@ -507,6 +564,7 @@ class ServerConversation {
     Structured? structured,
     Geolocation? geolocation,
     bool deleted = false,
+    String? syncMergedInto,
     bool siriVisibilityValid = true,
     bool? processingDeferred,
     List<TranscriptMatchSnippet>? matchSnippets,
@@ -539,6 +597,7 @@ class ServerConversation {
           generated.source != null ? ConversationSource.values.asNameMap()[generated.source] : ConversationSource.omi,
       language: generated.language,
       deleted: deleted,
+      syncMergedInto: syncMergedInto,
       externalIntegration:
           generated.externalData != null ? ConversationExternalData.fromJson(generated.externalData!) : null,
       calendarEvent: generated.calendarEvent == null ? null : CalendarEventLink.fromGenerated(generated.calendarEvent!),
@@ -578,6 +637,7 @@ class ServerConversation {
       'geolocation': geolocation?.toJson(),
       'photos': photos.map((photo) => photo.toJson()).toList(),
       'discarded': discarded,
+      'sync_merged_into': syncMergedInto,
       'deleted': deleted,
       // Cache/webhook payloads use the wire value (for example `sdcard`),
       // not Dart's enum rendering (`ConversationSource.sdcard`).

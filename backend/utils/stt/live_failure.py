@@ -36,6 +36,7 @@ from utils.stt.live_reason import (
 from config.live_stt_recovery import recovery_enabled, session_recovery_enabled
 from utils.stt.recovery_state import current_recovery
 from utils.stt.live_outcome import LiveLegOutcome
+from utils.stt.local_send_diagnostics import record_local_send_failure
 from utils.stt.stream_close import (
     ACCOUNT_REJECTION_REASONS,
     PROVIDER_AUTH_REJECTED,
@@ -466,6 +467,16 @@ def note_typed_provider_death(stt_socket: Any, provider: str | None) -> bool:
         typed = getattr(stt_socket, 'typed_death_reason', None)
     except Exception:
         return False
+    # Direct window POSTs already settled the contacted GPU's circuit. Never
+    # reclassify a pod failure as evidence against every sibling in the fleet.
+    # Credential/account evidence must still follow the hard family bench.
+    if provider == 'parakeet' and typed in {'provider_5xx', 'timeout', 'connection_lost', 'capacity_full'}:
+        try:
+            raw = getattr(stt_socket, 'raw', stt_socket)
+            if getattr(raw, 'replica_scoped', False) is True:
+                return True
+        except Exception:
+            pass  # observation must not prevent the normal terminal path
     if typed not in _CIRCUIT_OPENING_REASONS:
         return False
     endpoint: str | None = None
@@ -705,10 +716,12 @@ async def send_live_stt_audio(
         # A socket that predates the capture-position seam: send without it.
         try:
             accepted = stt_socket.send(audio)
-        except Exception:
+        except Exception as error:
+            record_local_send_failure(provider, 'send_call', stt_socket, error)
             await _recoverable_failure('send_failed')
             return False
-    except Exception:
+    except Exception as error:
+        record_local_send_failure(provider, 'send_call', stt_socket, error)
         await _recoverable_failure('send_failed')
         return False
 

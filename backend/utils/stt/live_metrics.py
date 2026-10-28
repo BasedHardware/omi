@@ -71,6 +71,13 @@ WINDOW_ADMISSION = Counter('omi_stt_window_admissions_total', 'Window admission 
 WINDOW_PRESSURE_REFRESH = Counter(
     'omi_stt_window_batch_pressure_refresh_total', 'Batch pressure fleet refresh outcomes', ['outcome']
 )
+WINDOW_PRESSURE_FETCH_FAILURE = Counter(
+    'omi_stt_window_batch_pressure_fetch_failures_total', 'Batch pressure fetch failures by bounded cause', ['cause']
+)
+WINDOW_PRESSURE_PROGRESS_TIME = Gauge(
+    'omi_stt_window_batch_pressure_progress_timestamp_seconds',
+    'Unix time of sampler start or last valid replica response; detects stalled pollers without admissions',
+)
 WINDOW_PRESSURE_REPLICAS = Gauge(
     'omi_stt_window_batch_pressure_replicas', 'Fresh and DNS-ready GPU replicas for window admission', ['state']
 )
@@ -78,6 +85,9 @@ WINDOW_PRESSURE_REFUSAL = Counter(
     'omi_stt_window_batch_pressure_refusals_total', 'Window batch pressure refusals', ['reason']
 )
 WINDOW_POSTS = Counter('omi_stt_window_posts_total', 'Window POST outcomes', ['outcome'])
+WINDOW_REPLICA_ATTEMPTS = Counter(
+    'omi_stt_window_replica_attempts_total', 'Direct GPU pod POST attempts with bounded causes', ['outcome']
+)
 WINDOW_LATENCY = Histogram('omi_stt_window_post_seconds', 'Window POST latency', buckets=(0.1, 0.5, 1, 2, 4, 8, 15))
 WINDOW_FIRST_TEXT = Histogram(
     'omi_stt_window_first_text_seconds',
@@ -371,14 +381,27 @@ class SonioxIdleMetrics(NamedTuple):
     failures: Counter
     avoided: Counter
     closes_by_trigger: Counter
+    cohort_closes: Counter
+    cohort_reopens: Counter
+    cohort_latency: Histogram
+    cohort_failures: Counter
+    cohort_avoided: Counter
+    cohort_closes_by_trigger: Counter
 
 
 _soniox_idle_metrics: SonioxIdleMetrics | None = None
 _soniox_idle_lock = threading.Lock()
 
+SONIOX_IDLE_COHORT_ARMS = ('control', 'treatment')
+
 
 def soniox_idle_metrics() -> SonioxIdleMetrics:
-    """Register only when an enabled Soniox socket is constructed; no off series."""
+    """Register only when an enabled Soniox socket is constructed; no off series.
+
+    The ``omi_soniox_idle_cohort_*`` companions carry the session's treatment
+    arm (``config.soniox_idle`` uid-hash cohort) so a percent rollout compares
+    arms without relabelling the existing unlabeled family.
+    """
     global _soniox_idle_metrics
     with _soniox_idle_lock:
         if _soniox_idle_metrics is None:
@@ -399,7 +422,46 @@ def soniox_idle_metrics() -> SonioxIdleMetrics:
                     'Planned paid transport closes by trigger (vad silence or no client frames)',
                     ['trigger'],
                 ),
+                Counter(
+                    'omi_soniox_idle_cohort_closes_total',
+                    'Planned paid transport closes by treatment arm',
+                    ['arm'],
+                ),
+                Counter(
+                    'omi_soniox_idle_cohort_reopens_total',
+                    'Speech-triggered paid transport dials by treatment arm',
+                    ['arm'],
+                ),
+                Histogram(
+                    'omi_soniox_idle_cohort_reopen_seconds',
+                    'Onset to replacement audio admission by treatment arm',
+                    ['arm'],
+                    buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10),
+                ),
+                Counter(
+                    'omi_soniox_idle_cohort_reopen_failures_total',
+                    'Failed speech-triggered transport dials by treatment arm',
+                    ['arm'],
+                ),
+                Counter(
+                    'omi_soniox_idle_cohort_connected_seconds_avoided_total',
+                    'Estimated wall seconds with transport closed by treatment arm',
+                    ['arm'],
+                ),
+                Counter(
+                    'omi_soniox_idle_cohort_closes_by_trigger_total',
+                    'Planned paid transport closes by trigger and treatment arm',
+                    ['arm', 'trigger'],
+                ),
             )
             for _trigger in ('vad', 'no_frames'):
                 _soniox_idle_metrics.closes_by_trigger.labels(trigger=_trigger)
+                for _arm in SONIOX_IDLE_COHORT_ARMS:
+                    _soniox_idle_metrics.cohort_closes_by_trigger.labels(arm=_arm, trigger=_trigger)
+            for _arm in SONIOX_IDLE_COHORT_ARMS:
+                _soniox_idle_metrics.cohort_closes.labels(arm=_arm)
+                _soniox_idle_metrics.cohort_reopens.labels(arm=_arm)
+                _soniox_idle_metrics.cohort_latency.labels(arm=_arm)
+                _soniox_idle_metrics.cohort_failures.labels(arm=_arm)
+                _soniox_idle_metrics.cohort_avoided.labels(arm=_arm)
     return _soniox_idle_metrics

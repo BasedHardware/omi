@@ -24,6 +24,16 @@ one capture window's evidence.
 1. `live.py` sees every batch of final segments through
    `utils.app_integrations._async_trigger_realtime_integrations` (pusher, or the
    listen fallback) and buffers them per user in process (TTL + size cap).
+   - **Structure first** (`service.attach_conversation`): a conversation's first
+     words attach it to the live episode by the cheap rules, with no model call.
+     The app gets the episode, its real start and its member conversations at
+     once, so live splits, short fragments and parallel captures hide under one
+     row instead of waiting for the first notes. An ambiguous gap joins
+     provisionally (`pending_boundary`); the conversation's first moment asks Jev
+     and, on a confident "moved on", splits it into the next episode.
+   - A moment also ends after `MOMENT_MAX_SECONDS` of steady speech (`interval`)
+     and when the pusher session closes (`session_end`), so continuous talk keeps
+     the notes current and a pod move or reconnect does not strand the buffer.
 2. When a moment ends, `service.record_moment` runs on `postprocess_executor` as
    a tracked background task:
    - **Boundary** (`policy.boundary`): the hard cap (`MAX_EPISODE_SECONDS`), a gap at
@@ -41,16 +51,77 @@ one capture window's evidence.
      prefix comes first and the clock, state and new speech come last.
    - **Compare-and-swap store** (`database/episodes.py`): speech-derived fields are
      sealed with the user's key. A lost race retries once.
-3. After a conversation's finalization job completes,
+3. When a conversation's finalize starts, its live episode closes
+   (`service.close_on_finalize`, through `finalize.close_now`; see "Close and wrap-up").
+4. A sync (WAL) conversation joins the episode covering its span the
+   moment intake persisted it (`service.attach_synced_intake`, through
+   `finalize.attach_synced_at_intake`, called from the sync pipeline's
+   `complete_sync_intake`). The join is the cheap parallel-capture one below,
+   so Home folds the clip under the live row from its first appearance instead
+   of only after its enrichment finalizes; a clip whose covering episode
+   already closed on silence rejoins it exactly as in the finalize-time hook.
+   Fail-open and gated on the same admission and client-capability markers as
+   the finalize-time hook.
+5. After a conversation's finalization job completes,
    `utils/conversations/finalizer.py` calls `service.on_conversation_finalized`
-   (bounded, fail-open, after `complete_finalization_fanout`):
+   (bounded, fail-open, after `complete_finalization_fanout`). The synchronous
+   `POST /v1/conversations` route runs the same hook off the request path
+   (`finalize.schedule_after_finalization`). The sync lane runs it too, off its
+   own lane, after WAL processing persists the conversation
+   (`ProcessingTrigger.SYNC_UPDATE`). The hook:
    - It applies trailing text the live stream never delivered (dedupe by the
-     per-conversation applied offset).
+     per-conversation applied offset), to the conversation's own episode even
+     when that one has closed.
+   - A sync-finalized conversation that never attached (no realtime stream
+     carried it, and intake did not or could not join it) joins the episode
+     covering its span first, as a parallel capture: a member whose
+     recovered speech merges into the existing compact notes through a
+     `sync_recovery` moment. A transactional content receipt per segment
+     snapshot makes repeated intake/finalization idempotent, including text
+     inserted behind an earlier placed offset. Overlap alone never proves
+     that the live stream heard the recovered words. Stable segment slices and
+     bounded batches keep every word inside the prompt budget before recording
+     consumption. It never
+     closes the live episode and never opens one; a discarded conversation
+     never joins. Its speech extends the
+     episode's `last_activity_at`, so an idle close cannot fire while sync
+     speech keeps landing late. A clip that started
+     before the episode's recorded start still joins when its span reaches the
+     episode or it began within `CONTINUE_GAP_SECONDS` of that start (the
+     pendant and the phone clock separately); one that ended earlier belongs
+     to an occasion already over.
+   - A clip that lands after its covering episode closed on silence (`gap` or
+     `idle`, never a user close, wrap-up or hard boundary) rejoins it
+     (`policy.rejoinable_closed_episode`): the clip's span overlaps the closed
+     episode's `started_at..closed_at` window, or starts within
+     `CONTINUE_GAP_SECONDS` of its end. When the closed episode is the most
+     recent one and no newer episode exists it reopens
+     (`database.episodes.reopen_episode`, transactional; the recap link stops
+     advertising it as last closed); when a newer episode owns the now the clip
+     attaches as a member of the closed one without reopening it. A user,
+     wrap-up or boundary close stays closed.
    - It repoints a smart-merge donor to its survivor.
    - It reconciles the provisional items heard in that conversation against the
      tasks its normal processing saved: each becomes `kept` (with the task id)
-     or `dropped`.
-   - A pending "Wrap up now" for that conversation closes the episode.
+     or `dropped`. A discarded conversation's items are dropped.
+   - It closes the episode if the close at finalize start never ran.
+
+Live and recovery updates share content-revision receipts in a separate
+`content-v1:{conversation_id}` key of the existing receipt store. Complete
+live prompt input is recorded alongside its state, so attaching WAL to that
+same canonical row feeds only unconsumed content, including gaps behind the
+cursor. Existing unplaced-ID receipts remain consumption proof. Older placed
+cursor-only state has no exact content proof; its first recovery conservatively
+merges the retained snapshot once instead of dropping a potentially new gap.
+Sync donor repointing transfers both receipt namespaces in the membership CAS,
+and that repoint runs inside the three-attempt retry owner at intake/finalize.
+
+Sync attachment retries lost compare-and-swap commits up to three times with
+jitter and fresh membership/boundary reads. Saturated synchronous intake and
+finalize hooks enter a bounded deferred queue on the same executor; a released
+slot retries admission without a later append or a retry thread. At 64 deferred
+calls synchronous producers backpressure. This queue, like the executor's
+ordinary queue, is process-local and cancels on process shutdown.
 
 ## Provisional items (INV-TASK-2)
 
@@ -65,11 +136,30 @@ per-moment extraction. Undo marks an item `dismissed`.
 
 The close reasons are `user`, `gap`, `idle`, `hard_cap`, `source_change`,
 `calendar_boundary` and `moved_on`.
-- `POST /v1/episodes/{id}/wrap-up` with the conversation being finished waits for
-  that conversation's finalization. That is the normal processing pass, run once
-  through the client-finalize trigger. Without a conversation, it closes now.
+- Before close, recovered members' stored transcripts are checked for unapplied
+  content. Their recovery moments merge into the existing notes; receipts and
+  state commit together. Failed model calls consume no receipt, so close or a
+  later finalize can retry. A late recovery targets its exact member episode,
+  including a closed episode, and cannot open or move to a newer one.
+- Ending a conversation ends its live episode at once, and the next words open
+  a new one (`attach_conversation`); the server never creates an empty episode.
+  - A client finalize (`client_finalize`: the app's Wrap up, a pendant double-tap,
+    desktop's finalize) closes it with `user`. Both finalize routes close with the
+    request; the durable finalizer repeats the close when its job starts.
+  - The server ending an occasion conversation (`capture_end` on silence,
+    `server_recovery` after a disconnect) closes it with `gap`, unless another
+    conversation joined after it (a rollover, a second device). Desktop capture,
+    which still splits on short silences, keeps its episode until the rules above.
+  - The ended conversation is the episode's `closing_conversation_id`. Its items
+    stay provisional until its processing reconciles them, and it never reopens
+    the episode or opens or joins another: a late live moment is
+    `skipped_closed`, and a re-attach is a no-op. A second close is a no-op.
+- `POST /v1/episodes/{id}/wrap-up` closes at once (`user`), recording the
+  conversation being finished as the closing one when given. An episode an older
+  server left live with `wrap_up_requested_at` is closed on its next read.
 - A read that finds an episode idle for `CLOSE_GAP_SECONDS` closes it lazily
-  (`idle`). No scheduler is involved.
+  (`idle`), dated when the quiet reached the gap rather than when the read
+  happened. No scheduler is involved.
 
 ## Kill switch, cohort and client capability
 
