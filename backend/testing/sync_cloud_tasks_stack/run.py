@@ -163,7 +163,7 @@ class Stack:
         pre_ledger_failures: int = 0,
         post_ledger_failures: int = 0,
         cleanup_failures: int = 0,
-        hold_processor: bool = False,
+        hold_worker_pipeline: bool = False,
         process_persistence_fenced: bool = False,
     ):
         self.state_dir = state_dir
@@ -172,7 +172,9 @@ class Stack:
         self.storage_dir = state_dir / 'local-storage'
         # A retained --state-dir may contain an earlier run's entered/release
         # markers. Keep that evidence, but never treat it as this run's gate.
-        self.gate_dir = state_dir / f'processor-gate-{secrets.token_hex(8)}' if hold_processor else None
+        self.pipeline_gate_dir = (
+            state_dir / f'worker-pipeline-gate-{secrets.token_hex(8)}' if hold_worker_pipeline else None
+        )
         ports = _free_ports(3)
         self.redis_port = ports[0]
         self.admission_port = ports[1]
@@ -206,8 +208,8 @@ class Stack:
             raise StackFailure('FIRESTORE_EMULATOR_HOST must be loopback; run via run.sh')
         for directory in (self.logs_dir, self.evidence_dir, self.storage_dir):
             directory.mkdir(parents=True, exist_ok=True)
-        if self.gate_dir is not None:
-            self.gate_dir.mkdir(parents=True, exist_ok=True)
+        if self.pipeline_gate_dir is not None:
+            self.pipeline_gate_dir.mkdir(parents=True, exist_ok=True)
 
         # Inherit no provider keys, proxy configuration, ADC paths, or cloud CLI state.
         env = {key: os.environ[key] for key in ('PATH', 'LANG', 'LC_ALL', 'TZ', 'TMPDIR') if os.getenv(key)}
@@ -281,7 +283,9 @@ class Stack:
                 'OMI_SYNC_STACK_POST_LEDGER_FAILURES': str(self.post_ledger_failures),
                 'OMI_SYNC_STACK_CLEANUP_FAILURES': str(self.cleanup_failures),
                 'OMI_SYNC_STACK_PROCESS_PERSISTENCE_FENCED': ('true' if self.process_persistence_fenced else 'false'),
-                'OMI_SYNC_STACK_PROCESS_GATE_DIR': str(self.gate_dir) if self.gate_dir is not None else '',
+                'OMI_SYNC_STACK_WORKER_PIPELINE_GATE_DIR': (
+                    str(self.pipeline_gate_dir) if self.pipeline_gate_dir is not None else ''
+                ),
                 'PYTHONPATH': str(BACKEND),
             }
         )
@@ -931,8 +935,8 @@ def _retry_budget_terminalizes_truthfully(stack: Stack) -> None:
 
 
 def _concurrent_delivery_is_lease_fenced(stack: Stack) -> None:
-    if stack.gate_dir is None:
-        raise StackFailure('concurrent scenario requires a processor gate')
+    if stack.pipeline_gate_dir is None:
+        raise StackFailure('concurrent scenario requires a worker pipeline gate')
     uid = stack.scenario_uid('concurrent')
     job_id, task = _submit_and_capture_task(stack, uid)
     first_result: list[httpx.Response] = []
@@ -944,8 +948,8 @@ def _concurrent_delivery_is_lease_fenced(stack: Stack) -> None:
     thread.start()
     try:
         _wait_until(
-            lambda: (stack.gate_dir / 'entered').exists(),
-            label='first worker processor gate',
+            lambda: (stack.pipeline_gate_dir / 'entered').exists(),
+            label='first worker pipeline gate',
             timeout=60.0,
         )
     except StackFailure as error:
@@ -956,20 +960,21 @@ def _concurrent_delivery_is_lease_fenced(stack: Stack) -> None:
             response_body = None
         response_status = response_body.get('status') if isinstance(response_body, dict) else None
         worker = stack.children.get('worker')
-        provider_events = sorted(
-            {event.get('event') for event in stack.evidence_events('providers') if isinstance(event.get('event'), str)}
+        worker_events = sorted(
+            {event.get('event') for event in stack.evidence_events('worker') if isinstance(event.get('event'), str)}
         )
         diagnostics = {
             'first_delivery_http_status': response.status_code if response is not None else None,
             'first_delivery_status': response_status,
             'worker_alive': worker is not None and worker.process.poll() is None,
-            'provider_events': provider_events,
+            'worker_pipeline_gate_entered': (stack.pipeline_gate_dir / 'entered').exists(),
+            'worker_events': worker_events,
         }
         raise StackFailure(f'{error}; diagnostics={json.dumps(diagnostics, sort_keys=True)}') from error
     second = _deliver_task(task, retry_count=1)
     if second.status_code != 409 or second.json().get('status') != 'locked':
         raise StackFailure('concurrent worker delivery did not observe the real run lock')
-    (stack.gate_dir / 'release').write_text('release', encoding='utf-8')
+    (stack.pipeline_gate_dir / 'release').write_text('release', encoding='utf-8')
     thread.join(timeout=35.0)
     if thread.is_alive() or len(first_result) != 1:
         raise StackFailure('first gated worker delivery did not finish')
@@ -1074,7 +1079,7 @@ def _run_scenario(
     pre_ledger_failures: int = 0,
     post_ledger_failures: int = 0,
     cleanup_failures: int = 0,
-    hold_processor: bool = False,
+    hold_worker_pipeline: bool = False,
     process_persistence_fenced: bool = False,
     scenario: Callable[[Stack], None],
 ) -> None:
@@ -1085,7 +1090,7 @@ def _run_scenario(
         pre_ledger_failures=pre_ledger_failures,
         post_ledger_failures=post_ledger_failures,
         cleanup_failures=cleanup_failures,
-        hold_processor=hold_processor,
+        hold_worker_pipeline=hold_worker_pipeline,
         process_persistence_fenced=process_persistence_fenced,
     )
     try:
@@ -1136,7 +1141,9 @@ def main() -> int:
             _run_scenario(
                 state_dir / 'terminal-failure', worker_failures=2, scenario=_retry_budget_terminalizes_truthfully
             )
-            _run_scenario(state_dir / 'concurrent', hold_processor=True, scenario=_concurrent_delivery_is_lease_fenced)
+            _run_scenario(
+                state_dir / 'concurrent', hold_worker_pipeline=True, scenario=_concurrent_delivery_is_lease_fenced
+            )
             _run_scenario(
                 state_dir / 'nonprod-legacy-backfill',
                 scenario=_nonprod_legacy_backfill_is_acked_before_worker_state,
