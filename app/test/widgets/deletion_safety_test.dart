@@ -139,6 +139,31 @@ void main() {
     expect(restored, 1);
   });
 
+  testWidgets('finish deletion puts progress on erase, leaves restore idle, and retains errors', (tester) async {
+    final response = Completer<ApiResult<bool>>();
+    var calls = 0;
+    await tester.pumpWidget(deletionTestHost(RestoreAccount(
+      status: const AccountDeletionStatus(pendingDeletion: true),
+      finish: () {
+        calls++;
+        return response.future;
+      },
+      onRestored: () {},
+      onFinished: () {},
+    )));
+    await tester.tap(find.byKey(const Key('finish_deleting')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('finish_deleting_confirm')));
+    await tester.pump();
+    expect(calls, 1);
+    expect(tester.widget<OmiButton>(find.byKey(const Key('finish_deleting_confirm'))).isLoading, isTrue);
+    expect(tester.widget<OmiButton>(find.byKey(const Key('restore_my_account'))).isLoading, isFalse);
+    response.complete(const ApiFailure(ApiProblem(ApiProblemKind.server)));
+    await tester.pumpAndSettle();
+    expect(find.text('Erase my account now'), findsOneWidget);
+    expect(calls, 1);
+  });
+
   testWidgets('pending gate never builds product; failed status offers retry', (tester) async {
     var productBuilds = 0;
     var checks = 0;
