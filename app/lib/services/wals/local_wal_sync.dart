@@ -2048,7 +2048,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     // later remainder must not claim one covering only part of it.
     final unclaimableConversationIds = <String>{};
     // Per-recording share carried across passes; see [maxBatchesPerRecordingPerDrain].
-    // deferredGroups stays pass-local: it only rotates order within one pass.
+    // deferredGroups stays pass-local: it only yields a group's turn within
+    // one pass — every deferred group resumes once the waiting groups drain.
     final deferredGroups = <String>{};
     final shareWindowStart = initialNowSeconds - drainRecordingShareWindowSeconds;
     _drainGroupBatchCounts.removeWhere((group, _) => (_drainGroupCountedAt[group] ?? 0) < shareWindowStart);
@@ -2062,16 +2063,23 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       // while its members upload (uploaded rows stay listed) and later passes
       // key the same run identically; see [recordingGroupKeys].
       final groupKeys = recordingGroupKeys(_wals);
-      final candidates = _wals
+      final eligible = _wals
           .where((wal) =>
               isAutoUploadEligible(wal, nowSeconds: batchNowSeconds) &&
               !attemptedWalIds.contains(walAttemptKey(wal)) &&
-              !deferredGroups.contains(groupKeys[wal]) &&
               (wal.status != WalStatus.uploadRejected || refusalRetries < walMaxRefusalRetriesPerDrain))
           .toList();
-      final pending = candidates.where((wal) => !liveCaptureOnly || isLiveCaptureWal(wal, batchNowSeconds)).toList();
+      final pending = eligible.where((wal) => !liveCaptureOnly || isLiveCaptureWal(wal, batchNowSeconds)).toList();
       if (pending.isEmpty) break;
-      var batch = nextSyncUploadBatch(pending, batchNowSeconds);
+      // A deferred group waits only while another group can still be served in
+      // this pass. Once nothing else is pending it rejoins the candidates, so
+      // a capped recording finishes in the same drain instead of stranding its
+      // tail until a later pass — a custom-STT user confirms one sync, and a
+      // recording near the 30-day backfill deadline must not wait for a second
+      // confirmation the deadline may not survive (#14688).
+      final waiting = pending.where((wal) => !deferredGroups.contains(groupKeys[wal])).toList();
+      final candidates = waiting.isNotEmpty ? waiting : pending;
+      var batch = nextSyncUploadBatch(candidates, batchNowSeconds);
       if (batch.isEmpty) break;
       if (batch
           .any((wal) => wal.status == WalStatus.uploadRejected || isolateAfterRefusal.contains(walAttemptKey(wal)))) {
@@ -2079,16 +2087,17 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       }
       final drainGroup = groupKeys[batch.first]!;
       if ((_drainGroupBatchCounts[drainGroup] ?? 0) >= maxBatchesPerRecordingPerDrain &&
-          pending.any((wal) => groupKeys[wal] != drainGroup)) {
+          pending.any((wal) => groupKeys[wal] != drainGroup && !deferredGroups.contains(groupKeys[wal]))) {
         // This recording spent its share while others still wait: defer its
-        // remainder to a later pass instead of letting it own every
-        // interrupted drain. Oldest-first resumes with it on the next pass —
-        // or later in this one, once nothing else is waiting.
+        // remainder instead of letting it own every interrupted drain. The
+        // waiting groups drain first; oldest-first then resumes this recording
+        // within the same pass, so an uninterrupted drain empties the backlog.
         deferredGroups.add(drainGroup);
         DebugLogManager.logEvent('local_upload_recording_deferred', {
           'group': drainGroup,
           'batchesAttempted': _drainGroupBatchCounts[drainGroup],
-          'pendingBehind': pending.where((wal) => groupKeys[wal] != drainGroup).length,
+          'pendingBehind':
+              pending.where((wal) => groupKeys[wal] != drainGroup && !deferredGroups.contains(groupKeys[wal])).length,
         });
         continue;
       }

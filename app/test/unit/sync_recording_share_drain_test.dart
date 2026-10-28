@@ -9,7 +9,6 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
-import 'package:omi/services/wals/sync_upload_batch.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -115,7 +114,7 @@ void main() {
         for (var index = 0; index < walCount; index++) await writeWal(startSeconds + index * 60, device: 'pendant'),
       ];
 
-  test('a recording past its share defers its remainder while smaller recordings sync in the same pass', () async {
+  test('a recording past its share yields to smaller recordings and still finishes in the same pass', () async {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     // Every recording sits outside the 6h live-capture window, so the drain
     // orders them purely oldest-first.
@@ -126,20 +125,45 @@ void main() {
 
     await sync.syncAll();
 
-    expect(uploadedConversations.length, 38);
-    expect(uploadedConversations.where((c) => c == 'c1').length, maxBatchesPerRecordingPerDrain);
-    expect(uploadedConversations.last, 'c3');
-    expect(uploadedConversations[uploadedConversations.length - 2], 'c2');
-    // The small recordings finished; the poison recording keeps only the
-    // batches beyond its share pending.
+    // The cap yields after 36 poison batches so both small recordings land,
+    // then the poison remainder resumes: one uninterrupted pass drains
+    // everything. Leaving the tail pending would strand it until another
+    // confirmed sync (#14688).
+    expect(uploadedConversations.length, 40);
+    expect(uploadedConversations.where((c) => c == 'c1').length, 38);
+    expect(uploadedConversations[36], 'c2');
+    expect(uploadedConversations[37], 'c3');
+    expect(uploadedConversations.last, 'c1');
+    expect(poison.every((w) => w.status == WalStatus.uploaded), isTrue);
     expect(smallA.every((w) => w.status == WalStatus.uploaded), isTrue);
     expect(smallB.every((w) => w.status == WalStatus.uploaded), isTrue);
-    expect(poison.where((w) => w.status == WalStatus.miss).length, 190 - 5 * maxBatchesPerRecordingPerDrain);
 
-    // A later pass resumes the poison recording and finishes it.
+    // A later pass has nothing left to upload.
     await sync.syncAll();
+    expect(uploadedConversations.length, 40);
+  });
+
+  test('a recording near the 30-day backfill deadline is never stranded by the cap', () async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    // The recording's oldest audio is three hours inside the server's 30-day
+    // backfill cutoff: any batch left pending after this pass faces
+    // `backfill_lookback_exceeded` unless the user confirms another sync in
+    // time. Custom-STT drains are manual-confirm only, so this pass must
+    // finish what the cap interrupts (#14688).
+    final poison = await writeRecording('c1', now - 30 * 86400 + 3 * 3600, 190); // 38 batches
+    final small = await writeRecording('c2', now - 6 * 3600 - 30 * 60, 5);
+    sync.testWals = [...poison, ...small];
+
+    await sync.syncAll();
+
+    // The cap still yielded first — the small recording landed right after
+    // the 36th poison batch, so the deadline-near group really was deferred,
+    // not exempted — and the resumed pass still uploaded every batch.
+    expect(uploadedConversations.length, 39);
+    expect(uploadedConversations[36], 'c2');
     expect(uploadedConversations.where((c) => c == 'c1').length, 38);
-    expect(poison.every((w) => w.status == WalStatus.uploaded), isTrue);
+    expect(poison.where((w) => w.status == WalStatus.miss), isEmpty);
+    expect(small.every((w) => w.status == WalStatus.uploaded), isTrue);
   });
 
   test('a lone backlog is never throttled by the share cap', () async {
@@ -177,16 +201,17 @@ void main() {
     await sync.syncAll();
 
     // The huge run defers at its 36-batch share with the small run waiting;
-    // the small run's batch lands before the pass ends. With the old
-    // null|null|false| key every device recording shared one group, so the
-    // cap never fired between them (#14688).
-    expect(uploadedBatchFirstFiles.length, 37);
+    // the small run's batch lands before the pass ends, then the huge run
+    // resumes and finishes in the same pass. With the old null|null|false|
+    // key every device recording shared one group, so the cap never fired
+    // between them (#14688).
+    expect(uploadedBatchFirstFiles.length, 39);
     expect(uploadedBatchFirstFiles[36], 'audio_$smallStart.bin');
+    expect(huge.where((w) => w.status == WalStatus.miss), isEmpty);
     expect(small.every((w) => w.status == WalStatus.uploaded), isTrue);
-    expect(huge.where((w) => w.status == WalStatus.miss).length, 190 - 5 * maxBatchesPerRecordingPerDrain);
 
     await sync.syncAll();
-    expect(huge.every((w) => w.status == WalStatus.uploaded), isTrue);
+    expect(uploadedBatchFirstFiles.length, 39);
   });
 
   test('a rate-limit break before the cap carries the spent share into the next pass', () async {
@@ -210,14 +235,15 @@ void main() {
 
     // The carried share defers the poison remainder immediately; the small
     // recording gets its turn in pass 2 instead of waiting for 36 more
-    // poison batches.
-    expect(uploadedConversations.where((c) => c == 'c1').length, 35);
-    expect(uploadedConversations.last, 'c2');
+    // poison batches. Once nothing else waits, the poison remainder resumes
+    // and pass 2 finishes it too.
+    expect(uploadedConversations.where((c) => c == 'c1').length, 38);
+    expect(uploadedConversations[35], 'c2');
+    expect(uploadedConversations.last, 'c1');
     expect(small.every((w) => w.status == WalStatus.uploaded), isTrue);
-    expect(poison.where((w) => w.status == WalStatus.miss).length, 190 - 35 * 5);
+    expect(poison.every((w) => w.status == WalStatus.uploaded), isTrue);
 
     await sync.syncAll();
-    expect(poison.every((w) => w.status == WalStatus.uploaded), isTrue);
-    expect(uploadedConversations.where((c) => c == 'c1').length, 38);
+    expect(uploadedConversations.length, 39);
   });
 }

@@ -155,8 +155,8 @@ const _deviceRunGapToleranceSeconds = 5;
 /// run uploads, defers and re-enters later passes. A batch may still span a
 /// run boundary — [nextSyncUploadBatch] merges id-less WALs up to its audio
 /// budget — but it counts toward its first member's run, and a deferred run
-/// never rides along because the drain drops deferred groups from the
-/// candidate list before batching.
+/// never rides along while it waits: the drain drops deferred groups from the
+/// candidate list until nothing else is pending, at which point they resume.
 Map<Wal, String> recordingGroupKeys(List<Wal> wals) {
   final keys = <Wal, String>{};
   final byDevice = <String, List<Wal>>{};
