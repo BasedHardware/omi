@@ -13,11 +13,14 @@ from database import sync_live_overlap
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
 from tests.unit.test_sync_cross_job_assignment import chunk
 from utils.sync.assignment_telemetry import created_sync_row_observation
+from utils.sync import assignment
 from utils.sync.intake_completion import log_sync_lineage_created
 
 
 @pytest.fixture(autouse=True)
 def flags(monkeypatch):
+    # Compare diagnostic variants against the same hold-clock instant.
+    monkeypatch.setattr(assignment, 'time', SimpleNamespace(time=lambda: 1760000000.0))
     monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_ENABLED', 'true')
     monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', 'u')
     monkeypatch.setenv('SYNC_LIVE_OVERLAP_ENABLED', 'true')
