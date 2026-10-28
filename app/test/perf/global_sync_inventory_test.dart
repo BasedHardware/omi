@@ -27,19 +27,29 @@ class _CountingWal extends Wal {
   }
 
   @override
-  set timerStart(int value) => _start = value;
+  set timerStart(int value) {
+    _start = value;
+    super.timerStart = value;
+  }
 }
 
 class _Syncs {
   final List<Wal> wals;
   _Syncs(this.wals);
   int inventoryReads = 0;
+  List<Wal>? _snapshot;
   Completer<List<Wal>>? blockedRead;
   Future<List<Wal>> getAllWals() async {
     inventoryReads++;
     final blocked = blockedRead;
     if (blocked != null) return blocked.future;
-    return List.of(wals);
+    final previous = _snapshot;
+    if (previous == null ||
+        previous.length != wals.length ||
+        List.generate(wals.length, (i) => !identical(wals[i], previous[i])).any((changed) => changed)) {
+      _snapshot = List.unmodifiable(wals);
+    }
+    return _snapshot!; // Match production's membership snapshots and in-place state updates.
   }
 
   final entered = Completer<void>();
@@ -327,8 +337,8 @@ void main() {
         }
         shellBuilds = 0;
         for (var event = 0; event < 20; event++) {
-          // Services publish new list containers containing the same mutable
-          // WALs on every progress update, not just membership changes.
+          // Production reuses membership snapshots across progress updates;
+          // mutations to a WAL still notify the incremental derived views.
           wals.first.syncSpeedKBps = event.toDouble();
           await provider.refreshWals();
           await tester.pump();
