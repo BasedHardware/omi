@@ -156,6 +156,7 @@ def _stub_external_deletion_boundaries(monkeypatch) -> None:
     """Keep Firebase, Twilio, billing, and vector service calls inside the harness."""
 
     from services.users import account_deletion
+    from database import user_data_deletion
 
     monkeypatch.setattr(account_deletion.auth, "delete_account", lambda _uid: None)
     monkeypatch.setattr(account_deletion.firebase_auth, "revoke_refresh_tokens", lambda _uid: None)
@@ -165,6 +166,9 @@ def _stub_external_deletion_boundaries(monkeypatch) -> None:
     # requires a verified owner purge before completion, so keep this external
     # boundary hermetic just like Stripe, Firebase, and storage.
     monkeypatch.setattr(account_deletion, "purge_user_conversation_index", lambda _uid: None)
+    # This E2E focuses on the durable wipe lifecycle, not marketplace query
+    # semantics; creator-app erasure is covered by the focused unit test.
+    monkeypatch.setattr(user_data_deletion, "search_apps_db", lambda _uid, my_apps: [])
     monkeypatch.setattr(account_deletion, "delete_user_caller_ids", lambda _uid: None)
     monkeypatch.setattr(account_deletion, "delete_agent_vm_for_account", lambda _uid: None)
     monkeypatch.setattr(account_deletion, "delete_account_credentials", lambda _uid: None)
