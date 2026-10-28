@@ -26,11 +26,32 @@ def item_id(conversation_id: str, row: dict[str, Any]) -> str:
     return 'conv-summary:' + conversation_id + ':' + hashlib.sha256(generation(row).encode()).hexdigest()[:24]
 
 
+def _coerce_utc_datetime(value: Any) -> datetime | None:
+    """Coerce a datetime or ISO timestamp string to a timezone-aware UTC datetime."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        except ValueError:
+            return None
+    else:
+        return None
+
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
 def timing(row: dict[str, Any]) -> dict[str, Any]:
-    start = row.get('started_at') or row.get('created_at')
-    end = row.get('finished_at') or start
-    duration = max(0, (end - start).total_seconds()) if isinstance(start, datetime) and isinstance(end, datetime) else 0
-    return {'started_at': start, 'duration_seconds': duration}
+    raw_start = row.get('started_at') or row.get('created_at')
+    raw_end = row.get('finished_at') or raw_start
+    start = _coerce_utc_datetime(raw_start)
+    end = _coerce_utc_datetime(raw_end)
+    duration = max(0, (end - start).total_seconds()) if start and end else 0
+    return {'started_at': raw_start, 'duration_seconds': duration}
 
 
 def create_in_transaction(
@@ -94,9 +115,11 @@ def list_items(uid: str, limit: int | None = None) -> list[dict[str, Any]]:
         claim_snapshot = claim_ref.get()
         if claim_snapshot.exists:
             operation = claim_snapshot.to_dict() or {}
-            if operation['state'] == 'failed' and item.get('retry', {}).get('state') == 'failed':
+            retry_obj = item.get('retry')
+            retry_state = retry_obj.get('state') if isinstance(retry_obj, dict) else None
+            if operation.get('state') == 'failed' and retry_state == 'failed':
                 item['retryable'] = True  # Repair items made permanently non-retryable by the old ledger.
-            item['retry'] = {'state': operation['state'], 'operation_id': operation['operation_id']}
+            item['retry'] = {'state': operation.get('state'), 'operation_id': operation.get('operation_id')}
         item['title'] = (row or {}).get('user_title') or ((row or {}).get('structured') or {}).get('title')
         item.pop('generation', None)
         item.pop('active', None)
@@ -118,11 +141,12 @@ def claim_id(conversation_id: str, revision: str) -> str:
 
 
 def lease_live(operation: dict[str, Any], now: datetime) -> bool:
-    expires = operation.get('lease_expires_at')
-    if not isinstance(expires, datetime):
-        created = operation.get('created_at')
-        expires = created + timedelta(seconds=RETRY_LEASE_SECONDS) if isinstance(created, datetime) else None
-    return isinstance(expires, datetime) and expires > now
+    now_dt = _coerce_utc_datetime(now) or now_utc()
+    expires = _coerce_utc_datetime(operation.get('lease_expires_at'))
+    if expires is None:
+        created = _coerce_utc_datetime(operation.get('created_at'))
+        expires = created + timedelta(seconds=RETRY_LEASE_SECONDS) if created else None
+    return bool(expires and expires > now_dt)
 
 
 class ClaimRejected(ValueError):
@@ -187,8 +211,10 @@ def claim_in_transaction(
         or (current.get('state') == 'in_progress' and not lease_live(current, now))
     )
     if item is not None and owned:
+        retry_obj = item.get('retry')
+        retry_state = retry_obj.get('state') if isinstance(retry_obj, dict) else None
         retryable = item.get('retryable') or (
-            current.get('state') == 'failed' and item.get('retry', {}).get('state') == 'failed'
+            current.get('state') == 'failed' and retry_state == 'failed'
         )
         if not item.get('active') or not retryable:
             raise ClaimRejected('not_retryable')
@@ -225,7 +251,7 @@ def claim_in_transaction(
                 (
                     attention_ref,
                     {
-                        'retry': {'state': operation['state'], 'operation_id': operation['operation_id']},
+                        'retry': {'state': operation.get('state'), 'operation_id': operation.get('operation_id')},
                         **({'retryable': True} if owned else {}),
                     },
                 ),
@@ -293,7 +319,7 @@ def finish_in_transaction(
     transaction.set(current_ref, completed)
     transaction.set(current_ref.collection('attempts').document(operation['operation_id']), completed)
     if item_snapshot is not None and item_snapshot.exists:
-        updates: dict[str, Any] = {'retry': {'state': state, 'operation_id': operation['operation_id']}}
+        updates: dict[str, Any] = {'retry': {'state': state, 'operation_id': operation.get('operation_id')}}
         if state == 'succeeded':
             updates['active'] = False
         transaction.update(attention_ref, updates)
