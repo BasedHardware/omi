@@ -110,6 +110,7 @@ from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.process_conversation import process_conversation
 from utils.sync import processing_hold
 from utils.conversations.smart_merge import refresh_survivor
+from utils.conversations.sync_hold_completion import complete_explicit
 from utils.conversations.smart_merge_policy import refresh_owed
 from utils.conversations.relevance import sync_intake_decision
 from utils.episodes.finalize import schedule_after_finalization, schedule_synced_intake_attach
@@ -2110,8 +2111,9 @@ def _reprocess_merged_conversations(
 
                 mark(uid, conversation_id, language, sync_hold=hold)
             else:
-                _reprocess_conversation_after_update(uid, conversation_id, language)
+                processed = _reprocess_conversation_after_update(uid, conversation_id, language)
                 if user_selected:
+                    complete_explicit(uid, processed, ProcessingTrigger.BACKLOG_CHOICE)
                     from utils.conversations.demand_processing import promote_conversation_effects
 
                     promote_conversation_effects(uid, conversation_id)

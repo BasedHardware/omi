@@ -7844,7 +7844,7 @@ must add at least 30 seconds of speech or 80 words; it receives the same quiet
 window and at most one automatic re-finalization per canonical conversation.
 Small changes accumulate against the last processed snapshot. Explicit Process
 Now, client finalize, first-open and user reprocess retain their immediate
-paths. A full snapshot receipt survives lost outbox acknowledgements and
+paths and satisfy a pending hold when they succeed, without consuming the automatic late budget. A full snapshot receipt survives lost outbox acknowledgements and
 subsequent appends. Content is always retained even after the automatic cap.
 
 No current WAL producer provides a contiguous device upload watermark. A

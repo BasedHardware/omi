@@ -10,7 +10,8 @@ from utils.enrichment import callback, custody
 from utils.enrichment.consumer import EnrichmentConsumer
 from utils.workers.consumer import run_push
 from tests.unit.test_conversation_smart_merge import World
-from utils.conversations import smart_merge
+from utils.conversations import smart_merge, sync_hold_completion
+from utils.conversations.processing_trigger import ProcessingTrigger
 
 from utils.sync import processing_hold as hold
 from utils.enrichment import outbox
@@ -251,3 +252,17 @@ def test_hold_scheduling_respects_the_existing_outbox_runtime_boundary(monkeypat
     monkeypatch.setenv('OMI_ENV_STAGE', stage)
     monkeypatch.setenv('FIRESTORE_EMULATOR_HOST', emulator)
     assert hold.scheduling_enabled() is expected
+
+
+@pytest.mark.parametrize('trigger', ['client_finalize', 'backlog_choice', 'first_open', 'user_reprocess'])
+def test_explicit_end_satisfies_hold_immediately_without_spending_late_budget(monkeypatch, trigger):
+    world = World(monkeypatch)
+    world.add('parent', 0, 5, sync_content_revision=2, **{hold.FIELD: {'pending_since': 100, 'last_content_at': 100}})
+    current = world.get('user-1', 'parent')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    sync_hold_completion.complete_explicit(
+        'user-1', callback.deserialize_conversation(current), ProcessingTrigger(trigger)
+    )
+    state = world.raw('parent')[hold.FIELD]
+    assert state['pending_since'] is None and state['late_runs'] == 0
+    assert hold.admission(world.get('user-1', 'parent'), {'first_pending_at': 100}, now=700) == ('unchanged', None)

@@ -101,11 +101,13 @@ def admission(row: Mapping[str, Any], obligation: Mapping[str, Any], *, now: flo
     return ('max_hold' if now >= first + MAX_HOLD_SECONDS else 'ready'), None
 
 
-def completion_patch(existing: Mapping[str, Any], snapshot: Mapping[str, Any]) -> dict[str, Any]:
+def completion_patch(
+    existing: Mapping[str, Any], snapshot: Mapping[str, Any], *, automatic: bool = True
+) -> dict[str, Any]:
     state = dict(existing.get(FIELD) or {})
     previous = state.get('full_snapshot') or {}
     state['late_runs'] = int(state.get('late_runs') or 0) + int(
-        bool(previous) and previous.get('digest') != snapshot.get('digest')
+        automatic and bool(previous) and previous.get('digest') != snapshot.get('digest')
     )
     state.update(full_snapshot=dict(snapshot), pending_since=None, held=False)
     return state

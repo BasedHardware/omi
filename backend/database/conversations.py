@@ -4596,6 +4596,7 @@ def complete_sync_processing_hold(
     expected_revision: int | None,
     snapshot: dict | None,
     *,
+    automatic: bool = True,
     firestore_client: Any = None,
 ) -> bool:
     """Finish a hold epoch only after processing and its existing effects succeeded.
@@ -4613,7 +4614,7 @@ def complete_sync_processing_hold(
             return False
         state = dict(existing.get(processing_hold.FIELD) or {})
         if snapshot is not None:
-            state = processing_hold.completion_patch(existing, snapshot)
+            state = processing_hold.completion_patch(existing, snapshot, automatic=automatic)
         else:
             state.update(pending_since=None, held=False)
         transaction.update(ref, {processing_hold.FIELD: state})

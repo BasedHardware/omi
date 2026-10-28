@@ -79,6 +79,7 @@ from utils.conversations.deterministic_minimum import (
 )
 from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.duplicate_capture import link_duplicate_captures
+from utils.conversations.sync_hold_completion import complete_explicit
 from utils.conversations.processing_trigger import is_recovery_trigger
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
 from utils.conversations.recovery import (
@@ -3174,6 +3175,7 @@ def process_conversation(
             logger.error('Conversation processing failed: %s', type(failure).__name__)
             raise HTTPException(status_code=502, detail=APP_RESULT_FAILED_ERROR_DETAIL) from failure
         raise conversation_processing_http_exception(failure, route='conversation_processing/app_result') from failure
+    complete_explicit(uid, conversation, trigger)
     logger.info(f'process_conversation completed conversation.id= {conversation.id}')
     return conversation
 
