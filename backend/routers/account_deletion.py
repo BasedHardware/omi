@@ -32,6 +32,7 @@ class AccountDeletionStatusResponse(BaseModel):
     status: Optional[str] = None
     pending_deletion: bool = False
     wipe_at: Optional[datetime] = None
+    grace_period_days: int = 0
     loss_summary: AccountDeletionLossSummary
 
 
@@ -51,6 +52,7 @@ class AccountDeletionRestoreResponse(BaseModel):
 @router.delete('/v1/users/delete-account', tags=['v1'], response_model=AccountDeletionActionResponse)
 def delete_account(
     request: DeleteAccountRequest = DeleteAccountRequest(),
+    grace: bool = False,
     uid: str = Depends(auth.get_current_user_uid_for_deletion_status),
 ):
     # This recovery-auth route is open for status and restore operations, and
@@ -63,6 +65,7 @@ def delete_account(
             uid,
             reason=request.reason,
             reason_details=request.reason_details,
+            grace=grace,
             erase_now=request.erase_now,
         )
     except Exception as error:

@@ -228,7 +228,7 @@ def test_erase_now_route_uses_the_recovery_auth_dependency_and_promotes_pending(
         uid=uid,
     )
 
-    assert observed == {'uid': 'old-uid', 'reason': None, 'reason_details': None, 'erase_now': True}
+    assert observed == {'uid': 'old-uid', 'reason': None, 'reason_details': None, 'grace': False, 'erase_now': True}
     assert result['status'] == 'pending'
 
 

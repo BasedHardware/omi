@@ -61,6 +61,7 @@ from services.users.agent_vm_account_cleanup import delete_agent_vm_for_account
 from config.account_deletion_grace import (
     account_deletion_grace_enabled,
     account_deletion_grace_window,
+    account_deletion_grace_window_days,
 )
 from utils.sync.cap_hold import read_held_audio_summary
 
@@ -647,6 +648,7 @@ def start_account_deletion(
     reason: str | None = None,
     reason_details: str | None = None,
     *,
+    grace: bool = False,
     erase_now: bool = False,
 ) -> dict[str, Any]:
     # Admission is also fenced before creating a durable deletion intent. This
@@ -657,10 +659,11 @@ def start_account_deletion(
     # markers are not dispatchable until the stored deadline and the immediate
     # action receipt are both present. Immediate requests keep the established
     # durable queue claim and worker as the destructive executor.
-    use_grace = account_deletion_grace_enabled() and not erase_now
+    grace_window = account_deletion_grace_window()
+    use_grace = account_deletion_grace_enabled() and grace and not erase_now and grace_window.total_seconds() > 0
     wipe_due_at: datetime | None = None
     if use_grace:
-        wipe_due_at = datetime.now(timezone.utc) + account_deletion_grace_window()
+        wipe_due_at = datetime.now(timezone.utc) + grace_window
         wipe_intent = _retry_firestore_write(
             lambda: deletion_grace_db.mark_user_deletion_grace_intent(uid, wipe_due_at),
             uid=uid,
@@ -754,6 +757,7 @@ def account_deletion_status(uid: str) -> dict[str, Any]:
         'status': status,
         'pending_deletion': status == 'pending_deletion',
         'wipe_at': wipe_at,
+        'grace_period_days': account_deletion_grace_window_days() if account_deletion_grace_enabled() else 0,
         'loss_summary': {
             'held_recordings': _summary_count(held.get('count')),
             'held_audio_seconds': _summary_count(held.get('seconds')),

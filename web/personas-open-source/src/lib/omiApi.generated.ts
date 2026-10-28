@@ -72,6 +72,7 @@ export interface AccountDeletionRestoreResponse {
 }
 
 export interface AccountDeletionStatusResponse {
+  grace_period_days?: number;
   loss_summary: AccountDeletionLossSummary;
   pending_deletion?: boolean;
   status?: string | null;
@@ -20345,10 +20346,13 @@ export async function test_daily_summary_v1_users_daily_summary_settings_test_po
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function delete_account_v1_users_delete_account_delete(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: DeleteAccountRequest, init?: OmiApiClientInit): Promise<AccountDeletionActionResponse> {
+export async function delete_account_v1_users_delete_account_delete(query: { grace?: boolean }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: DeleteAccountRequest, init?: OmiApiClientInit): Promise<AccountDeletionActionResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/delete-account`;
-  const _search = "";
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "DELETE",
     headers: {

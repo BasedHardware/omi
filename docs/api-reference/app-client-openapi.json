@@ -360,6 +360,11 @@
       },
       "AccountDeletionStatusResponse": {
         "properties": {
+          "grace_period_days": {
+            "default": 0,
+            "title": "Grace Period Days",
+            "type": "integer"
+          },
           "loss_summary": {
             "$ref": "#/components/schemas/AccountDeletionLossSummary"
           },
@@ -74093,6 +74098,16 @@
       "delete": {
         "operationId": "delete_account_v1_users_delete_account_delete",
         "parameters": [
+          {
+            "in": "query",
+            "name": "grace",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Grace",
+              "type": "boolean"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",

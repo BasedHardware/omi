@@ -1,9 +1,11 @@
 # Account deletion grace period
 
-`DELETE /v1/users/delete-account` keeps the account's existing Firebase UID and
-starts a 14-day grace period by default. It cancels billing, revokes Firebase
-refresh tokens, and removes owner API/OAuth credentials when the request is
-accepted. The `account_deletions/{uid}` marker immediately fences ordinary API,
+`DELETE /v1/users/delete-account?grace=true` keeps the account's existing Firebase UID and
+starts the configured grace period when the client explicitly opts in. Requests
+without `grace=true` keep the existing immediate-erasure behavior, including
+requests from released clients that do not have restore UI. It cancels billing,
+revokes Firebase refresh tokens, and removes owner API/OAuth credentials when
+the request is accepted. The `account_deletions/{uid}` marker immediately fences ordinary API,
 capture, and processing access. Authentication remains enabled so the owner can
 sign in to the same UID; blocked requests return
 `account_pending_deletion`. The status, restore, and `erase_now` routes use a
@@ -13,12 +15,13 @@ content recovery.
 ## Owner API
 
 - `GET /v1/users/deletion-status` returns the current deletion status,
-  `pending_deletion`, `wipe_at`, and metadata-only loss counts for held audio
-  and deferred processing backlog. Call it before showing confirmation and
-  while the grace period is active.
+  `pending_deletion`, `wipe_at`, the enabled `grace_period_days` policy for a
+  new deletion, and metadata-only loss counts for held audio and deferred
+  processing backlog. A disabled kill switch reports zero grace days.
 - `DELETE /v1/users/delete-account` accepts `{"erase_now": true}` to bypass
   the grace period, including when promoting an existing pending request.
-  Omitting the field uses the configured default.
+  Grace requires the explicit `?grace=true` query parameter and a positive
+  configured window; omitting it erases immediately.
 - `POST /v1/users/restore-account` cancels a still-future grace marker. Restore
   changes the marker to `cancelled`, lifting the access and capture fences. The
   subscription remains cancelled, and deleted API/OAuth credentials must be
@@ -33,8 +36,8 @@ revoked at admission, so a client may need to sign in again before restoring.
 ## Configuration and execution
 
 - `ACCOUNT_DELETION_GRACE_ENABLED` defaults to `true`. Explicit `false` is the
-  kill switch and returns new deletion requests to the existing immediate-wipe
-  path.
+  global kill switch and returns even opted-in deletion requests to the
+  existing immediate-wipe path.
 - `ACCOUNT_DELETION_GRACE_WINDOW_DAYS` defaults to `14`; values are clamped to
   `0..365` whole days.
 - `ACCOUNT_DELETION_DISPATCH_MODE=cloud_tasks` remains the production wipe

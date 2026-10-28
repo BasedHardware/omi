@@ -1255,7 +1255,7 @@ def test_start_account_deletion_does_not_dispatch_when_atomic_claim_loses(monkey
     enqueue.assert_not_called()
 
 
-def test_start_account_deletion_uses_default_grace_without_dispatch(monkeypatch):
+def test_start_account_deletion_uses_opted_in_grace_without_dispatch(monkeypatch):
     from datetime import datetime, timedelta, timezone
 
     monkeypatch.setenv('ACCOUNT_DELETION_GRACE_ENABLED', 'true')
@@ -1288,7 +1288,7 @@ def test_start_account_deletion_uses_default_grace_without_dispatch(monkeypatch)
     submit = MagicMock()
     monkeypatch.setattr(account_deletion, 'submit_with_context', submit)
 
-    result = account_deletion.start_account_deletion('uid1')
+    result = account_deletion.start_account_deletion('uid1', grace=True)
 
     assert result['pending_deletion'] is True
     assert result['wipe_at'] is not None
@@ -1313,6 +1313,46 @@ def test_start_account_deletion_erase_now_overrides_enabled_grace(monkeypatch):
     assert result['wipe_at'] is None
     actions.assert_called_once_with('uid1')
     enqueue.assert_called_once_with('uid1', 'job-1')
+
+
+@pytest.mark.parametrize(('grace_enabled', 'grace_opt_in'), [('true', False), ('false', True)])
+def test_start_account_deletion_uses_immediate_path_without_opt_in_or_when_killed(
+    monkeypatch, grace_enabled, grace_opt_in
+):
+    monkeypatch.setenv('ACCOUNT_DELETION_GRACE_ENABLED', grace_enabled)
+    mark_wipe_intent = MagicMock(return_value=_new_wipe_intent())
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_intent', mark_wipe_intent)
+    mark_grace_intent = MagicMock()
+    monkeypatch.setattr(account_deletion.deletion_grace_db, 'mark_user_deletion_grace_intent', mark_grace_intent)
+    promote_grace = MagicMock(return_value=None)
+    monkeypatch.setattr(account_deletion.deletion_grace_db, 'promote_grace_to_immediate', promote_grace)
+    actions = MagicMock()
+    monkeypatch.setattr(account_deletion, '_run_immediate_deletion_steps', actions)
+    enqueue = MagicMock()
+    monkeypatch.setattr(account_deletion, 'enqueue_deletion_wipe', enqueue)
+
+    result = account_deletion.start_account_deletion('uid1', grace=grace_opt_in)
+
+    assert result['pending_deletion'] is False
+    assert result['wipe_at'] is None
+    mark_wipe_intent.assert_called_once_with('uid1')
+    mark_grace_intent.assert_not_called()
+    promote_grace.assert_called_once_with('uid1')
+    actions.assert_called_once_with('uid1')
+    enqueue.assert_called_once_with('uid1', 'job-1')
+
+
+def test_immediate_deletion_marker_cannot_be_restored(monkeypatch):
+    monkeypatch.setattr(
+        account_deletion.deletion_marker_db, 'read_account_deletion_marker', lambda _uid: {'wipe_status': 'pending'}
+    )
+    restore = MagicMock()
+    monkeypatch.setattr(account_deletion.deletion_grace_db, 'restore_user_deletion', restore)
+
+    result = account_deletion.restore_account_deletion('uid1')
+
+    assert result == {'status': 'not_pending', 'restored': False}
+    restore.assert_not_called()
 
 
 def test_erase_now_promotes_existing_grace_intent(monkeypatch):
@@ -1360,7 +1400,7 @@ def test_grace_actions_failure_keeps_the_fence_and_does_not_dispatch(monkeypatch
     monkeypatch.setattr(account_deletion, 'enqueue_deletion_wipe', enqueue)
 
     with pytest.raises(RuntimeError, match='Stripe unavailable'):
-        account_deletion.start_account_deletion('uid1')
+        account_deletion.start_account_deletion('uid1', grace=True)
 
     mark_complete.assert_not_called()
     enqueue.assert_not_called()
@@ -1420,6 +1460,8 @@ def test_restore_grace_deletion_keeps_billing_cancelled_and_restores_access(monk
 def test_account_deletion_status_includes_pending_deadline_and_loss_counts(monkeypatch):
     from datetime import datetime, timedelta, timezone
 
+    monkeypatch.setenv('ACCOUNT_DELETION_GRACE_ENABLED', 'true')
+    monkeypatch.setenv('ACCOUNT_DELETION_GRACE_WINDOW_DAYS', '14')
     wipe_at = datetime.now(timezone.utc) + timedelta(days=4)
     monkeypatch.setattr(
         account_deletion.deletion_marker_db,
@@ -1439,6 +1481,7 @@ def test_account_deletion_status_includes_pending_deadline_and_loss_counts(monke
         'status': 'pending_deletion',
         'pending_deletion': True,
         'wipe_at': wipe_at,
+        'grace_period_days': 14,
         'loss_summary': {
             'held_recordings': 3,
             'held_audio_seconds': 120,
@@ -1446,6 +1489,21 @@ def test_account_deletion_status_includes_pending_deadline_and_loss_counts(monke
             'backlog_seconds': 50,
         },
     }
+
+
+@pytest.mark.parametrize(('enabled', 'expected_days'), [(True, 14), (False, 0)])
+def test_account_deletion_status_reports_pre_delete_policy(monkeypatch, enabled, expected_days):
+    monkeypatch.setenv('ACCOUNT_DELETION_GRACE_ENABLED', str(enabled).lower())
+    monkeypatch.setenv('ACCOUNT_DELETION_GRACE_WINDOW_DAYS', '14')
+    monkeypatch.setattr(account_deletion.deletion_marker_db, 'read_account_deletion_marker', lambda _uid: {})
+    monkeypatch.setattr(account_deletion, 'read_held_audio_summary', lambda _uid: {})
+    monkeypatch.setattr(account_deletion.processing_backlog_db, 'read_processing_backlog_summary', lambda _uid: {})
+
+    result = account_deletion.account_deletion_status('uid1')
+
+    assert result['pending_deletion'] is False
+    assert result['wipe_at'] is None
+    assert result['grace_period_days'] == expected_days
 
 
 def test_background_wipe_user_data_preserves_order(monkeypatch):

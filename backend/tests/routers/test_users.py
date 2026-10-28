@@ -41,7 +41,23 @@ def test_delete_account_delegates_to_service():
         result = deletion_router.delete_account(request=request, uid='uid1')
 
     assert result == {'status': 'ok', 'message': 'Account deletion started'}
-    start_account_deletion.assert_called_once_with('uid1', reason='reason', reason_details='details', erase_now=False)
+    start_account_deletion.assert_called_once_with(
+        'uid1', reason='reason', reason_details='details', grace=False, erase_now=False
+    )
+
+
+def test_delete_account_forwards_explicit_grace_opt_in():
+    start_account_deletion = MagicMock(return_value={'status': 'ok', 'message': 'Account deletion started'})
+
+    with patch.object(deletion_router.auth, 'enforce_account_deletion_http_access'), patch.object(
+        deletion_router, 'start_account_deletion', start_account_deletion
+    ):
+        result = deletion_router.delete_account(request=deletion_router.DeleteAccountRequest(), grace=True, uid='uid1')
+
+    assert result == {'status': 'ok', 'message': 'Account deletion started'}
+    start_account_deletion.assert_called_once_with(
+        'uid1', reason=None, reason_details=None, grace=True, erase_now=False
+    )
 
 
 def test_delete_account_forwards_explicit_erase_now():
@@ -61,7 +77,9 @@ def test_delete_account_forwards_explicit_erase_now():
         result = deletion_router.delete_account(request=request, uid='uid1')
 
     assert result['pending_deletion'] is False
-    start_account_deletion.assert_called_once_with('uid1', reason=None, reason_details=None, erase_now=True)
+    start_account_deletion.assert_called_once_with(
+        'uid1', reason=None, reason_details=None, grace=False, erase_now=True
+    )
 
 
 def test_account_deletion_status_endpoint_returns_pending_deadline_and_loss_summary():
