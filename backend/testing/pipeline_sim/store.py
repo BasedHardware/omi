@@ -223,8 +223,11 @@ class SimStore:
         ]
         return min(values) if values else None
 
-    def pull_claim_hint(self, shard: str) -> dict:
-        return deepcopy(self.rows.get(('pull_claims', shard), {}))
+    def acquire_pull_claim(self, shard: str, token: str, now: float, ttl: float) -> bool:
+        if self.rows.get(('pull_claims', shard), {}).get('expires_at', 0) > now:
+            return False
+        self.rows['pull_claims', shard] = {'token': token, 'expires_at': now + ttl}
+        return True
 
     def control_candidate(self, priority: int, pool: str, now: float, *, worker_id: str = '', exclude=()) -> str | None:
         if priority not in (0, 1, 2) or pool not in {'batch', 'live'}:

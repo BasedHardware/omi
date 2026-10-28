@@ -52,6 +52,7 @@ def test_three_workers_pull_rounds_without_duplicate_or_lost_leases(lane, caplog
     admit = Scheduler(stores[0])
     leases = []
     expected = set()
+    conflicts_by_round = []
     caplog.set_level(logging.WARNING, logger=retry.__name__)
     with ThreadPoolExecutor(max_workers=4) as executor:
         for round_number in range(8):
@@ -86,11 +87,13 @@ def test_three_workers_pull_rounds_without_duplicate_or_lost_leases(lane, caplog
                     if operation.startswith(('batch_claim shard=scheduler_', 'batch_pull shard=scheduler_')):
                         conflicts[operation.split('scheduler_')[1]] += 1
             assert all(count <= 1 for count in conflicts.values()), conflicts
+            conflicts_by_round.append(dict(conflicts))
             # Drain sequentially between rounds so a busy ownership hint is
             # allowed to defer a pull but can never discard its obligation.
             leases.extend(workers[round_number % 3].pull(round_number, 4))
     assert Counter(lease.item.segment_id for lease in leases) == Counter({segment: 1 for segment in expected})
     assert len({lease.token for lease in leases}) == len(expected)
+    print(f'shard-spread single_shard={single_shard} issued={len(leases)} conflicts_by_round={conflicts_by_round}')
     for lease in leases:
         row = stores[0].run(lambda tx: tx.get('jobs', lease.item.segment_id))
         assert row['state'] == 'leased' and row['token'] == lease.token and row['attempt'] == 1
@@ -124,7 +127,7 @@ def test_expired_pull_holder_cannot_write_after_takeover(lane, monkeypatch):
     def run(body):
         nonlocal calls
         calls += 1
-        if calls == 2:
+        if calls == 1:
             stores[1].run(lambda tx: tx.put('pull_claims', shard, {'token': 'replacement', 'expires_at': 100}))
         return original_run(body)
 

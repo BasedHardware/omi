@@ -55,7 +55,7 @@ def test_failed_pull_keeps_only_expiring_claim_and_never_loses_job(monkeypatch):
     def fail(body):
         nonlocal calls
         calls += 1
-        if calls == 2:
+        if calls == 1:
             raise ValueError('synthetic failure before commit')
         return run(body)
 

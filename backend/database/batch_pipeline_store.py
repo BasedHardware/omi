@@ -8,11 +8,13 @@ from copy import deepcopy
 from contextlib import contextmanager
 from contextvars import ContextVar
 import hashlib
+import logging
 import os
 import re
 from typing import Any, Callable, Protocol, TypeVar
 
 from google.cloud import firestore
+from google.api_core.exceptions import AlreadyExists, FailedPrecondition, Aborted
 
 from config.batch_pipeline import contention_retry_enabled, SCHEDULER_SHARDS
 from config.firestore_read_levers import lever_enabled
@@ -31,6 +33,7 @@ PROJECTION_FINISH_STATES = ('persisted', 'ready')
 
 T = TypeVar('T')
 _pull_operation = ContextVar('batch_pull_operation', default='batch_pipeline_store')
+logger = logging.getLogger(__name__)
 
 
 @contextmanager
@@ -64,7 +67,7 @@ class Store(Protocol):
     def control_candidate(
         self, priority: int, pool: str, now: float, *, worker_id: str = '', exclude=()
     ) -> str | None: ...
-    def pull_claim_hint(self, shard: str) -> dict: ...
+    def acquire_pull_claim(self, shard: str, token: str, now: float, ttl: float) -> bool: ...
     def quarantine_fenced(self, segment_id: str, now: float) -> bool: ...
     def longest_ready_pending(self, owner_key: str) -> dict | None: ...
     def fresh_pending(self, owner_key: str, limit: int) -> list[dict]: ...
@@ -226,8 +229,24 @@ class FirestoreStore:
     def control_candidate(self, priority: int, pool: str, now: float, *, worker_id: str = '', exclude=()) -> str | None:
         return control_candidate(self.client, self.namespace, priority, pool, now, worker_id=worker_id, exclude=exclude)
 
-    def pull_claim_hint(self, shard: str) -> dict:
-        return self.client.collection(f'{self.namespace}_pull_claims').document(shard).get().to_dict() or {}
+    def acquire_pull_claim(self, shard: str, token: str, now: float, ttl: float) -> bool:
+        # One conditional write, no transaction or retrying read set. A stale
+        # hint can only lose the CAS, never authorize two simultaneous owners.
+        with pull_operation('claim', shard):
+            ref = self.client.collection(f'{self.namespace}_pull_claims').document(shard)
+            snapshot = ref.get()
+            if (snapshot.to_dict() or {}).get('expires_at', 0) > now:
+                return False
+            value = {'token': token, 'expires_at': now + ttl}
+            try:
+                if snapshot.exists:
+                    ref.update(value, option=firestore.LastUpdateOption(snapshot.update_time), retry=None)
+                else:
+                    ref.create(value, retry=None)
+            except (AlreadyExists, FailedPrecondition, Aborted):
+                logger.info('event=batch_shard_contention operation=claim shard=%s outcome=busy', shard)
+                return False
+            return True
 
     def oldest_retry(self, priority: int) -> float | None:
         return oldest_retry(self.client, self.namespace, priority)

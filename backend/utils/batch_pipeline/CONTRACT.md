@@ -43,7 +43,9 @@ record. Live transcription is a preview; the batch result is the record.
   exhaustion. `BATCH_PIPELINE_CONTENTION_RETRY_ENABLED=false` restores the old
   transaction behavior. Other `InvalidArgument` and application errors are not
   retried or quarantined as poison without unit-specific evidence.
-  Pullers take a token-fenced, 30s `pull_claims/scheduler_NN` lease before
+  Pullers take a token-fenced, 30s `pull_claims/scheduler_NN` lease with a
+  single compare-and-swap (create or update-time precondition), without
+  a claim transaction/retry loop, before
   touching control/queue/job metadata. The pull transaction verifies that
   token and releases it atomically; an error leaves a bounded claim for
   expiry/takeover. Followers only read hints or the claim, never write control.

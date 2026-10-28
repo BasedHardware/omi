@@ -122,8 +122,8 @@ class PgSimStore(SimStore):
     def oldest_retry(self, priority: int) -> float | None:
         return self.pg.oldest_retry(priority)
 
-    def pull_claim_hint(self, shard: str) -> dict:
-        return self.pg.pull_claim_hint(shard)
+    def acquire_pull_claim(self, shard: str, token: str, now: float, ttl: float) -> bool:
+        return self.pg.acquire_pull_claim(shard, token, now, ttl)
 
     def control_candidate(self, priority: int, pool: str, now: float, *, worker_id: str = '', exclude=()) -> str | None:
         return self.pg.control_candidate(priority, pool, now, worker_id=worker_id, exclude=exclude)

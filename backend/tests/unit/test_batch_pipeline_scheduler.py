@@ -95,9 +95,12 @@ class MemoryStore:
         ]
         return min(jobs) if jobs else None
 
-    def pull_claim_hint(self, shard):
+    def acquire_pull_claim(self, shard, token, now, ttl):
         with self.lock:
-            return deepcopy(self.rows.get(('pull_claims', shard), {}))
+            if self.rows.get(('pull_claims', shard), {}).get('expires_at', 0) > now:
+                return False
+            self.rows['pull_claims', shard] = {'token': token, 'expires_at': now + ttl}
+            return True
 
     def control_candidate(self, priority, pool, now, *, worker_id='', exclude=()):
         from utils.batch_pipeline.control import field

@@ -6155,7 +6155,8 @@ flags does not remove persisted label authority or reset paid recovery intents.
 ### Batch pull shard ownership
 
 `BATCH_SHARD_SPREAD_ENABLED` defaults on. Pullers first acquire a separate,
-token-fenced 30-second claim for a control shard, then verify it in the actual
+token-fenced 30-second claim for a control shard using a single conditional
+create/update-time write (no transaction retry loop), then verify it in the actual
 queue/job transaction. A successful pull (including an owned empty/blocked
 visit) releases the claim atomically with its metadata changes. A crashed or
 failed pull leaves it for bounded expiry; a resumed old token cannot mutate

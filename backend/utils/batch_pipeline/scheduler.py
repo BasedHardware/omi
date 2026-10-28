@@ -357,21 +357,8 @@ class Scheduler:
         if spread:
             # Hint reads take no transaction locks and never authorize writes.
             # A loser does not join the expensive control/queue/job read set.
-            hint = self.store.pull_claim_hint(shard)
-            if hint.get('expires_at', 0) > current_time():
+            if not self.store.acquire_pull_claim(shard, claim_token, current_time(), PULL_CLAIM_SECONDS):
                 return None, 'busy'
-
-            def acquire(tx):
-                claim = tx.get('pull_claims', shard)
-                at = current_time()
-                if claim.get('expires_at', 0) > at:
-                    return False
-                tx.put('pull_claims', shard, {'token': claim_token, 'expires_at': at + PULL_CLAIM_SECONDS})
-                return True
-
-            with pull_operation('claim', shard):
-                if not self.store.run(acquire):
-                    return None, 'busy'
 
         def commit(tx):
             observations = []
