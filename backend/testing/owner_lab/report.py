@@ -82,7 +82,7 @@ def bootstrap_ratio(
     point = sum(float(p[1][key]) for p in pairs) / sum(float(p[0][key]) for p in pairs)
     stats = []
     for _ in range(iterations):
-        sample = [pairs[rng._randbelow(len(pairs))] for _ in pairs]  # noqa: SLF001
+        sample = [rng.choice(pairs) for _ in pairs]
         stats.append(sum(float(p[1][key]) for p in sample) / sum(float(p[0][key]) for p in sample))
     stats.sort()
     return point, stats[int(0.025 * iterations)], stats[int(0.975 * iterations)]
