@@ -11887,5 +11887,8 @@
     "onTheWayDayQueued": "На чекање",
     "onTheWayNoDate": "Без датум",
     "onTheWayFootnote": "Записите што не успеат продолжуваат да се обидуваат во позадина. Сè што не можеме да го транскрибираме, автоматски ни се пријавува.",
-    "onTheWayDetailsForSupport": "Детали за поддршка"
+    "onTheWayDetailsForSupport": "Детали за поддршка",
+    "homeNoiseFoldHidden": "{count, plural, =1{Скриен е 1 краток клип} other{Скриени се {count} кратки клипови}}",
+    "homeNoiseFoldShow": "Прикажи",
+    "homeNoiseFoldHide": "{count, plural, =1{Скрии 1 краток клип} other{Скрии {count} кратки клипови}}"
 }

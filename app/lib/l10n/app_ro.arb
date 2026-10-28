@@ -4461,5 +4461,8 @@
     "onTheWayDayQueued": "În coadă",
     "onTheWayNoDate": "Fără dată",
     "onTheWayFootnote": "Înregistrările care eșuează continuă să fie reîncercate în fundal. Orice nu putem transcrie ni se raportează automat.",
-    "onTheWayDetailsForSupport": "Detalii pentru suport"
+    "onTheWayDetailsForSupport": "Detalii pentru suport",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 clip scurt ascuns} other{{count} clipuri scurte ascunse}}",
+    "homeNoiseFoldShow": "Afișează",
+    "homeNoiseFoldHide": "{count, plural, =1{Ascunde 1 clip scurt} other{Ascunde {count} clipuri scurte}}"
 }

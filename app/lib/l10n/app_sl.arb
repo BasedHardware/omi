@@ -11887,5 +11887,8 @@
     "onTheWayDayQueued": "V čakalni vrsti",
     "onTheWayNoDate": "Brez datuma",
     "onTheWayFootnote": "Posnetki, katerih nalaganje spodleti, se v ozadju poskušajo znova. Vse, česar ne moremo transkribirati, nam bo samodejno sporočeno.",
-    "onTheWayDetailsForSupport": "Podrobnosti za podporo"
+    "onTheWayDetailsForSupport": "Podrobnosti za podporo",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 kratek posnetek skrit} other{{count} kratkih posnetkov skritih}}",
+    "homeNoiseFoldShow": "Prikaži",
+    "homeNoiseFoldHide": "{count, plural, =1{Skrij 1 kratek posnetek} other{Skrij {count} kratkih posnetkov}}"
 }

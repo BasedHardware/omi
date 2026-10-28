@@ -11887,5 +11887,8 @@
     "onTheWayDayQueued": "Nakapila",
     "onTheWayNoDate": "Walang petsa",
     "onTheWayFootnote": "Ang mga recording na nabigo ay patuloy na susubukan ulit sa background. Awtomatikong maiuulat sa amin ang mga hindi namin matranscribe.",
-    "onTheWayDetailsForSupport": "Mga detalye para sa support"
+    "onTheWayDetailsForSupport": "Mga detalye para sa support",
+    "homeNoiseFoldHidden": "{count, plural, =1{Nakatago ang 1 maikling clip} other{Nakatago ang {count} maikling clip}}",
+    "homeNoiseFoldShow": "Ipakita",
+    "homeNoiseFoldHide": "{count, plural, =1{Itago ang 1 maikling clip} other{Itago ang {count} maikling clip}}"
 }

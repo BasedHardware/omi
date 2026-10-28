@@ -4461,5 +4461,8 @@
     "onTheWayDayQueued": "อยู่ในคิว",
     "onTheWayNoDate": "ไม่มีวันที่",
     "onTheWayFootnote": "การบันทึกที่ล้มเหลวจะลองใหม่ต่อในเบื้องหลัง ส่วนสิ่งที่เราถอดเสียงไม่ได้จะถูกรายงานถึงเราโดยอัตโนมัติ",
-    "onTheWayDetailsForSupport": "รายละเอียดสำหรับฝ่ายสนับสนุน"
+    "onTheWayDetailsForSupport": "รายละเอียดสำหรับฝ่ายสนับสนุน",
+    "homeNoiseFoldHidden": "{count, plural, =1{ซ่อนคลิปสั้นไว้ 1 รายการ} other{ซ่อนคลิปสั้นไว้ {count} รายการ}}",
+    "homeNoiseFoldShow": "แสดง",
+    "homeNoiseFoldHide": "{count, plural, =1{ซ่อนคลิปสั้น 1 รายการ} other{ซ่อนคลิปสั้น {count} รายการ}}"
 }

@@ -4461,5 +4461,8 @@
     "onTheWayDayQueued": "Ve frontě",
     "onTheWayNoDate": "Bez data",
     "onTheWayFootnote": "Nahrávky, které se nepodaří nahrát, se na pozadí odesílají znovu a znovu. Cokoli, co nedokážeme přepsat, se nám hlásí automaticky.",
-    "onTheWayDetailsForSupport": "Podrobnosti pro podporu"
+    "onTheWayDetailsForSupport": "Podrobnosti pro podporu",
+    "homeNoiseFoldHidden": "{count, plural, =1{Skrytá 1 krátká nahrávka} other{Skryto krátkých nahrávek: {count}}}",
+    "homeNoiseFoldShow": "Zobrazit",
+    "homeNoiseFoldHide": "{count, plural, =1{Skrýt 1 krátkou nahrávku} other{Skrýt krátké nahrávky: {count}}}"
 }

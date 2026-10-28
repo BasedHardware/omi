@@ -4461,5 +4461,8 @@
     "onTheWayDayQueued": "En cola",
     "onTheWayNoDate": "Sin fecha",
     "onTheWayFootnote": "Las grabaciones que fallan siguen reintentándose en segundo plano. Todo lo que no podemos transcribir se nos notifica automáticamente.",
-    "onTheWayDetailsForSupport": "Detalles para soporte"
+    "onTheWayDetailsForSupport": "Detalles para soporte",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 clip corto oculto} other{{count} clips cortos ocultos}}",
+    "homeNoiseFoldShow": "Mostrar",
+    "homeNoiseFoldHide": "{count, plural, =1{Ocultar 1 clip corto} other{Ocultar {count} clips cortos}}"
 }

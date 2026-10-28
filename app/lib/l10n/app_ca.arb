@@ -4461,5 +4461,8 @@
     "onTheWayDayQueued": "A la cua",
     "onTheWayNoDate": "Sense data",
     "onTheWayFootnote": "Els enregistraments que fallin es tornen a provar en segon pla. Tot allò que no puguem transcriure se'ns notifica automàticament.",
-    "onTheWayDetailsForSupport": "Detalls per al suport"
+    "onTheWayDetailsForSupport": "Detalls per al suport",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 clip curt amagat} other{{count} clips curts amagats}}",
+    "homeNoiseFoldShow": "Mostrar",
+    "homeNoiseFoldHide": "{count, plural, =1{Amagar 1 clip curt} other{Amagar {count} clips curts}}"
 }

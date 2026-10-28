@@ -4461,5 +4461,8 @@
     "onTheWayDayQueued": "Jonossa",
     "onTheWayNoDate": "Ei päivämäärää",
     "onTheWayFootnote": "Nauhoitukset, jotka epäonnistuvat, yritetään yhä uudelleen taustalla. Kaikki, mitä emme pysty transkriboimaan, ilmoitetaan meille automaattisesti.",
-    "onTheWayDetailsForSupport": "Tiedot tukea varten"
+    "onTheWayDetailsForSupport": "Tiedot tukea varten",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 lyhyt leike piilotettu} other{{count} lyhyttä leikettä piilotettu}}",
+    "homeNoiseFoldShow": "Näytä",
+    "homeNoiseFoldHide": "{count, plural, =1{Piilota 1 lyhyt leike} other{Piilota {count} lyhyttä leikettä}}"
 }

@@ -4496,5 +4496,8 @@
     "onTheWayDayQueued": "Kuyrukta",
     "onTheWayNoDate": "Tarih yok",
     "onTheWayFootnote": "Başarısız olan kayıtlar arka planda yeniden denenmeye devam eder. Transkriptini çıkaramadığımız her şey bize otomatik olarak bildirilir.",
-    "onTheWayDetailsForSupport": "Destek için ayrıntılar"
+    "onTheWayDetailsForSupport": "Destek için ayrıntılar",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 kısa kayıt gizlendi} other{{count} kısa kayıt gizlendi}}",
+    "homeNoiseFoldShow": "Göster",
+    "homeNoiseFoldHide": "{count, plural, =1{1 kısa kaydı gizle} other{{count} kısa kaydı gizle}}"
 }

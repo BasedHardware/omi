@@ -4461,5 +4461,8 @@
     "onTheWayDayQueued": "Trong hàng đợi",
     "onTheWayNoDate": "Không có ngày",
     "onTheWayFootnote": "Các bản ghi âm bị lỗi sẽ tiếp tục được thử lại trong nền. Những gì chúng tôi không thể phiên âm sẽ tự động được báo cáo cho chúng tôi.",
-    "onTheWayDetailsForSupport": "Chi tiết cho bộ phận hỗ trợ"
+    "onTheWayDetailsForSupport": "Chi tiết cho bộ phận hỗ trợ",
+    "homeNoiseFoldHidden": "{count, plural, =1{Đã ẩn 1 clip ngắn} other{Đã ẩn {count} clip ngắn}}",
+    "homeNoiseFoldShow": "Hiển thị",
+    "homeNoiseFoldHide": "{count, plural, =1{Ẩn 1 clip ngắn} other{Ẩn {count} clip ngắn}}"
 }

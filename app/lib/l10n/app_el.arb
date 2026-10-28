@@ -4461,5 +4461,8 @@
     "onTheWayDayQueued": "Σε αναμονή",
     "onTheWayNoDate": "Χωρίς ημερομηνία",
     "onTheWayFootnote": "Οι ηχογραφήσεις που αποτυγχάνουν συνεχίζουν να δοκιμάζουν στο παρασκήνιο. Οτιδήποτε δεν μπορούμε να μεταγράψουμε αναφέρεται αυτόματα σε εμάς.",
-    "onTheWayDetailsForSupport": "Λεπτομέρειες για την υποστήριξη"
+    "onTheWayDetailsForSupport": "Λεπτομέρειες για την υποστήριξη",
+    "homeNoiseFoldHidden": "{count, plural, =1{Κρύφτηκε 1 σύντομο απόσπασμα} other{Κρύφτηκαν {count} σύντομα αποσπάσματα}}",
+    "homeNoiseFoldShow": "Εμφάνιση",
+    "homeNoiseFoldHide": "{count, plural, =1{Απόκρυψη 1 σύντομου αποσπάσματος} other{Απόκρυψη {count} σύντομων αποσπασμάτων}}"
 }

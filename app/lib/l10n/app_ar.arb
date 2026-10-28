@@ -4461,5 +4461,8 @@
     "onTheWayDayQueued": "في قائمة الانتظار",
     "onTheWayNoDate": "بدون تاريخ",
     "onTheWayFootnote": "تستمر التسجيلات التي تفشل في إعادة المحاولة في الخلفية. ويُبلَّغنا تلقائيًا عن أي شيء يتعذر علينا تحويله إلى نص.",
-    "onTheWayDetailsForSupport": "تفاصيل لفريق الدعم"
+    "onTheWayDetailsForSupport": "تفاصيل لفريق الدعم",
+    "homeNoiseFoldHidden": "{count, plural, =1{تم إخفاء مقطع صوتي قصير واحد} other{تم إخفاء {count} من المقاطع الصوتية القصيرة}}",
+    "homeNoiseFoldShow": "إظهار",
+    "homeNoiseFoldHide": "{count, plural, =1{إخفاء مقطع صوتي قصير واحد} other{إخفاء {count} من المقاطع الصوتية القصيرة}}"
 }

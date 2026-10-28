@@ -4461,5 +4461,8 @@
     "onTheWayDayQueued": "Laukia eilėje",
     "onTheWayNoDate": "Be datos",
     "onTheWayFootnote": "Nepavykę įrašai toliau bandomi fone. Viskas, ko nepavyksta transkribuoti, mums automatiškai pranešama.",
-    "onTheWayDetailsForSupport": "Išsami informacija palaikymo komandai"
+    "onTheWayDetailsForSupport": "Išsami informacija palaikymo komandai",
+    "homeNoiseFoldHidden": "{count, plural, =1{Paslėptas 1 trumpas įrašas} other{Paslėpta {count} trumpų įrašų}}",
+    "homeNoiseFoldShow": "Rodyti",
+    "homeNoiseFoldHide": "{count, plural, =1{Slėpti 1 trumpą įrašą} other{Slėpti {count} trumpus įrašus}}"
 }
