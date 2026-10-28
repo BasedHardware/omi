@@ -24,6 +24,7 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/wals/wal_derived_views.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/ui/ui.dart';
@@ -96,6 +97,35 @@ class _FakeSync extends ChangeNotifier implements SyncProvider {
   _FakeSync(this.wals);
 
   final List<Wal> wals;
+
+  late final _views = WalDerivedViews(wals);
+  @override
+  WalDerivedViews get derivedWals {
+    _views.refresh();
+    return _views;
+  }
+
+  @override
+  List<Wal> get uploadedWals => derivedWals.uploaded;
+  @override
+  List<Wal> get pendingSyncWals => derivedWals.syncing;
+  @override
+  List<Wal> get attentionWals => derivedWals.attention;
+  @override
+  List<Wal> get refusedWals => derivedWals.refused;
+  @override
+  List<Wal> get pendingWorkWals => derivedWals.pendingWork;
+  @override
+  int get needsAttentionWalsCount => attentionWals.length;
+  @override
+  int get terminallyFailedWalsCount => refusedWals.length;
+  @override
+  WalRefusalSummary get refusalSummary => derivedWals.refusalSummary();
+  @override
+  void dispose() {
+    _views.dispose();
+    super.dispose();
+  }
 
   @override
   SyncState get syncState => const SyncState();

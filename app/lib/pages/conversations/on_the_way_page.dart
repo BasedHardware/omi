@@ -85,9 +85,8 @@ class _OnTheWayPageState extends State<OnTheWayPage> with _PendingWorkListener {
         final work = _PendingWork.collect(p, processing, store.pending, l, forSupport: false);
         // Recordings that failed or were refused recover without the user; they are not rows
         // here, but they keep the page from claiming everything is synced.
-        final quiet = p.allWals.any((w) => isAttentionSyncState(w.syncDisplayState)) ||
-            p.allWals.any((w) => w.status == WalStatus.uploadRejected);
-        final refusals = WalRefusalSummary.from(p.allWals);
+        final quiet = p.needsAttentionWalsCount > 0 || p.terminallyFailedWalsCount > 0;
+        final refusals = p.refusalSummary;
 
         final Widget body;
         if (work.isEmpty && !quiet) {
@@ -379,7 +378,7 @@ class _PendingWork {
     final pending = [
       ...inFlight,
       if (forSupport) ...SyncPendingWork.attention(p),
-      if (forSupport) ...p.displaySortedWals.where((w) => w.status == WalStatus.uploadRejected),
+      if (forSupport) ...p.refusedWals,
     ]..sort((a, b) => b.timerStart.compareTo(a.timerStart));
     // Rows with no trustworthy time: server work the phone did not start, and recordings whose
     // device clock predates the plausibility floor.

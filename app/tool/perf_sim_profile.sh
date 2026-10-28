@@ -10,6 +10,7 @@ OUT_DIR=""
 MODE=profile
 PLATFORM=ios
 TIMELINE=0
+SYNCED_WALS=0
 VIRTUAL=0
 RUNTIME_BUILD=""
 WARMUP_RUNS=0
@@ -24,6 +25,7 @@ while [[ $# -gt 0 ]]; do
     --warmup-runs) WARMUP_RUNS="$2"; shift 2 ;;
     --platform) PLATFORM="$2"; shift 2 ;;
     --timeline) TIMELINE=1; shift ;;
+    --synced-wals) SYNCED_WALS="$2"; shift 2 ;;
     *) echo "unknown option: $1" >&2; exit 64 ;;
   esac
 done
@@ -79,6 +81,9 @@ TARGET=integration_test/perf/heavy_profile_main.dart
 DEFINES=(--dart-define=OMI_APP_PROFILE=local_dev)
 if [[ "$VIRTUAL" == 1 ]]; then DEFINES+=(--dart-define=PERF_VIRTUAL_QUALIFICATION=true); fi
 if [[ "$TIMELINE" == 1 ]]; then DEFINES+=(--dart-define=PERF_HEAVY_TIMELINE=true); fi
+# Field-shaped diagnostic: synced records on top of the pending backlog. Changes the dataset, so
+# such a batch is never comparable with, or accepted as, the standard heavy baseline.
+if [[ "$SYNCED_WALS" != 0 ]]; then DEFINES+=(--dart-define=PERF_SIM_SYNCED_WALS="$SYNCED_WALS"); fi
 BUILD_ARGS=(--"$MODE" --flavor dev --target "$TARGET")
 if [[ "$SIMULATOR" == 1 ]]; then
   DEFINES+=(--dart-define=PERF_SIM_QUALIFICATION=true)
@@ -165,6 +170,7 @@ for ((launch=1; launch<=RUNS+WARMUP_RUNS; launch++)); do
         --out "$ATTEMPT_DIR/admission-before-launch.json"
     fi
     DRIVE_RESULT=0
+    # Empty on physical devices; bash 3.2 (macOS /usr/bin/env bash) rejects "${a[@]}" of an empty array under set -u.
     HOST_GUARD=()
     if [[ "$VIRTUAL" == 1 ]]; then
       HOST_GUARD=(python3 -I tool/perf/host_load.py --out "$ATTEMPT_DIR/host-load.json" --)
@@ -174,7 +180,7 @@ for ((launch=1; launch<=RUNS+WARMUP_RUNS; launch++)); do
       OMI_PERF_TIMELINE="$TIMELINE" \
       OMI_PERF_SIMULATOR="$SIMULATOR" \
       OMI_PERF_VIRTUAL="$VIRTUAL" \
-      "${HOST_GUARD[@]}" python3 -I tool/perf_drive.py "$ATTEMPT_DIR/driver.log" \
+      ${HOST_GUARD[@]+"${HOST_GUARD[@]}"} python3 -I tool/perf_drive.py "$ATTEMPT_DIR/driver.log" \
       flutter drive --"$MODE" --flavor dev --no-pub --no-dds --keep-app-running --no-publish-port \
       --driver=test_driver/heavy_profile_driver.dart --target="$TARGET" \
       --use-application-binary="$BINARY" "${DEFINES[@]}" -d "$DEVICE" || DRIVE_RESULT=$?

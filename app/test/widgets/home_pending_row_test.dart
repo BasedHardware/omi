@@ -1,3 +1,4 @@
+import 'package:omi/services/wals/wal_derived_sync_views.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -32,7 +33,7 @@ import '../support/typed_conversation_screen.dart';
 /// conversations stay visible in Today as one calm row, with the detail one
 /// tap away and the Offline Sync page one tap beyond that.
 
-class _FakeSync extends ChangeNotifier implements SyncProvider {
+class _FakeSync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvider {
   _FakeSync({this.wals = const [], this.syncing = false, this.fetching = false, this.fetchingWithUploadPhase = false});
 
   final List<Wal> wals;
@@ -365,14 +366,16 @@ void main() {
       expect(find.text('1 recording · 10m'), findsOneWidget);
     });
 
-    test('the catching-up check is answered once per WAL list, not per progress tick', () {
+    test('the catching-up check reuses its view until a WAL actually changes', () {
       final wals = [_wal('long', 40, WalStatus.miss)];
       final sync = _FakeSync(wals: wals);
       expect(SyncPendingWork.isLargeBacklog(sync), isTrue);
-      // Same list, same answer, even though nothing re-scans it.
+      final totals = sync.derivedWals.pendingSecondsByDay;
+      expect(identical(sync.derivedWals.pendingSecondsByDay, totals), isTrue);
+      // A real mutation invalidates the contribution even with stable membership.
       wals.first.seconds = 60;
-      expect(SyncPendingWork.isLargeBacklog(sync), isTrue);
-      // A new list, as SyncProvider publishes on any status change, is read afresh.
+      expect(SyncPendingWork.isLargeBacklog(sync), isFalse);
+      // A newly published inventory produces the same updated answer.
       expect(SyncPendingWork.isLargeBacklog(_FakeSync(wals: [...wals])), isFalse);
     });
 
