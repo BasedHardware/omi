@@ -4470,5 +4470,7 @@
     "onTheWayDetailsForSupport": "Detalls per al suport",
     "homeNoiseFoldHidden": "{count, plural, =1{1 clip curt amagat} other{{count} clips curts amagats}}",
     "homeNoiseFoldShow": "Mostrar",
-    "homeNoiseFoldHide": "{count, plural, =1{Amagar 1 clip curt} other{Amagar {count} clips curts}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Amagar 1 clip curt} other{Amagar {count} clips curts}}",
+    "dailyRecapsOnHome": "Resums diaris a l'Inici",
+    "dailyRecapsOnHomeDescription": "Mostra els teus resums més recents a dalt de l'Inici."
 }
