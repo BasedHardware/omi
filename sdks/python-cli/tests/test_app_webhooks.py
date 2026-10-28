@@ -603,3 +603,15 @@ def test_verify_reports_malformed_url_as_usage_error_without_traceback(
     rows = json.loads(result.stdout)
     assert rows[0]["check"] == "delivery target"
     assert rows[0]["result"] == "fail"
+
+
+@pytest.mark.parametrize("bad_url", ["http://[", "https://example.com:0/webhook", "https://example.com:99999/webhook"])
+def test_send_reports_malformed_url_as_usage_error_without_traceback(
+    cli_runner: CliRunner, config_path: Path, monkeypatch: pytest.MonkeyPatch, bad_url: str
+) -> None:
+    _public_resolver(monkeypatch)
+    result = _run(cli_runner, "app", "send", "memory_created", "--to", bad_url)
+
+    assert result.exit_code == EXIT_USAGE
+    assert "Traceback" not in result.output
+    assert not isinstance(result.exception, (httpx.InvalidURL, ValueError))

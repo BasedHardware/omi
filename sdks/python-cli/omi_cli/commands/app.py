@@ -195,7 +195,13 @@ def send_event(
                 raise UsageError("Payload file must contain a JSON object")
             payload = parsed
 
-    url = append_query_params(to, events_mod.request_params(event, uid))
+    try:
+        url = append_query_params(to, events_mod.request_params(event, uid))
+    except (httpx.InvalidURL, ValueError) as exc:
+        raise UsageError(
+            f"Invalid --to URL: {to!r}",
+            detail=f"{exc}. Pass a full http(s) URL with a valid host and port, e.g. https://example.com/webhook",
+        ) from exc
     headers = {"Content-Type": event.content_type}
     # Same precedence as the backend: the key the event carries, else a fresh one.
     headers["Idempotency-Key"] = idempotency_key or events_mod.idempotency_key(event, payload) or str(uuid.uuid4())
