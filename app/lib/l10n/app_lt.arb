@@ -4459,5 +4459,8 @@
     "onTheWayDayQueued": "Laukia eilėje",
     "onTheWayNoDate": "Be datos",
     "onTheWayFootnote": "Nepavykę įrašai toliau bandomi fone. Viskas, ko nepavyksta transkribuoti, mums automatiškai pranešama.",
-    "onTheWayDetailsForSupport": "Išsami informacija palaikymo komandai"
+    "onTheWayDetailsForSupport": "Išsami informacija palaikymo komandai",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}",
+    "homeNoiseFoldShow": "Show",
+    "homeNoiseFoldHide": "{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}"
 }

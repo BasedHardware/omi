@@ -11885,5 +11885,8 @@
     "onTheWayDayQueued": "قطار میں",
     "onTheWayNoDate": "کوئی تاریخ نہیں",
     "onTheWayFootnote": "ناکام ہونے والی ریکارڈنگز پس منظر میں دوبارہ کوشش کرتی رہتی ہیں۔ جو ہم ٹرانسکرائب نہیں کر سکتے وہ خود بخود ہمیں رپورٹ ہو جاتا ہے۔",
-    "onTheWayDetailsForSupport": "سپورٹ کے لیے تفصیلات"
+    "onTheWayDetailsForSupport": "سپورٹ کے لیے تفصیلات",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}",
+    "homeNoiseFoldShow": "Show",
+    "homeNoiseFoldHide": "{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}"
 }

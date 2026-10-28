@@ -11885,5 +11885,8 @@
     "onTheWayDayQueued": "ಸರದಿಯಲ್ಲಿದೆ",
     "onTheWayNoDate": "ದಿನಾಂಕವಿಲ್ಲ",
     "onTheWayFootnote": "ವಿಫಲವಾದ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಹಿನ್ನೆಲೆಯಲ್ಲಿ ಮರುಪ್ರಯತ್ನಿಸುತ್ತಲೇ ಇರುತ್ತವೆ. ನಾವು ಟ್ರಾನ್ಸ್‌ಕ್ರೈಬ್ ಮಾಡಲಾಗದ ವಿಷಯಗಳು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ನಮಗೆ ವರದಿಯಾಗುತ್ತವೆ.",
-    "onTheWayDetailsForSupport": "ಬೆಂಬಲಕ್ಕಾಗಿ ವಿವರಗಳು"
+    "onTheWayDetailsForSupport": "ಬೆಂಬಲಕ್ಕಾಗಿ ವಿವರಗಳು",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}",
+    "homeNoiseFoldShow": "Show",
+    "homeNoiseFoldHide": "{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}"
 }

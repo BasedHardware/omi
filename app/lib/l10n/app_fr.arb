@@ -4494,5 +4494,8 @@
     "onTheWayDayQueued": "En file d'attente",
     "onTheWayNoDate": "Sans date",
     "onTheWayFootnote": "Les enregistrements qui échouent réessaient en arrière-plan. Tout ce que nous ne pouvons pas transcrire nous est signalé automatiquement.",
-    "onTheWayDetailsForSupport": "Détails pour le support"
+    "onTheWayDetailsForSupport": "Détails pour le support",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}",
+    "homeNoiseFoldShow": "Show",
+    "homeNoiseFoldHide": "{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}"
 }

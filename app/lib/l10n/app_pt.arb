@@ -4494,5 +4494,8 @@
     "onTheWayDayQueued": "Na fila",
     "onTheWayNoDate": "Sem data",
     "onTheWayFootnote": "As gravações que falham continuam sendo tentadas em segundo plano. Tudo o que não conseguimos transcrever nos é reportado automaticamente.",
-    "onTheWayDetailsForSupport": "Detalhes para o suporte"
+    "onTheWayDetailsForSupport": "Detalhes para o suporte",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}",
+    "homeNoiseFoldShow": "Show",
+    "homeNoiseFoldHide": "{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}"
 }

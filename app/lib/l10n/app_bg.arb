@@ -4459,5 +4459,8 @@
     "onTheWayDayQueued": "На опашка",
     "onTheWayNoDate": "Без дата",
     "onTheWayFootnote": "Неуспелите записи продължават да се опитват във фонов режим. Всичко, което не можем да транскрибираме, ни се докладва автоматично.",
-    "onTheWayDetailsForSupport": "Подробности за поддръжката"
+    "onTheWayDetailsForSupport": "Подробности за поддръжката",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}",
+    "homeNoiseFoldShow": "Show",
+    "homeNoiseFoldHide": "{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}"
 }

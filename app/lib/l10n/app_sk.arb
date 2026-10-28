@@ -4459,5 +4459,8 @@
     "onTheWayDayQueued": "Vo fronte",
     "onTheWayNoDate": "Bez dátumu",
     "onTheWayFootnote": "Nahrávky, ktorých odosielanie zlyhá, sa budú na pozadí opakovať. Všetko, čo nedokážeme prepísať, sa nám automaticky nahlási.",
-    "onTheWayDetailsForSupport": "Detaily pre podporu"
+    "onTheWayDetailsForSupport": "Detaily pre podporu",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}",
+    "homeNoiseFoldShow": "Show",
+    "homeNoiseFoldHide": "{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}"
 }

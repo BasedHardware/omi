@@ -4459,5 +4459,8 @@
     "onTheWayDayQueued": "Trong hàng đợi",
     "onTheWayNoDate": "Không có ngày",
     "onTheWayFootnote": "Các bản ghi âm bị lỗi sẽ tiếp tục được thử lại trong nền. Những gì chúng tôi không thể phiên âm sẽ tự động được báo cáo cho chúng tôi.",
-    "onTheWayDetailsForSupport": "Chi tiết cho bộ phận hỗ trợ"
+    "onTheWayDetailsForSupport": "Chi tiết cho bộ phận hỗ trợ",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}",
+    "homeNoiseFoldShow": "Show",
+    "homeNoiseFoldHide": "{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}"
 }

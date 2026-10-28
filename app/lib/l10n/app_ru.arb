@@ -4494,5 +4494,8 @@
     "onTheWayDayQueued": "В очереди",
     "onTheWayNoDate": "Без даты",
     "onTheWayFootnote": "Если загрузка записи завершится сбоем, попытки продолжатся в фоновом режиме. Всё, что мы не сможем расшифровать, будет автоматически отправляться нам.",
-    "onTheWayDetailsForSupport": "Подробности для поддержки"
+    "onTheWayDetailsForSupport": "Подробности для поддержки",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}",
+    "homeNoiseFoldShow": "Show",
+    "homeNoiseFoldHide": "{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}"
 }

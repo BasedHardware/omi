@@ -4494,5 +4494,8 @@
     "onTheWayDayQueued": "Dalam antrean",
     "onTheWayNoDate": "Tanpa tanggal",
     "onTheWayFootnote": "Rekaman yang gagal terus dicoba ulang di latar belakang. Apa pun yang tidak bisa kami transkripsikan akan otomatis dilaporkan ke kami.",
-    "onTheWayDetailsForSupport": "Detail untuk dukungan"
+    "onTheWayDetailsForSupport": "Detail untuk dukungan",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}",
+    "homeNoiseFoldShow": "Show",
+    "homeNoiseFoldHide": "{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}"
 }

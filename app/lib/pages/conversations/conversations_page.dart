@@ -33,6 +33,7 @@ import 'package:omi/pages/conversations/background_conversations.dart';
 import 'package:omi/pages/conversations/widgets/processing_conversation_row.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/date_list_item.dart';
+import 'package:omi/pages/conversations/widgets/noise_fold_line.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
 import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
@@ -49,7 +50,16 @@ String _conversationDateRangeLabel(BuildContext context, DateTime start, DateTim
   return '${dates.date(start)} – ${dates.date(end)}';
 }
 
-enum _ConversationListRowKind { topSpacer, dateHeader, liveEpisode, processing, conversation, recording, groupSpacer }
+enum _ConversationListRowKind {
+  topSpacer,
+  dateHeader,
+  liveEpisode,
+  processing,
+  conversation,
+  recording,
+  noiseFold,
+  groupSpacer
+}
 
 typedef _ConversationListRow = ({
   _ConversationListRowKind kind,
@@ -79,6 +89,7 @@ typedef _ConversationPageSnapshot = ({
   int conversationIdentitySignature,
   int processingIdentitySignature,
   int recordingIdentitySignature,
+  int noiseFoldSignature,
   int pendingDeleteCount,
   HomeEmptyExplanation homeEmptyExplanation,
 });
@@ -140,6 +151,8 @@ _ConversationPageSnapshot _conversationPageSnapshot(
     conversationIdentitySignature: _identitySignature(conversations.conversations),
     processingIdentitySignature: _identitySignature(conversations.processingConversations),
     recordingIdentitySignature: _identitySignature(recordings.recordings),
+    noiseFoldSignature: Object.hash(
+        identityHashCode(conversations.foldedNoiseByDate), Object.hashAllUnordered(conversations.revealedNoiseDates)),
     pendingDeleteCount: conversations.memoriesToDelete.length,
     homeEmptyExplanation: conversations.homeEmptyExplanation,
   );
@@ -149,13 +162,20 @@ List<_ConversationListRow> _buildConversationListRows({
   required List<DateTime> dates,
   required Map<DateTime, List<ServerConversation>> conversationsByDate,
   required Map<DateTime, List<LocalRecording>> recordingsByDate,
+  Map<DateTime, List<ServerConversation>> foldedNoiseByDate = const {},
+  Set<DateTime> revealedNoiseDates = const {},
 }) {
   final rows = <_ConversationListRow>[];
   var hasRenderedDate = false;
 
   for (var dateIndex = 0; dateIndex < dates.length; dateIndex++) {
     final date = dates[dateIndex];
-    final conversations = conversationsByDate[date] ?? const <ServerConversation>[];
+    final folded = foldedNoiseByDate[date] ?? const <ServerConversation>[];
+    final shown = conversationsByDate[date] ?? const <ServerConversation>[];
+    // Revealed clips take their place in the day's timeline, not a pile at its end.
+    final conversations = revealedNoiseDates.contains(date) && folded.isNotEmpty
+        ? ([...shown, ...folded]..sort((x, y) => y.createdAt.compareTo(x.createdAt)))
+        : shown;
     final recordings = recordingsByDate[date] ?? const <LocalRecording>[];
     final entries = buildConversationGroupEntries(conversations: conversations, recordings: recordings);
     final conversationIndexes = <String, int>{
@@ -204,6 +224,17 @@ List<_ConversationListRow> _buildConversationListRows({
           conversationIndex: -1,
         ));
       }
+    }
+
+    if (folded.isNotEmpty) {
+      rows.add((
+        kind: _ConversationListRowKind.noiseFold,
+        date: date,
+        isFirst: false,
+        conversation: null,
+        recording: null,
+        conversationIndex: folded.length,
+      ));
     }
 
     rows.add((
@@ -621,6 +652,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           dates: mergedDates,
           conversationsByDate: hidingBackground ? _withoutBackground(conversationsByDate) : conversationsByDate,
           recordingsByDate: recordingsByDate,
+          foldedNoiseByDate:
+              showRecordings && !convoProvider.isSelectionModeActive ? convoProvider.foldedNoiseByDate : const {},
+          revealedNoiseDates: convoProvider.revealedNoiseDates,
         );
         final withLive =
             episodeLive ? _withTodayRow(builtRows, DateTime.now(), _ConversationListRowKind.liveEpisode) : builtRows;
@@ -764,6 +798,13 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                     switch (row.kind) {
                       case _ConversationListRowKind.topSpacer:
                         return const SizedBox(height: 10);
+                      case _ConversationListRowKind.noiseFold:
+                        return NoiseFoldLine(
+                          key: ValueKey('noise_fold_${row.date.toIso8601String()}'),
+                          count: row.conversationIndex,
+                          revealed: convoProvider.revealedNoiseDates.contains(row.date),
+                          onTap: () => convoProvider.toggleFoldedNoise(row.date),
+                        );
                       case _ConversationListRowKind.dateHeader:
                         return DateListItem(
                           key: ValueKey('date_${row.date.toIso8601String()}'),

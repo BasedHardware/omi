@@ -4459,5 +4459,8 @@
     "onTheWayDayQueued": "Järjekorras",
     "onTheWayNoDate": "Kuupäeveta",
     "onTheWayFootnote": "Salvestised, mis ei õnnestu, proovitakse taustal pidevalt uuesti. Kõik, mida me ei suuda transkribeerida, raporteeritakse meile automaatselt.",
-    "onTheWayDetailsForSupport": "Üksikasjad toe jaoks"
+    "onTheWayDetailsForSupport": "Üksikasjad toe jaoks",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}",
+    "homeNoiseFoldShow": "Show",
+    "homeNoiseFoldHide": "{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}"
 }

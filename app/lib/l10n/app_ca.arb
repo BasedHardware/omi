@@ -4459,5 +4459,8 @@
     "onTheWayDayQueued": "A la cua",
     "onTheWayNoDate": "Sense data",
     "onTheWayFootnote": "Els enregistraments que fallin es tornen a provar en segon pla. Tot allò que no puguem transcriure se'ns notifica automàticament.",
-    "onTheWayDetailsForSupport": "Detalls per al suport"
+    "onTheWayDetailsForSupport": "Detalls per al suport",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}",
+    "homeNoiseFoldShow": "Show",
+    "homeNoiseFoldHide": "{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}"
 }

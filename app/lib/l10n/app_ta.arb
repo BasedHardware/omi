@@ -11885,5 +11885,8 @@
     "onTheWayDayQueued": "வரிசையில் உள்ளது",
     "onTheWayNoDate": "தேதி இல்லை",
     "onTheWayFootnote": "தோல்வியுற்ற பதிவுகள் பின்னணியில் மீண்டும் முயற்சிக்கும். எழுத்துப்பெயர்க்க முடியாதவை தானாகவே எங்களுக்குத் தெரிவிக்கப்படும்.",
-    "onTheWayDetailsForSupport": "ஆதரவுக்கான விவரங்கள்"
+    "onTheWayDetailsForSupport": "ஆதரவுக்கான விவரங்கள்",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}",
+    "homeNoiseFoldShow": "Show",
+    "homeNoiseFoldHide": "{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}"
 }

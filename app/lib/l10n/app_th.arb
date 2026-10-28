@@ -4459,5 +4459,8 @@
     "onTheWayDayQueued": "อยู่ในคิว",
     "onTheWayNoDate": "ไม่มีวันที่",
     "onTheWayFootnote": "การบันทึกที่ล้มเหลวจะลองใหม่ต่อในเบื้องหลัง ส่วนสิ่งที่เราถอดเสียงไม่ได้จะถูกรายงานถึงเราโดยอัตโนมัติ",
-    "onTheWayDetailsForSupport": "รายละเอียดสำหรับฝ่ายสนับสนุน"
+    "onTheWayDetailsForSupport": "รายละเอียดสำหรับฝ่ายสนับสนุน",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}",
+    "homeNoiseFoldShow": "Show",
+    "homeNoiseFoldHide": "{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}"
 }

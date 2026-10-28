@@ -88,6 +88,17 @@ class ConversationProvider extends ChangeNotifier {
   bool _isLoadingConversationList = false;
   bool _isLoadingConversationSearch = false;
   bool showDiscardedConversations = false;
+
+  /// Per local day, the noise clips the server folded away from Home (MEDIA_NOISE). Home shows
+  /// one quiet line per day instead of the rows; tapping it reveals them in place.
+  Map<DateTime, List<ServerConversation>> foldedNoiseByDate = {};
+  final Set<DateTime> revealedNoiseDates = {};
+
+  void toggleFoldedNoise(DateTime date) {
+    if (!revealedNoiseDates.remove(date)) revealedNoiseDates.add(date);
+    notifyListeners();
+  }
+
   HomeEmptyExplanation homeEmptyExplanation = HomeEmptyExplanation.none;
   bool showShortConversations = false;
   int shortConversationThreshold = 0; // in seconds

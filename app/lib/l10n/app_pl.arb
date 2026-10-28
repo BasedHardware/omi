@@ -4494,5 +4494,8 @@
     "onTheWayDayQueued": "W kolejce",
     "onTheWayNoDate": "Brak daty",
     "onTheWayFootnote": "Nagrania, których nie uda się wgrać, będą ponawiane w tle. Wszystko, czego nie potrafimy transkrybować, zostanie automatycznie zgłoszone.",
-    "onTheWayDetailsForSupport": "Szczegóły dla działu wsparcia"
+    "onTheWayDetailsForSupport": "Szczegóły dla działu wsparcia",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}",
+    "homeNoiseFoldShow": "Show",
+    "homeNoiseFoldHide": "{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}"
 }
