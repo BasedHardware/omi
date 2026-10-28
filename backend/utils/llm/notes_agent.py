@@ -26,8 +26,13 @@ from prometheus_client import Counter as PromCounter, Histogram
 from pydantic import ValidationError
 
 from models.structured_extraction import AgentNotesSubmission
-from utils.llm.notes_agent_policy import NotesAgentBudget, estimate_cost_usd
-from utils.llm.notes_agent_prompt import INSTRUCTIONS, SUBMIT, TOOL_SCHEMAS, screenshot_message
+from utils.llm.notes_agent_policy import NotesAgentBudget, estimate_cost_usd, lookup_efficiency_enabled
+from utils.llm.notes_agent_prompt import (
+    SUBMIT,
+    screenshot_message,
+    instructions_for_run,
+    tools_for_run,
+)
 from utils.llm.notes_output_contract import FORMAT, check_notes, repair_notes, repair_contract, OUTPUT_RULES
 from utils.llm.notes_output import NotesOutput, submit_tool
 from utils.llm.notes_packet import PACKET_RULES
@@ -63,6 +68,12 @@ FORCED_RUNS = PromCounter(
 )
 DECISIONS = PromCounter('omi_notes_agent_decisions_total', 'Agentic notes eligibility decisions', ['reason'])
 TOOL_USE = PromCounter('omi_notes_agent_tool_use_total', 'Agentic notes read-tool calls by tool', ['tool'])
+REFUSED_LOOKUPS = PromCounter(
+    'omi_notes_agent_refused_lookups_total', 'Read lookups refused beyond the run cap', ['tool']
+)
+DUPLICATE_LOOKUPS = PromCounter(
+    'omi_notes_agent_duplicate_lookups_total', 'Identical read lookups in one run', ['tool']
+)
 REPAIRS = PromCounter('omi_notes_agent_repairs_total', 'Static repairs and rejections of submissions', ['kind'])
 TOKENS = PromCounter('omi_notes_agent_tokens_total', 'Agentic notes tokens', ['kind'])
 TOOL_CALLS = Histogram(
@@ -111,6 +122,8 @@ class NotesAgentResult:
     stop: str
     turns: int = 0
     tool_calls: int = 0
+    duplicate_lookups: int = 0
+    refused_lookups: int = 0
     prompt_tokens: int = 0
     cached_tokens: int = 0
     completion_tokens: int = 0
@@ -133,8 +146,8 @@ def notes_agent_mount(
     # The run_loop tool cap carries slack: the real lookup cap is enforced per call
     # below, so a submit_notes that shares a turn with lookups is never discarded.
     return Mount(
-        instructions=INSTRUCTIONS,
-        tools=TOOL_SCHEMAS,
+        instructions=instructions_for_run(),
+        tools=tools_for_run(),
         stable_context=(owner,),
         cache_breakpoint=False,
         feature=FEATURE,
@@ -160,6 +173,8 @@ async def run_notes_agent(
     toolbox: Toolbox,
     budget: NotesAgentBudget,
     transcript_words: int,
+    prefetched_evidence: int = 0,
+    prefetched_lookups: Mapping[str, Any] | None = None,
     open_tasks: Sequence[Any] = (),
     owner_names: Sequence[str] = (),
     naming_leads: Sequence[str] = (),
@@ -180,6 +195,14 @@ async def run_notes_agent(
             instructions=mount.instructions + '\n\n' + PACKET_RULES + '\n\n' + OUTPUT_RULES,
             tools=tuple(tool for tool in mount.tools if tool['function']['name'] != SUBMIT) + (submit_tool(),),
         )
+    efficient = lookup_efficiency_enabled()
+    lookup_cache: dict[str, Any] = {}
+    seen_lookups: set[str] = set()
+    if efficient:
+        for name, outcome in (prefetched_lookups or {}).items():
+            if name in {'get_calendar', 'get_screen_activity'}:
+                lookup_cache[name + ':{}'] = outcome
+    evidence_credit = max(0, min(prefetched_evidence, budget.min_tool_calls)) if efficient else 0
     last_submission: Optional[dict[str, Any]] = None
     last_identity_repaired = False
     send_backs = SendBackBudget(SEND_BACKS)
@@ -283,7 +306,7 @@ async def run_notes_agent(
                 sent_back, payload = _review_submission(
                     arguments,
                     transcript_words=transcript_words,
-                    lookups_missing=max(0, budget.min_tool_calls - result.tool_calls),
+                    lookups_missing=max(0, budget.min_tool_calls - result.tool_calls - evidence_credit),
                     naming_leads=naming_leads,
                     contract_v2=contract_v2,
                     identity=identity,
@@ -305,12 +328,12 @@ async def run_notes_agent(
                         state.get('force', False)
                         or at_cap
                         or (
-                            result.tool_calls >= budget.min_tool_calls
+                            result.tool_calls + evidence_credit >= budget.min_tool_calls
                             and not any(problem.kind == EVIDENCE for problem in sent_back)
                         )
                     )
                     if state['force'] and not state.get('force_reason'):
-                        state['force_reason'] = 'lookup_cap' if at_cap else 'submission_rejected'
+                        state['force_reason'] = 'submission_rejected_at_cap' if at_cap else 'submission_rejected'
                     responses.append(_tool_reply(call, {'status': 'rejected', 'fix': verdict}))
                     continue
                 accepted = payload
@@ -319,7 +342,40 @@ async def run_notes_agent(
             if name not in toolbox.names:
                 responses.append(_tool_reply(call, {'error': f'unknown tool {name}'}))
                 continue
+            # Canonical JSON ignores argument-key order. Search text ignores case/whitespace;
+            # identifiers and screenshot ids retain their exact bytes.
+            normalized = dict(arguments)
+            for key in ('query', 'person'):
+                if isinstance(normalized.get(key), str):
+                    normalized[key] = ' '.join(normalized[key].split()).casefold()
+            if isinstance(normalized.get('names'), list) and all(isinstance(n, str) for n in normalized['names']):
+                normalized['names'] = sorted(
+                    set(' '.join(n.split()).casefold() for n in normalized['names'] if isinstance(n, str))
+                )
+            # Omitted/default values identify the same conversation-window read.
+            defaults = {'start': None, 'end': None}
+            if name == 'get_screen_activity':
+                defaults['query'] = ''
+                defaults['limit'] = 25
+            if name in {'get_calendar', 'get_screen_activity'}:
+                normalized = {
+                    key: value
+                    for key, value in normalized.items()
+                    if key not in defaults or value not in (defaults[key], '')
+                }
+            cache_key = name + ':' + json.dumps(normalized, sort_keys=True, ensure_ascii=False)
+            if cache_key in seen_lookups:
+                result.duplicate_lookups += 1
+                DUPLICATE_LOOKUPS.labels(tool=name).inc()
+            seen_lookups.add(cache_key)
+            if efficient and cache_key in lookup_cache:
+                outcome = lookup_cache[cache_key]
+                responses.append({'role': 'tool', 'tool_call_id': call['id'], 'content': outcome.content})
+                # The original image remains in the append-only history.
+                continue
             if result.tool_calls >= budget.max_tool_calls:
+                result.refused_lookups += 1
+                REFUSED_LOOKUPS.labels(tool=name).inc()
                 state['force'] = True
                 state['force_reason'] = 'lookup_cap'
                 responses.append(_tool_reply(call, {'error': 'lookup budget exhausted; call submit_notes now'}))
@@ -327,6 +383,8 @@ async def run_notes_agent(
             result.tool_calls += 1
             result.tools[name] += 1
             outcome = await toolbox.call(name, arguments)
+            if efficient:
+                lookup_cache[cache_key] = outcome
             responses.append({'role': 'tool', 'tool_call_id': call['id'], 'content': outcome.content})
             image = getattr(outcome, 'image', None)
             if image is not None:
@@ -495,7 +553,7 @@ def langchain_complete(
     model: Any, *, cache_options: Optional[Mapping[str, Any]] = None, cache_key: Optional[str] = None
 ) -> Complete:
     """One conv-structure gateway turn through the notes model (usage callbacks preserved)."""
-    base: dict[str, Any] = {'tools': list(TOOL_SCHEMAS), 'max_completion_tokens': MAX_COMPLETION_TOKENS}
+    base: dict[str, Any] = {'tools': list(tools_for_run()), 'max_completion_tokens': MAX_COMPLETION_TOKENS}
     if cache_options:
         base['extra_body'] = {'prompt_cache_options': dict(cache_options)}
     if cache_key:

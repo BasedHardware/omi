@@ -7334,6 +7334,20 @@ L2 roster priors and L3 rendering/language authorities; notes cache identities
 include effective packet selection and version. Cloud Run metric export includes
 the refactor families while retaining the prerecorded-language gate allowlist.
 
+Agentic notes reuse identical read lookups within one conversation and batch
+unresolved People names with `search_people(names=[...])`. Calendar overlap,
+conversation-window screen rows (with the same messaging-text exclusions), and
+up to 12 matching People records live in the conversation's cached evidence
+packet. Prefetched evidence counts toward the investigation floor; lookup caps
+stay 6/10/15 by transcript tier. People records remain spelling/relationship
+evidence, never voice bindings. The per-call
+`CONVERSATION_NOTES_AGENT_LOOKUP_EFFICIENCY_ENABLED` kill switch defaults on;
+false/off/0/no restores legacy packet, prompt, schema and charging. Attribution
+stays split in both modes: `lookup_cap` requires a refused lookup, while a
+rejected submission at the cap uses `submission_rejected_at_cap`.
+`omi_notes_agent_duplicate_lookups_total` and
+`omi_notes_agent_refused_lookups_total` count both cases by bounded tool name.
+
 ### Wave 2 evidence and consumers
 
 The nine wave-2 percentage controls share the `capture-speaker-notes:wave2`

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -30,6 +31,7 @@ from utils.conversations.screen_text_digest import MESSAGING_APPS
 from utils.executors import db_executor, run_blocking
 from utils.llm.meeting_notes_rich_prompts import NotesFrameImage
 from utils.llm.notes_agent_prompt import READ_TOOL_NAMES, VIEW_SCREENSHOT
+from utils.llm.notes_agent_policy import lookup_efficiency_enabled
 from utils.llm.shaped_agent import model_json
 from utils.llm.notes_identity import NotesIdentity
 from utils.model_text import ContextWindow, ToolTimeError, parse_tool_time, to_datetime, utc_z
@@ -77,6 +79,7 @@ class NotesToolbox:
     seen_conversations: set[str] = field(default_factory=set)
     calls: Counter = field(default_factory=Counter)
     _search: Any = None
+    _people: Any = None
     identity: NotesIdentity | None = None
     # The conversation window: every time-range tool defaults to it (harness tool rule 1).
     window: ContextWindow = field(init=False)
@@ -144,28 +147,7 @@ class NotesToolbox:
                     )
                 )
             )
-        wanted = {word.casefold() for word in str(query or '').split() if len(word) > 2}
-        picked = []
-        for row in rows or []:
-            if not isinstance(row, Mapping):
-                continue
-            app = str(row.get('appName') or '')
-            private = app.strip().casefold() in MESSAGING_APPS
-            text = '' if private else str(row.get('ocrText') or '')
-            haystack = f"{row.get('windowTitle') or ''} {text}".casefold()
-            if wanted and not any(word in haystack for word in wanted):
-                continue
-            picked.append(
-                {
-                    'at': row.get('timestamp'),
-                    'app': app,
-                    'window': _clip(row.get('windowTitle'), 160),
-                    **({'text': _clip(text, SCREEN_TEXT_CHARACTERS)} if text else {}),
-                }
-            )
-        cap = max(1, min(_bounded(limit) or 25, MAX_SCREEN_ROWS))
-        step = max(1, len(picked) // cap)
-        return {'total_rows': len(picked), 'rows': picked[::step][:cap]}
+        return screen_result(rows or [], query, limit)
 
     async def view_screenshot(self, frame_id: str = ''):
         frame = next((item for item in self.frames if item.frame_id == frame_id), None)
@@ -192,14 +174,29 @@ class NotesToolbox:
                     )
         return {'meetings': [calendar_row(meeting) for meeting in meetings or [] if isinstance(meeting, Mapping)]}
 
-    async def search_people(self, query: str = ''):
-        people = await run_blocking(db_executor, load_people_documents, self.uid)
-        wanted = [word.casefold() for word in str(query or '').split() if word]
+    async def _load_people(self):
+        if not lookup_efficiency_enabled():
+            return await run_blocking(db_executor, load_people_documents, self.uid)
+        if self._people is None:
+            self._people = await run_blocking(db_executor, load_people_documents, self.uid)
+        return self._people
+
+    async def search_people(self, query: str = '', names: Optional[list[str]] = None):
+        if names is not None and not lookup_efficiency_enabled():
+            raise TypeError('names is unavailable')
+        if names is not None and (not isinstance(names, list) or any(not isinstance(n, str) for n in names)):
+            raise TypeError('names must be a list of strings')
+        if names is not None and not any(n.strip() for n in names) and not query:
+            return {'people': []}
+        people = await self._load_people()
+        queries = [str(query or '')] if names is None else [*names[:12], *([query] if query else [])]
+        wanted = [[word.casefold() for word in name.split() if word] for name in queries]
+        wanted = [words for words in wanted if words]
         found = []
         for person in people or []:
             names = [person.get('name'), *(person.get('aliases') or [])]
             blob = ' '.join(str(name) for name in names if isinstance(name, str)).casefold()
-            if wanted and not all(word in blob for word in wanted):
+            if wanted and not any(all(word in blob for word in words) for words in wanted):
                 continue
             found.append(person_row(person))
             if len(found) >= MAX_PEOPLE:
@@ -226,7 +223,7 @@ class NotesToolbox:
     ):
         person_ref = None
         if person:
-            people = await run_blocking(db_executor, load_people_documents, self.uid)
+            people = await self._load_people()
             wanted = person.strip().casefold()
             match = next((p for p in people or [] if str(p.get('name') or '').strip().casefold() == wanted), None)
             if match is None or not match.get('id'):
@@ -283,6 +280,82 @@ class NotesToolbox:
                 _clip(item.get('description'), 160) for item in open_items or [] if isinstance(item, Mapping)
             ],
         }
+
+
+def screen_result(rows: Sequence[Any], query: str = '', limit: int = 25) -> dict[str, Any]:
+    wanted = {word.casefold() for word in str(query or '').split() if len(word) > 2}
+    picked = []
+    for row in rows or []:
+        if not isinstance(row, Mapping):
+            continue
+        app = str(row.get('appName') or '')
+        private = app.strip().casefold() in MESSAGING_APPS
+        text = '' if private else str(row.get('ocrText') or '')
+        haystack = f"{row.get('windowTitle') or ''} {text}".casefold()
+        if wanted and not any(word in haystack for word in wanted):
+            continue
+        picked.append(
+            {
+                'at': row.get('timestamp'),
+                'app': app,
+                'window': _clip(row.get('windowTitle'), 160),
+                **({'text': _clip(text, SCREEN_TEXT_CHARACTERS)} if text else {}),
+            }
+        )
+    cap = max(1, min(_bounded(limit) or 25, MAX_SCREEN_ROWS))
+    step = max(1, len(picked) // cap)
+    return {'total_rows': len(picked), 'rows': picked[::step][:cap]}
+
+
+def enrich_lookup_packet(packet: dict[str, Any], *, people_loader, capture_evidence: str) -> None:
+    """Bounded People leads in the conversation block, never the shared/user prefix.
+
+    These records establish spelling/relationship only, never attendance or voice identity.
+    Calendar and screen context were already prefetched; do not manufacture lookup quotas.
+    """
+    leads = [
+        str(row.get('name') or '')
+        for key in ('listed_participants', 'people_on_screen')
+        for row in packet.get(key) or []
+    ]
+    text = ' '.join([capture_evidence, *leads]).casefold()
+    matched = []
+    loaded_people = False
+    try:
+        people = people_loader() or []
+        loaded_people = True
+        for person in people:
+            names = [person.get('name'), *(person.get('aliases') or [])]
+            if any(
+                isinstance(name, str)
+                and len(name.strip()) >= 3
+                and '@' not in name
+                and re.search(r'(?<!\w)' + re.escape(name.strip().casefold()) + r'(?!\w)', text)
+                for name in names
+            ):
+                matched.append(person_row(person))
+                if len(matched) >= 12:
+                    break
+    except Exception as error:
+        logger.warning('notes agent packet people read failed error=%s', type(error).__name__)
+    packet['matched_people'] = matched
+    # A floor of physical calls duplicates the same work after prefetch. Count independent
+    # evidence sources/People records already supplied, bounded by the tier's old floor.
+    packet['prefetched_evidence'] = (
+        len(packet.get('prefetched_tools') or [])
+        + loaded_people
+        + len(matched)
+        + bool(packet.get('related_past_meetings'))
+    )
+
+
+def prefetched_results(packet: Mapping[str, Any]) -> dict[str, ToolOutcome]:
+    results = {}
+    if 'get_calendar' in (packet.get('prefetched_tools') or []):
+        results['get_calendar'] = ToolOutcome(model_json({'meetings': packet.get('calendar_overlap') or []}))
+    if 'get_screen_activity' in (packet.get('prefetched_tools') or []):
+        results['get_screen_activity'] = ToolOutcome(model_json(packet['screen_activity']))
+    return results
 
 
 def calendar_row(meeting: Mapping[str, Any]) -> dict[str, Any]:
@@ -349,6 +422,8 @@ def build_packet(
     background: Optional[str],
     frames: Sequence[NotesFrameImage],
     capture_sources: Sequence[str] = (),
+    capture_evidence: str = '',
+    people_cache: Optional[dict[str, Any]] = None,
 ) -> tuple[dict[str, Any], set[str]]:
     """The cheap lookups every agent run gets. Returns ``(packet, seen_conversation_ids)``.
 
@@ -356,11 +431,14 @@ def build_packet(
     """
     start, end = _as_utc(started_at) or datetime.now(timezone.utc), _as_utc(finished_at)
     end = end if end and end >= start else start
+    prefetched_tools = []
     calendar: list[dict[str, Any]] = []
     windows: list[str] = []
+    screen = None
     try:
         meetings: Any = calendar_db.get_meetings_in_time_range(uid, start, end)
         calendar = [calendar_row(meeting) for meeting in meetings or [] if isinstance(meeting, Mapping)]
+        prefetched_tools.append('get_calendar')
     except Exception as error:  # noqa: BLE001 - every packet source degrades independently
         logger.warning('notes agent packet calendar read failed uid=%s: %s', uid, type(error).__name__)
     leads: list[dict[str, Any]] = []
@@ -369,6 +447,14 @@ def build_packet(
             uid, start_date=start - timedelta(minutes=LEAD_MINUTES_BEFORE), end_date=end, limit=400
         )
         windows = _top_windows(rows or [])
+        if lookup_efficiency_enabled():
+            conversation_rows = [
+                r
+                for r in rows or []
+                if isinstance(r, Mapping) and (at := _as_utc(r.get('timestamp'))) is not None and start <= at <= end
+            ]
+            screen = screen_result(conversation_rows)
+            prefetched_tools.append('get_screen_activity')
         leads = screen_people_leads(rows or [], started_at=start, finished_at=end, owner_names=owner_names)
     except Exception as error:  # noqa: BLE001
         logger.warning('notes agent packet screen read failed uid=%s: %s', uid, type(error).__name__)
@@ -419,4 +505,16 @@ def build_packet(
         'related_past_meetings': related,
         'background': background or None,
     }
+    if lookup_efficiency_enabled():
+        packet['prefetched_tools'] = prefetched_tools
+        if screen is not None:
+            packet['screen_activity'] = screen
+
+        def people_loader():
+            people = load_people_documents(uid)
+            if people_cache is not None:
+                people_cache['people'] = people
+            return people
+
+        enrich_lookup_packet(packet, people_loader=people_loader, capture_evidence=capture_evidence)
     return packet, seen
