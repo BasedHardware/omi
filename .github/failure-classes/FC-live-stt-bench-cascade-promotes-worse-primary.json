@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-live-stt-bench-cascade-promotes-worse-primary",
+  "violated_contract": "An availability escape must not promote a benched or worse-failure-rate provider over a proven stage-5+ alternative. A bench-induced failover surge must not become burst-only evidence that benches the remaining healthy provider and hands full traffic to a worse recovering provider.",
+  "canonical_prevention": "Rank the escape lead by proven stage-5+ failure rate, hold Modulate below sole full share while Soniox is available, and exclude surge-window deaths only from the burst count while retaining sustained detection. Persist bounded source-bench deadlines with the gate CAS and replay both the burst cascade and sustained-bench recovery, including cold pods and recovery transitions.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_live_stt_bench_cascade_sim.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/stt/live_gate.py",
+    "backend/utils/stt/live_router.py",
+    "backend/utils/stt/live_cost_health.py"
+  ],
+  "status": "open"
+}

@@ -207,6 +207,7 @@ class FleetHealth(CostHealthMixin):
             self._cost_preferred.clear()
             self._cost_fresh.clear()
             self._cost_unreconciled.clear()
+            self._cost_surge_until.clear()
             self._cost_server_offset = 0.0
             self._identity = identity
         return identity

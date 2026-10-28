@@ -245,15 +245,42 @@ class MemoryRedis:
             self.expires_at.pop(state_key, None)
             self.expires_at.pop(probe_key, None)
             return 1
-        key, expected, new, ttl = args
+        key = args[0]
+        expected, new, ttl = args[_numkeys : _numkeys + 3]
         if self.data.get(key, '') != expected:
             return 0
+        mode = args[_numkeys + 3] if len(args) > _numkeys + 3 else ''
+        mode_keys = int(args[_numkeys + 7]) if len(args) > _numkeys + 7 else _numkeys
+        if len(args) > _numkeys + 7:
+            for index, value in enumerate(json.loads(args[_numkeys + 6])):
+                actual = self.data.get(args[mode_keys + index], '')
+                if (actual.decode() if isinstance(actual, bytes) else actual) != value:
+                    return 0
+        result = 1
+        if mode == 'hold':
+            held, guard_indices = args[_numkeys + 4 : _numkeys + 6]
+            stages = {
+                index
+                + 1: min(
+                    json.loads(self.data.get(args[index], '{"stage":100}'))['stage'],
+                    json.loads(self.data.get(args[index + 1], '{"stage":100}'))['stage'],
+                )
+                for index in range(1, mode_keys, 2)
+            }
+            if any(stages[index] >= 5 for index in json.loads(guard_indices)) and all(
+                stage < 100 for stage in stages.values()
+            ):
+                new, ttl, result = held, 0, 2
         self.data[key] = new
         self.expires_at.pop(key, None)
         if int(ttl) > 0:
             self.expires_at[key] = self.clock() + int(ttl)
         self.ttls[key] = ttl
-        return 1
+        if str(mode).isdigit():
+            seconds = int(mode)
+            self.data[args[1]] = str(self.clock() + seconds)
+            self.expires_at[args[1]] = self.clock() + seconds
+        return result
 
     def pipeline(self, *, transaction=False):
         redis = self

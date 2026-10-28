@@ -199,15 +199,23 @@ def test_rnnt_outcomes_cannot_alias_window_health():
     assert not live_chain.health._cost_local
 
 
-def test_trial_terminal_remains_a_failover_leg_when_cheaper_healthy_target_exists():
+@pytest.mark.parametrize('guarded', [True, False])
+def test_soniox_trial_joins_guarded_escape_or_remains_a_last_resort(monkeypatch, guarded):
+    monkeypatch.setenv('LISTEN_STT_SOLE_PRIMARY_HOLD_ENABLED', 'true' if guarded else 'false')
     health = live_chain.health
     health._cost_local[('soniox', 'all')] = GateState(stage=5)
     health._cost_fresh.update({(t.id, lang): 0.0 for t in DEFAULT_TARGETS for lang in ('all', 'en')})
     uid = next(str(i) for i in range(1000) if not assigned(str(i), 'stt-reentry:soniox', 5))
     tail = []
-    chain = live_router.propose(health, ['modulate', 'soniox'], uid, 'en', 'modulate', last_resorts=tail)
-    assert [target.id for target in chain] == ['modulate-velma-2']
-    assert [target.id for target in tail] == ['soniox']
+    decision = {}
+    chain = live_router.propose(
+        health, ['modulate', 'soniox'], uid, 'en', 'modulate', last_resorts=tail, decision=decision
+    )
+    # With the hold on, Modulate is projected below full share and the actual
+    # two-provider chain escapes with Soniox included despite its trial cohort.
+    assert [target.id for target in chain] == ['modulate-velma-2', *(['soniox'] if guarded else [])]
+    assert [target.id for target in tail] == ([] if guarded else ['soniox'])
+    assert decision['states']['modulate-velma-2'].stage == (25 if guarded else 100)
 
 
 @pytest.mark.parametrize('exclude_benched', [True, False])
