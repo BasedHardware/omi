@@ -236,6 +236,9 @@ class PostHogManager {
       "Screen Task Delivery Completed", distinctId: ownerID, properties: completion.properties(deferred: deferred))
   }
 
+  /// Analytics opt-out also withholds the screen-task flag lease, as the retired fresh flag read did.
+  var screenTaskFlagWithheld: Bool { PostHogSDK.shared.isOptOut() }
+
   /// Reload feature flags
   func reloadFeatureFlags() {
     guard isInitialized else { return }

@@ -121,6 +121,9 @@ struct ScreenTaskLease: Sendable {
     return now - last >= flagReloadInterval
   }
 
+  /// Analytics opt-out withholds the cached-flag renewal, so an existing lease expires within 55 s.
+  static func renewsFlagLease(analyticsOptedOut: Bool) -> Bool { !analyticsOptedOut }
+
   static func start() {
     guard timer == nil else { return }
     reload()
@@ -142,7 +145,9 @@ struct ScreenTaskLease: Sendable {
     else { return }
     reloadInFlight = true
     let requestedAt = ProcessInfo.processInfo.systemUptime
-    ScreenTaskFeature.authority.refresh(enabled: true, requestedAt: requestedAt, authorization: owner)
+    if renewsFlagLease(analyticsOptedOut: PostHogManager.shared.screenTaskFlagWithheld) {
+      ScreenTaskFeature.authority.refresh(enabled: true, requestedAt: requestedAt, authorization: owner)
+    }
     Task { @MainActor in
       defer { reloadInFlight = false }
       do {

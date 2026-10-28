@@ -15,4 +15,9 @@ final class ScreenTaskFlagRefreshCadenceTests: XCTestCase {
     XCTAssertFalse(ScreenTaskFlagRefresh.shouldReloadFlags(now: 100 + interval - 1, last: 100))
     XCTAssertTrue(ScreenTaskFlagRefresh.shouldReloadFlags(now: 100 + interval, last: 100))
   }
+
+  func testAnalyticsOptOutWithholdsCachedFlagRenewal() {
+    XCTAssertTrue(ScreenTaskFlagRefresh.renewsFlagLease(analyticsOptedOut: false))
+    XCTAssertFalse(ScreenTaskFlagRefresh.renewsFlagLease(analyticsOptedOut: true))
+  }
 }
