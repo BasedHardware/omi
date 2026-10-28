@@ -1,163 +1,260 @@
+"""Hermetic unit tests for input validation and defensive guards in retrieval tools.
+
+Covers:
+- web_tools.fetch_url_tool: non-string, None, whitespace URL validation
+- perplexity_tools.perplexity_web_search_tool: non-string, None, whitespace query validation
+- calendar_tools.create_calendar_event_tool: title, start_time, end_time fast-fail validation
+- calendar_tools.delete_calendar_event_tool: whitespace sanitization & titleless event resilience
+- calendar_tools.update_calendar_event_tool: whitespace sanitization & titleless event resilience
+"""
+
 import asyncio
-import os
-import sys
+from pathlib import Path
 from types import ModuleType
-from unittest.mock import patch, MagicMock
-import unittest
-from importlib.machinery import ModuleSpec
+from typing import Iterator
 
-# Ensure backend root is on sys.path
-backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-if backend_dir not in sys.path:
-    sys.path.insert(0, backend_dir)
+import pytest
 
-from testing.import_isolation import AutoMockModule
+from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 
-class AutoStubLoader:
-    def create_module(self, spec):
-        m = AutoMockModule(spec.name)
-        if spec.name == "langchain_core.tools":
-            def tool_dec(fn=None):
-                if fn is None:
-                    return lambda f: f
-                fn.ainvoke = lambda args: fn(**args)
-                return fn
-            m.tool = tool_dec
-        return m
-
-    def exec_module(self, module):
-        pass
-
-class AutoStubFinder:
-    _STUB_PREFIXES = (
-        "google",
-        "database",
-        "firebase",
-        "pinecone",
-        "typesense",
-        "stripe",
-        "anthropic",
-        "openai",
-        "langchain",
-        "langchain_core",
-        "langchain_openai",
-        "httpx",
-        "pydantic",
-        "fastapi",
-        "pytz",
-        "prometheus_client",
-        "tiktoken",
-    )
-
-    def find_spec(self, fullname, path, target=None):
-        if any(fullname == p or fullname.startswith(p + ".") for p in self._STUB_PREFIXES):
-            spec = ModuleSpec(fullname, AutoStubLoader())
-            spec.submodule_search_locations = []
-            return spec
-        return None
-
-sys.meta_path.insert(0, AutoStubFinder())
-
-# Pre-populate utils.retrieval.tools package without running __init__.py
-tools_dir = os.path.join(backend_dir, "utils", "retrieval", "tools")
-tools_pkg = ModuleType("utils.retrieval.tools")
-tools_pkg.__path__ = [tools_dir]
-tools_pkg.__file__ = os.path.join(tools_dir, "__init__.py")
-sys.modules["utils.retrieval.tools"] = tools_pkg
-
-from utils.retrieval.tools.web_tools import fetch_url_tool
-from utils.retrieval.tools.perplexity_tools import perplexity_web_search_tool
-from utils.retrieval.tools.calendar_tools import (
-    create_calendar_event_tool,
-    delete_calendar_event_tool,
-    update_calendar_event_tool,
-)
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+TOOLS_DIR = BACKEND_DIR / "utils" / "retrieval" / "tools"
 
 
-class TestRetrievalToolsInputGuards(unittest.IsolatedAsyncioTestCase):
-    async def test_fetch_url_tool_none_and_empty_guards(self):
-        # Ensure None or non-string does not raise AttributeError
-        res_none = await fetch_url_tool.ainvoke({"url": None})
-        self.assertIn("Error: URL is required and cannot be empty.", res_none)
+def _module(name: str, **attributes) -> ModuleType:
+    module = ModuleType(name)
+    for key, value in attributes.items():
+        setattr(module, key, value)
+    return module
 
-        res_empty = await fetch_url_tool.ainvoke({"url": "   "})
-        self.assertIn("Error: URL is required and cannot be empty.", res_empty)
 
-        res_num = await fetch_url_tool.ainvoke({"url": 12345})
-        self.assertIn("Error: URL is required and cannot be empty.", res_num)
+def _package(name: str) -> ModuleType:
+    package = _module(name)
+    package.__path__ = []
+    return package
 
-        res_invalid_scheme = await fetch_url_tool.ainvoke({"url": "ftp://example.com"})
-        self.assertIn("Error: URL must start with http:// or https://", res_invalid_scheme)
 
-    async def test_perplexity_web_search_tool_none_and_empty_guards(self):
-        # Ensure None or non-string does not raise TypeError or proceed to API
-        res_none = await perplexity_web_search_tool.ainvoke({"query": None})
-        self.assertIn("Error: query is required and cannot be empty.", res_none)
+def _passthrough_tool(func=None, **_kwargs):
+    def wrap(fn):
+        fn.ainvoke = lambda args: fn(**args)
+        return fn
 
-        res_empty = await perplexity_web_search_tool.ainvoke({"query": "   "})
-        self.assertIn("Error: query is required and cannot be empty.", res_empty)
+    if func is not None:
+        return wrap(func)
+    return wrap
 
-        res_num = await perplexity_web_search_tool.ainvoke({"query": 9999})
-        self.assertIn("Error: query is required and cannot be empty.", res_num)
 
-    @patch("utils.retrieval.tools.calendar_tools.run_blocking")
-    async def test_create_calendar_event_tool_input_guards(self, mock_run_blocking):
-        mock_run_blocking.return_value = ("test-uid", {"id": "int-1"}, "test-token", None)
+async def _run_blocking(_executor, function, *args, **kwargs):
+    return function(*args, **kwargs)
 
-        # Empty/None title
-        res_title_none = await create_calendar_event_tool.ainvoke({
+
+class _GoogleAPIError(Exception):
+    pass
+
+
+@pytest.fixture
+def calendar_tools_mod() -> Iterator[ModuleType]:
+    """Load calendar_tools with integration dependencies stubbed via sanctioned import isolation."""
+    stubs = {
+        "langchain_core.tools": _module("langchain_core.tools", tool=_passthrough_tool),
+        "langchain_core.runnables": _module("langchain_core.runnables", RunnableConfig=dict),
+        "database.users": AutoMockModule("database.users"),
+        "database.notifications": _module("database.notifications", get_user_time_zone=lambda _uid: "UTC"),
+        "utils.executors": _module("utils.executors", db_executor=object(), run_blocking=_run_blocking),
+        "utils.http_client": AutoMockModule("utils.http_client"),
+        "utils.integration_telemetry": AutoMockModule("utils.integration_telemetry"),
+        "utils.log_sanitizer": AutoMockModule("utils.log_sanitizer"),
+        "utils.retrieval.agentic": AutoMockModule("utils.retrieval.agentic"),
+        "utils.retrieval.tools": _package("utils.retrieval.tools"),
+        "utils.retrieval.tools.google_utils": AutoMockModule("utils.retrieval.tools.google_utils"),
+    }
+    stubs["utils.retrieval.tools.google_utils"].GoogleAPIError = _GoogleAPIError
+
+    with stub_modules(stubs):
+        load_module_fresh("utils.retrieval.tools.calendar_render", str(TOOLS_DIR / "calendar_render.py"))
+        load_module_fresh("utils.retrieval.tools.integration_base", str(TOOLS_DIR / "integration_base.py"))
+        module = load_module_fresh("utils.retrieval.tools.calendar_tools", str(TOOLS_DIR / "calendar_tools.py"))
+        module.prepare_access = lambda *_args: ("uid-test", {"connected": True, "access_token": "token-test"}, "token-test", None)
+        yield module
+
+
+@pytest.fixture
+def web_tools_mod() -> Iterator[ModuleType]:
+    """Load web_tools with minimal stubs."""
+    stubs = {
+        "langchain_core.tools": _module("langchain_core.tools", tool=_passthrough_tool),
+        "utils.http_client": AutoMockModule("utils.http_client"),
+        "utils.log_sanitizer": AutoMockModule("utils.log_sanitizer"),
+        "utils.retrieval.tools": _package("utils.retrieval.tools"),
+    }
+    with stub_modules(stubs):
+        yield load_module_fresh("utils.retrieval.tools.web_tools", str(TOOLS_DIR / "web_tools.py"))
+
+
+@pytest.fixture
+def perplexity_tools_mod() -> Iterator[ModuleType]:
+    """Load perplexity_tools with minimal stubs."""
+    stubs = {
+        "langchain_core.tools": _module("langchain_core.tools", tool=_passthrough_tool),
+        "utils.generated_compute": AutoMockModule("utils.generated_compute"),
+        "utils.executors": _module("utils.executors", db_executor=object(), run_blocking=_run_blocking),
+        "utils.http_client": AutoMockModule("utils.http_client"),
+        "utils.llm.gateway_client": AutoMockModule("utils.llm.gateway_client"),
+        "utils.log_sanitizer": AutoMockModule("utils.log_sanitizer"),
+        "utils.retrieval.tools": _package("utils.retrieval.tools"),
+    }
+    with stub_modules(stubs):
+        yield load_module_fresh("utils.retrieval.tools.perplexity_tools", str(TOOLS_DIR / "perplexity_tools.py"))
+
+
+# ---------------------------------------------------------------------------
+# web_tools.fetch_url_tool tests
+# ---------------------------------------------------------------------------
+
+def test_fetch_url_tool_none_and_empty_guards(web_tools_mod):
+    res_none = asyncio.run(web_tools_mod.fetch_url_tool.ainvoke({"url": None}))
+    assert "Error: URL is required and cannot be empty." in res_none
+
+    res_empty = asyncio.run(web_tools_mod.fetch_url_tool.ainvoke({"url": "   "}))
+    assert "Error: URL is required and cannot be empty." in res_empty
+
+    res_num = asyncio.run(web_tools_mod.fetch_url_tool.ainvoke({"url": 12345}))
+    assert "Error: URL is required and cannot be empty." in res_num
+
+    res_invalid_scheme = asyncio.run(web_tools_mod.fetch_url_tool.ainvoke({"url": "ftp://example.com"}))
+    assert "Error: URL must start with http:// or https://" in res_invalid_scheme
+
+
+# ---------------------------------------------------------------------------
+# perplexity_tools.perplexity_web_search_tool tests
+# ---------------------------------------------------------------------------
+
+def test_perplexity_web_search_tool_none_and_empty_guards(perplexity_tools_mod):
+    res_none = asyncio.run(perplexity_tools_mod.perplexity_web_search_tool.ainvoke({"query": None}))
+    assert "Error: query is required and cannot be empty." in res_none
+
+    res_empty = asyncio.run(perplexity_tools_mod.perplexity_web_search_tool.ainvoke({"query": "   "}))
+    assert "Error: query is required and cannot be empty." in res_empty
+
+    res_num = asyncio.run(perplexity_tools_mod.perplexity_web_search_tool.ainvoke({"query": 9999}))
+    assert "Error: query is required and cannot be empty." in res_num
+
+
+# ---------------------------------------------------------------------------
+# calendar_tools tests
+# ---------------------------------------------------------------------------
+
+def test_create_calendar_event_tool_fast_fail_guards(calendar_tools_mod):
+    # None/empty title fast-fails before any DB lookup
+    res_title_none = asyncio.run(
+        calendar_tools_mod.create_calendar_event_tool.ainvoke({
             "title": None,
             "start_time": "2026-10-28T10:00:00Z",
             "end_time": "2026-10-28T11:00:00Z",
         })
-        self.assertIn("Error: title is required and cannot be empty.", res_title_none)
+    )
+    assert "Error: title is required and cannot be empty." in res_title_none
 
-        res_title_empty = await create_calendar_event_tool.ainvoke({
+    res_title_empty = asyncio.run(
+        calendar_tools_mod.create_calendar_event_tool.ainvoke({
             "title": "   ",
             "start_time": "2026-10-28T10:00:00Z",
             "end_time": "2026-10-28T11:00:00Z",
         })
-        self.assertIn("Error: title is required and cannot be empty.", res_title_empty)
+    )
+    assert "Error: title is required and cannot be empty." in res_title_empty
 
-        # Empty/None start_time
-        res_start_none = await create_calendar_event_tool.ainvoke({
+    # None/empty start_time
+    res_start_none = asyncio.run(
+        calendar_tools_mod.create_calendar_event_tool.ainvoke({
             "title": "Sync Meeting",
             "start_time": None,
             "end_time": "2026-10-28T11:00:00Z",
         })
-        self.assertIn("Error: start_time is required in format", res_start_none)
+    )
+    assert "Error: start_time is required in format" in res_start_none
 
-        # Empty/None end_time
-        res_end_none = await create_calendar_event_tool.ainvoke({
+    # None/empty end_time
+    res_end_none = asyncio.run(
+        calendar_tools_mod.create_calendar_event_tool.ainvoke({
             "title": "Sync Meeting",
             "start_time": "2026-10-28T10:00:00Z",
             "end_time": None,
         })
-        self.assertIn("Error: end_time is required in format", res_end_none)
+    )
+    assert "Error: end_time is required in format" in res_end_none
 
-    @patch("utils.retrieval.tools.calendar_tools.run_blocking")
-    async def test_delete_calendar_event_tool_whitespace_sanitization(self, mock_run_blocking):
-        mock_run_blocking.return_value = ("test-uid", {"id": "int-1"}, "test-token", None)
 
-        # When event_id is only whitespace and no other fields provided
-        res = await delete_calendar_event_tool.ainvoke({
+def test_delete_calendar_event_tool_whitespace_sanitization(calendar_tools_mod):
+    # Whitespace-only event_id is sanitized to None
+    res = asyncio.run(
+        calendar_tools_mod.delete_calendar_event_tool.ainvoke({
             "event_id": "   ",
             "event_title": None,
             "start_date": None,
         })
-        self.assertIn("Error: Please provide either event_id, event_title, or start_date", res)
+    )
+    assert "Error: Please provide either event_id, event_title, or start_date" in res
 
-    @patch("utils.retrieval.tools.calendar_tools.run_blocking")
-    async def test_update_calendar_event_tool_whitespace_sanitization(self, mock_run_blocking):
-        mock_run_blocking.return_value = ("test-uid", {"id": "int-1"}, "test-token", None)
 
-        # When both event_id and event_title are whitespace
-        res = await update_calendar_event_tool.ainvoke({
+def test_delete_calendar_event_tool_handles_titleless_events(calendar_tools_mod):
+    # An event with summary: None should not crash with AttributeError when filtering
+    titleless_event = {"id": "ev-1", "summary": None, "start": {"dateTime": "2026-10-28T10:00:00Z"}}
+    matching_event = {"id": "ev-2", "summary": "Team Sync", "start": {"dateTime": "2026-10-28T11:00:00Z"}}
+
+    async def _mock_get_events(**_kwargs):
+        return [titleless_event, matching_event]
+
+    async def _mock_delete_event(*_args, **_kwargs):
+        return None
+
+    calendar_tools_mod.get_google_calendar_events = _mock_get_events
+    calendar_tools_mod.delete_google_calendar_event = _mock_delete_event
+
+    res = asyncio.run(
+        calendar_tools_mod.delete_calendar_event_tool.ainvoke({
+            "event_id": None,
+            "event_title": "Team Sync",
+            "start_date": "2026-10-28T00:00:00Z",
+        })
+    )
+    assert "Successfully deleted 1 calendar event" in res
+
+
+def test_update_calendar_event_tool_whitespace_sanitization(calendar_tools_mod):
+    # Both whitespace-only event_id and event_title are sanitized to None
+    res = asyncio.run(
+        calendar_tools_mod.update_calendar_event_tool.ainvoke({
             "event_id": "   ",
             "event_title": "   ",
         })
-        self.assertIn("Error: Please provide either event_id or event_title to identify which event to update.", res)
+    )
+    assert "Error: Please provide either event_id or event_title to identify which event to update." in res
 
 
-if __name__ == "__main__":
-    unittest.main()
+def test_update_calendar_event_tool_handles_titleless_events(calendar_tools_mod):
+    # An event with summary: None should not crash with AttributeError when filtering
+    titleless_event = {"id": "ev-1", "summary": None, "start": {"dateTime": "2026-10-28T10:00:00Z"}}
+    matching_event = {"id": "ev-2", "summary": "Team Sync", "start": {"dateTime": "2026-10-28T11:00:00Z"}}
+
+    async def _mock_get_events(**_kwargs):
+        return [titleless_event, matching_event]
+
+    async def _mock_get_event(*_args, **_kwargs):
+        return {"id": "ev-2", "summary": "Team Sync"}
+
+    async def _mock_update_event(*_args, **_kwargs):
+        return {"id": "ev-2", "summary": "Updated Team Sync"}
+
+    calendar_tools_mod.get_google_calendar_events = _mock_get_events
+    calendar_tools_mod.get_google_calendar_event = _mock_get_event
+    calendar_tools_mod.update_google_calendar_event = _mock_update_event
+
+    res = asyncio.run(
+        calendar_tools_mod.update_calendar_event_tool.ainvoke({
+            "event_id": None,
+            "event_title": "Team Sync",
+            "title": "Updated Team Sync",
+        })
+    )
+    assert "Successfully updated calendar event: Updated Team Sync" in res

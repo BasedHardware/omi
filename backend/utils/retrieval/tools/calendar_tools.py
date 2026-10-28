@@ -808,6 +808,19 @@ async def create_calendar_event_tool(
         f"start_time: {start_time}, end_time: {end_time}, location: {location}"
     )
 
+    # Validate title, start_time, and end_time
+    if not title or not isinstance(title, str) or not title.strip():
+        return "Error: title is required and cannot be empty."
+    title = title.strip()
+
+    if not start_time or not isinstance(start_time, str) or not start_time.strip():
+        return "Error: start_time is required in format YYYY-MM-DDTHH:MM:SS+HH:MM"
+    start_time = start_time.strip()
+
+    if not end_time or not isinstance(end_time, str) or not end_time.strip():
+        return "Error: end_time is required in format YYYY-MM-DDTHH:MM:SS+HH:MM"
+    end_time = end_time.strip()
+
     try:
         uid, integration, access_token, access_err = await run_blocking(
             db_executor,
@@ -825,26 +838,13 @@ async def create_calendar_event_tool(
             return "Google Calendar access token not found."
         clock = clock_for_config(config, uid)
 
-        # Validate title, start_time, and end_time
-        if not title or not isinstance(title, str) or not title.strip():
-            return "Error: title is required and cannot be empty."
-        title = title.strip()
-
-        if not start_time or not isinstance(start_time, str) or not start_time.strip():
-            return "Error: start_time is required in format YYYY-MM-DDTHH:MM:SS+HH:MM"
-        start_time = start_time.strip()
-
-        if not end_time or not isinstance(end_time, str) or not end_time.strip():
-            return "Error: end_time is required in format YYYY-MM-DDTHH:MM:SS+HH:MM"
-        end_time = end_time.strip()
-
         # Parse start and end times
         try:
             start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
             if start_dt.tzinfo is None:
                 return f"Error: start_time must include timezone in format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-20T14:00:00-08:00'): {start_time}"
             logger.info("Parsed calendar start_time")
-        except (ValueError, AttributeError) as e:
+        except ValueError as e:
             return f"Error: Invalid start_time format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM: {start_time} - {str(e)}"
 
         try:
@@ -1118,7 +1118,7 @@ async def delete_calendar_event_tool(
             # Filter events by title if provided
             matching_events: List[Dict[str, Any]] = events
             if event_title:
-                matching_events = [e for e in events if event_title.lower() in e.get('summary', '').lower()]
+                matching_events = [e for e in events if event_title.lower() in (e.get('summary') or '').lower()]
 
             if not matching_events:
                 date_info = ""
@@ -1180,7 +1180,7 @@ async def delete_calendar_event_tool(
 
                         matching_events = events
                         if event_title:
-                            matching_events = [e for e in events if event_title.lower() in e.get('summary', '').lower()]
+                            matching_events = [e for e in events if event_title.lower() in (e.get('summary') or '').lower()]
 
                         if not matching_events:
                             return f"No calendar events found matching '{event_title}'{date_info_retry}."
