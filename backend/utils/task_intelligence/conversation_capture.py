@@ -20,6 +20,7 @@ from utils.conversations.transcript_for_llm import (
     conversation_transcript_for_action_items,
 )
 from utils.conversations.wake_word import find_wake_word_segment_ids
+from utils.conversations.action_item_extraction import filter_extracted_items
 from utils.llm.usage_tracker import Features, track_usage
 from utils.llm.wake_word_adjudication import (
     WakeWordAdjudication,
@@ -264,8 +265,6 @@ def process_conversation_before_legacy(
     conversation: Any,
     wake_word_gate: WakeWordCaptureGate | None = None,
 ) -> bool:
-    from utils.conversations.action_item_extraction import filter_extracted_items
-
     if not conversation.id:
         raise ValueError('extracted action items require conversation provenance')
     items = filter_extracted_items(uid, conversation.structured.action_items, conversation=conversation)

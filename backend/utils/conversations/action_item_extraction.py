@@ -14,6 +14,7 @@ from config.action_item_extraction_policy import (
 )
 from database.auth import get_user_full_name
 from utils.metrics import OMI_ACTION_ITEM_EXTRACTION_DROPPED_TOTAL
+from utils.conversations.action_item_validity import select_valid_items
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +41,6 @@ def filter_extracted_items(uid: str, items: Sequence[Any], *, conversation: Any 
             OMI_ACTION_ITEM_EXTRACTION_DROPPED_TOTAL.labels(reason=reason).inc(count)
             logger.info('event=action_item_extraction_dropped reason=%s count=%d', reason, count)
     from utils.llm.action_item_v2 import select_items
-
-    from utils.conversations.action_item_validity import select_valid_items
 
     segments = getattr(conversation, 'transcript_segments', ()) or ()
     return select_valid_items(uid, select_items(uid, items, kept, profile_name), transcript_segments=segments)

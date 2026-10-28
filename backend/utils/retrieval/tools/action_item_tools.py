@@ -25,6 +25,7 @@ from utils.model_text import count_header, format_date, format_instant, truncati
 from utils.user_clock import clock_for_config
 from utils.retrieval.chat_scope import apply_chat_scope_dates, chat_scope_from_config
 from utils.retrieval.turn_refs import register_record_ref, resolve_edit_ref
+from utils.retrieval.tool_services.action_items import create_action_item
 from utils.task_intelligence.task_source_validation import TaskSourceValidationError
 import logging
 
@@ -504,8 +505,6 @@ def create_action_item_tool(
 
     # Create the action item
     try:
-        from utils.retrieval.tool_services.action_items import create_action_item
-
         action_item_id = create_action_item(uid, action_item_data)
         if not action_item_id:
             return "Error: Failed to create action item."

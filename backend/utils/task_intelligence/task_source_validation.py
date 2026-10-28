@@ -4,6 +4,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from config.refactor_modes import default_on
+from database import conversations as conversations_db
 
 SOURCE_LINKS_ENABLED_ENV = 'ACTION_ITEM_SOURCE_LINKS_ENABLED'
 
@@ -15,8 +16,6 @@ class TaskSourceValidationError(ValueError):
 def validate_task_sources(uid: str, items: Sequence[Mapping[str, Any]]) -> None:
     if not default_on(SOURCE_LINKS_ENABLED_ENV):
         return
-    from database import conversations as conversations_db
-
     checked: set[str] = set()
     for item in items:
         sources = [item.get('conversation_id')]

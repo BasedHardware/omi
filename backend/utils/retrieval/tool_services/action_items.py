@@ -18,6 +18,7 @@ from utils.model_text import format_date, format_instant
 from utils.user_clock import clock_for_uid
 from utils.retrieval.tool_services.conversations import parse_iso_date
 from utils.retrieval.safety import safe_isoformat
+from utils.task_intelligence.task_source_validation import validate_task_sources
 import logging
 
 logger = logging.getLogger(__name__)
@@ -25,15 +26,11 @@ logger = logging.getLogger(__name__)
 
 def create_action_item(uid: str, data: Dict[str, Any], **kwargs) -> str:
     """Shared create boundary; callers retain their HTTP/tool error contracts."""
-    from utils.task_intelligence.task_source_validation import validate_task_sources
-
     validate_task_sources(uid, [data])
     return action_items_db.create_action_item(uid, data, **kwargs)
 
 
 def create_action_items_batch(uid: str, items: List[Dict[str, Any]]) -> List[str]:
-    from utils.task_intelligence.task_source_validation import validate_task_sources
-
     validate_task_sources(uid, items)  # Validate the whole batch before any write.
     return action_items_db.create_action_items_batch(uid, items)
 

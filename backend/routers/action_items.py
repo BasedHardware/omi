@@ -15,6 +15,10 @@ import database.redis_db as redis_db
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from utils.list_version_check import ListVersionCheck
 from utils.task_intelligence.task_source_validation import TaskSourceValidationError
+from utils.retrieval.tool_services.action_items import (
+    create_action_item as create_task,
+    create_action_items_batch as create_tasks,
+)
 from database.vector_db import (
     upsert_action_item_vector,
     upsert_action_item_vectors_batch,
@@ -374,8 +378,6 @@ def create_action_item(
     action_item_data = request.storage_payload()
 
     try:
-        from utils.retrieval.tool_services.action_items import create_action_item as create_task
-
         action_item_id = create_task(uid, action_item_data, idempotency_key=_client_idempotency_key(idempotency_key))
     except TaskSourceValidationError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -1039,8 +1041,6 @@ def create_action_items_batch(
 
     # Create batch
     try:
-        from utils.retrieval.tool_services.action_items import create_action_items_batch as create_tasks
-
         created_ids = create_tasks(uid, action_items_data)
     except TaskSourceValidationError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
