@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Mapping, Sequence
@@ -23,6 +24,7 @@ MEDIA_SERVE_DIGESTS_ENV = 'MEDIA_NOISE_MODE_SERVE_UID_SHA256S'
 OWNER_FLOOR_SECONDS = 2.0
 WORD_FLOOR = 12
 BYSTANDER_MIN_SECONDS = 10 * 60
+logger = logging.getLogger(__name__)
 
 
 def value(row: Any, name: str, default: Any = None) -> Any:
@@ -147,6 +149,12 @@ def exclude_from_derived(uid: str, conversation: Any, *, consumer: str) -> bool:
         return False
     excluded = value(conversation, 'content_kind') in ('media', 'noise')
     observe(consumer, 'disagree' if excluded else 'agree')
+    logger.info(
+        'event=media_derived_admission consumer=%s reason=%s serving=%s',
+        consumer if consumer in ('memories', 'daily_summary', 'recap', 'action_items', 'notes') else 'unknown',
+        value(conversation, 'content_kind') if excluded else 'eligible',
+        str(serving_for(FLAG, uid)).lower(),
+    )
     return excluded and serving_for(FLAG, uid)
 
 
