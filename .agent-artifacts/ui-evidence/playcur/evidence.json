@@ -210,6 +210,139 @@
       "description": "en US v2 plans year; rendered production widget with hermetic fixture data",
       "captured_by": "agent",
       "source": "visual-audit"
+    },
+    {
+      "file": "031-mobile-android-native-en-ca-jpy-manage.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-ca-jpy-manage; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "032-mobile-android-native-en-ca-outline.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-ca-outline; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "033-mobile-android-native-en-ca-plans.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-ca-plans; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "034-mobile-android-native-en-ca-retention.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-ca-retention; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "035-mobile-android-native-en-ca-trial-month.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-ca-trial-month; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "036-mobile-android-native-en-ca-trial-year.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-ca-trial-year; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "037-mobile-android-native-en-ca-upsell.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-ca-upsell; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "038-mobile-android-native-en-ca-v2-month.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-ca-v2-month; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "039-mobile-android-native-en-ca-v2-year.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-ca-v2-year; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "040-mobile-android-native-en-ca-web.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-ca-web; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "041-mobile-android-native-en-us-outline.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-us-outline; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "042-mobile-android-native-en-us-plans.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-us-plans; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "043-mobile-android-native-en-us-retention.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-us-retention; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "044-mobile-android-native-en-us-trial-month.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-us-trial-month; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "045-mobile-android-native-en-us-trial-year.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-us-trial-year; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "046-mobile-android-native-en-us-upsell.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-us-upsell; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "047-mobile-android-native-en-us-v2-month.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-us-v2-month; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "048-mobile-android-native-en-us-v2-year.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-us-v2-year; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "049-mobile-android-native-en-us-web.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-us-web; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
     }
   ]
 }
