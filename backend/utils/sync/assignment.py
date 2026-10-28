@@ -8,6 +8,9 @@ no expiring lock that lets a late worker overwrite a newer transcript.
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import timedelta
+from utils.sync import processing_hold
+import time
+
 import logging
 from typing import TYPE_CHECKING, Any, Callable, NamedTuple, Optional, TypeVar
 from uuid import NAMESPACE_URL, uuid5
@@ -732,6 +735,8 @@ def assign_in_transaction(
         persist_identity(user_ref.id, result, incoming, live_row)
         result['has_content'] = bool(segments)
         result['sync_content_revision'] = max([row.get('sync_content_revision') or 0 for row in records] + [0]) + 1
+        if processing_hold.enabled():
+            result[processing_hold.FIELD] = processing_hold.activity_patch(result, time.time())
         verdict, rule = fragment_rule(segments)
         curated = is_user_curated(result)
         result['sync_relevance'] = (

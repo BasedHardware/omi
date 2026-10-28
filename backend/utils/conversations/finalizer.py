@@ -34,6 +34,7 @@ from utils.conversations.episode_runtime import process_with_episode_budget
 from utils.conversations.processing_trigger import is_recovery_trigger
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.smart_merge import smart_merge_step
+from utils.conversations.sync_hold_completion import complete_explicit
 from utils.conversations.smart_merge_policy import is_donor
 from utils.conversations.meeting_evidence_admission import await_meeting_evidence
 from utils.conversations.meeting_receipt import record_finalized_meeting_receipt
@@ -621,6 +622,7 @@ async def finalize_persisted_conversation(
                         device_id=device_id,
                         account_generation=decision.account_generation,
                     )
+        await run_blocking(db_executor, complete_explicit, uid, conversation, trigger)
         stage = 'fanout_completion'
         fanout_completed = await run_blocking(
             db_executor,

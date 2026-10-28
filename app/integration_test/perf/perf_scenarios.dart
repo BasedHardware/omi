@@ -398,10 +398,14 @@ class PerfWorld {
 }
 
 /// Advance real fixture transport and then the fake-zone continuations. A single
-/// real delay cannot finish multi-step headers/body/SSE work in a fake clock.
+/// real delay cannot finish multi-step headers/body/SSE work in a fake clock,
+/// so the number of turns is the load-bearing part; loopback responses land in
+/// ~1-5 ms, so each turn only needs a short real wait. This runs inside every
+/// scroll fling iteration of the measured scenarios, so the per-turn delay was
+/// a large share of the gate's wall time at 20 ms x 5.
 Future<void> drainFixtureIo(WidgetTester tester, {int cycles = 5}) async {
   for (var i = 0; i < cycles; i++) {
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 8)));
     await tester.pump();
   }
 }

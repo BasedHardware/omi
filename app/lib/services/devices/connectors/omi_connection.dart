@@ -69,13 +69,24 @@ class OmiDeviceConnection extends DeviceConnection {
     return completer.future;
   }
 
-  OmiDeviceConnection(super.device, super.transport, {PendantRingCustody? custody})
-      : _custody = custody ?? PendantRingCustody.shared {
+  OmiDeviceConnection(
+    super.device,
+    super.transport, {
+    PendantRingCustody? custody,
+    Duration enableAckTimeout = _defaultEnableAckTimeout,
+  })  : _custody = custody ?? PendantRingCustody.shared,
+        _enableAckTimeout = enableAckTimeout {
     final t = transport;
     if (t is NativeBleTransport) {
       t.beforeAudioResubscribe = (_) => _audioResubscribeGate();
     }
   }
+
+  /// How long the custody opt-in waits for the device ack before giving up
+  /// (live custody off, ring-id custody retained). Injected shorter by tests
+  /// over an in-memory transport; the default matches real hardware.
+  static const Duration _defaultEnableAckTimeout = Duration(seconds: 5);
+  final Duration _enableAckTimeout;
 
   int _audioSubscribers = 0;
   Completer<void>? _physicalReady = Completer<void>();
@@ -827,7 +838,7 @@ class OmiDeviceConnection extends DeviceConnection {
         Logger.debug('OmiDeviceConnection: CMD_CUSTODY_ENABLE caps=0x${requestedCaps.toRadixString(16)}');
 
         return await completer.future.timeout(
-          const Duration(seconds: 5),
+          _enableAckTimeout,
           onTimeout: () {
             Logger.debug('OmiDeviceConnection: custody enable timeout');
             return null;
