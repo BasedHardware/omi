@@ -1,10 +1,13 @@
-{{/* Both deployments sample the same durable queue. Separate, pool-pinned HPAs
-keep one worker in each capacity class without strict topology spread, which
-GKE's cluster autoscaler does not support. The original name stays on OD. */}}
+{{/* Optional balanced-pool machinery divides the shared durable queue across
+pool-pinned HPAs. The production cutover is a single OD HPA and never depends
+on Spot capacity. */}}
 {{- define "batch-pipeline-worker.instances" -}}
 {{- $min := int .Values.autoscaling.minReplicas -}}
 {{- $max := int .Values.autoscaling.maxReplicas -}}
 {{- $target := int .Values.autoscaling.targetQueuedUnitsPerWorker -}}
+{{- if and .Values.autoscaling.balancedPools.enabled (or (eq .Values.stage "prod") (eq .Values.namespace "batch_pipeline_prod") (eq .Release.Namespace "prod-omi-backend")) -}}
+{{- fail "balancedPools is machinery-only outside production; production requires a single OD-pinned HPA" -}}
+{{- end -}}
 {{- if and .Values.autoscaling.enabled (lt $target 1) -}}
 {{- fail "a qualified positive targetQueuedUnitsPerWorker is required" -}}
 {{- end -}}
