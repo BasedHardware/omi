@@ -3508,7 +3508,12 @@ _add(
     DriverEntry(
         'utils.processing_backlog_worker._page',
         base={'uid': UID},
-        domains={'kind': ['audio', 'text'], 'cursor': [None, {'at': 1, 'id': 'cursor'}]},
+        # The malformed cursor domain proves the defensive rewind builds the
+        # same cursorless shape as None instead of a server-rejected query.
+        domains={
+            'kind': ['audio', 'text'],
+            'cursor': [None, {'at': 1, 'id': 'cursor'}, {'at': None, 'id': ''}],
+        },
     )
 )
 _add(
@@ -3544,6 +3549,7 @@ _add(
 _add(
     DriverEntry(
         'database.cap_hold_redrive.page',
+        neutrals={'limit': _LIMIT},
         domains={
             'kind': ['choices', 'staging', 'cleanup'],
             'after': [None, 'users/synthetic/processing_backlog/current'],
@@ -3553,10 +3559,16 @@ _add(
 _add(
     DriverEntry(
         'database.cap_hold_redrive.discover',
+        neutrals={'limit': _LIMIT},
         domains={'kind': ['choices', 'staging', 'cleanup']},
     )
 )
-_add(DriverEntry('database.cap_hold_redrive.fleet_snapshot'))
+_add(
+    DriverEntry(
+        'database.cap_hold_redrive.fleet_snapshot',
+        neutrals={'timeout': (60.0, 'per-RPC budget; does not change the query shape')},
+    )
+)
 
 
 # WQ7 canonical_statuses_dedupe: the lever-on helper batches missing-ID lookups as

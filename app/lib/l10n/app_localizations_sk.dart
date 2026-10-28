@@ -429,6 +429,12 @@ class AppLocalizationsSk extends AppLocalizations {
   String get autoSync => 'Automatická synchronizácia';
 
   @override
+  String get syncHealthAlerts => 'Upozornenia na stav synchronizácie';
+
+  @override
+  String get syncHealthAlertsDescription => 'Upozorniť, keď Omi viac než deň nesynchronizuje nahrávky';
+
+  @override
   String get autoSyncDescription => 'Automaticky synchronizovať offline nahrávky pri pripojení zariadenia';
 
   @override
@@ -9036,6 +9042,14 @@ class AppLocalizationsSk extends AppLocalizations {
   String get syncCardWaitingInternet => 'Čaká sa na internet';
 
   @override
+  String get syncStallAlertTitle => 'Omi sa nesynchronizuje';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Viac než $hours hodín sa z vášho Omi nesynchronizovali žiadne nahrávky. Otvorte Omi a skontrolujte pripojenie zariadenia.';
+  }
+
+  @override
   String syncCardNeedsAttention(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13670,6 +13684,14 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'Nahrávky pozastavené';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi sa nesynchronizuje';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Viac než $hours hodín bez synchronizovaných nahrávok';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'Odosielanie zastavené';
