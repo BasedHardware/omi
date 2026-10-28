@@ -366,7 +366,9 @@ class _PlansSheetState extends State<PlansSheet> {
     if (storefrontPrice != null &&
         (storefrontPrice.id != priceId ||
             storefrontPrice.interval != selectedPlanData['interval'] ||
-            storefrontPrice.amountMinor != selectedPlanData['unit_amount'])) {
+            storefrontPrice.amountMinor != selectedPlanData['unit_amount'] ||
+            storefrontPrice.currency.toLowerCase() !=
+                (selectedPlanData['currency'] ?? 'usd').toString().toLowerCase())) {
       OmiFeedback.error(context, context.l10n.selectedPlanNotAvailable);
       return;
     }
@@ -396,8 +398,8 @@ class _PlansSheetState extends State<PlansSheet> {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (ctx) => OmiAlertDialog(
-          title: storefrontPrice?.confirmLines.isNotEmpty == true
-              ? (storefrontPrice!.ctaLabel ?? l10n.upgradeToAnnualPlan)
+          title: storefrontPrice?.formattedConfirmLines.isNotEmpty == true
+              ? (storefrontPrice!.formattedCtaLabel ?? l10n.upgradeToAnnualPlan)
               : l10n.upgradeToAnnualPlan,
           content: Material(
             type: MaterialType.transparency,
@@ -405,8 +407,8 @@ class _PlansSheetState extends State<PlansSheet> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (storefrontPrice?.confirmLines.isNotEmpty == true)
-                  ...storefrontPrice!.confirmLines.map((line) => Padding(
+                if (storefrontPrice?.formattedConfirmLines.isNotEmpty == true)
+                  ...storefrontPrice!.formattedConfirmLines.map((line) => Padding(
                       padding: const EdgeInsets.only(bottom: OmiSpacing.sm),
                       child: Text(line, style: OmiType.callout.copyWith(color: OmiColors.textPrimary))))
                 else ...[
@@ -432,8 +434,8 @@ class _PlansSheetState extends State<PlansSheet> {
           actions: [
             OmiDialogAction(label: l10n.cancel, onPressed: () => Navigator.of(ctx).pop(false)),
             OmiDialogAction(
-                label: storefrontPrice?.confirmLines.isNotEmpty == true
-                    ? (storefrontPrice!.ctaLabel ?? l10n.confirmUpgrade)
+                label: storefrontPrice?.formattedConfirmLines.isNotEmpty == true
+                    ? (storefrontPrice!.formattedCtaLabel ?? l10n.confirmUpgrade)
                     : l10n.confirmUpgrade,
                 isDefault: true,
                 onPressed: () => Navigator.of(ctx).pop(true)),
@@ -458,7 +460,8 @@ class _PlansSheetState extends State<PlansSheet> {
       billingInterval: isYearly ? 'year' : 'month',
       releaseUpgradingLock: releaseUpgradingLock,
       storefrontDecision: storefrontDecision,
-      confirmedByStorefront: isUpgradingFromMonthlyToAnnual && storefrontPrice?.confirmLines.isNotEmpty == true,
+      confirmedByStorefront:
+          isUpgradingFromMonthlyToAnnual && storefrontPrice?.formattedConfirmLines.isNotEmpty == true,
     );
   }
 
@@ -1288,7 +1291,7 @@ class _PlansSheetState extends State<PlansSheet> {
       isPopular: isPopular,
       title: planData['title'] as String,
       subtitle: interval == 'year' ? l10n.annualBillingSummary(12, planBillingTotal(planData)) : null,
-      price: planData['price_string'] as String,
+      price: l10n.billingRecurringPrice(planBillingTotal(planData), interval),
       onTap: onTap,
       isActive: isActive && !isCancelled,
       endsOnDate: endsOnDate,

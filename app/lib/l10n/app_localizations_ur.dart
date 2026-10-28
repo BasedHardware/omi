@@ -8861,12 +8861,12 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'چیٹ: \$$used / \$$limit اس مہینے استعمال ہوا';
+    return 'چیٹ: $used / $limit اس مہینے استعمال ہوا';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'چیٹ: \$$used اس مہینے استعمال ہوا';
+    return 'چیٹ: $used اس مہینے استعمال ہوا';
   }
 
   @override
@@ -13313,6 +13313,30 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get paywallOutlineHeadline => 'اب ایک لفظ بھی نہ چھوڑیں۔';
+
+  @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/سال',
+        'other': '/مہینہ',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/سال',
+        'other': '/مہینہ',
+      },
+    );
+    return '$days دن مفت، پھر $price$_temp0';
+  }
 
   @override
   String get paywallTrialBrand => 'Omi Pro';

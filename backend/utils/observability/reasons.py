@@ -446,6 +446,7 @@ class NotesAgentForceReason(StrEnum):
 
     UNKNOWN = 'unknown'
     LOOKUP_CAP = 'lookup_cap'
+    SUBMISSION_REJECTED_AT_CAP = 'submission_rejected_at_cap'
     SUBMISSION_REJECTED = 'submission_rejected'
     TEXT_ONLY_RESPONSE = 'text_only_response'
     PRIOR_REJECTION = 'prior_rejection'

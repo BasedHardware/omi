@@ -60,9 +60,9 @@ final class PlanStorefrontTests: XCTestCase {
     let data = try Self.golden("plus_monthly_yearly_toggle")
     XCTAssertEqual(
       Self.buttons(data, .month),
-      ["operator": "Upgrade to Pro", "plus": "Switch to yearly · save $39.98", "architect": "Upgrade to Architect"])
+      ["operator": "Upgrade to Pro", "plus": "Switch to yearly · save US$39.98", "architect": "Upgrade to Architect"])
     let plus = try XCTUnwrap(data.tiers.first(where: \.isCurrent))
-    XCTAssertEqual(data.offeredPrice(plus, interval: .month)?.headline, "$19.99/month")
+    XCTAssertEqual(data.offeredPrice(plus, interval: .month)?.headline, "US$19.99/month")
     XCTAssertEqual(
       data.offeredPrice(plus, interval: .month)?.confirmLines.first, "Your monthly plan continues until Nov 1")
   }
@@ -79,7 +79,7 @@ final class PlanStorefrontTests: XCTestCase {
     XCTAssertFalse(capped.showsBudgetNudge)
     XCTAssertEqual(
       Self.buttons(capped, .month),
-      ["architect": "Upgrade to Architect", "plus": "", "operator": "Switch to yearly · save $99.98"])
+      ["architect": "Upgrade to Architect", "plus": "", "operator": "Switch to yearly · save US$99.98"])
     XCTAssertEqual(capped.partitionedTiers.primary.map(\.planId), ["architect", "operator"])
     XCTAssertFalse(try Self.golden("pro_settings").tiers.map(\.planId).contains("architect"))
     XCTAssertFalse(try Self.golden("pro_budget80").tiers.map(\.planId).contains("architect"))
@@ -164,7 +164,7 @@ final class PlanStorefrontTests: XCTestCase {
     tiers[0]["action"] = "trial"
     tiers[0]["future_field"] = ["nested": true]
     var prices = try XCTUnwrap(tiers[2]["prices"] as? [[String: Any]])
-    prices.append(["interval": "week", "amount_minor": 1, "currency": "usd", "headline": "$1/week"])
+    prices.append(["interval": "week", "amount_minor": 1, "currency": "usd", "headline": "US$1/week"])
     tiers[2]["prices"] = prices
     tiers.append(
       tiers[3].merging(["tier_id": "galaxy:ladder_v2", "plan_id": "galaxy", "name": "Galaxy"]) { $1 })
@@ -190,7 +190,7 @@ final class PlanStorefrontTests: XCTestCase {
     XCTAssertEqual(data.checkoutDecision(tier: pro, price: month), .checkout)
     let plus = try XCTUnwrap(data.tiers.first(where: \.isCurrent))
     let forgedPrice = PlanStorefront.Price(
-      id: "price_plus_month", interval: .month, amountMinor: 1999, currency: "usd", headline: "$19.99/month",
+      id: "price_plus_month", interval: .month, amountMinor: 1999, currency: "usd", headline: "US$19.99/month",
       subline: nil, renewalLine: nil, monthsFree: nil, ctaLabel: nil)
     let forged = PlanStorefront.Tier(
       tierId: plus.tierId, planId: plus.planId, name: plus.name, recommended: false, isCurrent: true,

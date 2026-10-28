@@ -173,7 +173,8 @@ BODY_DIGEST = {
     'database.action_items._apply_action_item_date_filters': 'b69dc9810414753e0b0715560b872121566b965f36bdefc5b91869587037336f',
     'database.action_items._harvest_legacy_docs': 'f4b8069a91feae96d257470687bc383bb0652b002a009e79979815be58814f9a',
     'database.action_items._probe_legacy_completion_rows': '57a375ed6e56cdd9c6156ef4cee5944dbfb089a2477844c5b9c52de9a3214a30',
-    'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': 'edf090b47ae28c017f15251bc0c9a4fe6d92445745f3b89f585159ac51f0c8d1',
+    # Re-reviewed: quiet admission uses the shared speech clock; query/read shapes are unchanged.
+    'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': 'a6c91232a5a2cff334260675817331cb46b5b670cad91acd6bdd9c46ed58ee67',
     'database.durable_queue_age._publish_queue_ages': '58e66cfc32f39bdc2e9b1e6c805d18599c1ff14be8dbcff68eadc23506656d9b',
     'database.firestore_query_types.FirestoreQuerySpec.build': '2c26a157a8e87be2bcfef668e3bd5cdc0a9c0d96e0b56bada98c30741c8be01a',
     # Re-reviewed: positional .where converted to filter=FieldFilter — same field/op/value shape.

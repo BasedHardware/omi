@@ -32390,10 +32390,32 @@
       },
       "StorefrontCurrent": {
         "properties": {
+          "amount_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Minor"
+          },
           "cancel_at_period_end": {
             "default": false,
             "title": "Cancel At Period End",
             "type": "boolean"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
           },
           "interval": {
             "anyOf": [
@@ -32428,6 +32450,17 @@
           "line": {
             "title": "Line",
             "type": "string"
+          },
+          "line_template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line Template"
           },
           "name": {
             "title": "Name",
@@ -32464,6 +32497,20 @@
             "title": "Amount Minor",
             "type": "integer"
           },
+          "confirm_line_templates": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirm Line Templates"
+          },
           "confirm_lines": {
             "anyOf": [
               {
@@ -32488,6 +32535,17 @@
               }
             ],
             "title": "Cta Label"
+          },
+          "cta_label_template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cta Label Template"
           },
           "currency": {
             "title": "Currency",
@@ -32537,6 +32595,17 @@
               }
             ],
             "title": "Renewal Line"
+          },
+          "saving_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Saving Minor"
           },
           "subline": {
             "anyOf": [
