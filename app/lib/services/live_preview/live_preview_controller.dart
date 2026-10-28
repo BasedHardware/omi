@@ -34,6 +34,7 @@ class LivePreviewLine {
       required this.isFinal,
       this.startedAt,
       this.endedAt,
+      this.firstSeenAt,
       this.spans = const []});
 
   final String id;
@@ -43,6 +44,10 @@ class LivePreviewLine {
   final bool isFinal;
   final DateTime? startedAt;
   final DateTime? endedAt;
+
+  /// First recognizer result time for this id, used only when audio timing is
+  /// unavailable and the server's settled watermark eventually passes it.
+  final DateTime? firstSeenAt;
   final List<LivePreviewSpan> spans;
 }
 
@@ -419,6 +424,7 @@ class LivePreviewController extends ChangeNotifier {
           isFinal: result.isFinal,
           startedAt: result.startedAt,
           endedAt: result.endedAt,
+          firstSeenAt: index >= 0 ? (_lines[index].firstSeenAt ?? now) : now,
           spans: result.spans);
       if (index >= 0) {
         _lines[index] = line;
