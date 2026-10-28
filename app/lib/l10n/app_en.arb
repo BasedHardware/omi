@@ -10422,9 +10422,9 @@
     "@deletePauseKeepLine": {
         "description": "Second line of the pause-instead card"
     },
-    "deletePauseReturnLine": "Sign in anytime to pick up where you left off.",
+    "deletePauseReturnLine": "You stay signed in. Resume recording anytime. Your subscription continues unchanged.",
     "@deletePauseReturnLine": {
-        "description": "Third line of the pause-instead card"
+        "description": "Pause v1 keeps the session and does not change billing"
     },
     "pauseOmiButton": "Pause Omi",
     "@pauseOmiButton": {
@@ -10471,9 +10471,9 @@
             }
         }
     },
-    "deleteGracePeriodNotice": "{days, plural, =1{Your data is kept for 1 day. Sign in again to restore it.} other{Your data is kept for {days} days. Sign in again to restore it.}}",
+    "deleteGracePeriodNotice": "{days, plural, =1{Sign in again within 1 day to restore your account.} other{Sign in again within {days} days to restore your account.}}",
     "@deleteGracePeriodNotice": {
-        "description": "Restore window the backend keeps after account deletion; shown on the delete confirmation step",
+        "description": "Backend-reported grace window; never infer a duration",
         "placeholders": {
             "days": {
                 "type": "int"
@@ -18023,9 +18023,9 @@
             }
         }
     },
-    "deleteLocalRecordingsWarning": "{count, plural, =1{You have 1 recording not yet uploaded. Deleting now loses it.} other{You have {count} recordings not yet uploaded. Deleting now loses them.}}",
+    "deleteLocalRecordingsWarning": "{count, plural, =1{1 recording hasn't uploaded yet. Deleting now loses it — keep the app open to finish uploading.} other{{count} recordings haven't uploaded yet. Deleting now loses them — keep the app open to finish uploading.}}",
     "@deleteLocalRecordingsWarning": {
-        "description": "Local audio loss warning on account deletion",
+        "description": "Loss warning only for recordings stored on this phone and not uploaded",
         "placeholders": {
             "count": {
                 "type": "int"
@@ -18035,5 +18035,79 @@
     "deleteConfirmGraceSubtitle": "Review what happens to your data before you leave.",
     "@deleteConfirmGraceSubtitle": {
         "description": "Confirmation subtitle when a backend restore window is available"
+    },
+    "deletePauseConfirmation": "Omi is paused. Resume recording anytime.",
+    "@deletePauseConfirmation": {
+        "description": "Brief confirmation after capture pause succeeds"
+    },
+    "deleteProcessingKept": "{count, plural, =1{1 recording is still processing. It is kept with your account for {days} days.} other{{count} recordings are still processing. They’re kept with your account for {days} days.}}",
+    "@deleteProcessingKept": {
+        "description": "Server-held recordings are retained during the backend-reported grace period",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            },
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "deleteDataErasedAfterDays": "{days, plural, =1{Your memories and conversations will be erased after 1 day.} other{Your memories and conversations will be erased after {days} days.}}",
+    "@deleteDataErasedAfterDays": {
+        "description": "Consequence row; days comes from backend",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "deleteAppsDisconnectImmediately": "Your apps and integrations disconnect immediately.",
+    "@deleteAppsDisconnectImmediately": {
+        "description": "Immediate effect even during grace"
+    },
+    "deleteSubscriptionImmediately": "Your subscription is cancelled immediately.",
+    "@deleteSubscriptionImmediately": {
+        "description": "Immediate cancellation when account deletion is requested"
+    },
+    "deleteRestoreTitle": "Your account is pending deletion",
+    "@deleteRestoreTitle": {
+        "description": "Title on sign-in into a pending-deletion account"
+    },
+    "deleteRestoreSubtitle": "Changed your mind? Restore your account before it is erased.",
+    "@deleteRestoreSubtitle": {
+        "description": "Restore decision description"
+    },
+    "deleteRestoreKeepData": "Restore your memories and conversations.",
+    "@deleteRestoreKeepData": {
+        "description": "Restoration benefit row"
+    },
+    "deleteRestoreBillingNotice": "Your subscription stays cancelled. Reconnect apps and integrations after restoring.",
+    "@deleteRestoreBillingNotice": {
+        "description": "Restoring does not restart billing or reconnect revoked integrations"
+    },
+    "deleteRestoreDaysRemaining": "{days, plural, =1{You have at least 1 day left to restore your account.} other{You have at least {days} days left to restore your account.}}",
+    "@deleteRestoreDaysRemaining": {
+        "description": "Whole days rounded down from server wipe_at",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "deleteRestoreButton": "Restore my account",
+    "@deleteRestoreButton": {
+        "description": "Primary action on pending deletion sign-in"
+    },
+    "deleteFinishButton": "Finish deleting",
+    "@deleteFinishButton": {
+        "description": "Secondary action reveals final erase-now confirmation"
+    },
+    "deleteFinishNowButton": "Erase my account now",
+    "@deleteFinishNowButton": {
+        "description": "Destructive confirmation; sends erase_now true"
+    },
+    "deleteFinishNowWarning": "This ends the restore window. Your account and its recordings will be permanently erased.",
+    "@deleteFinishNowWarning": {
+        "description": "Final warning before erase_now"
     }
 }

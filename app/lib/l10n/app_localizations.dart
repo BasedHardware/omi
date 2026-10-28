@@ -16329,10 +16329,10 @@ abstract class AppLocalizations {
   /// **'Your memories, conversations and apps are kept exactly as they are.'**
   String get deletePauseKeepLine;
 
-  /// Third line of the pause-instead card
+  /// Pause v1 keeps the session and does not change billing
   ///
   /// In en, this message translates to:
-  /// **'Sign in anytime to pick up where you left off.'**
+  /// **'You stay signed in. Resume recording anytime. Your subscription continues unchanged.'**
   String get deletePauseReturnLine;
 
   /// Primary action of the pause-instead interstitial
@@ -16395,10 +16395,10 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{You have 1 recording still processing. Deleting now loses it.} other{You have {count} recordings still processing. Deleting now loses them.}}'**
   String deletePendingRecordingsWarning(int count);
 
-  /// Restore window the backend keeps after account deletion; shown on the delete confirmation step
+  /// Backend-reported grace window; never infer a duration
   ///
   /// In en, this message translates to:
-  /// **'{days, plural, =1{Your data is kept for 1 day. Sign in again to restore it.} other{Your data is kept for {days} days. Sign in again to restore it.}}'**
+  /// **'{days, plural, =1{Sign in again within 1 day to restore your account.} other{Sign in again within {days} days to restore your account.}}'**
   String deleteGracePeriodNotice(int days);
 
   /// Instruction to type DELETE to confirm
@@ -26031,10 +26031,10 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}'**
   String homeNoiseFoldHide(int count);
 
-  /// Local audio loss warning on account deletion
+  /// Loss warning only for recordings stored on this phone and not uploaded
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{You have 1 recording not yet uploaded. Deleting now loses it.} other{You have {count} recordings not yet uploaded. Deleting now loses them.}}'**
+  /// **'{count, plural, =1{1 recording hasn\'t uploaded yet. Deleting now loses it — keep the app open to finish uploading.} other{{count} recordings haven\'t uploaded yet. Deleting now loses them — keep the app open to finish uploading.}}'**
   String deleteLocalRecordingsWarning(int count);
 
   /// Confirmation subtitle when a backend restore window is available
@@ -26042,6 +26042,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Review what happens to your data before you leave.'**
   String get deleteConfirmGraceSubtitle;
+
+  /// Brief confirmation after capture pause succeeds
+  ///
+  /// In en, this message translates to:
+  /// **'Omi is paused. Resume recording anytime.'**
+  String get deletePauseConfirmation;
+
+  /// Server-held recordings are retained during the backend-reported grace period
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 recording is still processing. It is kept with your account for {days} days.} other{{count} recordings are still processing. They’re kept with your account for {days} days.}}'**
+  String deleteProcessingKept(int count, int days);
+
+  /// Consequence row; days comes from backend
+  ///
+  /// In en, this message translates to:
+  /// **'{days, plural, =1{Your memories and conversations will be erased after 1 day.} other{Your memories and conversations will be erased after {days} days.}}'**
+  String deleteDataErasedAfterDays(int days);
+
+  /// Immediate effect even during grace
+  ///
+  /// In en, this message translates to:
+  /// **'Your apps and integrations disconnect immediately.'**
+  String get deleteAppsDisconnectImmediately;
+
+  /// Immediate cancellation when account deletion is requested
+  ///
+  /// In en, this message translates to:
+  /// **'Your subscription is cancelled immediately.'**
+  String get deleteSubscriptionImmediately;
+
+  /// Title on sign-in into a pending-deletion account
+  ///
+  /// In en, this message translates to:
+  /// **'Your account is pending deletion'**
+  String get deleteRestoreTitle;
+
+  /// Restore decision description
+  ///
+  /// In en, this message translates to:
+  /// **'Changed your mind? Restore your account before it is erased.'**
+  String get deleteRestoreSubtitle;
+
+  /// Restoration benefit row
+  ///
+  /// In en, this message translates to:
+  /// **'Restore your memories and conversations.'**
+  String get deleteRestoreKeepData;
+
+  /// Restoring does not restart billing or reconnect revoked integrations
+  ///
+  /// In en, this message translates to:
+  /// **'Your subscription stays cancelled. Reconnect apps and integrations after restoring.'**
+  String get deleteRestoreBillingNotice;
+
+  /// Whole days rounded down from server wipe_at
+  ///
+  /// In en, this message translates to:
+  /// **'{days, plural, =1{You have at least 1 day left to restore your account.} other{You have at least {days} days left to restore your account.}}'**
+  String deleteRestoreDaysRemaining(int days);
+
+  /// Primary action on pending deletion sign-in
+  ///
+  /// In en, this message translates to:
+  /// **'Restore my account'**
+  String get deleteRestoreButton;
+
+  /// Secondary action reveals final erase-now confirmation
+  ///
+  /// In en, this message translates to:
+  /// **'Finish deleting'**
+  String get deleteFinishButton;
+
+  /// Destructive confirmation; sends erase_now true
+  ///
+  /// In en, this message translates to:
+  /// **'Erase my account now'**
+  String get deleteFinishNowButton;
+
+  /// Final warning before erase_now
+  ///
+  /// In en, this message translates to:
+  /// **'This ends the restore window. Your account and its recordings will be permanently erased.'**
+  String get deleteFinishNowWarning;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
