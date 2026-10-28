@@ -429,6 +429,12 @@ class AppLocalizationsLv extends AppLocalizations {
   String get autoSync => 'Automātiska sinhronizācija';
 
   @override
+  String get syncHealthAlerts => 'Sinhronizācijas stāvokļa brīdinājumi';
+
+  @override
+  String get syncHealthAlertsDescription => 'Brīdināt, ja Omi vairāk nekā dienu nav sinhronizējis ierakstus';
+
+  @override
   String get autoSyncDescription => 'Automātiski sinhronizēt bezsaistes ierakstus, kad ierīce tiek savienota';
 
   @override
@@ -9067,6 +9073,14 @@ class AppLocalizationsLv extends AppLocalizations {
   String get syncCardWaitingInternet => 'Gaida internetu';
 
   @override
+  String get syncStallAlertTitle => 'Omi nesinhronizējas';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Vairāk nekā $hours stundas no jūsu Omi nav sinhronizēts neviens ieraksts. Atveriet Omi, lai pārbaudītu ierīces savienojumu.';
+  }
+
+  @override
   String syncCardNeedsAttention(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13705,6 +13719,14 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'Ieraksti apturēti';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi nesinhronizējas';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Vairāk nekā $hours stundas nav sinhronizēts neviens ieraksts';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'Augšupielāde apstājusies';

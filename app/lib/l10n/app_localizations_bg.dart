@@ -430,6 +430,12 @@ class AppLocalizationsBg extends AppLocalizations {
   String get autoSync => 'Автоматична синхронизация';
 
   @override
+  String get syncHealthAlerts => 'Сигнали за състоянието на синхронизацията';
+
+  @override
+  String get syncHealthAlertsDescription => 'Сигнал, ако Omi не е синхронизирал записи повече от ден';
+
+  @override
   String get autoSyncDescription => 'Автоматично синхронизиране на офлайн записите при свързване на устройството ви';
 
   @override
@@ -9079,6 +9085,14 @@ class AppLocalizationsBg extends AppLocalizations {
   String get syncCardWaitingInternet => 'Изчакване на интернет';
 
   @override
+  String get syncStallAlertTitle => 'Omi не се синхронизира';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Няма синхронизирани записи от вашия Omi от повече от $hours часа. Отворете Omi, за да проверите връзката на устройството.';
+  }
+
+  @override
   String syncCardNeedsAttention(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13722,6 +13736,14 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'Записите са спрени';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi не се синхронизира';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Няма синхронизирани записи от повече от $hours часа';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'Качването е спряно';

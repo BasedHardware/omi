@@ -429,6 +429,12 @@ class AppLocalizationsNl extends AppLocalizations {
   String get autoSync => 'Automatisch synchroniseren';
 
   @override
+  String get syncHealthAlerts => 'Waarschuwingen over synchronisatiestatus';
+
+  @override
+  String get syncHealthAlertsDescription => 'Waarschuw als Omi langer dan een dag geen opnames heeft gesynchroniseerd';
+
+  @override
   String get autoSyncDescription => 'Synchroniseer offline-opnamen automatisch wanneer je apparaat verbinding maakt';
 
   @override
@@ -9067,6 +9073,14 @@ class AppLocalizationsNl extends AppLocalizations {
   String get syncCardWaitingInternet => 'Wachten op internet';
 
   @override
+  String get syncStallAlertTitle => 'Omi synchroniseert niet';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Al meer dan $hours uur zijn er geen opnames van je Omi gesynchroniseerd. Open Omi om de verbinding van je apparaat te controleren.';
+  }
+
+  @override
   String syncCardNeedsAttention(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13710,6 +13724,14 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'Opnames gepauzeerd';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi synchroniseert niet';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Al meer dan $hours uur geen gesynchroniseerde opnames';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'Upload vastgelopen';

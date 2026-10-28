@@ -90,7 +90,10 @@ def entries():
             'database.dream_scheduler.candidates',
             patchers=(producer_mode,),
             domains={'limit': [1, 100]},
-            neutrals={'now': (datetime(2026, 10, 12, tzinfo=timezone.utc), 'post-query priority only')},
+            neutrals={
+                'now': (datetime(2026, 10, 12, tzinfo=timezone.utc), 'post-query priority only'),
+                'with_due': (False, 'projection of returned rows only'),
+            },
         ),
         DriverEntry(
             'database.dream_scheduler.candidate_page',
@@ -101,17 +104,19 @@ def entries():
         DriverEntry(
             'database.dream_store.acquire',
             base={'uid': UID},
-            domains={'trigger': ['schedule', 'manual']},
             neutrals={
                 'caps': (Caps(), 'admission policy only'),
                 'rng': (None, 'coin does not alter query shape'),
                 'reclaim_sink': (None, 'count-only output after commit does not alter query shape'),
                 'canary': (False, 'cohort gate only'),
                 'now': (datetime(2026, 10, 9, tzinfo=timezone.utc), 'UTC accounting day only'),
+                'denial_sink': (None, 'count-only denial reason after commit does not alter query shape'),
             },
+            domains={'trigger': ['schedule', 'manual'], 'skip_idle': [False, True]},
             setup=admission_state,
             patchers=(producer_mode,),
         ),
+        DriverEntry('database.dream_store.park_if_idle', base={'uid': UID}),
         DriverEntry(
             'database.dream_store.dirty_count',
             base={'uid': UID},
@@ -146,6 +151,7 @@ def entries():
                 'consumed': ([], 'settlement metadata; watermark uses the separately driven dirty_refs builder'),
                 'unavailable': ([], 'settlement metadata; watermark uses the separately driven dirty_refs builder'),
                 'release': (True, 'post-query lease policy'),
+                'park_when_idle': (False, 'chooses delete vs set of the due row; no query shape change'),
             },
             setup=finish_state,
         ),
@@ -172,7 +178,7 @@ registry_extension = SimpleNamespace(
             covered_by=('database.dream_scheduler.candidate_page',),
             reason='Discovery streams only through candidate_page (allowlist mode reads listed user documents by explicit ref instead); its chunked get_all calls read explicit document refs in bounded transactions that only initialize due rows and a cursor. SDK queue races are exercised in test_dream_queue_emulator.',
             expect_observed=False,
-            body_digest='e614de2d842268bb1b96e7e7a12c885b3e1bbcef9bd63da881baccf177d1c722',
+            body_digest='3d93d04de0f8e275f39ec72d8546af67ff2d583fb061d7faa25db084460ae492',
         )
     },
     SKIPS={},

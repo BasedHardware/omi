@@ -422,6 +422,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get autoSync => '自動同期';
 
   @override
+  String get syncHealthAlerts => '同期状態の通知';
+
+  @override
+  String get syncHealthAlertsDescription => 'Omi の録音が 1 日以上同期されていないときに通知します';
+
+  @override
   String get autoSyncDescription => 'デバイスの接続時にオフライン録音を自動的に同期します';
 
   @override
@@ -8916,6 +8922,14 @@ class AppLocalizationsJa extends AppLocalizations {
   String get syncCardWaitingInternet => 'インターネット接続を待機中';
 
   @override
+  String get syncStallAlertTitle => 'Omi が同期されていません';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return '$hours 時間以上、Omi から録音が同期されていません。端末の接続を確認するには Omi を開いてください。';
+  }
+
+  @override
   String syncCardNeedsAttention(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13484,6 +13498,14 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => '録音を一時停止中';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi が同期されていません';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return '$hours 時間以上、録音が同期されていません';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'アップロードが停止しています';

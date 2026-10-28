@@ -155,7 +155,8 @@ def test_action_item_speaker_labels_use_dense_labels(monkeypatch):
     labels = conversation_action_item_speaker_labels('uid-1', conversation, people=[])
     joined = '\n'.join(item['speaker_label'] for item in labels)
     _assert_no_raw_ids(joined)
-    assert 'David' in joined and 'Speaker A' in joined
+    assert 'David' not in joined and 'Speaker A' in joined
+    assert all(item['speaker_role'] == 'unknown' for item in labels)
 
 
 def test_populate_speaker_names_uses_dense_labels(monkeypatch):

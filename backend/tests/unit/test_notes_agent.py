@@ -35,6 +35,7 @@ START = datetime(2026, 10, 1, 15, 0, tzinfo=timezone.utc)
 
 @pytest.fixture(autouse=True)
 def clean_env(monkeypatch):
+    monkeypatch.setenv('CONVERSATION_NOTES_AGENT_LOOKUP_EFFICIENCY_ENABLED', 'false')
     for key in (policy.FLAG, policy.PERCENT, policy.UID_ALLOWLIST):
         monkeypatch.delenv(key, raising=False)
 
@@ -354,6 +355,199 @@ def test_lookup_cap_alone_allows_a_voluntary_submit():
     assert result.tool_calls == 2
 
 
+def test_identical_lookups_reuse_result_without_spending_budget(monkeypatch):
+    monkeypatch.setenv(policy.LOOKUP_EFFICIENCY, 'true')
+    model = ScriptedModel(lookups_per_turn=4)
+    box = CountingToolbox()
+    result = run_agent(model, policy.NotesAgentBudget(max_turns=4, max_tool_calls=2), toolbox=box)
+    assert result.tool_calls == box.calls == 1
+    assert result.duplicate_lookups == 11
+    assert result.refused_lookups == 0
+    assert result.force_reason == 'turn_limit'
+
+
+@pytest.mark.parametrize('efficient', [True, False])
+@pytest.mark.parametrize('batch_size', [8, 64])
+def test_duplicate_spam_keeps_a_forced_submit_turn(monkeypatch, efficient, batch_size):
+    monkeypatch.setenv(policy.LOOKUP_EFFICIENCY, str(efficient))
+    box = CountingToolbox()
+    model = ScriptedModel(lookups_per_turn=batch_size)
+    result = run_agent(model, policy.NotesAgentBudget(max_turns=4, max_tool_calls=2), toolbox=box)
+    if efficient:
+        assert result.stop == 'forced_submit' and result.submission is not None
+        assert result.force_reason == 'turn_limit'
+        assert result.tool_calls == box.calls == 1
+        assert result.duplicate_lookups == batch_size * 3 - 1
+        assert model.choices[-1] == {'type': 'function', 'function': {'name': prompt.SUBMIT}}
+    elif batch_size == 64:
+        assert result.stop == 'no_submission' and box.calls == 0
+    else:
+        assert result.stop == 'forced_submit' and box.calls == 2 and result.force_reason == 'lookup_cap'
+
+
+def test_submission_rejected_at_cap_has_its_own_reason(monkeypatch):
+    class RejectAtCap:
+        calls = 0
+
+        async def __call__(self, messages, tool_choice):
+            self.calls += 1
+            if self.calls == 1:
+                return agent.CompletionTurn(tool_calls=[call('search_people', {'query': 'Maya'})])
+            return agent.CompletionTurn(
+                tool_calls=[
+                    call(
+                        prompt.SUBMIT,
+                        submission(sections=[{'heading': 'Discussion', 'body_markdown': 'Prose needs repair.'}]),
+                    )
+                ]
+            )
+
+    result = run_agent(RejectAtCap(), policy.NotesAgentBudget(max_turns=4, max_tool_calls=1))
+    assert result.force_reason == 'submission_rejected_at_cap'
+    assert result.refused_lookups == 0
+
+
+def test_mixed_rejected_submit_and_refused_lookup_keeps_first_reason(monkeypatch):
+    class MixedBatch:
+        turns = 0
+
+        async def __call__(self, messages, tool_choice):
+            self.turns += 1
+            if self.turns == 1:
+                return agent.CompletionTurn(tool_calls=[call('search_people', {'query': 'Maya'})])
+            if self.turns == 2:
+                return agent.CompletionTurn(
+                    tool_calls=[
+                        call(
+                            prompt.SUBMIT, submission(sections=[{'heading': 'Discussion', 'body_markdown': 'Prose.'}])
+                        ),
+                        call('search_people', {'query': 'Different person'}),
+                    ]
+                )
+            return agent.CompletionTurn(tool_calls=[call(prompt.SUBMIT, submission())])
+
+    result = run_agent(MixedBatch(), policy.NotesAgentBudget(max_turns=5, max_tool_calls=1))
+    assert result.stop == 'forced_submit' and result.refused_lookups == 1
+    assert result.force_reason == 'submission_rejected_at_cap'
+
+
+def test_people_batch_matches_each_name_and_loads_once(toolbox, monkeypatch):
+    monkeypatch.setenv(policy.LOOKUP_EFFICIENCY, 'true')
+    box, calls = toolbox
+    batch = json.loads(run(box.call('search_people', {'names': ['Maya', 'Nobody']})).content)
+    single = json.loads(run(box.call('search_people', {'query': 'Maya'})).content)
+    assert batch['people'] == single['people']
+    assert [kind for kind, _ in calls].count('people') == 1
+
+
+def test_oversized_people_batches_have_order_independent_truncation_and_notice(toolbox, monkeypatch):
+    monkeypatch.setenv(policy.LOOKUP_EFFICIENCY, 'true')
+    people = [{'name': f'Contact {index:02d}'} for index in range(13)]
+    monkeypatch.setattr(tools, 'load_people_documents', lambda _uid: people)
+    box, _calls = toolbox
+    names = [p['name'] for p in people]
+    forward = json.loads(run(box.call('search_people', {'names': names})).content)
+    reverse = json.loads(run(box.call('search_people', {'names': list(reversed(names)) + [names[0]]})).content)
+    assert forward == reverse
+    assert [p['name'] for p in forward['people']] == names[:12]
+    assert forward['names_dropped'] == 1 and 'dropped' in forward['note']
+
+
+@pytest.mark.parametrize('tool', ['get_calendar', 'get_screen_activity'])
+def test_prefetched_tool_results_have_the_same_clip_as_live_results(tool):
+    packet = {
+        'prefetched_tools': [tool],
+        'calendar_overlap': [{'title': 'x' * 10000}],
+        'screen_activity': {'rows': [{'text': 'x' * 10000}]},
+    }
+    result = tools.prefetched_results(packet)[tool].content
+    raw = shaped_agent.model_json(
+        {'meetings': packet['calendar_overlap']} if tool == 'get_calendar' else packet['screen_activity']
+    )
+    assert result == raw[: tools.MAX_RESULT_CHARACTERS] + '…(truncated)'
+
+
+def test_prefetch_credit_satisfies_lookup_floor(monkeypatch):
+    monkeypatch.setenv(policy.LOOKUP_EFFICIENCY, 'true')
+
+    async def eager(messages, tool_choice):
+        return agent.CompletionTurn(tool_calls=[call(prompt.SUBMIT, submission())])
+
+    result = run_agent(
+        eager, policy.NotesAgentBudget(max_turns=4, max_tool_calls=6, min_tool_calls=2), prefetched_evidence=2
+    )
+    assert result.stop == 'submitted' and not result.rejections and result.tool_calls == 0
+
+
+def test_prefetched_calendar_and_screen_answer_at_zero_budget(monkeypatch):
+    monkeypatch.setenv(policy.LOOKUP_EFFICIENCY, 'true')
+    choices, requests = [], []
+
+    async def complete(messages, tool_choice):
+        choices.append(tool_choice)
+        requests.append(messages[:])
+        calls = [call('get_calendar', {}), call('get_screen_activity', {'limit': 25, 'query': '', 'start': None})]
+        return agent.CompletionTurn(tool_calls=calls if len(choices) == 1 else [call(prompt.SUBMIT, submission())])
+
+    result = run_agent(
+        complete,
+        policy.NotesAgentBudget(max_turns=4, max_tool_calls=0),
+        prefetched_lookups={
+            'get_calendar': tools.ToolOutcome('{"meetings": []}'),
+            'get_screen_activity': tools.ToolOutcome('{"rows": []}'),
+        },
+    )
+    assert result.stop == 'submitted' and result.tool_calls == result.refused_lookups == 0
+    assert choices == ['required', 'required']
+    assert any(m.get('role') == 'tool' and m['content'] == '{"rows": []}' for m in requests[1])
+
+
+def test_efficiency_switch_restores_prompt_tools_packet_and_charging(monkeypatch):
+    monkeypatch.delenv(policy.LOOKUP_EFFICIENCY)
+    assert policy.lookup_efficiency_enabled()
+    assert 'five to eight' not in prompt.instructions_for_run()
+    assert prompt.INSTRUCTIONS.count('then confirm with search_people,') == 1
+    assert (
+        'then confirm with the packet’s matched_people records or batched search_people(names=[...]),'
+        in prompt.instructions_for_run()
+    )
+    assert 'names' in next(
+        t['function']['parameters']['properties']
+        for t in prompt.tools_for_run()
+        if t['function']['name'] == 'search_people'
+    )
+    monkeypatch.setenv(policy.LOOKUP_EFFICIENCY, 'off')
+    assert prompt.instructions_for_run() == prompt.INSTRUCTIONS
+    assert prompt.tools_for_run() == prompt.TOOL_SCHEMAS
+    assert prompt.version_for_run() == 'notes-agent-v7'
+    box = CountingToolbox()
+    result = run_agent(
+        ScriptedModel(lookups_per_turn=4),
+        policy.NotesAgentBudget(max_turns=5, max_tool_calls=6),
+        toolbox=box,
+        prefetched_evidence=20,
+    )
+    assert result.tool_calls == box.calls == 6 and result.refused_lookups == 2
+
+
+def test_packet_people_matching_is_bounded_and_does_not_bind_voices():
+    packet = {
+        'prefetched_tools': ['get_calendar', 'get_screen_activity'],
+        'listed_participants': [{'name': 'Maya Okafor'}],
+    }
+    tools.enrich_lookup_packet(
+        packet,
+        people_loader=lambda: [
+            {'name': 'Maya Okafor', 'aliases': ['Maya O.'], 'notes': 'Known counterpart'},
+            {'name': 'Unrelated Person'},
+        ],
+        capture_evidence='Maya O. discussed pricing.',
+    )
+    assert [p['name'] for p in packet['matched_people']] == ['Maya Okafor']
+    assert packet['prefetched_evidence'] == 4
+    assert not any('speaker' in p for p in packet['matched_people'])
+
+
 def test_last_turn_and_cost_cap_force_submit():
     model = ScriptedModel()
     result = run_agent(model, policy.NotesAgentBudget(max_turns=3, max_tool_calls=15))
@@ -600,7 +794,7 @@ def test_synthetic_replay_through_shaped_notes_writer(monkeypatch):
     assert structured.participants[0].evidence.startswith('Zoom tile')
     assert all(nested_bullet_count(section.body_markdown) for section in structured.sections)
     assert [item.description for item in structured.action_items] == ['Check the firmware fix status with the team']
-    assert seen and seen[0][0] == serving.EXPLICIT_CACHE_OPTIONS and seen[0][1].startswith(prompt.PROMPT_VERSION)
+    assert seen and seen[0][0] == serving.EXPLICIT_CACHE_OPTIONS and seen[0][1].startswith(prompt.version_for_run())
 
 
 def test_writer_keeps_one_shot_when_agent_declines(monkeypatch):
@@ -671,7 +865,10 @@ def test_screen_leads_name_the_call_party_and_skip_groups_owner_bots_and_old_row
     assert leads[0]['evidence'] == ['call_window', 'profile_page'] and leads[0]['first_seen_min'] == -3
 
 
-def test_packet_carries_screen_leads_in_utc(monkeypatch):
+@pytest.mark.parametrize('efficient', [False, True])
+def test_packet_carries_screen_leads_in_utc(monkeypatch, efficient):
+    monkeypatch.setenv(policy.LOOKUP_EFFICIENCY, str(efficient))
+    monkeypatch.setattr(tools, 'load_people_documents', lambda *_a: [{'name': 'Maya Okafor'}])
     monkeypatch.setattr(tools.calendar_db, 'get_meetings_in_time_range', lambda *a, **k: [])
     monkeypatch.setattr(tools.screen_activity_db, 'get_screen_activity', lambda *a, **k: CALL_ROWS)
     packet, _seen = tools.build_packet(
@@ -694,6 +891,16 @@ def test_packet_carries_screen_leads_in_utc(monkeypatch):
     assert [lead['name'] for lead in packet['people_on_screen']] == ['Maya Okafor']
     assert packet['conversation']['started_at'] == '2026-10-01T15:00:00Z'
     assert serving.naming_leads(packet) == ['Maya Okafor']
+    if efficient:
+        assert [p['name'] for p in packet['matched_people']] == ['Maya Okafor']
+        assert packet['prefetched_evidence'] == 4
+        rows = packet['screen_activity']['rows']
+        assert all(row['at'] >= START.isoformat() for row in rows)
+        assert all('text' not in row for row in rows if row['app'] == 'Telegram')
+        assert set(tools.prefetched_results(packet)) == {'get_calendar', 'get_screen_activity'}
+    else:
+        assert 'screen_activity' not in packet and 'matched_people' not in packet
+        assert not tools.prefetched_results(packet)
 
 
 def test_unnamed_speaker_is_sent_back_and_the_name_reaches_participants_and_notes():
@@ -915,5 +1122,5 @@ def test_an_evidence_rejection_at_the_lookup_cap_forces_the_next_turn(monkeypatc
 
     assert model.choices[:2] == ['required', 'required']
     assert model.choices[2] == {'type': 'function', 'function': {'name': prompt.SUBMIT}}
-    assert result.forced and result.force_reason == 'lookup_cap'
+    assert result.forced and result.force_reason == 'submission_rejected_at_cap'
     assert result.tool_calls == 2 and len(reviews) == 2

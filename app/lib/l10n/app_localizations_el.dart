@@ -431,6 +431,12 @@ class AppLocalizationsEl extends AppLocalizations {
   String get autoSync => 'Αυτόματος συγχρονισμός';
 
   @override
+  String get syncHealthAlerts => 'Ειδοποιήσεις κατάστασης συγχρονισμού';
+
+  @override
+  String get syncHealthAlertsDescription => 'Ειδοποίηση αν το Omi δεν συγχρόνισε ηχογραφήσεις για πάνω από μια μέρα';
+
+  @override
   String get autoSyncDescription => 'Αυτόματος συγχρονισμός των εκτός σύνδεσης εγγραφών όταν συνδέεται η συσκευή σας';
 
   @override
@@ -9108,6 +9114,14 @@ class AppLocalizationsEl extends AppLocalizations {
   String get syncCardWaitingInternet => 'Αναμονή για σύνδεση';
 
   @override
+  String get syncStallAlertTitle => 'Το Omi δεν συγχρονίζεται';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Καμία ηχογράφηση από το Omi σας δεν συγχρονίστηκε για πάνω από $hours ώρες. Ανοίξτε το Omi για να ελέγξετε τη σύνδεση της συσκευής.';
+  }
+
+  @override
   String syncCardNeedsAttention(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13759,6 +13773,14 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'Οι ηχογραφήσεις τέθηκαν σε παύση';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Το Omi δεν συγχρονίζεται';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Καμία ηχογράφηση δεν συγχρονίστηκε για πάνω από $hours ώρες';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'Η αποστολή σταμάτησε';

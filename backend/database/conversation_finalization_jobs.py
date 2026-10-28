@@ -45,6 +45,7 @@ from models.client_processing import PROJECTION_FAMILY_FIELDS
 from models.conversation_continuity import continuation_timeout
 from utils.conversations.backfill_stats import same_timestamp_revision
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger, is_recovery_trigger
+from utils.conversations.lifecycle_clocks import speech_clock
 from utils.conversations.recovery import (
     TERMINAL_NO_DERIVED_EFFECTS_FIELD,
     raw_transcript_bytes,
@@ -380,8 +381,6 @@ def recovery_admission_refusal(
         return 'protected_content'
     if conversation.get('finalization_job_id'):
         return 'has_job'
-    from utils.conversations.lifecycle_clocks import speech_clock
-
     finished_at = speech_clock(uid, conversation)
     if not isinstance(finished_at, datetime):
         return 'no_finished_at'
@@ -615,8 +614,9 @@ def _create_or_get_finalization_intent_txn(
                 if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or not math.isfinite(timeout):
                     timeout = 120
                 timeout = max(1, min(timeout, 14400))
-                finished_at = loaded['finished_at']
-                finished_at = finished_at if finished_at.tzinfo else finished_at.replace(tzinfo=timezone.utc)
+                # Use the candidate-selection clock, including speech-only v2 rows.
+                finished_at = speech_clock(uid, loaded)
+                assert finished_at is not None  # recovery_admission_refusal checked it above
                 if finished_at + timedelta(seconds=continuation_timeout(loaded, timeout)) > now:
                     intent = _no_finalization_intent('refused_not_quiet')
                     return intent

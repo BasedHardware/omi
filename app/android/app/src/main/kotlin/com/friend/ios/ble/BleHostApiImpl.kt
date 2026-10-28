@@ -238,6 +238,7 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
             .put("lifecycle_events", array("lifecycle"))
             .put("ble_log", array("log_$addr"))
             .put("counters_since", prefs?.getLong("counters_since_$addr", 0L)?.takeIf { it > 0L } ?: JSONObject.NULL)
+        putFeedbackDiagnostics(payload, prefs, addr)
         putAudioRecoveryStamps(payload, prefs.getString(audioRecoveryProofsKey(addr), null), epoch, now)
         callback(Result.success(payload.toString()))
     }

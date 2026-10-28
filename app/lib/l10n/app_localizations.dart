@@ -999,6 +999,18 @@ abstract class AppLocalizations {
   /// **'Auto-Sync'**
   String get autoSync;
 
+  /// Device Settings toggle title: stall alerts for the paired pendant
+  ///
+  /// In en, this message translates to:
+  /// **'Sync Health Alerts'**
+  String get syncHealthAlerts;
+
+  /// Device Settings toggle subtitle under Sync Health Alerts
+  ///
+  /// In en, this message translates to:
+  /// **'Alert if Omi hasn\'t synced recordings for over a day'**
+  String get syncHealthAlertsDescription;
+
   /// Subtitle explaining the Auto-Sync toggle in device settings
   ///
   /// In en, this message translates to:
@@ -16869,6 +16881,18 @@ abstract class AppLocalizations {
   /// **'Waiting for internet'**
   String get syncCardWaitingInternet;
 
+  /// Local notification title when the sync stall alert fires
+  ///
+  /// In en, this message translates to:
+  /// **'Omi Not Syncing'**
+  String get syncStallAlertTitle;
+
+  /// Local notification body when the sync stall alert fires
+  ///
+  /// In en, this message translates to:
+  /// **'No recordings have synced from your Omi in over {hours} hours. Open Omi to check your device connection.'**
+  String syncStallAlertBody(int hours);
+
   /// Status card: items that need user attention
   ///
   /// In en, this message translates to:
@@ -24290,6 +24314,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Recordings paused'**
   String get activityAttentionStorageSubtitle;
+
+  /// Needs attention row title: no sync activity at all for the stall threshold
+  ///
+  /// In en, this message translates to:
+  /// **'Omi isn\'t syncing'**
+  String get activityAttentionSyncStalledTitle;
+
+  /// Needs attention row subtitle: how long the pipeline has been silent
+  ///
+  /// In en, this message translates to:
+  /// **'No recordings synced for over {hours} hours'**
+  String activityAttentionSyncStalledSubtitle(int hours);
 
   /// Needs attention row title: uploads made no progress long enough to need attention
   ///

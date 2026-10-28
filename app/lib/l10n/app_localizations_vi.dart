@@ -429,6 +429,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String get autoSync => 'Tự động đồng bộ';
 
   @override
+  String get syncHealthAlerts => 'Cảnh báo tình trạng đồng bộ';
+
+  @override
+  String get syncHealthAlertsDescription => 'Cảnh báo nếu Omi không đồng bộ bản ghi hơn một ngày';
+
+  @override
   String get autoSyncDescription => 'Tự động đồng bộ các bản ghi ngoại tuyến khi thiết bị của bạn kết nối';
 
   @override
@@ -9048,6 +9054,14 @@ class AppLocalizationsVi extends AppLocalizations {
   String get syncCardWaitingInternet => 'Đang chờ kết nối Internet';
 
   @override
+  String get syncStallAlertTitle => 'Omi không đồng bộ';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Không có bản ghi nào từ Omi của bạn được đồng bộ trong hơn $hours giờ. Mở Omi để kiểm tra kết nối thiết bị.';
+  }
+
+  @override
   String syncCardNeedsAttention(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13672,6 +13686,14 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'Bản ghi đã tạm dừng';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi không đồng bộ';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Không có bản ghi nào được đồng bộ hơn $hours giờ';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'Tải lên bị đình trệ';

@@ -137,7 +137,12 @@ Summary tab shows at most four notes (on-device, above, or the newest server not
 transcript link. The Transcript
 tab shows final segments first, then a "Live on this phone" divider, then the
 preview lines the finals do not already cover (union of final audio-time intervals; timed words allow partial hand-off; the
-volatile tail reads lighter), with one quiet "Final transcript about <N>s
+volatile tail reads lighter). The API has no processed-through watermark, so a
+client watermark trails the latest final segment end by 10 seconds to leave a
+recent out-of-order batch hole intact; older uncovered gaps are final-authoritative,
+including silence or noise the server omitted. Untimed preview lines expire
+after the watermark advances 10 seconds beyond their first observed time. The
+tab has one quiet "Final transcript about <N>s
 behind" line replacing the uploading pill (failed/retrying uploads keep their
 actionable pill). With no on-device engine the tab shows the calm "Recording
 safely" card; its "Turn on live text" link appears only where the platform can
@@ -150,6 +155,8 @@ audio time to delivery time. iOS carries recognized word/phrase ranges; Android
 Missing timing (including Android 13 recognizers) is kept conservatively. Final
 coverage uses the server conversation origin, independently of the local capture
 timer shown on Home. Preview words and timing stay display-only and in memory.
+Coverage scans merged, time-sorted intervals and preview ranges in one forward
+pass; sorting is only needed for an out-of-order batch/result list.
 
 ## Telemetry
 

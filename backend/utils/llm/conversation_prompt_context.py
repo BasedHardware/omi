@@ -233,6 +233,7 @@ def build_conversation_prompt_prefix(
     started_at_local = format_instant(aware_started_at, display_clock)
     transcript, speaker_names = prompt_speaker_map(transcript, speaker_map or {})
     source_speaker_names = dict(speaker_names)
+    authoritative_roles = getattr(speaker_map, 'role_evidence_authoritative', False)
     metadata_lines = [
         f'- Captured at: {started_at_local}',
     ]
@@ -248,6 +249,12 @@ def build_conversation_prompt_prefix(
                 ]
             )
         bind_speakers_with_roster(speaker_names, roster, desktop_meeting_capture)
+        if authoritative_roles:
+            # Retain remote-channel demotion, but a roster cannot fill an
+            # identity the shared evidence map deliberately left unbound.
+            for key, name in source_speaker_names.items():
+                if name is None:
+                    speaker_names[key] = None
         if speaker_names:
             metadata_lines.extend(_speaker_metadata_lines(speaker_names, roster, desktop_meeting_capture))
         if roster.entries:
@@ -291,11 +298,26 @@ def build_conversation_prompt_prefix(
             for participant in calendar_context.participants
             if participant.name and participant.name.casefold() not in bound_names
         ]
-        if len(unresolved_keys) == 1 and len(remaining_names) == 1:
+        if not authoritative_roles and len(unresolved_keys) == 1 and len(remaining_names) == 1:
             speaker_names[unresolved_keys[0]] = remaining_names[0]
 
     if roster is None and speaker_names:
         metadata_lines.extend(f'spk {key} {name}' if name else f'spk {key} ?' for key, name in speaker_names.items())
+
+    if authoritative_roles:
+        # Current notes also embed their spk table in the transcript. A remote
+        # demotion must agree there and in shaped evidence, not just metadata.
+        table = re.match(r'(?:\[Diarization marked [^\n]*\]\n)?(?:spk [^\n]*\n)+', transcript)
+        if table:
+            header = re.sub(
+                r'(?m)^spk (\S+) [^\n]*$',
+                lambda match: (
+                    f'spk {match[1]} {speaker_names[match[1]] or "?"}' if match[1] in speaker_names else match[0]
+                ),
+                table[0],
+            )
+            transcript = header + transcript[table.end() :]
+        source_speaker_names = dict(speaker_names)
 
     context_parts = ['CONVERSATION METADATA\n' + '\n'.join(metadata_lines), f'FULL TRANSCRIPT\n{transcript.strip()}']
     photo_descriptions = (

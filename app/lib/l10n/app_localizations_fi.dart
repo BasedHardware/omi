@@ -426,6 +426,12 @@ class AppLocalizationsFi extends AppLocalizations {
   String get autoSync => 'Automaattinen synkronointi';
 
   @override
+  String get syncHealthAlerts => 'Synkronoinnin tila-ilmoitukset';
+
+  @override
+  String get syncHealthAlertsDescription => 'Ilmoita, jos Omi ei ole synkronoinut tallenteita yli vuorokauteen';
+
+  @override
   String get autoSyncDescription => 'Synkronoi offline-tallenteet automaattisesti, kun laitteesi yhdistetään';
 
   @override
@@ -9046,6 +9052,14 @@ class AppLocalizationsFi extends AppLocalizations {
   String get syncCardWaitingInternet => 'Odottaa verkkoyhteyttä';
 
   @override
+  String get syncStallAlertTitle => 'Omi ei synkronoi';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Omistasi ei ole synkronoitu tallenteita yli $hours tuntiin. Avaa Omi ja tarkista laitteen yhteys.';
+  }
+
+  @override
   String syncCardNeedsAttention(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13678,6 +13692,14 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'Tallenteet keskeytetty';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi ei synkronoi';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Tallenteita ei synkronoitu yli $hours tuntiin';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'Lataus on pysähtynyt';

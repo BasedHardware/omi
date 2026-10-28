@@ -430,6 +430,12 @@ class AppLocalizationsTa extends AppLocalizations {
   String get autoSync => 'தானியங்கி ஒத்திசைவு';
 
   @override
+  String get syncHealthAlerts => 'ஒத்திசைவு நிலை எச்சரிக்கைகள்';
+
+  @override
+  String get syncHealthAlertsDescription => 'Omi ஒரு நாளுக்கு மேல் பதிவுகளை ஒத்திசைக்கவில்லை என்றால் எச்சரிக்கவும்';
+
+  @override
   String get autoSyncDescription => 'உங்கள் சாதனம் இணைக்கப்படும்போது ஆஃப்லைன் பதிவுகளைத் தானாகவே ஒத்திசைக்கவும்';
 
   @override
@@ -9116,6 +9122,14 @@ class AppLocalizationsTa extends AppLocalizations {
   String get syncCardWaitingInternet => 'இணையத்திற்காகக் காத்திருக்கிறது';
 
   @override
+  String get syncStallAlertTitle => 'Omi ஒத்திசைக்கவில்லை';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'உங்கள் Omi-யில் இருந்து $hours மணி நேரத்திற்கு மேல் எந்தப் பதிவும் ஒத்திசைக்கப்படவில்லை. உங்கள் சாதன இணைப்பைச் சரிபார்க்க Omi-ஐத் திறக்கவும்.';
+  }
+
+  @override
   String syncCardNeedsAttention(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13767,6 +13781,14 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'பதிவுகள் இடைநிறுத்தப்பட்டன';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi ஒத்திசைக்கவில்லை';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return '$hours மணி நேரத்திற்கு மேல் எந்தப் பதிவும் ஒத்திசைக்கப்படவில்லை';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'பதிவேற்றம் நின்றுவிட்டது';

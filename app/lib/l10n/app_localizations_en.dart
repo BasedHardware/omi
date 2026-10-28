@@ -427,6 +427,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get autoSync => 'Auto-Sync';
 
   @override
+  String get syncHealthAlerts => 'Sync Health Alerts';
+
+  @override
+  String get syncHealthAlertsDescription => 'Alert if Omi hasn\'t synced recordings for over a day';
+
+  @override
   String get autoSyncDescription => 'Automatically sync offline recordings when your device connects';
 
   @override
@@ -9041,6 +9047,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncCardWaitingInternet => 'Waiting for internet';
 
   @override
+  String get syncStallAlertTitle => 'Omi Not Syncing';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'No recordings have synced from your Omi in over $hours hours. Open Omi to check your device connection.';
+  }
+
+  @override
   String syncCardNeedsAttention(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13659,6 +13673,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'Recordings paused';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi isn\'t syncing';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'No recordings synced for over $hours hours';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'Upload stalled';

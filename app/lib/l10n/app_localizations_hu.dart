@@ -430,6 +430,13 @@ class AppLocalizationsHu extends AppLocalizations {
   String get autoSync => 'Automatikus szinkronizálás';
 
   @override
+  String get syncHealthAlerts => 'Szinkronizálási állapotriasztások';
+
+  @override
+  String get syncHealthAlertsDescription =>
+      'Figyelmeztetés, ha az Omi több mint egy napja nem szinkronizált felvételeket';
+
+  @override
   String get autoSyncDescription => 'Offline felvételek automatikus szinkronizálása az eszköz csatlakozásakor';
 
   @override
@@ -9084,6 +9091,14 @@ class AppLocalizationsHu extends AppLocalizations {
   String get syncCardWaitingInternet => 'Internetkapcsolatra várva';
 
   @override
+  String get syncStallAlertTitle => 'Az Omi nem szinkronizál';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Több mint $hours órája nem szinkronizálódott felvétel az Omidról. Nyisd meg az Omit az eszköz kapcsolatának ellenőrzéséhez.';
+  }
+
+  @override
   String syncCardNeedsAttention(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13726,6 +13741,14 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'A felvételek szünetelnek';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Az Omi nem szinkronizál';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Több mint $hours órája nem szinkronizálódott felvétel';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'A feltöltés elakadt';
