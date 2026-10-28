@@ -64,6 +64,12 @@ class TranscriptWidget extends StatefulWidget {
   final List<String> leadingItemIds;
   final TranscriptSegmentBuilder? segmentBuilder;
 
+  /// Counts render objects inspected by scroll geometry reporting in tests.
+  @visibleForTesting
+  final VoidCallback? onScrollGeometryProbe;
+  @visibleForTesting
+  final VoidCallback? onScrollRevealProbe;
+
   /// Playback sync: the line containing the playhead is highlighted, and while
   /// [followCurrentSegment] the list keeps [followTargetSegmentId] near the top
   /// third. [playbackFollowRequest] re-triggers the scroll even when the target
@@ -123,6 +129,8 @@ class TranscriptWidget extends StatefulWidget {
     this.leadingItems = const [],
     this.leadingItemIds = const [],
     this.segmentBuilder,
+    this.onScrollGeometryProbe,
+    this.onScrollRevealProbe,
     this.onConfirmSpeakerLabel,
     this.onRejectSpeakerLabel,
     this.startedAt,
@@ -227,6 +235,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   final Map<String, GlobalKey> _segmentKeys = {};
   final Map<String, int> _segmentIndices = {};
   final GlobalKey _listKey = GlobalKey();
+  final List<RenderSliverMultiBoxAdaptor> _cachedListSlivers = [];
   final _liveCenterKey = const ValueKey('transcript_live_center');
   String? _liveBoundaryId;
 
