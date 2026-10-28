@@ -522,10 +522,10 @@ void main() {
       final list = find.descendant(of: find.byType(TranscriptWidget), matching: find.byType(Scrollable)).first;
       final scroll = tester.state<ScrollableState>(list).position;
       final delegate = tester
-          .widget<ListView>(
-            find.descendant(of: find.byType(TranscriptWidget), matching: find.byType(ListView)).first,
+          .widget<SliverList>(
+            find.descendant(of: find.byType(TranscriptWidget), matching: find.byType(SliverList)).first,
           )
-          .childrenDelegate as SliverChildBuilderDelegate;
+          .delegate as SliverChildBuilderDelegate;
       // A server deletion/rollover changes the provider's mutable list before
       // the parent supplies the next frame. The old lazy delegate still exists.
       capture.segments.removeRange(2, capture.segments.length);
@@ -654,6 +654,12 @@ void main() {
         capture: capture,
         episodes: episodes,
       );
+
+      // Finish the live-edge follow and short-list anchor correction. The
+      // page's live clock keeps ticking, so pump a bounded set of frames.
+      for (var frame = 0; frame < 5; frame++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
 
       expect(find.textContaining('Where should we go for lunch?', findRichText: true), findsOneWidget);
       expect(find.textContaining('Booking'), findsWidgets);

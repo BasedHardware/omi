@@ -11,6 +11,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/ui/components/omi_spinner.dart';
+import 'package:omi/ui/omi_tokens.dart';
 import 'package:omi/widgets/speaker_label_badge.dart';
 import 'package:omi/utils/constants.dart';
 import 'package:omi/widgets/transcript.dart';
@@ -111,7 +112,8 @@ void main() {
     for (var id = 1; id <= 8; id++) {
       expect(find.text('Speaker $id'), findsNothing);
     }
-    await tester.tap(find.text('Speaker').at(1));
+    await tester.tap(
+        find.descendant(of: find.byKey(const ValueKey('transcript-segment-epoch-5')), matching: find.text('Speaker')));
     await tester.pump();
     expect(edited, [5]);
   });
@@ -467,6 +469,89 @@ void main() {
       );
     });
 
+    testWidgets('opening 1000 live segments builds only the newest viewport', (tester) async {
+      segments = List.generate(1000, (index) => segmentFor('large-$index', 0));
+      final built = <int>[];
+      await tester.pumpWidget(MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+            body: SizedBox(
+                height: 320,
+                child: TranscriptWidget(
+                  segments: segments,
+                  followLatest: true,
+                  bottomMargin: 0,
+                  onScrollControllerReady: (value) => controller = value,
+                  segmentBuilder: (context, segment, index) {
+                    built.add(index);
+                    return SizedBox(height: 48 + (index % 3) * 24, child: Text(segment.id));
+                  },
+                ))),
+      ));
+      await tester.pumpAndSettle();
+      expect(built.length, lessThan(40));
+      expect(built, contains(999));
+      expect(find.text('large-999').hitTestable(), findsOneWidget);
+      expect(controller.offset, closeTo(controller.position.maxScrollExtent, 0.1));
+      debugPrint('TRANSCRIPT_OPEN row_builds=${built.length} history=1000');
+    });
+
+    testWidgets('short live transcripts keep their chronological start at the top', (tester) async {
+      segments = [segmentFor('short', 0)];
+      await pumpTranscript(tester);
+      expect(tester.getTopLeft(find.byKey(const ValueKey('transcript_header'))).dy,
+          closeTo(tester.getTopLeft(find.byType(CustomScrollView)).dy, 0.1));
+      expect(controller.position.maxScrollExtent, 0);
+    });
+
+    testWidgets('a remount after appends preserves the reader and the scroll origin', (tester) async {
+      await pumpTranscript(tester);
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, 260));
+      await tester.pumpAndSettle();
+      segments = [...segments, segmentFor('after-open', 0)];
+      contentVersion++;
+      await pumpTranscript(tester);
+      final anchor = scrollState.anchorSegmentId;
+      final offset = controller.offset;
+      final top = tester.getTopLeft(find.byKey(ValueKey('transcript-segment-$anchor'))).dy;
+      await tester.pumpWidget(const SizedBox.shrink());
+      await pumpTranscript(tester);
+      expect(controller.offset, closeTo(offset, 0.1));
+      expect(scrollState.anchorSegmentId, anchor);
+      expect(tester.getTopLeft(find.byKey(ValueKey('transcript-segment-$anchor'))).dy, closeTo(top, 5));
+      expect(find.byKey(const ValueKey('transcript_jump_to_latest')), findsOneWidget);
+    });
+
+    testWidgets('search reveals and highlights a lazy older live row', (tester) async {
+      segments = List.generate(
+          60, (i) => segmentFor('search-$i', 0)..text = i == 4 ? 'A unique needle here' : 'Ordinary transcript words');
+      Future<void> pumpSearch(String query) => tester.pumpWidget(MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(
+                body: SizedBox(
+                    height: 320,
+                    child: TranscriptWidget(
+                      segments: segments,
+                      onScrollControllerReady: (value) => controller = value,
+                      followLatest: true,
+                      bottomMargin: 0,
+                      searchQuery: query,
+                      currentResultIndex: query.isEmpty ? -1 : 0,
+                    ))),
+          ));
+      await pumpSearch('');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('transcript-segment-search-4')), findsNothing);
+      await pumpSearch('needle');
+      await tester.pumpAndSettle();
+      expect(find.text('needle').hitTestable(), findsOneWidget);
+      final highlight =
+          tester.widget<Container>(find.ancestor(of: find.text('needle'), matching: find.byType(Container)).first);
+      expect((highlight.decoration! as BoxDecoration).color, OmiColors.warning);
+    });
+
     testWidgets('a fresh long transcript opens at the latest segment', (tester) async {
       await pumpTranscript(tester);
 
@@ -477,7 +562,7 @@ void main() {
 
     testWidgets('a fresh transcript load starts at the latest segment', (tester) async {
       await pumpTranscript(tester);
-      await tester.drag(find.byType(ListView), const Offset(0, 260));
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, 260));
       await tester.pumpAndSettle();
 
       expect(scrollState.isAtBottom, isFalse);
@@ -494,7 +579,7 @@ void main() {
 
     testWidgets('the jump control animates to the latest segment and hides', (tester) async {
       await pumpTranscript(tester);
-      await tester.drag(find.byType(ListView), const Offset(0, 260));
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, 260));
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const ValueKey('transcript_jump_to_latest')));
@@ -507,7 +592,7 @@ void main() {
 
     testWidgets('manual scrolling up stays put while live transcript grows', (tester) async {
       await pumpTranscript(tester);
-      await tester.drag(find.byType(ListView), const Offset(0, 260));
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, 260));
       await tester.pumpAndSettle();
 
       final preservedOffset = controller.offset;
@@ -536,7 +621,7 @@ void main() {
 
     testWidgets('manual scrolling up stays put when live content arrives mid-gesture', (tester) async {
       await pumpTranscript(tester);
-      final gestureStart = tester.getCenter(find.byType(ListView));
+      final gestureStart = tester.getCenter(find.byType(CustomScrollView));
       final gesture = await tester.startGesture(gestureStart);
       for (var step = 0; step < 5; step++) {
         await gesture.moveBy(const Offset(0, 52));
@@ -595,7 +680,7 @@ void main() {
       // The reader starts dragging up slowly from the live edge. The first
       // pixels stay inside the at-bottom band where a lost gesture used to be
       // forgotten and re-pinned by the next live tick.
-      final gesture = await tester.startGesture(tester.getCenter(find.byType(ListView)));
+      final gesture = await tester.startGesture(tester.getCenter(find.byType(CustomScrollView)));
       for (var step = 0; step < 3; step++) {
         await gesture.moveBy(const Offset(0, 12));
         await tester.pump(const Duration(milliseconds: 40));
@@ -641,7 +726,7 @@ void main() {
 
     testWidgets('same-ID growth of the live segment holds an unfollowed reading position', (tester) async {
       await pumpTranscript(tester);
-      await tester.drag(find.byType(ListView), const Offset(0, 260));
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, 260));
       await tester.pumpAndSettle();
 
       final preservedOffset = controller.offset;
@@ -737,13 +822,13 @@ void main() {
 
     testWidgets('layout changes restore the same transcript anchor instead of a raw offset', (tester) async {
       await pumpTranscript(tester);
-      await tester.drag(find.byType(ListView), const Offset(0, 260));
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, 260));
       await tester.pumpAndSettle();
 
       final anchorId = scrollState.anchorSegmentId;
       expect(anchorId, isNotNull);
       final anchorFinder = find.byKey(ValueKey('transcript-segment-$anchorId'));
-      final anchorTop = tester.getTopLeft(anchorFinder).dy - tester.getTopLeft(find.byType(ListView)).dy;
+      final anchorTop = tester.getTopLeft(anchorFinder).dy - tester.getTopLeft(find.byType(CustomScrollView)).dy;
       expect(scrollState.anchorViewportOffset, closeTo(anchorTop, 5));
 
       layoutIdentity = 'photo-timeline';
@@ -753,7 +838,7 @@ void main() {
       await pumpTranscript(tester);
 
       expect(scrollState.anchorSegmentId, anchorId);
-      final restoredTop = tester.getTopLeft(anchorFinder).dy - tester.getTopLeft(find.byType(ListView)).dy;
+      final restoredTop = tester.getTopLeft(anchorFinder).dy - tester.getTopLeft(find.byType(CustomScrollView)).dy;
       // Sliver layout may round the restored edge by the four-point separator,
       // but it must keep the same segment at the same reading position.
       expect(restoredTop, closeTo(anchorTop, 5));
@@ -762,13 +847,13 @@ void main() {
 
     testWidgets('deleting the first segment preserves a later reading anchor', (tester) async {
       await pumpTranscript(tester);
-      await tester.drag(find.byType(ListView), const Offset(0, 260));
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, 260));
       await tester.pumpAndSettle();
 
       final anchorId = scrollState.anchorSegmentId;
       expect(anchorId, isNotNull);
       final anchorFinder = find.byKey(ValueKey('transcript-segment-$anchorId'));
-      final anchorTop = tester.getTopLeft(anchorFinder).dy - tester.getTopLeft(find.byType(ListView)).dy;
+      final anchorTop = tester.getTopLeft(anchorFinder).dy - tester.getTopLeft(find.byType(CustomScrollView)).dy;
       expect(scrollState.anchorViewportOffset, closeTo(anchorTop, 5));
 
       segments = segments.skip(1).toList();
@@ -776,7 +861,7 @@ void main() {
       await pumpTranscript(tester);
 
       expect(scrollState.anchorSegmentId, anchorId);
-      final restoredTop = tester.getTopLeft(anchorFinder).dy - tester.getTopLeft(find.byType(ListView)).dy;
+      final restoredTop = tester.getTopLeft(anchorFinder).dy - tester.getTopLeft(find.byType(CustomScrollView)).dy;
       // Sliver layout may round the restored edge by the four-point separator,
       // but it must keep the same segment at the same reading position.
       expect(restoredTop, closeTo(anchorTop, 5));

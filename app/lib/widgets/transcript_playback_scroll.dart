@@ -23,8 +23,7 @@ extension _TranscriptPlaybackScrolling on _TranscriptWidgetState {
           final segment = widget.segments[index];
           final renderObject = _segmentKeys[segment.id]?.currentContext?.findRenderObject();
           if (renderObject is! RenderBox) continue;
-          final viewport = RenderAbstractViewport.of(renderObject);
-          final top = viewport.getOffsetToReveal(renderObject, 0).offset - currentScroll;
+          final top = _viewportTopOf(renderObject);
           final bottom = top + renderObject.size.height;
           if (bottom > 0 && top < _scrollController.position.viewportDimension && top < closestTop) {
             closestTop = top;
@@ -46,33 +45,45 @@ extension _TranscriptPlaybackScrolling on _TranscriptWidgetState {
     _setIsAtBottom(isAtBottom);
   }
 
-  /// Rows in the sliver's layout/cache window, excluding headings and spacing.
-  /// Scroll updates must not probe a GlobalKey for every line in the recording:
-  /// a saved conversation can have thousands of lines but only a few mounted.
-  Iterable<int> _builtSegmentIndices() sync* {
+  // getOffsetToReveal uses scroll coordinates without the viewport's anchor.
+  // Include it when measuring a row's physical distance from the viewport top.
+  double _viewportTopOf(RenderBox row) =>
+      RenderAbstractViewport.of(row).getOffsetToReveal(row, 0).offset -
+      _scrollController.offset +
+      (_endAnchored ? _scrollController.position.viewportDimension * _liveViewportAnchor : 0);
+
+  List<RenderSliverMultiBoxAdaptor> _listSlivers() {
     final root = _listKey.currentContext?.findRenderObject();
-    if (root == null) return;
-    RenderSliverMultiBoxAdaptor? sliver;
-    void findSliver(RenderObject object) {
-      if (sliver != null) return;
+    final slivers = <RenderSliverMultiBoxAdaptor>[];
+    void visit(RenderObject object) {
       if (object is RenderSliverMultiBoxAdaptor) {
-        sliver = object;
+        slivers.add(object);
       } else {
-        object.visitChildren(findSliver);
+        object.visitChildren(visit);
       }
     }
 
-    findSliver(root);
-    final rows = sliver;
-    if (rows == null) return;
-    var child = rows.firstChild;
-    while (child != null) {
-      final itemIndex = (child.parentData! as SliverMultiBoxAdaptorParentData).index;
-      if (itemIndex != null) {
-        final segmentIndex = itemIndex - widget.leadingItems.length - 1;
-        if (segmentIndex >= 0 && segmentIndex < widget.segments.length) yield segmentIndex;
+    if (root != null) visit(root);
+    return slivers;
+  }
+
+  /// Rows in the sliver's layout/cache window, excluding headings and spacing.
+  Iterable<int> _builtSegmentIndices() sync* {
+    final slivers = _listSlivers();
+    for (var sliverIndex = 0; sliverIndex < slivers.length; sliverIndex++) {
+      final rows = slivers[sliverIndex];
+      var child = rows.firstChild;
+      while (child != null) {
+        var itemIndex = (child.parentData! as SliverMultiBoxAdaptorParentData).index;
+        if (itemIndex != null) {
+          if (_endAnchored) {
+            itemIndex = sliverIndex == 0 ? _liveBoundary - 1 - itemIndex : _liveBoundary + itemIndex;
+          }
+          final segmentIndex = itemIndex - widget.leadingItems.length - 1;
+          if (segmentIndex >= 0 && segmentIndex < widget.segments.length) yield segmentIndex;
+        }
+        child = rows.childAfter(child);
       }
-      child = rows.childAfter(child);
     }
   }
 
@@ -159,6 +170,7 @@ extension _TranscriptPlaybackScrolling on _TranscriptWidgetState {
   }
 
   bool _onScrollMetrics(ScrollMetricsNotification notification) {
+    if (_endAnchored && notification.depth == 0 && _updateLiveViewportAnchor()) return false;
     if (!widget.followLatest || _isAutoScrolling || _isUserScrolling || _userInterruptedAutoScroll) return false;
     final shouldFollow = !_userHasScrolled;
     if (shouldFollow && notification.metrics.extentAfter > 0.5) {
@@ -215,9 +227,8 @@ extension _TranscriptPlaybackScrolling on _TranscriptWidgetState {
       if (!mounted || generation != _locateGeneration || !_scrollController.hasClients) return;
       final renderObject = _segmentKeys[segmentId]?.currentContext?.findRenderObject();
       if (renderObject is! RenderBox) return;
-      final viewport = RenderAbstractViewport.of(renderObject);
       final position = _scrollController.position;
-      final target = (viewport.getOffsetToReveal(renderObject, 0).offset - position.viewportDimension * alignment)
+      final target = (position.pixels + _viewportTopOf(renderObject) - position.viewportDimension * alignment)
           .clamp(position.minScrollExtent, position.maxScrollExtent);
       await _scrollController.animateTo(
         target,
@@ -255,13 +266,11 @@ extension _TranscriptPlaybackScrolling on _TranscriptWidgetState {
     if (onTop == null || !_scrollController.hasClients) return;
     TranscriptSegment? topSegment;
     var closestTop = double.infinity;
-    final currentScroll = _scrollController.offset;
     for (final index in _builtSegmentIndices()) {
       final segment = widget.segments[index];
       final renderObject = _segmentKeys[segment.id]?.currentContext?.findRenderObject();
       if (renderObject is! RenderBox) continue;
-      final viewport = RenderAbstractViewport.of(renderObject);
-      final top = viewport.getOffsetToReveal(renderObject, 0).offset - currentScroll;
+      final top = _viewportTopOf(renderObject);
       final bottom = top + renderObject.size.height;
       if (bottom > 0 && top < _scrollController.position.viewportDimension && top < closestTop) {
         closestTop = top;
