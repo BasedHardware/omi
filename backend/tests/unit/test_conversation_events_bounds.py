@@ -133,6 +133,12 @@ def router():
     setattr(request_validation, "NonNegativeOffset", int)
     setattr(request_validation, "PositiveLimit", int)
 
+    # utils.cloud_tasks imports the Google SDK at module scope, which cannot load
+    # under the faked "google" package below. The router only binds the durable
+    # dispatch flag from it; keep the env-unset inline default.
+    cloud_tasks = _pkg("utils.cloud_tasks")
+    cloud_tasks.is_listen_finalization_dispatch_enabled = MagicMock(return_value=False)
+
     fakes = {
         # top-level third-party
         "ulid": _pkg("ulid"),
@@ -192,6 +198,7 @@ def router():
         # These tests exercise event/speaker handlers, not list serving. Keep
         # the new router collaborator inside this fixture's existing isolation.
         "utils.list_version_check": _pkg("utils.list_version_check"),
+        "utils.cloud_tasks": cloud_tasks,
         "utils.other.storage": _pkg("utils.other.storage"),
         # utils.conversations.* is DERIVED, not listed: a new module in that package
         # must not break this suite at collection. See package_submodule_stubs.

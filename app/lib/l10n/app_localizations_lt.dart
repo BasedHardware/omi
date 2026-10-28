@@ -428,6 +428,12 @@ class AppLocalizationsLt extends AppLocalizations {
   String get autoSync => 'Automatinis sinchronizavimas';
 
   @override
+  String get syncHealthAlerts => 'Sinchronizavimo būsenos įspėjimai';
+
+  @override
+  String get syncHealthAlertsDescription => 'Įspėti, jei Omi daugiau nei parą nesinchronizavo įrašų';
+
+  @override
   String get autoSyncDescription =>
       'Automatiškai sinchronizuoti neprisijungus įrašytus įrašus, kai prijungiamas įrenginys';
 
@@ -8852,12 +8858,12 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Pokalbis: \$$used / \$$limit panaudota šį mėnesį';
+    return 'Pokalbis: $used / $limit panaudota šį mėnesį';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Pokalbis: \$$used panaudota šį mėnesį';
+    return 'Pokalbis: $used panaudota šį mėnesį';
   }
 
   @override
@@ -9053,6 +9059,14 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'Laukiama interneto';
+
+  @override
+  String get syncStallAlertTitle => 'Omi nesinchronizuojama';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Dažiau nei $hours val. iš jūsų Omi nesinchronizuotas nė vienas įrašas. Atidarykite Omi ir patikrinkite įrenginio ryšį.';
+  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13325,6 +13339,30 @@ class AppLocalizationsLt extends AppLocalizations {
   String get paywallOutlineHeadline => 'Daugiau nepraleiskite nė žodžio.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/metus',
+        'other': '/mėn.',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/metus',
+        'other': '/mėn.',
+      },
+    );
+    return '$days dienų nemokamai, tada $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -13674,6 +13712,14 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'Įrašai pristabdyti';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi nesinchronizuojama';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Dažiau nei $hours val. nesinchronizuotas nė vienas įrašas';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'Įkėlimas sustojo';

@@ -29,6 +29,7 @@ import 'package:omi/services/wals/wal_frame_encoder.dart';
 import 'package:omi/services/wals/wal_backlog_telemetry.dart';
 import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:omi/services/experiments/wal_delta_index_gate.dart';
 import 'package:omi/services/wals/pendant_ring_custody.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/deleted_account_uids.dart';
@@ -160,6 +161,14 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   bool _isCancelled = false;
 
+  /// Per-recording batch share of the drain cap, carried across passes for
+  /// [drainRecordingShareWindowSeconds]; see [maxBatchesPerRecordingPerDrain].
+  /// A rate-limit break ends a pass before the cap fires, so a pass-local
+  /// counter let the oldest recording re-enter every pass at the head and
+  /// starve the recordings behind it without ever deferring (#14688).
+  final Map<String, int> _drainGroupBatchCounts = {};
+  final Map<String, int> _drainGroupCountedAt = {};
+
   /// Session fence. Incremented on logout so in-flight chunk/flush/sync cannot
   /// publish retired-account WALs into the successor via [listener.onWalUpdated].
   int _sessionGeneration = 0;
@@ -222,6 +231,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   void clearUserData() {
     _backlogTelemetry.clearUserData();
     _sessionGeneration++;
+    _drainGroupBatchCounts.clear();
+    _drainGroupCountedAt.clear();
     conversationCompletions.value = null;
     _lastStaleWalReportAt = null;
     cancelSync();
@@ -268,6 +279,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   final Timer Function(Duration, void Function(Timer))? _periodicOverride;
   final Future<SyncJobFetch> Function(String jobId)? _jobStatusFetcherOverride;
   final Future<void> Function(List<Wal> wals)? _persistWalsOverride;
+  final Future<bool> Function()? _deltaIndexAllowedOverride;
   final Future<List<Wal>> Function()? _loadWalsOverride;
   final WalCoverageTelemetryEmitter? _coverageTelemetryOverride;
   final WalCoverageTelemetryEmitter? _staleWalTelemetry;
@@ -307,6 +319,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     Timer Function(Duration, void Function(Timer))? periodic,
     Future<SyncJobFetch> Function(String jobId)? jobStatusFetcher,
     Future<void> Function(List<Wal> wals)? persistWals,
+    Future<bool> Function()? deltaIndexAllowed,
     Future<List<Wal>> Function()? loadWals,
     WalCoverageTelemetryEmitter? coverageTelemetry,
     WalCoverageTelemetryEmitter? staleWalTelemetry,
@@ -321,6 +334,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         _periodicOverride = periodic,
         _jobStatusFetcherOverride = jobStatusFetcher,
         _persistWalsOverride = persistWals,
+        _deltaIndexAllowedOverride = deltaIndexAllowed,
         _loadWalsOverride = loadWals,
         _coverageTelemetryOverride = coverageTelemetry,
         _staleWalTelemetry = staleWalTelemetry,
@@ -1415,6 +1429,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   Future<WalIndexWorker>? _indexWorker;
   bool _rebuildIndexWorker = false;
+  // Read once per process so one launch never mixes the two writers.
+  late final Future<bool> _deltaIndexAllowed = (_deltaIndexAllowedOverride ?? WalDeltaIndexGate.deltaWriterAllowed)();
   @visibleForTesting
   Future<WalIndexWorker>? get indexWorkerForTesting => _indexWorker;
   Future<void>? _indexWriteInFlight;
@@ -1998,25 +2014,62 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     // the rest of the drain: the manifest is immutable per conversation, so a
     // later remainder must not claim one covering only part of it.
     final unclaimableConversationIds = <String>{};
+    // Per-recording share carried across passes; see [maxBatchesPerRecordingPerDrain].
+    // deferredGroups stays pass-local: it only yields a group's turn within
+    // one pass — every deferred group resumes once the waiting groups drain.
+    final deferredGroups = <String>{};
+    final shareWindowStart = initialNowSeconds - drainRecordingShareWindowSeconds;
+    _drainGroupBatchCounts.removeWhere((group, _) => (_drainGroupCountedAt[group] ?? 0) < shareWindowStart);
+    _drainGroupCountedAt.removeWhere((_, countedAt) => countedAt < shareWindowStart);
     while (true) {
       if (!_isCurrent(generation)) break;
       // Re-snapshot between batches so a newly captured WAL can preempt an
       // hours-long historical drain without waiting for the original list.
       final batchNowSeconds = _now().millisecondsSinceEpoch ~/ 1000;
-      final candidates = _wals
+      // Group keys come from the full WAL list so a run's key stays stable
+      // while its members upload (uploaded rows stay listed) and later passes
+      // key the same run identically; see [recordingGroupKeys].
+      final groupKeys = recordingGroupKeys(_wals);
+      final eligible = _wals
           .where((wal) =>
               isAutoUploadEligible(wal, nowSeconds: batchNowSeconds) &&
               !attemptedWalIds.contains(walAttemptKey(wal)) &&
               (wal.status != WalStatus.uploadRejected || refusalRetries < walMaxRefusalRetriesPerDrain))
           .toList();
-      final pending = candidates.where((wal) => !liveCaptureOnly || isLiveCaptureWal(wal, batchNowSeconds)).toList();
+      final pending = eligible.where((wal) => !liveCaptureOnly || isLiveCaptureWal(wal, batchNowSeconds)).toList();
       if (pending.isEmpty) break;
-      var batch = nextSyncUploadBatch(pending, batchNowSeconds);
+      // A deferred group waits only while another group can still be served in
+      // this pass. Once nothing else is pending it rejoins the candidates, so
+      // a capped recording finishes in the same drain instead of stranding its
+      // tail until a later pass — a custom-STT user confirms one sync, and a
+      // recording near the 30-day backfill deadline must not wait for a second
+      // confirmation the deadline may not survive (#14688).
+      final waiting = pending.where((wal) => !deferredGroups.contains(groupKeys[wal])).toList();
+      final candidates = waiting.isNotEmpty ? waiting : pending;
+      var batch = nextSyncUploadBatch(candidates, batchNowSeconds);
       if (batch.isEmpty) break;
       if (batch
           .any((wal) => wal.status == WalStatus.uploadRejected || isolateAfterRefusal.contains(walAttemptKey(wal)))) {
         batch = [batch.first];
       }
+      final drainGroup = groupKeys[batch.first]!;
+      if ((_drainGroupBatchCounts[drainGroup] ?? 0) >= maxBatchesPerRecordingPerDrain &&
+          pending.any((wal) => groupKeys[wal] != drainGroup && !deferredGroups.contains(groupKeys[wal]))) {
+        // This recording spent its share while others still wait: defer its
+        // remainder instead of letting it own every interrupted drain. The
+        // waiting groups drain first; oldest-first then resumes this recording
+        // within the same pass, so an uninterrupted drain empties the backlog.
+        deferredGroups.add(drainGroup);
+        DebugLogManager.logEvent('local_upload_recording_deferred', {
+          'group': drainGroup,
+          'batchesAttempted': _drainGroupBatchCounts[drainGroup],
+          'pendingBehind':
+              pending.where((wal) => groupKeys[wal] != drainGroup && !deferredGroups.contains(groupKeys[wal])).length,
+        });
+        continue;
+      }
+      _drainGroupBatchCounts[drainGroup] = (_drainGroupBatchCounts[drainGroup] ?? 0) + 1;
+      _drainGroupCountedAt[drainGroup] = batchNowSeconds;
       if (batch.first.status == WalStatus.uploadRejected) refusalRetries++;
       attemptedWalIds.addAll(batch.map(walAttemptKey));
       final batchConversationId = batch.first.conversationId;

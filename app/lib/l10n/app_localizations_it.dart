@@ -430,6 +430,12 @@ class AppLocalizationsIt extends AppLocalizations {
   String get autoSync => 'Sincronizzazione automatica';
 
   @override
+  String get syncHealthAlerts => 'Avvisi sullo stato di sincronizzazione';
+
+  @override
+  String get syncHealthAlertsDescription => 'Avvisa se Omi non sincronizza registrazioni da più di un giorno';
+
+  @override
   String get autoSyncDescription =>
       'Sincronizza automaticamente le registrazioni offline quando il dispositivo si connette';
 
@@ -8895,12 +8901,12 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit utilizzato questo mese';
+    return 'Chat: $used / $limit utilizzato questo mese';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used utilizzato questo mese';
+    return 'Chat: $used utilizzato questo mese';
   }
 
   @override
@@ -9094,6 +9100,14 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'In attesa di connessione';
+
+  @override
+  String get syncStallAlertTitle => 'Omi non si sta sincronizzando';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Nessuna registrazione del tuo Omi è stata sincronizzata da più di $hours ore. Apri Omi per controllare la connessione del dispositivo.';
+  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13371,6 +13385,30 @@ class AppLocalizationsIt extends AppLocalizations {
   String get paywallOutlineHeadline => 'Non perdere mai più una parola.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/anno',
+        'other': '/mese',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/anno',
+        'other': '/mese',
+      },
+    );
+    return '$days giorni gratis, poi $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -13721,6 +13759,14 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'Registrazioni in pausa';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi non si sta sincronizzando';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Nessuna registrazione sincronizzata da più di $hours ore';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'Caricamento bloccato';

@@ -560,6 +560,14 @@
     "@autoSync": {
         "description": "Title of the toggle in device settings that controls automatic syncing of offline recordings"
     },
+    "syncHealthAlerts": "Sync Health Alerts",
+    "@syncHealthAlerts": {
+        "description": "Device Settings toggle title: stall alerts for the paired pendant"
+    },
+    "syncHealthAlertsDescription": "Alert if Omi hasn't synced recordings for over a day",
+    "@syncHealthAlertsDescription": {
+        "description": "Device Settings toggle subtitle under Sync Health Alerts"
+    },
     "autoSyncDescription": "Automatically sync offline recordings when your device connects",
     "@autoSyncDescription": {
         "description": "Subtitle explaining the Auto-Sync toggle in device settings"
@@ -10469,7 +10477,7 @@
     "chatTitle": "Chat",
     "chatMessages": "messages",
     "unlimitedChatThisMonth": "Unlimited chat messages this month",
-    "chatUsedOfLimitCompute": "${used} of ${limit} compute budget used",
+    "chatUsedOfLimitCompute": "{used} of {limit} compute budget used",
     "@chatUsedOfLimitCompute": {
         "placeholders": {
             "used": {
@@ -10478,7 +10486,8 @@
             "limit": {
                 "type": "String"
             }
-        }
+        },
+        "description": "Compute budget usage; used and limit are already formatted unambiguous USD amounts."
     },
     "chatUsedOfLimitMessages": "{used} of {limit} messages used this month",
     "@chatUsedOfLimitMessages": {
@@ -10557,7 +10566,7 @@
             }
         }
     },
-    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
+    "chatUsageCost": "Chat: {used} / {limit} used this month",
     "@chatUsageCost": {
         "placeholders": {
             "used": {
@@ -10566,15 +10575,17 @@
             "limit": {
                 "type": "String"
             }
-        }
+        },
+        "description": "Chat compute usage; used and limit are already formatted unambiguous USD amounts."
     },
-    "chatUsageCostNoLimit": "Chat: ${used} used this month",
+    "chatUsageCostNoLimit": "Chat: {used} used this month",
     "@chatUsageCostNoLimit": {
         "placeholders": {
             "used": {
                 "type": "String"
             }
-        }
+        },
+        "description": "Chat compute usage; used is an already formatted unambiguous USD amount."
     },
     "chatUsageMessages": "Chat: {used} / {limit} messages this month",
     "@chatUsageMessages": {
@@ -10795,6 +10806,19 @@
     },
     "syncCardProcessing": "Processing on Omi…",
     "syncCardWaitingInternet": "Waiting for internet",
+    "syncStallAlertTitle": "Omi Not Syncing",
+    "@syncStallAlertTitle": {
+        "description": "Local notification title when the sync stall alert fires"
+    },
+    "syncStallAlertBody": "No recordings have synced from your Omi in over {hours} hours. Open Omi to check your device connection.",
+    "@syncStallAlertBody": {
+        "description": "Local notification body when the sync stall alert fires",
+        "placeholders": {
+            "hours": {
+                "type": "int"
+            }
+        }
+    },
     "syncCardNeedsAttention": "{count} recording{count, plural, =1{} other{s}} need attention",
     "@syncCardNeedsAttention": {
         "description": "Status card: items that need user attention",
@@ -15984,6 +16008,33 @@
     "@paywallOutlineHeadline": {
         "description": "Headline of the Outline paywall variant (mobile paywall A/B test)"
     },
+    "billingRecurringPrice": "{price}{interval, select, year{/year} other{/month}}",
+    "@billingRecurringPrice": {
+        "description": "Recurring catalog total with an unambiguous formatted currency amount; interval is month or year",
+        "placeholders": {
+            "price": {
+                "type": "String"
+            },
+            "interval": {
+                "type": "String"
+            }
+        }
+    },
+    "billingTrialPrice": "{days} days free, then {price}{interval, select, year{/year} other{/month}}",
+    "@billingTrialPrice": {
+        "description": "Trial disclosure showing the exact recurring catalog total and billing interval after the trial",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            },
+            "price": {
+                "type": "String"
+            },
+            "interval": {
+                "type": "String"
+            }
+        }
+    },
     "paywallTrialBrand": "Omi Pro",
     "@paywallTrialBrand": {
         "description": "Paywall header: plan name"
@@ -16114,7 +16165,7 @@
     },
     "paywallTrialCta": "Try for {price}",
     "@paywallTrialCta": {
-        "description": "Paywall primary button; price is a formatted zero price like $0.00",
+        "description": "Paywall primary button; price is a currency-safe formatted zero amount supplied by the catalog formatter",
         "placeholders": {
             "price": {
                 "type": "String"
@@ -16485,6 +16536,19 @@
     "activityAttentionStorageSubtitle": "Recordings paused",
     "@activityAttentionStorageSubtitle": {
         "description": "Needs attention row subtitle under the storage title: new recordings cannot be saved"
+    },
+    "activityAttentionSyncStalledTitle": "Omi isn't syncing",
+    "@activityAttentionSyncStalledTitle": {
+        "description": "Needs attention row title: no sync activity at all for the stall threshold"
+    },
+    "activityAttentionSyncStalledSubtitle": "No recordings synced for over {hours} hours",
+    "@activityAttentionSyncStalledSubtitle": {
+        "description": "Needs attention row subtitle: how long the pipeline has been silent",
+        "placeholders": {
+            "hours": {
+                "type": "int"
+            }
+        }
     },
     "activityAttentionUploadStalledTitle": "Upload stalled",
     "@activityAttentionUploadStalledTitle": {

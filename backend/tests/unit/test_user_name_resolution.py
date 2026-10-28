@@ -119,7 +119,17 @@ def test_resolved_identity_reaches_api_and_both_transcripts(sources):
     sources.document.to_dict.return_value = {
         'ai_user_profile': {'profile_text': '- David Zhang (张大正) is an engineer.'}
     }
-    segments = [TranscriptSegment(id='s1', text='Hello.', speaker_id=0, is_user=True, start=0, end=2)]
+    segments = [
+        TranscriptSegment(
+            id='s1',
+            text='Hello.',
+            speaker_id=0,
+            is_user=True,
+            start=0,
+            end=2,
+            speaker_match_source='conversation_voice',
+        )
+    ]
     payload = {'transcript_segments': [segment.model_dump() for segment in segments]}
     render.populate_speaker_names('u', [payload])
     assert payload['transcript_segments'][0]['speaker_name'] == 'David'

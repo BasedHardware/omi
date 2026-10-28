@@ -12,6 +12,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/services/sync_health_watchdog.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/pages/conversations/recording_blocks.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
@@ -1206,6 +1207,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     // costs one refresh and still publishes the final state.
     if (wal.status == WalStatus.uploaded || wal.status == WalStatus.synced) {
       _captureWedgeMonitor.onUploadCompleted();
+      // The server accepted a recording — the strongest sync-activity signal
+      // for the stall watchdog. A burst costs one persist (in-memory throttle).
+      SyncHealthWatchdog.instance.recordSyncActivity(source: 'wal_synced');
     }
     if (_totalWalsToProcess > 0) _walsProcessedCount++;
     _walUpdatePending = true;

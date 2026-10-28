@@ -428,6 +428,12 @@ class AppLocalizationsNo extends AppLocalizations {
   String get autoSync => 'Automatisk synkronisering';
 
   @override
+  String get syncHealthAlerts => 'Synkroniseringsvarsler';
+
+  @override
+  String get syncHealthAlertsDescription => 'Varsle hvis Omi ikke har synkronisert opptak på over et døgn';
+
+  @override
   String get autoSyncDescription => 'Synkroniser frakoblede opptak automatisk når enheten din kobles til';
 
   @override
@@ -8843,12 +8849,12 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit brukt denne måneden';
+    return 'Chat: $used / $limit brukt denne måneden';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used brukt denne måneden';
+    return 'Chat: $used brukt denne måneden';
   }
 
   @override
@@ -9042,6 +9048,14 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'Venter på internett';
+
+  @override
+  String get syncStallAlertTitle => 'Omi synkroniserer ikke';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Det er ikke synkronisert opptak fra Omi-en din på over $hours timer. Åpne Omi for å sjekke enhetens tilkobling.';
+  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13302,6 +13316,30 @@ class AppLocalizationsNo extends AppLocalizations {
   String get paywallOutlineHeadline => 'Gå aldri glipp av et ord igjen.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/år',
+        'other': '/måned',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/år',
+        'other': '/måned',
+      },
+    );
+    return '$days dager gratis, deretter $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -13652,6 +13690,14 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'Opptak satt på pause';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi synkroniserer ikke';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Ingen opptak synkronisert på over $hours timer';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'Opplastingen har stoppet';

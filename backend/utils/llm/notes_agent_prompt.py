@@ -17,15 +17,18 @@ module unchanged against local snapshots.
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from typing import Any, Mapping, Optional
 
 from models.conversation_enums import CategoryEnum
+from utils.llm.notes_agent_policy import lookup_efficiency_enabled
 from models.structured_extraction import SALIENCE_DESCRIPTION
 from utils.llm.conversation_notes_prompts import ACTION_ITEM_EXTRACTION_RULES
 from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT
 from utils.llm.shaped_agent import model_json
 
-PROMPT_VERSION = 'notes-agent-v7'
+PROMPT_VERSION = 'notes-agent-v8'
+LEGACY_PROMPT_VERSION = 'notes-agent-v7'
 SUBMIT = 'submit_notes'
 VIEW_SCREENSHOT = 'view_screenshot'
 OWNER_PROFILE_CHARACTERS = 1500
@@ -250,6 +253,42 @@ TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (*READ_TOOL_SCHEMAS, SUBMIT_SCHEMA)
 READ_TOOL_NAMES = frozenset(schema['function']['name'] for schema in READ_TOOL_SCHEMAS)
 
 
+def instructions_for_run() -> str:
+    if not lookup_efficiency_enabled():
+        return INSTRUCTIONS
+    return INSTRUCTIONS.replace(
+        'then confirm with search_people,',
+        'then confirm with the packet’s matched_people records or batched search_people(names=[...]),',
+    ).replace(
+        'Long meetings usually need five to eight lookups; independent lookups can go in one turn. Stay within the lookup\nbudget, then finish by calling submit_notes exactly once.',
+        'The packet already includes calendar_overlap, screen_activity and matched_people when available. '
+        'Use that evidence directly; do not fetch the same window or person again. Batch all unresolved names '
+        'in one search_people(names=[...]) call. Make only lookups that resolve a specific remaining uncertainty; '
+        'prefetched evidence counts toward investigation. Independent lookups can go in one turn. '
+        'Stay within the lookup budget, then finish by calling submit_notes exactly once.',
+    )
+
+
+def tools_for_run() -> tuple[dict[str, Any], ...]:
+    if not lookup_efficiency_enabled():
+        return TOOL_SCHEMAS
+    tools = deepcopy(TOOL_SCHEMAS)
+    people = next(tool['function'] for tool in tools if tool['function']['name'] == 'search_people')
+    people['description'] += ' Batch unresolved names in names; each name is matched independently. query still works.'
+    people['parameters']['properties']['names'] = {
+        'type': 'array',
+        'items': _STR,
+        'maxItems': 12,
+        'description': 'Names to resolve together (OR between names; all words within each name).',
+    }
+    people['parameters']['required'] = []
+    return tools
+
+
+def version_for_run() -> str:
+    return PROMPT_VERSION if lookup_efficiency_enabled() else LEGACY_PROMPT_VERSION
+
+
 def _with_breakpoint(text: str) -> list[dict[str, Any]]:
     return [{'type': 'text', 'text': text, 'prompt_cache_breakpoint': dict(EXPLICIT_CACHE_BREAKPOINT)}]
 
@@ -293,4 +332,6 @@ def screenshot_message(frame_id: str, offset_label: str, data_url: str) -> dict[
 
 def cache_key_material(owner: Mapping[str, Any]) -> str:
     """The stable bytes (instructions, tools, owner block) that name the per-user cache entry."""
-    return json.dumps([INSTRUCTIONS, list(TOOL_SCHEMAS), owner], ensure_ascii=False, sort_keys=True, default=str)
+    return json.dumps(
+        [instructions_for_run(), list(tools_for_run()), owner], ensure_ascii=False, sort_keys=True, default=str
+    )

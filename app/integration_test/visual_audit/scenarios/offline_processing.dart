@@ -8,7 +8,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/services/wals/wal_derived_sync_views.dart';
 import 'package:omi/backend/http/api_result.dart';
-import 'package:omi/backend/schema/bt_device/bt_device.dart' show BleAudioCodec;
+import 'package:omi/backend/schema/bt_device/bt_device.dart' show BtDevice, BleAudioCodec;
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/review.dart';
@@ -177,7 +177,12 @@ class _CatchUpCapture extends AuditCaptureProvider {
   void removeMetricsListener() {}
 }
 
-Future<void> _runDevice(AuditRun a, SyncProvider sync, {List<PendingWorkItem> pending = const []}) async {
+Future<void> _runDevice(
+  AuditRun a,
+  SyncProvider sync, {
+  List<PendingWorkItem> pending = const [],
+  DeviceProvider? deviceProvider,
+}) async {
   final store = PendingWorkStore(
     loadPending: () async => ApiSuccess(PendingWorkSnapshot(enabled: true, attentionUnseenCount: 0, items: pending)),
     loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
@@ -186,7 +191,7 @@ Future<void> _runDevice(AuditRun a, SyncProvider sync, {List<PendingWorkItem> pe
   addTearDown(store.dispose);
   addTearDown(conversations.dispose);
   await a.pump(DeviceSettings(pendingWork: store), scaffold: false, providers: [
-    ChangeNotifierProvider<DeviceProvider>.value(value: AuditDeviceProvider()),
+    ChangeNotifierProvider<DeviceProvider>.value(value: deviceProvider ?? AuditDeviceProvider()),
     ChangeNotifierProvider<CaptureProvider>.value(value: _CatchUpCapture()),
     ChangeNotifierProvider<ConversationProvider>.value(value: conversations),
     ChangeNotifierProvider<SyncProvider>.value(value: sync),
@@ -438,6 +443,27 @@ final offlineProcessingScenarios = <AuditScenario>[
       expect(find.text('Activity'), findsOneWidget);
       expect(find.byKey(const Key('activity_new_dot')), findsOneWidget);
       await a.shot('Open the bell');
+    },
+  ),
+  AuditScenario(
+    id: 'device-sync-stall-alerts',
+    title: 'Device Settings: sync stall alert toggle while stalled',
+    page: 'lib/pages/settings/device_settings.dart (DeviceSettings)',
+    state: 'Nothing connected right now and the sync watchdog declared a stall: the Sync Health '
+        'Alerts row says how long the pipeline has been silent',
+    run: (a) async {
+      // A remembered-but-absent pendant keeps the hermetic harness off the live
+      // feature load (empty id early-returns it) while the toggle still renders.
+      await _runDevice(
+        a,
+        _SyncAuditProvider(),
+        deviceProvider: AuditDeviceProvider(device: BtDevice.empty(), syncStalled: true),
+      );
+      final toggle = find.byKey(const Key('sync_health_alerts_toggle'));
+      expect(toggle, findsOneWidget);
+      expect(find.text('Sync Health Alerts'), findsOneWidget);
+      expect(find.textContaining('No recordings synced for over'), findsOneWidget);
+      await a.shot('The stall alert toggle, on by default, names the silence under Device');
     },
   ),
 ];

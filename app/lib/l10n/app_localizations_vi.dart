@@ -429,6 +429,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String get autoSync => 'Tự động đồng bộ';
 
   @override
+  String get syncHealthAlerts => 'Cảnh báo tình trạng đồng bộ';
+
+  @override
+  String get syncHealthAlertsDescription => 'Cảnh báo nếu Omi không đồng bộ bản ghi hơn một ngày';
+
+  @override
   String get autoSyncDescription => 'Tự động đồng bộ các bản ghi ngoại tuyến khi thiết bị của bạn kết nối';
 
   @override
@@ -8848,12 +8854,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Trò chuyện: \$$used / \$$limit đã dùng tháng này';
+    return 'Trò chuyện: $used / $limit đã dùng tháng này';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Trò chuyện: \$$used đã dùng tháng này';
+    return 'Trò chuyện: $used đã dùng tháng này';
   }
 
   @override
@@ -9046,6 +9052,14 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'Đang chờ kết nối Internet';
+
+  @override
+  String get syncStallAlertTitle => 'Omi không đồng bộ';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Không có bản ghi nào từ Omi của bạn được đồng bộ trong hơn $hours giờ. Mở Omi để kiểm tra kết nối thiết bị.';
+  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13299,6 +13313,30 @@ class AppLocalizationsVi extends AppLocalizations {
   String get paywallOutlineHeadline => 'Không bao giờ bỏ lỡ một lời nào nữa.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/năm',
+        'other': '/tháng',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/năm',
+        'other': '/tháng',
+      },
+    );
+    return 'Miễn phí $days ngày, sau đó $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -13648,6 +13686,14 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'Bản ghi đã tạm dừng';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi không đồng bộ';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Không có bản ghi nào được đồng bộ hơn $hours giờ';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'Tải lên bị đình trệ';

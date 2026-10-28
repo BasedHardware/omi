@@ -428,6 +428,12 @@ class AppLocalizationsFa extends AppLocalizations {
   String get autoSync => 'همگام‌سازی خودکار';
 
   @override
+  String get syncHealthAlerts => 'هشدارهای سلامت همگام‌سازی';
+
+  @override
+  String get syncHealthAlertsDescription => 'اگر Omi بیش از یک روز ضبط‌ها را همگام‌سازی نکرده باشد هشدار بده';
+
+  @override
   String get autoSyncDescription => 'هنگام اتصال دستگاه، ضبط‌های آفلاین به‌طور خودکار همگام‌سازی شوند';
 
   @override
@@ -8843,12 +8849,12 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'چت: \$$used / \$$limit مصرف‌شده این ماه';
+    return 'چت: $used / $limit مصرف‌شده این ماه';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'چت: \$$used مصرف‌شده این ماه';
+    return 'چت: $used مصرف‌شده این ماه';
   }
 
   @override
@@ -9042,6 +9048,14 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'در انتظار اتصال به اینترنت';
+
+  @override
+  String get syncStallAlertTitle => 'Omi همگام‌سازی نمی‌شود';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'بیش از $hours ساعت هیچ ضبطی از Omi شما همگام‌سازی نشده است. برای بررسی اتصال دستگاهتان Omi را باز کنید.';
+  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13297,6 +13311,30 @@ class AppLocalizationsFa extends AppLocalizations {
   String get paywallOutlineHeadline => 'دیگر هیچ کلمه‌ای را از دست ندهید.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/سال',
+        'other': '/ماه',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/سال',
+        'other': '/ماه',
+      },
+    );
+    return '$days روز رایگان، سپس $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -13646,6 +13684,14 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'ضبط‌ها متوقف شده‌اند';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi همگام‌سازی نمی‌شود';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'بیش از $hours ساعت هیچ ضبطی همگام‌سازی نشده است';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'بارگذاری متوقف شده';

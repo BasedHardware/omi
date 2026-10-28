@@ -1486,13 +1486,49 @@ removes it from its group first. `POST
 /v1/conversations/{id}/capture-group/separate` leaves the group stickily; a
 pair dissolves when one member leaves.
 
-Grouping is presentation metadata only. Transcripts, summaries, discard state
-and derived effects stay per capture. Clients render one row per group from
+Grouping is presentation metadata only. Transcripts, discard state
+and membership stay per capture. Clients render one row per group from
 the members they have loaded and keep every member reachable.
 `omi_product_event_total{event="capture_group_joined"}` counts the outcomes:
 `applied`, `none` (window match without shared speech) and `conflict`. A
 failure records `duplicate_capture_check → separate_captures` and never blocks
 finalization.
+
+**Primary notes can include shareable meeting evidence from a confirmed shared
+speech group** (owner meeting 2026-10-28). The primary is usually finalized
+before its group exists, while a desktop meeting member's
+`calendar_meeting_context` and approved screen frames describe the event the
+rendered row must summarize. Both enrichment seams are on unless
+`CAPTURE_GROUP_PRIMARY_NOTES_REFRESH_ENABLED` is set off. They fail closed for
+legacy call groups and groups without shared-speech evidence. Members contribute
+only while their visibility is `shared` or `public` and the row is not deleted.
+
+- Summarization-time context resolution merges eligible members' stored meeting
+  context below the conversation's own stored/direct context and above a Google
+  Calendar overlap read. The merged member context is kept in the server-only
+  `capture_group_member_context` field; it never overwrites the conversation's
+  own `external_data.calendar_meeting_context`. Reprocessing after separation or
+  exclusion recomputes the group evidence and clears that separate field when it
+  no longer applies. `load_capture_group_frame_evidence` joins up to three
+  desktop members' approved frames into roster names, screen moments and frame
+  images. Each member must have meeting role, shareable visibility, and
+  screenshot sharing enabled (including the existing enabled default for older
+  rows that lack the setting); frame bytes are fetched from that member's path.
+- `capture_group_notes_refresh.refresh_primary_notes` runs after the
+  duplicate-capture step in the durable finalizer and after inline sync/REST
+  completion. A refresh requires a new evidence fingerprint from an eligible
+  desktop meeting member with calendar context or approved frames. Evidence
+  fingerprints deduplicate repeated calls, and durable per-group state caps
+  refresh attempts at three. The conversation's processing claim coordinates
+  refresh against user reprocessing and live writers. The notes persistence
+  transaction rechecks the exact current group id and revision, then commits its
+  refresh receipt with the notes. A newer revision that arrives during an older
+  attempt is re-queued after the old write is fenced. Derived fanout is deferred:
+  the refresh does not rerun apps, rewrite task records or re-extract memories.
+  A user reprocess or live writer can make the refresh skip. The entry read is
+  field-projected, and the full document loads only after a candidate is found.
+  Membership, transcripts, discard state and audio are untouched, and the step
+  never fails finalization.
 
 The candidate read is bounded to 100 rows ordered by finish time; dense histories
 or delayed finalization may exceed it. Saturation and lookup/write/config failures
@@ -7334,6 +7370,25 @@ L2 roster priors and L3 rendering/language authorities; notes cache identities
 include effective packet selection and version. Cloud Run metric export includes
 the refactor families while retaining the prerecorded-language gate allowlist.
 
+Agentic notes reuse identical read lookups within one conversation and batch
+unresolved People names with `search_people(names=[...])`. Calendar overlap,
+conversation-window screen rows (with the same messaging-text exclusions), and
+up to 12 matching People records live in the conversation's cached evidence
+packet. Prefetched evidence counts toward the investigation floor; lookup caps
+stay 6/10/15 by transcript tier. People records remain spelling/relationship
+evidence, never voice bindings. The per-call
+`CONVERSATION_NOTES_AGENT_LOOKUP_EFFICIENCY_ENABLED` kill switch defaults on;
+false/off/0/no restores legacy packet, prompt, schema and charging. Attribution
+stays split in both modes: `lookup_cap` requires a refused lookup, while a
+rejected submission at the cap uses `submission_rejected_at_cap`.
+`omi_notes_agent_duplicate_lookups_total` and
+`omi_notes_agent_refused_lookups_total` count both cases by bounded tool name.
+Cache hits are free in both the lookup budget and shaped-loop tool-call budget,
+including repeats within one batch; model turns, token cost and wall time remain
+bounded. Other shaped adapters retain the default charge of one slot per call.
+People batches sort and deduplicate names before the 12-name cap and explicitly
+report any dropped names. Prefetched replies use the live tools' result clip.
+
 ### Wave 2 evidence and consumers
 
 The nine wave-2 percentage controls share the `capture-speaker-notes:wave2`
@@ -7373,6 +7428,34 @@ the media minimum, so later reprocessing cannot hide a restored card again.
 
 Notes do not bind a likely speaker suggestion to a name: likely and unknown
 voices remain anonymous, with statements attributed as "someone said".
+
+Shared prompt roles (`utils/conversations/owner_attribution.speaker_role_map`)
+now require positive owner/manual evidence and scope-qualified cluster IDs in
+both current and legacy notes, memory quote-source checks, and task role labels.
+Contradictory/mixed clusters stay unbound, regardless of row order. A manual
+segment correction applies to that segment only; it cannot label unconfirmed
+siblings. Multiple positive owner clusters remain unresolved. All source text,
+stored speaker keys, UI labels and manual corrections are retained.
+An evidence-authoritative `SpeakerMap` also prevents downstream calendar/roster
+elimination from filling an unresolved voice. Calendar context is retained and
+the existing mixed remote-channel demotion still applies; switch-off keeps the
+previous prefix behavior.
+
+`SPEAKER_ROLE_PROJECTION_ENABLED` is the one default-on kill switch at the role
+projection boundary (`false` restores the previous consumer behavior). There is
+no per-consumer rollout mode, confidence-prior change, new model or paid pass.
+Both memory paths share unique quote grounding and owner-spoken checks. Subject
+aboutness remains independent of utterance authorship: the owner saying "Sam is
+my teammate" has an owner-spoken source and a third-party subject. Only a uniquely
+grounded explicit first-person assertion can become an owner fact; model labels
+and the owner's presence alone cannot establish this. Unresolved aboutness stays
+unknown rather than dropping the source.
+
+Daily summaries still consume generated titles, notes, tasks and events through
+`conversations_to_string` by default. The renderer and daily prompt explicitly
+preserve subjects and uncertainty; they do not switch to full transcripts or
+repair historical incorrect notes. Synthetic fixture gates prove deterministic
+contracts only, not a population role-inversion rate or real-audio acceptance.
 
 Speaker refinement uses the same evidence record: count hints cannot merge
 confident distinct identities, and desktop-channel/near-field anchors remain

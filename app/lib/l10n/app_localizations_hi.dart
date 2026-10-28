@@ -426,6 +426,13 @@ class AppLocalizationsHi extends AppLocalizations {
   String get autoSync => 'स्वतः सिंक';
 
   @override
+  String get syncHealthAlerts => 'सिंक स्वास्थ्य अलर्ट';
+
+  @override
+  String get syncHealthAlertsDescription =>
+      'अगर Omi एक दिन से ज़्यादा समय से रिकॉर्डिंग सिंक नहीं कर रहा है तो अलर्ट दें';
+
+  @override
   String get autoSyncDescription => 'जब आपका डिवाइस कनेक्ट हो, तो ऑफ़लाइन रिकॉर्डिंग अपने आप सिंक करें';
 
   @override
@@ -8827,12 +8834,12 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'चैट: \$$used / \$$limit इस महीने उपयोग किया';
+    return 'चैट: $used / $limit इस महीने उपयोग किया';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'चैट: \$$used इस महीने उपयोग किया';
+    return 'चैट: $used इस महीने उपयोग किया';
   }
 
   @override
@@ -9026,6 +9033,14 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'इंटरनेट का इंतज़ार';
+
+  @override
+  String get syncStallAlertTitle => 'Omi सिंक नहीं हो रहा है';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'आपके Omi से $hours घंटे से ज़्यादा समय से कोई रिकॉर्डिंग सिंक नहीं हुई है। अपने डिवाइस का कनेक्शन जाँचने के लिए Omi खोलें।';
+  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13283,6 +13298,30 @@ class AppLocalizationsHi extends AppLocalizations {
   String get paywallOutlineHeadline => 'अब एक भी शब्द न छूटे।';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/वर्ष',
+        'other': '/माह',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/वर्ष',
+        'other': '/माह',
+      },
+    );
+    return '$days दिन मुफ़्त, फिर $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -13632,6 +13671,14 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'रिकॉर्डिंग रोक दी गई हैं';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi सिंक नहीं हो रहा है';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return '$hours घंटे से ज़्यादा समय से कोई रिकॉर्डिंग सिंक नहीं हुई';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'अपलोड रुक गया है';

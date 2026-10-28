@@ -427,6 +427,12 @@ class AppLocalizationsUr extends AppLocalizations {
   String get autoSync => 'خودکار مطابقت';
 
   @override
+  String get syncHealthAlerts => 'سنک ہیلتھ الرٹس';
+
+  @override
+  String get syncHealthAlertsDescription => 'اگر Omi ایک دن سے زیادہ ریکارڈنگز سنک نہ کرے تو الرٹ دیں';
+
+  @override
   String get autoSyncDescription => 'جب آپ کا آلہ منسلک ہو تو آف لائن ریکارڈنگز کو خودکار طور پر سنک کریں';
 
   @override
@@ -8861,12 +8867,12 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'چیٹ: \$$used / \$$limit اس مہینے استعمال ہوا';
+    return 'چیٹ: $used / $limit اس مہینے استعمال ہوا';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'چیٹ: \$$used اس مہینے استعمال ہوا';
+    return 'چیٹ: $used اس مہینے استعمال ہوا';
   }
 
   @override
@@ -9060,6 +9066,14 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'انٹرنیٹ کا انتظار';
+
+  @override
+  String get syncStallAlertTitle => 'Omi سنک نہیں ہو رہا';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'آپ کے Omi سے $hours گھنٹوں سے زیادہ کوئی ریکارڈنگ سنک نہیں ہوئی۔ اپنے ڈیوائس کا کنکشن چیک کرنے کے لیے Omi کھولیں۔';
+  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13315,6 +13329,30 @@ class AppLocalizationsUr extends AppLocalizations {
   String get paywallOutlineHeadline => 'اب ایک لفظ بھی نہ چھوڑیں۔';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/سال',
+        'other': '/مہینہ',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/سال',
+        'other': '/مہینہ',
+      },
+    );
+    return '$days دن مفت، پھر $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -13664,6 +13702,14 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'ریکارڈنگز روک دی گئی ہیں';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi سنک نہیں ہو رہا';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return '$hours گھنٹوں سے زیادہ کوئی ریکارڈنگ سنک نہیں ہوئی';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'اپ لوڈ رک گیا ہے';

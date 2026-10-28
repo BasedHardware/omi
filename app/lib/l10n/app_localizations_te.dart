@@ -429,6 +429,12 @@ class AppLocalizationsTe extends AppLocalizations {
   String get autoSync => 'ఆటో సింక్';
 
   @override
+  String get syncHealthAlerts => 'సింక్ ఆరోగ్య అలర్ట్‌లు';
+
+  @override
+  String get syncHealthAlertsDescription => 'Omi రికార్డింగ్‌లను రోజు కంటే ఎక్కువ సింక్ చేయకపోతే అలర్ట్ చేయండి';
+
+  @override
   String get autoSyncDescription => 'మీ పరికరం కనెక్ట్ అయినప్పుడు ఆఫ్‌లైన్ రికార్డింగ్‌లను స్వయంచాలకంగా సింక్ చేయండి';
 
   @override
@@ -8894,12 +8900,12 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'చాట్: \$$used / \$$limit ఈ నెల ఉపయోగించబడింది';
+    return 'చాట్: $used / $limit ఈ నెల ఉపయోగించబడింది';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'చాట్: \$$used ఈ నెల ఉపయోగించబడింది';
+    return 'చాట్: $used ఈ నెల ఉపయోగించబడింది';
   }
 
   @override
@@ -9092,6 +9098,14 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'ఇంటర్నెట్ కోసం వేచి ఉంది';
+
+  @override
+  String get syncStallAlertTitle => 'Omi సింక్ కావడం లేదు';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'మీ Omi నుండి $hours గంటల కంటే ఎక్కువ ఏ రికార్డింగ్ సింక్ కాలేదు. మీ పరికర కనెక్షన్‌ను తనిఖీ చేయడానికి Omi తెరవండి.';
+  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13354,6 +13368,30 @@ class AppLocalizationsTe extends AppLocalizations {
   String get paywallOutlineHeadline => 'ఇకపై ఒక్క మాట కూడా మిస్ అవ్వకండి.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/సంవత్సరం',
+        'other': '/నెల',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/సంవత్సరం',
+        'other': '/నెల',
+      },
+    );
+    return '$days రోజులు ఉచితం, ఆపై $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -13703,6 +13741,14 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'రికార్డింగ్‌లు పాజ్ చేయబడ్డాయి';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi సింక్ కావడం లేదు';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return '$hours గంటల కంటే ఎక్కువ ఏ రికార్డింగ్ సింక్ కాలేదు';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'అప్‌లోడ్ ఆగిపోయింది';

@@ -425,6 +425,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get autoSync => 'סנכרון אוטומטי';
 
   @override
+  String get syncHealthAlerts => 'התראות תקינות סנכרון';
+
+  @override
+  String get syncHealthAlertsDescription => 'התראה אם Omi לא סנכרן הקלטות במשך יותר מיממה';
+
+  @override
   String get autoSyncDescription => 'סנכרן אוטומטית הקלטות לא מקוונות כשהמכשיר שלך מתחבר';
 
   @override
@@ -8776,12 +8782,12 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'צ\'אט: \$$used / \$$limit נוצל החודש';
+    return 'צ\'אט: $used / $limit נוצל החודש';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'צ\'אט: \$$used נוצל החודש';
+    return 'צ\'אט: $used נוצל החודש';
   }
 
   @override
@@ -8975,6 +8981,14 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'ממתין לאינטרנט';
+
+  @override
+  String get syncStallAlertTitle => 'Omi לא מסתנכרן';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'לא סונכרנו הקלטות מה-Omi שלך במשך יותר מ-$hours שעות. פתח את Omi כדי לבדוק את חיבור המכשיר.';
+  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13207,6 +13221,30 @@ class AppLocalizationsHe extends AppLocalizations {
   String get paywallOutlineHeadline => 'אל תפספסו אף מילה יותר.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/שנה',
+        'other': '/חודש',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/שנה',
+        'other': '/חודש',
+      },
+    );
+    return '$days ימים בחינם, לאחר מכן $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -13555,6 +13593,14 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'ההקלטות מושהות';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi לא מסתנכרן';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'לא סונכרנו הקלטות במשך יותר מ-$hours שעות';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'ההעלאה נתקעה';

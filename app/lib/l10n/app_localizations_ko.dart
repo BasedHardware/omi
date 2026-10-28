@@ -422,6 +422,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get autoSync => '자동 동기화';
 
   @override
+  String get syncHealthAlerts => '동기화 상태 알림';
+
+  @override
+  String get syncHealthAlertsDescription => 'Omi가 하루 이상 녹음을 동기화하지 않으면 알림 표시';
+
+  @override
   String get autoSyncDescription => '기기가 연결되면 오프라인 녹음을 자동으로 동기화합니다';
 
   @override
@@ -8720,12 +8726,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return '채팅: \$$used / \$$limit 이번 달 사용량';
+    return '채팅: $used / $limit 이번 달 사용량';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return '채팅: \$$used 이번 달 사용량';
+    return '채팅: $used 이번 달 사용량';
   }
 
   @override
@@ -8916,6 +8922,14 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => '인터넷 연결 대기 중';
+
+  @override
+  String get syncStallAlertTitle => 'Omi가 동기화되지 않습니다';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return '$hours시간 이상 Omi에서 녹음이 동기화되지 않았습니다. 기기 연결을 확인하려면 Omi를 여세요.';
+  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13119,6 +13133,30 @@ class AppLocalizationsKo extends AppLocalizations {
   String get paywallOutlineHeadline => '이제 단 한마디도 놓치지 마세요.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/년',
+        'other': '/월',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/년',
+        'other': '/월',
+      },
+    );
+    return '$days일 무료, 이후 $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -13466,6 +13504,14 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => '녹음 일시중지됨';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi가 동기화되지 않습니다';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return '$hours시간 이상 녹음이 동기화되지 않았습니다';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => '업로드 중단됨';

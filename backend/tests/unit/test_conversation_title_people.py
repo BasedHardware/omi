@@ -56,6 +56,7 @@ def _seg(segment_id, text, *, speaker='SPEAKER_00', is_user=True, person_id=None
         text=text,
         speaker=speaker,
         is_user=is_user,
+        speaker_match_source='conversation_voice' if is_user else None,
         person_id=person_id,
         speaker_id_scope=scope,
         start=0.0,
@@ -386,7 +387,8 @@ def test_calendar_guessed_owner_cluster_is_never_a_title_person(monkeypatch):
     )
     structured, _ = _notes(prefix, monkeypatch, title='Weekly plan')
 
-    assert 'spk c0 David Miller' in prefix.context
+    assert 'spk c0 ?' in prefix.context
+    assert 'spk c0 David Miller' not in prefix.context
     assert prefix.title_people == ('Bob',)
     assert structured.title == 'Bob: Weekly plan'
 
@@ -617,7 +619,8 @@ def test_calendar_guessed_owner_split_cluster_is_never_a_title_person(monkeypatc
         conversation, monkeypatch, people=[_person('p-bob', 'Bob')], calendar_context=_calendar('David Miller', 'Bob')
     )
 
-    assert 'spk c2 David Miller' in prefix.context
+    assert 'spk c2 ?' in prefix.context
+    assert 'spk c2 David Miller' not in prefix.context
     assert prefix.title_people == ('Bob',)
     assert prefix.owner_names == ('David',)
 

@@ -256,3 +256,18 @@ def test_invalid_promotion_does_not_reactivate_current_jpy_subscription(case, mo
     case['modify'].assert_not_called()
     case['write'].assert_not_called()
     assert case['sub'].cancel_at_period_end is True
+
+
+@pytest.mark.parametrize('locale', ['en-US', 'en-CA', 'en-IN', 'de-DE'])
+def test_new_buyer_catalog_uses_original_usd_prices_in_every_locale(case, monkeypatch, locale):
+    monkeypatch.setattr(payment.users_db, 'get_user_subscription', lambda uid: None)
+    monkeypatch.setattr(payment.users_db, 'get_user_valid_subscription', lambda uid: None)
+    response = case['client'].get(
+        '/v1/payments/available-plans', headers={'X-App-Platform': 'android', 'Accept-Language': locale}
+    )
+    assert response.status_code == 200, response.text
+    rows = response.json()['plans']
+    assert {row['id'] for row in rows} == {'price_unlimited_v2_month_fixture', 'price_unlimited_v2_year_fixture'}
+    assert all(row['currency'] == 'usd' and row['billing_total'].startswith('US$') for row in rows)
+    assert all(row['price_string'].startswith('US$') for row in rows)
+    assert {row['unit_amount'] for row in rows} == {1999, 1999 * 9}
