@@ -2120,6 +2120,7 @@ class CaptureController extends ChangeNotifier
           PlatformManager.instance.analytics.omiDoubleTap(feature: 'unmute');
           resumeDeviceRecording().then((_) {
             _isProcessingButtonEvent = false;
+            if (!isPaused) _confirmDoubleTapOnPendant(deviceId, switchedOn: true);
           }).catchError((e) {
             Logger.debug("Error resuming device recording: $e");
             _isProcessingButtonEvent = false;
@@ -2128,6 +2129,7 @@ class CaptureController extends ChangeNotifier
           PlatformManager.instance.analytics.omiDoubleTap(feature: 'mute');
           pauseDeviceRecording().then((_) {
             _isProcessingButtonEvent = false;
+            if (isPaused) _confirmDoubleTapOnPendant(deviceId, switchedOn: false);
           }).catchError((e) {
             Logger.debug("Error pausing device recording: $e");
             _isProcessingButtonEvent = false;
@@ -2140,11 +2142,13 @@ class CaptureController extends ChangeNotifier
           markConversationForStarring();
           PlatformManager.instance.analytics.omiDoubleTap(feature: 'star_conversation');
           HapticFeedback.mediumImpact();
+          _confirmDoubleTapOnPendant(deviceId, switchedOn: true);
         } else {
           // Toggle off if already marked
           unmarkConversationForStarring();
           PlatformManager.instance.analytics.omiDoubleTap(feature: 'unstar_conversation');
           HapticFeedback.lightImpact();
+          _confirmDoubleTapOnPendant(deviceId, switchedOn: false);
         }
       } else {
         // End conversation and process (default)
@@ -2152,6 +2156,7 @@ class CaptureController extends ChangeNotifier
         Logger.debug("Double tap: processing conversation");
         PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
         HapticFeedback.lightImpact(); // The tap's only feedback on the phone until the processing row.
+        _confirmDoubleTapOnPendant(deviceId, switchedOn: false);
         forceProcessingCurrentConversation();
       }
       return;
@@ -2417,6 +2422,16 @@ class CaptureController extends ChangeNotifier
       return BleAudioCodec.pcm8;
     }
     return _rememberingCodec(deviceId, connection.getAudioCodec);
+  }
+
+  /// The pendant has no screen, so a double-tap action is confirmed on the device itself. The
+  /// wearer already knows which action the double tap runs; the pulse says it ran and, for a
+  /// toggle, which way: longer when it switched something on (resume, star), short when it
+  /// switched something off or completed (pause, unstar, end and process). A pause or resume
+  /// that only recorded intent (capture suspended for a call or owned by the phone) changed
+  /// nothing, so its caller does not confirm it.
+  void _confirmDoubleTapOnPendant(String deviceId, {required bool switchedOn}) {
+    _playSpeakerHaptic(deviceId, switchedOn ? 2 : 1);
   }
 
   Future<bool> _playSpeakerHaptic(String deviceId, int level) async {
