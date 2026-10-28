@@ -17,21 +17,38 @@ transaction.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Mapping, Optional, Sequence
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
+from google.api_core.exceptions import FailedPrecondition
 
 from database import conversations as conversations_db
 from database import smart_merge_audit as audit_db
 from database.quiet_check_retirement import stop_quiet_check_for_conversation
 from database._client import get_firestore_client, run_transactional
-from database.firestore_index_registry import CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY
+from database.firestore_index_registry import (
+    CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY,
+    CONVERSATIONS_SMART_MERGE_PARTITION_QUERY,
+)
 from database.people_stats_cache import invalidate_people_stats_cache
+from config.sync_live_dedupe import sync_live_dedupe_active_for
+from utils.conversations.smart_merge_policy import rebase_donor_segments
+from utils.sync.bridge_observation import log_bridge_observation
 from config import merge_ancestry
 from config.conversation_smart_merge import smart_merge_flatten_enabled
+from config.firestore_quick_reads import smart_merge_partition_enabled, indexed_string_value_safe
+from database.firestore_read_origin import read_origin
+from utils.conversations.size_limit import (
+    CONVERSATION_ABSORPTION_BYTE_CAP,
+    projected_document_bytes,
+    projected_size_bucket,
+)
+from utils.sync.assignment import run_with_size_limit_backstop
+from utils.sync.size_telemetry import log_size_rollover, remember_size_payload, size_fields
+from utils.observability.fallback import record_fallback
 from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_FIELD, OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD
 
 logger = logging.getLogger(__name__)
@@ -87,7 +104,9 @@ class AbsorbResult:
     outcome: str  # 'absorbed' | 'already_absorbed' | 'rejected'
     reason: str
     audit: str = 'none'  # audit sibling outcome of a committed absorb (database/smart_merge_audit.py)
+    projected_size_bucket: str | None = None
     flattened_ancestor_count: int = 0
+    bridge: dict | None = None
 
 
 _UNSET = object()
@@ -106,6 +125,7 @@ def find_preceding_conversations(
     discarded: bool = False,
     transaction: Any = None,
     firestore_client: Any = None,
+    client_device_id: Optional[str] = None,
 ) -> list[dict[str, Any]]:
     """Newest-first rows of one source and discard flag created before ``created_before``.
 
@@ -129,13 +149,59 @@ def find_preceding_conversations(
     query = query.order_by('created_at', direction=firestore.Query.DESCENDING).select(list(_PRECEDING_FIELDS))
     if limit is not None:
         query = query.limit(limit)
-    stream = query.stream(transaction=transaction) if transaction is not None else query.stream()
-    rows = []
-    for snapshot in stream:
-        data = snapshot.to_dict() or {}
-        data['id'] = snapshot.id
-        rows.append(data)
-    return rows
+
+    def collect(selected):
+        stream = selected.stream(transaction=transaction) if transaction is not None else selected.stream()
+        rows = []
+        for snapshot in stream:
+            data = snapshot.to_dict() or {}
+            data['id'] = snapshot.id
+            rows.append(data)
+        return rows
+
+    # A filter before a finite limit changes the global six-row window. Keep
+    # that lookup unchanged; the expensive discarded-barrier scan is unbounded.
+    # Missing device fields are not matched by equality-to-null in Firestore.
+    if (
+        limit is None
+        and isinstance(client_device_id, str)
+        and client_device_id
+        and smart_merge_partition_enabled()
+        and indexed_string_value_safe(client_device_id)
+    ):
+        with read_origin('task:smart_merge_partition_lookup'):
+            try:
+                partition_query = (
+                    CONVERSATIONS_SMART_MERGE_PARTITION_QUERY.build(
+                        _collection(client, uid),
+                        {
+                            'discarded': discarded,
+                            'source': source,
+                            'statuses': list(_ALL_STATUSES),
+                            'created_before': created_before,
+                            'client_device_id': client_device_id,
+                        },
+                        field_filter_factory=FieldFilter,
+                    )
+                    .order_by('created_at', direction=firestore.Query.DESCENDING)
+                    .select(list(_PRECEDING_FIELDS))
+                )
+                return collect(partition_query)
+            except FailedPrecondition as error:
+                if 'index' not in str(error).lower():
+                    raise
+                # The lead reconciles the index before shipping, but a rolling
+                # deploy must remain correct while the index is still building.
+                record_fallback(
+                    component='other',
+                    from_mode='indexed_query',
+                    to_mode='legacy_query',
+                    reason='unavailable',
+                    outcome='recovered',
+                    log=logger,
+                )
+                return collect(query)
+    return collect(query)
 
 
 def _epoch(value: Any) -> Optional[float]:
@@ -206,6 +272,7 @@ def has_intervening_discarded(
         discarded=True,
         transaction=transaction,
         firestore_client=firestore_client,
+        client_device_id=donor.get('client_device_id'),
     ):
         if row.get('client_device_id') != donor.get('client_device_id'):
             continue
@@ -281,8 +348,11 @@ def absorb_conversation(
     donor_ref = collection.document(donor_id)
 
     audit_io_failed = False
+    size_bucket = None
 
     def absorb_attempt(transaction, *, audit_unavailable: bool = False) -> AbsorbResult:
+        nonlocal size_bucket
+        size_bucket = None
         survivor_raw = survivor_ref.get(transaction=transaction).to_dict()
         donor_raw = donor_ref.get(transaction=transaction).to_dict()
         if not donor_raw:
@@ -342,6 +412,17 @@ def absorb_conversation(
         )
         if reason is not None or survivor_update is None or donor_update is None:
             return AbsorbResult('rejected', reason or 'survivor_changed')
+        bridge_observations = []
+        # Metadata-only plans do not transfer transcript content.
+        if 'transcript_segments' in survivor_update and sync_live_dedupe_active_for(uid):
+            survivor_update['transcript_segments'] = rebase_donor_segments(
+                survivor,
+                survivor_segments,
+                donor,
+                donor_segments,
+                uid=uid,
+                observations=bridge_observations,
+            )
         # Last read, only on the absorbing path: the gate fence for the audit sibling.
         audit = audit_db.SKIPPED_ERROR if audit_unavailable else audit_db.gate_skip(transaction, client, uid)
         level = survivor_update.get('data_protection_level') or 'enhanced'
@@ -355,6 +436,11 @@ def absorb_conversation(
                     survivor_raw[OPEN_LOOP_EXTRACTIONS_FIELD],
                     bool(survivor_raw.get(OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD)),
                 )
+        remember_size_payload(
+            survivor_id,
+            dict(survivor_update, transcript_segments=survivor_update.get('transcript_segments', survivor_segments)),
+        )
+        remember_size_payload(donor_id, dict(donor, transcript_segments=donor_segments))
         payload = conversations_db.encode_conversation_for_write(uid, survivor_update, level)
         conversations_db.guard_match_score_size(payload, survivor_raw)
         if (
@@ -372,6 +458,19 @@ def absorb_conversation(
             marker = dict(donor_update.get(SMART_MERGE_FIELD) or {})
             marker['flattened_ancestor_count'] = len(ancestor_updates)
             donor_update[SMART_MERGE_FIELD] = marker
+        projected_bytes = max(
+            [
+                projected_document_bytes(survivor_ref, payload, survivor_raw),
+                projected_document_bytes(donor_ref, donor_update, donor_raw),
+            ]
+            + [
+                projected_document_bytes(collection.document(cid), patch, ancestor_rows[cid])
+                for cid, patch in ancestor_updates.items()
+            ]
+        )
+        size_bucket = projected_size_bucket(projected_bytes)
+        if projected_bytes > CONVERSATION_ABSORPTION_BYTE_CAP:
+            return AbsorbResult('rejected', 'size_cap_stop', projected_size_bucket=size_bucket)
         transaction.update(survivor_ref, payload)
         transaction.update(donor_ref, donor_update)
         for ancestor_id, patch in ancestor_updates.items():
@@ -386,29 +485,65 @@ def absorb_conversation(
             donor_update=donor_update,
             source=donor.get('source'),
         )
-        return AbsorbResult('absorbed', 'absorbed', audit, flattened_ancestor_count=len(ancestor_updates))
+        return AbsorbResult(
+            'absorbed',
+            'absorbed',
+            audit,
+            flattened_ancestor_count=len(ancestor_updates),
+            bridge=bridge_observations[0] if bridge_observations else None,
+        )
 
     @firestore.transactional
     def absorb(transaction, *, audit_unavailable: bool = False) -> AbsorbResult:
         nonlocal audit_io_failed
         try:
-            return absorb_attempt(transaction, audit_unavailable=audit_unavailable)
+            result = absorb_attempt(transaction, audit_unavailable=audit_unavailable)
+            return replace(result, projected_size_bucket=size_bucket)
         except audit_db.AuditUnavailable:
             # The SDK's rollback RPC can mask this exception. Remember that
             # the callback failed before commit even if rollback also fails.
             audit_io_failed = True
             raise
 
-    try:
-        result = run_transactional(client, absorb)
-    except Exception:
-        if not audit_io_failed:
-            raise
-        # No commit was attempted. Never continue writing on a transaction whose
-        # optional read/staging failed; re-read and re-plan on a fresh transaction.
-        logger.warning('event=smart_merge_audit_restart reason=io_failed uid=%s', uid)
-        result = run_transactional(client, absorb, audit_unavailable=True)
+    def run_absorb(full_ids: frozenset[str]) -> AbsorbResult:
+        if full_ids:
+            # The donor already is a durable row. Rolling over a rejected
+            # absorb means leaving both rows untouched and finalizing it there.
+            log_size_rollover(
+                logger,
+                'event=sync_assignment_target reason=size_rollover outcome=rolled_over trigger=commit_limit '
+                + size_fields(cid=next(iter(full_ids)), target_kind='sibling_row'),
+            )
+            return AbsorbResult('rejected', 'size_cap_stop', projected_size_bucket=size_bucket)
+        try:
+            return run_transactional(client, absorb)
+        except Exception:
+            if not audit_io_failed:
+                raise
+            # Restart all reads on a fresh transaction after optional audit IO.
+            logger.warning('event=smart_merge_audit_restart reason=io_failed uid=%s', uid)
+            return run_transactional(client, absorb, audit_unavailable=True)
+
+    result = run_with_size_limit_backstop(run_absorb, lambda: survivor_id)
+    if result.projected_size_bucket is not None:
+        logger.log(
+            logging.WARNING if result.reason == 'size_cap_stop' else logging.INFO,
+            'event=smart_merge_absorb outcome=%s projected_size_bucket=%s',
+            'size_cap_stop' if result.reason == 'size_cap_stop' else result.outcome,
+            result.projected_size_bucket,
+        )
+    if result.reason == 'size_cap_stop':
+        record_fallback(
+            component='conversation_finalization',
+            from_mode='canonical_append',
+            to_mode='size_rollover',
+            reason='policy',
+            outcome='degraded',
+            log=logger,
+        )
     if result.outcome == 'absorbed':
+        if result.bridge is not None:
+            log_bridge_observation(result.bridge)
         for retired_id in (donor_id, survivor_id):
             stop_quiet_check_for_conversation(uid, retired_id, firestore_client=client)
         invalidate_people_stats_cache(uid)

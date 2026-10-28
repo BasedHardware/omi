@@ -1,0 +1,390 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-android-en-ca-jpy-manage.png",
+      "platform": "mobile-android",
+      "description": "en CA jpy manage; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-android-en-ca-jpy-v2-manage.png",
+      "platform": "mobile-android",
+      "description": "en CA jpy v2 manage; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-android-en-ca-outline.png",
+      "platform": "mobile-android",
+      "description": "en CA outline; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-android-en-ca-plans.png",
+      "platform": "mobile-android",
+      "description": "en CA plans; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-android-en-ca-promo.png",
+      "platform": "mobile-android",
+      "description": "en CA promo; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-android-en-ca-retention.png",
+      "platform": "mobile-android",
+      "description": "en CA retention; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-android-en-ca-trial-month-card.png",
+      "platform": "mobile-android",
+      "description": "en CA trial month card; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-android-en-ca-trial-slide-1.png",
+      "platform": "mobile-android",
+      "description": "en CA trial slide 1; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "009-mobile-android-en-ca-trial-slide-2.png",
+      "platform": "mobile-android",
+      "description": "en CA trial slide 2; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "010-mobile-android-en-ca-trial-slide-3.png",
+      "platform": "mobile-android",
+      "description": "en CA trial slide 3; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "011-mobile-android-en-ca-trial-slide-4.png",
+      "platform": "mobile-android",
+      "description": "en CA trial slide 4; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "012-mobile-android-en-ca-trial-slide-5.png",
+      "platform": "mobile-android",
+      "description": "en CA trial slide 5; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "013-mobile-android-en-ca-trial-upsell.png",
+      "platform": "mobile-android",
+      "description": "en CA trial upsell; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "014-mobile-android-en-ca-trial-year-card.png",
+      "platform": "mobile-android",
+      "description": "en CA trial year card; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "015-mobile-android-en-us-outline.png",
+      "platform": "mobile-android",
+      "description": "en US outline; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "016-mobile-android-en-us-plans.png",
+      "platform": "mobile-android",
+      "description": "en US plans; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "017-mobile-android-en-us-promo.png",
+      "platform": "mobile-android",
+      "description": "en US promo; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "018-mobile-android-en-us-retention.png",
+      "platform": "mobile-android",
+      "description": "en US retention; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "019-mobile-android-en-us-trial-month-card.png",
+      "platform": "mobile-android",
+      "description": "en US trial month card; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "020-mobile-android-en-us-trial-slide-1.png",
+      "platform": "mobile-android",
+      "description": "en US trial slide 1; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "021-mobile-android-en-us-trial-slide-2.png",
+      "platform": "mobile-android",
+      "description": "en US trial slide 2; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "022-mobile-android-en-us-trial-slide-3.png",
+      "platform": "mobile-android",
+      "description": "en US trial slide 3; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "023-mobile-android-en-us-trial-slide-4.png",
+      "platform": "mobile-android",
+      "description": "en US trial slide 4; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "024-mobile-android-en-us-trial-slide-5.png",
+      "platform": "mobile-android",
+      "description": "en US trial slide 5; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "025-mobile-android-en-us-trial-upsell.png",
+      "platform": "mobile-android",
+      "description": "en US trial upsell; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "026-mobile-android-en-us-trial-year-card.png",
+      "platform": "mobile-android",
+      "description": "en US trial year card; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "027-mobile-android-en-ca-v2-plans-month.png",
+      "platform": "mobile-android",
+      "description": "en CA v2 plans month; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "028-mobile-android-en-ca-v2-plans-year.png",
+      "platform": "mobile-android",
+      "description": "en CA v2 plans year; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "029-mobile-android-en-us-v2-plans-month.png",
+      "platform": "mobile-android",
+      "description": "en US v2 plans month; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "030-mobile-android-en-us-v2-plans-year.png",
+      "platform": "mobile-android",
+      "description": "en US v2 plans year; rendered production widget with hermetic fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "031-mobile-android-native-en-ca-jpy-manage.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-ca-jpy-manage; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "032-mobile-android-native-en-ca-outline.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-ca-outline; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "033-mobile-android-native-en-ca-plans.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-ca-plans; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "034-mobile-android-native-en-ca-retention.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-ca-retention; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "035-mobile-android-native-en-ca-trial-month.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-ca-trial-month; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "036-mobile-android-native-en-ca-trial-year.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-ca-trial-year; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "037-mobile-android-native-en-ca-upsell.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-ca-upsell; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "038-mobile-android-native-en-ca-v2-month.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-ca-v2-month; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "039-mobile-android-native-en-ca-v2-year.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-ca-v2-year; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "040-mobile-android-native-en-ca-web.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-ca-web; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "041-mobile-android-native-en-us-outline.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-us-outline; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "042-mobile-android-native-en-us-plans.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-us-plans; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "043-mobile-android-native-en-us-retention.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-us-retention; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "044-mobile-android-native-en-us-trial-month.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-us-trial-month; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "045-mobile-android-native-en-us-trial-year.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-us-trial-year; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "046-mobile-android-native-en-us-upsell.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-us-upsell; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "047-mobile-android-native-en-us-v2-month.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-us-v2-month; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "048-mobile-android-native-en-us-v2-year.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-us-v2-year; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "049-mobile-android-native-en-us-web.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture, en-us-web; production widget or offline static paywall HTML, no account/session; agent-flutter inspection and capture (adb frame for platform webview)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "050-mobile-android-native-en-ca-usage-capped.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture; en_CA Plan and Usage, capped USD chat budget; agent-flutter capture, no account/session",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "051-mobile-android-native-en-ca-usage-uncapped.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture; en_CA Plan and Usage, uncapped USD chat budget; agent-flutter capture, no account/session",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "052-mobile-android-native-en-us-usage-capped.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture; en_US Plan and Usage, capped USD chat budget; agent-flutter capture, no account/session",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "053-mobile-android-native-en-us-usage-uncapped.png",
+      "platform": "mobile-android",
+      "description": "Android API 36 dev fixture; en_US Plan and Usage, uncapped USD chat budget; agent-flutter capture, no account/session",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "054-mobile-android-en-us-jpy-manage.png",
+      "platform": "mobile-android",
+      "description": "en_US jpy_manage; rendered production widget with hermetic legacy JPY data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "055-mobile-android-en-us-jpy-v2-manage.png",
+      "platform": "mobile-android",
+      "description": "en_US jpy_v2_manage; rendered production widget with hermetic legacy JPY data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

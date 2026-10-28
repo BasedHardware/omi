@@ -426,6 +426,12 @@ class AppLocalizationsFi extends AppLocalizations {
   String get autoSync => 'Automaattinen synkronointi';
 
   @override
+  String get syncHealthAlerts => 'Synkronoinnin tila-ilmoitukset';
+
+  @override
+  String get syncHealthAlertsDescription => 'Ilmoita, jos Omi ei ole synkronoinut tallenteita yli vuorokauteen';
+
+  @override
   String get autoSyncDescription => 'Synkronoi offline-tallenteet automaattisesti, kun laitteesi yhdistetään';
 
   @override
@@ -709,7 +715,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get remembering => 'Muistaminen';
 
   @override
-  String get unlimitedPlan => 'Rajoittamaton paketti';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'Hallitse pakettia';
@@ -731,7 +737,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get upgrade => 'Päivitä';
 
   @override
-  String get upgradeToUnlimited => 'Päivitä rajattomaksi';
+  String get upgradeToUnlimited => 'Päivitä Omi Pro-versioon';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3156,7 +3162,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Päivitä Pro-versioon';
+  String get upgradeToPro => 'Päivitä Omi Pro-versioon';
 
   @override
   String get getOmiDevice => 'Hanki Omi-laite';
@@ -4278,8 +4284,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get trainingDataProgram => 'Koulutustietojen ohjelma';
 
   @override
-  String get getOmiUnlimitedFree =>
-      'Saat Omi Unlimited -tilauksen ilmaiseksi antamalla tietosi AI-mallien kouluttamiseen.';
+  String get getOmiUnlimitedFree => 'Saat Omi Pro -tilauksen ilmaiseksi antamalla tietosi AI-mallien kouluttamiseen.';
 
   @override
   String get trainingDataBullets =>
@@ -8846,12 +8851,12 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit käytetty tässä kuussa';
+    return 'Chat: $used / $limit käytetty tässä kuussa';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used käytetty tässä kuussa';
+    return 'Chat: $used käytetty tässä kuussa';
   }
 
   @override
@@ -9045,6 +9050,14 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'Odottaa verkkoyhteyttä';
+
+  @override
+  String get syncStallAlertTitle => 'Omi ei synkronoi';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Omistasi ei ole synkronoitu tallenteita yli $hours tuntiin. Avaa Omi ja tarkista laitteen yhteys.';
+  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -9664,7 +9677,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get downgradeToFreemiumAction => 'Vaihda ilmaisversioon';
 
   @override
-  String get getFreeUnlimitedAccess => 'Hanki ilmainen rajaton käyttöoikeus';
+  String get getFreeUnlimitedAccess => 'Hanki Omi Pro ilmaiseksi';
 
   @override
   String get shareDataForTraining => 'Jaa dataa koulutukseen';
@@ -12860,7 +12873,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'Lähetä ääniviesti, niin Omi vastaa siihen.';
 
   @override
-  String get chatAppsPartOfPro => 'Chat-sovellukset kuuluvat Pro-tilaukseen';
+  String get chatAppsPartOfPro => 'Chat-sovellukset kuuluvat Omi Pro-tilaukseen';
 
   @override
   String get chatAppsMessagesApp => 'Viestit';
@@ -13306,6 +13319,30 @@ class AppLocalizationsFi extends AppLocalizations {
   String get paywallOutlineHeadline => 'Älä enää koskaan missaa sanaakaan.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/vuosi',
+        'other': '/kuukausi',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/vuosi',
+        'other': '/kuukausi',
+      },
+    );
+    return '$days päivää ilmaiseksi, sitten $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -13493,7 +13530,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get syncDetailsCopy => 'Kopioi tiedot tukea varten';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Saatavilla Operator- ja Architect-tilauksissa';
+  String get chatAppsChannelPlanRequired => 'Saatavilla Omi Pro -tilauksessa';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -13633,32 +13670,6 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals tulossa';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'Lähetetään: $count';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'Melkein valmiina: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count vaatii huomiota',
-      one: '1 vaatii huomiota',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Ei vielä toimintaa';
 
   @override
@@ -13681,6 +13692,14 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'Tallenteet keskeytetty';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi ei synkronoi';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Tallenteita ei synkronoitu yli $hours tuntiin';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'Lataus on pysähtynyt';
@@ -14005,7 +14024,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'Toimii, kun puhelin latautuu.';
 
   @override
-  String get onDeviceUpgradeBody => 'Päivitä Pro-versioon puhujien erottelua ja parempaa tarkkuutta varten';
+  String get onDeviceUpgradeBody => 'Päivitä Omi Pro-versioon puhujien erottelua ja parempaa tarkkuutta varten';
 
   @override
   String get onDeviceAtCapFooter =>
@@ -14188,7 +14207,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Tee uudelleen Omi Cloudissa';
 
   @override
-  String get onDeviceRedoHint => 'Päivitä Pro-versioon puhujien erottelua ja parempaa tarkkuutta varten';
+  String get onDeviceRedoHint => 'Päivitä Omi Pro-versioon puhujien erottelua ja parempaa tarkkuutta varten';
 
   @override
   String get onDeviceKeepEverything => 'Pidä kaikki tällä puhelimella';
@@ -14437,13 +14456,7 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Avaa edellinen jakso';
-
-  @override
   String get episodeNotesSoon => 'Muistiinpanot näkyvät ensimmäisten puheminuuttien jälkeen.';
-
-  @override
-  String get episodeOpenAll => 'Avaa kaikki';
 
   @override
   String get episodeWrapUpNow => 'Päätä nyt';
@@ -14581,22 +14594,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get othersSpeakerLabel => 'Muut';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Valmis';
@@ -14606,4 +14607,133 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Ohita';
+
+  @override
+  String get syncRejectionInvalidDate => 'Virheellinen tallennuspäivä';
+
+  @override
+  String get syncDeleteKeptUploading => 'Osatiedostoja lähetetään vielä ja ne säilytettiin';
+
+  @override
+  String get syncRejectionServer => 'Palvelin hylkäsi';
+
+  @override
+  String get syncRejectionTooLarge => 'Liian suuri';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration puhelimessa';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Lataukset on pysäytetty hetkeksi — ne jatkuvat automaattisesti';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Jatkoa: “$title”';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· alkaen $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Muistiinpanot alkavat, kun lopullinen litterointi saapuu.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Laadittu puhelimessasi puhuessasi. Täydelliset muistiinpanot saapuvat lopullisen litteroinnin mukana.';
+
+  @override
+  String get episodeOnThisPhone => 'Tässä puhelimessa';
+
+  @override
+  String get episodeOpenTranscript => 'Avaa litterointi';
+
+  @override
+  String get liveCardTitle => 'Live';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Lopullinen litterointi noin $duration jäljessä';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'Lopullinen litterointi saavuttaa';
+
+  @override
+  String get livePreviewNoEngineBody =>
+      'Sanasi näkyvät tässä yhdestä kahteen minuuttia sen jälkeen, kun olet sanonut ne.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Tallentaa turvallisesti';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Live tässä puhelimessa';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Ota live-teksti käyttöön';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'matkalla';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'verkon palattua';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration saadaan kiinni';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'Latautuu itsestään. Keskustelut täydentyvät äänien saapuessa.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Latautuu itsestään, kun olet taas yhteydessä. Keskustelut täydentyvät äänien saapuessa.';
+
+  @override
+  String get onTheWayDayUploading => 'Ladataan';
+
+  @override
+  String get onTheWayDayNext => 'Seuraavaksi';
+
+  @override
+  String get onTheWayDayQueued => 'Jonossa';
+
+  @override
+  String get onTheWayNoDate => 'Ei päivämäärää';
+
+  @override
+  String get onTheWayFootnote =>
+      'Nauhoitukset, jotka epäonnistuvat, yritetään yhä uudelleen taustalla. Kaikki, mitä emme pysty transkriboimaan, ilmoitetaan meille automaattisesti.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Tiedot tukea varten';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count lyhyttä leikettä piilotettu',
+      one: '1 lyhyt leike piilotettu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Näytä';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Piilota $count lyhyttä leikettä',
+      one: 'Piilota 1 lyhyt leike',
+    );
+    return '$_temp0';
+  }
 }

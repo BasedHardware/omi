@@ -91,21 +91,27 @@ class GeneratedStorefrontCapChoice {
 }
 
 class GeneratedStorefrontCurrent {
+  final int? amountMinor;
   final bool cancelAtPeriodEnd;
+  final String? currency;
   final String? interval;
   final bool legacy;
   final String? legacyNote;
   final String line;
+  final String? lineTemplate;
   final String name;
   final String planId;
   final String? priceId;
 
   const GeneratedStorefrontCurrent({
+    this.amountMinor,
     this.cancelAtPeriodEnd = false,
+    this.currency,
     this.interval,
     required this.legacy,
     this.legacyNote,
     required this.line,
+    this.lineTemplate,
     required this.name,
     required this.planId,
     this.priceId,
@@ -113,11 +119,14 @@ class GeneratedStorefrontCurrent {
 
   factory GeneratedStorefrontCurrent.fromJson(Map<String, dynamic> json) {
     return GeneratedStorefrontCurrent(
+      amountMinor: _readFieldValue<int>(_readField(json, const ["amount_minor"]), "amount_minor", _readInt, requiredField: false, nullable: true),
       cancelAtPeriodEnd: _required(_readFieldValue<bool>(_readField(json, const ["cancel_at_period_end"]), "cancel_at_period_end", _readBool, requiredField: false, nullable: false, defaultValue: false), "cancel_at_period_end"),
+      currency: _readFieldValue<String>(_readField(json, const ["currency"]), "currency", _readString, requiredField: false, nullable: true),
       interval: _readFieldValue<String>(_readField(json, const ["interval"]), "interval", _readString, requiredField: false, nullable: true),
       legacy: _required(_readFieldValue<bool>(_readField(json, const ["legacy"]), "legacy", _readBool, requiredField: true, nullable: false), "legacy"),
       legacyNote: _readFieldValue<String>(_readField(json, const ["legacy_note"]), "legacy_note", _readString, requiredField: false, nullable: true),
       line: _required(_readFieldValue<String>(_readField(json, const ["line"]), "line", _readString, requiredField: true, nullable: false), "line"),
+      lineTemplate: _readFieldValue<String>(_readField(json, const ["line_template"]), "line_template", _readString, requiredField: false, nullable: true),
       name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
       planId: _required(_readFieldValue<String>(_readField(json, const ["plan_id"]), "plan_id", _readString, requiredField: true, nullable: false), "plan_id"),
       priceId: _readFieldValue<String>(_readField(json, const ["price_id"]), "price_id", _readString, requiredField: false, nullable: true),
@@ -126,11 +135,14 @@ class GeneratedStorefrontCurrent {
 
   Map<String, dynamic> toJson() {
     return {
+      'amount_minor': amountMinor,
       'cancel_at_period_end': cancelAtPeriodEnd,
+      'currency': currency,
       'interval': interval,
       'legacy': legacy,
       'legacy_note': legacyNote,
       'line': line,
+      'line_template': lineTemplate,
       'name': name,
       'plan_id': planId,
       'price_id': priceId,
@@ -140,40 +152,49 @@ class GeneratedStorefrontCurrent {
 
 class GeneratedStorefrontPrice {
   final int amountMinor;
+  final List<String>? confirmLineTemplates;
   final List<String>? confirmLines;
   final String? ctaLabel;
+  final String? ctaLabelTemplate;
   final String currency;
   final String headline;
   final String interval;
   final int? monthsFree;
   final String? priceId;
   final String? renewalLine;
+  final int? savingMinor;
   final String? subline;
 
   const GeneratedStorefrontPrice({
     required this.amountMinor,
+    this.confirmLineTemplates,
     this.confirmLines,
     this.ctaLabel,
+    this.ctaLabelTemplate,
     required this.currency,
     required this.headline,
     required this.interval,
     this.monthsFree,
     this.priceId,
     this.renewalLine,
+    this.savingMinor,
     this.subline,
   });
 
   factory GeneratedStorefrontPrice.fromJson(Map<String, dynamic> json) {
     return GeneratedStorefrontPrice(
       amountMinor: _required(_readFieldValue<int>(_readField(json, const ["amount_minor"]), "amount_minor", _readInt, requiredField: true, nullable: false), "amount_minor"),
+      confirmLineTemplates: _readFieldValue<List<String>>(_readField(json, const ["confirm_line_templates"]), "confirm_line_templates", _readStringList, requiredField: false, nullable: true),
       confirmLines: _readFieldValue<List<String>>(_readField(json, const ["confirm_lines"]), "confirm_lines", _readStringList, requiredField: false, nullable: true),
       ctaLabel: _readFieldValue<String>(_readField(json, const ["cta_label"]), "cta_label", _readString, requiredField: false, nullable: true),
+      ctaLabelTemplate: _readFieldValue<String>(_readField(json, const ["cta_label_template"]), "cta_label_template", _readString, requiredField: false, nullable: true),
       currency: _required(_readFieldValue<String>(_readField(json, const ["currency"]), "currency", _readString, requiredField: true, nullable: false), "currency"),
       headline: _required(_readFieldValue<String>(_readField(json, const ["headline"]), "headline", _readString, requiredField: true, nullable: false), "headline"),
       interval: _required(_readFieldValue<String>(_readField(json, const ["interval"]), "interval", _readString, requiredField: true, nullable: false), "interval"),
       monthsFree: _readFieldValue<int>(_readField(json, const ["months_free"]), "months_free", _readInt, requiredField: false, nullable: true),
       priceId: _readFieldValue<String>(_readField(json, const ["price_id"]), "price_id", _readString, requiredField: false, nullable: true),
       renewalLine: _readFieldValue<String>(_readField(json, const ["renewal_line"]), "renewal_line", _readString, requiredField: false, nullable: true),
+      savingMinor: _readFieldValue<int>(_readField(json, const ["saving_minor"]), "saving_minor", _readInt, requiredField: false, nullable: true),
       subline: _readFieldValue<String>(_readField(json, const ["subline"]), "subline", _readString, requiredField: false, nullable: true),
     );
   }
@@ -181,14 +202,17 @@ class GeneratedStorefrontPrice {
   Map<String, dynamic> toJson() {
     return {
       'amount_minor': amountMinor,
+      'confirm_line_templates': confirmLineTemplates,
       'confirm_lines': confirmLines,
       'cta_label': ctaLabel,
+      'cta_label_template': ctaLabelTemplate,
       'currency': currency,
       'headline': headline,
       'interval': interval,
       'months_free': monthsFree,
       'price_id': priceId,
       'renewal_line': renewalLine,
+      'saving_minor': savingMinor,
       'subline': subline,
     };
   }

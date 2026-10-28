@@ -31,14 +31,21 @@ import utils.stripe as stripe_utils  # noqa: E402
 STRIPE_UTILS_SOURCE = Path(__file__).resolve().parents[2] / "utils" / "stripe.py"
 
 
-def _captured_session_params(promotion_code_id, trial_period_days=None, customer_id=None):
+def _captured_session_params(promotion_code_id, trial_period_days=None, customer_id=None, currency="usd"):
     captured = {}
 
     def fake_session_create(**params):
         captured.update(params)
         return SimpleNamespace(url='https://checkout.stripe.com/c/pay/cs_test', id='cs_test')
 
-    with patch('utils.stripe.stripe.checkout.Session.create', side_effect=fake_session_create):
+    with (
+        patch.object(stripe_utils.stripe.checkout.Session, 'create', side_effect=fake_session_create),
+        patch.object(
+            stripe_utils.stripe.Price,
+            'retrieve',
+            return_value=SimpleNamespace(currency=currency, currency_options={'eur': {'unit_amount': 1000}}),
+        ),
+    ):
         stripe_utils.create_subscription_checkout_session(
             uid='uid_1',
             price_id='price_unlimited_yearly',
@@ -56,6 +63,9 @@ def test_promo_checkout_disables_adaptive_pricing():
 
     assert params['discounts'] == [{'promotion_code': 'promo_123'}]
     assert params['adaptive_pricing'] == {'enabled': False}
+    assert params['currency'] == 'usd'
+    assert params['locale'] == 'auto'
+    assert params['custom_text']['submit']['message'] == 'All amounts are in USD (US dollars).'
 
 
 @pytest.mark.parametrize(
@@ -72,6 +82,9 @@ def test_promo_free_checkout_disables_adaptive_pricing(trial_period_days, custom
     assert params['allow_promotion_codes'] is True
     assert 'discounts' not in params
     assert params['adaptive_pricing'] == {'enabled': False}
+    assert params['currency'] == 'usd'
+    assert params['locale'] == 'auto'
+    assert params['custom_text']['submit']['message'] == 'All amounts are in USD (US dollars).'
 
 
 def test_adaptive_pricing_pin_is_unconditional():
@@ -83,3 +96,14 @@ def test_adaptive_pricing_pin_is_unconditional():
     base_end = source.index("if trial_period_days:", base_start)
 
     assert "'adaptive_pricing': {'enabled': False}" in source[base_start:base_end]
+
+
+@pytest.mark.parametrize('currency', ['usd', 'jpy'])
+def test_session_currency_is_the_selected_prices_original_currency(currency):
+    params = _captured_session_params(None, customer_id='cus_fixture', currency=currency)
+    assert params['currency'] == currency
+    assert params['line_items'] == [{'price': 'price_unlimited_yearly', 'quantity': 1}]
+    assert params['customer_update'] == {'name': 'auto', 'address': 'auto'}
+    assert params['adaptive_pricing'] == {'enabled': False}
+    assert 'currency_options' not in params
+    assert ('custom_text' in params) == (currency == 'usd')

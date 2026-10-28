@@ -33,6 +33,7 @@ import 'package:omi/pages/conversations/background_conversations.dart';
 import 'package:omi/pages/conversations/widgets/processing_conversation_row.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/date_list_item.dart';
+import 'package:omi/pages/conversations/widgets/noise_fold_line.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
 import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
@@ -40,6 +41,8 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 import 'package:omi/widgets/home_bottom_bar.dart';
+
+part 'conversations_processing_rows.dart';
 
 String _conversationDateRangeLabel(BuildContext context, DateTime start, DateTime? end) {
   final dates = OmiDateFormat.of(context);
@@ -49,7 +52,16 @@ String _conversationDateRangeLabel(BuildContext context, DateTime start, DateTim
   return '${dates.date(start)} – ${dates.date(end)}';
 }
 
-enum _ConversationListRowKind { topSpacer, dateHeader, liveEpisode, processing, conversation, recording, groupSpacer }
+enum _ConversationListRowKind {
+  topSpacer,
+  dateHeader,
+  liveEpisode,
+  processing,
+  conversation,
+  recording,
+  noiseFold,
+  groupSpacer
+}
 
 typedef _ConversationListRow = ({
   _ConversationListRowKind kind,
@@ -79,6 +91,7 @@ typedef _ConversationPageSnapshot = ({
   int conversationIdentitySignature,
   int processingIdentitySignature,
   int recordingIdentitySignature,
+  int noiseFoldSignature,
   int pendingDeleteCount,
   HomeEmptyExplanation homeEmptyExplanation,
 });
@@ -140,6 +153,10 @@ _ConversationPageSnapshot _conversationPageSnapshot(
     conversationIdentitySignature: _identitySignature(conversations.conversations),
     processingIdentitySignature: _identitySignature(conversations.processingConversations),
     recordingIdentitySignature: _identitySignature(recordings.recordings),
+    noiseFoldSignature: Object.hash(
+        identityHashCode(conversations.foldedNoiseCounts),
+        Object.hashAll(conversations.foldedNoiseByDate.keys),
+        Object.hashAllUnordered(conversations.revealedNoiseDates)),
     pendingDeleteCount: conversations.memoriesToDelete.length,
     homeEmptyExplanation: conversations.homeEmptyExplanation,
   );
@@ -149,13 +166,26 @@ List<_ConversationListRow> _buildConversationListRows({
   required List<DateTime> dates,
   required Map<DateTime, List<ServerConversation>> conversationsByDate,
   required Map<DateTime, List<LocalRecording>> recordingsByDate,
+  Map<DateTime, int> foldedNoiseCounts = const {},
+  Map<DateTime, List<ServerConversation>> foldedNoiseByDate = const {},
+  Set<DateTime> revealedNoiseDates = const {},
 }) {
   final rows = <_ConversationListRow>[];
   var hasRenderedDate = false;
 
   for (var dateIndex = 0; dateIndex < dates.length; dateIndex++) {
     final date = dates[dateIndex];
-    final conversations = conversationsByDate[date] ?? const <ServerConversation>[];
+    final folded = foldedNoiseByDate[date] ?? const <ServerConversation>[];
+    final shown = conversationsByDate[date] ?? const <ServerConversation>[];
+    // Revealed clips take their place in the day's timeline, not a pile at its end.
+    final conversations = revealedNoiseDates.contains(date) && folded.isNotEmpty
+        ? ([
+            ...shown,
+            for (final c in folded)
+              if (c.isFoldedNoise && !shown.any((s) => s.id == c.id)) c,
+            // omi-perf-allow: sort-in-build -- one revealed day's rows, only while that day is revealed
+          ]..sort((x, y) => y.createdAt.compareTo(x.createdAt)))
+        : shown;
     final recordings = recordingsByDate[date] ?? const <LocalRecording>[];
     final entries = buildConversationGroupEntries(conversations: conversations, recordings: recordings);
     final conversationIndexes = <String, int>{
@@ -206,6 +236,18 @@ List<_ConversationListRow> _buildConversationListRows({
       }
     }
 
+    final foldedCount = foldedNoiseCounts[date] ?? folded.length;
+    if (foldedCount > 0) {
+      rows.add((
+        kind: _ConversationListRowKind.noiseFold,
+        date: date,
+        isFirst: false,
+        conversation: null,
+        recording: null,
+        conversationIndex: foldedCount,
+      ));
+    }
+
     rows.add((
       kind: _ConversationListRowKind.groupSpacer,
       date: date,
@@ -222,67 +264,6 @@ List<_ConversationListRow> _buildConversationListRows({
 
 /// [rows] with the live episode right under today's header. With no today in the list,
 /// the episode opens Today itself, carrying its own header.
-List<_ConversationListRow> _withTodayRow(List<_ConversationListRow> rows, DateTime now, _ConversationListRowKind kind) {
-  if (rows.isEmpty) return rows;
-  final today = DateTime(now.year, now.month, now.day);
-  final header = rows.indexWhere((r) => r.kind == _ConversationListRowKind.dateHeader && r.date == today);
-  _ConversationListRow todayRow(_ConversationListRowKind kind, {bool isFirst = false}) =>
-      (kind: kind, date: today, isFirst: isFirst, conversation: null, recording: null, conversationIndex: -1);
-  if (header >= 0) {
-    var at = header + 1;
-    while (at < rows.length && rows[at].kind == _ConversationListRowKind.liveEpisode) {
-      at++;
-    }
-    return [...rows.take(at), todayRow(kind), ...rows.skip(at)];
-  }
-  final opened = rows.indexWhere((r) => r.kind == kind);
-  if (opened >= 0) return rows;
-  // A row that already opened Today (the live episode) carries the header; sit right under it.
-  final todayOpener = rows.indexWhere(
-    (r) => r.date == today && r.isFirst && r.kind != _ConversationListRowKind.topSpacer,
-  );
-  if (todayOpener >= 0) {
-    return [...rows.take(todayOpener + 1), todayRow(kind), ...rows.skip(todayOpener + 1)];
-  }
-  // rows.first is the list's top spacer.
-  return [
-    rows.first,
-    todayRow(kind, isFirst: true),
-    todayRow(_ConversationListRowKind.groupSpacer),
-    for (final r in rows.skip(1))
-      r.kind == _ConversationListRowKind.dateHeader && r.isFirst
-          ? (kind: r.kind, date: r.date, isFirst: false, conversation: null, recording: null, conversationIndex: -1)
-          : r,
-  ];
-}
-
-/// One row per conversation still processing, right under Today's live row: the conversation the
-/// person just ended (Wrap up, a pendant double-tap) shows at once, then turns into its own row.
-List<_ConversationListRow> _withProcessingRows(
-  List<_ConversationListRow> rows,
-  List<ServerConversation> processing,
-  DateTime now,
-) {
-  if (processing.isEmpty) return rows;
-  final marked = _withTodayRow(rows, now, _ConversationListRowKind.processing);
-  final at = marked.indexWhere((r) => r.kind == _ConversationListRowKind.processing);
-  if (at < 0) return rows;
-  final slot = marked[at];
-  return [
-    ...marked.take(at),
-    for (var i = 0; i < processing.length; i++)
-      (
-        kind: _ConversationListRowKind.processing,
-        date: slot.date,
-        isFirst: slot.isFirst && i == 0,
-        conversation: processing[i],
-        recording: null,
-        conversationIndex: -1,
-      ),
-    ...marked.skip(at + 1),
-  ];
-}
-
 /// [byDate] without the conversations Home leaves to the daily recap (background notes,
 /// David 2026-10-23). Days left empty drop out when the rows are built.
 Map<DateTime, List<ServerConversation>> _withoutBackground(Map<DateTime, List<ServerConversation>> byDate) => {
@@ -617,10 +598,17 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               };
         // Episodes beta, default view: background conversations live in the day's recap, not on Home.
         final hidingBackground = episodesOn && showRecordings && !convoProvider.isSelectionModeActive;
+        final folding =
+            showRecordings && !convoProvider.isSelectionModeActive && !convoProvider.showDiscardedConversations;
         final builtRows = _buildConversationListRows(
           dates: mergedDates,
           conversationsByDate: hidingBackground ? _withoutBackground(conversationsByDate) : conversationsByDate,
           recordingsByDate: recordingsByDate,
+          // Only the plain default view folds: a search, folder, selection or "show discarded"
+          // list shows exactly what it matched.
+          foldedNoiseCounts: folding ? convoProvider.foldedNoiseCounts : const {},
+          foldedNoiseByDate: folding ? convoProvider.foldedNoiseByDate : const {},
+          revealedNoiseDates: folding ? convoProvider.revealedNoiseDates : const {},
         );
         final withLive =
             episodeLive ? _withTodayRow(builtRows, DateTime.now(), _ConversationListRowKind.liveEpisode) : builtRows;
@@ -764,6 +752,13 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                     switch (row.kind) {
                       case _ConversationListRowKind.topSpacer:
                         return const SizedBox(height: 10);
+                      case _ConversationListRowKind.noiseFold:
+                        return NoiseFoldLine(
+                          key: ValueKey('noise_fold_${row.date.toIso8601String()}'),
+                          count: row.conversationIndex,
+                          revealed: convoProvider.revealedNoiseDates.contains(row.date),
+                          onTap: () => convoProvider.toggleFoldedNoise(row.date),
+                        );
                       case _ConversationListRowKind.dateHeader:
                         return DateListItem(
                           key: ValueKey('date_${row.date.toIso8601String()}'),

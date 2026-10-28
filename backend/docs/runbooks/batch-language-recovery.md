@@ -60,9 +60,10 @@ batch re-ramp will clear.
 
 ## Spend and rollback
 
-`BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED` defaults **off** per lead
-ruling 404ca5. Explicit `true` enables the capped path; `false`
-stops new Soniox attempts. It never falls back to another Modulate call. Rollback:
+`BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED` defaults **off** in code per lead
+ruling 404ca5. Prod declares it `true` on backend-integration only (activated
+2026-10-27 02:07Z per lead 5da7dc/ebc45a); dev and the GPU worker stay off.
+Explicit `true` enables the capped path; `false` stops new Soniox attempts. It never falls back to another Modulate call. Rollback:
 set it false on the recovery role/operator, retaining all held obligations.
 
 `BATCH_PIPELINE_INDEPENDENT_RECOVERY_MAX_SECONDS` defaults to **60** and can only

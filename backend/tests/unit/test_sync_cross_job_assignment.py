@@ -17,6 +17,7 @@ import pytest
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.sync.assignment import assign_in_transaction, needs_fragment_review
 from utils.sync.assignment_errors import SyncAssignmentSuperseded
+from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
 
 
 @pytest.fixture(scope='module', autouse=True)
@@ -59,6 +60,94 @@ def intake(store, incoming, *, candidate_id=None, target_id=None):
 
 def conversations(store):
     return [value for key, value in store.rows.items() if key[2] == 'conversations' and not value.get('deleted')]
+
+
+@pytest.mark.parametrize('has_live_candidate', [False, True])
+def test_late_upload_skips_tombstoned_live_overlap_without_absorbing_it(has_live_candidate):
+    store = StrictFirestore()
+    tombstoned, _, _ = intake(store, chunk('blocked', 1000))
+    store.rows[('users', 'u', 'deleted_conversations', 'blocked')] = {'deleted': True}
+    if has_live_candidate:
+        # Seed independently so the setup does not itself merge the windows.
+        live = {**deepcopy(tombstoned), 'id': 'live', 'started_at': chunk('live', 1060)['started_at']}
+        store.rows[('users', 'u', 'conversations', 'live')] = live
+    before = deepcopy(store.rows[('users', 'u', 'conversations', 'blocked')])
+    result, created, survivors = intake(
+        store,
+        chunk('late-upload', 1070, text='New speech belongs to the surviving conversation.'),
+        candidate_id='live' if has_live_candidate else 'blocked',
+    )
+    assert result['id'] == ('live' if has_live_candidate else 'late-upload')
+    assert created is not has_live_candidate
+    assert survivors
+    assert 'blocked' not in result['sync_merged_from']
+    assert store.rows[('users', 'u', 'conversations', 'blocked')] == before
+
+
+@pytest.mark.parametrize('explicit', [False, True])
+def test_tombstoned_but_live_anchor_or_explicit_target_cannot_accept_speech(explicit):
+    store = StrictFirestore()
+    intake(store, chunk('blocked', 1000))
+    store.rows[('users', 'u', 'deleted_conversations', 'blocked')] = {'deleted': True}
+    before = deepcopy(store.rows)
+    with pytest.raises(SyncAssignmentSuperseded):
+        intake(store, chunk('new' if explicit else 'blocked', 1060), target_id='blocked' if explicit else None)
+    assert store.rows == before
+
+
+@pytest.mark.parametrize('second_refusal', [False, True])
+def test_deleted_ancestry_replans_once_before_any_write(second_refusal):
+    store = StrictFirestore()
+    store.rows[('users', 'u')] = {'data_protection_level': 'standard'}
+    row, _, _ = intake(store, chunk('canonical', 1000))
+    store.rows[('users', 'u', 'conversations', 'canonical')]['sync_merged_from'] = ['deleted-source']
+    store.rows[('users', 'u', 'deleted_conversations', 'deleted-source')] = {'deleted': True}
+    if second_refusal:
+        store.rows[('users', 'u', 'conversations', 'second')] = {
+            **deepcopy(row),
+            'id': 'second',
+            'sync_merged_from': ['other-deleted-source'],
+        }
+        store.rows[('users', 'u', 'deleted_conversations', 'other-deleted-source')] = {'deleted': True}
+    before = deepcopy(store.rows)
+    transaction = store.transaction()
+    plans = []
+
+    def encode(planned):
+        plans.append(planned['id'])
+        assert_batch_write_allowed(
+            store, transaction, 'u', conversation_ids=[planned['id'], *planned['sync_merged_from']]
+        )
+        return deepcopy(planned)
+
+    def assign():
+        return assign_in_transaction(
+            transaction,
+            store.collection('users').document('u'),
+            chunk('new', 1060),
+            candidate_id='second' if second_refusal else 'canonical',
+            decode=deepcopy,
+            encode=encode,
+            invalidate=lambda payload: None,
+        )
+
+    assigned, created, survivors = assign()
+    assert created and survivors
+    assert assigned['id'] not in {'canonical', 'second'}
+    assert assigned['sync_merged_from'] == []
+    assert [part['text'] for part in assigned['transcript_segments']] == [
+        chunk('new', 1060)['transcript_segments'][0]['text']
+    ]
+    assert (
+        store.rows[('users', 'u', 'conversations', 'canonical')] == before[('users', 'u', 'conversations', 'canonical')]
+    )
+    if second_refusal:
+        assert (
+            store.rows[('users', 'u', 'conversations', 'second')] == before[('users', 'u', 'conversations', 'second')]
+        )
+    else:
+        assert assigned['id'] == 'new'
+    assert len(plans) == (3 if second_refusal else 2)
 
 
 @pytest.mark.parametrize('reverse', [False, True])

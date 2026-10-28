@@ -56,6 +56,22 @@ void main() {
       await engine.stop();
     });
 
+    test('window audio times do not move to a late transcription result', () async {
+      final clock = DateTime.utc(2026, 10, 27);
+      final done = Completer<String?>();
+      final engine =
+          WhisperWindowPreviewEngine(windowBytes: 32000, now: () => clock, transcribe: (_, __) => done.future);
+      final results = <LivePreviewResult>[];
+      engine.results.listen(results.add);
+      await engine.start('en');
+      await engine.feedPcm16(Uint8List(32000));
+      done.complete('words');
+      await pumpEventQueue();
+      expect(results.single.startedAt, clock.subtract(const Duration(seconds: 1)));
+      expect(results.single.endedAt, clock);
+      await engine.stop();
+    });
+
     test('a model crash is a typed runtime failure; excluded after it', () async {
       final engine =
           WhisperWindowPreviewEngine(windowBytes: 8, transcribe: (wav, language) async => throw StateError('x'));

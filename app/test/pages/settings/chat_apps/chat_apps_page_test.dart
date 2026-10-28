@@ -82,7 +82,7 @@ void main() {
         ..links = [linkJson(id: linkIdIMessage, channel: 'imessage', externalId: '+15550100')];
       await pumpPage(tester, backend: backend, plan: PlanType.basic);
       expect(find.byKey(const ValueKey('chat_apps_pro_card')), findsOneWidget);
-      expect(find.text('Chat apps are part of Pro'), findsOneWidget);
+      expect(find.text('Chat apps are part of Omi Pro'), findsOneWidget);
       expect(find.byIcon(Icons.lock_outline_rounded), findsOneWidget); // Telegram is locked.
       expect(find.text('Connected as +15550100'), findsOneWidget);
       expect(find.text('Connect'), findsNothing);
@@ -273,7 +273,7 @@ void main() {
             'imessage': availabilityJson(reason: 'channel_plan'),
           },
           plan: PlanType.plus);
-      expect(find.text('Available on Operator and Architect'), findsOneWidget);
+      expect(find.text('Available on Omi Pro'), findsOneWidget);
       expect(find.text('Upgrade'), findsOneWidget);
       expect(row(tester, 'imessage').onTap, isNotNull);
       expect(find.text('Connect'), findsOneWidget);

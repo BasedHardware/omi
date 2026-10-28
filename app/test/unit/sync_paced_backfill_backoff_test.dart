@@ -221,7 +221,10 @@ void main() {
             1,
             reason: 'Retry-After must close admission; the client must not loop faster',
           );
-          expect(limiter.reason, RateLimitReason.backendBusy);
+          expect(
+            limiter.reason,
+            reason == 'dispatch_hold' ? RateLimitReason.dispatchHold : RateLimitReason.backendBusy,
+          );
           expect(
             limiter.activeRetryAfterSeconds,
             inInclusiveRange(59, 60),

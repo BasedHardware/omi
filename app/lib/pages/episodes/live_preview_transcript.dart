@@ -1,16 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/services/live_preview/live_preview_controller.dart';
+import 'package:omi/services/live_preview/live_preview_engine.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-/// The live transcript surface for a local-preview session: provisional,
-/// on-device text that the batch transcript replaces. Words the recognizer may
-/// still revise are drawn in secondary text; settled words in primary text. One
-/// unlabeled voice, as for every on-device engine (contract §9): no speakers.
+/// The live transcript surface for a local-preview session: final transcript
+/// segments first (when any arrived), then the "Live on this phone" divider,
+/// then the preview lines it does not already cover — provisional, on-device
+/// text that the batch transcript replaces. Words the recognizer may still
+/// revise are drawn in secondary text; settled words in primary text. No
+/// speaker labels: preview text has no speaker attribution.
 ///
-/// With no on-device engine it is a calm "Transcribing…" state, not an error
-/// and not a setup prompt.
+/// With no on-device engine it is a calm card ("Recording safely"), not an
+/// error and not a setup prompt, with a settings link only where the platform
+/// can deep-link to its speech settings.
 class LivePreviewTranscript extends StatelessWidget {
   const LivePreviewTranscript({super.key, required this.preview, this.bottomInset = 84});
 
@@ -24,49 +29,12 @@ class LivePreviewTranscript extends StatelessWidget {
     return ListenableBuilder(
       listenable: preview,
       builder: (context, _) => switch (preview.phase) {
-        LivePreviewPhase.unavailable => const _Transcribing(),
-        LivePreviewPhase.starting => _PreviewFrame(child: _Waiting(text: context.l10n.livePreviewStarting)),
-        _ => _PreviewFrame(
-            child: preview.lines.isEmpty
-                ? _Waiting(text: context.l10n.livePreviewListening, spinner: false)
-                : _Lines(lines: preview.lines, bottomInset: bottomInset),
-          ),
+        LivePreviewPhase.unavailable => _NoEngine(reason: preview.selected?.reason),
+        LivePreviewPhase.starting => _Waiting(text: context.l10n.livePreviewStarting),
+        _ => preview.lines.isEmpty
+            ? _Waiting(text: context.l10n.livePreviewListening, spinner: false)
+            : _Lines(lines: preview.lines, bottomInset: bottomInset),
       },
-    );
-  }
-}
-
-class _PreviewFrame extends StatelessWidget {
-  const _PreviewFrame({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      key: const Key('live_preview_transcript'),
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.md, OmiSpacing.xs),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                context.l10n.livePreviewLabel,
-                key: const Key('live_preview_label'),
-                style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: OmiSpacing.xxs),
-              Text(
-                context.l10n.livePreviewExplanation,
-                style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
-              ),
-            ],
-          ),
-        ),
-        Expanded(child: child),
-      ],
     );
   }
 }
@@ -167,28 +135,53 @@ class _Waiting extends StatelessWidget {
   }
 }
 
-class _Transcribing extends StatelessWidget {
-  const _Transcribing();
+/// Admitted, but this phone has no on-device engine: the mic glyph card that
+/// says when words arrive and — only where the platform can deep-link to its
+/// speech settings (a denied speech permission is the one case both platforms
+/// can open) — the link that turns live text on.
+class _NoEngine extends StatelessWidget {
+  const _NoEngine({this.reason});
+
+  final LivePreviewReason? reason;
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      key: const Key('live_preview_transcribing'),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xxl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const OmiSpinner(size: OmiSpinnerSize.small),
-            const SizedBox(height: OmiSpacing.md),
-            Text(context.l10n.livePreviewTranscribingTitle, textAlign: TextAlign.center, style: OmiType.headline),
-            const SizedBox(height: OmiSpacing.xs),
-            Text(
-              context.l10n.livePreviewTranscribingMessage,
-              textAlign: TextAlign.center,
-              style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-            ),
-          ],
+    final l10n = context.l10n;
+    final canOpenSpeechSettings = reason == LivePreviewReason.speechPermissionDenied;
+    // A calm card at the top of the tab, where the transcript will start: not an error, not
+    // a setup prompt.
+    return Align(
+      key: const Key('live_preview_no_engine'),
+      alignment: Alignment.topCenter,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, OmiSpacing.md, OmiSpacing.md),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.xl, OmiSpacing.lg, OmiSpacing.lg),
+          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.mic_none_rounded, size: 32, color: OmiColors.textTertiary),
+              const SizedBox(height: OmiSpacing.sm),
+              Text(l10n.livePreviewNoEngineTitle, textAlign: TextAlign.center, style: OmiType.headline),
+              const SizedBox(height: OmiSpacing.xs),
+              Text(
+                l10n.livePreviewNoEngineBody,
+                textAlign: TextAlign.center,
+                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.45),
+              ),
+              if (canOpenSpeechSettings) ...[
+                const SizedBox(height: OmiSpacing.xxs),
+                OmiButton.tertiary(
+                  key: const Key('live_preview_turn_on_live_text'),
+                  label: l10n.livePreviewTurnOnLiveText,
+                  size: OmiButtonSize.compact,
+                  onPressed: () => openAppSettings(),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );

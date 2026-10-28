@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-device-catching-up-pending.png",
+      "platform": "mobile-ios",
+      "description": "Synthetic Flutter widget harness, real DeviceSettings/OnTheWayPage with injected fakes, 390x844 iOS viewport: Device Settings with 8h 14m pending: the third stat tile reads Catching up / 8h 14m / on its way, and opens On the Way. Right now no longer has a catching-up block. The blank band above the tiles is the device image, which the test engine does not paint.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-device-nothing-pending.png",
+      "platform": "mobile-ios",
+      "description": "Synthetic Flutter widget harness, real DeviceSettings/OnTheWayPage with injected fakes, 390x844 iOS viewport: Device Settings with nothing pending: the third tile is On Device again.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-on-the-way-mixed-days.png",
+      "platform": "mobile-ios",
+      "description": "Synthetic Flutter widget harness, real DeviceSettings/OnTheWayPage with injected fakes, 390x844 iOS viewport: On the Way, option B, light: headline, thin progress bar, one line; one card with a row per day (Uploading / Transcribing / Queued / Next); footnote and Details for support. Fixture also holds a too-old recording and two refusals, which are not rows.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-on-the-way-support-details.png",
+      "platform": "mobile-ios",
+      "description": "Synthetic Flutter widget harness, real DeviceSettings/OnTheWayPage with injected fakes, 390x844 iOS viewport: Details for support: every recording with its stage, and refused/failed ones with their reason tokens; no Try Again or Delete.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-on-the-way-dark.png",
+      "platform": "mobile-ios",
+      "description": "Synthetic Flutter widget harness, real DeviceSettings/OnTheWayPage with injected fakes, 390x844 iOS viewport: On the Way in dark mode.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-on-the-way-largest-text.png",
+      "platform": "mobile-ios",
+      "description": "Synthetic Flutter widget harness, real DeviceSettings/OnTheWayPage with injected fakes, 390x844 iOS viewport: On the Way at iOS's largest accessibility text (3.1x): rows stack the status under the totals; nothing clips.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

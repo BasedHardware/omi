@@ -102,6 +102,9 @@ export interface SeriesPayload {
   gaps: Record<string, string>;
   /** Headline only: oldest leg's data-through day across all series. */
   status?: { through: string | null; text: string } | null;
+  /** When the oldest value in this body turns 24h old; the stats proxy never
+   * serves the body as last-good past it. */
+  staleUntil: string | null;
 }
 
 export const GROWTH_WEEKS = 26;
@@ -125,6 +128,8 @@ const PARTIAL_RETRY = 2 * 60_000;
 const FAILURE_RETRY = 60_000;
 const MAX_BACKOFF = 30 * 60_000;
 const MAX_STALE = 24 * 60 * 60_000;
+/** The warm route answers within this; Scheduler's attempt deadline is 30 min. */
+export const WARM_BUDGET_MS = 20 * 60_000;
 const DAYS_PER_MONTH = 365.25 / 12;
 /** 60% blended margin goal: cost may be at most 40% of revenue per MAU. */
 export const MARGIN_GOAL = 0.6;
@@ -1718,6 +1723,59 @@ export function dataStatus(
 
 const ALL_LEGS = Array.from(new Set(Object.values(LEGS_FOR).flat()));
 
+export interface WarmLeg {
+  day: string | null;
+  complete: boolean;
+  reason: string | null;
+  /** Another instance holds the fill lease; the next warm tick picks it up. */
+  busy: boolean;
+  storeDown: boolean;
+}
+
+/** Fill every leg to completion off the viewing path (the `omi-admin-wall-warm`
+ * scheduler). Viewers then read legs that are already complete for the UTC day
+ * instead of paying the day's cold fill; a complete leg is a store read only.
+ * Uses the same leases as requests, so a warm tick and a viewer never fill the
+ * same leg twice. */
+export async function warmSeries(
+  now = new Date(),
+  sources: SeriesSources = defaultSeriesSources,
+  /** Answer by then; unfinished fills keep running (retained) and the next
+   * tick sees their leases. Keeps the request under Scheduler's deadline. */
+  budgetMs = WARM_BUDGET_MS,
+  retain: (work: Promise<unknown>) => void = () => {}
+): Promise<Record<string, WarmLeg>> {
+  const day = isoDay(utcDay(now));
+  const store = sources.store ?? localStore;
+  const starts = await Promise.all(
+    ALL_LEGS.map((leg) => ensureLeg(leg, sources, store, day, now, retain))
+  );
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([
+    Promise.allSettled(starts.flatMap((s) => (s ? [s.flight] : []))),
+    new Promise((resolve) => (timer = setTimeout(resolve, budgetMs))),
+  ]);
+  if (timer) clearTimeout(timer);
+  return Object.fromEntries(
+    ALL_LEGS.map((leg) => {
+      const state = local.get(leg);
+      const entry = state?.doc?.entry;
+      return [
+        leg,
+        {
+          day: entry?.day ?? null,
+          complete: Boolean(
+            entry?.complete && entry.day === day && !state?.flight
+          ),
+          reason: entry?.reason ?? null,
+          busy: Boolean(state?.busy),
+          storeDown: Boolean(state?.storeDown),
+        },
+      ];
+    })
+  );
+}
+
 export async function seriesPayload(
   name: SeriesName,
   snapshot: Promise<WallPayload | null>,
@@ -1734,7 +1792,7 @@ export async function seriesPayload(
   );
   const flights = starts.flatMap((s) => (s ? [s.flight] : []));
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const [wall] = await Promise.all([
+  const [served] = await Promise.all([
     snapshot.catch(() => null),
     flights.length
       ? Promise.race([
@@ -1744,21 +1802,46 @@ export async function seriesPayload(
       : null,
   ]);
   if (timer) clearTimeout(timer);
+  // A metric the snapshot retained is shown for 24h from `retainedSince`,
+  // never longer, whatever the age of the snapshot that carries it.
+  const wall = served && {
+    ...served,
+    metrics: served.metrics.map((m) =>
+      m.retainedSince &&
+      now.getTime() - Date.parse(m.retainedSince) >= MAX_STALE
+        ? { ...m, value: null, trend: [] }
+        : m
+    ),
+  };
   const legs: Legs = {};
   const gaps: Record<string, string> = {};
   let cacheStale = Boolean(wall?.cacheStale);
   let refreshing = false;
+  let staleUntil = Infinity;
+  // A retained snapshot metric ages from `retainedSince`, not the snapshot's
+  // newer generatedAt (Luna r3).
+  for (const m of wall?.metrics || []) {
+    if (m.value == null) continue;
+    const at = Date.parse(m.retainedSince || wall!.generatedAt);
+    if (Number.isFinite(at)) staleUntil = Math.min(staleUntil, at + MAX_STALE);
+  }
   for (const leg of LEGS_FOR[name]) {
     const state = local.get(leg);
     const entry = state?.doc?.entry;
     const running = Boolean(state?.flight || state?.busy);
     refreshing ||= running;
-    if (entry?.value !== undefined)
+    // Never serve a value older than the stale-good bound, however it was kept.
+    const expired =
+      entry?.value !== undefined && now.getTime() - entry.at >= MAX_STALE;
+    if (entry?.value !== undefined && !expired) {
       (legs as Record<string, unknown>)[leg] = entry.value;
+      staleUntil = Math.min(staleUntil, entry.at + MAX_STALE);
+    }
     if (entry?.day !== day && entry?.value !== undefined) cacheStale = true;
     if (entry?.value === undefined && running)
       gaps[leg] = "Series refresh running";
-    if (entry?.reason) gaps[leg] = entry.reason;
+    if (expired) gaps[leg] = "Series data older than 24h";
+    else if (entry?.reason) gaps[leg] = entry.reason;
     else if (entry?.value === undefined && !running)
       gaps[leg] = state?.storeDown
         ? "Shared series store unavailable"
@@ -1820,6 +1903,9 @@ export async function seriesPayload(
     status,
     frames,
     gaps,
+    staleUntil: Number.isFinite(staleUntil)
+      ? new Date(staleUntil).toISOString()
+      : null,
   };
 }
 

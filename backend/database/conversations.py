@@ -1,4 +1,4 @@
-from database import conversation_visibility_counts, processing_backlog, speaker_auto_enroll
+from database import conversation_visibility_counts, processing_backlog, speaker_auto_enroll, capture_group_notes
 from utils.conversations import summary_delivery, lifecycle_clocks
 from config.refactor_modes import serving_for, shadow_or_serve
 import copy
@@ -72,6 +72,7 @@ from .read_boundary import parse_payload_strict
 from utils.other.list_budget import (
     ListReadBudget,
     ListReadBudgetExhausted,
+    budgeted_get_all,
     budgeted_stream_iter,
     indexed_list_reads_enabled,
 )
@@ -630,7 +631,11 @@ def get_open_loop_extractions(uid: str, conversation_data: Optional[Dict[str, An
 
 
 def prepare_conversation_for_read(
-    conversation_data: Optional[Dict[str, Any]], uid: str, *, firestore_client: Any = None
+    conversation_data: Optional[Dict[str, Any]],
+    uid: str,
+    *,
+    firestore_client: Any = None,
+    read_budget: Optional[ListReadBudget] = None,
 ) -> Optional[Dict[str, Any]]:
     if not conversation_data:
         return None
@@ -654,7 +659,9 @@ def prepare_conversation_for_read(
     if level == 'enhanced':
         from utils.agent_capabilities.transcripts import project
 
-        return project(uid, _decrypt_conversation_data(data, uid), firestore_client=firestore_client)
+        return project(
+            uid, _decrypt_conversation_data(data, uid), firestore_client=firestore_client, read_budget=read_budget
+        )
 
     # Handle standard level with potential compression
     if data.get('transcript_segments_compressed'):
@@ -674,7 +681,7 @@ def prepare_conversation_for_read(
     _reveal_match_scores_for_read(data, uid)
     from utils.agent_capabilities.transcripts import project
 
-    return project(uid, data, firestore_client=firestore_client)
+    return project(uid, data, firestore_client=firestore_client, read_budget=read_budget)
 
 
 def document_data_with_revision(document) -> Optional[Dict[str, Any]]:
@@ -1190,6 +1197,8 @@ def persist_processing_result_with_lifecycle(
     *,
     on_first_completion: Callable[[], None] | None = None,
     smart_merge_refresh: tuple[int, str] | None = None,
+    expected_capture_group: tuple[str, int] | None = None,
+    capture_group_notes_refresh: tuple[str, str] | None = None,
 ) -> bool:
     """Merge a processor result into its conversation.
 
@@ -1214,14 +1223,16 @@ def persist_processing_result_with_lifecycle(
     first_completed = False
     summary_receipt = None
     summary_changed = False
+    notes_refresh_state_write = None
 
     @firestore.transactional
     def _persist(transaction) -> bool:
-        nonlocal stale_sync_revision, first_completed, summary_receipt, summary_changed
+        nonlocal stale_sync_revision, first_completed, summary_receipt, summary_changed, notes_refresh_state_write
         summary_changed = False
         summary_receipt = None
         stale_sync_revision = False
         first_completed = False
+        notes_refresh_state_write = None
         write_data = copy.deepcopy(conversation_data)
         # Capture-group membership has one writer (database.capture_groups).
         write_data.pop(CAPTURE_GROUP_FIELD, None)
@@ -1234,6 +1245,24 @@ def persist_processing_result_with_lifecycle(
             return False
 
         existing = existing_snapshot.to_dict() or {}
+        if expected_capture_group is not None:
+            expected_group_id, expected_group_revision = expected_capture_group
+            current_group = existing.get(CAPTURE_GROUP_FIELD) or {}
+            if current_group.get('id') != expected_group_id or current_group.get('revision') != expected_group_revision:
+                return False
+        if capture_group_notes_refresh is not None:
+            group_id, reservation_id = capture_group_notes_refresh
+            if expected_capture_group is None or expected_capture_group[0] != group_id:
+                return False
+            notes_refresh_state_write = capture_group_notes.read_success_write(
+                transaction,
+                uid,
+                group_id,
+                reservation_id,
+                firestore_client=db,
+            )
+            if notes_refresh_state_write is None:
+                return False
         preserve_duplicate_hint(write_data, existing)
         if existing.get('record_lane_owner'):
             write_data['record_lane_owner'] = existing['record_lane_owner']
@@ -1354,6 +1383,9 @@ def persist_processing_result_with_lifecycle(
             transaction, uid, conversation_data['id'], existing, write_data, firestore_client=db
         )
         transaction.set(conversation_ref, write_data, merge=True)
+        if notes_refresh_state_write is not None:
+            state_document, state_update = notes_refresh_state_write
+            transaction.set(state_document, state_update)
         existing_status = existing.get('status')
         write_status = write_data.get('status')
         first_completed = existing_status not in (
@@ -2467,15 +2499,18 @@ def get_conversations_by_id(
     return _get_conversations_by_id(uid, conversation_ids, include_discarded=include_discarded, read_site=read_site)
 
 
-@prepare_for_read(decrypt_func=prepare_conversation_for_read)
+@prepare_for_read(decrypt_func=prepare_conversation_for_read, read_budget_arg='read_budget')
 def get_conversations_by_id_without_photos(
     uid,
     conversation_ids,
     include_discarded: bool = False,
     *,
     read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED,
+    read_budget: Optional[ListReadBudget] = None,
 ):
-    return _get_conversations_by_id(uid, conversation_ids, include_discarded=include_discarded, read_site=read_site)
+    return _get_conversations_by_id(
+        uid, conversation_ids, include_discarded=include_discarded, read_site=read_site, read_budget=read_budget
+    )
 
 
 def _get_conversations_by_id(
@@ -2484,12 +2519,13 @@ def _get_conversations_by_id(
     include_discarded: bool = False,
     *,
     read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED,
+    read_budget: Optional[ListReadBudget] = None,
 ):
     user_ref = db.collection('users').document(uid)
     conversations_ref = user_ref.collection(conversations_collection)
 
     doc_refs = [conversations_ref.document(str(conversation_id)) for conversation_id in conversation_ids]
-    docs = db.get_all(doc_refs)
+    docs = budgeted_get_all(db, doc_refs, read_budget)
 
     hits = 0
     misses = 0
@@ -4261,7 +4297,7 @@ def assign_sync_conversation(
     """
     from utils.sync.assignment import assign_in_transaction
     from config.sync_lineage import sync_lineage_resolve_enabled
-    from utils.sync.intake_completion import log_sync_lineage_created
+    from utils.sync.intake_completion import log_assignment_observations
 
     # The coordinator/projection already validated S1 and cohort admission.
     # Rechecking membership here can refresh its Firestore cache on the hot path.
@@ -4294,6 +4330,9 @@ def assign_sync_conversation(
         # hand the blob to the logical encoder; the encode seam preserves it.
         result.pop(OPEN_LOOP_EXTRACTIONS_FIELD, None)
         result.pop(OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, None)
+        from utils.sync.size_telemetry import remember_size_payload
+
+        remember_size_payload(result.get('id'), result)
         _reveal_match_scores_for_read(result, uid)
         return result
 
@@ -4355,19 +4394,19 @@ def assign_sync_conversation(
                 discover_live_candidates,
             )
         conversation = result[0]
-        for retired_id in sorted({conversation['id'], *absorbed}):
+        log_assignment_observations(conversation, lineage_eligible=lineage_eligible)
+        output_ids = [conversation['id'], *(row['id'] for row, _ in conversation.get('_sync_size_rollover_rows', []))]
+        for retired_id in sorted({*output_ids, *absorbed}):
             stop_quiet_check_for_conversation(uid, retired_id, firestore_client=client)
-        observation = conversation.pop('_sync_lineage_created', None)
-        if lineage_eligible and observation is not None:
-            log_sync_lineage_created(observation)
         if defer_index is not None:
             # Coalesce the lineage's retryable donor deletes once per flush.
             clock.donors = len(absorbed)
-            defer_index(uid, conversation['id'], sorted({*(conversation.get('sync_merged_from') or []), *absorbed}))
+            for output_id in output_ids:
+                defer_index(uid, output_id, sorted({*(conversation.get('sync_merged_from') or []), *absorbed}))
         else:
             with clock.timed('index'):
                 clock.donors = len(conversation.get('sync_merged_from') or [])
-                index_sync_assignment(uid, [conversation['id']], conversation.get('sync_merged_from') or [])
+                index_sync_assignment(uid, output_ids, conversation.get('sync_merged_from') or [])
     return result
 
 

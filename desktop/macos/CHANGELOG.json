@@ -2,6 +2,69 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.554",
+      "date": "2026-10-28",
+      "changes": [
+        "Improved meeting-note attribution from call participant names while excluding app titles, browser tabs, and your own name."
+      ]
+    },
+    {
+      "version": "0.12.553",
+      "date": "2026-10-28",
+      "changes": [
+        "Fixed recordings failing to upload forever when their stored session id was blank: uploads now always carry a real session id"
+      ]
+    },
+    {
+      "version": "0.12.552",
+      "date": "2026-10-28",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.551",
+      "date": "2026-10-28",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.550",
+      "date": "2026-10-28",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.549",
+      "date": "2026-10-28",
+      "changes": [
+        "Kept Google Meet calls in one conversation when the same meeting resumes within 15 minutes"
+      ]
+    },
+    {
+      "version": "0.12.548",
+      "date": "2026-10-28",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.547",
+      "date": "2026-10-27",
+      "changes": [
+        "Omi Pro is now the only plan offered in Plans & Billing, and buying it from the Mac works"
+      ]
+    },
+    {
+      "version": "0.12.546",
+      "date": "2026-10-27",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.12.545",
       "date": "2026-10-26",
       "changes": [

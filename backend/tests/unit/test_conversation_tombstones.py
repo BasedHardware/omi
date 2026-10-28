@@ -6,6 +6,7 @@ collaborators rather than importing network clients or asserting source strings.
 
 import ast
 import asyncio
+from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace, MethodType
 from unittest.mock import MagicMock, AsyncMock
@@ -58,6 +59,10 @@ class Ref:
 
 
 def function(path, name, namespace):
+    if path == 'routers/conversations.py' and name == 'delete_conversation':
+        namespace['nullcontext'] = nullcontext
+        namespace.setdefault('destructive_operation_gate', lambda *args, **kwargs: nullcontext())
+        function(path, '_delete_conversation_under_gate', namespace)
     node = next(
         n
         for n in ast.walk(ast.parse((ROOT / path).read_text()))

@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from google.cloud import firestore
+from google.cloud.firestore_v1 import FieldFilter
 from google.api_core.exceptions import NotFound
 from prometheus_client import Counter
 
@@ -76,7 +77,7 @@ def _pending_ref(client: Any, uid: str, job_id: str) -> Any:
 
 
 def _pending_for_uid(client: Any, uid: str) -> Any:
-    return client.collection(PENDING_COLLECTION).where('uid', '==', uid)
+    return client.collection(PENDING_COLLECTION).where(filter=FieldFilter('uid', '==', uid))
 
 
 def _data(snapshot: Any) -> dict[str, Any]:
@@ -284,7 +285,7 @@ def due_pending(
     client = firestore_client or get_firestore_client()
     docs = (
         client.collection(PENDING_COLLECTION)
-        .where('reconcile_at', '<=', now or _now())
+        .where(filter=FieldFilter('reconcile_at', '<=', now or _now()))
         .limit(max(1, min(limit, 500)))
         .stream()
     )
@@ -603,7 +604,10 @@ def due_owners(
     _require_production()
     client = firestore_client or get_firestore_client()
     docs = (
-        client.collection(COLLECTION).where('reconcile_at', '<=', now or _now()).limit(max(1, min(limit, 500))).stream()
+        client.collection(COLLECTION)
+        .where(filter=FieldFilter('reconcile_at', '<=', now or _now()))
+        .limit(max(1, min(limit, 500)))
+        .stream()
     )
     return [{'uid': doc.id, **_data(doc)} for doc in docs]
 

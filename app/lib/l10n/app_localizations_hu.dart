@@ -430,6 +430,13 @@ class AppLocalizationsHu extends AppLocalizations {
   String get autoSync => 'Automatikus szinkronizálás';
 
   @override
+  String get syncHealthAlerts => 'Szinkronizálási állapotriasztások';
+
+  @override
+  String get syncHealthAlertsDescription =>
+      'Figyelmeztetés, ha az Omi több mint egy napja nem szinkronizált felvételeket';
+
+  @override
   String get autoSyncDescription => 'Offline felvételek automatikus szinkronizálása az eszköz csatlakozásakor';
 
   @override
@@ -715,7 +722,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get remembering => 'Emlékezés';
 
   @override
-  String get unlimitedPlan => 'Korlátlan csomag';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'Csomag kezelése';
@@ -737,7 +744,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get upgrade => 'Frissítés';
 
   @override
-  String get upgradeToUnlimited => 'Frissítés korlátlanra';
+  String get upgradeToUnlimited => 'Frissítés Omi Pro-ra';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3174,7 +3181,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Frissítés Pro-ra';
+  String get upgradeToPro => 'Frissítés Omi Pro-ra';
 
   @override
   String get getOmiDevice => 'Omi eszköz beszerzése';
@@ -4301,7 +4308,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get getOmiUnlimitedFree =>
-      'Szerezze meg az Omi Unlimited-et ingyen, ha hozzájárul adataival az AI modellek képzéséhez.';
+      'Szerezze meg az Omi Pro-t ingyen, ha hozzájárul adataival az AI modellek képzéséhez.';
 
   @override
   String get trainingDataBullets =>
@@ -8883,12 +8890,12 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit felhasználva ebben a hónapban';
+    return 'Chat: $used / $limit felhasználva ebben a hónapban';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used felhasználva ebben a hónapban';
+    return 'Chat: $used felhasználva ebben a hónapban';
   }
 
   @override
@@ -9082,6 +9089,14 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'Internetkapcsolatra várva';
+
+  @override
+  String get syncStallAlertTitle => 'Az Omi nem szinkronizál';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Több mint $hours órája nem szinkronizálódott felvétel az Omidról. Nyisd meg az Omit az eszköz kapcsolatának ellenőrzéséhez.';
+  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -9702,7 +9717,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get downgradeToFreemiumAction => 'Váltás az ingyenes verzióra';
 
   @override
-  String get getFreeUnlimitedAccess => 'Szerezz ingyenes korlátlan hozzáférést';
+  String get getFreeUnlimitedAccess => 'Szerezd meg ingyen az Omi Pro-t';
 
   @override
   String get shareDataForTraining => 'Adatmegosztás tanításhoz';
@@ -12907,7 +12922,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'Küldj egy hangüzenetet, és Omi válaszol rá.';
 
   @override
-  String get chatAppsPartOfPro => 'A csevegőalkalmazások a Pro részei';
+  String get chatAppsPartOfPro => 'A csevegőalkalmazások a Omi Pro részei';
 
   @override
   String get chatAppsMessagesApp => 'Üzenetek';
@@ -13353,6 +13368,30 @@ class AppLocalizationsHu extends AppLocalizations {
   String get paywallOutlineHeadline => 'Soha többé ne maradj le egyetlen szóról sem.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/év',
+        'other': '/hónap',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/év',
+        'other': '/hónap',
+      },
+    );
+    return '$days nap ingyen, utána $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -13540,7 +13579,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get syncDetailsCopy => 'Részletek másolása az ügyfélszolgálatnak';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Elérhető az Operator és Architect csomagban';
+  String get chatAppsChannelPlanRequired => 'Elérhető az Omi Pro csomagban';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -13680,32 +13719,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals úton';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return '$count feltöltés alatt';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return '$count majdnem kész';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count figyelmet igényel',
-      one: '1 figyelmet igényel',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Még nincs tevékenység';
 
   @override
@@ -13728,6 +13741,14 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'A felvételek szünetelnek';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Az Omi nem szinkronizál';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Több mint $hours órája nem szinkronizálódott felvétel';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'A feltöltés elakadt';
@@ -14056,7 +14077,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'A telefon töltése közben fut.';
 
   @override
-  String get onDeviceUpgradeBody => 'Válts Pro-ra a beszélők elkülönítéséhez és a nagyobb pontosságért';
+  String get onDeviceUpgradeBody => 'Válts Omi Pro-ra a beszélők elkülönítéséhez és a nagyobb pontosságért';
 
   @override
   String get onDeviceAtCapFooter => 'Egyik esetben sem vész el semmi. Ezt itt módosíthatod: Beállítások › Átírás.';
@@ -14241,7 +14262,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Újra az Omi Clouddal';
 
   @override
-  String get onDeviceRedoHint => 'Válts Pro-ra a beszélők elkülönítéséhez és a nagyobb pontosságért';
+  String get onDeviceRedoHint => 'Válts Omi Pro-ra a beszélők elkülönítéséhez és a nagyobb pontosságért';
 
   @override
   String get onDeviceKeepEverything => 'Minden maradjon ezen a telefonon';
@@ -14490,13 +14511,7 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Előző epizód megnyitása';
-
-  @override
   String get episodeNotesSoon => 'A jegyzetek a beszélgetés első perceit követően jelennek meg.';
-
-  @override
-  String get episodeOpenAll => 'Összes megnyitása';
 
   @override
   String get episodeWrapUpNow => 'Lezárás most';
@@ -14634,22 +14649,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get othersSpeakerLabel => 'Mások';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Kész';
@@ -14659,4 +14662,132 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Eldobás';
+
+  @override
+  String get syncRejectionInvalidDate => 'Érvénytelen felvételi dátum';
+
+  @override
+  String get syncDeleteKeptUploading => 'Néhány rész még feltöltés alatt van, és meg lett tartva';
+
+  @override
+  String get syncRejectionServer => 'A kiszolgáló elutasította';
+
+  @override
+  String get syncRejectionTooLarge => 'Túl nagy';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration a telefonon';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'A feltöltések rövid szünetben vannak — automatikusan folytatódnak';
+
+  @override
+  String episodeContinues(Object title) {
+    return '„$title” folytatása';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· $time óta';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'A jegyzetek a végleges átirat megérkezésekor indulnak.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'A telefonodon készülnek, miközben beszélsz. A teljes jegyzetek a végleges átirattal együtt érkeznek.';
+
+  @override
+  String get episodeOnThisPhone => 'Ezen a telefonon';
+
+  @override
+  String get episodeOpenTranscript => 'Átirat megnyitása';
+
+  @override
+  String get liveCardTitle => 'Élő';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'A végleges átirat kb. $duration késésben van';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'A végleges átirat felzárkózik';
+
+  @override
+  String get livePreviewNoEngineBody => 'A szavaid egy-két perccel azután jelennek meg itt, hogy kimondtad őket.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Biztonságosan rögzít';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Élő ezen a telefonon';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Élő szöveg bekapcsolása';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'úton van';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'ha van internet';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration behozása folyamatban';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'Önmagától feltöltődik. Ahogy megérkezik, úgy készülnek el a beszélgetések.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Önmagától feltöltődik, amint újra online vagy. Ahogy megérkezik, úgy készülnek el a beszélgetések.';
+
+  @override
+  String get onTheWayDayUploading => 'Feltöltés alatt';
+
+  @override
+  String get onTheWayDayNext => 'Következik';
+
+  @override
+  String get onTheWayDayQueued => 'Várakozik';
+
+  @override
+  String get onTheWayNoDate => 'Dátum nélkül';
+
+  @override
+  String get onTheWayFootnote =>
+      'A sikertelen felvételek a háttérben újra és újra próbálkoznak. Amit nem tudunk átírni, arról automatikusan értesítést kapunk.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Részletek az ügyfélszolgálatnak';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rövid felvétel elrejtve',
+      one: '1 rövid felvétel elrejtve',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Megjelenítés';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rövid felvétel elrejtése',
+      one: '1 rövid felvétel elrejtése',
+    );
+    return '$_temp0';
+  }
 }

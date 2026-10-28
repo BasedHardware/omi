@@ -9,10 +9,12 @@ import pytest
 
 from config import episodes as config
 from database import episode_receipts
+from database import conversations as conversations_db
 from database import episodes as episodes_db
+from database import users as users_db
 from models.episode import Episode
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
-from utils.episodes import service
+from utils.episodes import incremental, service
 from utils.episodes.service import Collaborators, MomentInput
 
 UID = 'uid-episodes'
@@ -23,6 +25,7 @@ T0 = datetime(2026, 10, 20, 10, 0, tzinfo=timezone.utc)
 def _enabled(monkeypatch):
     monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
     monkeypatch.delenv(config.EPISODES_PERCENT_ENV, raising=False)
+    monkeypatch.setenv(config.EPISODE_OUTPUT_LANGUAGE_PIN_ENV, 'on')
     monkeypatch.setenv('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
     # These tests exercise a user whose app shows episodes (test_episodes_client_gate covers the marker).
     monkeypatch.setattr(service.client_gate, 'client_seen', lambda uid: True)
@@ -1103,16 +1106,17 @@ def test_a_sync_finalized_conversation_joins_the_live_episode_covering_it():
     assert after['id'] == episode['id'] and after['status'] == 'live'
     assert after['conversation_ids'] == ['c-live', 'c-wal']
     assert episodes_db.get_episode_for_conversation(UID, 'c-wal', firestore_client=store)['id'] == episode['id']
-    # A parallel capture: no model call, and its duplicate text never feeds the notes.
-    assert len(model.calls) == 1
-    assert after['applied'].keys() == {'c-live'} and [m['conversation_id'] for m in after['moments']] == ['c-live']
-    # A later WAL chunk re-runs the hook and feeds nothing either.
+    # Membership/overlap is not proof every retained word reached the live notes.
+    assert len(model.calls) == 2
+    assert after['applied'].keys() == {'c-live', 'c-wal'}
+    assert [m['conversation_id'] for m in after['moments']] == ['c-live', 'c-wal']
+    # Repeating the same WAL snapshot consumes no further model call.
     assert (
         service.on_conversation_finalized(UID, 'c-wal', _wal_row(), trigger='sync_update', collaborators=c)
         == 'finalized'
     )
     replay = episodes_db.get_current_episode(UID, firestore_client=store)
-    assert replay['applied'].keys() == {'c-live'} and len(model.calls) == 1
+    assert replay['applied'].keys() == {'c-live', 'c-wal'} and len(model.calls) == 2
 
 
 def test_a_sync_finalized_conversation_never_reopens_a_closed_episode():
@@ -1214,14 +1218,15 @@ def test_a_sync_clip_joins_the_live_episode_at_intake_and_the_finalize_hook_stay
     assert after['id'] == episode['id'] and after['status'] == 'live'
     assert after['conversation_ids'] == ['c-live', 'c-wal']
     assert episodes_db.get_episode_for_conversation(UID, 'c-wal', firestore_client=store)['id'] == episode['id']
-    # The cheap rules alone decided: no model call, and no text fed.
-    assert model.calls == [] and after['applied'].keys() == set() and after['moments'] == []
+    # Cheap rules decide membership; the retained WAL speech completes the notes.
+    assert len(model.calls) == 1 and after['applied'].keys() == {'c-wal'}
+    assert [m['conversation_id'] for m in after['moments']] == ['c-wal']
     # Enrichment finishing later neither re-joins nor replays the duplicate transcript.
     assert service.on_conversation_finalized(UID, 'c-wal', _wal_row(), trigger='sync_update', collaborators=c) == (
         'finalized'
     )
     replay = episodes_db.get_current_episode(UID, firestore_client=store)
-    assert replay['conversation_ids'] == ['c-live', 'c-wal'] and model.calls == []
+    assert replay['conversation_ids'] == ['c-live', 'c-wal'] and len(model.calls) == 1
     # A replayed intake is a no-op on the same membership.
     assert service.attach_synced_intake(UID, 'c-wal', _wal_row(), collaborators=c) == 'attached'
 
@@ -1350,8 +1355,8 @@ def test_a_late_sync_clip_rejoins_the_gap_closed_episode_and_reopens_it():
     assert reopened['conversation_ids'] == ['c-live', 'c-wal']
     assert episodes_db.get_current_episode(UID, firestore_client=store)['id'] == episode['id']
     assert episodes_db.get_episode_for_conversation(UID, 'c-wal', firestore_client=store)['id'] == episode['id']
-    # A parallel capture still feeds no text, spends nothing, and its speech is activity.
-    assert len(model.calls) == 1 and reopened['applied'].keys() == {'c-live'}
+    # Retained speech merges into notes once and also counts as activity.
+    assert len(model.calls) == 2 and reopened['applied'].keys() == {'c-live', 'c-wal'}
     assert reopened['last_activity_at'] == _wal_row(minutes=15)['finished_at']
     # The recap no longer advertises the reopened episode as the last closed one.
     assert episodes_db.get_last_closed_episode(UID, firestore_client=store) is None
@@ -1507,3 +1512,431 @@ def test_late_sync_audio_from_before_the_closed_episode_stays_out():
     assert episodes_db.get_episode_for_conversation(UID, 'c-old', firestore_client=store) is None
     closed = episodes_db.get_episode(UID, episode['id'], firestore_client=store)
     assert closed['conversation_ids'] == ['c-live'] and closed['status'] == 'closed'
+
+
+def test_recovered_wal_speech_is_merged_at_attach_once_and_an_attached_tail_is_not_lost():
+    store = StrictFirestore()
+    model = FakeModel({'bullets': ['Live']}, {'bullets': ['Live', 'Recovered']}, {'bullets': ['Live', 'Tail']})
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    service.record_moment(UID, _moment('c-live'), c)
+    clip = _wal_row(text='The recovered decision is to ship the blue version tomorrow.')
+    assert service.attach_synced_intake(UID, 'c-wal', clip, collaborators=c) == 'joined'
+    after = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert after['bullets'] == ['Live', 'Recovered']
+    assert 'blue version tomorrow' in str(model.calls[-1])
+    service.attach_synced_intake(UID, 'c-wal', clip, collaborators=c)
+    service.on_conversation_finalized(UID, 'c-wal', clip, trigger='sync_update', collaborators=c)
+    assert len(model.calls) == 2
+    # Recovery may insert an earlier gap behind the already consumed offset.
+    tail = {'id': 'recovered-gap', 'text': 'Keep the red backup.', 'start': 0, 'end': 1}
+    clip = {**clip, 'transcript_segments': [*clip['transcript_segments'], tail]}
+    assert service.attach_synced_intake(UID, 'c-wal', clip, collaborators=c) == 'attached'
+    assert 'red backup' in str(model.calls[-1])
+    service.on_conversation_finalized(UID, 'c-wal', clip, trigger='sync_update', collaborators=c)
+    assert len(model.calls) == 3
+
+
+def test_close_merges_member_transcript_recovered_after_the_last_moment(monkeypatch):
+    store = StrictFirestore()
+    model = FakeModel({'bullets': ['Live']}, RuntimeError('temporary provider outage'), {'bullets': ['Live', 'WAL']})
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    service.record_moment(UID, _moment('c-live'), c)
+    clip = _wal_row(text='Recovered speech includes the agreement to send the final contract today.')
+    monkeypatch.setattr(conversations_db, 'get_conversation', lambda *a, **k: clip if a[1] == 'c-wal' else None)
+    assert service.attach_synced_intake(UID, 'c-wal', clip, collaborators=c) == 'joined'
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['bullets'] == ['Live']
+    assert service.close_on_finalize(UID, 'c-live', trigger='client_finalize', collaborators=c) == 'closed'
+    closed = episodes_db.get_episode(UID, episode['id'], firestore_client=store)
+    assert closed['status'] == 'closed' and closed['bullets'] == ['Live', 'WAL']
+    assert 'final contract today' in str(model.calls[-1])
+    assert len(model.calls) == 3
+
+
+def test_synced_attach_retries_two_version_conflicts_and_preserves_other_members(monkeypatch):
+    store = StrictFirestore()
+    c = _collaborators(FakeModel(), now=T0 + timedelta(minutes=2), store=store)
+    service.attach_conversation(UID, 'c-live', 'omi', started_at=T0, collaborators=c)
+    original = episodes_db.commit_moment
+    attempts = []
+
+    def racing(uid, **kwargs):
+        attempts.append(kwargs.get('expected_version'))
+        if len(attempts) < 3:
+            episode = episodes_db.get_current_episode(uid, firestore_client=store)
+            original(
+                uid,
+                expected_episode_id=episode['id'],
+                expected_version=episode['state_version'],
+                updates={'conversation_ids': [*episode['conversation_ids'], f'other-{len(attempts)}']},
+                firestore_client=store,
+            )
+            raise episodes_db.EpisodeConflict('state_version_changed')
+        return original(uid, **kwargs)
+
+    monkeypatch.setattr(episodes_db, 'commit_moment', racing)
+    assert service.attach_synced_intake(UID, 'c-wal', _wal_row(text=''), collaborators=c) == 'joined'
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['conversation_ids'] == ['c-live', 'other-1', 'other-2', 'c-wal']
+    assert len(attempts) == 3 and len(set(attempts)) == 3
+
+
+@pytest.mark.parametrize('notes_mode', ['off', 'serve'])
+def test_large_recovered_member_does_not_receipt_words_truncated_from_the_prompt(monkeypatch, notes_mode):
+    monkeypatch.setenv('NOTES_PACKET_V2_MODE', notes_mode)
+    monkeypatch.setattr(service.incremental, 'get_evidence', lambda *a, **k: None)
+    monkeypatch.setattr(service.incremental, 'resolve_output_language', lambda *a, **k: 'English')
+    store = StrictFirestore()
+    model = FakeModel()
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    service.attach_conversation(UID, 'c-live', 'omi', started_at=T0, collaborators=c)
+    words = [f'word{index:04d}' for index in range(1500)]
+    row = _wal_row(text=' '.join(words))
+    assert service.attach_synced_intake(UID, 'c-wal', row, collaborators=c) == 'joined'
+    prompts = '\n'.join(str(call[-1][1]).split('Newest moment:\n')[-1] for call in model.calls)
+    assert all(word in prompts for word in words)
+    calls = len(model.calls)
+    service.attach_synced_intake(UID, 'c-wal', row, collaborators=c)
+    assert len(model.calls) == calls
+
+
+def test_recovery_batch_slices_preserve_the_stored_segment_id_for_speaker_evidence():
+    original = {'id': 'stored-segment', 'text': 'recovered words ' * 200, 'start': 0, 'end': 10}
+    slices = [segment for batch in service.recovery.segment_batches([original]) for segment in batch]
+    assert len(slices) > 1
+    assert {segment['id'] for segment in slices} == {'stored-segment'}
+    assert len({segment['_episode_recovery_key'] for segment in slices}) == len(slices)
+
+
+def test_recovered_unplaced_segment_is_not_reapplied_by_an_ordinary_finalize_tail():
+    store = StrictFirestore()
+    model = FakeModel()
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    service.attach_conversation(UID, 'c-live', 'omi', started_at=T0, collaborators=c)
+    tail = replace(_unplaced('unplaced-recovered'), conversation_id='c-wal', trigger='finalize')
+    row = _wal_row(transcript_segments=list(tail.segments))
+    assert service.attach_synced_intake(UID, 'c-wal', row, collaborators=c) == 'joined'
+    assert len(model.calls) == 1
+    assert service.record_moment(UID, tail, c) == 'skipped_applied'
+    assert len(model.calls) == 1
+
+
+def test_failed_recovery_slice_does_not_consume_the_whole_unplaced_segment():
+    store = StrictFirestore()
+    model = FakeModel({}, RuntimeError('provider unavailable'))
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    service.attach_conversation(UID, 'c-live', 'omi', started_at=T0, collaborators=c)
+    segment = {'id': 'long-unplaced', 'text': 'recovered words ' * 700, 'start': -1, 'end': -1}
+    row = _wal_row(transcript_segments=[segment])
+    assert service.attach_synced_intake(UID, 'c-wal', row, collaborators=c) == 'joined'
+    consumed, _ = _consumed(store, 'c-wal')
+    assert 'long-unplaced' not in consumed
+    service.attach_synced_intake(UID, 'c-wal', row, collaborators=c)
+    consumed, _ = _consumed(store, 'c-wal')
+    assert 'long-unplaced' in consumed
+
+
+def test_same_live_conversation_recovery_feeds_only_unconsumed_wal_speech():
+    store = StrictFirestore()
+    model = FakeModel({'bullets': ['Live']}, {'bullets': ['Live', 'Recovered']})
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    live = {'id': 'live-piece', 'text': LONG, 'start': 0, 'end': 30}
+    assert service.record_moment(UID, replace(_moment(), segments=[live]), c) == 'applied'
+    recovered = {'id': 'wal-gap', 'text': 'Send the blue contract tomorrow.', 'start': 1, 'end': 2}
+    row = _wal_row('c1', transcript_segments=[live, recovered])
+    assert service.attach_synced_intake(UID, 'c1', row, collaborators=c) == 'attached'
+    assert len(model.calls) == 2
+    newest = model.calls[-1][-1][1].split('Newest moment:\n')[-1]
+    assert recovered['text'] in newest and LONG not in newest
+    service.attach_synced_intake(UID, 'c1', row, collaborators=c)
+    assert len(model.calls) == 2
+
+
+def test_recovered_donor_receipts_follow_the_survivor_without_replaying_speech():
+    store = StrictFirestore()
+    model = FakeModel()
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    service.attach_conversation(UID, 'live', 'omi', started_at=T0, collaborators=c)
+    segment = {'id': 'retained-donor-segment', 'text': LONG, 'start': 0, 'end': 20}
+    donor = _wal_row('donor', transcript_segments=[segment])
+    service.attach_synced_intake(UID, 'donor', donor, collaborators=c)
+    assert len(model.calls) == 1
+    survivor = _wal_row('survivor', transcript_segments=[segment], sync_merged_from=['donor'])
+    assert service.attach_synced_intake(UID, 'survivor', survivor, collaborators=c) == 'attached'
+    assert len(model.calls) == 1
+    service.on_conversation_finalized(UID, 'survivor', survivor, trigger='sync_update', collaborators=c)
+    assert len(model.calls) == 1
+
+
+@pytest.mark.parametrize('absorbed_callback', [False, True])
+def test_donor_repoint_conflicts_retry_with_fresh_state_and_no_dead_member(monkeypatch, absorbed_callback):
+    store = StrictFirestore()
+    c = _collaborators(FakeModel(), now=T0 + timedelta(minutes=2), store=store)
+    service.attach_conversation(UID, 'live', 'omi', started_at=T0, collaborators=c)
+    service.attach_synced_intake(UID, 'donor', _wal_row('donor', text=''), collaborators=c)
+    original = episodes_db.update_episode
+    attempts = []
+
+    def race(uid, episode_id, **kwargs):
+        if kwargs.get('link_conversation_ids') == ['survivor']:
+            attempts.append(kwargs['expected_version'])
+            if len(attempts) < 3:
+                original(
+                    uid,
+                    episode_id,
+                    expected_version=kwargs['expected_version'],
+                    updates={'open_questions': [f'race-{len(attempts)}']},
+                    firestore_client=store,
+                )
+                raise episodes_db.EpisodeConflict('state_version_changed')
+        return original(uid, episode_id, **kwargs)
+
+    monkeypatch.setattr(episodes_db, 'update_episode', race)
+    row = _wal_row('survivor', text=LONG if absorbed_callback else '', sync_merged_from=['donor'])
+    if absorbed_callback:
+        monkeypatch.setattr(conversations_db, 'get_conversation', lambda *a, **k: row)
+        assert (
+            service.on_conversation_finalized(
+                UID,
+                'survivor',
+                _wal_row('donor', text=''),
+                trigger='sync_update',
+                absorbed_from='donor',
+                collaborators=c,
+            )
+            != 'error'
+        )
+        assert len(c.invoke.calls) == 1
+    else:
+        assert service.attach_synced_intake(UID, 'survivor', row, collaborators=c) == 'attached'
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['conversation_ids'] == ['live', 'survivor']
+    assert len(attempts) == 3 and len(set(attempts)) == 3
+
+
+def test_repoint_adopts_legacy_unplaced_receipts_before_member_moves():
+    store = StrictFirestore()
+    model = FakeModel()
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    service.attach_conversation(UID, 'live', 'omi', started_at=T0, collaborators=c)
+    service.attach_synced_intake(UID, 'donor', _wal_row('donor', text=''), collaborators=c)
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    segment = {'id': 'legacy-retained', 'text': LONG, 'start': -1, 'end': -1, 'audio_alignment': 'unplaced'}
+    episodes_db.update_episode(
+        UID,
+        episode['id'],
+        expected_version=episode['state_version'],
+        updates={'applied_segment_ids': {'donor': [segment['id']]}},
+        firestore_client=store,
+    )
+    survivor = _wal_row('survivor', transcript_segments=[segment], sync_merged_from=['donor'])
+    assert service.attach_synced_intake(UID, 'survivor', survivor, collaborators=c) == 'attached'
+    assert model.calls == []
+    consumed, _ = _consumed(store, 'survivor')
+    assert segment['id'] in consumed
+
+
+def test_sync_absorb_finalization_applies_only_the_survivors_novel_speech(monkeypatch):
+    store = StrictFirestore()
+    model = FakeModel()
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    service.attach_conversation(UID, 'live', 'omi', started_at=T0, collaborators=c)
+    carried = {'id': 'carried-segment', 'text': LONG, 'start': 0, 'end': 20}
+    donor = _wal_row('donor', transcript_segments=[carried])
+    service.attach_synced_intake(UID, 'donor', donor, collaborators=c)
+    novel = {'id': 'survivor-gap', 'text': 'Send the signed green agreement.', 'start': 1, 'end': 2}
+    survivor = _wal_row('survivor', transcript_segments=[carried, novel])
+    monkeypatch.setattr(conversations_db, 'get_conversation', lambda *a, **k: survivor if a[1] == 'survivor' else None)
+    service.on_conversation_finalized(
+        UID, 'survivor', donor, trigger='sync_update', absorbed_from='donor', collaborators=c
+    )
+    assert len(model.calls) == 2
+    newest = model.calls[-1][-1][1].split('Newest moment:\n')[-1]
+    assert novel['text'] in newest and LONG not in newest
+
+
+# --------------------------------------------------------------------------- output language
+
+
+def test_english_preference_keeps_english_notes_through_a_vietnamese_moment(monkeypatch):
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Team lunch', 'bullets': ['Lunch at 12:30']})
+    monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_a: 'en')
+    moment = replace(_moment(), language='vi')
+    assert (
+        service.record_moment(UID, moment, _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+        == 'applied'
+    )
+    system, _user = model.calls[0]
+    assert 'in en.' in system[1] and 'language the people speak' not in system[1]
+    assert episodes_db.get_current_episode(UID, firestore_client=store)['output_language'] == 'en'
+
+
+def test_vietnamese_preference_writes_vietnamese_notes(monkeypatch):
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Bữa trưa', 'bullets': ['Ăn trưa lúc 12:30']})
+    monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_a: 'vi')
+    assert (
+        service.record_moment(UID, _moment(), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+        == 'applied'
+    )
+    assert 'in vi.' in model.calls[0][0][1]
+    assert episodes_db.get_current_episode(UID, firestore_client=store)['output_language'] == 'vi'
+
+
+def test_without_a_preference_the_dominant_language_beats_the_moment_language(monkeypatch):
+    store = StrictFirestore()
+    store.rows[('users', UID, 'conversations', 'c1')] = {'language': 'en'}
+    model = FakeModel({'title': 'Team lunch', 'bullets': ['Lunch at 12:30']}, {'bullets': ['The team picked a cafe']})
+    monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_a: '')
+    first = replace(_moment(), language='vi')
+    assert (
+        service.record_moment(UID, first, _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+        == 'applied'
+    )
+    assert 'Write all output in en.' in model.calls[0][0][1]
+    # Each moment can carry a different speech tag; the conversation's dominant
+    # language remains the output authority.
+    later = replace(_moment(minutes=3, start=30.0, text=LONG.upper()), language='vi')
+    assert (
+        service.record_moment(UID, later, _collaborators(model, now=T0 + timedelta(minutes=4), store=store))
+        == 'applied'
+    )
+    assert 'Write all output in en.' in model.calls[1][0][1]
+    assert episodes_db.get_current_episode(UID, firestore_client=store)['output_language'] == 'en'
+
+
+def test_a_multi_capture_uses_the_dominant_language_from_buffered_segments(monkeypatch):
+    store = StrictFirestore()
+    store.rows[('users', UID, 'conversations', 'c1')] = {'language': 'multi'}
+    model = FakeModel({'title': 'Bữa trưa của cả nhóm', 'bullets': ['Đặt bàn ăn trưa cho ngày mai']})
+    monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_a: '')
+    moment = replace(
+        _moment(text='Đây là cuộc trò chuyện dài bằng tiếng Việt về bữa trưa và kế hoạch ngày mai.'),
+        language='multi',
+        segments=[
+            {
+                'id': 'vi-segment',
+                'text': 'Đây là cuộc trò chuyện dài bằng tiếng Việt về bữa trưa và kế hoạch ngày mai.',
+                'language': 'vi',
+                'start': 0,
+                'end': 20,
+            },
+            {
+                'id': 'vi-segment-2',
+                'text': 'Cả nhóm thống nhất địa điểm, thời gian gặp nhau và những việc cần chuẩn bị trước.',
+                'language': 'vi',
+                'start': 20,
+                'end': 40,
+            },
+        ],
+    )
+    assert (
+        service.record_moment(UID, moment, _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+        == 'applied'
+    )
+    assert 'Write all output in vi.' in model.calls[0][0][1]
+    assert episodes_db.get_current_episode(UID, firestore_client=store)['output_language'] == 'vi'
+
+
+def test_wrong_language_output_is_left_unstamped_then_repaired_on_the_next_update(monkeypatch):
+    store = StrictFirestore()
+    model = FakeModel(
+        {'title': 'Trao đổi công việc', 'bullets': ['Hẹn ăn trưa lúc 12:30 và đặt bàn cho nhóm']},
+        {'title': 'Team lunch', 'bullets': ['Book a table for lunch at 12:30']},
+    )
+    monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_a: 'en')
+    assert (
+        service.record_moment(UID, _moment(), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+        == 'applied'
+    )
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode.get('output_language') is None
+
+    second = _moment(minutes=3, start=30.0, text=LONG.upper())
+    assert (
+        service.record_moment(UID, second, _collaborators(model, now=T0 + timedelta(minutes=4), store=store))
+        == 'applied'
+    )
+    assert 'written in vi, not en' in model.calls[1][1][1]
+    assert episodes_db.get_episode(UID, episode['id'], firestore_client=store)['output_language'] == 'en'
+
+
+def test_output_language_firestore_and_preference_reads_are_cached_per_session(monkeypatch):
+    store = StrictFirestore()
+    store.rows[('users', UID, 'conversations', 'c1')] = {'language': 'en'}
+    model = FakeModel(
+        {'title': 'Team lunch', 'bullets': ['Lunch at 12:30 near the office']},
+        {'title': 'Team lunch', 'bullets': ['Book a table for the team lunch']},
+    )
+    language_reads = []
+    preference_reads = []
+    raw_snapshot = conversations_db.get_conversation_raw_snapshot
+    monkeypatch.setattr(
+        conversations_db,
+        'get_conversation_raw_snapshot',
+        lambda *args, **kwargs: (language_reads.append(args[1]), raw_snapshot(*args, **kwargs))[1],
+    )
+    monkeypatch.setattr(
+        users_db,
+        'get_user_language_preference',
+        lambda *_a: (preference_reads.append(UID), 'en')[1],
+    )
+    assert (
+        service.record_moment(UID, _moment(), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+        == 'applied'
+    )
+    assert (
+        service.record_moment(
+            UID,
+            _moment(minutes=3, start=30.0, text=LONG.upper()),
+            _collaborators(model, now=T0 + timedelta(minutes=4), store=store),
+        )
+        == 'applied'
+    )
+    assert language_reads == ['c1']
+    assert preference_reads == [UID]
+
+
+def test_a_legacy_unstamped_vietnamese_state_is_detected_and_repaired(monkeypatch):
+    store = StrictFirestore()
+    model = FakeModel(
+        {'title': 'Bữa trưa', 'bullets': ['Ăn trưa']}, {'title': 'Team lunch', 'bullets': ['Lunch at 12:30']}
+    )
+    monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_a: '')
+    assert (
+        service.record_moment(UID, _moment(), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+        == 'applied'
+    )
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    # The incident's shape: a stored state in Vietnamese that predates the language stamp.
+    episodes_db.update_episode(
+        UID,
+        episode['id'],
+        expected_version=episode['state_version'],
+        updates={
+            'title': 'Trao đổi công việc',
+            'bullets': ['Hẹn ăn trưa lúc 12:30', 'Đặt bàn cho nhóm'],
+            'output_language': None,
+        },
+        firestore_client=store,
+    )
+    monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_a: 'en')
+    second = _moment(minutes=3, start=30.0, text=LONG.upper())
+    assert (
+        service.record_moment(UID, second, _collaborators(model, now=T0 + timedelta(minutes=4), store=store))
+        == 'applied'
+    )
+    assert 'written in vi' in model.calls[1][1][1]
+
+
+def test_the_language_pin_kill_switch_restores_the_legacy_prompt(monkeypatch):
+    store = StrictFirestore()
+    model = FakeModel({'bullets': ['A']})
+    monkeypatch.setenv(config.EPISODE_OUTPUT_LANGUAGE_PIN_ENV, 'off')
+    assert (
+        service.record_moment(UID, _moment(), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+        == 'applied'
+    )
+    assert model.calls[0][0] == ('system', incremental.PROMPT_PREFIX)
+    assert 'output_language' not in episodes_db.get_current_episode(UID, firestore_client=store)

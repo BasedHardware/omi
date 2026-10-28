@@ -429,6 +429,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String get autoSync => 'Tự động đồng bộ';
 
   @override
+  String get syncHealthAlerts => 'Cảnh báo tình trạng đồng bộ';
+
+  @override
+  String get syncHealthAlertsDescription => 'Cảnh báo nếu Omi không đồng bộ bản ghi hơn một ngày';
+
+  @override
   String get autoSyncDescription => 'Tự động đồng bộ các bản ghi ngoại tuyến khi thiết bị của bạn kết nối';
 
   @override
@@ -714,7 +720,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get remembering => 'Ghi nhớ';
 
   @override
-  String get unlimitedPlan => 'Gói không giới hạn';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'Quản lý gói';
@@ -736,7 +742,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get upgrade => 'Nâng cấp';
 
   @override
-  String get upgradeToUnlimited => 'Nâng cấp lên không giới hạn';
+  String get upgradeToUnlimited => 'Nâng cấp lên Omi Pro';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3163,7 +3169,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Nâng cấp lên Pro';
+  String get upgradeToPro => 'Nâng cấp lên Omi Pro';
 
   @override
   String get getOmiDevice => 'Nhận Thiết bị Omi';
@@ -4285,7 +4291,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get getOmiUnlimitedFree =>
-      'Nhận Omi Unlimited miễn phí bằng cách đóng góp dữ liệu của bạn để huấn luyện các mô hình AI.';
+      'Nhận Omi Pro miễn phí bằng cách đóng góp dữ liệu của bạn để huấn luyện các mô hình AI.';
 
   @override
   String get trainingDataBullets =>
@@ -8848,12 +8854,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Trò chuyện: \$$used / \$$limit đã dùng tháng này';
+    return 'Trò chuyện: $used / $limit đã dùng tháng này';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Trò chuyện: \$$used đã dùng tháng này';
+    return 'Trò chuyện: $used đã dùng tháng này';
   }
 
   @override
@@ -9046,6 +9052,14 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'Đang chờ kết nối Internet';
+
+  @override
+  String get syncStallAlertTitle => 'Omi không đồng bộ';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Không có bản ghi nào từ Omi của bạn được đồng bộ trong hơn $hours giờ. Mở Omi để kiểm tra kết nối thiết bị.';
+  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -9660,7 +9674,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get downgradeToFreemiumAction => 'Chuyển xuống bản miễn phí';
 
   @override
-  String get getFreeUnlimitedAccess => 'Nhận quyền truy cập không giới hạn miễn phí';
+  String get getFreeUnlimitedAccess => 'Nhận Omi Pro miễn phí';
 
   @override
   String get shareDataForTraining => 'Chia sẻ dữ liệu để huấn luyện';
@@ -12853,7 +12867,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'Gửi ghi chú thoại và Omi sẽ trả lời.';
 
   @override
-  String get chatAppsPartOfPro => 'Ứng dụng trò chuyện nằm trong gói Pro';
+  String get chatAppsPartOfPro => 'Ứng dụng trò chuyện nằm trong gói Omi Pro';
 
   @override
   String get chatAppsMessagesApp => 'Tin nhắn';
@@ -13299,6 +13313,30 @@ class AppLocalizationsVi extends AppLocalizations {
   String get paywallOutlineHeadline => 'Không bao giờ bỏ lỡ một lời nào nữa.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/năm',
+        'other': '/tháng',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/năm',
+        'other': '/tháng',
+      },
+    );
+    return 'Miễn phí $days ngày, sau đó $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -13486,7 +13524,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get syncDetailsCopy => 'Sao chép chi tiết cho bộ phận hỗ trợ';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Có trên gói Operator và Architect';
+  String get chatAppsChannelPlanRequired => 'Có trên gói Omi Pro';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -13626,32 +13664,6 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals đang đến';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return '$count đang tải lên';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return '$count sắp xong';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count cần chú ý',
-      one: '1 cần chú ý',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Chưa có hoạt động';
 
   @override
@@ -13674,6 +13686,14 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'Bản ghi đã tạm dừng';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi không đồng bộ';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Không có bản ghi nào được đồng bộ hơn $hours giờ';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'Tải lên bị đình trệ';
@@ -14000,7 +14020,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'Chạy khi điện thoại đang sạc.';
 
   @override
-  String get onDeviceUpgradeBody => 'Nâng cấp lên Pro để phân biệt người nói và tăng độ chính xác';
+  String get onDeviceUpgradeBody => 'Nâng cấp lên Omi Pro để phân biệt người nói và tăng độ chính xác';
 
   @override
   String get onDeviceAtCapFooter => 'Chọn cách nào cũng không mất gì. Bạn có thể thay đổi trong Cài đặt › Phiên âm.';
@@ -14183,7 +14203,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Làm lại với Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Nâng cấp lên Pro để phân biệt người nói và tăng độ chính xác';
+  String get onDeviceRedoHint => 'Nâng cấp lên Omi Pro để phân biệt người nói và tăng độ chính xác';
 
   @override
   String get onDeviceKeepEverything => 'Giữ mọi thứ trên điện thoại này';
@@ -14432,13 +14452,7 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Mở phiên trước';
-
-  @override
   String get episodeNotesSoon => 'Ghi chú xuất hiện sau vài phút đầu trò chuyện.';
-
-  @override
-  String get episodeOpenAll => 'Mở tất cả';
 
   @override
   String get episodeWrapUpNow => 'Kết thúc ngay';
@@ -14577,22 +14591,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get othersSpeakerLabel => 'Những người khác';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Xong';
@@ -14602,4 +14604,132 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Bỏ qua';
+
+  @override
+  String get syncRejectionInvalidDate => 'Ngày ghi âm không hợp lệ';
+
+  @override
+  String get syncDeleteKeptUploading => 'Một số phần vẫn đang được tải lên và đã được giữ lại';
+
+  @override
+  String get syncRejectionServer => 'Bị máy chủ từ chối';
+
+  @override
+  String get syncRejectionTooLarge => 'Quá lớn';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration trên điện thoại';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Tải lên tạm dừng trong chốc lát — sẽ tự động tiếp tục';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Tiếp tục “$title”';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· từ $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Ghi chú bắt đầu khi bản ghi chép cuối cùng đến.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Được soạn trên điện thoại của bạn khi bạn nói. Ghi chú đầy đủ sẽ đến cùng bản ghi chép cuối cùng.';
+
+  @override
+  String get episodeOnThisPhone => 'Trên điện thoại này';
+
+  @override
+  String get episodeOpenTranscript => 'Mở bản ghi chép';
+
+  @override
+  String get liveCardTitle => 'Trực tiếp';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Bản ghi chép cuối cùng chậm khoảng $duration';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'Bản ghi chép cuối cùng đang cập nhật';
+
+  @override
+  String get livePreviewNoEngineBody => 'Lời nói của bạn sẽ xuất hiện ở đây sau một đến hai phút.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Đang ghi âm an toàn';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Trực tiếp trên điện thoại này';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Bật văn bản trực tiếp';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'đang trên đường gửi lên';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'khi có mạng';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return 'Đang xử lý nốt $duration';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'Tự động tải lên. Cuộc trò chuyện sẽ hiện dần khi dữ liệu đến nơi.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Tự động tải lên khi bạn có lại kết nối mạng. Cuộc trò chuyện sẽ hiện dần khi dữ liệu đến nơi.';
+
+  @override
+  String get onTheWayDayUploading => 'Đang tải lên';
+
+  @override
+  String get onTheWayDayNext => 'Tiếp theo';
+
+  @override
+  String get onTheWayDayQueued => 'Trong hàng đợi';
+
+  @override
+  String get onTheWayNoDate => 'Không có ngày';
+
+  @override
+  String get onTheWayFootnote =>
+      'Các bản ghi âm bị lỗi sẽ tiếp tục được thử lại trong nền. Những gì chúng tôi không thể phiên âm sẽ tự động được báo cáo cho chúng tôi.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Chi tiết cho bộ phận hỗ trợ';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Đã ẩn $count clip ngắn',
+      one: 'Đã ẩn 1 clip ngắn',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Hiển thị';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ẩn $count clip ngắn',
+      one: 'Ẩn 1 clip ngắn',
+    );
+    return '$_temp0';
+  }
 }

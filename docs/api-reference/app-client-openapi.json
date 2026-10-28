@@ -11196,6 +11196,18 @@
       "ConversationTopicRequest": {
         "additionalProperties": false,
         "properties": {
+          "conversation_language": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Language"
+          },
           "transcript": {
             "maxLength": 100000,
             "minLength": 1,
@@ -19435,6 +19447,67 @@
         "title": "HeldAudioSummary",
         "type": "object"
       },
+      "HiddenNoiseCountsResponse": {
+        "properties": {
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/HiddenNoiseDayCount"
+            },
+            "title": "Days",
+            "type": "array"
+          },
+          "end_date": {
+            "format": "date-time",
+            "title": "End Date",
+            "type": "string"
+          },
+          "start_date": {
+            "format": "date-time",
+            "title": "Start Date",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "tz": {
+            "title": "Tz",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tz",
+          "start_date",
+          "end_date",
+          "days",
+          "total",
+          "truncated"
+        ],
+        "title": "HiddenNoiseCountsResponse",
+        "type": "object"
+      },
+      "HiddenNoiseDayCount": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "count"
+        ],
+        "title": "HiddenNoiseDayCount",
+        "type": "object"
+      },
       "IgnoredVoice": {
         "description": "A voice the user marked Not a Person; Omi does not ask about it again.",
         "properties": {
@@ -21423,6 +21496,20 @@
               }
             ],
             "title": "Expected Calendar"
+          },
+          "observed_call_tiles": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/MeetingParticipant"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed Call Tiles"
           },
           "observed_screen_listing": {
             "anyOf": [
@@ -32185,6 +32272,16 @@
             "description": "Meeting notes/description",
             "title": "Notes"
           },
+          "participant_sources": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MeetingParticipantSources"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "participants": {
             "description": "Meeting participants",
             "items": {
@@ -32305,10 +32402,32 @@
       },
       "StorefrontCurrent": {
         "properties": {
+          "amount_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Minor"
+          },
           "cancel_at_period_end": {
             "default": false,
             "title": "Cancel At Period End",
             "type": "boolean"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
           },
           "interval": {
             "anyOf": [
@@ -32343,6 +32462,17 @@
           "line": {
             "title": "Line",
             "type": "string"
+          },
+          "line_template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line Template"
           },
           "name": {
             "title": "Name",
@@ -32379,6 +32509,20 @@
             "title": "Amount Minor",
             "type": "integer"
           },
+          "confirm_line_templates": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirm Line Templates"
+          },
           "confirm_lines": {
             "anyOf": [
               {
@@ -32403,6 +32547,17 @@
               }
             ],
             "title": "Cta Label"
+          },
+          "cta_label_template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cta Label Template"
           },
           "currency": {
             "title": "Currency",
@@ -32452,6 +32607,17 @@
               }
             ],
             "title": "Renewal Line"
+          },
+          "saving_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Saving Minor"
           },
           "subline": {
             "anyOf": [
@@ -48622,6 +48788,120 @@
           }
         ],
         "summary": "Create Conversation From Segments User",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/hidden-noise-counts": {
+      "get": {
+        "description": "Count hidden noise/media without gating on MEDIA_NOISE_MODE for this uid.\n\nZero-count days are omitted. A 1000-row scan cap sets truncated=true when\nhit; days and total then represent lower bounds. Locked rows are eligible;\ndeletion/merge tombstones never count; Dream duplicates count because the\ninclude_discarded reveal list shows them. No hidden rows\nreturns empty days and total=0, even when the media/noise mode is disabled.",
+        "operationId": "get_hidden_noise_counts_v1_conversations_hidden_noise_counts_get",
+        "parameters": [
+          {
+            "description": "Inclusive start instant; naive timestamps use UTC",
+            "in": "query",
+            "name": "start_date",
+            "required": true,
+            "schema": {
+              "description": "Inclusive start instant; naive timestamps use UTC",
+              "format": "date-time",
+              "title": "Start Date",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Inclusive end instant; maximum window is 31 days",
+            "in": "query",
+            "name": "end_date",
+            "required": true,
+            "schema": {
+              "description": "Inclusive end instant; maximum window is 31 days",
+              "format": "date-time",
+              "title": "End Date",
+              "type": "string"
+            }
+          },
+          {
+            "description": "IANA timezone for local created_at day buckets",
+            "in": "query",
+            "name": "tz",
+            "required": false,
+            "schema": {
+              "default": "UTC",
+              "description": "IANA timezone for local created_at day buckets",
+              "title": "Tz",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HiddenNoiseCountsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Hidden Noise Counts",
         "tags": [
           "conversations"
         ]

@@ -19,7 +19,7 @@ final class ChatBudgetPauseTests: XCTestCase {
       XCTAssertEqual(pause.title, "Chat is paused")
       XCTAssertEqual(pause.trigger, "usage_budget")
       XCTAssertEqual(pause.resetLine, "Chat is back on Nov 1.")
-      if plan == "operator" { XCTAssertEqual(pause.upgradeLabel, "Upgrade to Architect") }
+      if plan == "operator" { XCTAssertEqual(pause.upgradeLabel, "Upgrade to Omi Pro") }
       let expired = APIClient.ChatAtCap(
         state: pause.state, title: pause.title, body: pause.body,
         resetAt: 1, resetLine: pause.resetLine, trigger: pause.trigger, upgradePlan: pause.upgradePlan,

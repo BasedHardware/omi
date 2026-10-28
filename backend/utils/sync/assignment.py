@@ -6,16 +6,32 @@ no expiring lock that lets a late worker overwrite a newer transcript.
 """
 
 from copy import deepcopy
+from dataclasses import dataclass
+from datetime import timedelta
 import logging
 from typing import TYPE_CHECKING, Any, Callable, NamedTuple, Optional, TypeVar
+from uuid import NAMESPACE_URL, uuid5
 
 from config.conversation_smart_merge import smart_merge_flatten_chain_repair_enabled, smart_merge_flatten_enabled
 from config.sync_live_dedupe import sync_live_dedupe_active_for
 from config.sync_safety_wal import sync_safety_wal_enabled
 from config.sync_lineage import sync_lineage_resolve_enabled
 from database._client import firestore_document_kind, firestore_error_document_path, is_document_size_limit_error
-from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
+from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason, STRUCTURAL_REASONS
+from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES
+from utils.conversations.size_limit import (
+    CONVERSATION_ABSORPTION_BYTE_CAP,
+    projected_document_bytes,
+    projected_size_bucket,
+)
 from utils.observability.fallback import record_fallback
+from utils.sync.size_telemetry import (
+    finish_size_attempt,
+    log_size_rollover,
+    remember_size_payload,
+    size_backstop_scope,
+    size_fields,
+)
 from utils.manual_speaker_assignments import apply_manual_assignments
 from utils.capture_evidence import bounded_envelope, merge_track_receipts
 
@@ -35,8 +51,11 @@ from utils.sync.live_speech_dedupe import (
     drop_covered_repeats,
     drop_proven_exact_retries,
     pinned_audio_timeline,
+    speech_overlap_seconds,
 )
 from utils.sync.merge_dedupe import dedupe_segments_for_merge
+from utils.sync.donor_dedupe import DonorDedupe, dedupe_donor, live_reference
+from utils.sync.bridge_observation import bridge_observation
 from utils.sync.assignment_telemetry import lineage_span_delta_bucket as _lineage_span_delta_bucket
 from utils.sync.assignment_telemetry import created_sync_row_observation
 from utils.capture.dedupe import choose_segments
@@ -150,6 +169,13 @@ def _smart_merge_lineage(row: dict | None) -> bool:
     return bool(row and (row.get('smart_merge') or {}).get('role') in ('donor', 'survivor'))
 
 
+@dataclass
+class _SizeRollover:
+    trigger: str | None = None
+    payload: dict | None = None
+    cid: str | None = None
+
+
 class _Plan(NamedTuple):
     """One complete, unwritten assignment: what the transaction would commit."""
 
@@ -160,9 +186,12 @@ class _Plan(NamedTuple):
     survivors: list[dict]
     # Indices into incoming['transcript_segments'] that this plan found new.
     kept: tuple[int, ...]
+    donor_updates: dict[str, dict]
+    absorption_bytes: int
     payload: dict
     ancestor_updates: dict[str, dict]
     estimated_bytes: int
+    bridge: dict | None
 
     @property
     def grows(self) -> bool:
@@ -202,6 +231,8 @@ def assign_in_transaction(
     write is estimated above ``SYNC_CONVERSATION_BYTE_BUDGET`` are left
     untouched: the chunk's new speech goes to another conversation instead.
     """
+    # The SDK may retry this body after contention; only its winning plan may log success.
+    finish_size_attempt(logger, committed=False)
     if absorbed is not None:
         absorbed.clear()
     incoming = deepcopy(incoming)
@@ -220,7 +251,7 @@ def assign_in_transaction(
     tombstones: dict[str, bool] = {}
 
     def tombstoned(cid: str) -> bool:
-        # Read only before creating a row, inside the same transaction.
+        # Same transactional deletion authority as the batch privacy fence.
         if cid not in tombstones:
             tombstones[cid] = (
                 user_ref.collection('deleted_conversations').document(cid).get(transaction=transaction).exists
@@ -232,6 +263,8 @@ def assign_in_transaction(
     flatten = smart_merge_flatten_enabled()
 
     own = load(incoming['id'])
+    if tombstoned(incoming['id']):
+        raise SyncAssignmentSuperseded('sync anchor was deleted')
     if own and own.get('deleted') and not own.get('sync_merged_into'):
         if flatten and (own.get('smart_merge') or {}).get('role') == 'donor':
             raise SyncAssignmentConflict(
@@ -244,6 +277,8 @@ def assign_in_transaction(
         seen = set()
         has_smart_state = False
         while row and row.get('sync_merged_into'):
+            if tombstoned(row['id']):
+                raise SyncAssignmentSuperseded('sync capture lineage was deleted')
             if row['id'] in seen:
                 raise SyncAssignmentConflict('sync redirect cycle', subtype=Reason.REDIRECT_CYCLE)
             has_smart_state = has_smart_state or (one_hop and _smart_merge_lineage(row))
@@ -255,6 +290,8 @@ def assign_in_transaction(
                 raise SyncAssignmentConflict(
                     'sync redirect chain exceeds one hop', subtype=Reason.REDIRECT_CHAIN_TOO_LONG
                 )
+        if cid and tombstoned(cid):
+            raise SyncAssignmentSuperseded('sync capture lineage was deleted')
         if seen and (not row or row.get('deleted') or (has_smart_state and row.get('discarded'))):
             raise SyncAssignmentSuperseded('sync capture lineage was deleted')
         return cid, row
@@ -263,19 +300,40 @@ def assign_in_transaction(
     # never allow an absorbed chunk to resurrect its user-deleted survivor.
     own_id, own_anchor = resolve(incoming['id'], one_hop=flatten)
     target = load(target_id) if target_id else None
+    if target_id and tombstoned(target_id):
+        raise SyncAssignmentSuperseded('sync target was deleted')
     if require_live_target and target_id and target is None:
         # WAL can finish before listen creates its explicitly named row. A new
         # timestamp anchor here becomes a twin when listen later persists. The
         # already-read target document fences concurrent create on replay.
         raise SyncAssignmentConflict('batch live target not persisted', subtype=Reason.LIVE_TARGET_NOT_PERSISTED)
+    replacement = None
     if record_span is not None:
         if not target or not target_id:
             raise SyncAssignmentConflict('record target missing', subtype=Reason.RECORD_TARGET_MISSING)
         result, survivors = replace_record(decode(target), incoming, record_span)
         invalidate(result)
         encoded = encode(result)
-        transaction.update(collection.document(target_id), encoded)
-        return result, False, survivors
+        estimated = _stored_document_bytes(collection.document(target_id), encoded, target, invalidate)
+        remember_size_payload(target_id, result)
+        if target_id not in full_ids and estimated <= SYNC_CONVERSATION_BYTE_BUDGET:
+            transaction.update(collection.document(target_id), encoded)
+            result['_sync_projected_size_bucket'] = projected_size_bucket(estimated)
+            return result, False, survivors
+        replacement = _Plan(
+            target_id,
+            {target_id: target},
+            result,
+            False,
+            survivors,
+            tuple(range(len(incoming['transcript_segments']))),
+            {},
+            estimated,
+            encoded,
+            {},
+            estimated,
+            None,
+        )
     index = AssignmentIndex(transaction, user_ref)
     redirected = False
     if flatten:
@@ -310,11 +368,15 @@ def assign_in_transaction(
     # transaction as the append, so deletion, lifecycle and provenance win.
     temporal_live = False
     if not target_id and live_candidate_ids and live_overlap_enabled():
-        live_rows = [row for cid in live_candidate_ids if (row := load(cid)) and cid not in full_ids]
+        live_rows = [
+            row for cid in live_candidate_ids if (row := load(cid)) and cid not in full_ids and not tombstoned(cid)
+        ]
         live_id = choose_live_overlap(live_rows, incoming, uid=user_ref.id)
         if live_id:
             target_id, target = live_id, load(live_id)
             temporal_live = True
+    if target_id and tombstoned(target_id):
+        raise SyncAssignmentSuperseded('sync target survivor was deleted')
     target_hint = target_id
     if target and not target.get('deleted'):
         # Explicit capture proof is authoritative even before live STT produced
@@ -360,34 +422,51 @@ def assign_in_transaction(
         raise SyncAssignmentConflict('sync anchor provenance mismatch', subtype=Reason.PROVENANCE_MISMATCH)
 
     live_stats: Optional[dict] = None
+    privacy_excluded: frozenset[str] = frozenset()
 
-    def plan(excluded: frozenset[str], segment_indices: tuple[int, ...]) -> _Plan:
+    def plan(
+        excluded: frozenset[str],
+        segment_indices: tuple[int, ...],
+        *,
+        isolated_id: str | None = None,
+        speech_interval: bool = False,
+    ) -> _Plan:
         """Choose, merge and encode without writing; ``excluded`` rows stay untouched.
 
         An excluded conversation is never this chunk's target, donor or bridge,
         and every fence below re-runs without it.
         """
         nonlocal live_stats
-        plan_target_id = target_id if target_id not in excluded else None
+        plan_target_id = target_id if not isolated_id and target_id not in excluded else None
         plan_target = target if plan_target_id else None
-        if own_anchor and not auto_mergeable(own_anchor) and own_id != plan_target_id:
+        if not isolated_id and own_anchor and not auto_mergeable(own_anchor) and own_id != plan_target_id:
             raise SyncAssignmentSuperseded('sync anchor is user managed')
 
         if plan_target_id and own_anchor and own_id != plan_target_id and own_anchor.get('manual_speaker_assignments'):
             raise SyncAssignmentSuperseded('sync anchor has manual speaker assignments')
 
         receipt_owner = plan_target_id or (
-            own_id if own_anchor and own_anchor.get('manual_speaker_assignments') else None
+            own_id if not isolated_id and own_anchor and own_anchor.get('manual_speaker_assignments') else None
         )
         matched = {}
         extent = deepcopy(incoming)
+        if speech_interval and segment_indices:
+            # Fresh size rows own only this part's speech interval.
+            selected = [incoming['transcript_segments'][i] for i in segment_indices]
+            extent['started_at'] = incoming['started_at'] + timedelta(seconds=min(s['start'] for s in selected))
+            extent['finished_at'] = incoming['started_at'] + timedelta(seconds=max(s['end'] for s in selected))
         if plan_target_id and plan_target:
             matched[plan_target_id] = plan_target
             extent['started_at'] = min(extent['started_at'], plan_target['started_at'])
             extent['finished_at'] = max(extent['finished_at'], plan_target['finished_at'])
         while True:
-            ids = {row['id'] for row in index.read(extent) if interval_matches(row, extent)}
-            ids.update(cid for cid in (candidate_id, incoming['id'], own_id, target_hint) if cid)
+            if isolated_id:
+                # Preserve only this input, with no inherited donor content or
+                # ancestry. The stable key makes a lost reply replayable.
+                ids = {isolated_id}
+            else:
+                ids = {row['id'] for row in index.read(extent) if interval_matches(row, extent)}
+                ids.update(cid for cid in (candidate_id, incoming['id'], own_id, target_hint) if cid)
             ids -= excluded
             before = len(matched)
             candidates = []
@@ -396,6 +475,7 @@ def assign_in_transaction(
                 if (
                     raw
                     and not raw.get('deleted')
+                    and not tombstoned(cid)
                     and interval_matches(raw, extent)
                     and assignment_keys_compatible(raw, incoming, user_ref.id)
                 ):
@@ -418,12 +498,21 @@ def assign_in_transaction(
                 break
 
         canonical = (
-            plan_target_id
+            isolated_id
+            or plan_target_id
             or (receipt_owner if receipt_owner in matched else None)
             or (min(matched, key=lambda cid: (matched[cid]['started_at'], cid)) if matched else incoming['id'])
         )
+        if canonical in privacy_excluded:
+            # No safe alternative to the rejected retry owner. Do not overwrite
+            # it as a "new" row after removing it from the match set.
+            raise BatchPrivacyBlocked('conversation_deleted', conversation_id=canonical)
         current = matched.get(canonical)
         created = current is None
+        if isolated_id and created and load(isolated_id) is not None:
+            raise SyncAssignmentConflict(
+                'isolated privacy target is not appendable', subtype=Reason.PROVENANCE_MISMATCH
+            )
         if created and tombstoned(canonical):
             # User deletion hard-deletes the row, so `own` cannot fence it. A
             # re-upload segmented like the original reproduces the deleted
@@ -458,6 +547,13 @@ def assign_in_transaction(
             # its exact (possibly negative) relative offset instead.
             capture_start = plan_target['started_at']
         origin = capture_start.timestamp()
+        # Freeze the independently decoded live transcript/evidence before any
+        # donor or fresh-intake receipts can enter the survivor.
+        live_row = next((row for row in records if row['id'] == canonical), None)
+        observe_bridge = sync_live_dedupe_active_for(user_ref.id)
+        donor_policy = bool(live_row is not None and live_reference(live_row) and observe_bridge)
+        reference = deepcopy(live_row or result) if observe_bridge else {}
+        transfers = []
         existing = []
         allocator = ConversationSpeakerIdAllocator()
         allocator.hydrate(result.get('transcript_segments', []) if current else [])
@@ -473,23 +569,42 @@ def assign_in_transaction(
                 duration = segment['end'] - segment['start']
                 segment['start'] = segment['timestamp'] - origin
                 segment['end'] = segment['start'] + duration
-            # refactor: superseded by utils.capture.dedupe when CAPTURE_COVERAGE_MODE=serve
-            retained = dedupe_segments_for_merge(origin, existing, new, text_match_slop_seconds=0)
-            retained = choose_segments(
-                user_ref.id,
-                'bridge',
-                existing,
-                new,
-                retained,
-                incoming_row=row,
-                reference_row=result,
-            )
+            if donor_policy and row['id'] != canonical:
+                # Do not run legacy range-only suppression or capture-refactor
+                # overrides over retained, unproven speech in this cohort.
+                report = dedupe_donor(new, row, reference)
+                retained = report.kept
+            else:
+                # refactor: superseded by utils.capture.dedupe when CAPTURE_COVERAGE_MODE=serve
+                retained = dedupe_segments_for_merge(origin, existing, new, text_match_slop_seconds=0)
+                retained = choose_segments(
+                    user_ref.id,
+                    'bridge',
+                    existing,
+                    new,
+                    retained,
+                    incoming_row=row,
+                    reference_row=result,
+                )
+                report = DonorDedupe(retained)
+            if observe_bridge and row['id'] != canonical:
+                transfers.append((new, report))
             if row['id'] != canonical:
                 for segment in retained:
                     if not segment.get('speaker_id_scope'):
                         segment['speaker_id_scope'] = f"legacy-conversation:{row['id']}:{segment.get('speaker_id')}"
                     allocator.assign(segment)
             existing += retained
+        bridge = (
+            bridge_observation(
+                reference,
+                transfers,
+                operation='assignment',
+                target_kind='live' if live_reference(reference) else 'sync',
+            )
+            if transfers
+            else None
+        )
         new = [deepcopy(incoming['transcript_segments'][i]) for i in segment_indices]
         for segment in new:
             segment['timestamp'] = incoming['started_at'].timestamp() + segment['start']
@@ -570,6 +685,13 @@ def assign_in_transaction(
             conversation_rows=records,
             proof=capture_covered_indices,
         )
+        if live_dedupe and live_stats is not None and live_row is not None and plan_target is not None:
+            live_stats['appended_seconds_overlapping_live'] = speech_overlap_seconds(
+                survivors,
+                live_row.get('transcript_segments') or [],
+                live_origin=plan_target['started_at'].timestamp(),
+                live_pinned=pinned_audio_timeline(plan_target.get('audio_timeline')),
+            )
         surviving = {id(segment) for segment in survivors}
         kept = tuple(i for i, segment in indexed_new if id(segment) in surviving)
         for segment in survivors:
@@ -604,6 +726,9 @@ def assign_in_transaction(
                 result['capture_evidence'] = bounded_envelope(combined)
             else:
                 result['capture_evidence'] = incoming['capture_evidence']
+        if donor_policy and transfers and (reference.get('capture_evidence') or {}).get('origin') == 'live':
+            # Sync receipt aggregation must not replace live's committed runs.
+            result['capture_evidence'] = deepcopy(reference['capture_evidence'])
         persist_identity(user_ref.id, result, incoming, live_row)
         result['has_content'] = bool(segments)
         result['sync_content_revision'] = max([row.get('sync_content_revision') or 0 for row in records] + [0]) + 1
@@ -664,6 +789,15 @@ def assign_in_transaction(
         index.read(extent)
         payload = encode(result)
         payload.pop('photos', None)
+        donor_updates = {cid: _donor_redirect_patch(raw, canonical) for cid, raw in matched.items() if cid != canonical}
+        estimated_bytes = _stored_document_bytes(collection.document(canonical), payload, current, invalidate)
+        absorption_bytes = max(
+            [estimated_bytes]
+            + [
+                projected_document_bytes(collection.document(cid), patch, load(cid))
+                for cid, patch in {**donor_updates, **ancestor_updates}.items()
+            ]
+        )
         return _Plan(
             canonical,
             matched,
@@ -671,9 +805,12 @@ def assign_in_transaction(
             created,
             survivors,
             kept,
+            donor_updates,
+            absorption_bytes,
             payload,
             ancestor_updates,
             _stored_document_bytes(collection.document(canonical), payload, current, invalidate),
+            bridge,
         )
 
     # Every plan is read-only, so a full canonical can be dropped and the
@@ -685,7 +822,52 @@ def assign_in_transaction(
     # matches or targets an excluded row, so every pass excludes at least one
     # new conversation from the finite set this transaction can read.
     excluded: frozenset[str] = frozenset()
-    chosen = plan(excluded, tuple(range(len(incoming['transcript_segments']))))
+    segment_indices = tuple(range(len(incoming['transcript_segments'])))
+
+    def isolated_privacy_plan():
+        nonlocal live_stats, excluded
+        isolated_id = str(uuid5(NAMESPACE_URL, f'sync-privacy-replan:{incoming["id"]}'))
+        live_stats = None
+        excluded = frozenset(read) - {isolated_id}
+        result = plan(excluded, segment_indices, isolated_id=isolated_id)
+        logger.info('event=sync_assignment_target outcome=privacy_isolated created=%s', str(result.created).lower())
+        return result
+
+    try:
+        chosen = replacement or plan(excluded, segment_indices)
+    except BatchPrivacyBlocked as error:
+        if error.reason in STRUCTURAL_REASONS:
+            # An unrelated donor graph/budget must not withhold this live
+            # input. The isolated plan reruns every source and target fence.
+            chosen = isolated_privacy_plan()
+        else:
+            if error.reason != BatchPrivacyReason.CONVERSATION_DELETED or not error.conversation_id:
+                raise
+            # Validation can also discover deleted ancestry on an otherwise live
+            # donor. One read-only re-plan excludes every row carrying that source;
+            # prepare already fenced the input's own anchor and explicit target.
+            denied = error.conversation_id
+            excluded = privacy_excluded = frozenset(
+                {denied} | {cid for cid, row in read.items() if row and denied in (row.get('sync_merged_from') or [])}
+            )
+            logger.info('event=sync_assignment_target outcome=privacy_replan excluded=%d', len(excluded))
+            record_fallback(
+                component='sync_dispatch',
+                from_mode='canonical_append',
+                to_mode='privacy_replan',
+                reason='policy',
+                outcome='degraded',
+                log=logger,
+            )
+            try:
+                chosen = plan(excluded, segment_indices)
+            except BatchPrivacyBlocked as second_error:
+                if (
+                    second_error.reason != BatchPrivacyReason.CONVERSATION_DELETED
+                    and second_error.reason not in STRUCTURAL_REASONS
+                ):
+                    raise
+                chosen = isolated_privacy_plan()
     stamp_gap_refused = False
     if (
         lineage_binding == 'stamp_fallback'
@@ -712,6 +894,11 @@ def assign_in_transaction(
             no_op['_sync_lineage_stamp_gap_refused'] = True
             if no_op['id'] == target_id and live_stats is not None and live_stats['sync_retry']:
                 no_op['_sync_lineage_completion_pending'] = True
+            no_op['_sync_projected_size_bucket'] = projected_size_bucket(
+                projected_document_bytes(
+                    collection.document(no_op['id']), {}, own_anchor if own_anchor is not None else target
+                )
+            )
             return no_op, False, []
         if discover_on_stamp_gap:
             # No writes have happened. The adapter discovers outside this
@@ -727,7 +914,8 @@ def assign_in_transaction(
         # for contention and gate-3 classification, without adopting a live row.
         for cid in live_candidate_ids:
             load(cid)
-        chosen = plan(excluded, chosen.kept)
+        segment_indices = chosen.kept
+        chosen = plan(excluded, segment_indices)
         stamp_gap_refused = True
     if (
         live_stats is not None
@@ -748,6 +936,7 @@ def assign_in_transaction(
             no_op['_sync_lineage_completion_pending'] = True
         no_op['_sync_lineage_dedupe'] = {
             'appended_seconds': 0.0,
+            'appended_seconds_overlapping_live': 0.0,
             'dropped_as_repeat_seconds': bounded_span_seconds(incoming['transcript_segments']),
             'alignment_method': append_alignment_method(live_stats['report'], live_stats['exact_retries']),
             'repeat_only': True,
@@ -755,40 +944,150 @@ def assign_in_transaction(
                 stamp_fallback_live, target_id, chosen.matched.get(chosen.canonical), no_op
             ),
         }
+        no_op['_sync_projected_size_bucket'] = projected_size_bucket(
+            projected_document_bytes(collection.document(chosen.canonical), {}, chosen.matched[chosen.canonical])
+        )
         return no_op, False, []
-    trigger = None
+
+    def available(candidate: _Plan, denied: frozenset[str]) -> bool:
+        # A plan that lost its last bridge can fall back to incoming['id'].
+        # That is not a create when the ID already owns durable speech.
+        return candidate.canonical not in denied and not (
+            candidate.created and (read.get(candidate.canonical) is not None or not candidate.survivors)
+        )
+
+    extra_plans: list[_Plan] = []
+    rollover_state = _SizeRollover()
+
+    def fresh_size_plans(indices: tuple[int, ...]) -> _Plan:
+        """Read/encode every ordered part before any write; never inherit old speech.
+
+        Stable IDs make an interrupted reply replayable. A commit-proven full
+        part gets another deterministic slot, without overwriting its contents.
+        """
+        nonlocal live_stats
+        live_stats = None
+
+        def split(part: tuple[int, ...]) -> list[_Plan]:
+            slot = 0
+            while True:
+                cid = str(uuid5(NAMESPACE_URL, f'sync-size-rollover:{incoming["id"]}:{part[0] if part else 0}:{slot}'))
+                if cid not in full_ids:
+                    break
+                slot += 1
+            candidate = plan(frozenset(read) - {cid}, part, isolated_id=cid, speech_interval=True)
+            if candidate.estimated_bytes <= SYNC_CONVERSATION_BYTE_BUDGET:
+                return [candidate]
+            if len(part) <= 1:
+                logger.warning(
+                    'event=sync_assignment_target reason=size_rollover_unavailable outcome=rejected '
+                    'trigger=%s projected_size_bucket=%s %s',
+                    rollover_state.trigger,
+                    projected_size_bucket(candidate.estimated_bytes),
+                    size_fields(candidate.result),
+                )
+                raise SyncAssignmentConflict(
+                    'incoming segment exceeds sync size budget', subtype=Reason.SIZE_CAP_ROLLOVER_UNAVAILABLE
+                )
+            middle = len(part) // 2
+            return split(part[:middle]) + split(part[middle:])
+
+        parts = split(indices)
+        extra_plans[:] = parts[1:]
+        return parts[0]
+
+    def stop_absorption(chosen: _Plan) -> _Plan:
+        nonlocal excluded, live_stats
+        # Remove the last donor and re-run discovery without its bridge.
+        # Reconsider input deduped against that donor: it no longer belongs
+        # to the survivor. No donor/ancestor patch has been staged.
+        logger.warning(
+            'event=sync_assignment_target outcome=size_cap_stop projected_size_bucket=%s',
+            projected_size_bucket(chosen.absorption_bytes),
+        )
+        rollover_state.trigger = rollover_state.trigger or 'size_cap'
+        if rollover_state.payload is None:
+            rollover_state.payload = chosen.result
+        record_fallback(
+            component='sync_dispatch',
+            from_mode='canonical_append',
+            to_mode='size_rollover',
+            reason='policy',
+            outcome='degraded',
+            log=logger,
+        )
+        for drop in ({max(chosen.donor_updates)}, {chosen.canonical}):
+            denied = excluded | drop
+            live_stats = None
+            try:
+                candidate = plan(denied, segment_indices)
+            except (SyncAssignmentSuperseded, SyncAssignmentConflict):
+                continue
+            if available(candidate, denied):
+                # If removing a donor strands its own incoming anchor, leave
+                # the old survivor alone and append/dedupe at that donor.
+                excluded = denied
+                return candidate
+        excluded |= set(chosen.matched) | {chosen.canonical}
+        return fresh_size_plans(segment_indices)
+
     while True:
         drop = (set(chosen.matched) | {chosen.canonical}) & full_ids
-        if chosen.grows and chosen.estimated_bytes > SYNC_CONVERSATION_BYTE_BUDGET:
+        if (chosen.grows or replacement is chosen) and chosen.estimated_bytes > SYNC_CONVERSATION_BYTE_BUDGET:
             drop.add(chosen.canonical)
+        over_absorption_cap = bool(chosen.donor_updates and chosen.absorption_bytes > CONVERSATION_ABSORPTION_BYTE_CAP)
+        if not drop and over_absorption_cap:
+            chosen = stop_absorption(chosen)
+            continue
         if not drop:
+            if chosen.estimated_bytes > SYNC_CONVERSATION_BYTE_BUDGET and not chosen.grows:
+                # Every word is already durable. Acknowledge it without even
+                # staging a metadata-only update to an oversized document.
+                no_op = decode(chosen.matched[chosen.canonical])
+                no_op['sync_live_target'] = chosen.result['sync_live_target']
+                no_op.setdefault('sync_relevance', 'keep')
+                no_op['_sync_projected_size_bucket'] = projected_size_bucket(chosen.estimated_bytes)
+                return no_op, False, []
             break
-        trigger = trigger or ('commit_limit' if drop & full_ids else 'estimate')
+        rollover_state.trigger = rollover_state.trigger or ('commit_limit' if drop & full_ids else 'estimate')
+        if rollover_state.payload is None:
+            rollover_state.payload = chosen.result
+            rollover_state.cid = next(iter(sorted(drop & full_ids)), None)
         try:
             # Only speech the full plan found new moves on, so text already in
             # the full conversation is not duplicated into the rollover.
             rollover: _Plan | None = plan(excluded | drop, chosen.kept)
         except (SyncAssignmentSuperseded, SyncAssignmentConflict):
             rollover = None
-        if (
-            rollover is None
-            or rollover.canonical in excluded | drop
-            # Never overwrite an existing (tombstone) document or create an empty row.
-            or (rollover.created and (read.get(rollover.canonical) is not None or not rollover.survivors))
-        ):
-            # No safe home for the speech: keep the write unchanged, so the
-            # commit and its size-limit backstop decide exactly as before.
-            logger.warning('event=sync_assignment_target outcome=size_rollover_unavailable trigger=%s', trigger)
-            trigger = 'unavailable'
+        if rollover is None or not available(rollover, excluded | drop):
+            if over_absorption_cap:
+                # Stop donor absorption before choosing an alternate home.
+                chosen = stop_absorption(chosen)
+                continue
+            excluded |= drop
+            chosen = fresh_size_plans(chosen.kept)
             break
+        segment_indices = chosen.kept
         excluded, chosen = excluded | drop, rollover
-    if trigger is not None and trigger != 'unavailable' and excluded:
+    if (
+        rollover_state.trigger is not None
+        and excluded
+        and (rollover_state.trigger != 'size_cap' or chosen.canonical != (rollover_state.payload or {}).get('id'))
+    ):
         # One event per committed plan, however many full rows it stepped past.
-        logger.warning(
-            'event=sync_assignment_target outcome=size_rollover trigger=%s created=%s excluded=%d',
-            trigger,
+        log_size_rollover(
+            logger,
+            'event=sync_assignment_target reason=size_rollover outcome=rolled_over '
+            'trigger=%s created=%s excluded=%d projected_size_bucket=%s %s',
+            rollover_state.trigger,
             str(chosen.created).lower(),
             len(excluded),
+            projected_size_bucket(chosen.estimated_bytes),
+            size_fields(
+                rollover_state.payload,
+                cid=rollover_state.cid,
+                target_kind='new_row' if chosen.created else 'sibling_row',
+            ),
         )
         record_fallback(
             component='sync_dispatch',
@@ -806,37 +1105,32 @@ def assign_in_transaction(
         chosen.created,
         chosen.survivors,
     )
-    payload = chosen.payload
-    if created:
-        # DELETE_FIELD is invalid in a Firestore set without merge. New anchors
-        # inherit content, never a donor's client processing projection.
-        clears: dict = {}
-        invalidate(clears)
-        for field in clears:
-            payload.pop(field, None)
-        transaction.set(collection.document(canonical), payload)
-    else:
-        invalidate(payload)
-        transaction.update(collection.document(canonical), payload)
-    for cid, row in matched.items():
-        if cid != canonical:
-            transaction.update(
-                collection.document(cid),
-                {
-                    'deleted': True,
-                    # Hide the redirect from discarded==False list indexes. Distinct
-                    # from user discard: include_discarded=True readers still drop
-                    # these rows via is_soft_deleted, and restore must not revive them.
-                    'discarded': True,
-                    'sync_merged_into': canonical,
-                    'sync_content_revision': (row.get('sync_content_revision') or 0) + 1,
-                },
-            )
-    for ancestor_id, patch in chosen.ancestor_updates.items():
-        transaction.update(collection.document(ancestor_id), patch)
-    index.write(result, set(matched) | {canonical})
+    remember_size_payload(canonical, result)
+    for accepted in [chosen, *extra_plans]:
+        remember_size_payload(accepted.canonical, accepted.result)
+        payload = accepted.payload
+        if accepted.created:
+            # DELETE_FIELD is invalid in a Firestore set without merge.
+            clears: dict = {}
+            invalidate(clears)
+            for field in clears:
+                payload.pop(field, None)
+            transaction.set(collection.document(accepted.canonical), payload)
+        else:
+            invalidate(payload)
+            transaction.update(collection.document(accepted.canonical), payload)
+        for cid, patch in accepted.donor_updates.items():
+            transaction.update(collection.document(cid), patch)
+        for ancestor_id, patch in accepted.ancestor_updates.items():
+            transaction.update(collection.document(ancestor_id), patch)
+        index.write(accepted.result, set(accepted.matched) | {accepted.canonical})
+    if extra_plans:
+        result['_sync_size_rollover_rows'] = [(p.result, p.created) for p in extra_plans]
+        survivors = [s for p in [chosen, *extra_plans] for s in p.survivors]
     if absorbed is not None:
         absorbed[:] = sorted(cid for cid in matched if cid != canonical)
+    if chosen.bridge is not None:
+        result['_sync_lineage_bridge'] = chosen.bridge
     if created and lineage_eligible and sync_lineage_resolve_enabled():
         # The adapter emits only the final successful transaction's observation,
         # after commit. Neither this marker nor eligibility enters the write codec.
@@ -854,6 +1148,7 @@ def assign_in_transaction(
         appended = bounded_span_seconds(survivors)
         result['_sync_lineage_dedupe'] = {
             'appended_seconds': appended,
+            'appended_seconds_overlapping_live': live_stats['appended_seconds_overlapping_live'],
             'dropped_as_repeat_seconds': max(0.0, bounded_span_seconds(incoming['transcript_segments']) - appended),
             'alignment_method': append_alignment_method(live_stats['report'], live_stats['exact_retries']),
             'repeat_only': False,
@@ -869,7 +1164,19 @@ def assign_in_transaction(
         result['_sync_lineage_stamp_gap_refused'] = True
     if temporal_live:
         logger.info('event=sync_live_overlap outcome=%s', 'merged' if canonical == target_id else 'published')
+    result['_sync_projected_size_bucket'] = projected_size_bucket(chosen.estimated_bytes)
     return result, created, survivors
+
+
+def _donor_redirect_patch(row: dict, canonical: str) -> dict:
+    # Hidden redirect, retained for late uploads and owner detail reads; never
+    # confuse it with a user discard that can be restored independently.
+    return {
+        'deleted': True,
+        'discarded': True,
+        'sync_merged_into': canonical,
+        'sync_content_revision': (row.get('sync_content_revision') or 0) + 1,
+    }
 
 
 def _stored_document_bytes(
@@ -880,13 +1187,14 @@ def _stored_document_bytes(
     A create stores the payload; an update replaces the named top-level fields
     of the stored (encoded) row and removes the invalidated projection fields.
     """
-    stored = dict(payload) if current is None else {**current, **payload}
+    stored = dict(current or {})
+    patch = dict(payload)
     clears: dict = {}
     invalidate(clears)
     for field in clears:
         stored.pop(field, None)
-    path = getattr(reference, 'path', None)
-    return estimate_firestore_document_bytes(stored, path if isinstance(path, str) else None)
+        patch.pop(field, None)
+    return projected_document_bytes(reference, patch, stored)
 
 
 def size_limited_conversation(error: BaseException, canonical: Optional[str]) -> tuple[Optional[str], str]:
@@ -926,13 +1234,27 @@ def run_with_size_limit_backstop(
     by interval and deduplicates. A second rejection is raised unchanged and
     counts as a strike exactly as before.
     """
+    with size_backstop_scope():
+        return _run_size_backstop(run, attempted_canonical)
+
+
+def _run_size_backstop(run: Callable[[frozenset[str]], _T], attempted_canonical: Callable[[], Optional[str]]) -> _T:
     try:
-        return run(frozenset())
+        result = run(frozenset())
+        finish_size_attempt(logger, committed=True)
+        return result
     except Exception as error:
+        finish_size_attempt(logger, committed=False)
         full_id, kind = size_limited_conversation(error, attempted_canonical())
+        if is_document_size_limit_error(error):
+            setattr(error, 'sync_size_fields', size_fields(cid=full_id))
         if full_id is None:
             raise
-    logger.warning('event=sync_assignment_target outcome=size_limit_retry firestore_doc_kind=%s', kind)
+    logger.warning(
+        'event=sync_assignment_target reason=size_limit_retry outcome=rejected firestore_doc_kind=%s %s',
+        kind,
+        size_fields(cid=full_id),
+    )
     record_fallback(
         component='sync_dispatch',
         from_mode='canonical_append',
@@ -942,7 +1264,12 @@ def run_with_size_limit_backstop(
         log=logger,
     )
     try:
-        return run(frozenset({full_id}))
+        result = run(frozenset({full_id}))
+        finish_size_attempt(logger, committed=True)
+        return result
     except Exception as error:
-        size_limited_conversation(error, attempted_canonical())
+        finish_size_attempt(logger, committed=False)
+        full_id, _ = size_limited_conversation(error, attempted_canonical())
+        if is_document_size_limit_error(error):
+            setattr(error, 'sync_size_fields', size_fields(cid=full_id))
         raise

@@ -1,7 +1,8 @@
 """Narrow Firestore transaction fixture for ordering-sensitive unit tests.
 
 This fixture models document-reference ``get(transaction=...)`` plus transaction
-``create``, ``set``, and ``update``. It enforces Firestore's rule that every
+``create``, ``set``, and ``update``, plus the emulator-proven People
+generation merge increment. It enforces Firestore's rule that every
 transactional read must occur before the first transactional write.
 
 Parent reference navigation preserves the owning store and performs no IO.
@@ -26,6 +27,8 @@ from __future__ import annotations
 from copy import deepcopy
 from threading import RLock
 from typing import Any
+
+from google.cloud.firestore_v1.transforms import Increment
 
 
 class ReadAfterWriteError(RuntimeError):
@@ -106,6 +109,7 @@ class StrictFirestoreDocument:
             if field_paths not in (
                 ["is_locked"],
                 ["folder_id"],
+                ["language"],
                 ['manual_speaker_assignments', 'manual_speaker_assignments_compressed'],
                 [
                     'deleted',
@@ -116,7 +120,7 @@ class StrictFirestoreDocument:
                 ],
             ):
                 raise UnsupportedFirestoreOperationError(
-                    "only privacy, folder membership and speaker-receipt projections are supported"
+                    "only privacy, folder membership, language and speaker-receipt projections are supported"
                 )
             data = {key: value for key, value in data.items() if key in field_paths}
         return StrictFirestoreSnapshot(data)
@@ -245,13 +249,25 @@ class StrictFirestoreTransaction:
         if ref._database is not self._database:
             raise ForeignTransactionError('Firestore transaction and document reference must belong to the same store')
 
-    def set(self, ref: StrictFirestoreDocument, data: dict[str, Any]) -> None:
+    def set(self, ref: StrictFirestoreDocument, data: dict[str, Any], *, merge: bool = False) -> None:
         self._assert_reference_belongs(ref)
         _assert_storable(data)
         self.has_written = True
         payload = deepcopy(data)
         self.sets.append((ref.path, payload))
-        self._database.rows[ref.path] = payload
+        if merge:
+            # Proven by fsr_people_generation_emulator_test.py: set+Increment
+            # without merge replaces the counter and repeatedly stores 1.
+            # Keep this fixture narrow: only the People generation transform
+            # has an emulator proof; do not approximate arbitrary merge masks.
+            if set(data) != {'generation'} or not isinstance(data['generation'], Increment):
+                raise UnsupportedFirestoreOperationError('only the People generation merge transform is supported')
+            prior = dict(self._database.rows.get(ref.path) or {})
+            value = prior.get('generation', 0)
+            prior['generation'] = (value if type(value) in (int, float) else 0) + data['generation'].value
+            self._database.rows[ref.path] = prior
+        else:
+            self._database.rows[ref.path] = payload
 
     def create(self, ref: StrictFirestoreDocument, data: dict[str, Any]) -> None:
         self._assert_reference_belongs(ref)
@@ -311,8 +327,10 @@ class StrictFirestore:
             raise ValueError('Firestore document paths require an even number of non-empty segments')
         return StrictFirestoreDocument(self, segments)
 
-    def transaction(self) -> StrictFirestoreTransaction:
+    def transaction(self, max_attempts: int | None = None) -> StrictFirestoreTransaction:
         transaction = StrictFirestoreTransaction(self, allow_reads_after_writes=self._allow_reads_after_writes)
+        if max_attempts is not None:
+            transaction._max_attempts = max_attempts
         self.transactions.append(transaction)
         return transaction
 

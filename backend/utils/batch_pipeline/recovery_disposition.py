@@ -183,9 +183,11 @@ LANGUAGE_GUARD_EMPTY_EVIDENCE = {
 class MultilingualEmpty(RecoveryFailure):
     """Affirmative positive VAD and a validated empty multilingual response, no content."""
 
-    def __init__(self, duration, spans):
+    def __init__(self, duration, spans, worker_speech=None):
         super().__init__('response_validation', 'empty_asr')
         self.duration, self.spans = duration, spans
+        # Bound worker VAD seconds the independent recognizer may cite (see words_payload).
+        self.worker_speech = worker_speech
 
 
 class WordsWithoutVad(RecoveryFailure):

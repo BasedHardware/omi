@@ -429,6 +429,12 @@ class AppLocalizationsLv extends AppLocalizations {
   String get autoSync => 'Automātiska sinhronizācija';
 
   @override
+  String get syncHealthAlerts => 'Sinhronizācijas stāvokļa brīdinājumi';
+
+  @override
+  String get syncHealthAlertsDescription => 'Brīdināt, ja Omi vairāk nekā dienu nav sinhronizējis ierakstus';
+
+  @override
   String get autoSyncDescription => 'Automātiski sinhronizēt bezsaistes ierakstus, kad ierīce tiek savienota';
 
   @override
@@ -712,7 +718,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get remembering => 'Atceras';
 
   @override
-  String get unlimitedPlan => 'Neierobežots plāns';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'Pārvaldīt plānu';
@@ -734,7 +740,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get upgrade => 'Jaunināt';
 
   @override
-  String get upgradeToUnlimited => 'Jauniniet uz neierobežotu';
+  String get upgradeToUnlimited => 'Jaunināt uz Omi Pro';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3162,7 +3168,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Jaunināt uz Pro';
+  String get upgradeToPro => 'Jaunināt uz Omi Pro';
 
   @override
   String get getOmiDevice => 'Iegūt Omi ierīci';
@@ -4286,7 +4292,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get trainingDataProgram => 'Apmācības datu programma';
 
   @override
-  String get getOmiUnlimitedFree => 'Iegūstiet Omi Unlimited bez maksas, sniedzot savus datus AI modeļu apmācībai.';
+  String get getOmiUnlimitedFree => 'Iegūstiet Omi Pro bez maksas, sniedzot savus datus AI modeļu apmācībai.';
 
   @override
   String get trainingDataBullets => '• Jūsu dati palīdz uzlabot AI modeļus\n• Tiek kopīgoti tikai nejutīgi dati';
@@ -8865,12 +8871,12 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Tērzēšana: \$$used / \$$limit izmantots šomēnes';
+    return 'Tērzēšana: $used / $limit izmantots šomēnes';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Tērzēšana: \$$used izmantots šomēnes';
+    return 'Tērzēšana: $used izmantots šomēnes';
   }
 
   @override
@@ -9065,6 +9071,14 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'Gaida internetu';
+
+  @override
+  String get syncStallAlertTitle => 'Omi nesinhronizējas';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Vairāk nekā $hours stundas no jūsu Omi nav sinhronizēts neviens ieraksts. Atveriet Omi, lai pārbaudītu ierīces savienojumu.';
+  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -9686,7 +9700,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get downgradeToFreemiumAction => 'Pāriet uz bezmaksas versiju';
 
   @override
-  String get getFreeUnlimitedAccess => 'Iegūstiet bezmaksas neierobežotu piekļuvi';
+  String get getFreeUnlimitedAccess => 'Iegūstiet Omi Pro bez maksas';
 
   @override
   String get shareDataForTraining => 'Kopīgot datus apmācībai';
@@ -12884,7 +12898,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'Nosūtiet balss ziņu, un Omi uz to atbildēs.';
 
   @override
-  String get chatAppsPartOfPro => 'Tērzēšanas lietotnes ir daļa no Pro';
+  String get chatAppsPartOfPro => 'Tērzēšanas lietotnes ir daļa no Omi Pro';
 
   @override
   String get chatAppsMessagesApp => 'Ziņas';
@@ -13331,6 +13345,30 @@ class AppLocalizationsLv extends AppLocalizations {
   String get paywallOutlineHeadline => 'Nekad vairs nepalaidiet garām nevienu vārdu.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/gadā',
+        'other': '/mēnesī',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/gadā',
+        'other': '/mēnesī',
+      },
+    );
+    return '$days dienas bez maksas, pēc tam $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -13519,7 +13557,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get syncDetailsCopy => 'Kopēt informāciju atbalstam';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Pieejams ar Operator un Architect';
+  String get chatAppsChannelPlanRequired => 'Pieejams ar Omi Pro';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -13659,32 +13697,6 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals ceļā';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'Augšupielādē: $count';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'Gandrīz gatavi: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Nepieciešama uzmanība: $count',
-      one: '1 nepieciešama uzmanība',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Vēl nav aktivitātes';
 
   @override
@@ -13707,6 +13719,14 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'Ieraksti apturēti';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi nesinhronizējas';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Vairāk nekā $hours stundas nav sinhronizēts neviens ieraksts';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'Augšupielāde apstājusies';
@@ -14032,7 +14052,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'Darbojas, kamēr tālrunis uzlādējas.';
 
   @override
-  String get onDeviceUpgradeBody => 'Pārejiet uz Pro runātāju nošķiršanai un augstākai precizitātei';
+  String get onDeviceUpgradeBody => 'Pārejiet uz Omi Pro runātāju nošķiršanai un augstākai precizitātei';
 
   @override
   String get onDeviceAtCapFooter => 'Nekas netiek zaudēts. To var mainīt sadaļā Iestatījumi › Transkripcija.';
@@ -14215,7 +14235,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Pārtaisīt ar Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Pārejiet uz Pro runātāju nošķiršanai un augstākai precizitātei';
+  String get onDeviceRedoHint => 'Pārejiet uz Omi Pro runātāju nošķiršanai un augstākai precizitātei';
 
   @override
   String get onDeviceKeepEverything => 'Glabāt visu šajā tālrunī';
@@ -14464,13 +14484,7 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Atvērt iepriekšējo epizodi';
-
-  @override
   String get episodeNotesSoon => 'Piezīmes parādās pēc pirmajām sarunas minūtēm.';
-
-  @override
-  String get episodeOpenAll => 'Atvērt visu';
 
   @override
   String get episodeWrapUpNow => 'Pabeigt tagad';
@@ -14608,22 +14622,10 @@ class AppLocalizationsLv extends AppLocalizations {
   String get othersSpeakerLabel => 'Citi';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Pabeigts';
@@ -14633,4 +14635,133 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Atmest';
+
+  @override
+  String get syncRejectionInvalidDate => 'Nederīgs ieraksta datums';
+
+  @override
+  String get syncDeleteKeptUploading => 'Dažas daļas joprojām augšupielādē un tika paturētas';
+
+  @override
+  String get syncRejectionServer => 'Serveris noraidīja';
+
+  @override
+  String get syncRejectionTooLarge => 'Pārāk liels';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration telefonā';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Augšupielādes īsu brīdi ir pauzētas — tās automātiski atsāksies';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Turpina „$title“';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· kopš $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Piezīmes sāksies, kad ieradīsies galīgā transkripcija.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Tapat jūsu tālrunī, kamēr runājat. Pilnās piezīmes ieradīsies kopā ar galīgo transkripciju.';
+
+  @override
+  String get episodeOnThisPhone => 'Šajā tālrunī';
+
+  @override
+  String get episodeOpenTranscript => 'Atvērt transkripciju';
+
+  @override
+  String get liveCardTitle => 'Tiešraide';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Galīgā transkripcija atpaliek aptuveni $duration';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'Galīgā transkripcija panāks';
+
+  @override
+  String get livePreviewNoEngineBody => 'Tavi vārdi šeit parādās vienu līdz divas minūtes pēc to izteikšanas.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Droši ieraksta';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Tiešraide šajā tālrunī';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Ieslēgt tiešraides tekstu';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'ceļā';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'kad būsiet tiešsaistē';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration tiek apstrādāts';
+  }
+
+  @override
+  String get onTheWayUploadsByItself =>
+      'Augšupielāde notiek automātiski. Sarunas parādīsies, tiklīdz ieraksti būs klāt.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Augšupielāde notiek automātiski, kad atkal būsiet tiešsaistē. Sarunas parādīsies, tiklīdz ieraksti būs klāt.';
+
+  @override
+  String get onTheWayDayUploading => 'Notiek augšupielāde';
+
+  @override
+  String get onTheWayDayNext => 'Nākamais rindā';
+
+  @override
+  String get onTheWayDayQueued => 'Gaida rindā';
+
+  @override
+  String get onTheWayNoDate => 'Bez datuma';
+
+  @override
+  String get onTheWayFootnote =>
+      'Ieraksti, kas neizdodas, turpina mēģināt fonā. Viss, ko nevaram transkribēt, mums tiek ziņots automātiski.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Informācija atbalsta komandai';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Paslēpti $count īsi ieraksti',
+      one: 'Paslēpts 1 īss ieraksts',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Rādīt';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Slēpt $count īsus ierakstus',
+      one: 'Slēpt 1 īsu ierakstu',
+    );
+    return '$_temp0';
+  }
 }

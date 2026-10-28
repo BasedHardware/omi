@@ -207,7 +207,7 @@ extension SettingsContentView {
           GlassSeparator()
 
           Button(action: {
-            selectedPlanIdForCheckout = "operator"
+            selectedPlanIdForCheckout = omiProPlanId
           }) {
             Text("View Plans")
               .scaledFont(size: OmiType.body, weight: .semibold)
@@ -355,16 +355,16 @@ extension SettingsContentView {
 
               Text(
                 subscription.deprecationMessage
-                  ?? "Your Unlimited plan is being retired. Try the new Pro plan — same great features at \(operatorDeprecationFallbackPrice)."
+                  ?? "Your \(currentPlanTitle) plan is being retired. Switch to Omi Pro for \(omiProDeprecationFallbackPrice)."
               )
               .scaledFont(size: OmiType.body)
               .foregroundColor(Ink.secondary)
               .fixedSize(horizontal: false, vertical: true)
 
               Button(action: {
-                selectedPlanIdForCheckout = "operator"
+                selectedPlanIdForCheckout = omiProPlanId
               }) {
-                Text("Try Pro")
+                Text("Switch to Omi Pro")
                   .scaledFont(size: OmiType.body, weight: .semibold)
               }
               .buttonStyle(OmiButtonStyle(.primary, size: .compact))

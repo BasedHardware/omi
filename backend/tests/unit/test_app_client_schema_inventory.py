@@ -339,6 +339,55 @@ bool isSyncRecoveryWindowExceededResponse(Response response) {
     ]
 
 
+def test_sync_error_reason_classification_is_exact_to_helper_and_file(tmp_path, monkeypatch):
+    api_dir = tmp_path / 'api'
+    schema_dir = tmp_path / 'schema'
+    api_dir.mkdir()
+    schema_dir.mkdir()
+    (api_dir / 'conversations.dart').write_text(
+        """
+String? syncUploadErrorReason(Response response) {
+  final decoded = jsonDecode(response.body);
+  final value = decoded['detail'];
+  if (value is String) return value.length > 200 ? value.substring(0, 200) : value;
+  return null;
+}
+dynamic decodeOrdinaryResponse(Response response) {
+  return jsonDecode(response.body);
+}
+""",
+        encoding='utf-8',
+    )
+    (api_dir / 'other.dart').write_text(
+        """
+dynamic syncUploadErrorReason(Response response) {
+  return jsonDecode(response.body);
+}
+""",
+        encoding='utf-8',
+    )
+    # Translate the real production registrations into the fixture directory;
+    # do not inject a test-only exemption that would pass without the fix.
+    registered = frozenset(
+        (api_dir / path.name, function)
+        for path, function in inventory_app_client_schemas.NON_REST_RESPONSE_DECODER_FUNCTIONS
+    )
+    monkeypatch.setattr(inventory_app_client_schemas, 'APP_API_DIR', api_dir)
+    monkeypatch.setattr(inventory_app_client_schemas, 'APP_SCHEMA_DIR', schema_dir)
+    monkeypatch.setattr(inventory_app_client_schemas, 'MODEL_REST_DTO_FILES', ())
+    monkeypatch.setattr(inventory_app_client_schemas, 'LOCAL_NON_REST_SCHEMA_FILES', frozenset())
+    monkeypatch.setattr(inventory_app_client_schemas, 'NON_REST_RESPONSE_DECODER_FUNCTIONS', registered)
+
+    sites = inventory_app_client_schemas.scan_dart_decode_sites()
+
+    assert [(site.path.name, site.kind, site.context) for site in sites] == [
+        ('conversations.dart', 'jsonDecode', 'error_discriminator'),
+        ('conversations.dart', 'field_access', 'error_discriminator'),
+        ('conversations.dart', 'jsonDecode', 'response_decode'),
+        ('other.dart', 'jsonDecode', 'response_decode'),
+    ]
+
+
 def test_inventory_strict_raw_decode_site_gate_fails_with_actionable_sites():
     result = subprocess.run(
         [

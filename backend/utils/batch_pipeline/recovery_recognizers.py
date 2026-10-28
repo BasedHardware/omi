@@ -8,7 +8,7 @@ from config.policy import RecoveryPolicy
 from config.prerecorded_stt import missing_provider_environment
 from config.stt_provider_policy import provider_is_enabled, STTServingSurface
 from utils.executors import run_blocking, sync_executor
-from utils.batch_pipeline.contracts import projection_speech_spans
+from utils.batch_pipeline.contracts import projection_speech_spans, worker_vad_word_spans
 from utils.batch_pipeline.recovery_disposition import (
     inspect_audio,
     silence_payload,
@@ -43,7 +43,7 @@ def independent_ready():
     return provider_is_enabled('soniox', STTServingSurface.HELD_RECOVERY) and not missing_provider_environment('soniox')
 
 
-def transcribe(item, binding, audio, *, multilingual=None, force_recognition=False):
+def transcribe(item, binding, audio, *, multilingual=None, force_recognition=False, worker_speech=None):
     """Use the sync client directly, with no whole-upload coordinator or retries."""
     # Preserve the existing deferred STT boundary: its transitive encryption
     # module requires runtime secrets and cannot join credential-free imports.
@@ -76,7 +76,7 @@ def transcribe(item, binding, audio, *, multilingual=None, force_recognition=Fal
         'invalid_response',
         lambda: validate_response(response, duration, spans, multilingual=use_multilingual),
     )
-    return words_payload(duration, spans, words, language)
+    return words_payload(duration, spans, words, language, worker_speech=worker_speech)
 
 
 def second_transcribe(item, audio, empty):
@@ -90,7 +90,7 @@ def second_transcribe(item, audio, empty):
         'provider_failed',
         lambda: soniox_transcribe(output, duration),
     )
-    return independent_payload(response, duration, spans)
+    return independent_payload(response, duration, spans, getattr(empty, 'worker_speech', None))
 
 
 def independent_audio(item, audio, empty):
@@ -98,13 +98,13 @@ def independent_audio(item, audio, empty):
     return canonical_wav(pcm), duration, spans
 
 
-def independent_payload(response, duration, spans):
+def independent_payload(response, duration, spans, worker_speech=None):
     words, language = at_stage(
         'response_validation',
         'invalid_response',
         lambda: validate_response(response, duration, spans, multilingual=True),
     )
-    return {**words_payload(duration, spans, words, language), 'words_provider': 'soniox'}
+    return {**words_payload(duration, spans, words, language, worker_speech=worker_speech), 'words_provider': 'soniox'}
 
 
 async def second_transcribe_async(item, audio, empty):
@@ -115,7 +115,9 @@ async def second_transcribe_async(item, audio, empty):
         response = await soniox_transcribe_async(output, duration)
     except Exception:
         raise RecoveryFailure('provider', 'provider_failed') from None
-    return await run_blocking(sync_executor, independent_payload, response, duration, spans)
+    return await run_blocking(
+        sync_executor, independent_payload, response, duration, spans, getattr(empty, 'worker_speech', None)
+    )
 
 
 def canonical_wav(pcm):
@@ -144,7 +146,15 @@ def validate_response(response, duration, spans, *, multilingual):
     return words, language
 
 
-def words_payload(duration, spans, words, language):
+def words_payload(duration, spans, words, language, *, worker_speech=None):
+    evidence = None
+    if not spans and worker_speech:
+        # Strict CPU VAD can miss short low-energy speech that the GPU worker's
+        # bound VAD receipt measured. Words alone never prove speech: only with
+        # that independent measurement may their clocks place it, and
+        # speech_seconds stays the acoustic measure (lead ruling ef03d2).
+        spans = worker_vad_word_spans(words, duration, worker_speech)
+        evidence = {'speech_spans_source': 'worker_vad_word_clocks', 'worker_vad_speech_seconds': worker_speech}
     if not spans:
         raise WordsWithoutVad(len(words))
     # Preserve legacy speaker labels directly in build_incoming. Exclusive batch
@@ -158,6 +168,7 @@ def words_payload(duration, spans, words, language):
         'words_provider': 'legacy_sync',
         'language': language,
         'recovery_version': 1,
+        **(evidence or {}),
     }
     at_stage('payload_validation', 'invalid_payload', lambda: projection_speech_spans(payload, duration))
     return payload

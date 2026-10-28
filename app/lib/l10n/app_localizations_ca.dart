@@ -429,6 +429,12 @@ class AppLocalizationsCa extends AppLocalizations {
   String get autoSync => 'Sincronització automàtica';
 
   @override
+  String get syncHealthAlerts => 'Alertes d\'estat de sincronització';
+
+  @override
+  String get syncHealthAlertsDescription => 'Avisa si l\'Omi no ha sincronitzat enregistraments durant més d\'un dia';
+
+  @override
   String get autoSyncDescription =>
       'Sincronitza automàticament els enregistraments fora de línia quan el dispositiu es connecti';
 
@@ -715,7 +721,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get remembering => 'Recordant';
 
   @override
-  String get unlimitedPlan => 'Pla il·limitat';
+  String get unlimitedPlan => 'Omi Pro';
 
   @override
   String get managePlan => 'Gestionar pla';
@@ -737,7 +743,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get upgrade => 'Actualitzar';
 
   @override
-  String get upgradeToUnlimited => 'Actualitza a il·limitat';
+  String get upgradeToUnlimited => 'Actualitza a Omi Pro';
 
   @override
   String basicPlanDesc(int limit) {
@@ -3170,7 +3176,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get pro => 'Pro';
 
   @override
-  String get upgradeToPro => 'Actualitza a Pro';
+  String get upgradeToPro => 'Actualitza a Omi Pro';
 
   @override
   String get getOmiDevice => 'Obtenir dispositiu Omi';
@@ -4298,8 +4304,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get trainingDataProgram => 'Programa de dades d\'entrenament';
 
   @override
-  String get getOmiUnlimitedFree =>
-      'Obtén Omi Il·limitat gratis contribuint les teves dades per entrenar models d\'IA.';
+  String get getOmiUnlimitedFree => 'Obtén Omi Pro gratis contribuint les teves dades per entrenar models d\'IA.';
 
   @override
   String get trainingDataBullets =>
@@ -8895,12 +8900,12 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Xat: \$$used / \$$limit utilitzat aquest mes';
+    return 'Xat: $used / $limit utilitzat aquest mes';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Xat: \$$used utilitzat aquest mes';
+    return 'Xat: $used utilitzat aquest mes';
   }
 
   @override
@@ -9094,6 +9099,14 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'Esperant connexió';
+
+  @override
+  String get syncStallAlertTitle => 'Omi no se sincronitza';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Fa més de $hours hores que no se sincronitza cap enregistrament del teu Omi. Obre Omi per comprovar la connexió del dispositiu.';
+  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -9715,7 +9728,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get downgradeToFreemiumAction => 'Passa a la versió gratuïta';
 
   @override
-  String get getFreeUnlimitedAccess => 'Aconsegueix accés il·limitat gratuït';
+  String get getFreeUnlimitedAccess => 'Aconsegueix Omi Pro gratis';
 
   @override
   String get shareDataForTraining => 'Comparteix dades per a l\'entrenament';
@@ -12923,7 +12936,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get chatAppsVoiceNotesSubtitle => 'Envia una nota de veu i l\'Omi et respondrà.';
 
   @override
-  String get chatAppsPartOfPro => 'Les aplicacions de xat formen part de Pro';
+  String get chatAppsPartOfPro => 'Les aplicacions de xat formen part de Omi Pro';
 
   @override
   String get chatAppsMessagesApp => 'Missatges';
@@ -13370,6 +13383,30 @@ class AppLocalizationsCa extends AppLocalizations {
   String get paywallOutlineHeadline => 'No et perdis mai més ni una paraula.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/any',
+        'other': '/mes',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/any',
+        'other': '/mes',
+      },
+    );
+    return '$days dies gratis, després $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -13558,7 +13595,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get syncDetailsCopy => 'Copia els detalls per a assistència';
 
   @override
-  String get chatAppsChannelPlanRequired => 'Disponible amb Operator i Architect';
+  String get chatAppsChannelPlanRequired => 'Disponible amb Omi Pro';
 
   @override
   String chatAppsAtCapacity(String app) {
@@ -13698,32 +13735,6 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals en camí';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return '$count pujant';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'Gairebé a punt: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count requereixen atenció',
-      one: '1 requereix atenció',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Encara no hi ha activitat';
 
   @override
@@ -13746,6 +13757,14 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'Enregistraments en pausa';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi no se sincronitza';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Cap enregistrament sincronitzat fa més de $hours hores';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'La pujada s\'ha aturat';
@@ -14071,7 +14090,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get onDeviceOptionChargingBody => 'Funciona mentre el telèfon es carrega.';
 
   @override
-  String get onDeviceUpgradeBody => 'Passa a Pro per separar els parlants i obtenir més precisió';
+  String get onDeviceUpgradeBody => 'Passa a Omi Pro per separar els parlants i obtenir més precisió';
 
   @override
   String get onDeviceAtCapFooter => 'En cap cas no es perd res. Podeu canviar-ho a Configuració › Transcripció.';
@@ -14257,7 +14276,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Refés amb Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Passa a Pro per separar els parlants i obtenir més precisió';
+  String get onDeviceRedoHint => 'Passa a Omi Pro per separar els parlants i obtenir més precisió';
 
   @override
   String get onDeviceKeepEverything => 'Conserva-ho tot en aquest telèfon';
@@ -14506,13 +14525,7 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Obre l’episodi anterior';
-
-  @override
   String get episodeNotesSoon => 'Les notes apareixen després dels primers minuts de conversa.';
-
-  @override
-  String get episodeOpenAll => 'Obre-ho tot';
 
   @override
   String get episodeWrapUpNow => 'Tanca ara';
@@ -14651,22 +14664,10 @@ class AppLocalizationsCa extends AppLocalizations {
   String get othersSpeakerLabel => 'Altres';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Fet';
@@ -14676,4 +14677,133 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get openLoopAnswerDrop => 'Descarta-ho';
+
+  @override
+  String get syncRejectionInvalidDate => 'Data d\'enregistrament no vàlida';
+
+  @override
+  String get syncDeleteKeptUploading => 'Algunes parts encara s\'estant pujant i s\'han conservat';
+
+  @override
+  String get syncRejectionServer => 'Rebutjada pel servidor';
+
+  @override
+  String get syncRejectionTooLarge => 'Massa gran';
+
+  @override
+  String deviceOnPhoneQueue(Object duration) {
+    return '$duration al telèfon';
+  }
+
+  @override
+  String get syncCardUploadsPaused => 'Les pujades estan en pausa un moment — es reprendran automàticament';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Continua «$title»';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· des de $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Les notes comencen quan arriba la transcripció final.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Redactades al teu telèfon mentre parles. Les notes completes arriben amb la transcripció final.';
+
+  @override
+  String get episodeOnThisPhone => 'En aquest telèfon';
+
+  @override
+  String get episodeOpenTranscript => 'Obre la transcripció';
+
+  @override
+  String get liveCardTitle => 'En directe';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'La transcripció final va amb uns $duration de retard';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'La transcripció final s’està posant al dia';
+
+  @override
+  String get livePreviewNoEngineBody => 'Les teves paraules apareixen aquí un o dos minuts després de dir-les.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Enregistrant de forma segura';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'En directe en aquest telèfon';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Activa el text en directe';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'en camí';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'quan hi hagi connexió';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return 'Falten $duration per pujar';
+  }
+
+  @override
+  String get onTheWayUploadsByItself =>
+      'Es puja automàticament. Les converses es van creant a mesura que arriben les gravacions.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Es puja automàticament quan torneu a tenir connexió. Les converses es van creant a mesura que arriben les gravacions.';
+
+  @override
+  String get onTheWayDayUploading => 'S\'està pujant';
+
+  @override
+  String get onTheWayDayNext => 'Següents';
+
+  @override
+  String get onTheWayDayQueued => 'A la cua';
+
+  @override
+  String get onTheWayNoDate => 'Sense data';
+
+  @override
+  String get onTheWayFootnote =>
+      'Els enregistraments que fallin es tornen a provar en segon pla. Tot allò que no puguem transcriure se\'ns notifica automàticament.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Detalls per al suport';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count clips curts amagats',
+      one: '1 clip curt amagat',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Mostrar';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Amagar $count clips curts',
+      one: 'Amagar 1 clip curt',
+    );
+    return '$_temp0';
+  }
 }
