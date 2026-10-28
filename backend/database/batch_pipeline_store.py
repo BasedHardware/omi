@@ -244,7 +244,7 @@ class FirestoreStore:
                 else:
                     ref.create(value, retry=None)
             except (AlreadyExists, FailedPrecondition, Aborted):
-                logger.info('event=batch_shard_contention operation=claim shard=%s outcome=busy', shard)
+                logger.info('event=batch_shard_contention operation=batch_claim shard=%s outcome=busy', shard)
                 return False
             return True
 
