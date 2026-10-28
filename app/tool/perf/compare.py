@@ -11,7 +11,14 @@ def compare(before, after):
     virtual = before.get('qualified_virtual_baseline') is True
     if before.get('accepted_baseline') is not True and not virtual:
         raise ValueError('reference is not an accepted three-run profile baseline')
-    for key in ('dataset', 'frame_policy', 'build_mode', 'timeline_enabled', 'pacing', 'runs'):
+    for value in (before, after):
+        if value.get('scoring_protocol') != 'sparse-readiness-stalls/v1':
+            raise ValueError('incomparable scoring_protocol; qualify a new baseline')
+        if value.get('dataset', {}).get('semantics') not in ('on', 'off'):
+            raise ValueError('missing semantics; qualify a new baseline')
+    if before['dataset']['semantics'] != after['dataset']['semantics']:
+        raise ValueError('incomparable semantics')
+    for key in ('scoring_protocol', 'sparse_stall_limits', 'sparse_scenarios', 'dataset', 'frame_policy', 'build_mode', 'timeline_enabled', 'pacing', 'runs'):
         if before.get(key) != after.get(key):
             raise ValueError(f'incomparable {key}')
     if after.get('timeline_enabled') is not False:
@@ -29,11 +36,15 @@ def compare(before, after):
                 raise ValueError(f'incomparable virtual {key}')
     elif after.get('virtual_qualification') is True:
         raise ValueError('physical and virtual evidence cannot be compared')
-    result = {'before': before['identity'], 'after': after['identity'],
+    result = {'scoring_protocol': after['scoring_protocol'],
+              'sparse_scenarios': after.get('sparse_scenarios', []),
+              'before': before['identity'], 'after': after['identity'],
               'current_variance_pass': after.get('variance_pass'), 'scenarios': {}}
     # A window added after the reference has nothing to compare against; list it, never invent one.
     result['new_scenarios'] = sorted(set(after['scenarios']) - set(before['scenarios']))
     for name, old in before['scenarios'].items():
+        if name not in after['scenarios']:
+            raise ValueError(f'missing scenario {name}')
         new = after['scenarios'][name]
         values = {}
         for metric in ('build_p90_us', 'raster_p90_us', 'total_p90_us'):
@@ -43,6 +54,11 @@ def compare(before, after):
         for metric in ('frames_over_16ms', 'frames_over_100ms'):
             values[metric] = {'before': sum(old[metric]), 'after': sum(new[metric])}
         values['worst_total_us'] = {'before': max(old['worst_total_us']), 'after': max(new['worst_total_us'])}
+        for metric in ('stalls_over_100ms', 'stall_blocked_over_100ms_us'):
+            values[metric] = {'before': list(old[metric]), 'after': list(new[metric])}
+        if name == 'cold_start':
+            values['cache_ready_us'] = {'before': list(old['cache_ready_us']),
+                                        'after': list(new['cache_ready_us'])}
         result['scenarios'][name] = values
     return result
 

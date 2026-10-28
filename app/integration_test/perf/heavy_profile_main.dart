@@ -63,6 +63,10 @@ import 'package:path_provider/path_provider.dart';
 
 import 'heavy_fixture.dart';
 import 'heavy_fixture_server.dart';
+import 'heavy_upload_fixture.dart';
+import 'package:omi/services/wals/wal.dart';
+import 'package:omi/services/wals/sync_rate_limiter.dart';
+import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'heavy_frame_collector.dart';
 import 'heavy_live_preview.dart';
 import 'production_shell.dart';
@@ -80,7 +84,7 @@ import 'production_shell.dart';
 /// comparable across builds on the same physical device only. Simulator debug
 /// is explicitly marked as scenario qualification, never profile acceptance.
 /// Windows in receipt order; perf_sim_report.py's SCENARIOS must match.
-const heavyScenarioCount = 9;
+const heavyScenarioCount = heavyUploadMode == 'accept' ? 10 : 9;
 
 void main() {
   final binding = HeavyProfileBinding();
@@ -93,6 +97,7 @@ void main() {
   final collector = HeavyFrameCollector(
       onEmptyWindow: (scenario) => _rejectMeasurement(binding, 'no_engine_frames', scenario: scenario));
   final fixture = HeavyFixtureServer();
+  late HeavyUploadFixture uploadFixture;
   final results = <String, Map<String, Object?>>{};
   final operationMarks = <Map<String, Object?>>[];
   void mark(String operation) {
@@ -103,6 +108,10 @@ void main() {
   late WalService walService;
 
   testWidgets('heavy_profile_scenarios', (tester) async {
+    expect(['accept', 'refuse'], contains(heavyUploadMode));
+    expect(['on', 'off'], contains(heavySemantics));
+    expect(binding.semanticsEnabled, heavySemantics == 'on',
+        reason: 'Actual semantics state must match the measured dataset; disable device accessibility for off runs');
     Env.init(const _HeavyEnv());
     await hostReady.future.timeout(const Duration(seconds: 30));
     final lifecycleSnapshot = _readNativeInitialLifecycle(binding);
@@ -155,7 +164,8 @@ void main() {
 
     // 3. The real WAL machinery over the seeded 6.5k-record index: cold-start
     // load, flush ticks, admission pressure and lifecycle drains all run.
-    walService = WalService();
+    uploadFixture = HeavyUploadFixture();
+    walService = WalService(phoneUploadGate: uploadFixture.gate, phoneJobStatusFetcher: uploadFixture.fetchJob);
     var stopped = true;
     addTearDown(() async {
       if (!stopped) await walService.stop();
@@ -168,7 +178,8 @@ void main() {
     // (requestInitialLoad defaults true): request → empty server page →
     // cache restore of the full seeded history. That whole path, plus the
     // shell mount, is the cold-start window.
-    final entry = _HeavyHomeShell(conversationsProvider: conversations, walService: walService);
+    final entry =
+        _HeavyHomeShell(conversationsProvider: conversations, walService: walService, uploadGate: uploadFixture.gate);
 
     const timelineEnabled = bool.fromEnvironment('PERF_HEAVY_TIMELINE');
     if (timelineEnabled) {
@@ -181,6 +192,7 @@ void main() {
     await (() async {
       // 4. Cold start: shell mount → Home request → empty server page → cache
       //    decode of the full seeded history → grouped list rendered → settled.
+      final coldClock = Stopwatch()..start();
       collector.begin('cold_start');
       mark('cold_start.mount');
       walService.start();
@@ -200,9 +212,11 @@ void main() {
           timeout: const Duration(seconds: 30));
       expect(settled, isTrue, reason: 'Home must restore the complete synthetic conversation history');
       mark('cold_start.cache_ready');
+      final cacheReadyUs = coldClock.elapsedMicroseconds;
       await _idle(const Duration(seconds: 3));
       var summary = await collector.end();
       summary['restored_from_cache'] = settled;
+      summary['cache_ready_us'] = cacheReadyUs;
       results['cold_start'] = summary;
       debugPrint('HEAVY_STAGE cold_start complete');
 
@@ -384,6 +398,57 @@ void main() {
       }
       results['home_idle_sync_refresh'] = await collector.end();
       debugPrint('HEAVY_STAGE home_idle_sync_refresh complete');
+
+      if (heavyUploadMode == 'accept') {
+        // Preserve the existing windows. Only here, hold the rest of the heavy
+        // inventory for the user and fully drain N file-backed pending WALs.
+        // N<=18 fits one real poller's per-minute budget; no clock/backoff bypass.
+        final syncProvider = globalNavigatorKey.currentContext!.read<SyncProvider>();
+        final inventory = await walService.syncs.phone.getAllWals();
+        final selected =
+            inventory.where((w) => w.status == WalStatus.miss && w.filePath != null).take(heavyUploadWalCount).toList();
+        expect(selected.length, heavyUploadWalCount, reason: 'success window needs N real synthetic files');
+        final held =
+            inventory.where((w) => w.status == WalStatus.miss && !w.holdForUser && !selected.contains(w)).toList();
+        for (final w in held) {
+          w.holdForUser = true;
+        }
+        SyncRateLimiter.instance.clearRateLimit();
+        uploadFixture.accepting = true;
+        try {
+          // Flush synthetic admission setup through the owner's existing
+          // metadata persistence boundary before measuring real sync work.
+          // Otherwise the first upload would also save thousands of hold edits.
+          await walService.syncs.phone.persistRetryMetadata(selected.first);
+          await syncProvider.refreshWals();
+          await _idle(const Duration(seconds: 2));
+          collector.begin('wal_sync_upload_success');
+          mark('wal_sync_upload_success.sync');
+          await syncProvider.syncWals();
+          expect(uploadFixture.acceptedFiles, heavyUploadWalCount);
+          expect(selected.every((w) => w.status == WalStatus.uploaded), isTrue);
+          // Honor the production job poller's minimum 20-second defer.
+          await _idle(const Duration(seconds: 21));
+          mark('wal_sync_upload_success.reconnect_reconcile');
+          // Same admitted pass used on reconnect; server jobs complete through
+          // the injected fetch boundary and real WAL reconciliation/persistence.
+          await walService.syncs.phone.reconcileUploadedWals();
+          await syncProvider.refreshWals();
+          expect(selected.every((w) => w.status == WalStatus.synced), isTrue);
+          expect(uploadFixture.completedJobs, uploadFixture.acceptedJobs);
+          await _idle(const Duration(seconds: 3));
+          results['wal_sync_upload_success'] = {
+            ...await collector.end(),
+            'uploaded_wals': uploadFixture.acceptedFiles,
+            'completed_jobs': uploadFixture.completedJobs,
+          };
+        } finally {
+          for (final w in held) {
+            w.holdForUser = false;
+          }
+          await walService.syncs.phone.persistRetryMetadata(selected.first);
+        }
+      }
     })();
 
     // 13. Receipt: engine frame statistics per scenario.
@@ -403,6 +468,9 @@ void main() {
       'flavor': 'dev',
       'scenario_order': collector.windowOrder,
       'dataset': {
+        'semantics': heavySemantics,
+        'upload': heavyUploadMode,
+        if (heavyUploadMode == 'accept') 'upload_wals': heavyUploadWalCount,
         'conversations': heavyConversationCount,
         'detail_segments': heavyDetailSegments,
         'wals': heavyWalCount,
@@ -440,7 +508,7 @@ void main() {
     debugPrint('HEAVY_FIXTURE_STORAGE=${storage.path}');
     expect(results['cold_start']!['restored_from_cache'], isTrue,
         reason: 'Home must restore the seeded history from the conversations cache');
-  }, timeout: const Timeout(Duration(minutes: 12)));
+  }, semanticsEnabled: heavySemantics == 'on', timeout: const Timeout(Duration(minutes: 12)));
 }
 
 Map<String, Object?> _readNativeInitialLifecycle(IntegrationTestWidgetsFlutterBinding binding) {
@@ -565,10 +633,11 @@ Future<Finder> _verticalScrollable(WidgetTester tester, Finder scope) async {
 /// production switch shape ([HomeTabSwitcher] driving [HomeProvider], an
 /// [IndexedStack] whose slots stay stable, tickers gated to the selected tab).
 class _HeavyHomeShell extends StatelessWidget {
-  const _HeavyHomeShell({required this.conversationsProvider, required this.walService});
+  const _HeavyHomeShell({required this.conversationsProvider, required this.walService, required this.uploadGate});
 
   final ConversationProvider conversationsProvider;
   final WalService walService;
+  final SyncUploadGate uploadGate;
 
   @override
   Widget build(BuildContext context) {
@@ -593,6 +662,7 @@ class _HeavyHomeShell extends StatelessWidget {
         ChangeNotifierProvider(
             create: (_) => SyncProvider(
                   walService: walService,
+                  uploadGate: uploadGate,
                   startBackgroundSync: false,
                   keepAlive: SyncTransferKeepAlive(start: () async {}, stop: () async {}),
                 )),

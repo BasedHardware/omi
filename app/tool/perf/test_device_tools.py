@@ -21,18 +21,63 @@ comparison = module('compare')
 
 
 def summary():
-    return {'accepted_baseline': True, 'variance_pass': True, 'build_mode': 'profile', 'runs': 3,
-            'dataset': {'wals': 6500}, 'frame_policy': 'framework-requested/v1',
+    return {'scoring_protocol': 'sparse-readiness-stalls/v1',
+            'sparse_stall_limits': {'stalls_over_100ms': 2, 'stall_blocked_over_100ms_us': 500000},
+            'sparse_scenarios': ['cold_start', 'home_idle_sync_refresh'],
+            'accepted_baseline': True, 'variance_pass': True, 'build_mode': 'profile', 'runs': 3,
+            'dataset': {'wals': 6500, 'semantics': 'off', 'upload': 'refuse'}, 'frame_policy': 'framework-requested/v1',
             'pacing': 'fixed-real-time/v1', 'timeline_enabled': False,
             'identity': {'device_id': 'fixture-device', 'platform': 'ios',
                          'device_os_version': 'fixture-os',
                          'flutter_revision': 'fixture-sdk', 'harness_sha256': 'fixture-harness'},
             'scenarios': {'cold_start': {'build_p90_us': [10, 11, 10], 'raster_p90_us': [20, 21, 20],
                           'total_p90_us': [30, 31, 30], 'frames_over_16ms': [1, 2, 3],
-                          'frames_over_100ms': [1, 0, 0], 'worst_total_us': [100001, 20, 30]}}}
+                          'frames_over_100ms': [1, 0, 0], 'worst_total_us': [100001, 20, 30],
+                          'stalls_over_100ms': [0, 1, 0], 'stall_blocked_over_100ms_us': [0, 150000, 0],
+                          'cache_ready_us': [1000000, 1100000, 1050000]}}}
 
 
 class DeviceToolsTests(unittest.TestCase):
+    def test_semantics_and_scoring_protocol_must_match(self):
+        for setting in ('on', None):
+            after = summary()
+            after['dataset']['semantics'] = setting
+            with self.assertRaisesRegex(ValueError, 'semantics'):
+                comparison.compare(summary(), after)
+        after = summary()
+        after['scoring_protocol'] = 'other'
+        with self.assertRaisesRegex(ValueError, 'scoring_protocol'):
+            comparison.compare(summary(), after)
+
+    def test_comparison_exposes_sparse_readiness_and_stalls(self):
+        before, after = summary(), summary()
+        after['scenarios']['cold_start']['stalls_over_100ms'] = [0, 3, 0]
+        result = comparison.compare(before, after)['scenarios']['cold_start']
+        self.assertEqual(result['cache_ready_us']['before'], [1000000, 1100000, 1050000])
+        self.assertEqual(result['stalls_over_100ms']['after'], [0, 3, 0])
+
+    def test_worker_command_forwards_modes_and_history(self):
+        spec = dict(heavy='/synthetic/omi-heavy', platform='ios', runs=3, out='/synthetic/out',
+                    timeline=True, synced_wals=66222, upload='accept', semantics='on', upload_wals=6)
+        command = runner.profile_command(spec, 'synthetic-phone')
+        for flag, value in (('--upload', 'accept'), ('--upload-wals', '6'),
+                            ('--semantics', 'on'), ('--synced-wals', '66222')):
+            self.assertEqual(command[command.index(flag) + 1], value)
+        self.assertIn('--timeline', command)
+
+    def test_new_cli_modes_are_retained_in_dry_run(self):
+        result = subprocess.run([sys.executable, str(Path(runner.__file__)), '--dry-run',
+                                 '--upload', 'accept', '--upload-wals', '6', '--semantics', 'on'],
+                                capture_output=True, text=True, check=True)
+        value = json.loads(result.stdout)
+        self.assertEqual((value['upload'], value['upload_wals'], value['semantics']), ('accept', 6, 'on'))
+
+    def test_invalid_modes_are_rejected_before_launch(self):
+        for option, value in (('--upload', 'real'), ('--semantics', 'auto'), ('--upload-wals', '19')):
+            result = subprocess.run([sys.executable, str(Path(runner.__file__)), '--dry-run', option, value],
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 2)
+
     def test_stale_gui_request_cannot_start_a_device_job(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

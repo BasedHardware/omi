@@ -42,6 +42,10 @@ const _walsDefine = String.fromEnvironment('PERF_SIM_WALS');
 const _walFilesDefine = String.fromEnvironment('PERF_SIM_WAL_FILES');
 const _detailSegmentsDefine = String.fromEnvironment('PERF_SIM_DETAIL_SEGMENTS');
 const _syncedWalsDefine = String.fromEnvironment('PERF_SIM_SYNCED_WALS');
+const heavyUploadMode = String.fromEnvironment('PERF_SIM_UPLOAD', defaultValue: 'refuse');
+const heavySemantics = String.fromEnvironment('PERF_HEAVY_SEMANTICS', defaultValue: 'off');
+final heavyUploadWalCount =
+    _knob('PERF_SIM_UPLOAD_WALS', const String.fromEnvironment('PERF_SIM_UPLOAD_WALS'), 12, min: 1, max: 18);
 
 final heavyConversationCount = _knob('PERF_SIM_CONVERSATIONS', _conversationsDefine, 2000, min: 1, max: 5000);
 final heavyWalCount = _knob('PERF_SIM_WALS', _walsDefine, 6500, min: 0, max: 20000);
