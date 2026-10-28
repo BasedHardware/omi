@@ -28,10 +28,15 @@ class RestoreAccount extends StatefulWidget {
 
 class _RestoreAccountState extends State<RestoreAccount> {
   bool _busy = false;
+  bool _restoring = true;
   bool _confirmFinish = false;
 
   Future<void> _act(bool restoring) async {
-    setState(() => _busy = true);
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _restoring = restoring;
+    });
     try {
       final result = restoring
           ? await (widget.restore ?? const AccountDeletionApi().restore)()
@@ -95,13 +100,14 @@ class _RestoreAccountState extends State<RestoreAccount> {
                 key: const Key('restore_my_account'),
                 label: context.l10n.deleteRestoreButton,
                 expand: true,
-                isLoading: _busy,
+                isLoading: _busy && _restoring,
                 onPressed: _busy ? null : () => _act(true),
               ),
               const SizedBox(height: OmiSpacing.xs),
               if (_confirmFinish)
                 OmiButton.destructive(
                   key: const Key('finish_deleting_confirm'),
+                  isLoading: _busy && !_restoring,
                   label: context.l10n.deleteFinishNowButton,
                   expand: true,
                   onPressed: _busy ? null : () => _act(false),

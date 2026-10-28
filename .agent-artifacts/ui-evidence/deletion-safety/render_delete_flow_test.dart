@@ -106,12 +106,7 @@ void main() {
   Future<void> pumpDevice(WidgetTester tester, Brightness brightness, Widget home) async {
     tester.view.physicalSize = Size(width * dpr, height * dpr);
     tester.view.devicePixelRatio = dpr;
-    tester.view.padding = FakeViewPadding(
-      left: 0,
-      top: topInset * dpr,
-      right: 0,
-      bottom: bottomInset * dpr,
-    );
+    tester.view.padding = FakeViewPadding(left: 0, top: topInset * dpr, right: 0, bottom: bottomInset * dpr);
     addTearDown(tester.view.reset);
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     await tester.pumpWidget(host(brightness, home));
@@ -149,11 +144,7 @@ void main() {
 
     testWidgets('A: confirm step with held recordings ($mode)', (tester) async {
       try {
-        const data = DeletionPendingData(
-          processingCount: 14,
-          notUploadedCount: 3,
-          gracePeriodDays: 14,
-        );
+        const data = DeletionPendingData(processingCount: 14, notUploadedCount: 3, gracePeriodDays: 14);
         await reachConfirmStep(tester, brightness, data);
         expect(find.textContaining('14 recordings are still processing'), findsOneWidget);
         expect(find.textContaining("3 recordings haven't uploaded yet"), findsOneWidget);
@@ -206,14 +197,17 @@ void main() {
     testWidgets('restore and finish confirmation ($mode)', (tester) async {
       try {
         await pumpDevice(
-            tester,
-            brightness,
-            RestoreAccount(
-              status: AccountDeletionStatus(
-                  pendingDeletion: true, wipeAt: DateTime.now().add(const Duration(days: 14, minutes: 1))),
-              onRestored: () {},
-              onFinished: () {},
-            ));
+          tester,
+          brightness,
+          RestoreAccount(
+            status: AccountDeletionStatus(
+              pendingDeletion: true,
+              wipeAt: DateTime.now().add(const Duration(days: 14, minutes: 1)),
+            ),
+            onRestored: () {},
+            onFinished: () {},
+          ),
+        );
         await capture(tester, 'restore_$mode');
         await tester.tap(find.byKey(const Key('finish_deleting')));
         await tester.pumpAndSettle();
@@ -243,11 +237,13 @@ void main() {
   testWidgets('Technical issues offers pause and local-only loss uses supplied restore window', (tester) async {
     try {
       await pumpDevice(
-          tester,
-          Brightness.light,
-          DeleteAccount(
-              loadPendingData: () async =>
-                  const DeletionPendingData(processingCount: 0, notUploadedCount: 1, gracePeriodDays: 7)));
+        tester,
+        Brightness.light,
+        DeleteAccount(
+          loadPendingData: () async =>
+              const DeletionPendingData(processingCount: 0, notUploadedCount: 1, gracePeriodDays: 7),
+        ),
+      );
       await tester.tap(find.text('Too many technical issues'));
       await tester.pump();
       await tester.tap(find.text('Continue'));

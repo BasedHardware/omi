@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/core/app_shell.dart';
 import 'package:flutter/material.dart';
 
@@ -58,8 +60,10 @@ class _MobileAppState extends State<MobileApp> {
             check: authProvider.checkAccountDeletion,
             onFinished: () =>
                 Navigator.of(context).pushAndRemoveUntil(omiPageRoute(builder: (_) => const AppShell()), (_) => false),
-            onRestored: () =>
-                Navigator.of(context).pushAndRemoveUntil(omiPageRoute(builder: (_) => const AppShell()), (_) => false),
+            onRestored: () {
+              unawaited(AccountCutoverRuntime.instance.refresh());
+              Navigator.of(context).pushAndRemoveUntil(omiPageRoute(builder: (_) => const AppShell()), (_) => false);
+            },
             productBuilder: (context) => AccountCutoverBlockingGate(
               productBuilder: (context) {
                 // Returning users who haven't yet given consent under the new
