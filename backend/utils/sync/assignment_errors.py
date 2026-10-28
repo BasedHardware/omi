@@ -12,6 +12,7 @@ class SyncAssignmentConflictReason(StrEnum):
     REDIRECT_CHAIN_TOO_LONG = 'redirect_chain_too_long'
     DONOR_TOMBSTONE_NO_REDIRECT = 'donor_tombstone_no_redirect'
     ANCESTRY_FLATTEN_REJECTED = 'ancestry_flatten_rejected'
+    SIZE_CAP_ROLLOVER_UNAVAILABLE = 'size_cap_rollover_unavailable'
     CORRECTED_SPEECH_CHANGED = 'corrected_speech_changed'
     BRIDGE_SOURCE_NOT_TOMBSTONE = 'bridge_source_not_tombstone'
     LIVE_TARGET_NOT_PERSISTED = 'live_target_not_persisted'
@@ -35,6 +36,7 @@ SYNC_ASSIGNMENT_CONFLICT_STRUCTURAL = frozenset(
         SyncAssignmentConflictReason.REDIRECT_CHAIN_TOO_LONG.value,
         SyncAssignmentConflictReason.DONOR_TOMBSTONE_NO_REDIRECT.value,
         SyncAssignmentConflictReason.ANCESTRY_FLATTEN_REJECTED.value,
+        SyncAssignmentConflictReason.SIZE_CAP_ROLLOVER_UNAVAILABLE.value,
         SyncAssignmentConflictReason.CORRECTED_SPEECH_CHANGED.value,
         SyncAssignmentConflictReason.RECORD_TARGET_RETIRED.value,
         SyncAssignmentConflictReason.RECORD_ROUTE_OWNER_CHANGED.value,

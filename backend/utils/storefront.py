@@ -220,6 +220,9 @@ def _prices_for(
                 currency=row['currency'],
                 locale=locale,
             )
+            if payload['cta_label']:
+                payload['cta_label_template'] = copy_for(locale)['cta']['switch_yearly']
+                payload['saving_minor'] = monthly_minor * 12 - row['unit_amount']
         rendered.append(StorefrontPrice(**payload))
     return rendered
 
@@ -369,6 +372,10 @@ def build_storefront(
                             )
                             for line in copy_for(locale)['prices']['confirm_yearly_lines']
                         ]
+                        item.confirm_line_templates = [
+                            line.format(date=format_date(subscription.current_period_end, locale), amount='{price}')
+                            for line in copy_for(locale)['prices']['confirm_yearly_lines']
+                        ]
             if resubscribe_this and current_price_id:
                 prices = [item for item in prices if item.price_id == current_price_id]
             switch = want_switch and any(item.cta_label for item in prices)
@@ -471,6 +478,18 @@ def build_storefront(
         locale=locale,
         currency=current_currency,
     )
+    line_template, _ = current_line(
+        plan_id=current_plan,
+        plan_name_text=plan_name(current_plan, ladder),
+        amount_minor=current_amount,
+        interval=current_interval,
+        period_end=subscription.current_period_end,
+        cancel=subscription.cancel_at_period_end,
+        legacy=legacy,
+        locale=locale,
+        currency=current_currency,
+        price_label='{price}',
+    )
     at_cap = None
     chat_pause = None
     if (
@@ -513,6 +532,9 @@ def build_storefront(
             cancel_at_period_end=subscription.cancel_at_period_end,
             line=line,
             legacy_note=note,
+            amount_minor=current_amount,
+            currency=current_currency if current_amount is not None else None,
+            line_template=line_template if current_amount is not None else None,
         ),
         usage=usage,
         yearly_toggle_label=None if resubscribe_only else yearly_toggle_label(_sheet_months_free(tiers), locale),
@@ -549,14 +571,11 @@ def build_single_plan_storefront(
     trigger: str | None = None,
     locale: str | None = None,
 ) -> StorefrontResponse:
-    """Omi Pro (`unlimited_v2`) offer sheet for a new buyer on a non-desktop platform.
+    """Omi Pro (`unlimited_v2`) offer sheet for a buyer with no current paid plan.
 
-    2026-10-24 ruling: a buyer with no current paid subscription gets only Omi
-    Pro. The ladder sheet has no Omi Pro card and the web plans panel has no
-    catalog fallback, so this single-tier v2 sheet replaces the earlier 404 —
-    the caller gets exactly one purchasable offer instead of a dead "Couldn't
-    load plans" panel. Desktop platforms and current subscribers keep the
-    ladder sheet via `build_storefront`.
+    Omi Pro is the only plan sold, on every platform. The ladder sheet has no
+    Omi Pro card, so this single-tier v2 sheet is served instead; current
+    subscribers keep the ladder sheet via `build_storefront`.
     """
     ladder = load_ladder()
     current_plan = subscription.plan.value

@@ -31,11 +31,14 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 from database.batch_pipeline_policy import UnpinnedPolicyRefused
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_terminal_empty import TerminalEmptyStore, intent_snapshot, spent_canary, exhausted, idle
+from config.batch_language_recovery import guarded_exhausted, language_guarded
 from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.artifacts import ProtectionContext
 from utils.batch_pipeline.contracts import WorkItem
 from utils.batch_pipeline.quarantine_recovery import log_terminal_empty
 from utils.batch_pipeline.recovery_disposition import (
+    EMPTY_EVIDENCE,
+    LANGUAGE_GUARD_EMPTY_EVIDENCE,
     inspect_audio,
     silence_payload,
     terminal_empty_payload,
@@ -99,6 +102,10 @@ def inspect_unit(store, artifacts, sid, uid, key, attestation):
     item = WorkItem(**{f.name: job[f.name] for f in fields(WorkItem) if f.name in job})
     _, _, spans = inspect_audio(item, artifacts.fetch_audio(item))
     require(spent_canary(job) or exhausted(job, attestation), 'missing_exhaustion_evidence')
+    if language_guarded(job):
+        # The guarded terminal needs every recognizer's validated empty receipt:
+        # an unattempted independent side keeps the unit held.
+        require(guarded_exhausted(job), 'independent recovery required')
     if not spans:
         from utils.batch_pipeline.contracts import held_silence_allowed
 
@@ -150,7 +157,16 @@ def apply_one(store, artifacts, sid, uid, key, decision, digest, attestation, pa
     else:
         _, duration, spans = inspect_audio(item, artifacts.fetch_audio(item))
         require(bool(spans) == (decision == 'no_recoverable_speech'), 'vad_changed')
-        payload = terminal_empty_payload(duration, spans) if spans else silence_payload(duration)
+        # A guarded terminal records the language guard and both empty recognizers.
+        payload = (
+            silence_payload(duration)
+            if not spans
+            else terminal_empty_payload(
+                duration,
+                spans,
+                LANGUAGE_GUARD_EMPTY_EVIDENCE if language_guarded(job) else EMPTY_EVIDENCE,
+            )
+        )
         uri = artifacts.persist_recovery_result(item, payload, marker['token'])
     changed = protocol.complete(
         sid, marker['token'], digest, uri, time.time(), measured_held_vad_speech_seconds=result_vad_evidence(payload)

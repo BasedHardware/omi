@@ -190,9 +190,13 @@ class AuditRun {
   }
 
   /// Gives loopback I/O real event-loop turns, then finishes finite animations.
+  /// Six turns, not one long wait: each turn yields the event loop so loopback
+  /// responses (sub-millisecond locally) can land and the pump between turns
+  /// advances fake frame time. This helper runs several times per scenario, so
+  /// the per-turn delay dominated the smoke suite's wall time at 80 ms x 6.
   Future<void> settle() async {
     for (var i = 0; i < 6; i++) {
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 80)));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
       await tester.pump(const Duration(milliseconds: 200));
     }
   }

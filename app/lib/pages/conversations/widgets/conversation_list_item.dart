@@ -35,7 +35,8 @@ import 'package:omi/widgets/extensions/string.dart';
 /// "Discarded · 12s" for a discarded one (its words go in [conversationSnippet]).
 String conversationRowTitle(BuildContext context, ServerConversation conversation) {
   final l10n = context.l10n;
-  if (conversation.discarded) {
+  // A noise clip revealed from Home's fold reads like any row, not as "Discarded".
+  if (conversation.discarded && !conversation.isFoldedNoise) {
     final seconds = conversation.getDurationInSeconds();
     if (seconds <= 0) return l10n.discardedConversation;
     return l10n.discardedConversationTitle(OmiDuration.compact(seconds, l10n));
@@ -512,7 +513,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
   }
 
   Widget _buildMobileLayout(BuildContext context) {
-    final discarded = widget.conversation.discarded;
+    final discarded = widget.conversation.discarded && !widget.conversation.isFoldedNoise;
     final discardedSnippet =
         discarded || widget.conversation.processingDeferred ? conversationSnippet(widget.conversation) : '';
     return Stack(

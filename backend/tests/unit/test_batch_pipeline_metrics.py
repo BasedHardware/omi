@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 
 from prometheus_client import CollectorRegistry
@@ -347,3 +348,102 @@ def test_firestore_oldest_walks_past_policy_holds():
     assert oldest(exactly_bound, 'omi', 2) is None
     just_short = Client([Doc({**held, 'enqueued_at': float(n)}) for n in range(OLDEST_POLICY_HOLD_SCAN_LIMIT - 1)])
     assert oldest(just_short, 'omi', 2) is None
+
+
+def _deep_oldest_age(registry):
+    return registry.get_sample_value(
+        'omi_batch_pipeline_oldest_age_seconds',
+        {'priority': 'deep', 'worker_release': 'unscoped', 'namespace': 'unscoped'},
+    )
+
+
+def test_allowance_hold_through_an_unevaluated_reevaluation_does_not_flap_the_proxy():
+    # 2026-10-27: the proxy flapped to ~54h when a held job's re-evaluation came
+    # back unevaluated: defer pops compute_decision (BLIND, never a false hold)
+    # and the job read as a decisionless commitment until the next re-hold.
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(replace(item('held'), requires_compute_admission=True), 0)
+    lease = queue.pull(100)[0]
+    assert queue.defer('held', lease.token, 110, 60, held_reason='allowance_exhausted', admission_refused=True)
+    queue.recover(200)
+    lease = queue.pull(200)[0]
+    assert queue.defer('held', lease.token, 210, admission_refused=True)  # unevaluated RPC
+    job = store.rows['jobs', 'held']
+    assert 'compute_decision' not in job  # BLIND contract unchanged
+    assert job['last_policy_hold'] == {'reason': 'allowance_exhausted', 'at': 110}
+    metrics.refresh(store, 194_400)  # ~54h later: still parked, not a commitment
+    assert _deep_oldest_age(registry) == 0
+
+
+def test_lease_that_bypasses_admission_ends_the_parked_hold():
+    # Review (Luna): with offline enforcement off, a unit that does not require
+    # compute admission dispatches without authorize(); its lease is a real
+    # commitment, so a stale hold marker must not hide it from the proxy.
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('held'), 0)
+    lease = queue.pull(100)[0]
+    assert queue.defer('held', lease.token, 110, 60, held_reason='allowance_exhausted', admission_refused=True)
+    queue.recover(200)
+    lease = queue.pull(200)[0]
+    assert queue.defer('held', lease.token, 210, admission_refused=True)
+    assert 'last_policy_hold' not in store.rows['jobs', 'held']
+    metrics.refresh(store, 1900)
+    assert _deep_oldest_age(registry) == 1900
+
+
+def test_firestore_oldest_skips_a_decisionless_job_with_a_last_allowance_hold():
+    from database.batch_pipeline_store import OLDEST_POLICY_HOLD_SCAN_LIMIT, is_allowance_policy_hold, oldest
+
+    parked = {'merge_pending': True, 'last_policy_hold': {'reason': 'allowance_exhausted', 'at': 1}}
+    assert is_allowance_policy_hold(parked)
+    assert not is_allowance_policy_hold({'last_policy_hold': {'reason': 'privacy_blocked', 'at': 1}})
+    # The current decision wins over the marker whenever one is recorded.
+    assert not is_allowance_policy_hold(
+        {**parked, 'compute_decision': {'outcome': 'allowed', 'reason': 'batch', 'at': 2}}
+    )
+
+    class Query:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def where(self, *args, **kwargs):
+            return self
+
+        def order_by(self, *args, **kwargs):
+            return self
+
+        def limit(self, count):
+            return self
+
+        def stream(self):
+            return iter(self.rows)
+
+    class Doc:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def to_dict(self):
+            return self.payload
+
+    class Client:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def collection(self, name):
+            return Query(self.rows)
+
+    commitment = {'merge_pending': True, 'enqueued_at': 2.0}
+    assert oldest(Client([Doc({**parked, 'enqueued_at': 1.0}), Doc(commitment)]), 'omi', 1) == 2.0
+    assert oldest(Client([Doc({**parked, 'enqueued_at': 1.0})]), 'omi', 1) is None
+    # The #23638 truncation sentinel still fails toward tripping on the oldest
+    # hold when marker-only holds fill the scan bound.
+    truncated = [Doc({**parked, 'enqueued_at': float(n)}) for n in range(OLDEST_POLICY_HOLD_SCAN_LIMIT + 1)]
+    assert oldest(Client(truncated), 'omi', 1) == 0.0
+    exact = [Doc({**parked, 'enqueued_at': float(n)}) for n in range(OLDEST_POLICY_HOLD_SCAN_LIMIT)]
+    assert oldest(Client(exact), 'omi', 1) is None

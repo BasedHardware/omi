@@ -1,6 +1,9 @@
 """Projection binding validation and provider-free retry/publication guards."""
 
 from dataclasses import replace
+from dataclasses import asdict
+from copy import deepcopy
+from types import SimpleNamespace
 from config.policy import BatchUnitPolicy, ProjectionPolicy, resolve_batch_policy, resolve_stage_policy
 import logging
 from unittest.mock import Mock
@@ -12,6 +15,10 @@ from utils.batch_pipeline.contracts import ProjectionBinding
 from database.batch_pipeline_projection import ProjectionStore
 from utils.batch_pipeline import projection
 from utils.sync import bridge
+from database.sync_ledger import sync_content_ledger_ref
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from utils.batch_pipeline.scheduler import owner_key
+from utils.sync.capture import chunk_identity
 
 
 @pytest.fixture
@@ -108,6 +115,59 @@ def test_original_vad_union_must_agree_with_speech_metering():
     payload['speech_seconds'] = 3
     with pytest.raises(ValueError, match='accounting'):
         projection_speech_spans(payload, 160)
+
+
+def test_decoded_eof_span_overrunning_admitted_duration_is_clamped():
+    from utils.batch_pipeline.contracts import projection_speech_spans
+
+    # The worker's fetch_decode check admits decoded audio up to 0.1s longer
+    # than the admitted capture, and span edges ride the decoded sample clock,
+    # so a sample-rounded EOF span ends past the admitted duration (reentry29
+    # probe, 2026-10-28: admitted 1.00001s, 16001 decoded samples).
+    admitted, decoded_eof = 1.00001, 16001 / 16000
+    payload = {'speech_spans': [{'start': 0.0, 'end': decoded_eof}], 'speech_seconds': decoded_eof}
+    assert projection_speech_spans(payload, admitted) == [{'start': 0.0, 'end': admitted}]
+    # The worker's own tolerance boundary (exactly 0.1s) still clamps.
+    payload = {'speech_spans': [{'start': 0.0, 'end': 4.1}], 'speech_seconds': 4.1}
+    assert projection_speech_spans(payload, 4) == [{'start': 0.0, 'end': 4}]
+
+
+def test_vad_span_overrun_beyond_decode_tolerance_is_still_rejected():
+    from utils.batch_pipeline.contracts import projection_speech_spans
+
+    payload = {'speech_spans': [{'start': 0.0, 'end': 4.2}], 'speech_seconds': 4.2}
+    with pytest.raises(ValueError, match='ordered nonoverlapping'):
+        projection_speech_spans(payload, 4)
+    # A span starting at or past the admitted duration degenerates after the
+    # clamp (start >= end), whether or not its own overrun is within tolerance.
+    payload = {'speech_spans': [{'start': 4.05, 'end': 4.1}], 'speech_seconds': 0.05}
+    with pytest.raises(ValueError, match='ordered nonoverlapping'):
+        projection_speech_spans(payload, 4)
+
+
+def test_clamped_eof_span_keeps_overlapping_spans_rejected():
+    from utils.batch_pipeline.contracts import projection_speech_spans
+
+    # Overlap against a span the clamp shortened must still fail: the second
+    # span cannot survive inside the admitted tail the first span now owns.
+    payload = {'speech_spans': [{'start': 3.9, 'end': 4.1}, {'start': 3.95, 'end': 4.05}], 'speech_seconds': 0.2}
+    with pytest.raises(ValueError, match='ordered nonoverlapping'):
+        projection_speech_spans(payload, 4)
+
+
+def test_speech_accounting_tolerates_the_eof_clamp_only_within_one_sample():
+    from utils.batch_pipeline.contracts import projection_speech_spans
+
+    # speech_seconds counts the decoded-clock union (the worker sums the same
+    # spans it emits), so the clamp must not break the accounting fence: the
+    # pre-clamp union is compared, and a real disagreement still fails.
+    admitted, decoded_eof = 1.00001, 16001 / 16000
+    spans = [{'start': 0.5, 'end': decoded_eof}]
+    payload = {'speech_spans': spans, 'speech_seconds': decoded_eof - 0.5}
+    assert projection_speech_spans(payload, admitted) == [{'start': 0.5, 'end': admitted}]
+    payload['speech_seconds'] = decoded_eof - 0.5 + 0.001
+    with pytest.raises(ValueError, match='accounting'):
+        projection_speech_spans(payload, admitted)
 
 
 def test_production_result_cannot_invent_vad_groups_from_transcript_gaps():
@@ -553,6 +613,7 @@ def test_phase_timing_preserves_playback_retry_and_never_logs_private_error(bind
     monkeypatch.setattr(bridge, 'finish_sync_bridges', lambda *_, **kw: 'synthetic-conversation')
     playback = Mock(side_effect=ValueError('private-error-must-never-be-logged'))
     projector = projection.Projector(Mock(), Mock(), playback=playback)
+    monkeypatch.setattr(projector.store, 'settle_deleted_output', Mock())
     receipt = {
         'state': 'persisted',
         'conversation_id': 'synthetic-conversation',
@@ -644,6 +705,105 @@ def test_supersession_cannot_bypass_privacy_fence(binding):
         projector.supersede(session)
 
 
+@pytest.mark.parametrize(
+    'source', ['live', 'donor_only', 'output_only', 'direct_deleted', 'redirect_deleted', 'soft_deleted']
+)
+def test_privacy_disposition_requires_transactional_input_tombstone_proof(binding, source, monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'local')
+    client = StrictFirestore()
+    store = ProjectionStore(SimpleNamespace(client=client, namespace='batch_privacy_proof'))
+    user = client.collection('users').document(binding.owner_id)
+    user.create({'data_protection_level': 'standard'})
+    cid = chunk_identity(binding.owner_id, binding.source, binding.client_device_id, binding.is_locked, 1000)
+    if source == 'direct_deleted':
+        user.collection('deleted_conversations').document(cid).create({'deleted': True})
+    elif source == 'redirect_deleted':
+        user.collection('conversations').document(cid).create({'deleted': True, 'sync_merged_into': 'deleted-survivor'})
+        user.collection('deleted_conversations').document('deleted-survivor').create({'deleted': True})
+    elif source == 'soft_deleted':
+        user.collection('conversations').document(cid).create({'deleted': True})
+    elif source in {'donor_only', 'output_only'}:
+        user.collection('deleted_conversations').document('unrelated-donor').create({'deleted': True})
+    result = {'outcome': 'success', 'result_uri': 'gs://synthetic/result'}
+    store.ref('jobs', 'segment').create(
+        {
+            'projection_binding': asdict(binding),
+            'owner_id': binding.owner_id,
+            'capture_at': 1000,
+            'privacy_generation': 0,
+            'result': result,
+            **({'conversation_ids': ['unrelated-donor']} if source == 'output_only' else {}),
+        }
+    )
+    store.ref('results', 'segment').create(
+        {
+            'owner_key': owner_key(binding.owner_id),
+            'protocol_version': 1,
+            'segment_id': 'segment',
+            'capture_at': 1000,
+            'previous_segment_id': None,
+            'result': result,
+        }
+    )
+    store.ref('owners', owner_key(binding.owner_id)).create({'projection_watermark': None})
+    sync_content_ledger_ref(client, binding.owner_id, binding.content_id).create(
+        {
+            'dispatch_protocol': 'batch_v1',
+            'status': 'processing',
+            'job_id': binding.job_id,
+            'batch_pipeline': {'protocol_version': 1, 'namespace': store.store.namespace, 'segment_ids': ['segment']},
+        }
+    )
+    session = store.session('segment', binding, 10000, policy=ProjectionPolicy())
+    transaction = client.transaction()
+    before = deepcopy(client.rows)
+    if source == 'output_only':
+        session.prepare(transaction)
+        assert client.rows == before
+        transaction = client.transaction()
+    if source in {'direct_deleted', 'redirect_deleted'}:
+        session.prepare(transaction, privacy_deleted=True)
+        receipt = session.persist(transaction, superseded=True, privacy_deleted=True)
+        assert receipt['privacy_reason'] == 'conversation_deleted' and receipt['speech_seconds'] == 0
+        assert store.projection_watermark(owner_key(binding.owner_id)) == 'segment'
+    else:
+        with pytest.raises(projection.ProjectionBlocked, match='requires a source deletion tombstone'):
+            session.prepare(transaction, privacy_deleted=True)
+        assert client.rows == before
+
+
+@pytest.mark.parametrize('deleted', [False, True])
+def test_separate_output_guards_preserve_distinct_document_budget(binding, deleted, monkeypatch):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'local')
+    client = StrictFirestore()
+    store = ProjectionStore(SimpleNamespace(client=client, namespace='batch_privacy_budget'))
+    user = client.collection('users').document(binding.owner_id)
+    user.create({'data_protection_level': 'standard'})
+    session = store.session('segment', binding, 10000, policy=ProjectionPolicy())
+    session._privacy_fence_ids = set()  # The grouped input/output prepare phase.
+    transaction = client.transaction()
+    for index in range(256):
+        cid = f'output-{index}'
+        if deleted:
+            user.collection('deleted_conversations').document(cid).create({'deleted': True})
+            with pytest.raises(BatchPrivacyBlocked, match='conversation_deleted'):
+                session.guard(transaction, [cid])
+        else:
+            session.guard(transaction, [cid])
+    # Rechecking a previously seen source does not consume another slot.
+    if deleted:
+        with pytest.raises(BatchPrivacyBlocked, match='conversation_deleted'):
+            session.guard(transaction, ['output-0'])
+    else:
+        session.guard(transaction, ['output-0'])
+    with pytest.raises(BatchPrivacyBlocked, match='conversation_fence_budget'):
+        session.guard(transaction, ['later-input'])
+    session._privacy_fence_ids = None  # Later validate_plan keeps its existing budget.
+    session.guard(transaction, ['later-input'])
+
+
 @pytest.mark.parametrize('reason', ['conversation_fence_budget', 'conversation_deleted', 'private-text-not-a-reason'])
 def test_assignment_privacy_fence_logs_bounded_reason(binding, monkeypatch, caplog, reason):
     from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -674,15 +834,26 @@ def test_assignment_privacy_fence_logs_bounded_reason(binding, monkeypatch, capl
     monkeypatch.setattr(
         projection.conversations_db, 'assign_sync_conversation', Mock(side_effect=BatchPrivacyBlocked(reason))
     )
-    with caplog.at_level(logging.INFO, logger=projection.__name__):
-        with pytest.raises(BatchPrivacyBlocked):
-            with projection.projection_phase('assignment', policy):
-                projector.assign_parts(item, {'result': {'result_uri': 'fixture'}}, binding, policy=policy)
+    session = projector.store.session.return_value
+    session.persist_empty.return_value = {'state': 'ready', 'privacy_reason': 'conversation_deleted'}
+    with caplog.at_level(logging.INFO):
+        if reason == 'conversation_deleted':
+            projector.assign_parts(item, {'result': {'result_uri': 'fixture'}}, binding, policy=policy)
+            session.persist_empty.assert_called_once_with(superseded=True, privacy_deleted=True)
+        else:
+            with pytest.raises(BatchPrivacyBlocked):
+                with projection.projection_phase('assignment', policy):
+                    projector.assign_parts(item, {'result': {'result_uri': 'fixture'}}, binding, policy=policy)
     expected = reason if reason != 'private-text-not-a-reason' else 'unknown'
     text = caplog.text
-    assert f'action=assignment outcome=error exception_type=BatchPrivacyBlocked fence_reason={expected}' in text
-    assert f'phase=assignment outcome=error' in text
-    assert text.count(f'fence_reason={expected}') == 2
+    if reason == 'conversation_deleted':
+        assert 'action=assignment outcome=privacy_terminal fence_reason=conversation_deleted' in text
+        assert 'phase=assignment outcome=error' not in text
+        assert text.count(f'fence_reason={expected}') == 1
+    else:
+        assert f'action=assignment outcome=error exception_type=BatchPrivacyBlocked fence_reason={expected}' in text
+        assert 'phase=assignment outcome=error' in text
+        assert text.count(f'fence_reason={expected}') == 2
     assert 'private-text' not in text
     assert binding.owner_id not in text
 
@@ -734,3 +905,48 @@ def test_stamp_gap_reroute_reports_lineage_telemetry_after_batch_commit(binding,
     assert 'event=sync_lineage_stamp_append outcome=stamp_gap_refused span_delta_bucket=0' in caplog.text
     assert 'synthetic-neighbour' not in caplog.text
     assert '_sync_lineage_stamp_gap_refused' not in assigned
+
+
+def test_split_rollover_enqueues_every_output_before_acknowledging_and_resumes(monkeypatch, binding):
+    from utils.sync import reprocess
+
+    client = StrictFirestore()
+    store = ProjectionStore(Mock(client=client))
+    receipt_ref = client.collection('receipts').document('segment')
+    receipt_ref.create(
+        {
+            'state': 'persisted',
+            'conversation_id': 'part-0',
+            'size_rollover_outputs': [{'conversation_id': f'part-{i}', 'created': True} for i in range(3)],
+        }
+    )
+    session = Mock(job={'priority': 0})
+    session.prepare.side_effect = lambda transaction, **_: receipt_ref.get(transaction=transaction)
+    session.guard.side_effect = lambda transaction, _: receipt_ref.get(transaction=transaction)
+    session.receipt.side_effect = lambda: receipt_ref.get().to_dict()
+    session.write_receipt.side_effect = lambda transaction, receipt: transaction.set(receipt_ref, receipt)
+    monkeypatch.setattr(store, 'session', lambda *a, **k: session)
+    monkeypatch.setattr(store, 'run', lambda operation, **kwargs: operation(client.transaction()))
+    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+    monkeypatch.setenv('SYNC_TASKS_QUEUE', 'sync-jobs')
+    monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://fresh.invalid/v2/sync-jobs/run')
+    monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'invoker@example.invalid')
+    calls = []
+
+    def wake(row):
+        calls.append(row['conversation_id'])
+        if len(calls) == 1:
+            assert receipt_ref.get().to_dict()['state'] == 'persisted'
+            raise RuntimeError('interrupted after first durable enqueue')
+
+    monkeypatch.setattr(reprocess, '_enqueue', wake)
+    with pytest.raises(RuntimeError, match='interrupted'):
+        store.mark_enrichment('segment', binding, 0, 'part-0', 'en', policy=ProjectionPolicy())
+    store.mark_enrichment('segment', binding, 1, 'part-0', 'en', policy=ProjectionPolicy())
+    assert calls == ['part-0', 'part-1', 'part-2']
+    assert receipt_ref.get().to_dict()['state'] == 'ready'
+    assert receipt_ref.get().to_dict()['size_rollover_enriched'] == calls
+    assert all(
+        client.collection(reprocess.COLLECTION).document(reprocess.key(binding.owner_id, cid)).get().exists
+        for cid in calls
+    )

@@ -14,6 +14,8 @@ from enum import Enum
 
 from fastapi import HTTPException
 from config.batch_pipeline import RecordOwnerContention
+from config.server_batch import owned as server_batch_owned
+from config.server_batch import has_audio as server_batch_has_audio
 from config.episodes import episodes_enabled_for
 from config.rollout_cohorts import warm_rollout_cohorts
 
@@ -32,6 +34,7 @@ from utils.conversations.episode_runtime import process_with_episode_budget
 from utils.conversations.processing_trigger import is_recovery_trigger
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.smart_merge import smart_merge_step
+from utils.conversations.sync_hold_completion import complete_explicit
 from utils.conversations.smart_merge_policy import is_donor
 from utils.conversations.meeting_evidence_admission import await_meeting_evidence
 from utils.conversations.meeting_receipt import record_finalized_meeting_receipt
@@ -55,6 +58,7 @@ from utils.observability.finalization import (
     finalization_diagnostic_id,
     record_finalization_failure,
 )
+from utils.conversations.capture_group_notes_refresh import refresh_primary_notes
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retry
 from services.conversation_keyframes import ensure_conversation_keyframe_job, reconcile_conversation_keyframe_jobs
 from utils.retrieval.frame_request_authority import resolve_frame_request_authority
@@ -221,6 +225,52 @@ async def finalize_persisted_conversation(
     )
     if fenced is not None:
         return fenced
+    if (
+        server_batch_owned(conversation_data)
+        and not conversation.transcript_segments
+        and not getattr(conversation, 'photos', None)
+    ):
+        if not server_batch_has_audio(conversation_data):
+            if not conversation_data.get('server_batch_audio_closed'):
+                raise RuntimeError('server batch archive is not closed')
+            if not await run_blocking(
+                db_executor,
+                lifecycle_service.delete_empty_recording_conversation,
+                uid,
+                conversation_id,
+                (conversation_data.get('external_data') or {}).get('recording_session_id'),
+                allow_empty_server_batch=True,
+            ):
+                raise RuntimeError('server batch empty cleanup fenced')
+            return ConversationFinalizationDisposition.fenced
+        # No preview to enrich. Reserve batch before terminalizing this generation;
+        # its upload barrier still prevents work until pusher has committed the tail.
+        if not await run_blocking(db_executor, register_recording, uid, conversation_data):
+            raise RuntimeError('desktop batch registration refused')
+        if conversation.status != ConversationStatus.completed:
+            if not await run_blocking(
+                db_executor, lifecycle_service.complete_server_batch_capture, uid, conversation_id, conversation_data
+            ):
+                raise RuntimeError('desktop batch completion fenced')
+        fanout = await run_blocking(
+            db_executor,
+            lifecycle_service.claim_finalization_fanout,
+            finalization_job_id,
+            dispatch_generation,
+            lease_epoch,
+        )
+        if fanout['status'] == 'claimed':
+            if not await run_blocking(
+                db_executor,
+                lifecycle_service.complete_finalization_fanout,
+                finalization_job_id,
+                dispatch_generation,
+                lease_epoch,
+            ):
+                raise RuntimeError('desktop batch handoff completion fenced')
+        elif fanout['status'] not in {'completed', 'fenced'}:
+            raise RuntimeError('desktop batch handoff claim pending')
+        return ConversationFinalizationDisposition.completed
     await _episode_at_finalization_start(uid, conversation_id, conversation_data, trigger)
 
     silent_backfill = trigger is ProcessingTrigger.SILENT_BACKFILL
@@ -421,6 +471,11 @@ async def finalize_persisted_conversation(
             await run_blocking(
                 db_executor, link_duplicate_captures, uid, overlap_snapshot(uid, conversation, conversation_data)
             )
+            # Grouping may have delivered meeting identity (member calendar
+            # context, screen evidence) that the primary's already-generated
+            # notes lack; regenerate them once per group revision. Never fails
+            # finalization: the step swallows its own errors.
+            await run_blocking(lifecycle_executor(uid), refresh_primary_notes, uid, conversation_id)
         if fanout['status'] == 'completed':
             schedule_person_voice_learning_retry(uid, conversation_id)
             # Re-finalization of a row whose fanout already completed (e.g.
@@ -567,6 +622,7 @@ async def finalize_persisted_conversation(
                         device_id=device_id,
                         account_generation=decision.account_generation,
                     )
+        await run_blocking(db_executor, complete_explicit, uid, conversation, trigger)
         stage = 'fanout_completion'
         fanout_completed = await run_blocking(
             db_executor,

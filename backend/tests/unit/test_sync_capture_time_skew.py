@@ -12,12 +12,13 @@ and counts every disposition in ``omi_sync_capture_time_total``.
 
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
+import hashlib
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 from prometheus_client import REGISTRY
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from routers import sync as router
@@ -816,3 +817,59 @@ def test_skewed_private_cloud_chunk_persist_normalized_playback_start(
     # pair's server-clock start (clamped to now at latest).
     assert stored[0]['playback_start'] == pytest.approx(now_test - 10, abs=1.0)
     assert stored[0]['playback_start'] <= datetime.now(timezone.utc).timestamp()
+
+
+@pytest.mark.parametrize('payload', [b'', b'\x01', b'\x01\x00\x00\x00'])
+def test_v2_empty_or_torn_header_is_noop_even_with_invalid_clock(client, payload):
+    response = client.post('/v2/sync-local-files', files=[('files', (_filename(5 * 365 * 86400), payload))])
+    assert response.status_code == 200
+    assert response.json() == {'new_memories': [], 'updated_memories': []}
+    router.create_sync_job.assert_not_called()
+
+
+def test_v2_mixed_empty_invalid_clock_and_valid_audio_keeps_audio(client):
+    response = client.post(
+        '/v2/sync-local-files',
+        files=[
+            ('files', (_filename(5 * 365 * 86400), b'')),
+            ('files', (_filename(-10), b'\x01\x00\x00\x00\x42')),
+        ],
+    )
+    assert response.status_code == 202
+    router.create_sync_job.assert_called_once()
+
+
+def test_v2_invalid_filename_returns_closed_code_with_legacy_string_detail(client):
+    response = client.post('/v2/sync-local-files', files=[('files', ('audio.mp3', b'12345'))])
+    assert response.status_code == 400
+    assert response.json() == {'code': 'invalid_file', 'detail': 'Invalid sync file format'}
+
+
+def test_v2_non400_http_failures_keep_original_status(client, monkeypatch):
+    def denied(*_args):
+        raise HTTPException(status_code=403, detail='Synthetic denial')
+
+    monkeypatch.setattr(router, '_retrieve_file_paths_v2', denied)
+    response = _post_sync(client, _filename(-10))
+    assert response.status_code == 403
+    assert response.json() == {'detail': 'Synthetic denial'}
+
+
+def test_mixed_empty_clip_preserves_manifest_proof_for_remaining_audio(client, monkeypatch):
+    empty_name, audio_name = _filename(5 * 365 * 86400), _filename(-10)
+    audio = b'\x01\0\0\0\x42'
+    claims = [
+        {'name': empty_name, 'sha256': hashlib.sha256(b'').hexdigest()},
+        {'name': audio_name, 'sha256': hashlib.sha256(audio).hexdigest()},
+    ]
+    seen_names = []
+
+    def verified(_token, _uid, _device, _conversation, filenames):
+        seen_names.extend(filenames)
+        return claims
+
+    monkeypatch.setattr(router, 'verify_capture_manifest', verified)
+    monkeypatch.setattr(router, '_capture_matches_server_conversation', lambda *_a, **_k: True)
+    response = client.post('/v2/sync-local-files', files=[('files', (empty_name, b'')), ('files', (audio_name, audio))])
+    assert response.status_code == 202, response.text
+    assert seen_names == [empty_name, audio_name]

@@ -1755,6 +1755,7 @@ export interface ConversationTestPromptResponse {
 }
 
 export interface ConversationTopicRequest {
+  conversation_language?: string | null;
   transcript: string;
 }
 
@@ -3095,6 +3096,20 @@ export interface HeldAudioSummary {
   state?: "paused" | "recovering";
 }
 
+export interface HiddenNoiseCountsResponse {
+  days: Array<HiddenNoiseDayCount>;
+  end_date: string;
+  start_date: string;
+  total: number;
+  truncated: boolean;
+  tz: string;
+}
+
+export interface HiddenNoiseDayCount {
+  count: number;
+  date: string;
+}
+
 export interface IgnoredVoice {
   conversation_id: string;
   conversation_started_at?: string | null;
@@ -3428,6 +3443,7 @@ export interface MeetingParticipant {
 
 export interface MeetingParticipantSources {
   expected_calendar?: Array<MeetingParticipant> | null;
+  observed_call_tiles?: Array<MeetingParticipant> | null;
   observed_screen_listing?: Array<MeetingParticipant> | null;
 }
 
@@ -5246,6 +5262,7 @@ export interface StoreMeetingRequest {
   end_time: string;
   meeting_link?: string | null;
   notes?: string | null;
+  participant_sources?: MeetingParticipantSources | null;
   participants?: Array<MeetingParticipant>;
   platform?: string | null;
   start_time: string;
@@ -5272,11 +5289,14 @@ export interface StorefrontCapChoice {
 }
 
 export interface StorefrontCurrent {
+  amount_minor?: number | null;
   cancel_at_period_end?: boolean;
+  currency?: string | null;
   interval?: "month" | "year" | null;
   legacy: boolean;
   legacy_note?: string | null;
   line: string;
+  line_template?: string | null;
   name: string;
   plan_id: string;
   price_id?: string | null;
@@ -5284,14 +5304,17 @@ export interface StorefrontCurrent {
 
 export interface StorefrontPrice {
   amount_minor: number;
+  confirm_line_templates?: Array<string> | null;
   confirm_lines?: Array<string> | null;
   cta_label?: string | null;
+  cta_label_template?: string | null;
   currency: string;
   headline: string;
   interval: "month" | "year";
   months_free?: number | null;
   price_id?: string | null;
   renewal_line?: string | null;
+  saving_minor?: number | null;
   subline?: string | null;
 }
 
@@ -6715,6 +6738,8 @@ export interface OmiApiSchemas {
   "HasSpeechProfileResponse": HasSpeechProfileResponse;
   "HeldAudioRecording": HeldAudioRecording;
   "HeldAudioSummary": HeldAudioSummary;
+  "HiddenNoiseCountsResponse": HiddenNoiseCountsResponse;
+  "HiddenNoiseDayCount": HiddenNoiseDayCount;
   "IgnoredVoice": IgnoredVoice;
   "IgnoredVoicesResponse": IgnoredVoicesResponse;
   "ImportJobResponse": ImportJobResponse;
@@ -8210,6 +8235,16 @@ export interface OmiApiPaths {
       operationId: "create_conversation_from_segments_user_v1_conversations_from_segments_post";
       responses: {
         "200": ConversationCreateResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/hidden-noise-counts": {
+    get: {
+      operationId: "get_hidden_noise_counts_v1_conversations_hidden_noise_counts_get";
+      responses: {
+        "200": HiddenNoiseCountsResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -14624,6 +14659,28 @@ export async function create_conversation_from_segments_user_v1_conversations_fr
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_hidden_noise_counts_v1_conversations_hidden_noise_counts_get(query: { start_date: string, end_date: string, tz?: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<HiddenNoiseCountsResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/conversations/hidden-noise-counts`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -23044,4 +23101,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 530 client methods generated.
+// Total: 531 client methods generated.

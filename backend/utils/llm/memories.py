@@ -1,4 +1,3 @@
-import re
 from collections.abc import Sequence
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional, cast
@@ -14,7 +13,11 @@ from utils.llm.conversation_prompt_context import ConversationPromptPrefix
 from utils.llm.conversation_prompt_prefix import shared_conversation_cache_supported
 from models.transcript_segment import TranscriptSegment
 from database.users import get_user_language_preference
-from utils.conversations.owner_attribution import OwnerAttributionEvidence, may_attribute_to_owner
+from utils.conversations.owner_attribution import (
+    owner_spoken_for_quotes,
+    quote_source_attribution,
+    speaker_role_projection,
+)
 from utils.prompts import extract_memories_prompt, extract_learnings_prompt, extract_memories_text_content_prompt
 from utils.llms.memory import get_prompt_memories
 from utils.llm.temporal import current_date_for_uid
@@ -207,30 +210,14 @@ def extract_canonical_l1_memory_candidates(
         prompt_cache_enabled=shared_conversation_cache_supported(),
         rejected_memory_examples=tuple(rejected_memory_examples),
     )
-    owner_evidence = OwnerAttributionEvidence.from_segments(segments)
-
-    def owner_spoken_for_quotes(quotes: Sequence[str]) -> bool:
-        """Confirm that every cited quote came from the uniquely known owner."""
-
-        if not quotes or not may_attribute_to_owner(owner_evidence):
-            return False
-        for raw_quote in quotes:
-            normalized_quote = re.sub(r"[\W_]+", " ", str(raw_quote or "").casefold()).strip()
-            if not normalized_quote:
-                return False
-            matched = [
-                segment
-                for segment in segments
-                if f" {normalized_quote} "
-                in " " + re.sub(r"[\W_]+", " ", str(getattr(segment, "text", "") or "").casefold()).strip() + " "
-            ]
-            if len(matched) != 1 or not may_attribute_to_owner(owner_evidence, segment=matched[0]):
-                return False
-        return True
-
     candidates: List[CanonicalL1MemoryCandidate] = []
     for item in items:
         quotes = list(getattr(item, "evidence_quotes", None) or [])
+        attribution = (
+            quote_source_attribution(quotes, segments)
+            if speaker_role_projection(segments) is not None
+            else 'user_spoken' if owner_spoken_for_quotes(quotes, segments) else None
+        )
         candidates.append(
             CanonicalL1MemoryCandidate(
                 content=item.text,
@@ -241,7 +228,7 @@ def extract_canonical_l1_memory_candidates(
                 source_signal="transcription",
                 lineage_id=source_id,
                 independence_group=source_id,
-                attribution="user_spoken" if owner_spoken_for_quotes(quotes) else None,
+                attribution=attribution,
                 evidence_quotes=quotes,
                 speaker_label=item.speaker_label,
                 speaker_scope=item.speaker_scope,

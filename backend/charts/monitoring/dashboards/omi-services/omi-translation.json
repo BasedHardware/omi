@@ -415,7 +415,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "(0.005 - (sum(increase(nllb_requests_total{status!=\"ok\"}[30d])) / (sum(increase(nllb_requests_total[30d])) > 0))) / 0.005",
+          "expr": "(0.005 - (sum(increase(nllb_requests_total{status!=\"ok\",status!=\"unsupported_target\",status!=\"unsupported_source\"}[30d])) / (sum(increase(nllb_requests_total{status!=\"unsupported_target\",status!=\"unsupported_source\"}[30d])) > 0))) / 0.005",
           "legendFormat": "budget"
         }
       ]
@@ -482,11 +482,11 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "(sum(rate(nllb_requests_total{status!=\"ok\"}[5m])) / (sum(rate(nllb_requests_total[5m])) > 0)) / 0.005",
+          "expr": "(sum(rate(nllb_requests_total{status!=\"ok\",status!=\"unsupported_target\",status!=\"unsupported_source\"}[5m])) / (sum(rate(nllb_requests_total{status!=\"unsupported_target\",status!=\"unsupported_source\"}[5m])) > 0)) / 0.005",
           "legendFormat": "fast burn (5m)"
         },
         {
-          "expr": "(sum(rate(nllb_requests_total{status!=\"ok\"}[30m])) / (sum(rate(nllb_requests_total[30m])) > 0)) / 0.005",
+          "expr": "(sum(rate(nllb_requests_total{status!=\"ok\",status!=\"unsupported_target\",status!=\"unsupported_source\"}[30m])) / (sum(rate(nllb_requests_total{status!=\"unsupported_target\",status!=\"unsupported_source\"}[30m])) > 0)) / 0.005",
           "legendFormat": "slow burn (30m)"
         }
       ]

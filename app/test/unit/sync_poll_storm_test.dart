@@ -85,6 +85,48 @@ void main() {
     await dir.delete(recursive: true);
   });
 
+  test('reconnect wakes join one pass and completed passes are spaced, including transient retry', () async {
+    var active = 0, maxActive = 0, calls = 0;
+    var gate = Completer<SyncJobFetch>();
+    final sync = LocalWalSyncImpl(_Listener(),
+        now: () => now,
+        persistWals: (_) async {},
+        jobStatusFetcher: (id) async {
+          calls++;
+          active++;
+          maxActive = maxActive < active ? active : maxActive;
+          try {
+            return await gate.future;
+          } finally {
+            active--;
+          }
+        });
+    sync.testWals = [pending(0)];
+    final first = sync.reconcileUploadedWals();
+    await Future<void>.delayed(Duration.zero);
+    final joined = [for (var i = 0; i < 30; i++) sync.reconcileUploadedWals()];
+    expect(calls, 1);
+    gate.complete(SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: 'job-0', status: 'processing')));
+    await Future.wait([first, ...joined]);
+    for (var i = 0; i < 39; i++) {
+      now = now.add(const Duration(milliseconds: 500));
+      await sync.reconcileUploadedWals();
+    }
+    expect(calls, 1, reason: 'reconnect cannot cause a pass every half second');
+    now = now.add(const Duration(milliseconds: 500));
+    gate = Completer<SyncJobFetch>()..complete(const SyncJobFetch(SyncJobFetchOutcome.transient));
+    await sync.reconcileUploadedWals();
+    expect(calls, 2);
+    // Existing per-job backoff and pass pacing both remain in force.
+    now = now.add(const Duration(minutes: 5));
+    gate = Completer<SyncJobFetch>()
+      ..complete(SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: 'job-0', status: 'completed')));
+    await sync.reconcileUploadedWals();
+    expect(calls, 3);
+    expect(maxActive, 1);
+    expect(sync.testWals.single.status, WalStatus.synced);
+  });
+
   test('first polls are immediate unless an upload explicitly supplies a poll deadline', () async {
     final poller = SyncJobPoller(clock: () => now);
     final seen = <String>[];
@@ -429,7 +471,7 @@ void main() {
     expect(orphans.every((wal) => wal.status == WalStatus.miss && wal.jobId == null), isTrue,
         reason: 'retained orphan audio re-enters the upload path');
     expect(orphans.every((wal) => wal.retryCount == 0), isTrue, reason: 'recovery spends no retry budget');
-    expect(wals.where((wal) => identical(wal, incoming)), hasLength(1));
+    expect(sync.testWals.where((wal) => identical(wal, incoming)), hasLength(1));
     expect(incoming.status, WalStatus.miss);
     final saved = persisted.map(Wal.fromJson).toList();
     expect(saved.where((wal) => wal.filePath == 'incoming.bin'), hasLength(1), reason: 'the new recording is durable');
@@ -452,7 +494,7 @@ void main() {
 
     final pass = sync.reconcileUploadedWals();
     orphans[0].jobId = 'job-new'; // a newer upload claimed this row
-    wals.remove(orphans[1]); // retention released this row
+    sync.testWals.remove(orphans[1]); // retention released this row
     orphans[2].status = WalStatus.synced; // another path already finished it
     await expectLater(pass, completes);
 

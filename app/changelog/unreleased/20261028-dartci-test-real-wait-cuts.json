@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "Test-suite wall-time reduction only: shorter real event-loop settle waits in hermetic tests and two injectable Duration seams whose defaults equal the replaced constants. No UI surface or product behavior change."
+}

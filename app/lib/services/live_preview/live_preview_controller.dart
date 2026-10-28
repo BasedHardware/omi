@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/live_preview/live_preview_engine.dart';
+import 'package:omi/services/live_preview/live_preview_notes.dart';
+import 'package:omi/services/live_preview/live_preview_word_budget.dart';
 import 'package:omi/services/live_preview/live_preview_telemetry.dart';
 import 'package:omi/services/live_preview/local_preview_admission.dart';
 
@@ -26,13 +28,27 @@ enum LivePreviewPhase {
 
 @immutable
 class LivePreviewLine {
-  const LivePreviewLine({required this.id, required this.text, required this.isFinal});
+  const LivePreviewLine(
+      {required this.id,
+      required this.text,
+      required this.isFinal,
+      this.startedAt,
+      this.endedAt,
+      this.firstSeenAt,
+      this.spans = const []});
 
   final String id;
   final String text;
 
   /// False while the recognizer may still revise the words (volatile).
   final bool isFinal;
+  final DateTime? startedAt;
+  final DateTime? endedAt;
+
+  /// First recognizer result time for this id, used only when audio timing is
+  /// unavailable and the server's settled watermark eventually passes it.
+  final DateTime? firstSeenAt;
+  final List<LivePreviewSpan> spans;
 }
 
 /// Display-only on-device preview for mobile local-preview sessions.
@@ -49,6 +65,7 @@ class LivePreviewController extends ChangeNotifier {
     required this.telemetry,
     required this.platform,
     required this.osMajor,
+    LivePreviewNotesEngine? notesEngine,
     DateTime Function()? now,
     Duration Function()? conversationGap,
     List<int> Function(Uint8List opus)? decodeOpus,
@@ -62,11 +79,21 @@ class LivePreviewController extends ChangeNotifier {
         _now = now ?? DateTime.now,
         _conversationGap = conversationGap ?? (() => const Duration(minutes: 2)),
         _decodeOpus = decodeOpus,
-        _requestAllowed = requestAllowed ?? (() async => true);
+        _requestAllowed = requestAllowed ?? (() async => true) {
+    // Notes draft from the preview text on this phone; they clear with it.
+    notes = LivePreviewNotes(
+      engine: notesEngine ?? noLivePreviewNotesEngine,
+      telemetry: telemetry,
+      platform: platform,
+      now: _now,
+    )..attach(this);
+  }
 
   final LivePreviewEngine _engine;
   final LivePreviewTelemetry telemetry;
   final LivePreviewPlatform platform;
+
+  late final LivePreviewNotes notes;
 
   /// OS major version for telemetry; Android resolves it after composition.
   int osMajor;
@@ -102,6 +129,14 @@ class LivePreviewController extends ChangeNotifier {
   LivePreviewStart? _start;
   LivePreviewStart? get selected => _start;
 
+  // Separate from socket/engine generation: a silence boundary also clears
+  // display state, even when the same engine immediately fills the next line.
+  int _sessionGeneration = 0;
+  int get sessionGeneration => _sessionGeneration;
+  int _totalWordsSeen = 0;
+  final Map<String, int> _lineWordHighWater = {};
+  int get totalWordsSeen => _totalWordsSeen;
+
   int _generation = 0;
   Future<void> _serial = Future.value();
   StreamSubscription<LivePreviewResult>? _results;
@@ -112,6 +147,7 @@ class LivePreviewController extends ChangeNotifier {
   bool _drainScheduled = false;
   final BytesBuilder _pending = BytesBuilder(copy: false);
   int _inFlight = 0;
+  DateTime? _pendingStartedAt;
 
   // Per-session telemetry.
   DateTime? _firstAudioAt;
@@ -153,6 +189,9 @@ class LivePreviewController extends ChangeNotifier {
 
   String _language = 'multi';
 
+  /// The language the preview was admitted for (the notes draft in it).
+  String get language => _language;
+
   /// Engines that failed at runtime in this admitted session. One fallback to
   /// the next engine is allowed; a second failure is the no-engine state.
   final Set<LivePreviewEngineKind> _failedEngines = {};
@@ -169,7 +208,9 @@ class LivePreviewController extends ChangeNotifier {
       _resetSessionTelemetry();
       telemetry.engineSelected(start, platform: platform, osMajor: osMajor);
       if (start.running) {
-        _results = _engine.results.listen(_onResult, onError: (Object error) => _onRuntimeFailure(generation, error));
+        _results = _engine.results.listen((result) {
+          if (generation == _generation) _onResult(result);
+        }, onError: (Object error) => _onRuntimeFailure(generation, error));
         _phase = LivePreviewPhase.streaming;
       } else {
         _phase = LivePreviewPhase.unavailable;
@@ -212,7 +253,7 @@ class LivePreviewController extends ChangeNotifier {
     _generation++;
     _phase = LivePreviewPhase.inactive;
     _stopEngine();
-    _lines.clear();
+    _clearLines();
     _lastResultAt = null;
     _lastNotRequested = null;
     if (hadState) notifyListeners();
@@ -225,6 +266,7 @@ class LivePreviewController extends ChangeNotifier {
     _results = null;
     _queue.clear();
     _pending.clear();
+    _pendingStartedAt = null;
     if (start != null && start.running) {
       telemetry.sessionEnded(
         start.engine,
@@ -259,13 +301,13 @@ class LivePreviewController extends ChangeNotifier {
     if (!_feeding || packet.length <= 3) return;
     final isOpus = codec.isOpusSupported();
     if (!isOpus && codec != BleAudioCodec.pcm16) return;
-    _enqueue(_PreviewAudio(Uint8List.fromList(packet.sublist(3)), opus: isOpus));
+    _enqueue(_PreviewAudio(Uint8List.fromList(packet.sublist(3)), opus: isOpus, receivedAt: _now()));
   }
 
   /// Phone-mic tap: PCM16 16 kHz mono.
   void onPhonePcm(List<int> pcm) {
     if (!_feeding || pcm.isEmpty) return;
-    _enqueue(_PreviewAudio(Uint8List.fromList(pcm), opus: false));
+    _enqueue(_PreviewAudio(Uint8List.fromList(pcm), opus: false, receivedAt: _now()));
   }
 
   void _enqueue(_PreviewAudio audio) {
@@ -308,6 +350,7 @@ class LivePreviewController extends ChangeNotifier {
       } else {
         pcm = audio.bytes;
       }
+      _pendingStartedAt ??= audio.receivedAt.subtract(Duration(microseconds: pcm.length * 1000000 ~/ 32000));
       _pending.add(pcm);
       if (_pending.length >= feedChunkBytes) _flush();
     }
@@ -330,6 +373,8 @@ class LivePreviewController extends ChangeNotifier {
 
   void _flush() {
     final chunk = _pending.takeBytes();
+    final startedAt = _pendingStartedAt;
+    _pendingStartedAt = null;
     if (chunk.isEmpty) return;
     if (_inFlight >= maxInFlightFeeds) {
       _droppedBytes += chunk.length;
@@ -338,7 +383,7 @@ class LivePreviewController extends ChangeNotifier {
     _firstAudioAt ??= _now();
     _inFlight++;
     final generation = _generation;
-    _engine.feedPcm16(chunk).then((accepted) {
+    _engine.feedPcm16(chunk, startedAt: startedAt).then((accepted) {
       if (generation != _generation) return;
       if (accepted) {
         _fedBytes += chunk.length;
@@ -358,7 +403,7 @@ class LivePreviewController extends ChangeNotifier {
     if (text.isNotEmpty) {
       // A silence as long as the conversation timeout is a conversation
       // boundary: the earlier span becomes its own record, so stop showing it.
-      if (last != null && now.difference(last) >= _conversationGap()) _lines.clear();
+      if (last != null && now.difference(last) >= _conversationGap()) _clearLines();
       _lastResultAt = now;
       _noteFirstWord(now);
     }
@@ -367,16 +412,42 @@ class LivePreviewController extends ChangeNotifier {
       if (index >= 0 && !_lines[index].isFinal) _lines.removeAt(index);
       if (result.isFinal) _finalWordCounts.remove(result.segmentId);
     } else {
-      final line = LivePreviewLine(id: result.segmentId, text: text, isFinal: result.isFinal);
+      final previousWords = _lineWordHighWater[result.segmentId] ?? 0;
+      final newWords = _wordCount(text);
+      if (newWords > previousWords) {
+        _totalWordsSeen += newWords - previousWords;
+        _lineWordHighWater[result.segmentId] = newWords;
+      }
+      final line = LivePreviewLine(
+          id: result.segmentId,
+          text: text,
+          isFinal: result.isFinal,
+          startedAt: result.startedAt,
+          endedAt: result.endedAt,
+          firstSeenAt: index >= 0 ? (_lines[index].firstSeenAt ?? now) : now,
+          spans: result.spans);
       if (index >= 0) {
         _lines[index] = line;
       } else {
         _lines.add(line);
-        if (_lines.length > maxLines) _lines.removeRange(0, _lines.length - maxLines);
+        if (_lines.length > maxLines) {
+          final evicted = _lines.length - maxLines;
+          for (final line in _lines.take(evicted)) {
+            _lineWordHighWater.remove(line.id);
+          }
+          _lines.removeRange(0, evicted);
+        }
       }
       if (result.isFinal) _finalWordCounts[result.segmentId] = _wordCount(text);
     }
     notifyListeners();
+  }
+
+  void _clearLines() {
+    _sessionGeneration++;
+    _totalWordsSeen = 0;
+    _lineWordHighWater.clear();
+    _lines.clear();
   }
 
   void _noteFirstWord(DateTime now) {
@@ -388,18 +459,20 @@ class LivePreviewController extends ChangeNotifier {
     telemetry.firstWord(start.engine, latencyMs: latency < 0 ? 0 : latency);
   }
 
-  static int _wordCount(String text) => text.split(RegExp(r'\s+')).where((word) => word.isNotEmpty).length;
+  static int _wordCount(String text) => LivePreviewWordBudget.count(text);
 
   @override
   void dispose() {
     endCapture();
+    notes.dispose();
     super.dispose();
   }
 }
 
 class _PreviewAudio {
-  _PreviewAudio(this.bytes, {required this.opus});
+  _PreviewAudio(this.bytes, {required this.opus, required this.receivedAt});
 
   final Uint8List bytes;
   final bool opus;
+  final DateTime receivedAt;
 }

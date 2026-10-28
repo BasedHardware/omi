@@ -1125,6 +1125,29 @@ def main() -> int:
             from .batch import run_batch_scenarios
 
             run_batch_scenarios(state_dir / 'batch')
+            # Keep the sparse-shard concurrency regression in the existing
+            # CI emulator gate, after the process-level batch scenarios drain.
+            subprocess.run(
+                [
+                    str(PYTHON),
+                    '-m',
+                    'pytest',
+                    '-p',
+                    'no:langsmith_plugin',
+                    '-q',
+                    '-rP',
+                    str(BACKEND / 'tests/integration/test_batch_pipeline_shard_spread_firestore.py'),
+                ],
+                cwd=ROOT,
+                env={
+                    **os.environ,
+                    'PYTHONPATH': str(BACKEND),
+                    'OPENAI_API_KEY': 'test-openai-key-not-real',
+                    'ENCRYPTION_SECRET': ENCRYPTION_SECRET,
+                },
+                timeout=240,
+                check=True,
+            )
         succeeded = True
         print(f'Sync Cloud Tasks stack gauntlet passed; sanitized evidence: {state_dir}')
         return 0

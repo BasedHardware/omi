@@ -109,6 +109,7 @@ def authorize(store, leases: list[dict], *, now: float | None = None) -> dict:
                     return False
                 latest['compute_admission_token'] = token
                 latest['compute_decision'] = {'reason': allow_reason, 'outcome': 'allowed', 'at': current}
+                latest.pop('last_policy_hold', None)  # an allow ends the parked hold
                 tx.put('jobs', segment, latest)
                 return True
 

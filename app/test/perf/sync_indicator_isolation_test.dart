@@ -35,6 +35,8 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   @override
   bool get isConnected => true;
   @override
+  bool get isSyncStalled => false; // The watchdog's stall (#15501) is not under test here.
+  @override
   bool get isConnecting => false;
   @override
   int get batteryLevel => 75;
@@ -97,6 +99,12 @@ class _Sync extends ChangeNotifier implements SyncProvider {
   bool get isSyncing => active;
   @override
   List<Wal> get allWals {
+    inventoryReads++;
+    return wals;
+  }
+
+  @override
+  List<Wal> get pendingWorkWals {
     inventoryReads++;
     return wals;
   }
@@ -333,18 +341,19 @@ void main() {
         timerStart: 1, codec: BleAudioCodec.opus, seconds: 600, status: WalStatus.miss, storage: WalStorage.sdcard));
     sync.tick();
     await tester.pump();
-    expect(find.byKey(const Key('device_right_now_catching_up')), findsOneWidget);
-    expect(tester.widget<DeviceRightNowGroup>(find.byType(DeviceRightNowGroup)).catchingUp?.status, isNotEmpty);
+    expect(find.byKey(const Key('device_stat_catching_up')), findsOneWidget);
+    expect(tester.widget<DeviceStatsRow>(find.byType(DeviceStatsRow)).catchUpSeconds, 600);
     expect(tester.widget<DeviceStatsRow>(find.byType(DeviceStatsRow)).onDeviceSeconds, 600);
     sync.active = false;
     sync.tick();
     await tester.pump();
-    expect(find.byKey(const Key('device_right_now_catching_up')), findsOneWidget,
+    expect(find.byKey(const Key('device_stat_catching_up')), findsOneWidget,
         reason: 'A waiting backlog remains reachable after a transfer stops.');
     sync.wals.clear();
     sync.tick();
     await tester.pump();
-    expect(find.byKey(const Key('device_right_now_catching_up')), findsNothing);
+    expect(find.byKey(const Key('device_stat_catching_up')), findsNothing);
+    expect(find.byKey(const Key('device_stat_on_device')), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

@@ -10,19 +10,27 @@ dataPlaneProject: based-hardware
 stage: prod
 namespace: batch_pipeline_prod
 secretName: prod-omi-backend-secrets
-# Preserve the approved four-worker floor on image-only Helm rolls. Each
-# replica requests one L4; actual ready capacity still gates admission.
-# Higher ladder steps must explicitly reconcile their desired replica count
-# after a roll: the node-pool maximum alone does not create worker demand.
-# Leases, ordered merge and privacy fences stay durable per segment/owner.
-replicaCount: 4
+# The ratified batch floor is 3 on-demand workers (lead 114a22/724762, 10-28;
+# op1 readback 3 desired / 3 Ready). Image-only rolls preserve it.
+replicaCount: 3
+# Latent queue scaler per the lead-accepted 100% capacity plan (f05065):
+# demand-driven, min 3 / max 16, OD-first - all replicas pin to the on-demand
+# pool; Spot stays opportunistic and out of this cutover. Above 16 only as a
+# second qualified step. This latent budget authorizes no capacity and creates
+# no HPA while enabled is false; op1 raises batch-pipeline-pool's node max (3
+# -> 16) in the same reviewed qualification window that enables it, using a
+# real scale-up during the 25% soak as the scheduling proof.
 autoscaling:
   enabled: false
-# The null drops the base chart's pool pin: batch-pipeline-pool and its Spot
-# sibling share the service/env labels and omi.ai taints, so the autoscaler
-# can place replicas on Spot first while the on-demand pool stays the fallback.
+  minReplicas: 3
+  maxReplicas: 16
+  balancedPools:
+    enabled: false
+# OD-first placement: the worker pins to the on-demand pool so the guaranteed
+# floor and scale-out never depend on Spot (persistent L4 Spot stockout, and
+# Spot L4 bills above on-demand - N6 10-26).
 nodeSelector:
-  cloud.google.com/gke-nodepool: null
+  cloud.google.com/gke-nodepool: batch-pipeline-pool
   service: batch-pipeline
   env: prod
 tolerations:
@@ -35,6 +43,8 @@ tolerations:
     value: present
     effect: NoSchedule
 worker:
+  # Preserve the measured profiling-on state across the scaler Helm upgrade.
+  stageProfilingEnabled: true
   shadowRecoveryApiUrl: "https://backend-integration-hhibjajaja-uc.a.run.app"
   apiUrl: https://backend-sync-hhibjajaja-uc.a.run.app
   audience: https://backend-sync-hhibjajaja-uc.a.run.app

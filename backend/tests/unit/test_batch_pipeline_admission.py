@@ -6,12 +6,14 @@ from unittest.mock import Mock
 
 from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F401
 
+from prometheus_client import CollectorRegistry
 import pytest
 
 from database.batch_pipeline_intake import admit
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore, item
 from utils.batch_pipeline import admission
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkResult
+from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
 
 
@@ -358,3 +360,26 @@ def test_privacy_fence_hold_records_its_reason(monkeypatch):
         'at': 2,
     }
     monkeypatch.setattr(MemoryTransaction, 'check_privacy', check)
+
+
+def test_allowed_decision_ends_the_parked_hold_for_the_age_proxy(monkeypatch):
+    store, queue, lease, _ = setup(monkeypatch)
+    assert queue.defer('segment', lease.token, 1, 60, held_reason='allowance_exhausted', admission_refused=True)
+    assert store.rows['jobs', 'segment']['last_policy_hold'] == {'reason': 'allowance_exhausted', 'at': 1}
+    queue.recover(61)
+    lease = queue.pull(61)[0]
+    assert admission.authorize(store, tokens(lease), now=61)['allowed'] == ['segment']
+    job = store.rows['jobs', 'segment']
+    assert job['compute_decision']['outcome'] == 'allowed' and 'last_policy_hold' not in job
+    # A later unevaluated dispatch recheck pops the allow (BLIND); with the
+    # hold ended the admitted job is a real commitment the proxy must measure.
+    assert queue.defer('segment', lease.token, 62, admission_refused=True)
+    registry = CollectorRegistry()
+    QueueMetrics(registry).refresh(store, 1860)
+    assert (
+        registry.get_sample_value(
+            'omi_batch_pipeline_oldest_age_seconds',
+            {'priority': 'deep', 'worker_release': 'unscoped', 'namespace': 'unscoped'},
+        )
+        == 1860
+    )

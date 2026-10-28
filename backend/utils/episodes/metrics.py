@@ -47,7 +47,7 @@ MOMENT_OUTCOMES = frozenset(
         'error',
     }
 )
-MOMENT_TRIGGERS = frozenset({'pause', 'rollover', 'interval', 'session_end', 'finalize'})
+MOMENT_TRIGGERS = frozenset({'pause', 'rollover', 'interval', 'session_end', 'finalize', 'sync_recovery'})
 # Gated work that never ran: ended moments by trigger, plus conversation attaches.
 SKIP_TRIGGERS = MOMENT_TRIGGERS | {'attach'}
 CLOSE_REASON_LABELS = frozenset(

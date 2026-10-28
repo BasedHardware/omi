@@ -1,3 +1,4 @@
+import 'sync_upload_refusal.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -401,6 +402,41 @@ Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String c
   return (item: null, ok: false);
 }
 
+/// Per local day in [tz], how many noise/media clips the server folded away from Home
+/// (`GET /v1/conversations/hidden-noise-counts`). Null when the request failed: the caller keeps
+/// what it showed, never reading a failure as "nothing hidden".
+Future<Map<DateTime, int>?> getHiddenNoiseCounts({required DateTime start, required DateTime end, String? tz}) async {
+  final base = Env.apiBaseUrl ?? '';
+  final root = base.endsWith('/') ? base : '$base/';
+  var url = '${root}v1/conversations/hidden-noise-counts'
+      '?start_date=${Uri.encodeQueryComponent(start.toUtc().toIso8601String())}'
+      '&end_date=${Uri.encodeQueryComponent(end.toUtc().toIso8601String())}';
+  if (tz != null && tz.isNotEmpty) url += '&tz=${Uri.encodeQueryComponent(tz)}';
+  final response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
+  if (response == null || response.statusCode != 200) return null;
+  try {
+    // omi-perf-allow: history-json-on-ui -- at most 31 day rows, independent of history size
+    return parseHiddenNoiseCounts(jsonDecode(response.body));
+  } catch (_) {
+    return null;
+  }
+}
+
+/// `{"days": [{"date": "2026-10-27", "count": 5}, ...]}` → local day keys.
+Map<DateTime, int> parseHiddenNoiseCounts(Object? body) {
+  final days = body is Map ? body['days'] : null;
+  return {
+    if (days is List)
+      for (final day in days)
+        if (day is Map && day['date'] is String && day['count'] is int && (day['count'] as int) > 0)
+          DateTime.parse(day['date'] as String).let((d) => DateTime(d.year, d.month, d.day)): day['count'] as int,
+  };
+}
+
+extension _Let<T> on T {
+  R let<R>(R Function(T) f) => f(this);
+}
+
 Future<ServerConversation?> getConversationById(String conversationId) async {
   return (await getConversationByIdResult(conversationId)).item;
 }
@@ -788,6 +824,7 @@ class UploadFilesResult {
 class SyncUploadHttpException implements Exception {
   final int statusCode;
   final String message;
+  final String? reasonCode;
 
   /// The server's `Retry-After` (delta-seconds) on a 5xx, when provided. The
   /// sync dispatch and ledger-fence refusals carry one so the client pauses
@@ -795,7 +832,7 @@ class SyncUploadHttpException implements Exception {
   /// server gave no pacing guidance (e.g. platform-generated 503s).
   final int? retryAfterSeconds;
 
-  const SyncUploadHttpException(this.statusCode, this.message, {this.retryAfterSeconds});
+  const SyncUploadHttpException(this.statusCode, this.message, {this.retryAfterSeconds, this.reasonCode});
 
   @override
   String toString() => 'SyncUploadHttpException(status=$statusCode): $message';
@@ -877,6 +914,21 @@ bool isSyncRecoveryWindowExceededResponse(http.Response response) {
   } catch (_) {
     return false;
   }
+}
+
+/// Thrown when the server refuses an upload because its filename carries a
+/// capture time it will not accept (HTTP 400 `invalid_capture_time`): before
+/// 2024-01-01 or in the future. The audio is fine — only its claimed time is
+/// not. The app never deletes or renames the file for this: the row parks on
+/// attention with the reason kept, and a retry resends it unchanged, which a
+/// later server-side widening of the clock window can still accept.
+class SyncInvalidCaptureTimeException implements Exception {
+  final String? serverReason;
+
+  const SyncInvalidCaptureTimeException({this.serverReason});
+
+  @override
+  String toString() => 'SyncInvalidCaptureTimeException(reason: $serverReason)';
 }
 
 /// A synchronous upload response that durably reached the server but did not
@@ -1042,11 +1094,24 @@ Future<UploadFilesResult> uploadLocalFilesV2(
     return UploadFilesResult.queued(start.jobId, pollAfterMs: start.pollAfterMs);
   }
   if (response.statusCode == 400) {
-    throw SyncUploadHttpException(response.statusCode, 'Audio file could not be processed by server');
+    final refusal = switch (decodeSyncUploadRefusal(response)) {
+      ApiSuccess(:final data) => data,
+      ApiFailure() => const SyncUploadRefusalBody(),
+    };
+    if (refusal.invalidCaptureTime) {
+      throw const SyncInvalidCaptureTimeException(serverReason: 'invalid_capture_time');
+    }
+    // Other 400s stay terminal, but the server's own reason travels with the
+    // refusal instead of being dropped at the HTTP boundary.
+    throw SyncUploadHttpException(
+      response.statusCode,
+      'Audio file could not be processed by server',
+      reasonCode: refusal.reasonCode,
+    );
   } else if (response.statusCode == 401 || response.statusCode == 403) {
     throw SyncUploadHttpException(response.statusCode, 'Upload authentication failed');
   } else if (response.statusCode == 413) {
-    throw SyncUploadHttpException(response.statusCode, 'Audio file is too large to upload');
+    throw SyncUploadHttpException(response.statusCode, 'Audio file is too large to upload', reasonCode: 'too_large');
   } else if (isSyncContentInProgressResponse(response)) {
     final existingJob = syncContentInProgressResult(response);
     if (existingJob != null) return existingJob;
