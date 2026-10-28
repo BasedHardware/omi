@@ -61,6 +61,8 @@ async def test_pending_deletion_owner_is_skipped_before_backlog_reads(monkeypatc
         return function(*args, **kwargs)
 
     monkeypatch.setattr(worker, 'account_deletion_blocks_user_work', lambda _uid: True)
+    monkeypatch.setattr(worker, 'recovery_cohort_admits', lambda _uid: True)
+    monkeypatch.setattr(worker.funded_processing, 'enabled', lambda _uid: True)
     monkeypatch.setattr(worker, 'run_blocking', blocking)
 
     assert await worker.run('uid-pending') is None
