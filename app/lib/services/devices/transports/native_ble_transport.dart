@@ -297,6 +297,7 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
   ///
   /// This is intentionally read-only so higher-level commands can fail closed
   /// instead of treating NativeBleTransport's compatibility no-op writes as success.
+  @override
   bool hasCharacteristic(String serviceUuid, String characteristicUuid) =>
       _hasCharacteristic(serviceUuid, characteristicUuid);
 
@@ -310,10 +311,6 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
     Logger.debug('[NativeBleTransport] $op $characteristicUuid timed out after ${operationTimeout.inSeconds}s');
     unawaited(DebugLogManager.logWarning('ble_op_timeout', {'op': op, 'characteristic': characteristicUuid}));
   }
-
-  @override
-  bool hasCharacteristic(String serviceUuid, String characteristicUuid) =>
-      _hasCharacteristic(serviceUuid, characteristicUuid);
 
   @override
   Future<List<int>> readCharacteristic(String serviceUuid, String characteristicUuid) async {

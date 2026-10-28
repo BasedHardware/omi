@@ -2108,7 +2108,7 @@ class CaptureController extends ChangeNotifier
     if (action == null) return;
     if (_omiButtonActionsDisabled) return;
     if (action == ButtonAction.askQuestion) {
-      _handleButtonEvent(deviceId, 1);
+      _handleButtonEvent(deviceId, 1, fromTaps: true);
       return;
     }
     if (_isProcessingButtonEvent) return;
@@ -2182,9 +2182,6 @@ class CaptureController extends ChangeNotifier
       Uint8List.fromList(snapshot.sublist(0, 4).reversed.toList()).buffer,
     ).getUint32(0);
     Logger.debug("device button $buttonState");
-    if (_deviceHasButtonTaps && deviceOnboardingProvider?.isOnboardingActive != true && buttonState == 2) {
-      return;
-    }
     _handleButtonEvent(deviceId, buttonState);
   }
 
@@ -2192,11 +2189,14 @@ class CaptureController extends ChangeNotifier
   set deviceHasButtonTapsForTesting(bool value) => _deviceHasButtonTaps = value;
 
   @visibleForTesting
+  void handleButtonTapsForTesting(String deviceId, List<int> value) => _onButtonTaps(deviceId, value);
+
+  @visibleForTesting
   void handleButtonEventForTesting(String deviceId, int buttonState) {
     _handleButtonEvent(deviceId, buttonState);
   }
 
-  void _handleButtonEvent(String deviceId, int buttonState) {
+  void _handleButtonEvent(String deviceId, int buttonState, {bool fromTaps = false}) {
     unawaited(DebugLogManager.logEvent('pendant_button_event', {'state': buttonState}));
     // Only an admitted capture transition may move the question UI. Raw
     // presses can be ignored (auto-submit grace / a reply already pending).
@@ -2211,6 +2211,7 @@ class CaptureController extends ChangeNotifier
       if (_voiceCommandSession != null && !_voiceCommandStartedDuringOnboarding) cancelActiveVoiceSession();
     }
 
+    if (!fromTaps && _deviceHasButtonTaps && tutorial?.isOnboardingActive != true) return;
     // Omi button actions are disabled by the user: skip action handling but
     // onboarding (handled above) still receives button events regardless.
     if (_omiButtonActionsDisabled && deviceOnboardingProvider?.isOnboardingActive != true) {
