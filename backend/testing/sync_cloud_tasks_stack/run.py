@@ -942,7 +942,30 @@ def _concurrent_delivery_is_lease_fenced(stack: Stack) -> None:
 
     thread = threading.Thread(target=first_delivery, daemon=True)
     thread.start()
-    _wait_until(lambda: (stack.gate_dir / 'entered').exists(), label='first worker processor gate')
+    try:
+        _wait_until(
+            lambda: (stack.gate_dir / 'entered').exists(),
+            label='first worker processor gate',
+            timeout=60.0,
+        )
+    except StackFailure as error:
+        response = first_result[0] if first_result else None
+        try:
+            response_body = response.json() if response is not None else None
+        except ValueError:
+            response_body = None
+        response_status = response_body.get('status') if isinstance(response_body, dict) else None
+        worker = stack.children.get('worker')
+        provider_events = sorted(
+            {event.get('event') for event in stack.evidence_events('providers') if isinstance(event.get('event'), str)}
+        )
+        diagnostics = {
+            'first_delivery_http_status': response.status_code if response is not None else None,
+            'first_delivery_status': response_status,
+            'worker_alive': worker is not None and worker.process.poll() is None,
+            'provider_events': provider_events,
+        }
+        raise StackFailure(f'{error}; diagnostics={json.dumps(diagnostics, sort_keys=True)}') from error
     second = _deliver_task(task, retry_count=1)
     if second.status_code != 409 or second.json().get('status') != 'locked':
         raise StackFailure('concurrent worker delivery did not observe the real run lock')

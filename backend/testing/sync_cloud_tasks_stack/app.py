@@ -278,7 +278,9 @@ elif ROLE == 'worker':
         release = _gate_dir / 'release'
         entered.write_text('entered', encoding='utf-8')
         write_event('providers', {'event': 'processor_gate_entered', 'conversation_id': conversation_id})
-        deadline = time.monotonic() + 15.0
+        # Keep the gate bounded while allowing a slower CI worker to reach the
+        # processor after the Firestore emulator and service stack are ready.
+        deadline = time.monotonic() + 60.0
         while not release.exists():
             if time.monotonic() >= deadline:
                 raise RuntimeError('controlled Sync processor gate timed out')
