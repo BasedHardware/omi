@@ -169,7 +169,8 @@ async def test_failed_votes_see_a_source_bench_before_the_next_snapshot():
 
 
 @pytest.mark.parametrize(
-    'language,exclude_by', [('ar', 'capability'), ('en', 'ramp'), ('en', 'capacity'), ('en', 'cohort')]
+    'language,exclude_by',
+    [('ar', 'capability'), ('en', 'ramp'), ('en', 'capacity'), ('en', 'cohort'), ('en', 'account')],
 )
 @pytest.mark.asyncio
 async def test_ineligible_full_share_target_cannot_release_modulate(monkeypatch, language, exclude_by):
@@ -192,6 +193,8 @@ async def test_ineligible_full_share_target_cannot_release_modulate(monkeypatch,
         if exclude_by == 'capacity':
             monkeypatch.setenv('TEST_CASCADE_FULL', 'true')
     pod = _Pod(lambda: clock[0])
+    if exclude_by == 'account':
+        pod.pod._benches[PARAKEET.family] = ('account', clock[0] + 300)
     users = tuple((f'{i:016x}', 3, 0) for i in range(20))
     _seed(
         pod.pod._redis(),

@@ -162,6 +162,10 @@ class CostHealthMixin(ABC):
     def _check_identity(self) -> str:
         raise NotImplementedError
 
+    @abstractmethod
+    def _account_bench_until(self, provider: str) -> float:
+        raise NotImplementedError
+
     def init_cost_health(self) -> None:
         self._cost_metrics_targets: set[str] = set()
         self._cost_local = {}
@@ -460,7 +464,9 @@ class CostHealthMixin(ABC):
         promotion_stages = {
             candidate.id: stages[candidate.id]
             for candidate in registry()
-            if candidate.id in stages and not candidate.at_capacity()
+            if candidate.id in stages
+            and not candidate.at_capacity()
+            and self._account_bench_until(candidate.family) <= now
         }
         if minimum_share > 0 and escape_trial_votes_enabled() and assigned(uid, target, entry.ramp()):
             if stages and all(stage < 100 for stage in stages.values()):
