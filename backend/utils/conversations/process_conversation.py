@@ -750,7 +750,7 @@ def trigger_conversation_apps(
     produced or paid for.
     """
     if serving_for('NOTES_PACKET_V2_MODE', uid):
-        language_code = resolve_output_language(uid, conversation.language or language_code)
+        language_code = resolve_output_language(uid, normalize_language(conversation.language) or language_code)
     else:
         # The legacy branch never resolved: a 'multi' capture tag reached app prompts verbatim.
         language_code = normalize_language(conversation.language) or normalize_language(language_code) or 'en'

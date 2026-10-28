@@ -58,6 +58,19 @@ def test_deep_reflection_uses_only_earlier_recaps_and_active_goals(ext):
     ext.goals_db.get_user_goals.assert_called_once_with('user-1', limit=3)
 
 
+def test_daily_recap_normalizes_a_sentinel_language_to_english(ext):
+    _configure(ext)
+    ext.users_db.get_user_profile = MagicMock(
+        return_value={'time_zone': 'UTC', 'language': 'multi', 'daily_summary_depth': 'normal'}
+    )
+
+    ext.generate_comprehensive_daily_summary('user-1', [_Convo('conversation-1')], '2026-09-30')
+
+    prompt = ext.get_llm.return_value.invoke.call_args.args[0]
+    assert 'OUTPUT LANGUAGE: en.' in prompt
+    assert 'OUTPUT LANGUAGE: multi.' not in prompt
+
+
 def test_deep_reflection_missing_optional_context_still_generates(ext):
     _configure(ext)
     ext.users_db.get_user_profile = MagicMock(

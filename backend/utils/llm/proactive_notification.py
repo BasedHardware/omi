@@ -11,6 +11,7 @@ from utils.byok import has_byok_keys
 from utils.llm.clients import get_llm
 from utils.llm.gateway_client import should_route_features_through_gateway
 from utils.llm.model_config import get_model_config, uses_explicit_cache_and_chat_sanitizer
+from utils.llm.output_language import normalize_language
 from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT, bind_explicit_cache, has_cacheable_prefix
 from utils.llm.temporal import current_date_in_tz
 import logging
@@ -208,16 +209,17 @@ def language_instruction(output_language: str, *, for_critic: bool = False) -> s
     """Instruction telling the model to write (or, for the critic, reject if not written in) the
     user's language (#5214).
 
-    Returns "" for English, an unset language, or any value that is not a clean BCP-47 token, so the
-    model defaults to English and a user-controlled preference cannot inject prompt text. English
-    family codes (en, en-US, ...) intentionally produce no instruction.
+    A missing, sentinel or malformed value falls back to English. Only a clean
+    BCP-47 token enters the prompt, so a user-controlled preference cannot inject
+    prompt text. English-family codes receive the same explicit pin as other
+    languages.
     """
-    lang = (output_language or 'en').strip()
-    if not lang or lang.lower().startswith('en') or not _BCP47_LANGUAGE_RE.fullmatch(lang):
-        return ""
+    lang = normalize_language(output_language)
+    if not lang or not _BCP47_LANGUAGE_RE.fullmatch(lang):
+        lang = 'en'
     if for_critic:
-        return f"\n- The notification is written in a language other than the user's (expected code: {lang})"
-    return f"\n- Write the notification entirely in the user's language (language/locale code: {lang})"
+        return f'\n- Reject the notification unless it is written entirely in {lang} (expected code: {lang})'
+    return f'\n- Write all output in {lang}. Keep names and quoted words verbatim.'
 
 
 # ---------------------------------------------------------------------------

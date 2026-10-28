@@ -2,10 +2,9 @@
 
 The moment prompt is pinned to one resolved language on every path (kill switch
 ``EPISODE_OUTPUT_LANGUAGE_PIN``): the user's explicit preference first, then the
-language the episode state is already written in, then the conversation's
-dominant language — never the newest moment's speech deciding on its own. Blank
-and sentinel tags (``multi``, ``auto``, …) count as unset, so they never reach a
-prompt.
+conversation's dominant language tag — never the newest moment's speech or the
+episode's previous output deciding on its own. Blank and sentinel tags
+(``multi``, ``auto``, …) count as unset, so they never reach a prompt.
 
 A state written in a different language (the wrong-language incident) is not fed
 back verbatim: ``repair_instruction`` tells the model to rewrite it in the
@@ -40,7 +39,10 @@ def resolved_invoke(uid, conversation_language, invoke):
         invoke = invoke_model
 
     def with_language(account, messages):
-        return invoke(account, [*messages, ('system', f'Write all episode output in {language}.')])
+        return invoke(
+            account,
+            [*messages, ('system', f'Write all output in {language}. Keep names and quoted words verbatim.')],
+        )
 
     return with_language
 
@@ -73,12 +75,15 @@ def state_language(episode: Optional[Mapping[str, Any]], *, hint_language: Optio
 
 def resolve_episode_language(
     uid: str,
-    episode: Optional[Mapping[str, Any]],
     conversation_language: Optional[str],
     *,
     preference: Optional[str] = None,
 ) -> str:
-    """Preference, then the language the episode already speaks, then the conversation's, then English."""
+    """Preference, then the conversation's dominant language tag, then English.
+
+    The stored episode language describes the prior state for comparison; it is
+    never an authority over the current resolved output language.
+    """
     if preference is None:
         from utils.llm.output_language import language_preference
 
@@ -86,9 +91,6 @@ def resolve_episode_language(
     preferred = normalize_language(preference)
     if preferred:
         return preferred
-    stored = stored_language(episode)
-    if stored:
-        return stored
     return normalize_language(conversation_language) or 'en'
 
 

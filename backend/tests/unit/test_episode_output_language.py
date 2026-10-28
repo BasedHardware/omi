@@ -29,7 +29,10 @@ def test_episode_language_comes_from_l3_only_for_serve(monkeypatch):
     assert call('test-account', [('system', 'fixture prompt')]) == 'fixture'
     authority.resolve_output_language.assert_called_once_with('test-account', 'en')
     invoke.assert_called_once()
-    assert invoke.call_args.args[1][-1] == ('system', 'Write all episode output in English.')
+    assert invoke.call_args.args[1][-1] == (
+        'system',
+        'Write all output in English. Keep names and quoted words verbatim.',
+    )
 
 
 @pytest.mark.parametrize(
@@ -43,6 +46,7 @@ def test_episode_language_comes_from_l3_only_for_serve(monkeypatch):
         ('auto', ''),
         ('unknown', ''),
         ('none', ''),
+        ('und', ''),
         ('', ''),
         (None, ''),
     ],
@@ -70,20 +74,17 @@ def test_resolve_survives_a_preference_read_outage(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    'preference,stored,conversation,expected',
+    'preference,conversation,expected',
     [
-        ('en', 'vi', 'vi', 'en'),  # The explicit preference always wins.
-        ('', 'vi', 'en', 'vi'),  # No preference: the episode's running language beats the newest conversation tag.
-        ('', '', 'vi', 'vi'),  # First moment: the conversation's dominant language.
-        ('', '', 'multi', 'en'),  # A sentinel tag counts as unset.
-        ('', '', None, 'en'),
+        ('en', 'vi', 'en'),  # The explicit preference always wins.
+        ('', 'en', 'en'),  # The conversation's dominant tag is the authority.
+        ('', 'vi', 'vi'),  # No preference: use the conversation's dominant language.
+        ('', 'multi', 'en'),  # A sentinel tag counts as unset.
+        ('', None, 'en'),
     ],
 )
-def test_episode_resolution_order(preference, stored, conversation, expected):
-    episode = {'output_language': stored} if stored else {}
-    assert (
-        episode_language.resolve_episode_language('uid-lang', episode, conversation, preference=preference) == expected
-    )
+def test_episode_resolution_order(preference, conversation, expected):
+    assert episode_language.resolve_episode_language('uid-lang', conversation, preference=preference) == expected
 
 
 def test_state_language_answers_from_the_stamp_or_detects_the_text():
@@ -118,6 +119,8 @@ def test_run_incremental_update_pins_the_resolved_language_by_default(monkeypatc
         'uid-lang', '{}', 'Owner: một khoảnh khắc tiếng Việt', known_item_ids=[], now=NOW, tz_name='UTC', invoke=invoke
     )
     assert seen[0][0] == ('system', incremental._moment_prompt('en'))
+    assert 'Write all output in en.' in seen[0][0][1]
+    assert 'Keep names and quoted words verbatim.' in seen[0][0][1]
 
 
 def test_the_kill_switch_restores_the_cohort_gated_prompt(monkeypatch):

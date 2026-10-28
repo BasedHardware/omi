@@ -4,7 +4,7 @@ from __future__ import annotations
 
 # Sentinel codes that name no single language; they must never reach a prompt
 # ("Write all output in multi"). Capture tags and preferences can both carry them.
-NON_LANGUAGE_CODES = frozenset({'multi', 'auto', 'unknown', 'none'})
+NON_LANGUAGE_CODES = frozenset({'multi', 'auto', 'unknown', 'none', 'und'})
 
 
 def normalize_language(value: str | None) -> str:

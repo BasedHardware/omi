@@ -51,9 +51,9 @@ one capture window's evidence.
      prefix comes first and the clock, state and new speech come last.
      One output language is resolved for every moment (`output_language.py`,
      kill switch `EPISODE_OUTPUT_LANGUAGE_PIN`): the user's explicit preference,
-     then the language the episode state is already written in, then the
-     conversation's dominant language tag — never the newest moment's speech
-     deciding on its own, and `multi`/`auto`/`unknown` count as unset. The
+     then the conversation's dominant language tag — never the newest moment's
+     speech or the episode's previous output deciding on its own, and
+     `multi`/`auto`/`unknown` count as unset. The
      prompt pins that language, the resolved value is stamped on the episode as
      `output_language`, and a state detected in a different language is
      rewritten in the update instead of being fed back, so a wrong-language

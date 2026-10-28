@@ -27,6 +27,7 @@ from utils.conversations.location import get_google_maps_location
 from utils.conversations.render import conversations_to_string
 from utils.llm.clients import get_llm, parser
 from utils.llm.usage_tracker import track_usage, Features
+from utils.llm.output_language import normalize_language, resolve_output_language
 from utils.llms.memory import get_prompt_memories
 from utils.log_sanitizer import sanitize, sanitize_validation_error
 from utils.observability.fallback import record_fallback
@@ -290,7 +291,7 @@ def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
         return ''
     require_generated_compute(uid, 'daily_summary_simple')
     user_name, memories_str = get_prompt_memories(uid)
-    user_language = users_db.get_user_language_preference(uid)
+    user_language = resolve_output_language(uid, None)
 
     all_person_ids: List[str] = []
     for m in memories:
@@ -303,9 +304,9 @@ def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
 
     conversation_history = conversations_to_string(memories, people=people)
 
-    language_instruction = ''
-    if user_language and user_language != 'en':
-        language_instruction = f'You MUST respond entirely in {user_language}. Do NOT respond in English.'
+    language_instruction = (
+        f'Write all output in {user_language}. Keep names and quoted words verbatim; do not switch languages.'
+    )
 
     prompt = f"""
     You are an experienced mentor, that helps people achieve their goals and improve their lives.
@@ -373,7 +374,7 @@ def generate_comprehensive_daily_summary(
     user_name, memories_str = get_prompt_memories(uid)
 
     # Get user's language preference for generating summary in their language
-    output_language = user_profile.get('language', '') or 'en'
+    output_language = normalize_language(user_profile.get('language')) or 'en'
     depth = normalize_daily_summary_depth(user_profile.get('daily_summary_depth'))
     overview_copy, highlight_copy, depth_rules = _daily_summary_depth_copy(depth)
     question_copy, decision_copy, learning_copy = _daily_summary_entry_examples(depth)
@@ -507,7 +508,7 @@ def generate_comprehensive_daily_summary(
     convo_id_map = {i + 1: c.id for i, c in enumerate(non_discarded)}
 
     prompt = f"""You are creating a daily summary for {user_name}. {memories_str}
-OUTPUT LANGUAGE: {output_language}. You MUST write every word of this summary in {output_language}, regardless of the language the conversations are in.
+OUTPUT LANGUAGE: {output_language}. Write all output in {output_language}, regardless of the conversation languages. Keep names and quoted words verbatim.
 
 Today's date: {date_str}
 Conversations available for recap: {len(non_discarded)} (total recordings in day: {total_conversations})

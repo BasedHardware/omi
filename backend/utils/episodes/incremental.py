@@ -76,11 +76,15 @@ PROMPT_PREFIX = _MOMENT_OPENING + _MOMENT_LEGACY_LANGUAGE + _MOMENT_RULES
 
 
 def _moment_prompt(output_language: str) -> str:
+    # Keep the resolved-language directive last so it governs titles, headings,
+    # bullets and every other generated field regardless of the speech language.
     return (
-        _MOMENT_OPENING + f'- Write all fields, including title and moment_heading, in {output_language}. '
-        'Be concrete: names, places, numbers, decisions.\n'
-        '- Use names only from confident speaker evidence; hedge likely matches as "likely X"; '
-        'unknown voices are "a speaker". Never assign personal stories to a name without evidence.\n' + _MOMENT_RULES
+        _MOMENT_OPENING
+        + '- Be concrete: names, places, numbers, decisions.\n'
+        + '- Use names only from confident speaker evidence; hedge likely matches as "likely X"; '
+        'unknown voices are "a speaker". Never assign personal stories to a name without evidence.\n'
+        + _MOMENT_RULES
+        + f'\nWrite all output in {output_language}. Keep names and quoted words verbatim.\n'
     )
 
 

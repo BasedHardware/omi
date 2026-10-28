@@ -653,9 +653,15 @@ def _record_moment_once(
     base = dict(episode) if episode else _empty_episode(moment, now)
     known_ids = [item['id'] for item in provisional_items(base) if item.get('status') == 'provisional']
     output_language, repair = '', None
+    conversation_language = moment.language or ''
     if episode_output_language_pinned():
-        conversation_language = moment.language or _conversation_language(uid, moment.conversation_id, c)
-        output_language = episode_language.resolve_episode_language(uid, base, conversation_language)
+        conversation_tag = _conversation_language(uid, moment.conversation_id, c)
+        # Recovery moments may carry the same conversation-level tag. Prefer the
+        # stored conversation authority whenever present so a moment tag cannot
+        # overrule the language that represents the whole conversation.
+        if conversation_tag.strip():
+            conversation_language = conversation_tag
+        output_language = episode_language.resolve_episode_language(uid, conversation_language)
         prior = episode_language.state_language(base, hint_language=conversation_language)
         if prior and prior != output_language:
             repair = episode_language.repair_instruction(prior, output_language)
@@ -667,8 +673,8 @@ def _record_moment_once(
             known_item_ids=known_ids,
             now=now,
             tz_name=_tz(uid, c),
-            invoke=episode_language.resolved_invoke(uid, output_language or moment.language, c.invoke),
-            conversation_language=moment.language,
+            invoke=episode_language.resolved_invoke(uid, output_language or conversation_language, c.invoke),
+            conversation_language=conversation_language,
             output_language=output_language or None,
             repair_instruction=repair,
         )
