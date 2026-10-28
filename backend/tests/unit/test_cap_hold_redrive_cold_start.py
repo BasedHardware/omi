@@ -35,3 +35,12 @@ async def test_fleet_snapshot_starts_before_first_interval_on_cold_process(monke
     assert task is not None
     await task
     assert calls == [None]
+
+
+def test_default_fleet_snapshot_interval_preserves_freshness_headroom(monkeypatch):
+    monkeypatch.delenv('CAP_HOLD_FLEET_SNAPSHOT_MIN_INTERVAL_SECONDS', raising=False)
+
+    interval = cap_hold_redrive.fleet_snapshot_interval()
+
+    assert interval == cap_hold_redrive.FLEET_SNAPSHOT_INTERVAL_SECONDS == 120.0
+    assert interval < cap_hold_redrive.FLEET_SNAPSHOT_MAX_AGE_SECONDS == 300.0

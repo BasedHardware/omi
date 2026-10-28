@@ -38,7 +38,7 @@ def _cursor_problem(cursor) -> str | None:
     (an empty ``id`` builds a document name with a trailing slash), and a null
     ``at`` compares below every number, permanently hiding the whole queue.
     """
-    if not cursor:
+    if cursor is None:
         return None
     if not isinstance(cursor, dict):
         return 'not_a_map'

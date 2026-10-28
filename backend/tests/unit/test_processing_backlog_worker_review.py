@@ -819,7 +819,6 @@ async def test_worker_selects_original_encrypted_audio_lane(monkeypatch, origin,
 def test_cursor_problem_accepts_only_shapes_start_after_can_seed():
     usable = [
         None,
-        {},
         {'at': 1, 'id': 'hold'},
         {'at': 1000.5, 'id': 'hold'},
         {'at': DatetimeWithNanoseconds(2026, 10, 1, nanosecond=123456000, tzinfo=timezone.utc), 'id': 'hold'},
@@ -832,6 +831,10 @@ def test_cursor_problem_accepts_only_shapes_start_after_can_seed():
     # the SDK build a document name with a trailing slash that the server
     # rejects with InvalidArgument on every visit.
     rejected = {
+        'empty map': ({}, 'at_type'),
+        'empty list': ([], 'not_a_map'),
+        'empty string': ('', 'not_a_map'),
+        'zero': (0, 'not_a_map'),
         'null at': ({'at': None, 'id': 'hold'}, 'at_type'),
         'bool at': ({'at': True, 'id': 'hold'}, 'at_type'),
         'nan at': ({'at': float('nan'), 'id': 'hold'}, 'at_type'),
@@ -852,6 +855,10 @@ def test_cursor_problem_accepts_only_shapes_start_after_can_seed():
 @pytest.mark.parametrize(
     'poisoned,reason',
     [
+        ({}, 'at_type'),
+        ([], 'not_a_map'),
+        ('', 'not_a_map'),
+        (0, 'not_a_map'),
         ({'at': None, 'id': ''}, 'at_type'),
         ({'at': 1, 'id': ''}, 'id_shape'),
         ('legacy-cursor', 'not_a_map'),
@@ -874,6 +881,19 @@ def test_poisoned_stored_cursor_rewinds_instead_of_rebuilding_a_rejected_query(
     assert f'outcome=cursor_invalid uid=synthetic kind=audio reason={reason}' in caplog.text
     # The repaired page is the cursorless shape: nothing reaches RunQuery that
     # the server would reject again on the next visit.
+    assert not requests[-1].structured_query.start_at.values
+
+
+def test_absent_cursor_does_not_emit_cursor_invalid(monkeypatch, query_protocol, caplog):
+    client, documents, requests = query_protocol
+    collection = client.collection('users').document('synthetic').collection('audio')
+    monkeypatch.setattr(worker.cap_hold, 'holds', lambda uid: collection)
+    documents[collection.document('first-hold')._document_path] = {'listed_at': 1000, 'state': 'held'}
+
+    rows = worker._page('synthetic', 'audio', None)
+
+    assert [snap.id for _, snap in rows] == ['first-hold']
+    assert 'outcome=cursor_invalid' not in caplog.text
     assert not requests[-1].structured_query.start_at.values
 
 

@@ -150,15 +150,19 @@ or owner work: the sweep schedules it, does its own work, then waits at most
 `CAP_HOLD_FLEET_SNAPSHOT_WAIT_SECONDS` (default 90) to publish before returning;
 a slower aggregation keeps running under its own budget and publishes late. At
 most one aggregation runs per process at a time and no more often than
-`CAP_HOLD_FLEET_SNAPSHOT_MIN_INTERVAL_SECONDS` (default 600). Each of its RPCs
-is bounded by `CAP_HOLD_FLEET_SNAPSHOT_TIMEOUT_SECONDS` (default 60; a fixed
-10 s budget failed every sweep against the multi-million-row held population
-with RetryError). `CAP_HOLD_FLEET_SNAPSHOT_ENABLED=false` stops gauge
-refresh without touching drain work. A malformed stored queue cursor (non-map,
-null/boolean/non-finite `at`, empty or non-string `id`) is logged once per
-encounter as `event=processing_backlog outcome=cursor_invalid` and rewound to
-newest — the same widening-preserving rewind `finish()` uses for skipped scope —
-instead of rebuilding a query the server rejects on every visit.
+`CAP_HOLD_FLEET_SNAPSHOT_MIN_INTERVAL_SECONDS` (default 120 seconds). The
+held-content acceptance gate treats snapshots older than 300 seconds as stale,
+so this default leaves 180 seconds for aggregation completion and Scheduler
+delay. Each of its RPCs is bounded by
+`CAP_HOLD_FLEET_SNAPSHOT_TIMEOUT_SECONDS` (default 60; a fixed 10 s budget
+failed every sweep against the multi-million-row held population with
+RetryError). `CAP_HOLD_FLEET_SNAPSHOT_ENABLED=false` stops gauge refresh without
+touching drain work. A stored cursor of `None` means no cursor; any other
+malformed shape (including an empty map, list, string, or zero, null/boolean/
+non-finite `at`, or empty/non-string `id`) is logged once per encounter as
+`event=processing_backlog outcome=cursor_invalid` and rewound to newest — the
+same widening-preserving rewind `finish()` uses for skipped scope — instead of
+rebuilding a query the server rejects on every visit.
 
 After shipping the reader, the operator should trigger the existing
 `cap-hold-durable-redrive` Scheduler job once to resume persisted

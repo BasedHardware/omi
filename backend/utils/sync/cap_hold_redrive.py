@@ -19,7 +19,10 @@ logger = logging.getLogger(__name__)
 LEGACY_CHOICES_PAGE = 5
 CHOICES_PAGE_CEILING = 8
 OWNER_ITEMS_CEILING = 10
-FLEET_SNAPSHOT_INTERVAL_SECONDS = 600.0
+# Keep the refresh cadence below the held-content acceptance gate's 300-second
+# maximum age, leaving 180 seconds for aggregation completion and scheduler delay.
+FLEET_SNAPSHOT_MAX_AGE_SECONDS = 300.0
+FLEET_SNAPSHOT_INTERVAL_SECONDS = 120.0
 FLEET_SNAPSHOT_WAIT_CEILING = 300.0
 
 
@@ -38,9 +41,9 @@ def enabled() -> bool:
     return os.getenv('CAP_HOLD_DURABLE_REDRIVE_ENABLED', 'true').lower() == 'true'
 
 
-def _env_number(name: str, default: float, *, low: float, high: float) -> float:
+def _env_number(raw_value: str | None, default: float, *, low: float, high: float) -> float:
     try:
-        value = float(os.getenv(name, '') or default)
+        value = float(raw_value or default)
     except ValueError:
         value = default
     return max(low, min(high, value))
@@ -55,7 +58,7 @@ def choices_page() -> int:
     """Processing owners visited per sweep, bounded below the shared sync pool."""
     if not parallel_drain_enabled():
         return LEGACY_CHOICES_PAGE
-    return int(_env_number('CAP_HOLD_REDRIVE_CHOICES_PAGE', 8, low=1, high=CHOICES_PAGE_CEILING))
+    return int(_env_number(os.getenv('CAP_HOLD_REDRIVE_CHOICES_PAGE', ''), 8, low=1, high=CHOICES_PAGE_CEILING))
 
 
 def owner_items() -> int:
@@ -64,7 +67,7 @@ def owner_items() -> int:
     gets another turn."""
     if not parallel_drain_enabled():
         return 1
-    return int(_env_number('CAP_HOLD_REDRIVE_ITEMS_PER_OWNER', 10, low=1, high=OWNER_ITEMS_CEILING))
+    return int(_env_number(os.getenv('CAP_HOLD_REDRIVE_ITEMS_PER_OWNER', ''), 10, low=1, high=OWNER_ITEMS_CEILING))
 
 
 def fleet_snapshot_enabled() -> bool:
@@ -73,12 +76,17 @@ def fleet_snapshot_enabled() -> bool:
 
 def fleet_snapshot_interval() -> float:
     return _env_number(
-        'CAP_HOLD_FLEET_SNAPSHOT_MIN_INTERVAL_SECONDS', FLEET_SNAPSHOT_INTERVAL_SECONDS, low=0.0, high=3600.0
+        os.getenv('CAP_HOLD_FLEET_SNAPSHOT_MIN_INTERVAL_SECONDS', ''),
+        FLEET_SNAPSHOT_INTERVAL_SECONDS,
+        low=0.0,
+        high=3600.0,
     )
 
 
 def fleet_snapshot_wait() -> float:
-    return _env_number('CAP_HOLD_FLEET_SNAPSHOT_WAIT_SECONDS', 90.0, low=0.0, high=FLEET_SNAPSHOT_WAIT_CEILING)
+    return _env_number(
+        os.getenv('CAP_HOLD_FLEET_SNAPSHOT_WAIT_SECONDS', ''), 90.0, low=0.0, high=FLEET_SNAPSHOT_WAIT_CEILING
+    )
 
 
 def owner(snap: Any, collection: str) -> str | None:
