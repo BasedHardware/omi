@@ -281,3 +281,27 @@ def test_settled_survivor_uses_existing_refresh_lease_and_checkpoint_once(monkey
     smart_refresh.settle_survivor('user-1', 'parent', owner='retry')
     assert len(world.processed) == 1
     assert world.raw('parent')['smart_merge']['refreshed_revision'] == 2
+
+
+def test_relevance_discard_never_spends_the_first_full_summary_budget(monkeypatch):
+    world = World(monkeypatch)
+    world.add('parent', 0, 5, sync_content_revision=2, **{hold.FIELD: {'pending_since': 100, 'last_content_at': 100}})
+    current = world.get('user-1', 'parent')
+    monkeypatch.setattr(callback.conversations_db, 'get_conversation', lambda *_: current)
+    monkeypatch.setattr(callback, 'repair_fenced', lambda _: False)
+    monkeypatch.setattr(callback, 'claim_from_snapshot', lambda *_: True)
+    monkeypatch.setattr(callback, 'get_firestore_client', lambda: world.store)
+    monkeypatch.setattr(callback, 'schedule_after_finalization', lambda *_: None)
+    monkeypatch.setattr(callback.time, 'time', lambda: 700)
+    discarded = callback.deserialize_conversation({**current, 'discarded': True, 'structured': {'title': 'Minimum'}})
+    monkeypatch.setattr(callback, 'process_conversation', Mock(return_value=discarded))
+    token = PROCESS_CONTEXT.set({'owner': 'worker', 'lease_until': 1000, 'first_pending_at': 100, 'sync_hold': True})
+    try:
+        callback.enrich_conversation('user-1', 'parent', 'en')
+    finally:
+        PROCESS_CONTEXT.reset(token)
+    state = world.raw('parent')[hold.FIELD]
+    assert 'full_snapshot' not in state and state['pending_since'] is None
+    # A later small fragment can promote the row and still receive its first notes.
+    promoted = {**current, hold.FIELD: hold.activity_patch({hold.FIELD: state}, 1000)}
+    assert hold.admission(promoted, {'first_pending_at': 1000}, now=1600) == ('ready', None)

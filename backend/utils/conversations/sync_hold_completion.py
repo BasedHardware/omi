@@ -30,6 +30,6 @@ def complete_explicit(uid: str, conversation: Any, trigger: ProcessingTrigger) -
         uid,
         conversation.id,
         revision,
-        processing_hold.content_snapshot(conversation.model_dump()),
+        processing_hold.content_snapshot(conversation.model_dump()) if present(conversation.structured) else None,
         automatic=False,
     )

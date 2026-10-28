@@ -1162,7 +1162,10 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
             and (refreshed.get('discarded') or summary_output_present(refreshed.get('structured')))
             and context.get('hold_snapshot') is not None
             and not conversations_db.complete_sync_processing_hold(
-                uid, conversation_id, conversation_data.get('sync_content_revision'), context['hold_snapshot']
+                uid,
+                conversation_id,
+                conversation_data.get('sync_content_revision'),
+                context['hold_snapshot'] if summary_output_present(refreshed.get('structured')) else None,
             )
         ):
             raise SyncConversationPersistenceFenced('hold completion snapshot changed')
@@ -1203,7 +1206,10 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         and context.get('hold_snapshot') is not None
         and (processed_conversation.discarded or summary_output_present(processed_conversation.structured))
         and not conversations_db.complete_sync_processing_hold(
-            uid, conversation_id, conversation_data.get('sync_content_revision'), context['hold_snapshot']
+            uid,
+            conversation_id,
+            conversation_data.get('sync_content_revision'),
+            context['hold_snapshot'] if summary_output_present(processed_conversation.structured) else None,
         )
     ):
         raise SyncConversationPersistenceFenced('hold completion snapshot changed')
