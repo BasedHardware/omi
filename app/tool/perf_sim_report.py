@@ -15,6 +15,7 @@ from pathlib import Path
 SCENARIOS = (
     "cold_start", "scroll_conversations", "open_conversation",
     "tab_switch", "wal_sync_bg_fg",
+    "home_live_preview", "live_episode_page", "device_settings_on_the_way",
 )
 METRICS = (
     "build_p50_us", "build_p90_us", "build_p99_us",
@@ -25,7 +26,8 @@ METRICS = (
 )
 P90_METRICS = ("build_p90_us", "raster_p90_us", "total_p90_us")
 HEAVY_DATASET = {'conversations': 2000, 'detail_segments': 120, 'wals': 6500,
-                 'wal_files': 6500, 'people': 40, 'task_items': 50}
+                 'wal_files': 6500, 'people': 40, 'task_items': 50,
+                 'live_final_segments': 1000, 'live_preview_interval_ms': 200}
 
 
 def validate(report):
