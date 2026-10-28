@@ -2,6 +2,7 @@ from database import sync_redrive
 from database.sync_snapshot_resolve_cache import sync_snapshot_resolve_job
 from database.legal_holds import DestructiveOperationInProgress
 from utils.sync import minimal_redrive, redrive_policy, playback_build
+from utils.other.playback_identity import PlaybackSourceChanged
 from utils.capture.coverage_endpoint import router as coverage_router
 from utils.observability.sync_phases import sync_attempt, set_sync_metrics_lane
 import asyncio
@@ -3700,6 +3701,41 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
 AUDIO_MERGE_DESTRUCTIVE_DEFERRALS_MAX = 6
 
 
+async def _refuse_changed_playback_source(payload: dict, *, fingerprint: str | None = None):
+    """A replaced source cannot be repaired by retrying its old immutable key."""
+    from database.legal_holds import DestructiveOperationInProgress
+
+    try:
+        if fingerprint is None:
+            await run_blocking(
+                storage_executor,
+                mark_playback_unavailable,
+                payload['uid'],
+                payload['conversation_id'],
+                payload['audio_file_id'],
+                'source_changed',
+            )
+        else:
+            await run_blocking(
+                storage_executor,
+                mark_conversation_playback_unavailable,
+                payload['uid'],
+                payload['conversation_id'],
+                fingerprint,
+                'source_changed',
+            )
+    except DestructiveOperationInProgress:
+        deferred = await _defer_merge_for_destructive_operation(payload)
+        if deferred is not None:
+            return deferred
+        return JSONResponse(status_code=503, content={'status': 'retry'})
+    PLAYBACK_WRITES.labels('skipped').inc()
+    logger.warning(
+        'audio_merge: refused reason=source_manifest_changed kind=%s', 'file' if fingerprint is None else 'conversation'
+    )
+    return JSONResponse(status_code=200, content={'status': 'unavailable', 'reason': 'source_manifest_changed'})
+
+
 async def _defer_merge_for_destructive_operation(payload: dict):
     """Return a 200 'deferred' response after re-enqueueing, or None to keep the
     caller's existing retry and final-attempt handling (deferrals exhausted, or
@@ -3813,6 +3849,8 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
                         else {}
                     ),
                 )
+        except PlaybackSourceChanged:
+            return await _refuse_changed_playback_source(payload)
         except FileNotFoundError:
             logger.warning(f'audio_merge: chunks missing conv={conversation_id} file={audio_file_id}, dropping')
             # Persist the verdict or /urls reports pending forever and clients
@@ -4006,6 +4044,8 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
                     artifact_fingerprint,
                     strict_sources=demand,
                 )
+        except PlaybackSourceChanged:
+            return await _refuse_changed_playback_source(payload, fingerprint=fingerprint)
         except FileNotFoundError:
             logger.warning(f'audio_merge: conversation chunks missing conv={conversation_id}, dropping')
             try:

@@ -7491,6 +7491,53 @@ Memory/task entrypoints and daily/simple/comprehensive recaps use the same
 eligibility helper. Restoring a recording protects it, reclassification clears
 its exclusion, and successful reprocessing clears the terminal marker. Shadow
 preserves transcripts, labels and derived output; it never writes media edges.
+Required-memory normalization consults this same persisted media policy even
+when `SPEAKER_EVIDENCE_MODE` is off. Automatic sources read at most four
+conversation documents, reusing each document within the admission call;
+explicit user assertions retain their separate authority. The read bound counts
+distinct readable source documents, so repeated evidence for one source reads
+it once. Stored keep/restore and `has_photos` markers, inline photos and user
+titles outrank an older
+media label at every derived gate. Current manual owner anchors use P2's scoped
+roles and the existing owner-duration floor; ambiguous/unscoped manual owner
+anchors abstain from media exclusion without granting owner attribution. These
+read-time protections never rewrite the stored classification.
+The photo marker protects without fetching the photos subcollection; both the
+classification adapter and required-memory read path honor it.
+Media admission does
+not confer owner attribution: the independent speaker policy still consumes
+P2's shared `owner_attribution` role projection when serving. Outside serving,
+bounded media-only reads use the existing 5% uid shadow sample, return the
+legacy revision mapping and cannot defer normalization on a read error.
+All derived wrappers now reach the shared gate in shadow. Aggregate/text-free
+`media_classification`, `media_derived_admission` and `batch_media_admission`
+logs expose bounded reasons and serving status; they contain no transcript,
+account or speaker identifiers. Existing `omi_media_noise_shadow_total`
+consumer/classification counters remain the parity/error surface.
+
+Batch `projection.build_incoming` uses the same narrow transcript admission as
+legacy sync after grouping and stable ID/clock assignment. Off and shadow at
+zero serving preserve the complete incoming row. Serving filters only existing
+marker/credit/repetition rules; an all-filtered part takes the existing empty
+projection receipt, without an empty conversation, re-transcription or a new
+paid call. Original results keep the existing artifact retention policy and
+measured VAD accounting is retained.
+There is no language-profile rejection or music classifier. Missing/partial/
+stale speaker evidence remains unknown; plausible owner speech, attended calls
+and explicit keep/restore protections still precede media suppression.
+
+P3 ships observationally: `MEDIA_NOISE_MODE=shadow`,
+`MEDIA_NOISE_MODE_SERVE_PERCENT=0`, digest cohort empty (the existing defaults).
+Only the rollout lead may expand after protected synthetic/authorized fixture
+review and a full 24-hour shadow window where available by Oct 29 12:00Z.
+With consumer parity green, understood reason/error rates and no validated
+false suppression, target 5% by Oct 30 12:00Z, 25% after six clean hours, and
+100% by Oct 31 12:00Z. Insufficient evidence blocks expansion and requires a
+renewed dated promise. Any false owner promotion or lost good speech/task
+stops the ramp; rollback is percent 0 plus empty digests in shadow, or mode
+off to stop observations too. Arbitrary music hallucination and instrument-only
+or Android media without reliable evidence remain lead-owned follow-ups;
+this gate does not repair historical derived output.
 On clients with the existing Show discarded/restore capability (currently
 iOS/Android), both media and noise minima are hidden from the default feed.
 Bystander classification uses noise. Explicit keep/restore overrides automatic
