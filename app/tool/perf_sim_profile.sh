@@ -165,6 +165,7 @@ for ((launch=1; launch<=RUNS+WARMUP_RUNS; launch++)); do
         --out "$ATTEMPT_DIR/admission-before-launch.json"
     fi
     DRIVE_RESULT=0
+    # Empty on physical devices; bash 3.2 (macOS /usr/bin/env bash) rejects "${a[@]}" of an empty array under set -u.
     HOST_GUARD=()
     if [[ "$VIRTUAL" == 1 ]]; then
       HOST_GUARD=(python3 -I tool/perf/host_load.py --out "$ATTEMPT_DIR/host-load.json" --)
@@ -174,7 +175,7 @@ for ((launch=1; launch<=RUNS+WARMUP_RUNS; launch++)); do
       OMI_PERF_TIMELINE="$TIMELINE" \
       OMI_PERF_SIMULATOR="$SIMULATOR" \
       OMI_PERF_VIRTUAL="$VIRTUAL" \
-      "${HOST_GUARD[@]}" python3 -I tool/perf_drive.py "$ATTEMPT_DIR/driver.log" \
+      ${HOST_GUARD[@]+"${HOST_GUARD[@]}"} python3 -I tool/perf_drive.py "$ATTEMPT_DIR/driver.log" \
       flutter drive --"$MODE" --flavor dev --no-pub --no-dds --keep-app-running --no-publish-port \
       --driver=test_driver/heavy_profile_driver.dart --target="$TARGET" \
       --use-application-binary="$BINARY" "${DEFINES[@]}" -d "$DEVICE" || DRIVE_RESULT=$?
