@@ -16,6 +16,7 @@ import {
   SeriesSources,
   STORE_FAIL_LIMIT,
   UNIT_DAYS,
+  warmSeries,
 } from "../wall-series";
 import { resetWallCache, wallPayload } from "../wall-cache";
 import {
@@ -35,6 +36,7 @@ import {
   VARIABLE_MARGIN_TARGET,
 } from "../wall-cost";
 import { HEALTH_COST_DAYS } from "../wall-finops";
+import { WallSourceError } from "../wall-source-error";
 
 const now = new Date("2026-10-15T12:00Z");
 const end = utcDay(now);
@@ -949,6 +951,53 @@ describe("v3 series cold-load and cache rules", () => {
       s
     );
     expect(s.query).toHaveBeenCalledTimes(6);
+  });
+});
+
+describe("the warm scheduler fills legs off the viewing path", () => {
+  it("runs every leg to completion so the first viewer reads complete legs", async () => {
+    const store = memorySeriesStore();
+    const w = { ...sources(), store, instance: "warm" };
+    const legs = await warmSeries(now, w);
+    // Every usage leg completed; legs whose sources this fixture omits report why.
+    for (const leg of ["growth", "curve", "retainedHistory", "captureSource"])
+      expect(legs[leg]).toMatchObject({ complete: true, reason: null });
+    resetSeriesCache(); // a viewer on another instance, same shared store
+    const v = { ...sources(), store, instance: "viewer" };
+    const growth = await seriesPayload("growth", Promise.resolve(null), now, v);
+    const retention = await seriesPayload(
+      "retention",
+      Promise.resolve(null),
+      now,
+      v
+    );
+    expect(v.query).not.toHaveBeenCalled();
+    expect(growth).toMatchObject({ refreshing: false, partial: false });
+    expect(retention.refreshing).toBe(false);
+  });
+
+  it("is a store read only once the day is complete", async () => {
+    const store = memorySeriesStore();
+    const w = { ...sources(), store, instance: "warm" };
+    await warmSeries(now, w);
+    const reads = (w.query as ReturnType<typeof vi.fn>).mock.calls.length;
+    await warmSeries(new Date(now.getTime() + 10 * 60_000), w);
+    expect((w.query as ReturnType<typeof vi.fn>).mock.calls.length).toBe(reads);
+  });
+
+  it("reports a failing leg's controlled reason instead of hiding it", async () => {
+    const w = { ...sources(), store: memorySeriesStore(), instance: "warm" };
+    w.planCost = vi.fn(async () => {
+      throw new WallSourceError(
+        "omi_finops.mercury_saas_daily not readable by the admin BigQuery identity (missing dataViewer grant)"
+      );
+    });
+    const legs = await warmSeries(now, w);
+    expect(legs.planCost).toMatchObject({
+      complete: false,
+      reason:
+        "omi_finops.mercury_saas_daily not readable by the admin BigQuery identity (missing dataViewer grant)",
+    });
   });
 });
 

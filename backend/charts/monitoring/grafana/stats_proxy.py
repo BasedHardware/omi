@@ -1,7 +1,12 @@
 """Loopback-only stats capability for Infinity. Uses GKE Workload Identity, no keys.
 
 Only GET stats routes are forwarded. Tokens, upstream bodies and request details
-are never logged. Successful GETs coalesce/cache for 15m; failures never serve stale.
+are never logged. Each path coalesces and caches on its own (15m settled, 15s while
+the admin reports `refreshing`). Once a path has answered, an expired or failed
+refresh serves that last good body (up to MAX_STALE) while one background refresh
+per path runs, so a slow or cold admin never blanks the board; the admin body
+carries its own freshness ("Data through", cacheStale). Only a path that has never
+answered blocks, and a failure there is shared briefly, never retried per panel.
 """
 
 import base64
@@ -39,6 +44,10 @@ ALLOWED_PATHS = frozenset([WALL_PATH] + [f"{WALL_PATH}/series/{name}" for name i
 # picks up the filled result instead of pinning the empty one for 15 minutes.
 REFRESHING_TTL = 15
 SETTLED_TTL = 900
+FAILURE_TTL = 5
+# The admin keeps stale-good legs for 24h and labels them; the proxy never holds a
+# body longer than that.
+MAX_STALE = 24 * 3600
 
 
 def allowed_path(path):
@@ -55,14 +64,21 @@ def allowed_path(path):
 
 
 class StatsProxy:
-    def __init__(self, opener=None, clock=time.time):
+    def __init__(self, opener=None, clock=time.time, spawn=None):
         self.opener = opener or build_opener(ProxyHandler({}), NoRedirect())
         self.clock = clock
+        self.spawn = spawn or (lambda work: threading.Thread(target=work, daemon=True).start())
         self.token = ""
         self.expiry = 0
         self.token_lock = threading.Lock()
-        self.cache_lock = threading.Lock()
-        self.cache = {}
+        # state_lock guards the dicts below and is never held across I/O. One
+        # fill lock per path: a slow series no longer queues every other path
+        # (2026-10-28: one global lock serialized all six behind the slowest).
+        self.state_lock = threading.Lock()
+        self.cache = {}  # path -> (expires_at, status, body), latest answer
+        self.good = {}  # path -> (at, body), last 200
+        self.fill_locks = {}
+        self.refreshing = set()
 
     def request(self, url, headers=None, data=None, timeout=20):
         request = Request(url, headers=headers or {}, data=data)
@@ -98,44 +114,93 @@ class StatsProxy:
             return token
 
     def remember(self, path, status, body, ttl):
+        """Record a path's latest answer; caller holds state_lock."""
         stamp = self.clock()
         self.cache = {k: v for k, v in self.cache.items() if stamp < v[0]}
+        self.good = {k: v for k, v in self.good.items() if stamp - v[0] < MAX_STALE}
         while self.cache and (
             len(self.cache) >= 32 or sum(len(v[2]) for v in self.cache.values()) + len(body) > MAX_CACHE_BYTES
         ):
             del self.cache[next(iter(self.cache))]
-        self.cache[path] = (min(stamp + ttl, (int(stamp) // 86400 + 1) * 86400), status, body)
+        self.cache[path] = (stamp + ttl, status, body)
+        if status == 200:
+            self.good[path] = (stamp, body)
         return status, body
+
+    def upstream(self, path):
+        for attempt in range(2):
+            try:
+                token = self.identity_token()
+                body = self.request(
+                    "https://admin.omi.me" + path,
+                    {"Authorization": f"Bearer {token}", "Accept": "application/json"},
+                    timeout=360,
+                )
+                parsed = json.loads(body)  # Never forward HTML, redirects or a login page.
+                refreshing = isinstance(parsed, dict) and parsed.get("refreshing") is True
+                return 200, body, REFRESHING_TTL if refreshing else SETTLED_TTL
+            except HTTPError as exc:
+                exc.close()
+                if exc.code == 401 and attempt == 0:
+                    with self.token_lock:
+                        self.token, self.expiry = "", 0
+                    continue
+                break
+            except Exception:
+                break
+        return 502, b'{"error":"stats upstream unavailable"}', FAILURE_TTL
+
+    def fill(self, path):
+        """One upstream read per path at a time; waiters share its answer."""
+        with self.state_lock:
+            lock = self.fill_locks.setdefault(path, threading.Lock())
+        with lock:
+            with self.state_lock:
+                cached = self.cache.get(path)
+                if cached and self.clock() < cached[0]:
+                    return cached[1], cached[2]
+            status, body, ttl = self.upstream(path)
+            with self.state_lock:
+                if status != 200 and path in self.good:
+                    # Keep serving the last good body; retry after FAILURE_TTL.
+                    self.cache[path] = (self.clock() + ttl, status, body)
+                    return status, body
+                return self.remember(path, status, body, ttl)
+
+    def refresh(self, path):
+        try:
+            self.fill(path)
+        except Exception:
+            pass
+        finally:
+            with self.state_lock:
+                self.refreshing.discard(path)
 
     def fetch(self, path):
         if not allowed_path(path):
             return 404, b'{"error":"not found"}'
-        # Share failures briefly too: waiters must not each retry a 360s timeout.
-        with self.cache_lock:
+        now = self.clock()
+        start = False
+        with self.state_lock:
             cached = self.cache.get(path)
-            if cached and self.clock() < cached[0]:
+            fresh = cached is not None and now < cached[0]
+            if fresh and cached[1] == 200:
                 return cached[1], cached[2]
-            for attempt in range(2):
-                try:
-                    token = self.identity_token()
-                    body = self.request(
-                        "https://admin.omi.me" + path,
-                        {"Authorization": f"Bearer {token}", "Accept": "application/json"},
-                        timeout=360,
-                    )
-                    parsed = json.loads(body)  # Never forward HTML, redirects or a login page.
-                    refreshing = isinstance(parsed, dict) and parsed.get("refreshing") is True
-                    return self.remember(path, 200, body, REFRESHING_TTL if refreshing else SETTLED_TTL)
-                except HTTPError as exc:
-                    exc.close()
-                    if exc.code == 401 and attempt == 0:
-                        with self.token_lock:
-                            self.token, self.expiry = "", 0
-                        continue
-                    break
-                except Exception:
-                    break
-            return self.remember(path, 502, b'{"error":"stats upstream unavailable"}', 5)
+            good = self.good.get(path)
+            if not (good and now - good[0] < MAX_STALE):
+                good = None
+                if fresh:
+                    return cached[1], cached[2]
+            elif not fresh and path not in self.refreshing:
+                # Stale-while-revalidate: answer now, refresh once in the
+                # background (not while a recent failure is cooling down).
+                self.refreshing.add(path)
+                start = True
+        if good is None:
+            return self.fill(path)
+        if start:
+            self.spawn(lambda: self.refresh(path))
+        return 200, good[1]
 
 
 class Handler(BaseHTTPRequestHandler):

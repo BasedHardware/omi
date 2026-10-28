@@ -19,6 +19,7 @@ from charts.monitoring.grafana.stats_proxy import (
     Handler,
     Server,
     StatsProxy,
+    MAX_STALE,
     REFRESHING_TTL,
     SERIES_NAMES,
     allowed_path,
@@ -95,10 +96,14 @@ class Transport:
         return io.BytesIO(b'{"ok":true}')
 
 
+def inline(work):
+    work()
+
+
 def test_cache_coalesces_panel_requests_and_refreshes_tokens_early():
     now = [10000]
     transport = Transport(now)
-    proxy = StatsProxy(transport, lambda: now[0])
+    proxy = StatsProxy(transport, lambda: now[0], spawn=inline)
     assert proxy.fetch("/api/omi/stats/wall") == (200, b'{"ok":true}')
     for _ in range(24):
         assert proxy.fetch("/api/omi/stats/wall")[0] == 200
@@ -120,18 +125,28 @@ def test_401_discards_identity_and_retries_once():
     assert len(transport.calls) == 6
 
 
-def test_failure_never_returns_stale_or_follows_redirect():
+def test_failed_refresh_serves_last_good_until_max_stale_and_never_follows_redirect():
     now = [10000]
     transport = Transport(now)
-    proxy = StatsProxy(transport, lambda: now[0])
+    proxy = StatsProxy(transport, lambda: now[0], spawn=inline)
     proxy.fetch("/api/omi/stats/wall")
     now[0] += 900
+    attempts = []
 
     def fail(*args, **kwargs):
+        attempts.append(1)
         raise HTTPError("https://admin.omi.me/api/omi/stats/wall", 302, "redirect", {}, io.BytesIO())
 
     transport.open = fail
-    assert proxy.fetch("/api/omi/stats/wall")[0] == 502
+    # The board keeps the last good body; the admin body carries its own freshness.
+    assert proxy.fetch("/api/omi/stats/wall") == (200, b'{"ok":true}')
+    assert len(attempts) == 1
+    assert proxy.fetch("/api/omi/stats/wall") == (200, b'{"ok":true}')
+    assert len(attempts) == 1  # the failure cools down before the next refresh
+    now[0] += MAX_STALE
+    assert proxy.fetch("/api/omi/stats/wall")[0] == 502  # never older than MAX_STALE
+    # A path that never answered has nothing to serve.
+    assert proxy.fetch("/api/omi/stats/wall/series/health")[0] == 502
 
 
 def test_http_rejects_mutations_and_does_not_forward_headers(monkeypatch):
@@ -293,7 +308,7 @@ def test_http_cold_wall_burst_queues_every_panel_and_coalesces_upstream(monkeypa
         serving.join(timeout=10)
 
 
-def test_refreshing_body_is_cached_briefly_then_refetched():
+def test_refreshing_body_is_cached_briefly_then_refetched_in_the_background():
     now = [10000]
     transport = Transport(now)
     bodies = [b'{"refreshing":true,"frames":{}}', b'{"refreshing":false,"frames":{"weekly":[1]}}']
@@ -306,12 +321,57 @@ def test_refreshing_body_is_cached_briefly_then_refetched():
         return original(request, timeout)
 
     transport.open = open_
-    proxy = StatsProxy(transport, lambda: now[0])
+    proxy = StatsProxy(transport, lambda: now[0], spawn=inline)
     path = "/api/omi/stats/wall/series/growth"
     assert proxy.fetch(path) == (200, b'{"refreshing":true,"frames":{}}')
     now[0] += 5
     assert proxy.fetch(path)[1] == b'{"refreshing":true,"frames":{}}'  # coalesced within the short TTL
     now[0] += REFRESHING_TTL
+    # Expired: answered from the last good body at once, refreshed behind it.
+    assert proxy.fetch(path)[1] == b'{"refreshing":true,"frames":{}}'
     assert proxy.fetch(path)[1] == b'{"refreshing":false,"frames":{"weekly":[1]}}'
     now[0] += REFRESHING_TTL + 60
     assert proxy.fetch(path)[1] == b'{"refreshing":false,"frames":{"weekly":[1]}}'  # settled body cached 900s
+
+
+def test_a_slow_path_does_not_hold_other_paths():
+    now = [10000]
+    proxy = StatsProxy(clock=lambda: now[0])
+    entered, release = threading.Event(), threading.Event()
+
+    def upstream(url, *args, **kwargs):
+        if url.endswith("/health"):
+            entered.set()
+            assert release.wait(10)
+        return b'{"ok":true}'
+
+    proxy.identity_token = lambda: "synthetic"
+    proxy.request = upstream
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        slow = pool.submit(proxy.fetch, "/api/omi/stats/wall/series/health")
+        assert entered.wait(10)
+        try:
+            fast = pool.submit(proxy.fetch, "/api/omi/stats/wall/series/headline")
+            assert fast.result(timeout=5) == (200, b'{"ok":true}')
+            assert not slow.done()
+        finally:
+            release.set()
+        assert slow.result(timeout=10) == (200, b'{"ok":true}')
+
+
+def test_background_refresh_is_single_flight_per_path():
+    now = [10000]
+    spawned = []
+    proxy = StatsProxy(clock=lambda: now[0], spawn=spawned.append)
+    proxy.identity_token = lambda: "synthetic"
+    proxy.request = lambda *args, **kwargs: b'{"ok":true}'
+    path = "/api/omi/stats/wall/series/retention"
+    proxy.fetch(path)
+    now[0] += 901
+    for _ in range(13):  # every retention target on one board load
+        assert proxy.fetch(path) == (200, b'{"ok":true}')
+    assert len(spawned) == 1
+    spawned[0]()
+    now[0] += 901
+    proxy.fetch(path)
+    assert len(spawned) == 2

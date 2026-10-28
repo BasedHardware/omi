@@ -1718,6 +1718,48 @@ export function dataStatus(
 
 const ALL_LEGS = Array.from(new Set(Object.values(LEGS_FOR).flat()));
 
+export interface WarmLeg {
+  day: string | null;
+  complete: boolean;
+  reason: string | null;
+  /** Another instance holds the fill lease; the next warm tick picks it up. */
+  busy: boolean;
+  storeDown: boolean;
+}
+
+/** Fill every leg to completion off the viewing path (the `omi-admin-wall-warm`
+ * scheduler). Viewers then read legs that are already complete for the UTC day
+ * instead of paying the day's cold fill; a complete leg is a store read only.
+ * Uses the same leases as requests, so a warm tick and a viewer never fill the
+ * same leg twice. */
+export async function warmSeries(
+  now = new Date(),
+  sources: SeriesSources = defaultSeriesSources
+): Promise<Record<string, WarmLeg>> {
+  const day = isoDay(utcDay(now));
+  const store = sources.store ?? localStore;
+  const starts = await Promise.all(
+    ALL_LEGS.map((leg) => ensureLeg(leg, sources, store, day, now, () => {}))
+  );
+  await Promise.allSettled(starts.flatMap((s) => (s ? [s.flight] : [])));
+  return Object.fromEntries(
+    ALL_LEGS.map((leg) => {
+      const state = local.get(leg);
+      const entry = state?.doc?.entry;
+      return [
+        leg,
+        {
+          day: entry?.day ?? null,
+          complete: Boolean(entry?.complete && entry.day === day),
+          reason: entry?.reason ?? null,
+          busy: Boolean(state?.busy),
+          storeDown: Boolean(state?.storeDown),
+        },
+      ];
+    })
+  );
+}
+
 export async function seriesPayload(
   name: SeriesName,
   snapshot: Promise<WallPayload | null>,
