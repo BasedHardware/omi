@@ -985,6 +985,34 @@ describe("the warm scheduler fills legs off the viewing path", () => {
     expect((w.query as ReturnType<typeof vi.fn>).mock.calls.length).toBe(reads);
   });
 
+  it("answers within its budget while unfinished fills keep running", async () => {
+    vi.useFakeTimers();
+    const w = { ...sources(), store: memorySeriesStore(), instance: "warm" };
+    w.query = vi.fn(() => new Promise<never>(() => {}));
+    const retain = vi.fn();
+    const pending = warmSeries(now, w, 1_000, retain);
+    await vi.advanceTimersByTimeAsync(1_000);
+    const legs = await pending;
+    expect(legs.growth).toMatchObject({ complete: false });
+    expect(retain).toHaveBeenCalled(); // the fill outlives the request
+  });
+
+  it("never serves a leg value older than 24 hours", async () => {
+    const store = memorySeriesStore();
+    const s = { ...sources(), store };
+    await seriesPayload("growth", Promise.resolve(null), now, s);
+    // The next day's refresh is still running when the board reads the leg.
+    vi.useFakeTimers();
+    s.query = vi.fn(() => new Promise<never>(() => {}));
+    const later = new Date(now.getTime() + 24 * 3_600_000 + 60_000);
+    resetSeriesCache();
+    const pending = seriesPayload("growth", Promise.resolve(null), later, s);
+    await vi.advanceTimersByTimeAsync(5_000);
+    const served = await pending;
+    expect(served.frames.weekly).toEqual([]);
+    expect(served.gaps.growth).toBe("Series data older than 24h");
+  });
+
   it("reports a failing leg's controlled reason instead of hiding it", async () => {
     const w = { ...sources(), store: memorySeriesStore(), instance: "warm" };
     w.planCost = vi.fn(async () => {

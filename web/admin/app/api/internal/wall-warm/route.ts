@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { wallPayload, wallSnapshotStore } from "@/lib/wall-cache";
-import { warmSeries } from "@/lib/wall-series";
+import { WARM_BUDGET_MS, warmSeries } from "@/lib/wall-series";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 3600;
@@ -9,8 +9,9 @@ export const maxDuration = 3600;
 // The wall's snapshot and series legs are keyed per UTC day; without this the
 // first viewer after midnight UTC triggered the whole day's PostHog fill
 // (~60 serialized HogQL reads, ~11 min on 2026-10-28) and the board sat blank.
-// Here the fill runs to completion off the viewing path; once every leg is
-// complete for the day a tick is only shared-store reads.
+// Here the fill runs off the viewing path, answering within WARM_BUDGET_MS
+// (Scheduler's attempt deadline is 30 min); once every leg is complete for the
+// day a tick is only shared-store reads.
 //
 // Auth: `x-cron-secret` must equal `process.env.CRON_SECRET`, as for
 // /api/internal/precompute. Response and logs carry leg names, outcomes and
@@ -21,16 +22,35 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const started = Date.now();
+  // Fills that outlast this request keep running inside after() (the admin
+  // deploy pins --no-cpu-throttling); the next tick sees their leases.
+  const retain = (work: Promise<unknown>) =>
+    after(async () => {
+      await work;
+    });
   // Snapshot first: series reads yield to a running snapshot refresh anyway.
   const work: Promise<unknown>[] = [];
   const snapshot = await wallPayload(
     undefined,
     undefined,
-    (refresh) => void work.push(refresh),
+    (refresh) => {
+      work.push(refresh);
+      retain(refresh);
+    },
     wallSnapshotStore()
   );
-  await Promise.allSettled(work);
-  const legs = await warmSeries();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([
+    Promise.allSettled(work),
+    new Promise((resolve) => (timer = setTimeout(resolve, WARM_BUDGET_MS))),
+  ]);
+  if (timer) clearTimeout(timer);
+  const legs = await warmSeries(
+    undefined,
+    undefined,
+    Math.max(0, WARM_BUDGET_MS - (Date.now() - started)),
+    retain
+  );
   const incomplete = Object.entries(legs)
     .filter(([, leg]) => !leg.complete)
     .map(([name]) => name);

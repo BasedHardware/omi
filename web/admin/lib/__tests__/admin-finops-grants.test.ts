@@ -76,11 +76,20 @@ describe("bigQueryFailure", () => {
     expect(failure.retryable).toBe(true);
   });
 
-  it("names every listed table when the denied one is not identifiable", () => {
-    expect(
-      bigQueryFailure({ code: 403, message: "denied" }, tables, "x").message
-    ).toBe(
-      "omi_finops.unit_cost_daily, omi_finops.mercury_saas_daily not readable by the admin BigQuery identity (missing dataViewer grant)"
+  it("does not blame a table grant for a project-level denial", () => {
+    const failure = bigQueryFailure(
+      {
+        code: 403,
+        message:
+          "Access Denied: Project based-hardware: User does not have bigquery.jobs.create permission",
+      },
+      tables,
+      "x",
+      true
     );
+    expect(failure.message).toBe(
+      "FinOps BigQuery permission denied for the admin identity (not table-specific)"
+    );
+    expect(failure.retryable).toBe(true);
   });
 });

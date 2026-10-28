@@ -125,6 +125,8 @@ const PARTIAL_RETRY = 2 * 60_000;
 const FAILURE_RETRY = 60_000;
 const MAX_BACKOFF = 30 * 60_000;
 const MAX_STALE = 24 * 60 * 60_000;
+/** The warm route answers within this; Scheduler's attempt deadline is 30 min. */
+export const WARM_BUDGET_MS = 20 * 60_000;
 const DAYS_PER_MONTH = 365.25 / 12;
 /** 60% blended margin goal: cost may be at most 40% of revenue per MAU. */
 export const MARGIN_GOAL = 0.6;
@@ -1734,14 +1736,23 @@ export interface WarmLeg {
  * same leg twice. */
 export async function warmSeries(
   now = new Date(),
-  sources: SeriesSources = defaultSeriesSources
+  sources: SeriesSources = defaultSeriesSources,
+  /** Answer by then; unfinished fills keep running (retained) and the next
+   * tick sees their leases. Keeps the request under Scheduler's deadline. */
+  budgetMs = WARM_BUDGET_MS,
+  retain: (work: Promise<unknown>) => void = () => {}
 ): Promise<Record<string, WarmLeg>> {
   const day = isoDay(utcDay(now));
   const store = sources.store ?? localStore;
   const starts = await Promise.all(
-    ALL_LEGS.map((leg) => ensureLeg(leg, sources, store, day, now, () => {}))
+    ALL_LEGS.map((leg) => ensureLeg(leg, sources, store, day, now, retain))
   );
-  await Promise.allSettled(starts.flatMap((s) => (s ? [s.flight] : [])));
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([
+    Promise.allSettled(starts.flatMap((s) => (s ? [s.flight] : []))),
+    new Promise((resolve) => (timer = setTimeout(resolve, budgetMs))),
+  ]);
+  if (timer) clearTimeout(timer);
   return Object.fromEntries(
     ALL_LEGS.map((leg) => {
       const state = local.get(leg);
@@ -1750,7 +1761,9 @@ export async function warmSeries(
         leg,
         {
           day: entry?.day ?? null,
-          complete: Boolean(entry?.complete && entry.day === day),
+          complete: Boolean(
+            entry?.complete && entry.day === day && !state?.flight
+          ),
           reason: entry?.reason ?? null,
           busy: Boolean(state?.busy),
           storeDown: Boolean(state?.storeDown),
@@ -1795,12 +1808,16 @@ export async function seriesPayload(
     const entry = state?.doc?.entry;
     const running = Boolean(state?.flight || state?.busy);
     refreshing ||= running;
-    if (entry?.value !== undefined)
+    // Never serve a value older than the stale-good bound, however it was kept.
+    const expired =
+      entry?.value !== undefined && now.getTime() - entry.at >= MAX_STALE;
+    if (entry?.value !== undefined && !expired)
       (legs as Record<string, unknown>)[leg] = entry.value;
     if (entry?.day !== day && entry?.value !== undefined) cacheStale = true;
     if (entry?.value === undefined && running)
       gaps[leg] = "Series refresh running";
-    if (entry?.reason) gaps[leg] = entry.reason;
+    if (expired) gaps[leg] = "Series data older than 24h";
+    else if (entry?.reason) gaps[leg] = entry.reason;
     else if (entry?.value === undefined && !running)
       gaps[leg] = state?.storeDown
         ? "Shared series store unavailable"

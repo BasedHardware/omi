@@ -375,3 +375,63 @@ def test_background_refresh_is_single_flight_per_path():
     now[0] += 901
     proxy.fetch(path)
     assert len(spawned) == 2
+
+
+@pytest.mark.parametrize("code", [401, 403])
+def test_a_revoked_reader_drops_the_last_good_body(code):
+    now = [10000]
+    proxy = StatsProxy(clock=lambda: now[0], spawn=inline)
+    proxy.identity_token = lambda: "synthetic"
+    proxy.request = lambda *args, **kwargs: b'{"ok":true}'
+    path = "/api/omi/stats/wall/series/revenue"
+    assert proxy.fetch(path)[0] == 200
+    now[0] += 901
+
+    def denied(*args, **kwargs):
+        raise HTTPError("https://admin.omi.me" + path, code, "denied", {}, io.BytesIO())
+
+    proxy.request = denied
+    proxy.fetch(path)  # the background refresh is denied
+    assert proxy.fetch(path)[0] == 502  # finance data leaves the board at once
+    now[0] += 6
+    assert proxy.fetch(path)[0] == 502
+
+
+def test_refreshing_answers_do_not_extend_the_stale_bound():
+    now = [10000]
+    proxy = StatsProxy(clock=lambda: now[0], spawn=inline)
+    proxy.identity_token = lambda: "synthetic"
+    proxy.request = lambda *args, **kwargs: b'{"refreshing":false}'
+    path = "/api/omi/stats/wall/series/growth"
+    proxy.fetch(path)
+    proxy.request = lambda *args, **kwargs: b'{"refreshing":true}'
+    for _ in range(int(MAX_STALE / 900) - 1):
+        now[0] += 900
+        proxy.fetch(path)
+    assert proxy.good[path][0] == 10000  # aged from the last settled answer
+
+    def down(*args, **kwargs):
+        raise TimeoutError("synthetic")
+
+    proxy.request = down
+    now[0] = 10000 + MAX_STALE  # a day after the last settled answer
+    assert proxy.fetch(path)[0] == 502
+
+
+def test_a_failed_background_start_lets_the_next_request_retry():
+    now = [10000]
+    calls = []
+
+    def broken(work):
+        calls.append(work)
+        raise RuntimeError("can't start new thread")
+
+    proxy = StatsProxy(clock=lambda: now[0], spawn=broken)
+    proxy.identity_token = lambda: "synthetic"
+    proxy.request = lambda *args, **kwargs: b'{"ok":true}'
+    path = "/api/omi/stats/wall/series/health"
+    proxy.fetch(path)
+    now[0] += 901
+    assert proxy.fetch(path) == (200, b'{"ok":true}')
+    assert proxy.fetch(path) == (200, b'{"ok":true}')
+    assert len(calls) == 2  # not stuck behind a refresh that never ran

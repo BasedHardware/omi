@@ -45,6 +45,7 @@ ALLOWED_PATHS = frozenset([WALL_PATH] + [f"{WALL_PATH}/series/{name}" for name i
 REFRESHING_TTL = 15
 SETTLED_TTL = 900
 FAILURE_TTL = 5
+UNAVAILABLE = b'{"error":"stats upstream unavailable"}'
 # The admin keeps stale-good legs for 24h and labels them; the proxy never holds a
 # body longer than that.
 MAX_STALE = 24 * 3600
@@ -113,7 +114,7 @@ class StatsProxy:
             self.token, self.expiry = token, expiry
             return token
 
-    def remember(self, path, status, body, ttl):
+    def remember(self, path, status, body, ttl, refreshing=False):
         """Record a path's latest answer; caller holds state_lock."""
         stamp = self.clock()
         self.cache = {k: v for k, v in self.cache.items() if stamp < v[0]}
@@ -124,7 +125,10 @@ class StatsProxy:
             del self.cache[next(iter(self.cache))]
         self.cache[path] = (stamp + ttl, status, body)
         if status == 200:
-            self.good[path] = (stamp, body)
+            # A `refreshing` body keeps the age of the last settled answer, so
+            # repeated refreshing answers cannot extend MAX_STALE indefinitely.
+            prior = self.good.get(path)
+            self.good[path] = (prior[0] if refreshing and prior else stamp, body)
         return status, body
 
     def upstream(self, path):
@@ -138,17 +142,19 @@ class StatsProxy:
                 )
                 parsed = json.loads(body)  # Never forward HTML, redirects or a login page.
                 refreshing = isinstance(parsed, dict) and parsed.get("refreshing") is True
-                return 200, body, REFRESHING_TTL if refreshing else SETTLED_TTL
+                return 200, body, REFRESHING_TTL if refreshing else SETTLED_TTL, refreshing, False
             except HTTPError as exc:
                 exc.close()
                 if exc.code == 401 and attempt == 0:
                     with self.token_lock:
                         self.token, self.expiry = "", 0
                     continue
-                break
+                # A definitive denial (reader revoked) must not keep finance data
+                # on the board; transport errors and 5xx may serve last good.
+                return 502, UNAVAILABLE, FAILURE_TTL, False, exc.code in (401, 403)
             except Exception:
                 break
-        return 502, b'{"error":"stats upstream unavailable"}', FAILURE_TTL
+        return 502, UNAVAILABLE, FAILURE_TTL, False, False
 
     def fill(self, path):
         """One upstream read per path at a time; waiters share its answer."""
@@ -159,13 +165,15 @@ class StatsProxy:
                 cached = self.cache.get(path)
                 if cached and self.clock() < cached[0]:
                     return cached[1], cached[2]
-            status, body, ttl = self.upstream(path)
+            status, body, ttl, refreshing, denied = self.upstream(path)
             with self.state_lock:
-                if status != 200 and path in self.good:
+                if denied:
+                    self.good.pop(path, None)
+                elif status != 200 and path in self.good:
                     # Keep serving the last good body; retry after FAILURE_TTL.
                     self.cache[path] = (self.clock() + ttl, status, body)
                     return status, body
-                return self.remember(path, status, body, ttl)
+                return self.remember(path, status, body, ttl, refreshing)
 
     def refresh(self, path):
         try:
@@ -199,7 +207,12 @@ class StatsProxy:
         if good is None:
             return self.fill(path)
         if start:
-            self.spawn(lambda: self.refresh(path))
+            try:
+                self.spawn(lambda: self.refresh(path))
+            except Exception:
+                # e.g. thread start failed: let the next request try again.
+                with self.state_lock:
+                    self.refreshing.discard(path)
         return 200, good[1]
 
 

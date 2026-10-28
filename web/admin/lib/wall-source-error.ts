@@ -24,18 +24,25 @@ export function bigQueryFailure(
   } | null;
   const reason = e?.errors?.[0]?.reason;
   const text = typeof e?.message === "string" ? e.message : "";
-  const table =
-    tables.find((t) => text.includes(t.split(".").at(-1)!)) ??
-    tables.join(", ");
-  if (
-    e?.code === 403 ||
-    reason === "accessDenied" ||
-    /Access Denied/.test(text)
-  )
+  // Name a table only when the upstream error itself names it: a project-level
+  // denial (e.g. bigquery.jobs.create) is not a table grant problem.
+  const table = tables.find((t) =>
+    new RegExp(`Table [\\w-]+:${t.replace(".", "\\.")}\\b`).test(text)
+  );
+  const denied =
+    e?.code === 403 || reason === "accessDenied" || /Access Denied/.test(text);
+  if (denied && table)
     return new WallSourceError(
       `${table} not readable by the admin BigQuery identity (missing dataViewer grant)`
     );
-  if (e?.code === 404 || reason === "notFound" || /^Not found/.test(text))
+  if (denied)
+    return new WallSourceError(
+      "FinOps BigQuery permission denied for the admin identity (not table-specific)",
+      retryable
+    );
+  const missing =
+    e?.code === 404 || reason === "notFound" || /^Not found/.test(text);
+  if (missing && table)
     return new WallSourceError(`${table} not found (table not created yet)`);
   return new WallSourceError(fallback, retryable);
 }
