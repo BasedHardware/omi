@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.549",
+      "date": "2026-10-28",
+      "changes": [
+        "Kept Google Meet calls in one conversation when the same meeting resumes within 15 minutes"
+      ]
+    },
+    {
       "version": "0.12.548",
       "date": "2026-10-28",
       "changes": [
