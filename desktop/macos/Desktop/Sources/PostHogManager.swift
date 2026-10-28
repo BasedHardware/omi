@@ -236,42 +236,8 @@ class PostHogManager {
       "Screen Task Delivery Completed", distinctId: ownerID, properties: completion.properties(deferred: deferred))
   }
 
-  /// Fresh screen-task kill-switch read. Missing, quota-limited or failed flag
-  /// reads default on; backend admission remains a separate authority.
-  func screenTaskFlagAdmission(authorization: RuntimeOwnerAuthorizationSnapshot) async throws -> Bool {
-    guard !PostHogSDK.shared.isOptOut() else { throw ScreenTaskFailure.stopped }
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw ScreenTaskFailure.ownerRevoked }
-    guard isInitialized, let url = URL(string: host + "/flags/?v=2") else { return true }
-    var request = URLRequest(url: url)
-    request.httpMethod = "POST"
-    request.timeoutInterval = 5
-    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    request.httpBody = try JSONSerialization.data(withJSONObject: [
-      "token": apiKey, "distinct_id": authorization.ownerID,
-      "person_properties": [
-        "platform": "macos",
-        "app_version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
-        "app_build": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown",
-        "update_channel": AppBuild.currentUpdateChannel,
-      ],
-    ])
-    guard !PostHogSDK.shared.isOptOut() else { throw ScreenTaskFailure.stopped }
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw ScreenTaskFailure.ownerRevoked }
-    let data: Data
-    let response: URLResponse
-    do {
-      (data, response) = try await URLSession.shared.data(for: request)
-    } catch {
-      if Task.isCancelled { throw CancellationError() }
-      guard !PostHogSDK.shared.isOptOut() else { throw ScreenTaskFailure.stopped }
-      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw ScreenTaskFailure.ownerRevoked }
-      return true
-    }
-    guard !PostHogSDK.shared.isOptOut() else { throw ScreenTaskFailure.stopped }
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { throw ScreenTaskFailure.ownerRevoked }
-    guard let response = response as? HTTPURLResponse, response.statusCode == 200 else { return true }
-    return ScreenTaskFreshFlagResponse.enabled(data)
-  }
+  /// Analytics opt-out also withholds the screen-task flag lease, as the retired fresh flag read did.
+  var screenTaskFlagWithheld: Bool { PostHogSDK.shared.isOptOut() }
 
   /// Reload feature flags
   func reloadFeatureFlags() {
