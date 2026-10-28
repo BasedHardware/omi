@@ -431,6 +431,13 @@ class AppLocalizationsFr extends AppLocalizations {
   String get autoSync => 'Synchronisation automatique';
 
   @override
+  String get syncHealthAlerts => 'Alertes d\'état de synchronisation';
+
+  @override
+  String get syncHealthAlertsDescription =>
+      'Alerter si Omi n\'a pas synchronisé d\'enregistrements depuis plus d\'un jour';
+
+  @override
   String get autoSyncDescription =>
       'Synchroniser automatiquement les enregistrements hors ligne lorsque votre appareil se connecte';
 
@@ -9126,6 +9133,14 @@ class AppLocalizationsFr extends AppLocalizations {
   String get syncCardWaitingInternet => 'En attente d\'Internet';
 
   @override
+  String get syncStallAlertTitle => 'Omi ne se synchronise pas';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Aucun enregistrement de votre Omi n\'a été synchronisé depuis plus de $hours heures. Ouvrez Omi pour vérifier la connexion de votre appareil.';
+  }
+
+  @override
   String syncCardNeedsAttention(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13781,6 +13796,14 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'Enregistrements en pause';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi ne se synchronise pas';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Aucun enregistrement synchronisé depuis plus de $hours heures';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'Envoi bloqué';

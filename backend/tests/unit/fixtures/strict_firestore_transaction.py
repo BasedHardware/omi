@@ -109,6 +109,7 @@ class StrictFirestoreDocument:
             if field_paths not in (
                 ["is_locked"],
                 ["folder_id"],
+                ["language"],
                 ['manual_speaker_assignments', 'manual_speaker_assignments_compressed'],
                 [
                     'deleted',
@@ -119,7 +120,7 @@ class StrictFirestoreDocument:
                 ],
             ):
                 raise UnsupportedFirestoreOperationError(
-                    "only privacy, folder membership and speaker-receipt projections are supported"
+                    "only privacy, folder membership, language and speaker-receipt projections are supported"
                 )
             data = {key: value for key, value in data.items() if key in field_paths}
         return StrictFirestoreSnapshot(data)

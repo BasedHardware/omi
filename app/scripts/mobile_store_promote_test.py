@@ -23,6 +23,9 @@ BUILD_TAG = "v1.2.3+456-android-cm"
 
 
 class InputTests(unittest.TestCase):
+    def test_play_commits_are_held_for_console_review_by_default(self):
+        self.assertTrue(promote.CHANGES_NOT_SENT_FOR_REVIEW)
+
     def test_android_build_tag_must_bind_to_the_promoted_version(self):
         self.assertEqual(promote.require_build_tag(BUILD_TAG, "1.2.3"), BUILD_TAG)
         for invalid in (
@@ -329,13 +332,14 @@ class AndroidChecks(unittest.TestCase):
             track="alpha",
             body={"track": "alpha", "releases": [*existing_alpha, internal_release]},
         )
-        client.edits().commit.assert_called_once_with(packageName="com.friend.ios", editId="edit-id")
+        client.edits().commit.assert_called_once_with(
+            packageName="com.friend.ios", editId="edit-id", changesNotSentForReview=True
+        )
         client.edits().delete.assert_not_called()
 
     def test_held_mode_still_holds_the_internal_to_alpha_commit(self):
-        # Held-changes mode is off by default since 2026-10-27; while the
-        # shared constant is True the commit must carry the parameter again,
-        # so the next flip is the constant alone.
+        # Pin the held path explicitly; the separate default test records the
+        # currently required operational setting.
         client = Mock()
         internal_release = {
             "name": f"{BUILD_TAG} [{BUILD_ID}]",
@@ -456,7 +460,9 @@ class AndroidChecks(unittest.TestCase):
                 ],
             },
         )
-        client.edits().commit.assert_called_once_with(packageName="com.friend.ios", editId="edit-id")
+        client.edits().commit.assert_called_once_with(
+            packageName="com.friend.ios", editId="edit-id", changesNotSentForReview=True
+        )
         self.assertFalse(client.edits().bundles.upload.called)
 
     def test_staged_and_halted_are_the_alternatives_to_completed(self):

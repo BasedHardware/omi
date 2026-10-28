@@ -26,6 +26,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/services/sync_health_watchdog.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -102,12 +103,18 @@ List<SingleChildWidget> defaultAuditProviders() => [
 /// A device provider with no BLE behind it.
 class AuditDeviceProvider extends ChangeNotifier implements DeviceProvider {
   AuditDeviceProvider(
-      {this.connected = false, this.battery = 0, this.charging = false, this.newFirmware = false, this.device});
+      {this.connected = false,
+      this.battery = 0,
+      this.charging = false,
+      this.newFirmware = false,
+      this.device,
+      this.syncStalled = false});
   final bool connected;
   final int battery;
   final bool charging;
   final bool newFirmware;
   final BtDevice? device;
+  final bool syncStalled;
 
   @override
   bool get isConnected => connected;
@@ -123,6 +130,10 @@ class AuditDeviceProvider extends ChangeNotifier implements DeviceProvider {
   bool get isCharging => charging;
   @override
   bool get havingNewFirmware => newFirmware;
+  @override
+  bool get isSyncStalled => syncStalled;
+  @override
+  SyncHealthEvaluation? get syncHealth => null;
   @override
   String get latestStableFirmwareVersion => '';
   @override

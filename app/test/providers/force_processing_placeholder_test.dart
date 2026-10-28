@@ -277,7 +277,7 @@ void main() {
     expect(actions.processing.map((conversation) => conversation.id), ['0']);
   });
 
-  test('keeps a processing skeleton instead of a contentless completed row', () async {
+  test('a contentless completed response settles into the real row', () async {
     final finalize = Completer<void>();
     final actions = _RecordingActions();
     final contentless = _conversation(id: 'real', status: ConversationStatus.completed);
@@ -293,8 +293,8 @@ void main() {
     await pending;
     await Future<void>.delayed(Duration.zero);
 
-    expect(actions.processing.map((conversation) => conversation.id), ['real']);
-    expect(actions.upserted, isEmpty);
+    expect(actions.processing, isEmpty);
+    expect(actions.upserted.map((conversation) => conversation.id), ['real']);
   });
 
   test('replaces the placeholder with the completed row once title and emoji arrive', () async {

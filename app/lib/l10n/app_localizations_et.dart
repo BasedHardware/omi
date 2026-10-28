@@ -428,6 +428,12 @@ class AppLocalizationsEt extends AppLocalizations {
   String get autoSync => 'Automaatne sünkroonimine';
 
   @override
+  String get syncHealthAlerts => 'Sünkroonimise hoiatused';
+
+  @override
+  String get syncHealthAlertsDescription => 'Teavita, kui Omi pole üle päeva salvestusi sünkrooninud';
+
+  @override
   String get autoSyncDescription => 'Sünkrooni võrguühenduseta salvestised automaatselt, kui seade ühendatakse';
 
   @override
@@ -9040,6 +9046,14 @@ class AppLocalizationsEt extends AppLocalizations {
   String get syncCardWaitingInternet => 'Ootan internetiühendust';
 
   @override
+  String get syncStallAlertTitle => 'Omi ei sünkrooni';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Üle $hours tunni pole sinu Omist sünkroonitud ühtegi salvestust. Ava Omi ja kontrolli seadme ühendust.';
+  }
+
+  @override
   String syncCardNeedsAttention(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13668,6 +13682,14 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'Salvestised peatatud';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi ei sünkrooni';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Üle $hours tunni pole sünkroonitud ühtegi salvestust';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'Üleslaadimine on seiskunud';

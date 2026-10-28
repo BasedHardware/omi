@@ -429,6 +429,12 @@ class AppLocalizationsCa extends AppLocalizations {
   String get autoSync => 'Sincronització automàtica';
 
   @override
+  String get syncHealthAlerts => 'Alertes d\'estat de sincronització';
+
+  @override
+  String get syncHealthAlertsDescription => 'Avisa si l\'Omi no ha sincronitzat enregistraments durant més d\'un dia';
+
+  @override
   String get autoSyncDescription =>
       'Sincronitza automàticament els enregistraments fora de línia quan el dispositiu es connecti';
 
@@ -9095,6 +9101,14 @@ class AppLocalizationsCa extends AppLocalizations {
   String get syncCardWaitingInternet => 'Esperant connexió';
 
   @override
+  String get syncStallAlertTitle => 'Omi no se sincronitza';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Fa més de $hours hores que no se sincronitza cap enregistrament del teu Omi. Obre Omi per comprovar la connexió del dispositiu.';
+  }
+
+  @override
   String syncCardNeedsAttention(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13743,6 +13757,14 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'Enregistraments en pausa';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi no se sincronitza';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Cap enregistrament sincronitzat fa més de $hours hores';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'La pujada s\'ha aturat';

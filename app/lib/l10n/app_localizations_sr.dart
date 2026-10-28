@@ -427,6 +427,12 @@ class AppLocalizationsSr extends AppLocalizations {
   String get autoSync => 'Аутоматска синхронизација';
 
   @override
+  String get syncHealthAlerts => 'Обавештења о стању синхронизације';
+
+  @override
+  String get syncHealthAlertsDescription => 'Обавести ме ако Omi није синхронизовао снимке дуже од једног дана';
+
+  @override
   String get autoSyncDescription => 'Аутоматски синхронизуј офлајн снимке када се уређај повеже';
 
   @override
@@ -9051,6 +9057,14 @@ class AppLocalizationsSr extends AppLocalizations {
   String get syncCardWaitingInternet => 'Чекање интернета';
 
   @override
+  String get syncStallAlertTitle => 'Omi се не синхронизује';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Снимци са вашег Omija нису синхронизовани дуже од $hours сати. Отворите Omi да проверите везу уређаја.';
+  }
+
+  @override
   String syncCardNeedsAttention(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13683,6 +13697,14 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'Снимке су паузиране';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi се не синхронизује';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Ниједан снимак није синхронизован дуже од $hours сати';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'Отпремање је застало';

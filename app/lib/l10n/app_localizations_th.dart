@@ -426,6 +426,12 @@ class AppLocalizationsTh extends AppLocalizations {
   String get autoSync => 'ซิงค์อัตโนมัติ';
 
   @override
+  String get syncHealthAlerts => 'การแจ้งเตือนสถานะการซิงค์';
+
+  @override
+  String get syncHealthAlertsDescription => 'แจ้งเตือนหาก Omi ไม่ได้ซิงค์การบันทึกเป็นเวลาเกินหนึ่งวัน';
+
+  @override
   String get autoSyncDescription => 'ซิงค์การบันทึกแบบออฟไลน์โดยอัตโนมัติเมื่ออุปกรณ์ของคุณเชื่อมต่อ';
 
   @override
@@ -8997,6 +9003,14 @@ class AppLocalizationsTh extends AppLocalizations {
   String get syncCardWaitingInternet => 'รออินเทอร์เน็ต';
 
   @override
+  String get syncStallAlertTitle => 'Omi ไม่ได้ซิงค์';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'ไม่มีการบันทึกจาก Omi ของคุณถูกซิงค์เป็นเวลาเกิน $hours ชั่วโมง เปิด Omi เพื่อตรวจสอบการเชื่อมต่อของอุปกรณ์';
+  }
+
+  @override
   String syncCardNeedsAttention(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13607,6 +13621,14 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'การบันทึกหยุดชั่วคราว';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi ไม่ได้ซิงค์';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'ไม่มีการบันทึกที่ซิงค์เป็นเวลาเกิน $hours ชั่วโมง';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'การอัปโหลดหยุดชะงัก';

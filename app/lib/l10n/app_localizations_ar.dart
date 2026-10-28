@@ -424,6 +424,12 @@ class AppLocalizationsAr extends AppLocalizations {
   String get autoSync => 'المزامنة التلقائية';
 
   @override
+  String get syncHealthAlerts => 'تنبيهات سلامة المزامنة';
+
+  @override
+  String get syncHealthAlertsDescription => 'تنبيه إذا لم تتم مزامنة التسجيلات من Omi لأكثر من يوم';
+
+  @override
   String get autoSyncDescription => 'مزامنة التسجيلات دون اتصال تلقائيًا عند توصيل جهازك';
 
   @override
@@ -8986,6 +8992,14 @@ class AppLocalizationsAr extends AppLocalizations {
   String get syncCardWaitingInternet => 'بانتظار الاتصال بالإنترنت';
 
   @override
+  String get syncStallAlertTitle => 'Omi لا يتزامن';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'لم تتم مزامنة أي تسجيلات من Omi الخاص بك لأكثر من $hours ساعة. افتح Omi للتحقق من اتصال جهازك.';
+  }
+
+  @override
   String syncCardNeedsAttention(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13599,6 +13613,14 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'تم إيقاف التسجيلات مؤقتًا';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi لا يتزامن';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'لم تتم مزامنة أي تسجيلات لأكثر من $hours ساعة';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'توقف الرفع';

@@ -19,8 +19,10 @@ import 'package:omi/utils/l10n_extensions.dart';
 ///
 /// Capture problems live here too, read from the capture wedge monitor: a pendant that stopped
 /// sending audio (Home has no banner, so the bell's dot points here), a full phone disk pausing
-/// recordings, and an upload stalled long enough to need attention. The storage and upload rows
-/// open Offline Sync, which owns storage management and retry; the link row reconnects in place.
+/// recordings, an upload stalled long enough to need attention, and a sync pipeline silent for a
+/// full day (the watchdog's stall, the one the local notification also speaks for, #15501). The
+/// storage, upload and sync-stall rows open Offline Sync, which owns storage management and retry;
+/// the link row reconnects in place.
 class NeedsAttentionSection extends StatelessWidget {
   const NeedsAttentionSection({
     super.key,
@@ -61,6 +63,7 @@ class NeedsAttentionSection extends StatelessWidget {
         final recordings = _recordingCount(sync);
         final storage = monitor.storageAtRisk;
         final upload = monitor.uploadStall;
+        final syncSilence = monitor.syncSilence;
         final acute = monitor.acuteEpisode;
         final ingressFailure = acute?.trigger == CaptureWedgeMonitor.triggerIngressRecoveryFailed;
         // "Still recording on your Omi" only where the pendant is off the link and keeps audio on
@@ -187,6 +190,26 @@ class NeedsAttentionSection extends StatelessWidget {
                         if (upload.pendingSeconds > 0) OmiDuration.compact(upload.pendingSeconds, l),
                       ].join(' · '),
                       onTap: sync == null ? null : () => openOfflineSyncDetails(context, sync, phoneLocal: true),
+                    ),
+                  ],
+                  if (syncSilence != null) ...[
+                    if (store.attention.isNotEmpty ||
+                        recordings > 0 ||
+                        acute != null ||
+                        storage != null ||
+                        upload != null)
+                      Divider(height: 1, thickness: 1, indent: 64, color: OmiColors.surface2),
+                    // The watchdog's sustained stall: nothing has flowed for a full day, so the
+                    // row points at Offline Sync like its slow-burn neighbors; the local
+                    // notification (same condition) reaches the reader who never opens the app.
+                    _CaptureAttentionRow(
+                      key: const Key('activity_attention_sync_stalled'),
+                      icon: Icons.cloud_off_rounded,
+                      title: l.activityAttentionSyncStalledTitle,
+                      subtitle: l.activityAttentionSyncStalledSubtitle(
+                        DateTime.now().difference(syncSilence.since).inHours,
+                      ),
+                      onTap: sync == null ? null : () => openOfflineSyncDetails(context, sync),
                     ),
                   ],
                 ],

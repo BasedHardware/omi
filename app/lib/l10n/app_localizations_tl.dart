@@ -429,6 +429,13 @@ class AppLocalizationsTl extends AppLocalizations {
   String get autoSync => 'Awtomatikong pag-sync';
 
   @override
+  String get syncHealthAlerts => 'Mga alerto sa kalusugan ng sync';
+
+  @override
+  String get syncHealthAlertsDescription =>
+      'I-alerto kung hindi nag-sync ang Omi ng mga recording nang mahigit isang araw';
+
+  @override
   String get autoSyncDescription =>
       'Awtomatikong i-sync ang mga offline na recording kapag nakakonekta ang iyong device';
 
@@ -9127,6 +9134,14 @@ class AppLocalizationsTl extends AppLocalizations {
   String get syncCardWaitingInternet => 'Naghihintay ng internet';
 
   @override
+  String get syncStallAlertTitle => 'Hindi nagri-sync ang Omi';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Walang recording mula sa iyong Omi na na-sync nang mahigit $hours oras. Buksan ang Omi para tingnan ang koneksyon ng iyong device.';
+  }
+
+  @override
   String syncCardNeedsAttention(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13780,6 +13795,14 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'Naka-pause ang mga recording';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Hindi nagri-sync ang Omi';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Walang naka-sync na recording nang mahigit $hours oras';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'Naka-stall ang upload';

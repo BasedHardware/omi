@@ -422,6 +422,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get autoSync => '自动同步';
 
   @override
+  String get syncHealthAlerts => '同步状态提醒';
+
+  @override
+  String get syncHealthAlertsDescription => '如果 Omi 超过一天未同步录音，则发出提醒';
+
+  @override
   String get autoSyncDescription => '设备连接时自动同步离线录音';
 
   @override
@@ -8906,6 +8912,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncCardWaitingInternet => '等待网络连接';
 
   @override
+  String get syncStallAlertTitle => 'Omi 未同步';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return '你的 Omi 已超过 $hours 小时未同步任何录音。打开 Omi 检查设备连接。';
+  }
+
+  @override
   String syncCardNeedsAttention(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13466,6 +13480,14 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => '录音已暂停';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi 未同步';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return '超过 $hours 小时未同步任何录音';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => '上传停滞';

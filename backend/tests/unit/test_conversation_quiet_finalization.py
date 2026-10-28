@@ -500,6 +500,27 @@ def test_quiet_deadline_and_recovery_admission_share_speech_clock_in_serve(store
     assert jobs.recovery_admission_refusal('synthetic', row, NOW - timedelta(seconds=120)) is None
 
 
+@pytest.mark.parametrize('legacy_finish', [None, NOW + timedelta(hours=1)])
+def test_quiet_run_admits_speech_only_or_stale_heartbeat_row_once(store, monkeypatch, legacy_finish):
+    """Exercise the whole check -> admission path, including its second quiet fence."""
+    monkeypatch.setenv('LIFECYCLE_V2_MODE', 'serve')
+    row = store.rows[ROW]
+    row['last_speech_at'] = NOW - timedelta(minutes=5)
+    if legacy_finish is None:
+        row.pop('finished_at')
+    else:
+        row['finished_at'] = legacy_finish
+    store.rows[SESSION]['lease_expires_at'] = NOW - timedelta(seconds=1)
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    job_id = checks.quiet_check_id('synthetic', 'old')
+    assert quiet.run(job_id, 1, firestore_client=store) == 'queued'
+    assert store.rows[ROW]['status'] == 'processing'
+    assert store.rows[ROW]['finalization_revision'] == 1
+    assert quiet.run(job_id, 1, firestore_client=store) == 'stale'
+    assert quiet.run(job_id, _job(store)['dispatch_generation'], firestore_client=store) == 'done'
+    assert store.rows[ROW]['finalization_revision'] == 1
+
+
 def _oversized_write_rejection():
     from google.api_core.exceptions import InvalidArgument
 

@@ -124,10 +124,17 @@ deliveries and live pusher session handoffs do not consume worker slots.
 When an exhausted worker sees a committed fanout, it completes the fenced job
 without rerunning processing; the dead-letter transaction refuses that state.
 
-This first migration deliberately excludes `POST /v1/conversations` (the
-Redis current-conversation pointer), `reprocess`, and routes that create a
-conversation while processing request content. Their identity and generation
-contracts need their own durable-admission migration.
+Mobile `POST /v1/conversations` (Process Now / Wrap up) resolves the Redis
+current-conversation pointer once, then uses the exact-ID finalizer when Cloud
+Tasks dispatch is enabled. The admission and projection fences are identical,
+and an unavailable queue returns 503 before mutation. A lost enqueue ACK leaves
+the outbox queued for reconciliation. A newer Redis pointer is not removed.
+BYOK keeps the request-scoped inline path because its credentials cannot be
+persisted or passed to the task worker. Deployments configured for inline
+listen dispatch retain the existing synchronous path.
+
+`reprocess` and routes that create a conversation while processing request
+content remain separate admissions.
 
 ## Reconciliation and runbook
 
@@ -223,3 +230,23 @@ for explicit reprocessing. Projection deltas include `blocked_byok -1` when
 applicable. Status, generation, epoch and activity checks fence reconnect and
 reclaim races: a stale scan cannot terminate a newly resumed owner, and a live
 session cannot resume an already dead-lettered job.
+
+
+## Quiet recording clocks and mobile optimism
+
+`finished_at` on a live `in_progress` row is a legacy activity/speech watermark,
+not proof that the person ended it. It is populated while recording. Disconnect
+recovery still observes the configured continuation timeout and recording lease;
+setting this field alone must not finalize an active recording. In lifecycle-v2
+serve mode, candidate selection **and the transactional quiet-admission fence**
+use `last_speech_at` through `speech_clock`, including rows without the legacy
+field. The existing quiet obligation and finalization outbox make admission
+idempotent across duplicate wakes and interrupted producers.
+
+The mobile Home pending list contains both server processing/merging rows and
+a local Process Now placeholder (`id=0`). The placeholder carries the known
+server conversation ID when available, probes its lifecycle on a bounded timer,
+and yields to its actual status regardless of title or emoji. An unknown or
+unreachable target expires after two minutes, even offline; refresh can then
+show the real row. That local deadline never cancels server work or declares it
+complete. A completed transcript-only response belongs in the normal list.

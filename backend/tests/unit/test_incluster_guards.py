@@ -751,7 +751,9 @@ def test_floor_schedule_renders_into_script_configmap_only_when_enabled():
         for obj in render_docs('prod')
         if obj['kind'] == 'ConfigMap' and obj['metadata']['name'] == 'prod-omi-incluster-guards-script'
     )
-    assert json.loads(prod['data']['floors.json']) == guard_yaml_hours()
+    # The production override must survive rendering: the hourly writer would
+    # otherwise restore the inherited 8..12 floor after a floor-only HPA apply.
+    assert json.loads(prod['data']['floors.json']) == [4] * 24
     default = next(
         obj
         for obj in render_docs('prod', overlay=False)
@@ -762,10 +764,6 @@ def test_floor_schedule_renders_into_script_configmap_only_when_enabled():
         render_docs('prod', '--set', 'floorSchedule.hours={1,2}')
     kinds = {(doc['kind'], doc['metadata']['name']) for doc in render_docs('prod')}
     assert not any(name.endswith('-floor') for _, name in kinds)
-
-
-def guard_yaml_hours():
-    return yaml.safe_load((CHART / 'values.yaml').read_text())['floorSchedule']['hours']
 
 
 def render(environment='prod', *extra):
