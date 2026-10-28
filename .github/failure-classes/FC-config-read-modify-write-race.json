@@ -3,8 +3,16 @@
   "id": "FC-config-read-modify-write-race",
   "violated_contract": "Auth credential store functions (store_api_key, store_oauth_tokens, update_oauth_id_token, clear_credentials) and config commands perform a read-modify-write cycle on the shared TOML config file without serialization. Two concurrent calls for different profiles both load the same stale config, each mutates a different profile, then both save — the last save overwrites the first profile's changes, silently dropping its credential.",
   "canonical_prevention": "Serialize all config read-modify-write cycles with a cross-platform file lock (fcntl.flock on POSIX, msvcrt.locking on Windows) around cfg.load() -> mutate -> cfg.save().",
-  "canonical_prevention_artifact": ["sdks/python-cli/omi_cli/auth/store.py", "sdks/python-cli/omi_cli/commands/config.py"],
-  "evidence_prs": [22972],
-  "scope_hints": ["sdks/python-cli/omi_cli/auth/store.py", "sdks/python-cli/omi_cli/commands/config.py"],
+  "canonical_prevention_artifact": [
+    "sdks/python-cli/omi_cli/auth/store.py",
+    "sdks/python-cli/omi_cli/commands/config.py"
+  ],
+  "evidence_prs": [
+    22972
+  ],
+  "scope_hints": [
+    "sdks/python-cli/omi_cli/auth/store.py",
+    "sdks/python-cli/omi_cli/commands/config.py"
+  ],
   "status": "fixed"
 }
