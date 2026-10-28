@@ -1,0 +1,74 @@
+{
+  "strings": [
+    {
+      "key": "deletePauseInsteadTitle",
+      "en": "Pause Omi Instead?",
+      "description": "Interstitial offered when the delete reason is taking a break or technical issues"
+    },
+    {
+      "key": "deletePauseInsteadSubtitle",
+      "en": "Stop recording and keep everything. Come back anytime.",
+      "description": "Subtitle of the pause-instead interstitial"
+    },
+    {
+      "key": "deletePauseRecordingLine",
+      "en": "Recording stops. Nothing new is captured while you are away.",
+      "description": "First line of the pause-instead card"
+    },
+    {
+      "key": "deletePauseKeepLine",
+      "en": "Your memories, conversations and apps are kept exactly as they are.",
+      "description": "Second line of the pause-instead card"
+    },
+    {
+      "key": "deletePauseReturnLine",
+      "en": "Sign in anytime to pick up where you left off.",
+      "description": "Third line of the pause-instead card"
+    },
+    {
+      "key": "pauseOmiButton",
+      "en": "Pause Omi",
+      "description": "Primary action of the pause-instead interstitial"
+    },
+    {
+      "key": "continueDeletingButton",
+      "en": "Continue Deleting",
+      "description": "Secondary action of the pause-instead interstitial; continues the delete flow"
+    },
+    {
+      "key": "deletePendingRecordingsWarning",
+      "en": "{count, plural, =1{You have 1 recording still processing. Deleting now loses it.} other{You have {count} recordings still processing. Deleting now loses them.}}",
+      "description": "Delete confirmation warning when recordings are still processing or not yet uploaded; deleting loses them",
+      "placeholders": {
+        "count": {
+          "type": "int"
+        }
+      }
+    },
+    {
+      "key": "deleteGracePeriodNotice",
+      "en": "{days, plural, =1{Your data is kept for 1 day. Sign in again to restore it.} other{Your data is kept for {days} days. Sign in again to restore it.}}",
+      "description": "Restore window the backend keeps after account deletion; shown on the delete confirmation step",
+      "placeholders": {
+        "days": {
+          "type": "int"
+        }
+      }
+    },
+    {
+      "key": "deleteLocalRecordingsWarning",
+      "en": "{count, plural, =1{You have 1 recording not yet uploaded. Deleting now loses it.} other{You have {count} recordings not yet uploaded. Deleting now loses them.}}",
+      "description": "Local audio loss warning on account deletion",
+      "placeholders": {
+        "count": {
+          "type": "int"
+        }
+      }
+    },
+    {
+      "key": "deleteConfirmGraceSubtitle",
+      "en": "Review what happens to your data before you leave.",
+      "description": "Confirmation subtitle when a backend restore window is available"
+    }
+  ]
+}

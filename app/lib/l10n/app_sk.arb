@@ -2803,6 +2803,13 @@
     "deleteReasonFoundAlternative": "Používam niečo iné",
     "deleteReasonTakingBreak": "Len si dávam pauzu",
     "deleteReasonOther": "Iné",
+    "deletePauseInsteadTitle": "Pause Omi Instead?",
+    "deletePauseInsteadSubtitle": "Stop recording and keep everything. Come back anytime.",
+    "deletePauseRecordingLine": "Recording stops. Nothing new is captured while you are away.",
+    "deletePauseKeepLine": "Your memories, conversations and apps are kept exactly as they are.",
+    "deletePauseReturnLine": "Sign in anytime to pick up where you left off.",
+    "pauseOmiButton": "Pause Omi",
+    "continueDeletingButton": "Continue Deleting",
     "deleteFlowFeedbackTitle": "Povedzte nám viac",
     "deleteFlowFeedbackSubtitle": "Čo by spôsobilo, že by Omi pre vás fungovalo?",
     "deleteFlowFeedbackHint": "Nepovinné — vaše myšlienky nám pomáhajú vytvoriť lepší produkt.",
@@ -2810,6 +2817,8 @@
     "deleteFlowConfirmSubtitle": "Túto akciu nemožno vrátiť, ani s pomocou podpory.",
     "deleteConsequenceSubscription": "Akékoľvek aktívne predplatné bude zrušené.",
     "deleteConsequenceNoRecovery": "Váš účet nie je možné obnoviť — ani podporou.",
+    "deletePendingRecordingsWarning": "{count, plural, =1{You have 1 recording still processing. Deleting now loses it.} other{You have {count} recordings still processing. Deleting now loses them.}}",
+    "deleteGracePeriodNotice": "{days, plural, =1{Your data is kept for 1 day. Sign in again to restore it.} other{Your data is kept for {days} days. Sign in again to restore it.}}",
     "deleteTypeToConfirm": "Pre potvrdenie napíšte DELETE",
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Trvalo odstrániť účet",
@@ -4464,5 +4473,7 @@
     "onTheWayDetailsForSupport": "Detaily pre podporu",
     "homeNoiseFoldHidden": "{count, plural, =1{1 skrytá krátka nahrávka} other{Skrytých krátkych nahrávok: {count}}}",
     "homeNoiseFoldShow": "Zobraziť",
-    "homeNoiseFoldHide": "{count, plural, =1{Skryť 1 krátku nahrávku} other{Skryť {count} krátkych nahrávok}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Skryť 1 krátku nahrávku} other{Skryť {count} krátkych nahrávok}}",
+    "deleteLocalRecordingsWarning": "{count, plural, =1{You have 1 recording not yet uploaded. Deleting now loses it.} other{You have {count} recordings not yet uploaded. Deleting now loses them.}}",
+    "deleteConfirmGraceSubtitle": "Review what happens to your data before you leave."
 }

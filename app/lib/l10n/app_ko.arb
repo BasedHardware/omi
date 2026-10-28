@@ -2803,6 +2803,13 @@
     "deleteReasonFoundAlternative": "다른 것을 사용 중",
     "deleteReasonTakingBreak": "잠시 쉬고 싶을 뿐",
     "deleteReasonOther": "기타",
+    "deletePauseInsteadTitle": "Pause Omi Instead?",
+    "deletePauseInsteadSubtitle": "Stop recording and keep everything. Come back anytime.",
+    "deletePauseRecordingLine": "Recording stops. Nothing new is captured while you are away.",
+    "deletePauseKeepLine": "Your memories, conversations and apps are kept exactly as they are.",
+    "deletePauseReturnLine": "Sign in anytime to pick up where you left off.",
+    "pauseOmiButton": "Pause Omi",
+    "continueDeletingButton": "Continue Deleting",
     "deleteFlowFeedbackTitle": "더 자세히 알려주세요",
     "deleteFlowFeedbackSubtitle": "무엇이 있었다면 Omi가 여러분께 도움이 되었을까요?",
     "deleteFlowFeedbackHint": "선택 사항 — 여러분의 의견은 더 나은 제품을 만드는 데 도움이 됩니다.",
@@ -2810,6 +2817,8 @@
     "deleteFlowConfirmSubtitle": "이 작업은 되돌릴 수 없으며, 지원팀도 복구할 수 없습니다.",
     "deleteConsequenceSubscription": "활성 구독은 모두 취소됩니다.",
     "deleteConsequenceNoRecovery": "계정은 복구할 수 없습니다 — 고객 지원으로도 불가능합니다.",
+    "deletePendingRecordingsWarning": "{count, plural, =1{You have 1 recording still processing. Deleting now loses it.} other{You have {count} recordings still processing. Deleting now loses them.}}",
+    "deleteGracePeriodNotice": "{days, plural, =1{Your data is kept for 1 day. Sign in again to restore it.} other{Your data is kept for {days} days. Sign in again to restore it.}}",
     "deleteTypeToConfirm": "확인하려면 DELETE를 입력하세요",
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "계정 영구 삭제",
@@ -4464,5 +4473,7 @@
     "onTheWayDetailsForSupport": "고객지원용 세부 정보",
     "homeNoiseFoldHidden": "{count, plural, =1{짧은 클립 1개 숨겨짐} other{짧은 클립 {count}개 숨겨짐}}",
     "homeNoiseFoldShow": "표시",
-    "homeNoiseFoldHide": "{count, plural, =1{짧은 클립 1개 숨기기} other{짧은 클립 {count}개 숨기기}}"
+    "homeNoiseFoldHide": "{count, plural, =1{짧은 클립 1개 숨기기} other{짧은 클립 {count}개 숨기기}}",
+    "deleteLocalRecordingsWarning": "{count, plural, =1{You have 1 recording not yet uploaded. Deleting now loses it.} other{You have {count} recordings not yet uploaded. Deleting now loses them.}}",
+    "deleteConfirmGraceSubtitle": "Review what happens to your data before you leave."
 }

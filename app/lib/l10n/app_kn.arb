@@ -10225,6 +10225,13 @@
     "deleteReasonFoundAlternative": "ಬೇರೆ ಯಾವುದನ್ನೋ ಬಳಸುತ್ತಿದ್ದೇನೆ",
     "deleteReasonTakingBreak": "ಕೇವಲ ವಿರಾಮ ತೆಗೆದುಕೊಳ್ಳುತ್ತಿದ್ದೇನೆ",
     "deleteReasonOther": "ಇತರೆ",
+    "deletePauseInsteadTitle": "Pause Omi Instead?",
+    "deletePauseInsteadSubtitle": "Stop recording and keep everything. Come back anytime.",
+    "deletePauseRecordingLine": "Recording stops. Nothing new is captured while you are away.",
+    "deletePauseKeepLine": "Your memories, conversations and apps are kept exactly as they are.",
+    "deletePauseReturnLine": "Sign in anytime to pick up where you left off.",
+    "pauseOmiButton": "Pause Omi",
+    "continueDeletingButton": "Continue Deleting",
     "deleteFlowFeedbackTitle": "ಹೆಚ್ಚು ಹೇಳಿ",
     "deleteFlowFeedbackSubtitle": "Omi ನಿಮಗೆ ಹೇಗೆ ಉಪಯುಕ್ತವಾಗುತ್ತಿತ್ತು?",
     "deleteFlowFeedbackHint": "ಐಚ್ಛಿಕ — ನಿಮ್ಮ ಆಲೋಚನೆಗಳು ಉತ್ತಮ ಉತ್ಪನ್ನವನ್ನು ನಿರ್ಮಿಸಲು ನಮಗೆ ಸಹಾಯ ಮಾಡುತ್ತವೆ.",
@@ -10232,6 +10239,8 @@
     "deleteFlowConfirmSubtitle": "ಇದನ್ನು ರದ್ದುಗೊಳಿಸಲಾಗುವುದಿಲ್ಲ, ಬೆಂಬಲ ತಂಡದಿಂದಲೂ ಸಾಧ್ಯವಿಲ್ಲ.",
     "deleteConsequenceSubscription": "ಯಾವುದೇ ಸಕ್ರಿಯ ಚಂದಾದಾರಿಕೆಯನ್ನು ರದ್ದುಗೊಳಿಸಲಾಗುತ್ತದೆ.",
     "deleteConsequenceNoRecovery": "ನಿಮ್ಮ ಖಾತೆಯನ್ನು ಮರುಸ್ಥಾಪಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ — ಬೆಂಬಲದಿಂದಲೂ ಸಾಧ್ಯವಿಲ್ಲ.",
+    "deletePendingRecordingsWarning": "{count, plural, =1{You have 1 recording still processing. Deleting now loses it.} other{You have {count} recordings still processing. Deleting now loses them.}}",
+    "deleteGracePeriodNotice": "{days, plural, =1{Your data is kept for 1 day. Sign in again to restore it.} other{Your data is kept for {days} days. Sign in again to restore it.}}",
     "deleteTypeToConfirm": "ದೃಢೀಕರಿಸಲು DELETE ಟೈಪ್ ಮಾಡಿ",
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "ಖಾತೆಯನ್ನು ಶಾಶ್ವತವಾಗಿ ಅಳಿಸಿ",
@@ -11890,5 +11899,7 @@
     "onTheWayDetailsForSupport": "ಬೆಂಬಲಕ್ಕಾಗಿ ವಿವರಗಳು",
     "homeNoiseFoldHidden": "{count, plural, =1{1 ಸಣ್ಣ ಕ್ಲಿಪ್ ಮರೆಮಾಡಲಾಗಿದೆ} other{{count} ಸಣ್ಣ ಕ್ಲಿಪ್‌ಗಳನ್ನು ಮರೆಮಾಡಲಾಗಿದೆ}}",
     "homeNoiseFoldShow": "ತೋರಿಸಿ",
-    "homeNoiseFoldHide": "{count, plural, =1{1 ಸಣ್ಣ ಕ್ಲಿಪ್ ಮರೆಮಾಡಿ} other{{count} ಸಣ್ಣ ಕ್ಲಿಪ್‌ಗಳನ್ನು ಮರೆಮಾಡಿ}}"
+    "homeNoiseFoldHide": "{count, plural, =1{1 ಸಣ್ಣ ಕ್ಲಿಪ್ ಮರೆಮಾಡಿ} other{{count} ಸಣ್ಣ ಕ್ಲಿಪ್‌ಗಳನ್ನು ಮರೆಮಾಡಿ}}",
+    "deleteLocalRecordingsWarning": "{count, plural, =1{You have 1 recording not yet uploaded. Deleting now loses it.} other{You have {count} recordings not yet uploaded. Deleting now loses them.}}",
+    "deleteConfirmGraceSubtitle": "Review what happens to your data before you leave."
 }

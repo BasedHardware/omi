@@ -10225,6 +10225,13 @@
     "deleteReasonFoundAlternative": "Карыстаюся нечым іншым",
     "deleteReasonTakingBreak": "Проста раблю перапынак",
     "deleteReasonOther": "Іншае",
+    "deletePauseInsteadTitle": "Pause Omi Instead?",
+    "deletePauseInsteadSubtitle": "Stop recording and keep everything. Come back anytime.",
+    "deletePauseRecordingLine": "Recording stops. Nothing new is captured while you are away.",
+    "deletePauseKeepLine": "Your memories, conversations and apps are kept exactly as they are.",
+    "deletePauseReturnLine": "Sign in anytime to pick up where you left off.",
+    "pauseOmiButton": "Pause Omi",
+    "continueDeletingButton": "Continue Deleting",
     "deleteFlowFeedbackTitle": "Раскажыце падрабязней",
     "deleteFlowFeedbackSubtitle": "Што прымусіла б Omi працаваць для вас?",
     "deleteFlowFeedbackHint": "Неабавязкова — вашы думкі дапамагаюць нам ствараць лепшы прадукт.",
@@ -10232,6 +10239,8 @@
     "deleteFlowConfirmSubtitle": "Гэта нельга адмяніць, нават службе падтрымкі.",
     "deleteConsequenceSubscription": "Любая актыўная падпіска будзе скасавана.",
     "deleteConsequenceNoRecovery": "Ваш уліковы запіс нельга аднавіць — нават службай падтрымкі.",
+    "deletePendingRecordingsWarning": "{count, plural, =1{You have 1 recording still processing. Deleting now loses it.} other{You have {count} recordings still processing. Deleting now loses them.}}",
+    "deleteGracePeriodNotice": "{days, plural, =1{Your data is kept for 1 day. Sign in again to restore it.} other{Your data is kept for {days} days. Sign in again to restore it.}}",
     "deleteTypeToConfirm": "Увядзіце DELETE для пацвярджэння",
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Выдаліць уліковы запіс назаўсёды",
@@ -11890,5 +11899,7 @@
     "onTheWayDetailsForSupport": "Падрабязнасці для падтрымкі",
     "homeNoiseFoldHidden": "{count, plural, =1{1 кароткі запіс схаваны} other{Схаваныя кароткія запісы: {count}}}",
     "homeNoiseFoldShow": "Паказаць",
-    "homeNoiseFoldHide": "{count, plural, =1{Схаваць 1 кароткі запіс} other{Схаваць кароткія запісы: {count}}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Схаваць 1 кароткі запіс} other{Схаваць кароткія запісы: {count}}}",
+    "deleteLocalRecordingsWarning": "{count, plural, =1{You have 1 recording not yet uploaded. Deleting now loses it.} other{You have {count} recordings not yet uploaded. Deleting now loses them.}}",
+    "deleteConfirmGraceSubtitle": "Review what happens to your data before you leave."
 }

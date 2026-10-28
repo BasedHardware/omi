@@ -2803,6 +2803,13 @@
     "deleteReasonFoundAlternative": "กำลังใช้สิ่งอื่น",
     "deleteReasonTakingBreak": "แค่หยุดพักสักครู่",
     "deleteReasonOther": "อื่นๆ",
+    "deletePauseInsteadTitle": "Pause Omi Instead?",
+    "deletePauseInsteadSubtitle": "Stop recording and keep everything. Come back anytime.",
+    "deletePauseRecordingLine": "Recording stops. Nothing new is captured while you are away.",
+    "deletePauseKeepLine": "Your memories, conversations and apps are kept exactly as they are.",
+    "deletePauseReturnLine": "Sign in anytime to pick up where you left off.",
+    "pauseOmiButton": "Pause Omi",
+    "continueDeletingButton": "Continue Deleting",
     "deleteFlowFeedbackTitle": "บอกเราเพิ่มเติม",
     "deleteFlowFeedbackSubtitle": "อะไรจะทำให้ Omi ใช้งานได้ดีสำหรับคุณ?",
     "deleteFlowFeedbackHint": "ไม่บังคับ — ความคิดของคุณช่วยให้เราสร้างผลิตภัณฑ์ที่ดีขึ้น",
@@ -2810,6 +2817,8 @@
     "deleteFlowConfirmSubtitle": "การดำเนินการนี้ย้อนกลับไม่ได้ แม้แต่ฝ่ายสนับสนุนก็ทำไม่ได้",
     "deleteConsequenceSubscription": "การสมัครสมาชิกที่ใช้งานอยู่จะถูกยกเลิก",
     "deleteConsequenceNoRecovery": "บัญชีของคุณไม่สามารถกู้คืนได้ — แม้แต่ทีมสนับสนุนก็ไม่สามารถทำได้",
+    "deletePendingRecordingsWarning": "{count, plural, =1{You have 1 recording still processing. Deleting now loses it.} other{You have {count} recordings still processing. Deleting now loses them.}}",
+    "deleteGracePeriodNotice": "{days, plural, =1{Your data is kept for 1 day. Sign in again to restore it.} other{Your data is kept for {days} days. Sign in again to restore it.}}",
     "deleteTypeToConfirm": "พิมพ์ DELETE เพื่อยืนยัน",
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "ลบบัญชีถาวร",
@@ -4464,5 +4473,7 @@
     "onTheWayDetailsForSupport": "รายละเอียดสำหรับฝ่ายสนับสนุน",
     "homeNoiseFoldHidden": "{count, plural, =1{ซ่อนคลิปสั้นไว้ 1 รายการ} other{ซ่อนคลิปสั้นไว้ {count} รายการ}}",
     "homeNoiseFoldShow": "แสดง",
-    "homeNoiseFoldHide": "{count, plural, =1{ซ่อนคลิปสั้น 1 รายการ} other{ซ่อนคลิปสั้น {count} รายการ}}"
+    "homeNoiseFoldHide": "{count, plural, =1{ซ่อนคลิปสั้น 1 รายการ} other{ซ่อนคลิปสั้น {count} รายการ}}",
+    "deleteLocalRecordingsWarning": "{count, plural, =1{You have 1 recording not yet uploaded. Deleting now loses it.} other{You have {count} recordings not yet uploaded. Deleting now loses them.}}",
+    "deleteConfirmGraceSubtitle": "Review what happens to your data before you leave."
 }

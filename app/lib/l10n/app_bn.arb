@@ -10225,6 +10225,13 @@
     "deleteReasonFoundAlternative": "অন্য কিছু ব্যবহার করছি",
     "deleteReasonTakingBreak": "শুধু একটু বিরতি নিচ্ছি",
     "deleteReasonOther": "অন্যান্য",
+    "deletePauseInsteadTitle": "Pause Omi Instead?",
+    "deletePauseInsteadSubtitle": "Stop recording and keep everything. Come back anytime.",
+    "deletePauseRecordingLine": "Recording stops. Nothing new is captured while you are away.",
+    "deletePauseKeepLine": "Your memories, conversations and apps are kept exactly as they are.",
+    "deletePauseReturnLine": "Sign in anytime to pick up where you left off.",
+    "pauseOmiButton": "Pause Omi",
+    "continueDeletingButton": "Continue Deleting",
     "deleteFlowFeedbackTitle": "আরও বলুন",
     "deleteFlowFeedbackSubtitle": "কী হলে Omi আপনার জন্য কাজ করত?",
     "deleteFlowFeedbackHint": "ঐচ্ছিক — আপনার চিন্তা আমাদের আরও ভাল পণ্য তৈরি করতে সাহায্য করে।",
@@ -10232,6 +10239,8 @@
     "deleteFlowConfirmSubtitle": "এটি পূর্বাবস্থায় ফেরানো যাবে না, সাপোর্টও পারবে না।",
     "deleteConsequenceSubscription": "যেকোনো সক্রিয় সাবস্ক্রিপশন বাতিল হবে।",
     "deleteConsequenceNoRecovery": "আপনার অ্যাকাউন্ট পুনরুদ্ধার করা যাবে না — সাপোর্টও পারবে না।",
+    "deletePendingRecordingsWarning": "{count, plural, =1{You have 1 recording still processing. Deleting now loses it.} other{You have {count} recordings still processing. Deleting now loses them.}}",
+    "deleteGracePeriodNotice": "{days, plural, =1{Your data is kept for 1 day. Sign in again to restore it.} other{Your data is kept for {days} days. Sign in again to restore it.}}",
     "deleteTypeToConfirm": "নিশ্চিত করতে DELETE টাইপ করুন",
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "অ্যাকাউন্ট স্থায়ীভাবে মুছুন",
@@ -11890,5 +11899,7 @@
     "onTheWayDetailsForSupport": "সাপোর্টের জন্য বিস্তারিত",
     "homeNoiseFoldHidden": "{count, plural, =1{1টি ছোট ক্লিপ লুকানো হয়েছে} other{{count}টি ছোট ক্লিপ লুকানো হয়েছে}}",
     "homeNoiseFoldShow": "দেখান",
-    "homeNoiseFoldHide": "{count, plural, =1{1টি ছোট ক্লিপ লুকান} other{{count}টি ছোট ক্লিপ লুকান}}"
+    "homeNoiseFoldHide": "{count, plural, =1{1টি ছোট ক্লিপ লুকান} other{{count}টি ছোট ক্লিপ লুকান}}",
+    "deleteLocalRecordingsWarning": "{count, plural, =1{You have 1 recording not yet uploaded. Deleting now loses it.} other{You have {count} recordings not yet uploaded. Deleting now loses them.}}",
+    "deleteConfirmGraceSubtitle": "Review what happens to your data before you leave."
 }

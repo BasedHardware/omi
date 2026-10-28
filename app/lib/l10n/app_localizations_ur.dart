@@ -8737,6 +8737,27 @@ class AppLocalizationsUr extends AppLocalizations {
   String get deleteReasonOther => 'دیگر';
 
   @override
+  String get deletePauseInsteadTitle => 'Pause Omi Instead?';
+
+  @override
+  String get deletePauseInsteadSubtitle => 'Stop recording and keep everything. Come back anytime.';
+
+  @override
+  String get deletePauseRecordingLine => 'Recording stops. Nothing new is captured while you are away.';
+
+  @override
+  String get deletePauseKeepLine => 'Your memories, conversations and apps are kept exactly as they are.';
+
+  @override
+  String get deletePauseReturnLine => 'Sign in anytime to pick up where you left off.';
+
+  @override
+  String get pauseOmiButton => 'Pause Omi';
+
+  @override
+  String get continueDeletingButton => 'Continue Deleting';
+
+  @override
   String get deleteFlowFeedbackTitle => 'مزید بتائیں';
 
   @override
@@ -8756,6 +8777,28 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get deleteConsequenceNoRecovery => 'آپ کا اکاؤنٹ بحال نہیں ہو سکتا — سپورٹ بھی نہیں کر سکتی۔';
+
+  @override
+  String deletePendingRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'You have $count recordings still processing. Deleting now loses them.',
+      one: 'You have 1 recording still processing. Deleting now loses it.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteGracePeriodNotice(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Your data is kept for $days days. Sign in again to restore it.',
+      one: 'Your data is kept for 1 day. Sign in again to restore it.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get deleteTypeToConfirm => 'تصدیق کے لیے DELETE ٹائپ کریں';
@@ -14722,4 +14765,18 @@ class AppLocalizationsUr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String deleteLocalRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'You have $count recordings not yet uploaded. Deleting now loses them.',
+      one: 'You have 1 recording not yet uploaded. Deleting now loses it.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConfirmGraceSubtitle => 'Review what happens to your data before you leave.';
 }

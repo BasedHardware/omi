@@ -2803,6 +2803,13 @@
     "deleteReasonFoundAlternative": "Lietoju kaut ko citu",
     "deleteReasonTakingBreak": "Vienkārši paņemu pārtraukumu",
     "deleteReasonOther": "Cits",
+    "deletePauseInsteadTitle": "Pause Omi Instead?",
+    "deletePauseInsteadSubtitle": "Stop recording and keep everything. Come back anytime.",
+    "deletePauseRecordingLine": "Recording stops. Nothing new is captured while you are away.",
+    "deletePauseKeepLine": "Your memories, conversations and apps are kept exactly as they are.",
+    "deletePauseReturnLine": "Sign in anytime to pick up where you left off.",
+    "pauseOmiButton": "Pause Omi",
+    "continueDeletingButton": "Continue Deleting",
     "deleteFlowFeedbackTitle": "Pastāsti vairāk",
     "deleteFlowFeedbackSubtitle": "Kas būtu licis Omi strādāt tev?",
     "deleteFlowFeedbackHint": "Neobligāti — tavas domas palīdz mums veidot labāku produktu.",
@@ -2810,6 +2817,8 @@
     "deleteFlowConfirmSubtitle": "To nevar atsaukt, pat ar atbalsta palīdzību.",
     "deleteConsequenceSubscription": "Visi aktīvie abonementi tiks atcelti.",
     "deleteConsequenceNoRecovery": "Tavu kontu nevar atjaunot — pat ne atbalsts.",
+    "deletePendingRecordingsWarning": "{count, plural, =1{You have 1 recording still processing. Deleting now loses it.} other{You have {count} recordings still processing. Deleting now loses them.}}",
+    "deleteGracePeriodNotice": "{days, plural, =1{Your data is kept for 1 day. Sign in again to restore it.} other{Your data is kept for {days} days. Sign in again to restore it.}}",
     "deleteTypeToConfirm": "Lai apstiprinātu, ieraksti DELETE",
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Neatgriezeniski dzēst kontu",
@@ -4464,5 +4473,7 @@
     "onTheWayDetailsForSupport": "Informācija atbalsta komandai",
     "homeNoiseFoldHidden": "{count, plural, =1{Paslēpts 1 īss ieraksts} other{Paslēpti {count} īsi ieraksti}}",
     "homeNoiseFoldShow": "Rādīt",
-    "homeNoiseFoldHide": "{count, plural, =1{Slēpt 1 īsu ierakstu} other{Slēpt {count} īsus ierakstus}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Slēpt 1 īsu ierakstu} other{Slēpt {count} īsus ierakstus}}",
+    "deleteLocalRecordingsWarning": "{count, plural, =1{You have 1 recording not yet uploaded. Deleting now loses it.} other{You have {count} recordings not yet uploaded. Deleting now loses them.}}",
+    "deleteConfirmGraceSubtitle": "Review what happens to your data before you leave."
 }

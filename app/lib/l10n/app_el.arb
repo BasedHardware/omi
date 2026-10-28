@@ -2803,6 +2803,13 @@
     "deleteReasonFoundAlternative": "Χρησιμοποιώ κάτι άλλο",
     "deleteReasonTakingBreak": "Απλώς κάνω ένα διάλειμμα",
     "deleteReasonOther": "Άλλο",
+    "deletePauseInsteadTitle": "Pause Omi Instead?",
+    "deletePauseInsteadSubtitle": "Stop recording and keep everything. Come back anytime.",
+    "deletePauseRecordingLine": "Recording stops. Nothing new is captured while you are away.",
+    "deletePauseKeepLine": "Your memories, conversations and apps are kept exactly as they are.",
+    "deletePauseReturnLine": "Sign in anytime to pick up where you left off.",
+    "pauseOmiButton": "Pause Omi",
+    "continueDeletingButton": "Continue Deleting",
     "deleteFlowFeedbackTitle": "Πείτε μας περισσότερα",
     "deleteFlowFeedbackSubtitle": "Τι θα έκανε το Omi να δουλεύει για σας;",
     "deleteFlowFeedbackHint": "Προαιρετικό — οι σκέψεις σας μας βοηθούν να φτιάξουμε ένα καλύτερο προϊόν.",
@@ -2810,6 +2817,8 @@
     "deleteFlowConfirmSubtitle": "Αυτό δεν μπορεί να αναιρεθεί, ούτε από την υποστήριξη.",
     "deleteConsequenceSubscription": "Κάθε ενεργή συνδρομή θα ακυρωθεί.",
     "deleteConsequenceNoRecovery": "Ο λογαριασμός σας δεν μπορεί να αποκατασταθεί — ούτε από την υποστήριξη.",
+    "deletePendingRecordingsWarning": "{count, plural, =1{You have 1 recording still processing. Deleting now loses it.} other{You have {count} recordings still processing. Deleting now loses them.}}",
+    "deleteGracePeriodNotice": "{days, plural, =1{Your data is kept for 1 day. Sign in again to restore it.} other{Your data is kept for {days} days. Sign in again to restore it.}}",
     "deleteTypeToConfirm": "Πληκτρολογήστε DELETE για επιβεβαίωση",
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Οριστική διαγραφή λογαριασμού",
@@ -4464,5 +4473,7 @@
     "onTheWayDetailsForSupport": "Λεπτομέρειες για την υποστήριξη",
     "homeNoiseFoldHidden": "{count, plural, =1{Κρύφτηκε 1 σύντομο απόσπασμα} other{Κρύφτηκαν {count} σύντομα αποσπάσματα}}",
     "homeNoiseFoldShow": "Εμφάνιση",
-    "homeNoiseFoldHide": "{count, plural, =1{Απόκρυψη 1 σύντομου αποσπάσματος} other{Απόκρυψη {count} σύντομων αποσπασμάτων}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Απόκρυψη 1 σύντομου αποσπάσματος} other{Απόκρυψη {count} σύντομων αποσπασμάτων}}",
+    "deleteLocalRecordingsWarning": "{count, plural, =1{You have 1 recording not yet uploaded. Deleting now loses it.} other{You have {count} recordings not yet uploaded. Deleting now loses them.}}",
+    "deleteConfirmGraceSubtitle": "Review what happens to your data before you leave."
 }

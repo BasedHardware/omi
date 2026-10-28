@@ -10225,6 +10225,13 @@
     "deleteReasonFoundAlternative": "משתמש במשהו אחר",
     "deleteReasonTakingBreak": "סתם לוקח הפסקה",
     "deleteReasonOther": "אחר",
+    "deletePauseInsteadTitle": "Pause Omi Instead?",
+    "deletePauseInsteadSubtitle": "Stop recording and keep everything. Come back anytime.",
+    "deletePauseRecordingLine": "Recording stops. Nothing new is captured while you are away.",
+    "deletePauseKeepLine": "Your memories, conversations and apps are kept exactly as they are.",
+    "deletePauseReturnLine": "Sign in anytime to pick up where you left off.",
+    "pauseOmiButton": "Pause Omi",
+    "continueDeletingButton": "Continue Deleting",
     "deleteFlowFeedbackTitle": "ספר לנו עוד",
     "deleteFlowFeedbackSubtitle": "מה היה גורם ל-Omi לעבוד עבורך?",
     "deleteFlowFeedbackHint": "אופציונלי — המחשבות שלך עוזרות לנו לבנות מוצר טוב יותר.",
@@ -10232,6 +10239,8 @@
     "deleteFlowConfirmSubtitle": "לא ניתן לבטל פעולה זו, גם לא על ידי התמיכה.",
     "deleteConsequenceSubscription": "כל מנוי פעיל יבוטל.",
     "deleteConsequenceNoRecovery": "לא ניתן לשחזר את החשבון שלך — אפילו לא על ידי התמיכה.",
+    "deletePendingRecordingsWarning": "{count, plural, =1{You have 1 recording still processing. Deleting now loses it.} other{You have {count} recordings still processing. Deleting now loses them.}}",
+    "deleteGracePeriodNotice": "{days, plural, =1{Your data is kept for 1 day. Sign in again to restore it.} other{Your data is kept for {days} days. Sign in again to restore it.}}",
     "deleteTypeToConfirm": "הקלד DELETE לאישור",
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "מחק חשבון לצמיתות",
@@ -11890,5 +11899,7 @@
     "onTheWayDetailsForSupport": "פרטים לתמיכה",
     "homeNoiseFoldHidden": "{count, plural, =1{קטע קצר 1 הוסתר} other{{count} קטעים קצרים הוסתרו}}",
     "homeNoiseFoldShow": "הצג",
-    "homeNoiseFoldHide": "{count, plural, =1{הסתר קטע קצר 1} other{הסתר {count} קטעים קצרים}}"
+    "homeNoiseFoldHide": "{count, plural, =1{הסתר קטע קצר 1} other{הסתר {count} קטעים קצרים}}",
+    "deleteLocalRecordingsWarning": "{count, plural, =1{You have 1 recording not yet uploaded. Deleting now loses it.} other{You have {count} recordings not yet uploaded. Deleting now loses them.}}",
+    "deleteConfirmGraceSubtitle": "Review what happens to your data before you leave."
 }

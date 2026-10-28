@@ -2803,6 +2803,13 @@
     "deleteReasonFoundAlternative": "Đang dùng thứ khác",
     "deleteReasonTakingBreak": "Chỉ nghỉ một thời gian",
     "deleteReasonOther": "Khác",
+    "deletePauseInsteadTitle": "Pause Omi Instead?",
+    "deletePauseInsteadSubtitle": "Stop recording and keep everything. Come back anytime.",
+    "deletePauseRecordingLine": "Recording stops. Nothing new is captured while you are away.",
+    "deletePauseKeepLine": "Your memories, conversations and apps are kept exactly as they are.",
+    "deletePauseReturnLine": "Sign in anytime to pick up where you left off.",
+    "pauseOmiButton": "Pause Omi",
+    "continueDeletingButton": "Continue Deleting",
     "deleteFlowFeedbackTitle": "Hãy chia sẻ thêm",
     "deleteFlowFeedbackSubtitle": "Điều gì sẽ khiến Omi phù hợp với bạn?",
     "deleteFlowFeedbackHint": "Tùy chọn — suy nghĩ của bạn giúp chúng tôi xây dựng sản phẩm tốt hơn.",
@@ -2810,6 +2817,8 @@
     "deleteFlowConfirmSubtitle": "Không thể hoàn tác thao tác này, kể cả bộ phận hỗ trợ.",
     "deleteConsequenceSubscription": "Mọi gói đăng ký đang hoạt động sẽ bị hủy.",
     "deleteConsequenceNoRecovery": "Tài khoản của bạn không thể khôi phục — ngay cả bộ phận hỗ trợ.",
+    "deletePendingRecordingsWarning": "{count, plural, =1{You have 1 recording still processing. Deleting now loses it.} other{You have {count} recordings still processing. Deleting now loses them.}}",
+    "deleteGracePeriodNotice": "{days, plural, =1{Your data is kept for 1 day. Sign in again to restore it.} other{Your data is kept for {days} days. Sign in again to restore it.}}",
     "deleteTypeToConfirm": "Nhập DELETE để xác nhận",
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Xóa tài khoản vĩnh viễn",
@@ -4464,5 +4473,7 @@
     "onTheWayDetailsForSupport": "Chi tiết cho bộ phận hỗ trợ",
     "homeNoiseFoldHidden": "{count, plural, =1{Đã ẩn 1 clip ngắn} other{Đã ẩn {count} clip ngắn}}",
     "homeNoiseFoldShow": "Hiển thị",
-    "homeNoiseFoldHide": "{count, plural, =1{Ẩn 1 clip ngắn} other{Ẩn {count} clip ngắn}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Ẩn 1 clip ngắn} other{Ẩn {count} clip ngắn}}",
+    "deleteLocalRecordingsWarning": "{count, plural, =1{You have 1 recording not yet uploaded. Deleting now loses it.} other{You have {count} recordings not yet uploaded. Deleting now loses them.}}",
+    "deleteConfirmGraceSubtitle": "Review what happens to your data before you leave."
 }

@@ -10406,6 +10406,34 @@
     "@deleteReasonOther": {
         "description": "Delete reason option"
     },
+    "deletePauseInsteadTitle": "Pause Omi Instead?",
+    "@deletePauseInsteadTitle": {
+        "description": "Interstitial offered when the delete reason is taking a break or technical issues"
+    },
+    "deletePauseInsteadSubtitle": "Stop recording and keep everything. Come back anytime.",
+    "@deletePauseInsteadSubtitle": {
+        "description": "Subtitle of the pause-instead interstitial"
+    },
+    "deletePauseRecordingLine": "Recording stops. Nothing new is captured while you are away.",
+    "@deletePauseRecordingLine": {
+        "description": "First line of the pause-instead card"
+    },
+    "deletePauseKeepLine": "Your memories, conversations and apps are kept exactly as they are.",
+    "@deletePauseKeepLine": {
+        "description": "Second line of the pause-instead card"
+    },
+    "deletePauseReturnLine": "Sign in anytime to pick up where you left off.",
+    "@deletePauseReturnLine": {
+        "description": "Third line of the pause-instead card"
+    },
+    "pauseOmiButton": "Pause Omi",
+    "@pauseOmiButton": {
+        "description": "Primary action of the pause-instead interstitial"
+    },
+    "continueDeletingButton": "Continue Deleting",
+    "@continueDeletingButton": {
+        "description": "Secondary action of the pause-instead interstitial; continues the delete flow"
+    },
     "deleteFlowFeedbackTitle": "Tell us more",
     "@deleteFlowFeedbackTitle": {
         "description": "Title on delete-account flow feedback step"
@@ -10433,6 +10461,24 @@
     "deleteConsequenceNoRecovery": "Your account cannot be restored — not even by support.",
     "@deleteConsequenceNoRecovery": {
         "description": "Delete consequence bullet"
+    },
+    "deletePendingRecordingsWarning": "{count, plural, =1{You have 1 recording still processing. Deleting now loses it.} other{You have {count} recordings still processing. Deleting now loses them.}}",
+    "@deletePendingRecordingsWarning": {
+        "description": "Delete confirmation warning when recordings are still processing or not yet uploaded; deleting loses them",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "deleteGracePeriodNotice": "{days, plural, =1{Your data is kept for 1 day. Sign in again to restore it.} other{Your data is kept for {days} days. Sign in again to restore it.}}",
+    "@deleteGracePeriodNotice": {
+        "description": "Restore window the backend keeps after account deletion; shown on the delete confirmation step",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
     },
     "deleteTypeToConfirm": "Type DELETE to confirm",
     "@deleteTypeToConfirm": {
@@ -17976,5 +18022,18 @@
                 "type": "int"
             }
         }
+    },
+    "deleteLocalRecordingsWarning": "{count, plural, =1{You have 1 recording not yet uploaded. Deleting now loses it.} other{You have {count} recordings not yet uploaded. Deleting now loses them.}}",
+    "@deleteLocalRecordingsWarning": {
+        "description": "Local audio loss warning on account deletion",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "deleteConfirmGraceSubtitle": "Review what happens to your data before you leave.",
+    "@deleteConfirmGraceSubtitle": {
+        "description": "Confirmation subtitle when a backend restore window is available"
     }
 }

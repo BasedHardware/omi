@@ -2803,6 +2803,13 @@
     "deleteReasonFoundAlternative": "Menggunakan sesuatu yang lain",
     "deleteReasonTakingBreak": "Hanya berehat sebentar",
     "deleteReasonOther": "Lain-lain",
+    "deletePauseInsteadTitle": "Pause Omi Instead?",
+    "deletePauseInsteadSubtitle": "Stop recording and keep everything. Come back anytime.",
+    "deletePauseRecordingLine": "Recording stops. Nothing new is captured while you are away.",
+    "deletePauseKeepLine": "Your memories, conversations and apps are kept exactly as they are.",
+    "deletePauseReturnLine": "Sign in anytime to pick up where you left off.",
+    "pauseOmiButton": "Pause Omi",
+    "continueDeletingButton": "Continue Deleting",
     "deleteFlowFeedbackTitle": "Beritahu kami lebih lanjut",
     "deleteFlowFeedbackSubtitle": "Apakah yang akan menjadikan Omi sesuai untuk anda?",
     "deleteFlowFeedbackHint": "Pilihan — pandangan anda membantu kami membina produk yang lebih baik.",
@@ -2810,6 +2817,8 @@
     "deleteFlowConfirmSubtitle": "Tindakan ini tidak boleh dibatalkan, walaupun oleh sokongan.",
     "deleteConsequenceSubscription": "Sebarang langganan aktif akan dibatalkan.",
     "deleteConsequenceNoRecovery": "Akaun anda tidak boleh dipulihkan — walaupun oleh sokongan.",
+    "deletePendingRecordingsWarning": "{count, plural, =1{You have 1 recording still processing. Deleting now loses it.} other{You have {count} recordings still processing. Deleting now loses them.}}",
+    "deleteGracePeriodNotice": "{days, plural, =1{Your data is kept for 1 day. Sign in again to restore it.} other{Your data is kept for {days} days. Sign in again to restore it.}}",
     "deleteTypeToConfirm": "Taip DELETE untuk sahkan",
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Padam akaun secara kekal",
@@ -4464,5 +4473,7 @@
     "onTheWayDetailsForSupport": "Butiran untuk sokongan",
     "homeNoiseFoldHidden": "{count, plural, =1{1 klip pendek disembunyikan} other{{count} klip pendek disembunyikan}}",
     "homeNoiseFoldShow": "Tunjukkan",
-    "homeNoiseFoldHide": "{count, plural, =1{Sembunyikan 1 klip pendek} other{Sembunyikan {count} klip pendek}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Sembunyikan 1 klip pendek} other{Sembunyikan {count} klip pendek}}",
+    "deleteLocalRecordingsWarning": "{count, plural, =1{You have 1 recording not yet uploaded. Deleting now loses it.} other{You have {count} recordings not yet uploaded. Deleting now loses them.}}",
+    "deleteConfirmGraceSubtitle": "Review what happens to your data before you leave."
 }

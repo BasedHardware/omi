@@ -2803,6 +2803,13 @@
     "deleteReasonFoundAlternative": "Käytän jotain muuta",
     "deleteReasonTakingBreak": "Pidän vain tauon",
     "deleteReasonOther": "Muu",
+    "deletePauseInsteadTitle": "Pause Omi Instead?",
+    "deletePauseInsteadSubtitle": "Stop recording and keep everything. Come back anytime.",
+    "deletePauseRecordingLine": "Recording stops. Nothing new is captured while you are away.",
+    "deletePauseKeepLine": "Your memories, conversations and apps are kept exactly as they are.",
+    "deletePauseReturnLine": "Sign in anytime to pick up where you left off.",
+    "pauseOmiButton": "Pause Omi",
+    "continueDeletingButton": "Continue Deleting",
     "deleteFlowFeedbackTitle": "Kerro lisää",
     "deleteFlowFeedbackSubtitle": "Mikä olisi saanut Omin toimimaan sinulle?",
     "deleteFlowFeedbackHint": "Valinnainen — ajatuksesi auttavat meitä rakentamaan parempaa tuotetta.",
@@ -2810,6 +2817,8 @@
     "deleteFlowConfirmSubtitle": "Tätä ei voi perua, ei edes tuen avulla.",
     "deleteConsequenceSubscription": "Mahdolliset aktiiviset tilaukset peruutetaan.",
     "deleteConsequenceNoRecovery": "Tiliäsi ei voi palauttaa — ei edes tuki voi tehdä sitä.",
+    "deletePendingRecordingsWarning": "{count, plural, =1{You have 1 recording still processing. Deleting now loses it.} other{You have {count} recordings still processing. Deleting now loses them.}}",
+    "deleteGracePeriodNotice": "{days, plural, =1{Your data is kept for 1 day. Sign in again to restore it.} other{Your data is kept for {days} days. Sign in again to restore it.}}",
     "deleteTypeToConfirm": "Kirjoita DELETE vahvistaaksesi",
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Poista tili pysyvästi",
@@ -4464,5 +4473,7 @@
     "onTheWayDetailsForSupport": "Tiedot tukea varten",
     "homeNoiseFoldHidden": "{count, plural, =1{1 lyhyt leike piilotettu} other{{count} lyhyttä leikettä piilotettu}}",
     "homeNoiseFoldShow": "Näytä",
-    "homeNoiseFoldHide": "{count, plural, =1{Piilota 1 lyhyt leike} other{Piilota {count} lyhyttä leikettä}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Piilota 1 lyhyt leike} other{Piilota {count} lyhyttä leikettä}}",
+    "deleteLocalRecordingsWarning": "{count, plural, =1{You have 1 recording not yet uploaded. Deleting now loses it.} other{You have {count} recordings not yet uploaded. Deleting now loses them.}}",
+    "deleteConfirmGraceSubtitle": "Review what happens to your data before you leave."
 }

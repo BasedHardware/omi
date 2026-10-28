@@ -2838,6 +2838,13 @@
     "deleteReasonFoundAlternative": "Использую другое",
     "deleteReasonTakingBreak": "Просто делаю перерыв",
     "deleteReasonOther": "Другое",
+    "deletePauseInsteadTitle": "Pause Omi Instead?",
+    "deletePauseInsteadSubtitle": "Stop recording and keep everything. Come back anytime.",
+    "deletePauseRecordingLine": "Recording stops. Nothing new is captured while you are away.",
+    "deletePauseKeepLine": "Your memories, conversations and apps are kept exactly as they are.",
+    "deletePauseReturnLine": "Sign in anytime to pick up where you left off.",
+    "pauseOmiButton": "Pause Omi",
+    "continueDeletingButton": "Continue Deleting",
     "deleteFlowFeedbackTitle": "Расскажите подробнее",
     "deleteFlowFeedbackSubtitle": "Что бы заставило Omi работать для вас?",
     "deleteFlowFeedbackHint": "Необязательно — ваши мысли помогают нам создавать лучший продукт.",
@@ -2845,6 +2852,8 @@
     "deleteFlowConfirmSubtitle": "Это нельзя отменить, даже через поддержку.",
     "deleteConsequenceSubscription": "Активная подписка будет отменена.",
     "deleteConsequenceNoRecovery": "Ваш аккаунт нельзя восстановить — даже через поддержку.",
+    "deletePendingRecordingsWarning": "{count, plural, =1{You have 1 recording still processing. Deleting now loses it.} other{You have {count} recordings still processing. Deleting now loses them.}}",
+    "deleteGracePeriodNotice": "{days, plural, =1{Your data is kept for 1 day. Sign in again to restore it.} other{Your data is kept for {days} days. Sign in again to restore it.}}",
     "deleteTypeToConfirm": "Введите DELETE для подтверждения",
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Удалить аккаунт навсегда",
@@ -4499,5 +4508,7 @@
     "onTheWayDetailsForSupport": "Подробности для поддержки",
     "homeNoiseFoldHidden": "{count, plural, =1{Скрыта 1 короткая запись} other{Скрыто {count} коротких записей}}",
     "homeNoiseFoldShow": "Показать",
-    "homeNoiseFoldHide": "{count, plural, =1{Скрыть 1 короткую запись} other{Скрыть {count} коротких записей}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Скрыть 1 короткую запись} other{Скрыть {count} коротких записей}}",
+    "deleteLocalRecordingsWarning": "{count, plural, =1{You have 1 recording not yet uploaded. Deleting now loses it.} other{You have {count} recordings not yet uploaded. Deleting now loses them.}}",
+    "deleteConfirmGraceSubtitle": "Review what happens to your data before you leave."
 }

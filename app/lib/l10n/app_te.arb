@@ -10225,6 +10225,13 @@
     "deleteReasonFoundAlternative": "మరొకటి ఉపయోగిస్తున్నాను",
     "deleteReasonTakingBreak": "కేవలం విరామం తీసుకుంటున్నాను",
     "deleteReasonOther": "ఇతరత్రా",
+    "deletePauseInsteadTitle": "Pause Omi Instead?",
+    "deletePauseInsteadSubtitle": "Stop recording and keep everything. Come back anytime.",
+    "deletePauseRecordingLine": "Recording stops. Nothing new is captured while you are away.",
+    "deletePauseKeepLine": "Your memories, conversations and apps are kept exactly as they are.",
+    "deletePauseReturnLine": "Sign in anytime to pick up where you left off.",
+    "pauseOmiButton": "Pause Omi",
+    "continueDeletingButton": "Continue Deleting",
     "deleteFlowFeedbackTitle": "మరింత చెప్పండి",
     "deleteFlowFeedbackSubtitle": "Omi మీకు ఎలా పని చేసేది?",
     "deleteFlowFeedbackHint": "ఐచ్ఛికం — మీ ఆలోచనలు మెరుగైన ఉత్పత్తిని తయారు చేయడంలో మాకు సహాయపడతాయి.",
@@ -10232,6 +10239,8 @@
     "deleteFlowConfirmSubtitle": "దీన్ని రద్దు చేయలేరు, సపోర్ట్ కూడా చేయలేదు.",
     "deleteConsequenceSubscription": "ఏదైనా క్రియాశీల సబ్‌స్క్రిప్షన్ రద్దు చేయబడుతుంది.",
     "deleteConsequenceNoRecovery": "మీ ఖాతాను పునరుద్ధరించలేరు — సపోర్ట్ కూడా చేయలేదు.",
+    "deletePendingRecordingsWarning": "{count, plural, =1{You have 1 recording still processing. Deleting now loses it.} other{You have {count} recordings still processing. Deleting now loses them.}}",
+    "deleteGracePeriodNotice": "{days, plural, =1{Your data is kept for 1 day. Sign in again to restore it.} other{Your data is kept for {days} days. Sign in again to restore it.}}",
     "deleteTypeToConfirm": "నిర్ధారించడానికి DELETE టైప్ చేయండి",
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "ఖాతాను శాశ్వతంగా తొలగించండి",
@@ -11890,5 +11899,7 @@
     "onTheWayDetailsForSupport": "సపోర్ట్ కోసం వివరాలు",
     "homeNoiseFoldHidden": "{count, plural, =1{1 చిన్న క్లిప్ దాచబడింది} other{{count} చిన్న క్లిప్‌లు దాచబడ్డాయి}}",
     "homeNoiseFoldShow": "చూపండి",
-    "homeNoiseFoldHide": "{count, plural, =1{1 చిన్న క్లిప్‌ను దాచండి} other{{count} చిన్న క్లిప్‌లను దాచండి}}"
+    "homeNoiseFoldHide": "{count, plural, =1{1 చిన్న క్లిప్‌ను దాచండి} other{{count} చిన్న క్లిప్‌లను దాచండి}}",
+    "deleteLocalRecordingsWarning": "{count, plural, =1{You have 1 recording not yet uploaded. Deleting now loses it.} other{You have {count} recordings not yet uploaded. Deleting now loses them.}}",
+    "deleteConfirmGraceSubtitle": "Review what happens to your data before you leave."
 }

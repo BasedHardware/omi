@@ -2794,6 +2794,13 @@
     "deleteReasonFoundAlternative": "أستخدم شيئاً آخر",
     "deleteReasonTakingBreak": "أأخذ استراحة فقط",
     "deleteReasonOther": "غير ذلك",
+    "deletePauseInsteadTitle": "Pause Omi Instead?",
+    "deletePauseInsteadSubtitle": "Stop recording and keep everything. Come back anytime.",
+    "deletePauseRecordingLine": "Recording stops. Nothing new is captured while you are away.",
+    "deletePauseKeepLine": "Your memories, conversations and apps are kept exactly as they are.",
+    "deletePauseReturnLine": "Sign in anytime to pick up where you left off.",
+    "pauseOmiButton": "Pause Omi",
+    "continueDeletingButton": "Continue Deleting",
     "deleteFlowFeedbackTitle": "أخبرنا المزيد",
     "deleteFlowFeedbackSubtitle": "ما الذي كان سيجعل Omi يناسبك؟",
     "deleteFlowFeedbackHint": "اختياري — أفكارك تساعدنا على بناء منتج أفضل.",
@@ -2801,6 +2808,8 @@
     "deleteFlowConfirmSubtitle": "لا يمكن التراجع عن ذلك، حتى من قِبل فريق الدعم.",
     "deleteConsequenceSubscription": "سيتم إلغاء أي اشتراك نشط.",
     "deleteConsequenceNoRecovery": "لا يمكن استعادة حسابك — ولا حتى من قبل الدعم.",
+    "deletePendingRecordingsWarning": "{count, plural, =1{You have 1 recording still processing. Deleting now loses it.} other{You have {count} recordings still processing. Deleting now loses them.}}",
+    "deleteGracePeriodNotice": "{days, plural, =1{Your data is kept for 1 day. Sign in again to restore it.} other{Your data is kept for {days} days. Sign in again to restore it.}}",
     "deleteTypeToConfirm": "اكتب DELETE للتأكيد",
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "حذف الحساب نهائياً",
@@ -4464,5 +4473,7 @@
     "onTheWayDetailsForSupport": "تفاصيل لفريق الدعم",
     "homeNoiseFoldHidden": "{count, plural, =1{تم إخفاء مقطع صوتي قصير واحد} other{تم إخفاء {count} من المقاطع الصوتية القصيرة}}",
     "homeNoiseFoldShow": "إظهار",
-    "homeNoiseFoldHide": "{count, plural, =1{إخفاء مقطع صوتي قصير واحد} other{إخفاء {count} من المقاطع الصوتية القصيرة}}"
+    "homeNoiseFoldHide": "{count, plural, =1{إخفاء مقطع صوتي قصير واحد} other{إخفاء {count} من المقاطع الصوتية القصيرة}}",
+    "deleteLocalRecordingsWarning": "{count, plural, =1{You have 1 recording not yet uploaded. Deleting now loses it.} other{You have {count} recordings not yet uploaded. Deleting now loses them.}}",
+    "deleteConfirmGraceSubtitle": "Review what happens to your data before you leave."
 }

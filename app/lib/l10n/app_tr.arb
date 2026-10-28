@@ -2838,6 +2838,13 @@
     "deleteReasonFoundAlternative": "Başka bir şey kullanıyorum",
     "deleteReasonTakingBreak": "Sadece ara veriyorum",
     "deleteReasonOther": "Diğer",
+    "deletePauseInsteadTitle": "Pause Omi Instead?",
+    "deletePauseInsteadSubtitle": "Stop recording and keep everything. Come back anytime.",
+    "deletePauseRecordingLine": "Recording stops. Nothing new is captured while you are away.",
+    "deletePauseKeepLine": "Your memories, conversations and apps are kept exactly as they are.",
+    "deletePauseReturnLine": "Sign in anytime to pick up where you left off.",
+    "pauseOmiButton": "Pause Omi",
+    "continueDeletingButton": "Continue Deleting",
     "deleteFlowFeedbackTitle": "Daha fazlasını anlat",
     "deleteFlowFeedbackSubtitle": "Omi'nin senin için işe yaramasını ne sağlardı?",
     "deleteFlowFeedbackHint": "İsteğe bağlı — düşünceleriniz daha iyi bir ürün oluşturmamıza yardımcı olur.",
@@ -2845,6 +2852,8 @@
     "deleteFlowConfirmSubtitle": "Bu işlem geri alınamaz, destek ekibi tarafından bile.",
     "deleteConsequenceSubscription": "Etkin abonelik iptal edilecektir.",
     "deleteConsequenceNoRecovery": "Hesabınız geri yüklenemez — destek ekibi bile yapamaz.",
+    "deletePendingRecordingsWarning": "{count, plural, =1{You have 1 recording still processing. Deleting now loses it.} other{You have {count} recordings still processing. Deleting now loses them.}}",
+    "deleteGracePeriodNotice": "{days, plural, =1{Your data is kept for 1 day. Sign in again to restore it.} other{Your data is kept for {days} days. Sign in again to restore it.}}",
     "deleteTypeToConfirm": "Onaylamak için DELETE yazın",
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Hesabı kalıcı olarak sil",
@@ -4499,5 +4508,7 @@
     "onTheWayDetailsForSupport": "Destek için ayrıntılar",
     "homeNoiseFoldHidden": "{count, plural, =1{1 kısa kayıt gizlendi} other{{count} kısa kayıt gizlendi}}",
     "homeNoiseFoldShow": "Göster",
-    "homeNoiseFoldHide": "{count, plural, =1{1 kısa kaydı gizle} other{{count} kısa kaydı gizle}}"
+    "homeNoiseFoldHide": "{count, plural, =1{1 kısa kaydı gizle} other{{count} kısa kaydı gizle}}",
+    "deleteLocalRecordingsWarning": "{count, plural, =1{You have 1 recording not yet uploaded. Deleting now loses it.} other{You have {count} recordings not yet uploaded. Deleting now loses them.}}",
+    "deleteConfirmGraceSubtitle": "Review what happens to your data before you leave."
 }

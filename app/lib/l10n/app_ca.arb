@@ -2794,6 +2794,13 @@
     "deleteReasonFoundAlternative": "Utilitzo una altra cosa",
     "deleteReasonTakingBreak": "Només em prenc un descans",
     "deleteReasonOther": "Altres",
+    "deletePauseInsteadTitle": "Pause Omi Instead?",
+    "deletePauseInsteadSubtitle": "Stop recording and keep everything. Come back anytime.",
+    "deletePauseRecordingLine": "Recording stops. Nothing new is captured while you are away.",
+    "deletePauseKeepLine": "Your memories, conversations and apps are kept exactly as they are.",
+    "deletePauseReturnLine": "Sign in anytime to pick up where you left off.",
+    "pauseOmiButton": "Pause Omi",
+    "continueDeletingButton": "Continue Deleting",
     "deleteFlowFeedbackTitle": "Explica'ns més",
     "deleteFlowFeedbackSubtitle": "Què hauria fet que Omi funcionés per a tu?",
     "deleteFlowFeedbackHint": "Opcional — les teves idees ens ajuden a crear un producte millor.",
@@ -2801,6 +2808,8 @@
     "deleteFlowConfirmSubtitle": "Això no es pot desfer, ni tan sols el servei d'assistència.",
     "deleteConsequenceSubscription": "Qualsevol subscripció activa es cancel·larà.",
     "deleteConsequenceNoRecovery": "El teu compte no es pot restaurar — ni tan sols pel suport.",
+    "deletePendingRecordingsWarning": "{count, plural, =1{You have 1 recording still processing. Deleting now loses it.} other{You have {count} recordings still processing. Deleting now loses them.}}",
+    "deleteGracePeriodNotice": "{days, plural, =1{Your data is kept for 1 day. Sign in again to restore it.} other{Your data is kept for {days} days. Sign in again to restore it.}}",
     "deleteTypeToConfirm": "Escriu DELETE per confirmar",
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Eliminar compte permanentment",
@@ -4464,5 +4473,7 @@
     "onTheWayDetailsForSupport": "Detalls per al suport",
     "homeNoiseFoldHidden": "{count, plural, =1{1 clip curt amagat} other{{count} clips curts amagats}}",
     "homeNoiseFoldShow": "Mostrar",
-    "homeNoiseFoldHide": "{count, plural, =1{Amagar 1 clip curt} other{Amagar {count} clips curts}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Amagar 1 clip curt} other{Amagar {count} clips curts}}",
+    "deleteLocalRecordingsWarning": "{count, plural, =1{You have 1 recording not yet uploaded. Deleting now loses it.} other{You have {count} recordings not yet uploaded. Deleting now loses them.}}",
+    "deleteConfirmGraceSubtitle": "Review what happens to your data before you leave."
 }

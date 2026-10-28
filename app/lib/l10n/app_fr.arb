@@ -2838,6 +2838,13 @@
     "deleteReasonFoundAlternative": "J'utilise autre chose",
     "deleteReasonTakingBreak": "Je fais juste une pause",
     "deleteReasonOther": "Autre",
+    "deletePauseInsteadTitle": "Pause Omi Instead?",
+    "deletePauseInsteadSubtitle": "Stop recording and keep everything. Come back anytime.",
+    "deletePauseRecordingLine": "Recording stops. Nothing new is captured while you are away.",
+    "deletePauseKeepLine": "Your memories, conversations and apps are kept exactly as they are.",
+    "deletePauseReturnLine": "Sign in anytime to pick up where you left off.",
+    "pauseOmiButton": "Pause Omi",
+    "continueDeletingButton": "Continue Deleting",
     "deleteFlowFeedbackTitle": "Dites-nous-en plus",
     "deleteFlowFeedbackSubtitle": "Qu'est-ce qui aurait fait fonctionner Omi pour vous ?",
     "deleteFlowFeedbackHint": "Facultatif — vos idées nous aident à créer un meilleur produit.",
@@ -2845,6 +2852,8 @@
     "deleteFlowConfirmSubtitle": "Cette action est irréversible, même par l'assistance.",
     "deleteConsequenceSubscription": "Tout abonnement actif sera annulé.",
     "deleteConsequenceNoRecovery": "Votre compte ne peut pas être restauré — même pas par le support.",
+    "deletePendingRecordingsWarning": "{count, plural, =1{You have 1 recording still processing. Deleting now loses it.} other{You have {count} recordings still processing. Deleting now loses them.}}",
+    "deleteGracePeriodNotice": "{days, plural, =1{Your data is kept for 1 day. Sign in again to restore it.} other{Your data is kept for {days} days. Sign in again to restore it.}}",
     "deleteTypeToConfirm": "Tapez DELETE pour confirmer",
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Supprimer le compte définitivement",
@@ -4499,5 +4508,7 @@
     "onTheWayDetailsForSupport": "Détails pour le support",
     "homeNoiseFoldHidden": "{count, plural, =1{1 extrait court masqué} other{{count} extraits courts masqués}}",
     "homeNoiseFoldShow": "Afficher",
-    "homeNoiseFoldHide": "{count, plural, =1{Masquer 1 extrait court} other{Masquer {count} extraits courts}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Masquer 1 extrait court} other{Masquer {count} extraits courts}}",
+    "deleteLocalRecordingsWarning": "{count, plural, =1{You have 1 recording not yet uploaded. Deleting now loses it.} other{You have {count} recordings not yet uploaded. Deleting now loses them.}}",
+    "deleteConfirmGraceSubtitle": "Review what happens to your data before you leave."
 }

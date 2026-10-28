@@ -16305,6 +16305,48 @@ abstract class AppLocalizations {
   /// **'Other'**
   String get deleteReasonOther;
 
+  /// Interstitial offered when the delete reason is taking a break or technical issues
+  ///
+  /// In en, this message translates to:
+  /// **'Pause Omi Instead?'**
+  String get deletePauseInsteadTitle;
+
+  /// Subtitle of the pause-instead interstitial
+  ///
+  /// In en, this message translates to:
+  /// **'Stop recording and keep everything. Come back anytime.'**
+  String get deletePauseInsteadSubtitle;
+
+  /// First line of the pause-instead card
+  ///
+  /// In en, this message translates to:
+  /// **'Recording stops. Nothing new is captured while you are away.'**
+  String get deletePauseRecordingLine;
+
+  /// Second line of the pause-instead card
+  ///
+  /// In en, this message translates to:
+  /// **'Your memories, conversations and apps are kept exactly as they are.'**
+  String get deletePauseKeepLine;
+
+  /// Third line of the pause-instead card
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in anytime to pick up where you left off.'**
+  String get deletePauseReturnLine;
+
+  /// Primary action of the pause-instead interstitial
+  ///
+  /// In en, this message translates to:
+  /// **'Pause Omi'**
+  String get pauseOmiButton;
+
+  /// Secondary action of the pause-instead interstitial; continues the delete flow
+  ///
+  /// In en, this message translates to:
+  /// **'Continue Deleting'**
+  String get continueDeletingButton;
+
   /// Title on delete-account flow feedback step
   ///
   /// In en, this message translates to:
@@ -16346,6 +16388,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your account cannot be restored — not even by support.'**
   String get deleteConsequenceNoRecovery;
+
+  /// Delete confirmation warning when recordings are still processing or not yet uploaded; deleting loses them
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{You have 1 recording still processing. Deleting now loses it.} other{You have {count} recordings still processing. Deleting now loses them.}}'**
+  String deletePendingRecordingsWarning(int count);
+
+  /// Restore window the backend keeps after account deletion; shown on the delete confirmation step
+  ///
+  /// In en, this message translates to:
+  /// **'{days, plural, =1{Your data is kept for 1 day. Sign in again to restore it.} other{Your data is kept for {days} days. Sign in again to restore it.}}'**
+  String deleteGracePeriodNotice(int days);
 
   /// Instruction to type DELETE to confirm
   ///
@@ -25976,6 +26030,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}'**
   String homeNoiseFoldHide(int count);
+
+  /// Local audio loss warning on account deletion
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{You have 1 recording not yet uploaded. Deleting now loses it.} other{You have {count} recordings not yet uploaded. Deleting now loses them.}}'**
+  String deleteLocalRecordingsWarning(int count);
+
+  /// Confirmation subtitle when a backend restore window is available
+  ///
+  /// In en, this message translates to:
+  /// **'Review what happens to your data before you leave.'**
+  String get deleteConfirmGraceSubtitle;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -10225,6 +10225,13 @@
     "deleteReasonFoundAlternative": "வேறு ஒன்றைப் பயன்படுத்துகிறேன்",
     "deleteReasonTakingBreak": "சற்று இடைவேளை எடுக்கிறேன்",
     "deleteReasonOther": "மற்றவை",
+    "deletePauseInsteadTitle": "Pause Omi Instead?",
+    "deletePauseInsteadSubtitle": "Stop recording and keep everything. Come back anytime.",
+    "deletePauseRecordingLine": "Recording stops. Nothing new is captured while you are away.",
+    "deletePauseKeepLine": "Your memories, conversations and apps are kept exactly as they are.",
+    "deletePauseReturnLine": "Sign in anytime to pick up where you left off.",
+    "pauseOmiButton": "Pause Omi",
+    "continueDeletingButton": "Continue Deleting",
     "deleteFlowFeedbackTitle": "மேலும் சொல்லுங்கள்",
     "deleteFlowFeedbackSubtitle": "Omi உங்களுக்கு எவ்வாறு பயனுள்ளதாக இருந்திருக்கும்?",
     "deleteFlowFeedbackHint": "விருப்பத்தேர்வு — உங்கள் எண்ணங்கள் சிறந்த தயாரிப்பை உருவாக்க எங்களுக்கு உதவுகின்றன.",
@@ -10232,6 +10239,8 @@
     "deleteFlowConfirmSubtitle": "இதைச் செயல்தவிர்க்க முடியாது, ஆதரவுக் குழுவாலும் முடியாது.",
     "deleteConsequenceSubscription": "செயலில் உள்ள சந்தா ரத்து செய்யப்படும்.",
     "deleteConsequenceNoRecovery": "உங்கள் கணக்கை மீட்டெடுக்க முடியாது — ஆதரவுக் குழுவாலும் முடியாது.",
+    "deletePendingRecordingsWarning": "{count, plural, =1{You have 1 recording still processing. Deleting now loses it.} other{You have {count} recordings still processing. Deleting now loses them.}}",
+    "deleteGracePeriodNotice": "{days, plural, =1{Your data is kept for 1 day. Sign in again to restore it.} other{Your data is kept for {days} days. Sign in again to restore it.}}",
     "deleteTypeToConfirm": "உறுதிப்படுத்த DELETE என தட்டச்சு செய்யவும்",
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "கணக்கை நிரந்தரமாக நீக்கு",
@@ -11890,5 +11899,7 @@
     "onTheWayDetailsForSupport": "ஆதரவுக்கான விவரங்கள்",
     "homeNoiseFoldHidden": "{count, plural, =1{1 குறுகிய பதிவு மறைக்கப்பட்டது} other{{count} குறுகிய பதிவுகள் மறைக்கப்பட்டன}}",
     "homeNoiseFoldShow": "காட்டவும்",
-    "homeNoiseFoldHide": "{count, plural, =1{1 குறுகிய பதிவை மறைக்கவும்} other{{count} குறுகிய பதிவுகளை மறைக்கவும்}}"
+    "homeNoiseFoldHide": "{count, plural, =1{1 குறுகிய பதிவை மறைக்கவும்} other{{count} குறுகிய பதிவுகளை மறைக்கவும்}}",
+    "deleteLocalRecordingsWarning": "{count, plural, =1{You have 1 recording not yet uploaded. Deleting now loses it.} other{You have {count} recordings not yet uploaded. Deleting now loses them.}}",
+    "deleteConfirmGraceSubtitle": "Review what happens to your data before you leave."
 }

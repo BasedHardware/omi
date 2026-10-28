@@ -2803,6 +2803,13 @@
     "deleteReasonFoundAlternative": "Använder något annat",
     "deleteReasonTakingBreak": "Tar bara en paus",
     "deleteReasonOther": "Annat",
+    "deletePauseInsteadTitle": "Pause Omi Instead?",
+    "deletePauseInsteadSubtitle": "Stop recording and keep everything. Come back anytime.",
+    "deletePauseRecordingLine": "Recording stops. Nothing new is captured while you are away.",
+    "deletePauseKeepLine": "Your memories, conversations and apps are kept exactly as they are.",
+    "deletePauseReturnLine": "Sign in anytime to pick up where you left off.",
+    "pauseOmiButton": "Pause Omi",
+    "continueDeletingButton": "Continue Deleting",
     "deleteFlowFeedbackTitle": "Berätta mer",
     "deleteFlowFeedbackSubtitle": "Vad hade fått Omi att fungera för dig?",
     "deleteFlowFeedbackHint": "Valfritt — dina tankar hjälper oss att bygga en bättre produkt.",
@@ -2810,6 +2817,8 @@
     "deleteFlowConfirmSubtitle": "Det går inte att ångra, inte ens via supporten.",
     "deleteConsequenceSubscription": "Eventuell aktiv prenumeration avslutas.",
     "deleteConsequenceNoRecovery": "Ditt konto kan inte återställas — inte ens av supporten.",
+    "deletePendingRecordingsWarning": "{count, plural, =1{You have 1 recording still processing. Deleting now loses it.} other{You have {count} recordings still processing. Deleting now loses them.}}",
+    "deleteGracePeriodNotice": "{days, plural, =1{Your data is kept for 1 day. Sign in again to restore it.} other{Your data is kept for {days} days. Sign in again to restore it.}}",
     "deleteTypeToConfirm": "Skriv DELETE för att bekräfta",
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Radera kontot permanent",
@@ -4464,5 +4473,7 @@
     "onTheWayDetailsForSupport": "Detaljer för support",
     "homeNoiseFoldHidden": "{count, plural, =1{1 kort klipp dolt} other{{count} korta klipp dolda}}",
     "homeNoiseFoldShow": "Visa",
-    "homeNoiseFoldHide": "{count, plural, =1{Dölj 1 kort klipp} other{Dölj {count} korta klipp}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Dölj 1 kort klipp} other{Dölj {count} korta klipp}}",
+    "deleteLocalRecordingsWarning": "{count, plural, =1{You have 1 recording not yet uploaded. Deleting now loses it.} other{You have {count} recordings not yet uploaded. Deleting now loses them.}}",
+    "deleteConfirmGraceSubtitle": "Review what happens to your data before you leave."
 }

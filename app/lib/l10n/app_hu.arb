@@ -2899,6 +2899,13 @@
     "deleteReasonFoundAlternative": "Mást használok",
     "deleteReasonTakingBreak": "Csak szünetet tartok",
     "deleteReasonOther": "Egyéb",
+    "deletePauseInsteadTitle": "Pause Omi Instead?",
+    "deletePauseInsteadSubtitle": "Stop recording and keep everything. Come back anytime.",
+    "deletePauseRecordingLine": "Recording stops. Nothing new is captured while you are away.",
+    "deletePauseKeepLine": "Your memories, conversations and apps are kept exactly as they are.",
+    "deletePauseReturnLine": "Sign in anytime to pick up where you left off.",
+    "pauseOmiButton": "Pause Omi",
+    "continueDeletingButton": "Continue Deleting",
     "deleteFlowFeedbackTitle": "Mesélj többet",
     "deleteFlowFeedbackSubtitle": "Mi tette volna használhatóvá az Omit számodra?",
     "deleteFlowFeedbackHint": "Nem kötelező — a gondolataid segítenek nekünk jobb terméket építeni.",
@@ -2906,6 +2913,8 @@
     "deleteFlowConfirmSubtitle": "Ez nem vonható vissza, még az ügyfélszolgálat által sem.",
     "deleteConsequenceSubscription": "Minden aktív előfizetés megszűnik.",
     "deleteConsequenceNoRecovery": "A fiókod nem állítható vissza — még az ügyfélszolgálat által sem.",
+    "deletePendingRecordingsWarning": "{count, plural, =1{You have 1 recording still processing. Deleting now loses it.} other{You have {count} recordings still processing. Deleting now loses them.}}",
+    "deleteGracePeriodNotice": "{days, plural, =1{Your data is kept for 1 day. Sign in again to restore it.} other{Your data is kept for {days} days. Sign in again to restore it.}}",
     "deleteTypeToConfirm": "Írd be a DELETE szót a megerősítéshez",
     "deleteConfirmationWord": "DELETE",
     "deleteAccountPermanently": "Fiók végleges törlése",
@@ -4560,5 +4569,7 @@
     "onTheWayDetailsForSupport": "Részletek az ügyfélszolgálatnak",
     "homeNoiseFoldHidden": "{count, plural, =1{1 rövid felvétel elrejtve} other{{count} rövid felvétel elrejtve}}",
     "homeNoiseFoldShow": "Megjelenítés",
-    "homeNoiseFoldHide": "{count, plural, =1{1 rövid felvétel elrejtése} other{{count} rövid felvétel elrejtése}}"
+    "homeNoiseFoldHide": "{count, plural, =1{1 rövid felvétel elrejtése} other{{count} rövid felvétel elrejtése}}",
+    "deleteLocalRecordingsWarning": "{count, plural, =1{You have 1 recording not yet uploaded. Deleting now loses it.} other{You have {count} recordings not yet uploaded. Deleting now loses them.}}",
+    "deleteConfirmGraceSubtitle": "Review what happens to your data before you leave."
 }
