@@ -1505,7 +1505,7 @@ async def check_setup(uid: str = Query(..., description="User ID from OMI")):
     }
 
 
-@app.post("/update-repo")
+@app.post("/update-repo", dependencies=[Depends(require_github_tools_auth)])
 async def update_repo(
     uid: str = Query(...),
     repo: str = Query(...)
@@ -1531,7 +1531,7 @@ async def update_repo(
         return {"success": False, "error": "Failed to update repository"}
 
 
-@app.post("/refresh-repos")
+@app.post("/refresh-repos", dependencies=[Depends(require_github_tools_auth)])
 async def refresh_repos(uid: str = Query(...)):
     """Refresh user's repository list from GitHub."""
     try:
@@ -1557,7 +1557,7 @@ async def refresh_repos(uid: str = Query(...)):
         return {"success": False, "error": "Failed to refresh repositories"}
 
 
-@app.post("/check-repo-access")
+@app.post("/check-repo-access", dependencies=[Depends(require_github_tools_auth)])
 async def check_repo_access(
     uid: str = Query(...),
     repo: str = Query(None)
@@ -1601,7 +1601,7 @@ async def check_repo_access(
         return {"success": False, "error": "Failed to check repository access"}
 
 
-@app.post("/save-agent-provider")
+@app.post("/save-agent-provider", dependencies=[Depends(require_github_tools_auth)])
 async def save_agent_provider(
     uid: str = Query(...),
     provider: str = Query(...)
@@ -1625,7 +1625,7 @@ async def save_agent_provider(
         return {"success": False, "error": "Failed to save agent provider"}
 
 
-@app.post("/save-agent-key")
+@app.post("/save-agent-key", dependencies=[Depends(require_github_tools_auth)])
 async def save_agent_key(
     uid: str = Query(...),
     provider: str = Query(...),
@@ -1650,7 +1650,7 @@ async def save_agent_key(
         return {"success": False, "error": "Failed to save agent key"}
 
 
-@app.post("/delete-agent-key")
+@app.post("/delete-agent-key", dependencies=[Depends(require_github_tools_auth)])
 async def delete_agent_key(
     uid: str = Query(...),
     provider: str = Query(...)
@@ -1670,7 +1670,7 @@ async def delete_agent_key(
         return {"success": False, "error": "Failed to delete agent key"}
 
 
-@app.post("/test-agent")
+@app.post("/test-agent", dependencies=[Depends(require_github_tools_auth)])
 async def test_agent(request: Request):
     """Send a direct test command to the selected agent provider."""
     try:

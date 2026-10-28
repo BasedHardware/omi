@@ -343,14 +343,9 @@ github/
 | `/health` | GET | Health check |
 | `/tools/*` | POST | Server-to-server chat tools (issue/repo management) |
 
-## Chat Tool Authentication
+## Chat Tool and Settings Authentication
 
-All chat-tool endpoints (`/tools/*`) require a shared secret so only the trusted
-OMI backend can invoke them. The caller presents `GITHUB_TOOLS_SECRET` either as an
-`Authorization: Bearer <secret>` header or a `github_tools_token` query parameter.
-Requests without a valid secret are rejected with `401` (or `503` when the secret is
-not configured). Browser setup and settings endpoints (`/`, `/auth`, `/auth/callback`,
-`/setup-completed`, `/update-repo`, `/refresh-repos`) remain open without this guard.
+All chat-tool endpoints (`/tools/*`) and user configuration settings endpoints (`/update-repo`, `/refresh-repos`, `/check-repo-access`, `/save-agent-provider`, `/save-agent-key`, `/delete-agent-key`, `/test-agent`) require a shared secret so only the trusted OMI backend or authenticated caller can invoke them. The caller presents `GITHUB_TOOLS_SECRET` or `GITHUB_SETTINGS_SECRET` either as an `Authorization: Bearer <secret>` header or a `github_tools_token` / `github_settings_token` query parameter. Requests without a valid secret are rejected with `401` (or `503` when the secret is not configured). Public browser setup endpoints (`/`, `/auth`, `/auth/callback`, `/setup-completed`) remain open.
 
 ## 🤝 Contributing
 
