@@ -2213,6 +2213,29 @@ unavailable data plane still costs at most four renewal attempts per
 audio-activity minute, never an unbounded loop, and an idle session still
 arms nothing at all — audio activity remains the only trigger.
 
+Since 2026-10-28 the conversation-row write behind the live persist loop
+(`update_conversation_segments`, `conversation_segments_write`) joined the
+same shared bounded budget. This is the hottest write on the listen path —
+one transaction per ~0.6s drain per live socket, replanning the merge
+against the row's current receipt every attempt — and it was the last
+conversation-surface writer still running a bare transactional call: an
+abort raised by the body's read (never retried by the SDK) or an expired-id
+commit surfaced immediately as `Live transcript persist failed; retained N
+segment(s) for retry` with the whole batch parked on the backoff ladder
+(prod backend-listen 2026-10-28: `InvalidArgument` ×199/3h through this
+boundary plus its read-time `Aborted 409` sibling ×77/20m, across every
+listen pod). The budget replays only contention shapes on a fresh
+transaction per attempt; every replay re-reads the row and replans, so a
+concurrent writer's committed decision still wins exactly as before and no
+attempt writes with stale evidence. An exhausted budget raises
+`FirestoreContentionExhausted` — classified as `contention`, never a
+permanent rejection or a deterministic defect — so the persist loop's
+transient arm keeps the same retained-batch retry as before, just after a
+real bounded replay instead of a single attempt. The deterministic arms
+(row missing, deleted, stale smart-merge lease, stale sync revision) still
+refuse on the first attempt without any replay, because their answers
+cannot change between transactions.
+
 Eligible meeting receipts also carry the stable Chat intent ID and, after the
 desktop kernel acknowledges its journal write, the materialization time. The
 durable receipt projection remains on the finalization write path. The disabled

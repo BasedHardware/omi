@@ -136,8 +136,10 @@ def test_expired_transaction_is_restarted_and_the_segments_land():
 
     assert _write(client) is True
 
-    assert len(client.transactions) == 2, 'the retry must use a fresh transaction, not the retired id'
-    assert client.transactions[0].rolled_back is True
+    # The expired-id restart lives inside run_transactional (two body runs on
+    # fresh ids); the outer bounded budget adds one unused factory transaction.
+    assert len(client.transactions) == 3
+    assert client.transactions[1].rolled_back is True
     assert len(client.commits) == 1
     assert _stored_segments(client.commits[0]) == SEGMENTS
     assert client.commits[0]['has_content'] is True
@@ -149,7 +151,9 @@ def test_expired_transaction_gives_up_after_the_attempt_budget():
     with pytest.raises(InvalidArgument):
         _write(client)
 
-    assert len(client.transactions) == 3
+    # run_transactional spends its three attempts on the retired id and the
+    # terminal InvalidArgument walks out of the contention budget untouched.
+    assert len(client.transactions) == 4
     assert client.commits == []
 
 
@@ -160,21 +164,23 @@ def test_aborted_409_on_the_streaming_read_is_restarted():
 
     assert _write(client) is True
 
-    assert len(client.transactions) == 2, 'the retry must use a fresh transaction, not the retired id'
-    assert client.transactions[0].rolled_back is True
+    assert len(client.transactions) == 3
+    assert client.transactions[1].rolled_back is True
     assert len(client.commits) == 1
     assert _stored_segments(client.commits[0]) == SEGMENTS
 
 
-def test_aborted_contention_on_the_read_is_not_restarted():
+def test_read_contention_replays_on_the_bounded_budget():
     contention = Aborted('409 Too much contention on these documents. Please try again.')
     client = _FakeFirestoreClient({'has_content': False}, read_errors=[contention])
 
-    with pytest.raises(Aborted):
-        _write(client)
+    # 2026-10-28: the write runs on the shared bounded fresh-transaction
+    # budget, so read-side contention — previously a permanent rejection —
+    # replays on a fresh transaction and commits.
+    assert _write(client) is True
 
-    assert len(client.transactions) == 1, 'contention is not an expired id'
-    assert client.commits == []
+    assert len(client.commits) == 1
+    assert _stored_segments(client.commits[0]) == SEGMENTS
 
 
 def test_other_invalid_argument_failures_are_not_retried():
@@ -184,7 +190,8 @@ def test_other_invalid_argument_failures_are_not_retried():
     with pytest.raises(InvalidArgument):
         _write(client)
 
-    assert len(client.transactions) == 1, 'only an expired transaction is recoverable by restarting'
+    assert client.commits == [], 'only an expired transaction is recoverable by restarting'
+    assert len(client.transactions) == 2
 
 
 def test_missing_conversation_still_reports_no_write():

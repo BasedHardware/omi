@@ -3284,7 +3284,28 @@ def update_conversation_segments(
             return planned.with_segments(accepted)
         return accepted if return_segments else True
 
-    result = run_transactional(client, _write_segments)
+    # The live persist loop replans against the row every ~0.6s, and the
+    # conversation's other atomic writers (session open/renewal/event,
+    # continuation adoption, sync assignment) already replay their contention
+    # on the shared bounded budget. Firestore retries a commit abort by
+    # replaying the SAME — often already retired — transaction id, and never
+    # retries an abort raised by the body's read, so a bare
+    # ``run_transactional`` call surfaces a mid-write contention burst as
+    # ``Live transcript persist failed`` ERRORs with the whole batch retained
+    # (prod backend-listen 2026-10-28: read-time ``Aborted 409`` plus
+    # expired-id ``InvalidArgument`` ×199/3h through this boundary). The
+    # replay stays atomic: every fresh attempt re-reads the row, replans the
+    # merge from its current receipt, and either commits or refuses. An
+    # exhausted budget surfaces as ``FirestoreContentionExhausted`` —
+    # classified as contention (never a permanent rejection or a
+    # deterministic defect), so the persist loop's transient arm keeps owning
+    # it with the same retained-batch retry as before, just after a real
+    # bounded replay instead of a single attempt.
+    result = run_with_transaction_contention_retry(
+        client.transaction,
+        lambda _transaction: run_transactional(client, _write_segments),
+        operation_name='conversation_segments_write',
+    )
     if result is not False:
         invalidate_people_stats_cache(uid)
     return result
