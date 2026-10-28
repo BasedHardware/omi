@@ -112,10 +112,16 @@ def test_validated_byok_keys_guards_none_and_timestamps():
         },
     }
 
-    with patch('utils.byok.get_cached_byok_state', return_value=state_payload):
+    with patch('utils.byok.get_cached_byok_state', return_value=state_payload), patch.object(byok_util.logger, 'warning') as mock_warn:
         validated, err = byok_util._validated_byok_keys('u1', {'anthropic': key_val})
         assert err is None
         assert validated == {'anthropic': key_val}
+        skipped_warnings = [
+            call[0][0]
+            for call in mock_warn.call_args_list
+            if "Skipping corrupt non-string BYOK fingerprint" in str(call[0][0])
+        ]
+        assert len(skipped_warnings) == 2
 
     # 2. State with None fingerprints map
     state_none_fps = {

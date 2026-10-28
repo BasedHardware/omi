@@ -237,22 +237,10 @@ class BYOKMiddleware(BaseHTTPMiddleware):
 
 
 def _coerce_utc_datetime(value: Any) -> datetime | None:
-    """Coerce a datetime or ISO timestamp string to a timezone-aware UTC datetime."""
-    if value is None:
-        return None
-    if isinstance(value, datetime):
-        parsed = value
-    elif isinstance(value, str):
-        try:
-            parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
-        except ValueError:
-            return None
-    else:
-        return None
+    """Coerce a datetime or ISO timestamp string to UTC using database.users helper."""
+    import database.users as users_db
 
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+    return users_db._coerce_utc_datetime(value)
 
 
 def _validated_byok_keys(uid: str, request_keys: Dict[str, str]) -> tuple[Dict[str, str], Optional[str]]:
@@ -301,6 +289,9 @@ def _validated_byok_keys(uid: str, request_keys: Dict[str, str]) -> tuple[Dict[s
     validated: Dict[str, str] = {}
     for provider, stored_fp in stored_fingerprints.items():
         if not isinstance(stored_fp, str):
+            logger.warning(
+                f"Skipping corrupt non-string BYOK fingerprint for user {uid}, provider {provider}: {type(stored_fp)}"
+            )
             continue
         raw_key = request_keys.get(provider)
         if not raw_key:
