@@ -1,0 +1,73 @@
+---
+title: "What is Omi"
+icon: "circle-dot"
+description: "Omi is an open-source AI wearable platform: a necklace that captures conversations, transcribes them, and turns them into memory you can query."
+---
+
+Omi is an open-source AI wearable. A small necklace device captures your conversations, the Omi app transcribes them in real time, and Omi extracts memories, action items, and summaries you can search and chat with afterwards.
+
+Everything that makes it work — mobile apps, backend, firmware, and hardware designs — is open source in this repository.
+
+<CardGroup cols={2}>
+  <Card title="Open Source" icon="code-branch" href="/doc/get_started/open-source-and-omi-cloud">
+    Apps, backend, firmware, and hardware files — all in the repo
+  </Card>
+  <Card title="Live Transcription" icon="microphone" href="/doc/developer/backend/transcription">
+    Speech-to-text as you speak, with speaker identification
+  </Card>
+  <Card title="Conversation Memory" icon="brain" href="/doc/developer/backend/StoringConversations">
+    Facts and action items extracted from what you say
+  </Card>
+  <Card title="A Platform" icon="puzzle-piece" href="/doc/developer/apps/Introduction">
+    Apps, webhooks, chat tools, and an app store for what others build
+  </Card>
+</CardGroup>
+
+## The devices
+
+<CardGroup cols={3}>
+  <Card title="Omi" icon="circle-dot" href="/doc/hardware/OmiConsumer">
+    <Frame>
+      <img src="/omi-without-rope.png" alt="Omi consumer wearable" />
+    </Frame>
+
+    The consumer wearable (CV1), built for everyday use
+  </Card>
+  <Card title="DevKit 2" icon="microchip" href="/doc/hardware/DevKit2">
+    <Frame>
+      <img src="/omi-devkit-without-rope.png" alt="Omi DevKit 2" />
+    </Frame>
+
+    Developer kit with a removable microSD card and speaker
+  </Card>
+  <Card title="omiGlass" icon="glasses" href="/doc/hardware/omiGlass">
+    <Frame>
+      <img src="/omi-glass.png" alt="omiGlass" />
+    </Frame>
+
+    Open smart-glasses build based on the XIAO ESP32 S3 Sense
+  </Card>
+</CardGroup>
+
+The Omi app also works without a wearable: record from your phone, and on Mac capture meetings and screen history with the [desktop app](/onboarding/omi-macos).
+
+## Using Omi day to day
+
+These docs are for builders. For end-user guides — device setup, charging, pairing, subscriptions — see the [help center](https://help.omi.me).
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="Choose Your Path" icon="signs-post" href="/doc/get_started/choose-your-path">
+    Pick the entry point that matches what you want to build
+  </Card>
+  <Card title="How Omi Works" icon="sitemap" href="/doc/how-omi-works/architecture">
+    Architecture, capture, the data model, and chat
+  </Card>
+  <Card title="Developer API" icon="square-terminal" href="/doc/developer/api/overview">
+    REST API for memories, conversations, and action items
+  </Card>
+  <Card title="Contribute" icon="code-pull-request" href="/doc/developer/Contribution">
+    Dev setup, PR quality bar, and community
+  </Card>
+</CardGroup>

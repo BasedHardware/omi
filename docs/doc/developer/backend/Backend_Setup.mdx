@@ -6,7 +6,9 @@ description: "Set up the Omi backend infrastructure for local development. This 
 
 ## Overview
 
-The Omi backend powers all AI capabilities including transcription, conversation processing, chat, and integrations. This guide will help you set up a local development environment.
+The Omi backend powers all AI capabilities including transcription, conversation processing, chat, and integrations. This page is **contributor setup** — running the backend to develop and test the platform. It is not a self-hosting guide (see [Open Source & Omi Cloud](/doc/get_started/open-source-and-omi-cloud) for that distinction).
+
+The fastest local path is the repository dev harness: `make dev-init` once, then `make dev-up`, which starts the Firestore and Auth emulators, Redis, and Typesense, and runs the API — no external cloud accounts needed. The manual steps below are for working against your own cloud services instead.
 
 For chat retrieval development, topic search uses the configured search providers.
 Explicit transcript recall can also read saved text directly through the existing
@@ -41,7 +43,7 @@ flowchart LR
 
     Flutter <-->|Ngrok| API
     API --> OAI
-    API --> DG
+    API --> STT
     API --> Pine
     API --> Redis
     API --> FB
@@ -71,17 +73,15 @@ If you just want to build apps or test features, you can use Omi's development b
 
 ## Prerequisites
 
-Before starting, gather these API keys and credentials:
+With the dev harness (`make dev-up`), Firestore, Auth, Redis, and Typesense run locally and need no keys. If you are wiring up the manual stack below, gather what your work touches — check `backend/.env.template` for the current authoritative list of variables:
 
-<Card title="Required Services" icon="key">
+<Card title="Services you may need (manual setup)" icon="key">
   | Service | Purpose | Get Key |
   |---------|---------|---------|
   | OpenAI | AI language models | [Get Key](https://platform.openai.com/settings/organization/api-keys) |
-  | Modulate | Speech-to-text fallback | Provision `MODULATE_API_KEY` |
-  | Parakeet | Self-hosted speech-to-text | Configure `HOSTED_PARAKEET_API_URL` |
+  | Speech-to-text providers | Transcription | `MODULATE_API_KEY`, `HOSTED_PARAKEET_API_URL` (see `.env.template`) |
   | Redis (Upstash) | Caching & sessions | [Get Key](https://console.upstash.com/) |
   | Pinecone | Vector database | [Get Key](https://app.pinecone.io/organizations/-/projects/-/api-keys) |
-  | Hugging Face | Voice detection | [Get Key](https://huggingface.co/settings/tokens) |
 </Card>
 
 <Card title="Optional Services" icon="puzzle-piece">
@@ -200,7 +200,7 @@ OAuth is required for user authentication. You need to configure both Google and
   </Tab>
   <Tab title="Apple OAuth" icon="apple">
     <Warning>
-    Apple OAuth requires a paid Apple Developer account ($99/year).
+    Apple OAuth requires a paid Apple Developer account.
     </Warning>
 
     <Steps>
@@ -570,7 +570,7 @@ ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
   <Card title="App Setup" icon="mobile" href="/doc/developer/AppSetup">
     Set up the Flutter app for development
   </Card>
-  <Card title="Backend Deep Dive" icon="magnifying-glass" href="/doc/developer/backend/backend_deepdive">
+  <Card title="Backend Deep Dive" icon="magnifying-glass" href="/doc/how-omi-works/architecture">
     Understand the backend architecture
   </Card>
   <Card title="Chat System" icon="comments" href="/doc/developer/backend/chat_system">
@@ -593,18 +593,3 @@ ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
     Get help from the community
   </Card>
 </CardGroup>
-
-
-### Testing subscription currency changes
-
-The first-party `GET /v1/payments/available-plans` response includes an optional
-formatted `billing_total` and a `currency` for each offer. Amounts remain in
-Stripe minor units; JPY uses whole yen. Currency-aware clients send
-`X-Omi-Billing-Currency: 1` and display the returned total before submitting the
-exact selected price to `POST /v1/payments/upgrade-subscription`. Refresh plans
-if a stale target returns HTTP 409. A payment decline returns HTTP 402.
-
-For provider integration testing, use a separate Stripe sandbox with synthetic
-customers and a test-mode key. The opt-in billing integration test documents its
-command and cleans up its disposable subscriptions and customers. Never run a
-plan-change test against a customer account or a live-mode key.

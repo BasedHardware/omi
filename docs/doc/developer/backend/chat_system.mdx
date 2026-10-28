@@ -48,7 +48,7 @@ flowchart TD
     Router -->|Persona App| P[Persona Path]
 
     NC --> LLM1[Direct LLM<br/>Response]
-    A --> Tools[Tool Calls<br/>22+ tools]
+    A --> Tools[Tool Calls<br/>registered tools]
     Tools --> LLM2[LLM with<br/>Context]
     P --> LLM3[Persona LLM<br/>Response]
 
@@ -110,7 +110,7 @@ Clients should keep the same `client_message_id` when retrying. A matching repla
     ```
 
     <Info>
-    This is the most powerful path - the LLM can call 22+ tools to gather comprehensive context before answering.
+    This is the most powerful path - the LLM can call the registered platform tools to gather comprehensive context before answering.
     </Info>
   </Tab>
   <Tab title="Persona" icon="mask">
@@ -438,19 +438,12 @@ The system prompt guides the LLM through a 5-step strategy:
 4. **Request transcripts** - Only when detailed content is needed
 5. **Cite sources** - Always cite conversations used in the answer
 
-## LLM Models Used
+## LLM models used
 
-| Model | Use Case | Location |
-|-------|----------|----------|
-| `gpt-5.4-mini` / `gpt-5.4` | Core chat, conversation processing | Premium / Max QoS profiles |
-| `gpt-4.1-mini` | Fast classification, date extraction | `requires_context()`, filters |
-| `claude-sonnet-4-6` | Chat agent (all QoS tiers) | `chat_agent` profile |
-| `gemini-2.5-flash-lite` | Session titles, followups | Light tasks (premium) |
-| `text-embedding-3-large` | Vector embeddings (3,072 dims) | Pinecone queries |
-
-<Note>
-Models are selected via QoS profiles (`premium`, `max`, `fair_use`, `byok`) in `backend/utils/llm/model_config.py`. The `fair_use` profile uses `gpt-5.1` as a fallback. See the config file for the current authoritative set.
-</Note>
+Model names and their per-task assignments churn too fast for these docs. They
+are selected via QoS profiles (`premium`, `max`, `fair_use`, `byok`) in
+[`backend/utils/llm/model_config.py`](https://github.com/BasedHardware/omi/blob/main/backend/utils/llm/model_config.py)
+— that file is the current authoritative set, including embeddings.
 
 ## Streaming Response Format
 
@@ -530,7 +523,7 @@ The Flutter app parses these to show:
   <Card title="Storing Conversations" icon="database" href="/doc/developer/backend/StoringConversations">
     How conversations and memories are stored
   </Card>
-  <Card title="Backend Deep Dive" icon="server" href="/doc/developer/backend/backend_deepdive">
+  <Card title="Backend Deep Dive" icon="server" href="/doc/how-omi-works/architecture">
     General backend architecture overview
   </Card>
   <Card title="Real-time Transcription" icon="microphone" href="/doc/developer/backend/transcription">

@@ -1,0 +1,32 @@
+---
+title: "Developer Changelog"
+icon: "clock-rotate-left"
+description: "Changes to the Omi developer platform: API, MCP, SDKs, CLI, and firmware/BLE protocol."
+---
+
+Newest first. This changelog covers **developer-platform changes only** — the Developer API, MCP server, SDKs, CLI, and firmware/BLE protocol. App release notes live in the app stores and the help center, not here.
+
+## October 2026
+
+- **API** — Sync ingest now returns a typed `invalid_capture_time` 400 for skewed capture times instead of rejecting real audio ([#23746](https://github.com/BasedHardware/omi/pull/23746)).
+- **MCP** — Clamped pre-origin transcript read offsets so MCP reads cannot start before a conversation begins ([#23691](https://github.com/BasedHardware/omi/pull/23691)).
+- **SDK** — The Go device SDK now refuses Whisper audio appended after `Stop` ([#22771](https://github.com/BasedHardware/omi/pull/22771)); the Rust SDK treats an uptime-flagged ring timestamp as no usable time ([#22481](https://github.com/BasedHardware/omi/pull/22481)); the Python SDK drains buffered Whisper audio when transcription is cancelled ([#22266](https://github.com/BasedHardware/omi/pull/22266)).
+- **CLI** — Added per-operation Developer API timeout, applied to local Desktop API calls too ([#19525](https://github.com/BasedHardware/omi/pull/19525)); added goals → Markdown checklist export ([#20439](https://github.com/BasedHardware/omi/pull/20439)) and action items to the CSV/TSV export recipe ([#19357](https://github.com/BasedHardware/omi/pull/19357)).
+- **API** — Conversation delete now purges photos, screen frames, and vectors ([#22997](https://github.com/BasedHardware/omi/pull/22997)); `from-segments` ingestion accepts `folder_id` and calendar meeting context ([#21265](https://github.com/BasedHardware/omi/pull/21265)); enforced access validation in Developer API conversation endpoints ([#19796](https://github.com/BasedHardware/omi/pull/19796)); added list metadata projections and conditional version checks to action-item, conversation, and developer list endpoints ([#23394](https://github.com/BasedHardware/omi/pull/23394)).
+- **MCP** — Preserved narrowed MCP API key scopes and added read-only agent key minting ([#22114](https://github.com/BasedHardware/omi/pull/22114)); widened first-party ChatGPT grants to the read scope floor ([#22032](https://github.com/BasedHardware/omi/pull/22032)).
+- **Firmware** — Removed the deprecated `check_button_level_2` ([#22739](https://github.com/BasedHardware/omi/pull/22739)); detected core type on transport error ([#18652](https://github.com/BasedHardware/omi/pull/18652)).
+
+## September 2026
+
+- **MCP** — Added scoped People rename and cleanup tools ([#15669](https://github.com/BasedHardware/omi/pull/15669)); hardened OAuth refresh rotation with bounded retries and a replay grace window ([#20885](https://github.com/BasedHardware/omi/pull/20885)); rejected unknown category filters instead of silently returning unfiltered results ([#17305](https://github.com/BasedHardware/omi/pull/17305)); rejected unparseable conversation date filters instead of returning wrong data ([#14105](https://github.com/BasedHardware/omi/pull/14105)); HTTP failures now propagate as tool errors instead of error bodies as successful results ([#13381](https://github.com/BasedHardware/omi/pull/13381)); the server speaks MCP 2.0 with backwards compatibility ([#13422](https://github.com/BasedHardware/omi/pull/13422)).
+- **SDK** — `omi-plugin-sdk` added Geolocation bounds and a model test suite ([#14286](https://github.com/BasedHardware/omi/pull/14286)).
+- **CLI** — Caught `OverflowError` on oversized token expiry in the config loader ([#15974](https://github.com/BasedHardware/omi/pull/15974)); added a memories batch pipeline for JSONL and CSV ([#19349](https://github.com/BasedHardware/omi/pull/19349)) and a conversations → TSV export recipe ([#19339](https://github.com/BasedHardware/omi/pull/19339)).
+- **Firmware** — Blocked the DevKit pusher while idle ([#15226](https://github.com/BasedHardware/omi/pull/15226)); removed the dead software-VAD Kconfig and scoped silence tuning under the T5838 AAD ([#12101](https://github.com/BasedHardware/omi/pull/12101)).
+
+## August 2026
+
+- **MCP** — Updated MCP setup docs for OAuth and manual clients ([#11298](https://github.com/BasedHardware/omi/pull/11298)).
+
+## Adding an entry
+
+When your merged PR changes a developer-platform surface (API, MCP, SDK, CLI, firmware/BLE protocol), add a one-line entry at the top of the matching month in [`docs/doc/reference/changelog.mdx`](https://github.com/BasedHardware/omi/blob/main/docs/doc/reference/changelog.mdx) — past tense, user-facing wording, PR link. Product/app changes do not get an entry. See [`docs/AGENTS.md`](https://github.com/BasedHardware/omi/blob/main/docs/AGENTS.md) for the full rule.

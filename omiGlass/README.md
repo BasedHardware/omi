@@ -5,24 +5,39 @@
 
 ## Overview
 
-omiGlass is an open-source smart glasses project that gives you AI capabilities with exceptional battery life.
+omiGlass is an open-source smart glasses project: a XIAO ESP32 S3 Sense with a camera, 3D-printed frame, and battery pack, paired with an open app and firmware.
 
-<CardGroup cols={3}>
-  <Card title="6x Battery Life" icon="battery-full">
-    Longer lasting than Meta Ray-Bans
-  </Card>
+<CardGroup cols={2}>
   <Card title="ESP32 S3 Sense" icon="microchip">
-    Powerful XIAO microcontroller with camera
+    XIAO microcontroller with camera
   </Card>
   <Card title="Fully Open Source" icon="code-branch">
-    Hardware, firmware, and software
+    Hardware, firmware, and software in this repo
   </Card>
 </CardGroup>
 
-<Info>
-Watch the [announcement video](https://x.com/kodjima33/status/1911852469329727811) to see omiGlass in action.
-</Info>
+<Note>
+omiGlass is a developer kit. Features are experimental; treat battery life and stability as unvalidated until you test your own build.
+</Note>
 
+## How to get it
+
+<CardGroup cols={2}>
+  <Card title="Pre-built Kit" icon="box" href="https://omi.me/glass">
+    Order a pre-built kit when available
+  </Card>
+  <Card title="Build Your Own" icon="screwdriver-wrench">
+    Follow the guide below to build from scratch
+  </Card>
+</CardGroup>
+
+## Using it
+
+Pair omiGlass with the Omi app like any other Omi device: power it on, open the app, and follow the pairing flow. The camera captures first-person photos; the microphone captures audio for transcription. End-user setup help lives in the [help center](https://help.omi.me).
+
+<Warning>
+Always get consent when recording others, and be mindful of local recording laws. Respect privacy in public and private spaces.
+</Warning>
 
 ## Prerequisites
 
@@ -38,8 +53,21 @@ Watch the [announcement video](https://x.com/kodjima33/status/191185246932972781
   </Card>
 </CardGroup>
 
+## Hardware components
 
-## Software Setup
+| Component | Description | Link |
+|-----------|-------------|------|
+| XIAO ESP32 S3 Sense | Main microcontroller with camera | [Amazon](https://www.amazon.com/dp/B0C69FFVHH/ref=dp_iou_view_item?ie=UTF8&psc=1) |
+| 6x 150mAh batteries | Main power supply | [Option 1](https://a.co/d/i17DjOr) or [Option 2](https://a.co/d/bbFdkic) |
+| 1x 250mAh battery | Additional power | [Amazon](https://a.co/d/2xheiFC) |
+| Wires | For connections | [Amazon](https://a.co/d/ah98wY0) |
+| Hinges | For frame assembly | Standard glasses hinges |
+
+<Note>
+The current design does not include a switch. See the contribution section for how you can help improve this.
+</Note>
+
+## Software setup
 
 <Steps>
   <Step title="Clone the Repository">
@@ -87,8 +115,25 @@ Watch the [announcement video](https://x.com/kodjima33/status/191185246932972781
   </Step>
 </Steps>
 
+## Hardware assembly
 
-## Firmware Installation
+<Steps>
+  <Step title="3D Print the Case">
+    Print the glasses mount case using the STL files in the `hardware` folder.
+  </Step>
+  <Step title="Assemble Components">
+    Wire the batteries and XIAO board according to the assembly diagram.
+
+    <Frame>
+      <img src="https://github.com/user-attachments/assets/45ef303b-0f92-43eb-bfad-1b20a86e948c" alt="omiGlass Assembly" style={{ maxWidth: '400px', margin: '0 auto' }} />
+    </Frame>
+  </Step>
+  <Step title="Final Assembly">
+    Mount all components into the 3D printed case and attach hinges.
+  </Step>
+</Steps>
+
+## Firmware installation
 
 <Steps>
   <Step title="Open the Firmware">
@@ -126,8 +171,46 @@ Watch the [announcement video](https://x.com/kodjima33/status/191185246932972781
   </Step>
 </Steps>
 
+For flashing and monitoring details, see [Flash Firmware](/doc/hardware/omiglass/flash-firmware) and [Monitoring](/doc/hardware/omiglass/monitoring).
+
+## Contributing
+
+Help improve omiGlass!
+
+### Software
+
+| Task | Status |
+|------|--------|
+| Connect glasses with Omi AI app | ✅ Complete |
+
+### Hardware
+
+| Task | Status |
+|------|--------|
+| Redesign legs/sides for bigger heads | ⬜ Open |
+| Add switch to design | ✅ Complete |
+
+<Card title="Join the Community" icon="discord" href="http://discord.omi.me">
+  Get help with setup, contribute to the project, and connect with other builders
+</Card>
 
 ## License
 
 This project is licensed under the MIT License.
 
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Omi (CV1)" icon="circle-dot" href="/doc/hardware/OmiConsumer">
+    Production Omi wearable
+  </Card>
+  <Card title="DevKit 2" icon="microchip" href="/doc/hardware/DevKit2">
+    Necklace form factor DevKit (legacy)
+  </Card>
+  <Card title="Build Guide" icon="screwdriver-wrench" href="/doc/assembly/Build_the_device">
+    General assembly instructions
+  </Card>
+  <Card title="What is Omi" icon="circle-dot" href="/doc/get_started/what-is-omi">
+    Start here
+  </Card>
+</CardGroup>

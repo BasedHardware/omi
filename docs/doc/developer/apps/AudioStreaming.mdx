@@ -148,7 +148,7 @@ A complete example that saves audio files to Google Cloud Storage.
 
 <Steps>
   <Step title="Create GCS Bucket" icon="bucket">
-    Follow the [Saving Audio Guide](/doc/developer/savingaudio) steps 1-5 to create a bucket with proper permissions.
+    Follow the [Cloud Audio Storage](#cloud-audio-storage) setup below to create a bucket, a service account, and a base64-encoded key.
   </Step>
   <Step title="Fork the Example Repository" icon="code-fork">
     Fork [github.com/mdmohsin7/omi-audio-streaming](https://github.com/mdmohsin7/omi-audio-streaming)
@@ -295,13 +295,82 @@ Audio data is sensitive. Ensure your endpoint is secured with HTTPS and implemen
 
 ---
 
+---
+
+## Cloud Audio Storage
+
+Store audio files from your Omi device in Google Cloud Storage (GCS). You'll need an active [Google Cloud Platform account](https://console.cloud.google.com/).
+
+<Steps>
+  <Step title="Create a Storage Bucket" icon="bucket">
+    1. Go to the [GCS console](https://console.cloud.google.com/storage/browser)
+    2. Click **Create Bucket**
+    3. Configure the bucket:
+
+    | Setting | Recommended Value |
+    |---------|-------------------|
+    | Name | Something unique, e.g. `omi-audio-files` |
+    | Location | Multi-region for reliability, or single region for lower cost |
+    | Storage class | **Standard** (for frequently accessed files) |
+    | Public access | **Off** (keep audio private) |
+    | Access control | **Uniform** |
+
+    4. Click **Create**
+  </Step>
+  <Step title="Create a Service Account" icon="user-gear">
+    1. Go to **IAM & Admin → Service Accounts** in the GCP console
+    2. Click **Create Service Account**
+    3. Set the name (e.g. `omi-audio-uploader`)
+    4. Grant the **Storage Object User** role
+    5. Click **Done**
+  </Step>
+  <Step title="Generate a JSON Key" icon="key">
+    1. Click on the service account you just created
+    2. Go to the **Keys** tab
+    3. Click **Add Key → Create new key → JSON**
+    4. The key file downloads automatically
+
+    <Warning>
+    Keep this key file secure. It grants access to your storage bucket.
+    </Warning>
+  </Step>
+  <Step title="Base64 Encode the Key" icon="lock">
+    Convert the key to Base64 for use as an environment variable:
+
+    <Tabs>
+      <Tab title="macOS / Linux" icon="terminal">
+        ```bash
+        base64 -i your-key-file.json
+        ```
+      </Tab>
+      <Tab title="Windows" icon="windows">
+        ```powershell
+        [Convert]::ToBase64String([IO.File]::ReadAllBytes("your-key-file.json"))
+        ```
+      </Tab>
+    </Tabs>
+
+    Copy the output — this is your `GOOGLE_APPLICATION_CREDENTIALS_JSON` value.
+  </Step>
+  <Step title="Note Your Bucket Name" icon="clipboard">
+    Copy your bucket name from the [GCS console](https://console.cloud.google.com/storage/browser). This is your `GCS_BUCKET_NAME` value.
+  </Step>
+</Steps>
+
+You'll need these two values when deploying the audio streaming service:
+
+| Variable | Description |
+|----------|-------------|
+| `GOOGLE_APPLICATION_CREDENTIALS_JSON` | Base64-encoded service account key |
+| `GCS_BUCKET_NAME` | Your storage bucket name |
+
 ## Related Documentation
 
 <CardGroup cols={2}>
   <Card title="Integration Apps" icon="plug" href="/doc/developer/apps/Integrations">
     Overview of webhook-based integrations
   </Card>
-  <Card title="Saving Audio" icon="floppy-disk" href="/doc/developer/savingaudio">
+  <Card title="Cloud Audio Storage" icon="floppy-disk" href="#cloud-audio-storage">
     Guide to storing audio in cloud storage
   </Card>
   <Card title="Real-time Transcription" icon="closed-captioning" href="/doc/developer/backend/transcription">

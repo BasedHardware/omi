@@ -1,0 +1,30 @@
+---
+title: "Privacy & Data Handling"
+icon: "shield"
+description: "What Omi stores, where it goes, and what you control — a builder's overview of the data model."
+---
+
+Omi records conversations. That is the product, and it makes the data model worth understanding before you build on it. This page is the short, stable version for builders; the formal documents are [Privacy](/doc/info/Privacy) and [Disclaimer](/doc/info/Disclaimer), and end-user controls are documented in the [help center](https://help.omi.me).
+
+## What exists, and who can see it
+
+Every account holds **conversations** (transcripts and, depending on settings, audio), **memories** (extracted facts), **action items**, **goals**, and **people** (recognized speakers). All API surfaces — the app, Developer API, MCP, CLI, and apps you install — are scoped to the signed-in account. There is no cross-account read path.
+
+Apps you install can receive the data you grant them (for example conversation webhooks or chat tools); app authors see only what flows to their endpoints.
+
+## Where it lives
+
+- Conversations, memories, and metadata are stored server-side in the account, encrypted in transit and at rest. The [Privacy policy](/doc/info/Privacy) is the authoritative description.
+- The desktop app additionally keeps a local database on your machine (see [Omi for Mac](/onboarding/omi-macos)).
+- Raw audio retention is a setting: **Store Recordings** controls whether audio is kept at all.
+
+## Your controls
+
+- **Export everything** — the app downloads a full JSON copy of your account.
+- **Delete anything** — individual conversations, or all data, from the app; deletions propagate to downstream stores.
+- **Bring your own keys** — [BYOK and custom transcription](/doc/get_started/byok_and_custom_transcription) let you route transcription and models through providers you choose, including self-hosted ones.
+- **Scoped API keys** — developer keys and MCP grants can be read-only and per-scope, and can be revoked at any time.
+
+## If you build on Omi
+
+Treat webhook payloads and API responses as your users' sensitive data: transport it over TLS, keep it no longer than you need, and say clearly in your app listing what your app receives. The [app review guidelines](/doc/developer/apps/Submitting) enforce the basics.
