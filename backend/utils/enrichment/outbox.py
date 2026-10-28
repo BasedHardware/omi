@@ -550,7 +550,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
     retry_revision = None
     empty_blocked = False
     held_reason: str | None = None
-    process_context = None
+    process_context: Row | None = None
     if row.get('effects_only'):
         from utils.conversations.lazy_enrichment import enrich_settled
 
