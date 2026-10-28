@@ -179,9 +179,9 @@ async def run(
     uid: str, *, continuation: bool = False, max_items: int = PAGE, time_budget: float | None = None
 ) -> bool | None:
     """True permits another round; false/None parks a blocked or inactive owner."""
-    if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
-        return
     if not recovery_cohort_admits(uid) or not funded_processing.enabled(uid):
+        return
+    if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
         return
     max_items = max(1, min(max_items, 100))
     if not continuation and not await run_blocking(db_executor, cap_hold.recovery_cooldown, uid):

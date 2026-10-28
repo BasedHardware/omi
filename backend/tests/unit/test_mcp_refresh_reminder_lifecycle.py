@@ -42,9 +42,11 @@ def world(monkeypatch):
     monkeypatch.delenv('COMMITMENT_FOLLOWUP_TASKS_QUEUE', raising=False)
     with stub_modules(fakes):
         notifications = load_module_fresh('utils.notifications', str(BACKEND / 'utils/notifications.py'))
+        monkeypatch.setattr(notifications, 'account_deletion_blocks_user_work', lambda _uid: False)
         load_module_fresh('utils.mcp_data', str(BACKEND / 'utils/mcp_data.py'))
         actions = load_module_fresh('utils.mcp_action_items', str(BACKEND / 'utils/mcp_action_items.py'))
         dispatcher = load_module_fresh('utils.notification_dispatch', str(BACKEND / 'utils/notification_dispatch.py'))
+        monkeypatch.setattr(dispatcher, 'account_deletion_blocks_user_work', lambda _uid: False)
         refresh = load_module_fresh(
             'utils.conversations.action_item_refresh', str(BACKEND / 'utils/conversations/action_item_refresh.py')
         )

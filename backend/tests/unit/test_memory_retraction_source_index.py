@@ -331,6 +331,7 @@ def test_account_wipe_drops_a_late_index_document(monkeypatch):
     from database import batch_pipeline_purge, user_data_deletion
 
     monkeypatch.setattr(batch_pipeline_purge, 'purge_batch_owner', lambda uid: None)
+    monkeypatch.setattr(user_data_deletion, 'search_apps_db', lambda uid, *, my_apps: [])
     monkeypatch.setattr(user_data_deletion, 'get_data_plane_firestore_client', lambda: MagicMock())
     deleted = []
     user_ref = SimpleNamespace(
@@ -358,6 +359,7 @@ def test_account_wipe_erases_head_recreated_after_state_collection(monkeypatch, 
     from database import batch_pipeline_purge, user_data_deletion
 
     monkeypatch.setattr(batch_pipeline_purge, 'purge_batch_owner', lambda uid: None)
+    monkeypatch.setattr(user_data_deletion, 'search_apps_db', lambda uid, *, my_apps: [])
     monkeypatch.setattr(user_data_deletion, 'get_data_plane_firestore_client', lambda: MagicMock())
     head = user_data_deletion.RELEASED_MEMORY_CHANGE_HEAD
     list_heads = tuple(user_data_deletion.ROW_COLLECTIONS)
