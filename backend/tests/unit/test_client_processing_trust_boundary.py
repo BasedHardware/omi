@@ -504,6 +504,10 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite('utils/memory/developer_memory_list.py', '_validated_memories', 'model_dump'),
         DumpSite('utils/goals_response.py', 'list_developer_goals', 'model_dump'),
         DumpSite('routers/developer.py', '_ingest_conversation_from_segments', 'model_dump'),
+        # Blank-session idempotency hashes only its fixed recording-identity
+        # fields; this request serialization is used to derive the digest and
+        # is not persisted or sent to an intelligence consumer.
+        DumpSite('routers/developer.py', '_derived_client_session_id', 'model_dump'),
         # Request serialization goes only to encrypted staging, never intelligence.
         DumpSite('routers/developer_segments.py', 'stage_chunk', 'model_dump'),
         DumpSite('routers/developer.py', 'update_goal', 'model_dump'),
