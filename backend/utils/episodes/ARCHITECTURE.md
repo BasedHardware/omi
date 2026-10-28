@@ -35,11 +35,16 @@ one capture window's evidence.
    - A moment also ends after `MOMENT_MAX_SECONDS` of steady speech (`interval`).
      A conversation rollover carries the buffered segments into the next moment
      when both conversations belong to the same episode; a pusher session end
-     retains the buffer for reconnect. Finalization and Wrap Up flush it.
+     retains the buffer for one `MOMENT_PAUSE_SECONDS` reconnect window, then
+     flushes the tail if no reconnect arrives. Finalization and Wrap Up flush it
+     sooner when they run.
    - The first episode moment is checked against the episode's original start
      across every member conversation. At `MAX_EPISODE_SECONDS`, the old episode
-     closes and continued speech starts a new one. While an episode is live, the
-     Home row timer uses its `started_at`, including after a hard-cap rotation.
+     closes and continued speech starts a new one at the cap boundary. Provisional
+     items for a continuing member transfer to the successor for finalization
+     reconciliation. While an episode is live, the Home row timer uses its
+     `started_at`; during rotation it holds the prior anchor until the successor
+     row is visible.
 2. When a moment ends, `service.record_moment` runs on `postprocess_executor` as
    a tracked background task:
    - **Boundary** (`policy.boundary`): the hard cap (`MAX_EPISODE_SECONDS`), a gap at
@@ -54,9 +59,11 @@ one capture window's evidence.
      `episode_incremental`, gpt-5-nano): the previous compact state
      (`state.render_state`, at most `MAX_STATE_CHARS`) plus only this moment's
      new text, including any carried segments from the same episode. The earlier
-     transcript is never re-read. Model bullets reject a six-word verbatim run,
-     quotes over five words, and speaker-label prefixes; one bounded repair call
-     is allowed, after which the moment is rejected as `quality_error`. The fixed instruction
+     transcript is never re-read. Model bullets are rejected when at least ten
+     words have 80% ordered overlap with the transcript, or they start with a
+     speaker label; short quotations and concise summaries are allowed. One
+     bounded repair call is allowed, after which the moment is rejected as
+     `quality_error` and the previous “So far” remains visible. The fixed instruction
      prefix comes first and the clock, state and new speech come last.
      One output language is resolved for every moment (`output_language.py`,
      kill switch `EPISODE_OUTPUT_LANGUAGE_PIN`): the user's explicit preference,

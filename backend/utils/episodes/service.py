@@ -51,8 +51,10 @@ from config.episodes import (
     CLOSE_GAP_SECONDS,
     CONTINUE_GAP_SECONDS,
     LAST_CLOSED_CACHE_SECONDS,
+    MAX_EPISODE_SECONDS,
     MOMENT_MIN_INTERVAL_SECONDS,
     MOMENT_MIN_WORDS,
+    episode_hard_cap_across_conversations_enabled,
     episode_output_language_pinned,
     episodes_enabled_for,
 )
@@ -210,14 +212,25 @@ def _episode_language_inputs(
     return conversation_language, preference
 
 
-def _empty_episode(moment: MomentInput, now: datetime) -> dict[str, Any]:
+def _empty_episode(
+    moment: MomentInput,
+    now: datetime,
+    *,
+    started_at: Optional[datetime] = None,
+    previous: Optional[Mapping[str, Any]] = None,
+) -> dict[str, Any]:
+    current_start = started_at or moment.current_started_at or moment.started_at
     return new_episode(
         conversation_id=moment.conversation_id,
-        started_at=moment.started_at,
-        last_activity_at=moment.ended_at,
+        started_at=current_start,
+        last_activity_at=moment.current_ended_at or moment.ended_at,
         calendar_identity=moment.calendar_identity,
         now=now,
-    )
+    ) | {
+        key: list(previous.get(key) or []) if isinstance(previous.get(key), list) else previous.get(key)
+        for key in ('title', 'bullets', 'people', 'open_questions', 'speaker_display_order', 'speaker_keys')
+        if previous is not None and previous.get(key) is not None
+    }
 
 
 def new_episode(
@@ -265,6 +278,17 @@ def _with_conversation(episode: Mapping[str, Any], conversation_id: str, source:
     return {'conversation_ids': ids, 'sources': sources}
 
 
+def _carry_hard_cap_state(
+    successor: dict[str, Any], previous: Mapping[str, Any], carried_items: Sequence[Mapping[str, Any]]
+) -> None:
+    """Keep the running summary and unresolved tasks when a long occasion rotates at its cap."""
+    for key in ('title', 'bullets', 'people', 'open_questions', 'speaker_display_order', 'speaker_keys'):
+        value = previous.get(key)
+        if value is not None:
+            successor[key] = list(value) if isinstance(value, list) else value
+    successor['provisional_items'] = [dict(item) for item in carried_items]
+
+
 def _retain_activity(
     uid: str, episode: Optional[dict[str, Any]], conversation_id: str, at: datetime, c: Collaborators
 ) -> Optional[dict[str, Any]]:
@@ -297,6 +321,9 @@ def _close(
     now: datetime,
     detach: Optional[str] = None,
     closing: Optional[str] = None,
+    carry_to_successor: Optional[str] = None,
+    carried_items: Optional[list[dict[str, Any]]] = None,
+    preserve_for_reconciliation: bool = False,
     extra_fields: Optional[Mapping[str, Any]] = None,
 ) -> bool:
     """Close once; resolve any provisional item still open as dropped (never a task).
@@ -306,6 +333,8 @@ def _close(
     ``closing`` is the conversation whose end closes the episode: its items stay
     provisional until its processing reconciles them, and it never reopens this
     episode or opens another (``_closed_owner``).
+    ``preserve_for_reconciliation`` leaves other members' items provisional on
+    this closed episode so their own finalizers can still reconcile them.
     """
     expected_activity_at = policy.utc(episode.get('last_activity_at')) if reason == 'idle' else None
     # A WAL member may have gained speech since its last incremental update (or
@@ -320,13 +349,29 @@ def _close(
             _record_recovered(uid, str(episode['id']), cid, row, c)
     episode = episodes_db.get_episode(uid, str(episode['id']), firestore_client=c.firestore_client) or episode
     items = provisional_items(episode)
+    transferred = [
+        dict(item)
+        for item in items
+        if carry_to_successor
+        and item.get('status') == 'provisional'
+        and item.get('conversation_id') == carry_to_successor
+    ]
     dropped = 0
     for item in items:
-        if item.get('status') == 'provisional' and item.get('conversation_id') not in {detach, closing}:
+        if (
+            item.get('status') == 'provisional'
+            and item.get('conversation_id') not in {detach, closing, carry_to_successor}
+            and not preserve_for_reconciliation
+        ):
             item['status'] = 'dropped'
             dropped += 1
     # A provisional join still unsettled at close stays with this episode (it joined on the cheap rules).
-    extra: dict[str, Any] = {'provisional_items': items, 'pending_boundary': {}, **(extra_fields or {})}
+    transfer_ids = {item.get('id') for item in transferred}
+    extra: dict[str, Any] = {
+        'provisional_items': [item for item in items if item.get('id') not in transfer_ids],
+        'pending_boundary': {},
+        **(extra_fields or {}),
+    }
     if closing:
         extra['closing_conversation_id'] = closing
     if detach:
@@ -342,6 +387,8 @@ def _close(
         firestore_client=c.firestore_client,
     )
     if closed is not None:
+        if carried_items is not None:
+            carried_items.extend(transferred)
         metrics.record_episode_closed(reason)
         metrics.record_provisional_outcomes({'dropped': dropped})
     return closed is not None
@@ -480,10 +527,23 @@ def _attach_once(uid: str, conversation_id: str, source: Optional[str], started_
     now = _now(c)
     episode = episodes_db.get_current_episode(uid, firestore_client=c.firestore_client)
     hard_cap_reopened = False
+    hard_cap_previous: Optional[dict[str, Any]] = None
+    hard_cap_items: list[dict[str, Any]] = []
     if episode and conversation_id in (episode.get('conversation_ids') or []):
-        if policy.hard_cap_due(episode, started_at):
+        if episode_hard_cap_across_conversations_enabled() and policy.hard_cap_due(episode, started_at):
             metrics.record_boundary('close')
-            hard_cap_reopened = _close(uid, episode, 'hard_cap', c, now=now)
+            hard_cap_previous = dict(episode)
+            hard_cap_reopened = _close(
+                uid,
+                episode,
+                'hard_cap',
+                c,
+                now=now,
+                closing=conversation_id,
+                carry_to_successor=conversation_id,
+                carried_items=hard_cap_items,
+                preserve_for_reconciliation=True,
+            )
             episode = (
                 None if hard_cap_reopened else episodes_db.get_current_episode(uid, firestore_client=c.firestore_client)
             )
@@ -527,6 +587,8 @@ def _attach_once(uid: str, conversation_id: str, source: Optional[str], started_
             calendar_identity=None,
             now=now,
         )
+        if hard_cap_previous is not None:
+            _carry_hard_cap_state(base, hard_cap_previous, hard_cap_items)
         episodes_db.commit_moment(
             uid,
             expected_episode_id=None,
@@ -600,8 +662,8 @@ def _settle_boundary(
 ):
     """Whether this moment continues, splits from or runs parallel to the live episode.
 
-    Returns ``(episode, pending)`` for the moment to apply (``episode`` is None when it opens a new
-    one), or the outcome label when the moment is already handled.
+    Returns the successor episode inputs for the moment to apply, or the outcome label when the
+    moment is already handled. A hard-cap split carries its running summary and unresolved items.
     """
     decision = boundary_runtime.decision(
         uid, episode, facts, policy.boundary(episode, facts), firestore_client=c.firestore_client
@@ -615,6 +677,9 @@ def _settle_boundary(
             source_changed=bool(pending.get('source_changed')),
         )
     detach = moment.conversation_id if pending is not None else None
+    carried_items: list[dict[str, Any]] = []
+    successor_started_at = facts.started_at
+    carry_previous_state = False
     if decision.action == policy.ASK and episode:
         prior_speakers = frozenset(episode.get('speaker_keys') or [])
         p_same = incremental.ask_same_occasion(
@@ -635,7 +700,23 @@ def _settle_boundary(
             metrics.record_boundary('jev_close')
     if decision.action == 'close' and episode:
         metrics.record_boundary('close')
-        _close(uid, episode, decision.reason or 'gap', c, now=now, detach=detach)
+        carry_previous_state = decision.reason == 'hard_cap' and episode_hard_cap_across_conversations_enabled()
+        if carry_previous_state:
+            started = policy.utc(episode.get('started_at'))
+            if started and policy.hard_cap_due(episode, max(facts.started_at, facts.ended_at)):
+                successor_started_at = max(facts.started_at, started + timedelta(seconds=MAX_EPISODE_SECONDS))
+        _close(
+            uid,
+            episode,
+            decision.reason or 'gap',
+            c,
+            now=now,
+            detach=detach,
+            closing=moment.conversation_id if carry_previous_state else None,
+            carry_to_successor=moment.conversation_id if carry_previous_state else None,
+            carried_items=carried_items if carry_previous_state else None,
+            preserve_for_reconciliation=carry_previous_state,
+        )
         episode = None
     elif decision.action == policy.NEW:
         metrics.record_boundary('new')
@@ -653,7 +734,7 @@ def _settle_boundary(
         return 'parallel'
     else:
         metrics.record_boundary('continue')
-    return episode, pending
+    return episode, pending, carried_items, successor_started_at, carry_previous_state
 
 
 def _record_moment_once(
@@ -747,12 +828,17 @@ def _record_moment_once(
         speakers=policy.speaker_keys(segments),
     )
     pending: Optional[dict[str, Any]] = None
+    carried_items: list[dict[str, Any]] = []
+    successor_started_at = moment.current_started_at or moment.started_at
+    hard_cap_previous: Optional[dict[str, Any]] = None
+    carry_previous_state = False
     if closed is None and not member_episode_id:
         previous_episode_id = episode.get('id') if episode else None
+        hard_cap_previous = dict(episode) if episode else None
         settled = _settle_boundary(uid, episode, moment, facts, text.text, c, now)
         if isinstance(settled, str):
             return settled
-        episode, pending = settled
+        episode, pending, carried_items, successor_started_at, carry_previous_state = settled
         if episode is None and previous_episode_id is not None and text.voice_order:
             # A boundary opened a fresh occasion: do not carry its predecessor's labels.
             text = incremental.render_moment(
@@ -784,7 +870,32 @@ def _record_moment_once(
     if text.words == 0:
         metrics.record_moment_update(trigger=moment.trigger, outcome='skipped_applied')
         return 'skipped_applied'
-    if not recovered and text.words < (FINALIZE_MIN_WORDS if moment.trigger == 'finalize' else MOMENT_MIN_WORDS):
+    base = (
+        dict(episode)
+        if episode
+        else _empty_episode(
+            moment,
+            now,
+            started_at=successor_started_at,
+            previous=hard_cap_previous if carry_previous_state else None,
+        )
+    )
+    if episode is None and carry_previous_state and hard_cap_previous is not None:
+        _carry_hard_cap_state(base, hard_cap_previous, carried_items)
+    if (
+        not recovered
+        and moment.trigger != 'session_end'
+        and text.words < (FINALIZE_MIN_WORDS if moment.trigger == 'finalize' else MOMENT_MIN_WORDS)
+    ):
+        if episode is None and carry_previous_state:
+            episodes_db.commit_moment(
+                uid,
+                expected_episode_id=None,
+                expected_version=None,
+                new_episode={**base, **_with_conversation(base, moment.conversation_id, moment.source)},
+                link_conversation_ids=[moment.conversation_id],
+                firestore_client=c.firestore_client,
+            )
         metrics.record_moment_update(trigger=moment.trigger, outcome='skipped_short')
         return 'skipped_short'
 
@@ -797,7 +908,6 @@ def _record_moment_once(
         metrics.record_moment_update(trigger=moment.trigger, outcome='rate_limited')
         return 'rate_limited'
 
-    base = dict(episode) if episode else _empty_episode(moment, now)
     known_ids = [item['id'] for item in provisional_items(base) if item.get('status') == 'provisional']
     output_language, repair = '', None
     conversation_language = moment.language or ''

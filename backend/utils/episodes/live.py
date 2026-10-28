@@ -10,15 +10,17 @@
 - an interval: the buffer has spanned ``MOMENT_MAX_SECONDS`` of steady speech, or,
   for the first moment of a live stretch, ``FIRST_MOMENT_MIN_SECONDS`` and
   ``FIRST_MOMENT_MIN_WORDS`` (so the episode has a title within a minute);
-- a session end: the pusher session closes, but the buffer stays available for a
-  reconnect or the next same-occasion conversation. Finalization and wrap-up
-  consume any remaining buffer.
+- a session end: the pusher session closes, and the buffer stays available for a
+  reconnect during one ``MOMENT_PAUSE_SECONDS`` window. If none arrives, the
+  remaining tail is flushed as a moment. Finalization and wrap-up consume any
+  buffer that remains.
 
 A moment shorter than ``MOMENT_MIN_WORDS``, or one inside
 ``MOMENT_MIN_INTERVAL_SECONDS`` of the last flush, keeps accumulating instead
-of costing a call. The buffer is in-process and bounded (TTL plus a size cap):
-losing it on a crash loses nothing durable, because finalization applies
-every segment the live stream did not (``service.on_conversation_finalized``).
+of costing a call; the bounded session-end flush can send a short terminal
+tail. The buffer is in-process and bounded (TTL plus a size cap). If the process
+crashes before a flush, finalization can apply every segment the live stream did
+not (``service.on_conversation_finalized``).
 
 Structure does not wait for a moment. The first speech of each conversation
 attaches it to the live episode (``service.attach_conversation``, no model
@@ -34,6 +36,7 @@ when no capable client was seen.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import threading
 import time
@@ -49,6 +52,7 @@ from config.episodes import (
     MOMENT_MIN_INTERVAL_SECONDS,
     MOMENT_MIN_WORDS,
     MOMENT_PAUSE_SECONDS,
+    episode_carry_on_session_end_enabled,
     episodes_enabled_for,
 )
 from utils.episodes import client_gate, metrics
@@ -75,6 +79,7 @@ class _Buffer:
     last_flush_wall: float = 0.0
     current_first_wall: Optional[float] = None
     session_ended: bool = False
+    session_end_generation: int = 0
 
 
 class MomentTracker:
@@ -254,14 +259,32 @@ class MomentTracker:
                 current_ended_at=end,
             )
 
-    def mark_session_end(self, uid: str, conversation_id: Optional[str]) -> None:
-        """Remember a session close without turning it into a model-call boundary."""
+    def mark_session_end(self, uid: str, conversation_id: Optional[str]) -> Optional[int]:
+        """Remember a session close and return its fence for the bounded carry timer."""
         if not conversation_id:
-            return
+            return None
         with self._lock:
             buf = self._buffers.get(uid)
-            if buf is not None and buf.conversation_id == conversation_id and buf.segments:
+            if buf is not None and buf.conversation_id == conversation_id and (buf.segments or buf.carried):
                 buf.session_ended = True
+                buf.session_end_generation += 1
+                return buf.session_end_generation
+        return None
+
+    def flush_session_end(self, uid: str, conversation_id: Optional[str], generation: int) -> Optional[MomentInput]:
+        """Flush only the still-ended buffer named by this timer, after reconnect time has elapsed."""
+        with self._lock:
+            buf = self._buffers.get(uid)
+            if (
+                buf is None
+                or not conversation_id
+                or buf.conversation_id != conversation_id
+                or not buf.session_ended
+                or buf.session_end_generation != generation
+            ):
+                return None
+            del self._buffers[uid]
+            return self._moment(buf, 'session_end')
 
     def clear(self) -> None:
         with self._lock:
@@ -352,6 +375,16 @@ async def _moment_if_client_seen(uid: str, moment: MomentInput) -> str:
     return await executors.run_blocking(executors.lifecycle_executor(uid), record_moment, uid, moment)
 
 
+async def _flush_session_end_after_timeout(uid: str, conversation_id: str, generation: int) -> None:
+    """Let same-session reconnects reuse the buffer, then commit an unclaimed tail as a moment."""
+    await asyncio.sleep(MOMENT_PAUSE_SECONDS)
+    if not episodes_enabled_for(uid) or not episode_carry_on_session_end_enabled():
+        return
+    moment = tracker.flush_session_end(uid, conversation_id, generation)
+    if moment is not None:
+        await _moment_if_client_seen(uid, moment)
+
+
 async def on_realtime_segments(
     uid: str, segments: Sequence[Mapping[str, Any]], conversation_id: Optional[str], source: Optional[str] = None
 ) -> None:
@@ -377,10 +410,15 @@ async def on_realtime_segments(
 
 
 async def on_session_end(uid: str, conversation_id: Optional[str]) -> None:
-    """Retain buffered speech across pusher session boundaries. Never raises."""
+    """Carry speech across reconnects, then flush it if the session is gone for good."""
     try:
         if not episodes_enabled_for(uid):
             return
-        tracker.mark_session_end(uid, conversation_id)
+        generation = tracker.mark_session_end(uid, conversation_id)
+        if generation is not None and episode_carry_on_session_end_enabled():
+            executors.start_background_task(
+                _flush_session_end_after_timeout(uid, str(conversation_id), generation),
+                name='episode_session_end_flush',
+            )
     except Exception as error:
         logger.warning('event=episode_live outcome=session_end_error exception_type=%s', type(error).__name__)

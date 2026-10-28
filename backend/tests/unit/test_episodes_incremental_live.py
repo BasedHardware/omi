@@ -125,6 +125,30 @@ def test_quality_validator_rejects_after_one_bounded_retry():
     assert len(seen) == 2
 
 
+def test_validator_kill_switch_restores_single_call_output(monkeypatch):
+    monkeypatch.setenv(config.EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV, 'off')
+    seen = []
+
+    def invoke(uid, messages):
+        seen.append(messages)
+        return SimpleNamespace(
+            content=json.dumps({'bullets': ['No, do not send us again. Okay, where should I send?']}),
+            usage_metadata={'input_tokens': 100, 'output_tokens': 20},
+        )
+
+    result = incremental.run_incremental_update(
+        'uid',
+        '{}',
+        'Others: No, do not send us again. Okay, where should I send?',
+        known_item_ids=[],
+        now=NOW,
+        tz_name='UTC',
+        invoke=invoke,
+    )
+    assert len(seen) == 1
+    assert result.update.bullets == ['No, do not send us again. Okay, where should I send?']
+
+
 @pytest.mark.parametrize(
     'invoke,outcome',
     [
@@ -273,6 +297,7 @@ def test_session_end_retains_the_buffer_until_next_moment_or_finalization(monkey
 
     scheduled = []
     monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
+    monkeypatch.setenv(config.EPISODE_CARRY_ON_SESSION_END_ENV, 'off')
     monkeypatch.setattr(live, 'tracker', tracker)
     monkeypatch.setattr(
         live.executors, 'start_background_task', lambda coro, *, name: scheduled.append(name) or coro.close()
@@ -288,6 +313,53 @@ def test_session_end_retains_the_buffer_until_next_moment_or_finalization(monkey
     pending = tracker.flush('u', 'c1')
     assert pending is not None and pending.trigger == 'finalize' and pending.conversation_id == 'c1'
     assert tracker.flush('u', 'c1') is None and tracker.flush('u', None) is None
+
+
+def test_session_end_flushes_after_app_kill_when_the_session_is_gone(monkeypatch):
+    tracker = MomentTracker()
+    tracker.observe('u', _segs(3), 'c1', 'omi', now=100)
+    scheduled = []
+    delivered = []
+    monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
+    monkeypatch.delenv(config.EPISODE_CARRY_ON_SESSION_END_ENV, raising=False)
+    monkeypatch.setattr(live, 'tracker', tracker)
+
+    async def no_wait(_seconds):
+        return None
+
+    def fake_moment(uid, moment):
+        delivered.append(moment)
+
+        async def finish():
+            return 'applied'
+
+        return finish()
+
+    monkeypatch.setattr(live.asyncio, 'sleep', no_wait)
+    monkeypatch.setattr(live, '_moment_if_client_seen', fake_moment)
+    monkeypatch.setattr(live.executors, 'start_background_task', lambda coro, *, name: scheduled.append((name, coro)))
+
+    asyncio.run(live.on_session_end('u', 'c1'))
+    assert [name for name, _ in scheduled] == ['episode_session_end_flush']
+    asyncio.run(scheduled.pop()[1])
+    assert len(delivered) == 1
+    assert delivered[0].trigger == 'session_end' and len(delivered[0].segments) == 1
+    assert 'u' not in tracker._buffers
+    assert scheduled == []
+
+
+def test_session_end_timeout_is_fenced_by_reconnect_and_later_end(monkeypatch):
+    tracker = MomentTracker()
+    tracker.observe('u', _segs(3), 'c1', 'omi', now=100)
+    first = tracker.mark_session_end('u', 'c1')
+    assert first is not None
+    tracker.observe('u', _segs(3), 'c1', 'omi', now=110)
+    assert tracker.flush_session_end('u', 'c1', first) is None
+    second = tracker.mark_session_end('u', 'c1')
+    assert second is not None and second != first
+    pending = tracker.flush_session_end('u', 'c1', second)
+    assert pending is not None and pending.trigger == 'session_end'
+    assert len(pending.segments) == 2
 
 
 def test_alternating_devices_attach_each_conversation_once():

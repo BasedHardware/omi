@@ -65,25 +65,26 @@ class LiveStartAnchor {
       if (_episodeId != episode.id) {
         _episodeId = episode.id;
         _start = episode.startedAt;
+        if (_captureFloor == null || episode.startedAt.isAfter(_captureFloor!)) {
+          _captureFloor = episode.startedAt;
+        }
       }
       return _start;
+    }
+    if (_episodeId != null) {
+      // A cap rotation briefly has no live row. Keep the old anchor through that gap; the
+      // successor's server-owned start replaces it only after that row is visible.
+      _episodeId = null;
+      if (streaming && _start != null) {
+        _captureFloor = _start;
+        return _start;
+      }
     }
     final floor = _captureFloor;
     if (floor != null && captureStart != null && captureStart.isBefore(floor)) captureStart = floor;
     if (captureStart != null && !captureStart.isAfter(now)) {
       if (!_hasCaptureStart || _start == null || captureStart.isBefore(_start!)) _start = captureStart;
       _hasCaptureStart = true;
-    }
-    if (_episodeId != null) {
-      // The server episode disappeared. This is now capture duration, not a new episode.
-      // Count from the known capture start; with the lease lapsed during the quiet that
-      // closed it, keep the old start
-      // rather than reading 0s.
-      _episodeId = null;
-      if (captureStart != null && !captureStart.isAfter(now)) {
-        if (_start == null || captureStart.isBefore(_start!)) _start = captureStart;
-        return _start;
-      }
     }
     if (!streaming) {
       _start = null;

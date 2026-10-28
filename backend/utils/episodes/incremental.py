@@ -26,6 +26,7 @@ from config.episodes import (
     JEV_LANE,
     JEV_TIMEOUT_SECONDS,
     MOMENT_TEXT_MAX_CHARS,
+    episode_moment_output_validator_enabled,
     episode_output_language_pinned,
 )
 from config.refactor_modes import serving_for, shadow_or_serve
@@ -42,8 +43,9 @@ from utils.speakers.display import display_participants
 
 logger = logging.getLogger(__name__)
 
-MAX_VERBATIM_OVERLAP_WORDS = 5
-MAX_QUOTED_WORDS = 5
+MIN_VERBATIM_REJECTION_WORDS = 10
+VERBATIM_OVERLAP_RATIO = 0.8
+MAX_SHORT_QUOTE_WORDS = 8
 _QUALITY_WORD = re.compile(r"[^\W_]+(?:['’][^\W_]+)?", re.UNICODE)
 _QUOTED_TEXT = re.compile(r'["“]([^"”\n]+)["”]')
 _SPEAKER_LABEL = re.compile(
@@ -127,33 +129,38 @@ def _quality_words(value: str) -> tuple[str, ...]:
 
 
 def validate_moment_output(update: IncrementalUpdate, transcript: str) -> tuple[str, ...]:
-    """Reject raw transcript bullets, long quoted spans, and transcript speaker labels.
+    """Reject bullets that are mostly transcript text, and transcript speaker labels.
 
-    A five-word verbatim phrase is the maximum; any six-word contiguous match
-    against the moment transcript is rejected. Labels in transcript input are
-    stripped before matching so a generated bullet cannot pass by copying one.
+    Short quotations and concise summaries can reuse transcript phrases. Only
+    bullets with at least ten words and an 80% ordered word overlap are treated
+    as transcript copies. Labels in transcript input are stripped before matching.
     """
     transcript_words = []
     for line in transcript.splitlines():
         clean = re.sub(r'^\s*[^:\n]{1,48}:\s*', '', line).strip()
         transcript_words.extend(_quality_words(clean))
-    window_size = MAX_VERBATIM_OVERLAP_WORDS + 1
-    transcript_windows = {
-        tuple(transcript_words[index : index + window_size]) for index in range(len(transcript_words) - window_size + 1)
-    }
     issues: list[str] = []
     for bullet in update.bullets:
         if _SPEAKER_LABEL.search(bullet):
             issues.append('speaker_label')
             continue
-        if any(len(_quality_words(quoted)) > MAX_QUOTED_WORDS for quoted in _QUOTED_TEXT.findall(bullet)):
-            issues.append('quote_too_long')
+        overlap_text = _QUOTED_TEXT.sub(
+            lambda match: ' ' if len(_quality_words(match.group(1))) <= MAX_SHORT_QUOTE_WORDS else match.group(0),
+            bullet,
+        )
+        bullet_words = _quality_words(overlap_text)
+        if len(bullet_words) < MIN_VERBATIM_REJECTION_WORDS or not transcript_words:
             continue
-        bullet_words = _quality_words(bullet)
-        if len(bullet_words) <= MAX_VERBATIM_OVERLAP_WORDS:
-            continue
-        windows = {bullet_words[index : index + window_size] for index in range(len(bullet_words) - window_size + 1)}
-        if transcript_windows & windows:
+        previous = [0] * (len(transcript_words) + 1)
+        for word in bullet_words:
+            current = [0] * (len(transcript_words) + 1)
+            for index, transcript_word in enumerate(transcript_words, start=1):
+                if word == transcript_word:
+                    current[index] = previous[index - 1] + 1
+                else:
+                    current[index] = max(previous[index], current[index - 1])
+            previous = current
+        if max(previous, default=0) / len(bullet_words) >= VERBATIM_OVERLAP_RATIO:
             issues.append('verbatim_overlap')
     return tuple(dict.fromkeys(issues))
 
@@ -338,17 +345,20 @@ def run_incremental_update(
     messages = build_messages(
         state_json, moment, now=now, tz_name=tz_name, output_language=language, repair_instruction=repair_instruction
     )
+    first = _invoke_and_parse(uid, messages, invoke, known_item_ids)
+    if not episode_moment_output_validator_enabled():
+        return first
+
     # The validation retry uses the same bounded transcript and a fresh JSON
     # response. The issue names are fixed enums; no transcript text is logged.
-    first = _invoke_and_parse(uid, messages, invoke, known_item_ids)
     issues = validate_moment_output(first.update, moment)
     if not issues:
         return first
 
     repair = (
-        'Quality correction required: rewrite the bullets as concise third-person paraphrases. '
-        f'No bullet may quote more than {MAX_QUOTED_WORDS} words, copy a run of {MAX_QUOTED_WORDS + 1} '
-        'or more words from the newest moment, or start with a speaker label such as You:, Others:, or Speaker A:. '
+        'Quality correction required: rewrite any bullet that mostly copies the newest moment as a concise '
+        'third-person summary. Short quotes and concise summaries may reuse speech. Do not start a bullet with '
+        'a speaker label such as You:, Others:, or Speaker A:. '
         'Return the complete corrected JSON object.'
     )
     retry_messages = build_messages(

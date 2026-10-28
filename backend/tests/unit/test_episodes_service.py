@@ -26,6 +26,9 @@ T0 = datetime(2026, 10, 20, 10, 0, tzinfo=timezone.utc)
 def _enabled(monkeypatch):
     monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
     monkeypatch.delenv(config.EPISODES_PERCENT_ENV, raising=False)
+    monkeypatch.delenv(config.EPISODE_HARD_CAP_ACROSS_CONVERSATIONS_ENV, raising=False)
+    monkeypatch.delenv(config.EPISODE_CARRY_ON_SESSION_END_ENV, raising=False)
+    monkeypatch.delenv(config.EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV, raising=False)
     monkeypatch.setenv(config.EPISODE_OUTPUT_LANGUAGE_PIN_ENV, 'on')
     monkeypatch.setenv('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
     # These tests exercise a user whose app shows episodes (test_episodes_client_gate covers the marker).
@@ -1001,6 +1004,131 @@ def test_hard_cap_rotates_a_multi_conversation_episode_when_a_member_keeps_talki
     assert current['id'] != old['id'] and current['conversation_ids'] == ['c2']
     assert current['started_at'] == after_cap
     assert current['title'] == 'Next stretch' and current['usage']['calls'] == 1
+
+
+def test_hard_cap_carries_same_member_provisional_items_until_finalization_reconciles_them():
+    store = StrictFirestore()
+    model = FakeModel(
+        {
+            'title': 'Planning',
+            'bullets': ['Before the cap'],
+            'items': [{'text': 'Book the room for the planning session'}],
+        },
+        {'bullets': ['The group assigned the schedule'], 'items': [{'text': 'Send the revised schedule to the team'}]},
+    )
+    c = _collaborators(model, now=T0 + timedelta(minutes=1), store=store)
+    assert service.record_moment(UID, _moment('c1'), c) == 'applied'
+    c.now = lambda: T0 + timedelta(minutes=2)
+    assert (
+        service.attach_conversation(UID, 'c2', 'omi', started_at=T0 + timedelta(minutes=2), collaborators=c) == 'joined'
+    )
+    c.now = lambda: T0 + timedelta(minutes=3)
+    assert (
+        service.record_moment(
+            UID,
+            _moment(
+                'c2',
+                minutes=2,
+                text=LONG + '. Please send the revised schedule to the team.',
+            ),
+            c,
+        )
+        == 'applied'
+    )
+    original = episodes_db.get_current_episode(UID, firestore_client=store)
+    original_item = next(item for item in original['provisional_items'] if item['conversation_id'] == 'c2')
+    earlier_item = next(item for item in original['provisional_items'] if item['conversation_id'] == 'c1')
+
+    cap_at = T0 + timedelta(seconds=config.MAX_EPISODE_SECONDS)
+    c.now = lambda: cap_at + timedelta(minutes=1)
+    post_cap = _moment('c2', minutes=180, start=360, text='After the cap the team confirmed the revised schedule')
+    assert service.record_moment(UID, post_cap, c) == 'skipped_short'
+    closed = episodes_db.get_episode(UID, original['id'], firestore_client=store)
+    successor = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert closed['close_reason'] == 'hard_cap'
+    assert closed['provisional_items'][0]['id'] == earlier_item['id']
+    assert closed['provisional_items'][0]['status'] == 'provisional'
+    assert successor['started_at'] == cap_at
+    assert successor['bullets'] == ['The group assigned the schedule']
+    assert successor['provisional_items'][0]['id'] == original_item['id']
+    assert successor['provisional_items'][0]['status'] == 'provisional'
+
+    saved = {
+        'c1': [{'id': 'task-c1', 'description': 'Book the room for the planning session'}],
+        'c2': [{'id': 'task-c2', 'description': 'Send the revised schedule to the team'}],
+    }
+    c = _collaborators(model, now=cap_at + timedelta(minutes=2), saved=saved, store=store)
+    finalized = {'id': 'c2', 'source': 'omi', 'started_at': cap_at, 'finished_at': cap_at + timedelta(minutes=1)}
+    assert (
+        service.on_conversation_finalized(UID, 'c2', finalized, trigger='client_finalize', collaborators=c)
+        == 'reconciled'
+    )
+    reconciled = episodes_db.get_episode(UID, successor['id'], firestore_client=store)
+    assert [(item['status'], item['action_item_id']) for item in reconciled['provisional_items']] == [
+        ('kept', 'task-c2')
+    ]
+
+    c = _collaborators(model, now=cap_at + timedelta(minutes=3), saved=saved, store=store)
+    finalized = {'id': 'c1', 'source': 'omi', 'started_at': T0, 'finished_at': cap_at - timedelta(minutes=1)}
+    assert (
+        service.on_conversation_finalized(UID, 'c1', finalized, trigger='client_finalize', collaborators=c)
+        == 'reconciled'
+    )
+    reconciled_old = episodes_db.get_episode(UID, original['id'], firestore_client=store)
+    assert [(item['status'], item['action_item_id']) for item in reconciled_old['provisional_items']] == [
+        ('kept', 'task-c1')
+    ]
+
+
+def test_quality_error_keeps_previous_live_episode_notes():
+    transcript = 'No, do not send us again. Okay, where should I send?'
+    model = FakeModel(
+        {'title': 'Invitation', 'bullets': ['The group reviewed the invitation destination.']},
+        {'title': 'Invitation', 'bullets': [transcript]},
+        {'title': 'Invitation', 'bullets': [transcript]},
+    )
+    store = StrictFirestore()
+    c = _collaborators(model, now=T0 + timedelta(minutes=1), store=store)
+    assert service.record_moment(UID, _moment('c1'), c) == 'applied'
+    before = episodes_db.get_current_episode(UID, firestore_client=store)
+    c.now = lambda: T0 + timedelta(minutes=10)
+    rejected = _moment('c1', minutes=9, trigger='session_end', text=transcript, start=100)
+    assert service.record_moment(UID, rejected, c) == 'quality_error'
+    after = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert after['id'] == before['id']
+    assert after['bullets'] == ['The group reviewed the invitation destination.']
+
+
+def test_quality_error_at_hard_cap_keeps_previous_so_far_in_the_successor():
+    transcript = LONG + '. The group also confirmed the venue and sent an update to everyone.'
+    model = FakeModel(
+        {'title': 'Planning', 'bullets': ['The group reviewed the invitation destination.']},
+        {'title': 'Planning', 'bullets': [transcript]},
+        {'title': 'Planning', 'bullets': [transcript]},
+    )
+    store = StrictFirestore()
+    c = _collaborators(model, now=T0 + timedelta(minutes=1), store=store)
+    assert service.record_moment(UID, _moment('c1'), c) == 'applied'
+    before = episodes_db.get_current_episode(UID, firestore_client=store)
+
+    cap_at = T0 + timedelta(seconds=config.MAX_EPISODE_SECONDS)
+    c.now = lambda: cap_at + timedelta(minutes=1)
+    post_cap = _moment('c1', minutes=180, trigger='interval', start=100, text=transcript)
+    assert service.record_moment(UID, post_cap, c) == 'quality_error'
+    successor = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert successor['id'] != before['id'] and successor['started_at'] == cap_at
+    assert successor['bullets'] == ['The group reviewed the invitation destination.']
+
+
+def test_short_terminal_session_tail_is_written_below_the_live_word_floor():
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Call Maya', 'bullets': ['They will call Maya tomorrow.']})
+    moment = _moment('c-short', trigger='session_end', text='Please call Maya tomorrow')
+    c = _collaborators(model, now=T0 + timedelta(minutes=1), store=store)
+    assert service.record_moment(UID, moment, c) == 'applied'
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['bullets'] == ['They will call Maya tomorrow.']
+    assert len(model.calls) == 1
 
 
 def test_same_episode_moment_applies_carried_speech_with_separate_cursors():

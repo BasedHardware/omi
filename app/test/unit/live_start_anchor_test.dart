@@ -77,6 +77,37 @@ void main() {
           later);
     });
 
+    test('polling during a hard-cap rotation gap never rewinds before adopting the successor', () {
+      final anchor = LiveStartAnchor();
+      final oldStart = _t0.add(const Duration(minutes: 8));
+      final oldEpisode = _episode(oldStart);
+      final now = oldStart.add(const Duration(minutes: 12));
+      expect(anchor.resolve(episode: oldEpisode, captureStart: _t0, streaming: true, now: now), oldStart);
+
+      // The old row has closed and the service has not written the successor yet.
+      expect(anchor.resolve(episode: null, captureStart: _t0, streaming: true, now: now), oldStart);
+      expect(
+        anchor.resolve(
+          episode: null,
+          captureStart: _t0,
+          streaming: true,
+          now: now.add(const Duration(seconds: 20)),
+        ),
+        oldStart,
+      );
+
+      final capStart = _t0.add(const Duration(hours: 3));
+      expect(
+        anchor.resolve(
+          episode: _episode(capStart, id: 'ep2'),
+          captureStart: _t0,
+          streaming: true,
+          now: capStart,
+        ),
+        capStart,
+      );
+    });
+
     test('an idle close during a lapsed lease keeps the old start instead of 0s', () {
       final anchor = LiveStartAnchor();
       final now = _t0.add(const Duration(minutes: 40));
