@@ -35,7 +35,9 @@ def test_delete_account_delegates_to_service():
     start_account_deletion = MagicMock(return_value={'status': 'ok', 'message': 'Account deletion started'})
     request = deletion_router.DeleteAccountRequest(reason='reason', reason_details='details')
 
-    with patch.object(deletion_router, 'start_account_deletion', start_account_deletion):
+    with patch.object(deletion_router.auth, 'enforce_account_deletion_http_access'), patch.object(
+        deletion_router, 'start_account_deletion', start_account_deletion
+    ):
         result = deletion_router.delete_account(request=request, uid='uid1')
 
     assert result == {'status': 'ok', 'message': 'Account deletion started'}
@@ -53,7 +55,9 @@ def test_delete_account_forwards_explicit_erase_now():
     )
     request = deletion_router.DeleteAccountRequest(erase_now=True)
 
-    with patch.object(deletion_router, 'start_account_deletion', start_account_deletion):
+    with patch.object(deletion_router.auth, 'enforce_account_deletion_http_access'), patch.object(
+        deletion_router, 'start_account_deletion', start_account_deletion
+    ):
         result = deletion_router.delete_account(request=request, uid='uid1')
 
     assert result['pending_deletion'] is False
@@ -91,7 +95,9 @@ def test_restore_account_endpoint_rejects_non_restorable_state():
 
 def test_delete_account_maps_unexpected_service_error_to_500():
     start_account_deletion = MagicMock(side_effect=Exception('boom'))
-    with patch.object(deletion_router, 'start_account_deletion', start_account_deletion):
+    with patch.object(deletion_router.auth, 'enforce_account_deletion_http_access'), patch.object(
+        deletion_router, 'start_account_deletion', start_account_deletion
+    ):
         with pytest.raises(HTTPException) as exc:
             deletion_router.delete_account(request=deletion_router.DeleteAccountRequest(), uid='uid1')
 
