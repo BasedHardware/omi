@@ -140,6 +140,37 @@ class TestGitHubToolsAuth(unittest.TestCase):
             req = _FakeRequest(query_params={"github_settings_token": SETTINGS_SECRET})
             self.assertIsNone(self.mod.require_github_tools_auth(req))
 
+    def test_both_secrets_set_either_token_succeeds(self):
+        with patch.dict(
+            os.environ,
+            {
+                "GITHUB_TOOLS_SECRET": SECRET,
+                "GITHUB_SETTINGS_SECRET": SETTINGS_SECRET,
+            },
+            clear=True,
+        ):
+            # Presenting tools secret via Authorization header
+            req1 = _FakeRequest(headers={"Authorization": f"Bearer {SECRET}"})
+            self.assertIsNone(self.mod.require_github_tools_auth(req1))
+
+            # Presenting settings secret via Authorization header
+            req2 = _FakeRequest(headers={"Authorization": f"Bearer {SETTINGS_SECRET}"})
+            self.assertIsNone(self.mod.require_github_tools_auth(req2))
+
+            # Presenting tools secret via query param
+            req3 = _FakeRequest(query_params={"github_tools_token": SECRET})
+            self.assertIsNone(self.mod.require_github_tools_auth(req3))
+
+            # Presenting settings secret via query param
+            req4 = _FakeRequest(query_params={"github_settings_token": SETTINGS_SECRET})
+            self.assertIsNone(self.mod.require_github_tools_auth(req4))
+
+            # Presenting invalid token returns 401
+            req_bad = _FakeRequest(headers={"Authorization": "Bearer invalid-token"})
+            with self.assertRaises(self.mod.HTTPException) as ctx:
+                self.mod.require_github_tools_auth(req_bad)
+            self.assertEqual(ctx.exception.status_code, 401)
+
     def test_wrong_query_token_returns_401(self):
         with patch.dict(os.environ, {"GITHUB_TOOLS_SECRET": SECRET}, clear=True):
             req = _FakeRequest(query_params={"github_tools_token": "wrong"})

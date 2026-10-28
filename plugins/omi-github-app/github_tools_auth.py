@@ -25,12 +25,13 @@ _QUERY_TOKEN_PARAM = "github_tools_token"
 _SETTINGS_QUERY_TOKEN_PARAM = "github_settings_token"
 
 
-def _configured_secret() -> Optional[str]:
-    secret = os.getenv(_GITHUB_SETTINGS_SECRET_ENV) or os.getenv(_GITHUB_TOOLS_SECRET_ENV)
-    if secret is None:
-        return None
-    secret = secret.strip()
-    return secret or None
+def _configured_secrets() -> list[str]:
+    secrets = []
+    for env_var in (_GITHUB_SETTINGS_SECRET_ENV, _GITHUB_TOOLS_SECRET_ENV):
+        val = os.getenv(env_var)
+        if val is not None and val.strip():
+            secrets.append(val.strip())
+    return secrets
 
 
 def _presented_token(request: Request) -> Optional[str]:
@@ -47,15 +48,15 @@ def _presented_token(request: Request) -> Optional[str]:
 
 def require_github_tools_auth(request: Request) -> None:
     """Reject unauthenticated callers of the GitHub chat-tool and settings routes."""
-    secret = _configured_secret()
-    if secret is None:
+    secrets = _configured_secrets()
+    if not secrets:
         raise HTTPException(
             status_code=503,
             detail="github tools auth is not configured",
         )
 
     token = _presented_token(request)
-    if not token or not hmac.compare_digest(token, secret):
+    if not token or not any(hmac.compare_digest(token, sec) for sec in secrets):
         raise HTTPException(status_code=401, detail="unauthorized")
 
 
