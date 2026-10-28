@@ -5,6 +5,7 @@ import hashlib
 import math
 import logging
 import random
+from threading import Lock
 import uuid
 from time import monotonic
 
@@ -159,6 +160,8 @@ class Scheduler:
         self.pool = pool
         self._contention_failures = 0
         self._contention_backoff_until = 0.0
+        self._contention_generation = 0
+        self._contention_lock = Lock()
 
     def enqueue(self, item: WorkItem, now: float) -> bool:
         return self.store.run(lambda tx: self.enqueue_in_transaction(tx, item, now))
@@ -223,8 +226,10 @@ class Scheduler:
     def pull(self, now: float, limit: int = 1, *, capacity: PoolCapacity | None = None) -> list[LeasedWork]:
         if not 1 <= limit <= 32:
             raise ValueError('pull limit must be in [1, 32]')
-        if self._contention_backoff_until > monotonic():
-            return []
+        with self._contention_lock:
+            if self._contention_backoff_until > monotonic():
+                return []
+            contention_generation = self._contention_generation
         if self.pool == 'live' and (capacity is None or not capacity.shared_with_live):
             return []
         if self.pool == 'batch' and capacity is not None and capacity.shared_with_live:
@@ -248,18 +253,26 @@ class Scheduler:
                 )
             except Exception as error:
                 if isinstance(error, FirestoreContentionExhausted):
-                    self._contention_failures += 1
-                    maximum = min(
-                        CONTENTION_BACKOFF_CAP_SECONDS,
-                        2.0 ** min(self._contention_failures - 1, 5),
-                    )
-                    delay = maximum * (0.5 + 0.5 * random.random())
-                    self._contention_backoff_until = monotonic() + delay
+                    with self._contention_lock:
+                        self._contention_failures += 1
+                        maximum = min(
+                            CONTENTION_BACKOFF_CAP_SECONDS,
+                            2.0 ** min(self._contention_failures - 1, 5),
+                        )
+                        delay = maximum * (0.5 + 0.5 * random.random())
+                        failed_at = monotonic()
+                        self._contention_backoff_until = max(
+                            self._contention_backoff_until,
+                            failed_at + delay,
+                        )
+                        retry_after_ms = round((self._contention_backoff_until - failed_at) * 1000)
+                        self._contention_generation += 1
+                        contention_failures = self._contention_failures
                     contention_deferred = True
                     logger.error(
                         'event=batch_pull outcome=backoff failures=%d retry_after_ms=%d%s',
-                        self._contention_failures,
-                        round(delay * 1000),
+                        contention_failures,
+                        retry_after_ms,
                         error_site_field(error),
                     )
                     break
@@ -283,8 +296,10 @@ class Scheduler:
             if capacity is not None and capacity.shared_with_live:
                 break  # One non-preemptible short item, never a mixed long batch.
         if not contention_deferred:
-            self._contention_failures = 0
-            self._contention_backoff_until = 0.0
+            with self._contention_lock:
+                if self._contention_generation == contention_generation:
+                    self._contention_failures = 0
+                    self._contention_backoff_until = 0.0
         return result
 
     def _pull_one(

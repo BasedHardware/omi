@@ -1,7 +1,7 @@
 """State-machine tests over an atomic snapshot store, not a Firestore emulator."""
 
 from copy import deepcopy
-from threading import RLock
+from threading import Event, RLock, Thread, current_thread
 from unittest.mock import Mock
 
 import pytest
@@ -264,6 +264,40 @@ def test_contention_backoff_returns_prior_leases_and_suppresses_hot_repull(monke
     assert queue.pull(1) == []
     assert pull_one.call_count == 3
     assert queue._contention_failures == 0
+
+
+def test_overlapping_pull_cannot_clear_a_newer_contention_backoff(monkeypatch):
+    from database.firestore_transaction_retry import FirestoreContentionExhausted
+    from utils.batch_pipeline import scheduler as scheduler_module
+
+    now = [100.0]
+    monkeypatch.setattr(scheduler_module, 'monotonic', lambda: now[0])
+    monkeypatch.setattr(scheduler_module.random, 'random', lambda: 0.0)
+    queue = Scheduler(MemoryStore())
+    entered = Event()
+    finish = Event()
+
+    def pull_one(*_args, **_kwargs):
+        if current_thread().name == 'overlapping-pull':
+            entered.set()
+            assert finish.wait(timeout=5)
+            return None
+        raise FirestoreContentionExhausted('bounded')
+
+    monkeypatch.setattr(queue, '_pull_one', pull_one)
+    overlapping_pull = Thread(name='overlapping-pull', target=lambda: queue.pull(0))
+    overlapping_pull.start()
+    assert entered.wait(timeout=5)
+
+    assert queue.pull(1) == []
+    cooldown = queue._contention_backoff_until
+    assert cooldown == 100.5
+
+    finish.set()
+    overlapping_pull.join(timeout=5)
+    assert not overlapping_pull.is_alive()
+    assert queue._contention_backoff_until == cooldown
+    assert queue.pull(2) == []
 
 
 def test_out_of_order_completion_and_idempotent_ordered_commit():
