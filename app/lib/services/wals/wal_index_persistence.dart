@@ -34,9 +34,10 @@ extension _WalIndexPersistence on LocalWalSyncImpl {
   }
 
   Future<void> _writeIndexDelta(WalIndexDelta delta) async {
-    if (_persistWalsOverride != null) {
-      // Legacy hermetic seam; normal production saves send deltas.
-      await _persistWalsOverride!([
+    // Hermetic tests and the kill switch take full snapshots; normal saves send deltas.
+    final persist = _persistWalsOverride ?? (await _deltaIndexAllowed ? null : _saveFullSnapshot);
+    if (persist != null) {
+      await persist([
         ..._retiredWals.where((w) => w.storage != WalStorage.mem),
         ..._foreignWals.where((w) => w.storage != WalStorage.mem),
         ..._wals.where((w) => w.storage != WalStorage.mem),
@@ -63,5 +64,9 @@ extension _WalIndexPersistence on LocalWalSyncImpl {
         rethrow;
       }
     }
+  }
+
+  static Future<void> _saveFullSnapshot(List<Wal> wals) async {
+    if (!await WalFileManager.saveWals(wals)) throw const FileSystemException('wal index save failed');
   }
 }

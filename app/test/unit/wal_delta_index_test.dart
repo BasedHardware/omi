@@ -10,6 +10,7 @@ import 'package:omi/services/wals/sync_job_poller.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/services/experiments/wal_delta_index_gate.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_index_inventory.dart';
@@ -247,6 +248,27 @@ void main() {
     expect(rows.fold<int>(0, (sum, w) => sum + w.fingerprints), 0);
     expect((await WalFileManager.loadWals()).singleWhere((w) => w.timerStart == rows.last.timerStart).retryCount, 3);
     await sync.stop();
+  });
+
+  test('kill switch saves full snapshots through the legacy writer and never starts a worker', () async {
+    final rows = List.generate(50, _CountedWal.new);
+    final sync = LocalWalSyncImpl(_Listener(), deltaIndexAllowed: () async => false);
+    sync.testWals = rows;
+    rows.last.retryCount = 2;
+    await sync.persistRetryMetadata(rows.last);
+    expect(sync.indexWorkerForTesting, isNull);
+    final onDisk = await WalFileManager.loadWals();
+    expect(onDisk, hasLength(50));
+    expect(onDisk.singleWhere((w) => w.timerStart == rows.last.timerStart).retryCount, 2);
+    await sync.stop();
+  });
+
+  group('WalDeltaIndexGate', () {
+    test('only an explicit true turns the delta writer off', () async {
+      expect(await WalDeltaIndexGate.deltaWriterAllowed(readFlag: (_) async => true), isFalse);
+      expect(await WalDeltaIndexGate.deltaWriterAllowed(readFlag: (_) async => false), isTrue);
+      expect(await WalDeltaIndexGate.deltaWriterAllowed(readFlag: (_) async => throw StateError('offline')), isTrue);
+    });
   });
 
   test('worker exit fails every pending request instead of wedging saves', () async {
