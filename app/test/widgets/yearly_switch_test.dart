@@ -410,6 +410,22 @@ void main() {
       expect(find.byKey(const Key('yearly_switch_home_row')), findsOneWidget);
     });
 
+    testWidgets('a Home without the usage provider renders nothing and asks nothing', (tester) async {
+      final backend = _Backend(offer: _offer());
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildOmiTheme(),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: YearlySwitchHomeRow(load: backend.load, apply: backend.apply, now: () => _now)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const Key('yearly_switch_home_row')), findsNothing);
+      expect(backend.loads, isEmpty);
+    });
+
     testWidgets('a yearly subscriber is never looked up', (tester) async {
       final backend = _Backend(offer: _offer(eligible: false, reason: 'not_monthly'));
       await _pump(

@@ -54,10 +54,11 @@ bool _usablePreview(wire.GeneratedYearlySwitchResponse? offer) =>
     offer.renewsAt != null &&
     offer.prorationDate != null;
 
-/// A paid, renewing Stripe subscription the offer could apply to; null hides every entry point.
-String? yearlySwitchCandidate(UsageProvider provider) {
-  final sub = provider.subscription?.subscription;
-  if (!provider.showSubscriptionUI || sub == null || !sub.plan.isPaid) return null;
+/// A paid, renewing Stripe subscription the offer could apply to; null hides every entry point
+/// (also when no [UsageProvider] is in scope).
+String? yearlySwitchCandidate(UsageProvider? provider) {
+  final sub = provider?.subscription?.subscription;
+  if (provider == null || !provider.showSubscriptionUI || sub == null || !sub.plan.isPaid) return null;
   if (sub.status != SubscriptionStatus.active || sub.cancelAtPeriodEnd) return null;
   final id = sub.stripeSubscriptionId;
   return id == null || id.isEmpty ? null : id;
@@ -224,9 +225,11 @@ class _YearlySwitchSheetState extends State<YearlySwitchSheet> {
       const TypedEvents().emit(SubscriptionYearlySwitchSucceeded(
           surface: SubscriptionYearlySwitchSucceededSurface.values.byName(widget.surface.name)));
       widget.onSwitched?.call();
-      final usage = context.read<UsageProvider>();
-      unawaited(usage.fetchSubscription());
-      unawaited(usage.loadAvailablePlans());
+      final usage = context.read<UsageProvider?>();
+      if (usage != null) {
+        unawaited(usage.fetchSubscription());
+        unawaited(usage.loadAvailablePlans());
+      }
       setState(() {
         _switching = false;
         _done = true;
@@ -312,7 +315,7 @@ class _YearlySwitchSheetState extends State<YearlySwitchSheet> {
         ],
       );
     }
-    final usage = context.read<UsageProvider>().subscription;
+    final usage = context.read<UsageProvider?>()?.subscription;
     final plan = planDisplayName(PlanType.fromWire(offer.planId ?? ''), usage?.availablePlans ?? const [], l10n);
     return Column(
       key: const Key('yearly_switch_preview'),
@@ -518,7 +521,7 @@ class _YearlySwitchPlansRowState extends State<YearlySwitchPlansRow> {
 
   @override
   Widget build(BuildContext context) {
-    final candidate = context.select<UsageProvider, String?>(yearlySwitchCandidate);
+    final candidate = context.select<UsageProvider?, String?>(yearlySwitchCandidate);
     if (candidate == null || _switched) return const SizedBox.shrink();
     if (_loadedFor != candidate) {
       _loadedFor = candidate;
@@ -568,7 +571,7 @@ class _YearlySwitchHomeRowState extends State<YearlySwitchHomeRow> {
     final prefs = SharedPreferencesUtil();
     final now = (widget.now ?? DateTime.now)();
     // A yearly plan renews months from now: no lookup (it would only answer not_monthly on every launch).
-    final periodEnd = context.read<UsageProvider>().subscription?.subscription.currentPeriodEnd;
+    final periodEnd = context.read<UsageProvider?>()?.subscription?.subscription.currentPeriodEnd;
     if (periodEnd != null && DateTime.fromMillisecondsSinceEpoch(periodEnd * 1000).isAfter(now.add(_monthAhead))) {
       return;
     }
@@ -603,7 +606,7 @@ class _YearlySwitchHomeRowState extends State<YearlySwitchHomeRow> {
 
   @override
   Widget build(BuildContext context) {
-    final candidate = context.select<UsageProvider, String?>(yearlySwitchCandidate);
+    final candidate = context.select<UsageProvider?, String?>(yearlySwitchCandidate);
     if (candidate == null || _hidden) return const SizedBox.shrink();
     if (_loadedFor != candidate) {
       _loadedFor = candidate;

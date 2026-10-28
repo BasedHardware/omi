@@ -101,16 +101,16 @@ Future<bool> acceptRetentionOffer() async {
 }
 
 /// The monthly-to-yearly switch for this reader; with [preview], Stripe's charge today and renewal
-/// date. Null when it cannot be read.
+/// date. Null when it cannot be read: the offer is optional and never throws into its host screen.
 Future<wire.GeneratedYearlySwitchResponse?> getYearlySwitch({bool preview = false}) async {
-  final response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/payments/yearly-switch${preview ? '?preview=true' : ''}',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
-  if (response == null || response.statusCode != 200) return null;
   try {
+    final response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/payments/yearly-switch${preview ? '?preview=true' : ''}',
+      headers: {},
+      method: 'GET',
+      body: '',
+    );
+    if (response == null || response.statusCode != 200) return null;
     return wire.GeneratedYearlySwitchResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   } catch (_) {
     return null;
