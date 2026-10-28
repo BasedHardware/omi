@@ -1011,6 +1011,13 @@ describe("the warm scheduler fills legs off the viewing path", () => {
     const served = await pending;
     expect(served.frames.weekly).toEqual([]);
     expect(served.gaps.growth).toBe("Series data older than 24h");
+    expect(served.staleUntil).toBeNull(); // nothing served, nothing to bound
+  });
+
+  it("tells the proxy when its oldest served value turns 24h old", async () => {
+    const s = { ...sources(), store: memorySeriesStore() };
+    const served = await seriesPayload("growth", Promise.resolve(null), now, s);
+    expect(Date.parse(served.staleUntil!)).toBe(now.getTime() + 24 * 3_600_000);
   });
 
   it("reports a failing leg's controlled reason instead of hiding it", async () => {

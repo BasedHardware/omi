@@ -102,6 +102,9 @@ export interface SeriesPayload {
   gaps: Record<string, string>;
   /** Headline only: oldest leg's data-through day across all series. */
   status?: { through: string | null; text: string } | null;
+  /** When the oldest value in this body turns 24h old; the stats proxy never
+   * serves the body as last-good past it. */
+  staleUntil: string | null;
 }
 
 export const GROWTH_WEEKS = 26;
@@ -1803,6 +1806,10 @@ export async function seriesPayload(
   const gaps: Record<string, string> = {};
   let cacheStale = Boolean(wall?.cacheStale);
   let refreshing = false;
+  let staleUntil = Infinity;
+  const wallAt = wall ? Date.parse(wall.generatedAt) : NaN;
+  if (wall?.metrics.some((m) => m.value != null) && Number.isFinite(wallAt))
+    staleUntil = wallAt + MAX_STALE;
   for (const leg of LEGS_FOR[name]) {
     const state = local.get(leg);
     const entry = state?.doc?.entry;
@@ -1811,8 +1818,10 @@ export async function seriesPayload(
     // Never serve a value older than the stale-good bound, however it was kept.
     const expired =
       entry?.value !== undefined && now.getTime() - entry.at >= MAX_STALE;
-    if (entry?.value !== undefined && !expired)
+    if (entry?.value !== undefined && !expired) {
       (legs as Record<string, unknown>)[leg] = entry.value;
+      staleUntil = Math.min(staleUntil, entry.at + MAX_STALE);
+    }
     if (entry?.day !== day && entry?.value !== undefined) cacheStale = true;
     if (entry?.value === undefined && running)
       gaps[leg] = "Series refresh running";
@@ -1879,6 +1888,9 @@ export async function seriesPayload(
     status,
     frames,
     gaps,
+    staleUntil: Number.isFinite(staleUntil)
+      ? new Date(staleUntil).toISOString()
+      : null,
   };
 }
 

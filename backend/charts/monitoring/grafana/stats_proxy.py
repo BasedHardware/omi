@@ -11,6 +11,7 @@ answered blocks, and a failure there is shared briefly, never retried per panel.
 
 import base64
 import json
+from datetime import datetime
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -64,6 +65,15 @@ def allowed_path(path):
     )
 
 
+def stale_until(body, default):
+    """The admin's `staleUntil` (ISO time its oldest served value turns 24h old)."""
+    try:
+        value = json.loads(body).get("staleUntil")
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp() if value else default
+    except Exception:
+        return default
+
+
 class StatsProxy:
     def __init__(self, opener=None, clock=time.time, spawn=None):
         self.opener = opener or build_opener(ProxyHandler({}), NoRedirect())
@@ -77,7 +87,7 @@ class StatsProxy:
         # (2026-10-28: one global lock serialized all six behind the slowest).
         self.state_lock = threading.Lock()
         self.cache = {}  # path -> (expires_at, status, body), latest answer
-        self.good = {}  # path -> (at, body), last 200
+        self.good = {}  # path -> (at, body, serve_until), last 200
         self.fill_locks = {}
         self.refreshing = set()
 
@@ -118,7 +128,7 @@ class StatsProxy:
         """Record a path's latest answer; caller holds state_lock."""
         stamp = self.clock()
         self.cache = {k: v for k, v in self.cache.items() if stamp < v[0]}
-        self.good = {k: v for k, v in self.good.items() if stamp - v[0] < MAX_STALE}
+        self.good = {k: v for k, v in self.good.items() if stamp < v[2]}
         while self.cache and (
             len(self.cache) >= 32 or sum(len(v[2]) for v in self.cache.values()) + len(body) > MAX_CACHE_BYTES
         ):
@@ -128,7 +138,9 @@ class StatsProxy:
             # A `refreshing` body keeps the age of the last settled answer, so
             # repeated refreshing answers cannot extend MAX_STALE indefinitely.
             prior = self.good.get(path)
-            self.good[path] = (prior[0] if refreshing and prior else stamp, body)
+            at = prior[0] if refreshing and prior else stamp
+            # Never past the body's own data-age bound (admin `staleUntil`).
+            self.good[path] = (at, body, min(at + MAX_STALE, stale_until(body, at + MAX_STALE)))
         return status, body
 
     def upstream(self, path):
@@ -195,7 +207,7 @@ class StatsProxy:
             if fresh and cached[1] == 200:
                 return cached[1], cached[2]
             good = self.good.get(path)
-            if not (good and now - good[0] < MAX_STALE):
+            if not (good and now < good[2]):
                 good = None
                 if fresh:
                     return cached[1], cached[2]
@@ -254,7 +266,10 @@ class Server(ThreadingHTTPServer):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.slots = threading.BoundedSemaphore(8)
+        # Handler threads, not upstream calls: each path already has at most one
+        # upstream read (fill locks), so same-path waiters must not be able to
+        # hold every slot while another path's request queues (Luna r2).
+        self.slots = threading.BoundedSemaphore(self.request_queue_size)
 
     def get_request(self):
         request, address = super().get_request()

@@ -4,6 +4,7 @@ import base64
 import io
 import json
 import threading
+from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 from http.client import HTTPConnection
 from pathlib import Path
@@ -435,3 +436,69 @@ def test_a_failed_background_start_lets_the_next_request_retry():
     assert proxy.fetch(path) == (200, b'{"ok":true}')
     assert proxy.fetch(path) == (200, b'{"ok":true}')
     assert len(calls) == 2  # not stuck behind a refresh that never ran
+
+
+def test_last_good_is_never_served_past_the_bodys_own_stale_bound():
+    now = [1_800_000_000]
+    proxy = StatsProxy(clock=lambda: now[0], spawn=inline)
+    proxy.identity_token = lambda: "synthetic"
+    # The admin says its oldest served value turns 24h old in one hour.
+    proxy.request = lambda *args, **kwargs: b'{"staleUntil":"2027-01-15T09:00:00Z"}'
+    path = "/api/omi/stats/wall/series/retention"
+    proxy.fetch(path)
+    bound = proxy.good[path][2]
+    assert bound == datetime(2027, 1, 15, 9, tzinfo=timezone.utc).timestamp()
+
+    def down(*args, **kwargs):
+        raise TimeoutError("synthetic")
+
+    proxy.request = down
+    now[0] = bound - 1
+    assert proxy.fetch(path)[0] == 200
+    now[0] = bound
+    assert proxy.fetch(path)[0] == 502
+
+
+def test_http_same_path_cold_waiters_do_not_starve_other_paths(monkeypatch):
+    now = [10000]
+    proxy = StatsProxy(clock=lambda: now[0])
+    entered, release = threading.Event(), threading.Event()
+
+    def upstream(url, *args, **kwargs):
+        if url.endswith("/headline"):
+            entered.set()
+            assert release.wait(20)
+        return b'{"ok":true}'
+
+    proxy.identity_token = lambda: "synthetic"
+    proxy.request = upstream
+    monkeypatch.setattr(Handler, "proxy", proxy)
+    server = Server(("127.0.0.1", 0), Handler)
+    serving = threading.Thread(target=server.serve_forever, daemon=True)
+    serving.start()
+
+    def get(path):
+        connection = HTTPConnection(*server.server_address, timeout=20)
+        try:
+            connection.request("GET", path)
+            response = connection.getresponse()
+            return response.status, response.read()
+        finally:
+            connection.close()
+
+    try:
+        with ThreadPoolExecutor(max_workers=20) as pool:
+            # More cold headline panels than the old 8-slot limit, all waiting.
+            headline = [pool.submit(get, "/api/omi/stats/wall/series/headline") for _ in range(18)]
+            assert entered.wait(10)
+            try:
+                health = pool.submit(get, "/api/omi/stats/wall/series/health")
+                assert health.result(timeout=5) == (200, b'{"ok":true}')
+            finally:
+                release.set()
+            assert all(f.result(timeout=20)[0] == 200 for f in headline)
+    finally:
+        release.set()
+        server.shutdown()
+        server.server_close()
+        serving.join(timeout=10)
