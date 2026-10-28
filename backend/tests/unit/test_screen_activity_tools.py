@@ -1,7 +1,7 @@
 """Tests verifying screen_activity_tools query validation, user resolution, and app filter matching.
 
 Ensures that empty or None queries return graceful error messages, limits are coerced cleanly,
-user ID resolution falls back to top-level configuration when needed, and app filters match
+user ID resolution strictly extracts configurable.user_id, and app filters match
 safely without case/whitespace or NoneType errors.
 """
 
