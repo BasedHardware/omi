@@ -202,15 +202,21 @@ void main() {
           RestoreAccount(
             status: AccountDeletionStatus(
               pendingDeletion: true,
-              wipeAt: DateTime.now().add(const Duration(days: 14, minutes: 1)),
+              wipeAt: DateTime.now().add(const Duration(days: 9, hours: 1)),
             ),
             onRestored: () {},
             onFinished: () {},
           ),
         );
+        expect(find.text('You have 9 days left to restore your account.'), findsOneWidget);
+        expect(find.textContaining('This ends the restore window.'), findsNothing);
         await capture(tester, 'restore_$mode');
         await tester.tap(find.byKey(const Key('finish_deleting')));
         await tester.pumpAndSettle();
+        expect(find.textContaining('This ends the restore window.'), findsNothing);
+        await tester.tap(find.byKey(const Key('finish_deleting_confirm')));
+        await tester.pumpAndSettle();
+        expect(find.textContaining('This ends the restore window.'), findsOneWidget);
         await capture(tester, 'finish_deleting_$mode');
       } finally {
         debugDefaultTargetPlatformOverride = null;

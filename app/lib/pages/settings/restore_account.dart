@@ -61,9 +61,28 @@ class _RestoreAccountState extends State<RestoreAccount> {
     }
   }
 
+  void _confirmFinishDeleting() {
+    final label = context.l10n.deleteFinishNowButton;
+    _showFinishConfirmation().catchError((Object error, StackTrace stack) {
+      OmiButton.reportOnPressedError(error, stack, label: label);
+    });
+  }
+
+  Future<void> _showFinishConfirmation() async {
+    if (_busy) return;
+    final confirmed = await showOmiConfirm(
+      context,
+      title: context.l10n.deleteFinishNowTitle,
+      message: context.l10n.deleteFinishNowWarning,
+      confirmLabel: context.l10n.deleteFinishNowButton,
+      destructive: true,
+    );
+    if (confirmed && mounted) await _act(false);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final days = widget.status.graceDaysAt(DateTime.now());
+    final remaining = widget.status.restoreDaysRemainingAt(DateTime.now());
     return Scaffold(
       backgroundColor: OmiColors.surface0,
       body: SafeArea(
@@ -85,13 +104,13 @@ class _RestoreAccountState extends State<RestoreAccount> {
                       OmiSettingsRow(title: context.l10n.deleteRestoreBillingNotice),
                     ]),
                     const SizedBox(height: OmiSpacing.md),
-                    if (days > 0)
-                      Text(context.l10n.deleteRestoreDaysRemaining(days),
-                          style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
-                    if (_confirmFinish) ...[
-                      const SizedBox(height: OmiSpacing.md),
-                      Text(context.l10n.deleteFinishNowWarning,
-                          style: OmiType.footnote.copyWith(color: OmiColors.danger)),
+                    if (remaining.available) ...[
+                      Text(
+                        remaining.days == 0
+                            ? context.l10n.deleteRestoreLessThanDayRemaining
+                            : context.l10n.deleteRestoreDaysRemaining(remaining.days),
+                        style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                      ),
                     ],
                   ],
                 ),
@@ -110,7 +129,7 @@ class _RestoreAccountState extends State<RestoreAccount> {
                   isLoading: _busy && !_restoring,
                   label: context.l10n.deleteFinishNowButton,
                   expand: true,
-                  onPressed: _busy ? null : () => _act(false),
+                  onPressed: _busy ? null : _confirmFinishDeleting,
                 )
               else
                 OmiButton.secondary(

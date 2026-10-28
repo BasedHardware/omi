@@ -140,10 +140,46 @@ void main() {
     await tester.tap(find.byKey(const Key('finish_deleting')));
     await tester.pumpAndSettle();
     expect(find.text('Erase my account now'), findsOneWidget);
+    expect(find.textContaining('This ends the restore window.'), findsNothing);
+    await tester.tap(find.byKey(const Key('finish_deleting_confirm')));
+    await tester.pumpAndSettle();
     expect(find.textContaining('This ends the restore window.'), findsOneWidget);
+    expect(find.text('Erase Your Account?'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('This ends the restore window.'), findsNothing);
     await tester.tap(find.byKey(const Key('restore_my_account')));
     await tester.pumpAndSettle();
     expect(restored, 1);
+  });
+
+  testWidgets('restore deadline copy uses whole wipe_at days and hides unknown or expired deadlines', (tester) async {
+    final now = DateTime.now();
+
+    Future<void> show(AccountDeletionStatus status) async {
+      await tester.pumpWidget(deletionTestHost(RestoreAccount(
+        status: status,
+        onRestored: () {},
+        onFinished: () {},
+      )));
+      await tester.pumpAndSettle();
+    }
+
+    await show(AccountDeletionStatus(pendingDeletion: true, wipeAt: now.add(const Duration(days: 9, hours: 1))));
+    expect(find.text('You have 9 days left to restore your account.'), findsOneWidget);
+    expect(find.textContaining('14 days'), findsNothing);
+
+    await show(AccountDeletionStatus(pendingDeletion: true, wipeAt: now.add(const Duration(days: 1, hours: 1))));
+    expect(find.text('You have 1 day left to restore your account.'), findsOneWidget);
+
+    await show(AccountDeletionStatus(pendingDeletion: true, wipeAt: now.add(const Duration(hours: 23))));
+    expect(find.text('You have less than a day left to restore your account.'), findsOneWidget);
+
+    await show(const AccountDeletionStatus(pendingDeletion: true, gracePeriodDays: 14));
+    expect(find.textContaining('left to restore your account'), findsNothing);
+
+    await show(AccountDeletionStatus(pendingDeletion: true, wipeAt: now.subtract(const Duration(minutes: 1))));
+    expect(find.textContaining('left to restore your account'), findsNothing);
   });
 
   testWidgets('finish deletion puts progress on erase, leaves restore idle, and retains errors', (tester) async {
@@ -161,6 +197,9 @@ void main() {
     await tester.tap(find.byKey(const Key('finish_deleting')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('finish_deleting_confirm')));
+    await tester.pumpAndSettle();
+    expect(calls, 0);
+    await tester.tap(find.text('Erase my account now').last);
     await tester.pump();
     expect(calls, 1);
     expect(tester.widget<OmiButton>(find.byKey(const Key('finish_deleting_confirm'))).isLoading, isTrue);

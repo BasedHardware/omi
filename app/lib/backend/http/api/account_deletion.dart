@@ -46,6 +46,16 @@ class AccountDeletionStatus {
     }
     return pendingDeletion ? 0 : gracePeriodDays;
   }
+
+  /// Whole days left before the server's deletion deadline. A positive
+  /// fraction of a day is 0; unknown or expired deadlines are unavailable.
+  ({bool available, int days}) restoreDaysRemainingAt(DateTime now) {
+    final deadline = wipeAt;
+    if (deadline == null) return (available: false, days: 0);
+    final remaining = deadline.difference(now);
+    if (remaining <= Duration.zero) return (available: false, days: 0);
+    return (available: true, days: remaining.inDays);
+  }
 }
 
 class AccountDeletionApi {
