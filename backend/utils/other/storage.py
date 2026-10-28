@@ -1440,7 +1440,7 @@ def download_audio_chunks_and_merge(
             path,
             uid,
             sample_rate,
-            **({'download_kwargs': {'if_generation_match': entry['generation']}} if strict_sources else {}),
+            download_kwargs={'if_generation_match': entry['generation']} if strict_sources else None,
         )
 
     def download_single_chunk(timestamp: float) -> tuple[float, bytes | None]:
