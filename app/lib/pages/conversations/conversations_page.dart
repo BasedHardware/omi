@@ -177,11 +177,11 @@ List<_ConversationListRow> _buildConversationListRows({
     final shown = conversationsByDate[date] ?? const <ServerConversation>[];
     // Revealed clips take their place in the day's timeline, not a pile at its end.
     final conversations = revealedNoiseDates.contains(date) && folded.isNotEmpty
-        // omi-perf-allow: sort-in-build -- one revealed day's rows, only while that day is revealed
         ? ([
             ...shown,
             for (final c in folded)
               if (c.isFoldedNoise && !shown.any((s) => s.id == c.id)) c,
+            // omi-perf-allow: sort-in-build -- one revealed day's rows, only while that day is revealed
           ]..sort((x, y) => y.createdAt.compareTo(x.createdAt)))
         : shown;
     final recordings = recordingsByDate[date] ?? const <LocalRecording>[];
