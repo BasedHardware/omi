@@ -453,7 +453,10 @@ class TestIsHardRestricted:
         }
         mock_speech.return_value = {'daily_ms': 8000000, 'three_day_ms': 0, 'weekly_ms': 0}
 
-        assert fair_use_mod.is_hard_restricted('user1') is True
+        # Keep this engine test independent of subscription storage and use the
+        # backwards-compatible metered profile these 8,000,000 ms exceed.
+        with patch.object(fair_use_mod, 'fair_use_caps_for_user', return_value=fair_use_mod.fair_use_caps_for_plan()):
+            assert fair_use_mod.is_hard_restricted('user1') is True
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
@@ -602,7 +605,8 @@ class TestDatetimeNormalization:
         _fair_use_db.get_fair_use_state.return_value = {'stage': 'restrict', 'restrict_until': aware_future}
         mock_speech.return_value = {'daily_ms': 8000000, 'three_day_ms': 0, 'weekly_ms': 0}
 
-        result = fair_use_mod.is_hard_restricted('user1')
+        with patch.object(fair_use_mod, 'fair_use_caps_for_user', return_value=fair_use_mod.fair_use_caps_for_plan()):
+            result = fair_use_mod.is_hard_restricted('user1')
         assert result is True
 
 
