@@ -188,6 +188,7 @@ def test_speaker_map_keeps_scoped_hard_identity_evidence(monkeypatch):
     # Still the plain cluster -> name mapping every existing caller reads.
     assert speaker_map == {'c0': 'David', 'c1': 'Sarah Chen', 'c2': 'Lee'}
     assert speaker_map.owner_name == 'David'
+    assert [cluster.prompt_key for cluster in speaker_map.clusters] == ['c0', 'c1', 'c2']
     assert [
         (cluster.speaker_id, cluster.scope, cluster.owner, cluster.names, cluster.speech_seconds, cluster.words)
         for cluster in speaker_map.clusters
