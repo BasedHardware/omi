@@ -742,8 +742,16 @@ is unknown. Both block widening. Include transferred donor speech in both the
 doubled-speech numerator and denominator, counted once per source segment. Sum
 `appended_seconds_overlapping_live` plus `donor_seconds_retained_overlapping_live`
 for the numerator, and `appended_seconds` plus `donor_seconds_retained` for the
-denominator. Incomplete or missing measurements block widening;
-bridge observations have a separate denominator from resolver decisions and
+denominator. Incomplete or missing measurements block widening.
+Both legacy intake and batch projection emit fresh append and stamp markers
+through one post-commit consumer. Append timing observes final survivors
+independently of the dedupe policy, including fleet safety dedupe. Filter append
+lines to `lineage_admitted=true` for the cohort widening formula. On cohort live
+targets, capture-proof plus lexical lineage dedupe takes precedence over fleet
+fuzzy dedupe and refactor proposals; non-cohort fleet policy is unchanged.
+Finite zero-length donor intervals contribute zero seconds without invalidating
+the bridge; inverted/nonfinite donor timing remains unknown.
+Bridge observations have a separate denominator from resolver decisions and
 new-row observations. Field values and caps live in
 [`utils/sync/ARCHITECTURE.md`](../utils/sync/ARCHITECTURE.md).
 
@@ -752,10 +760,12 @@ outcomes `created_clear|created_overlap|created_unknown`. Only lineage-admitted,
 S1-validated creates emit; unknown includes a closed `incomplete_reason` field,
 and every reason remains unmeasured and blocks widening. Clear/overlap omit it.
 Classification reuses assignment's transactional read cache. A lineage-eligible
-stamp-gap reroute with retained new speech first runs bounded metadata discovery
+stamp-gap reroute with retained new speech, or a rejected explicit target falling
+to temporal assignment, first runs bounded metadata discovery
 once outside the transaction, then restarts with its candidate hints and diagnostics.
 The reroute rechecks all fences and live candidates transactionally, using the same
-live-overlap selector as untargeted intake. Targets that remain valid and repeat-only
+bounded lookup as untargeted intake. Candidate hints are observation-only and
+never become reroute targets. Retained explicit targets and stamp-gap repeat-only
 acknowledgments add no discovery query. Creates that never run discovery report
 `discovery_skipped`; `not_recorded` is reserved for missing diagnostics. See `utils/sync/ARCHITECTURE.md` for the closed count buckets and
 lookup-completeness rules and ordered reason set.

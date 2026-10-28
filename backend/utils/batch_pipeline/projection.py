@@ -46,7 +46,6 @@ from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.voice_evidence import prepare as prepare_voice_evidence
 from utils.batch_pipeline.projection_parts import align_projection_words, bounded_projection_words
 from utils.sync.assignment_errors import SyncAssignmentSuperseded
-from utils.sync.intake_completion import log_sync_lineage_stamp_gap_refused
 from utils.stt.transcript_admission import filter_admission
 
 if TYPE_CHECKING:
@@ -899,8 +898,6 @@ class Projector:
                         )
                         receipt = receipt_box[0]
                         record_labels(assigned[2])
-                        if assigned[0].pop('_sync_lineage_stamp_gap_refused', False):
-                            log_sync_lineage_stamp_gap_refused()
             except ProjectionReplay as replay:
                 receipt = replay.receipt
             except ProjectionGenerationAmbiguous:
