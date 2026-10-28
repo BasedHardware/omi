@@ -139,7 +139,10 @@ List<int> _legacyInfo() {
 BtDevice _device(String fw) =>
     BtDevice(id: 'omi-1', name: 'Omi', type: DeviceType.omi, rssi: -40, firmwareRevision: fw);
 
-Future<void> _settle() => Future<void>.delayed(const Duration(milliseconds: 50));
+/// Probe/opt-in chains settle on the microtask queue (scripted transports
+/// reply in memory); the delay only yields the event loop, so it was pure wall
+/// time at 50 ms per call.
+Future<void> _settle() => Future<void>.delayed(const Duration(milliseconds: 12));
 
 bool _hasOp(_ScriptedTransport t, int op) => t.writes.any((w) => w[0] == op);
 
@@ -217,11 +220,14 @@ void main() {
       const ringA = 0x1122334455667788;
       const ringB = 0x0102030405060708;
       final t = _ScriptedTransport(infoPayload: _v1Info(ringId: ringA), dropEnableAck: true);
-      final conn = OmiDeviceConnection(_device('3.0.21'), t);
+      // Short injected enable-ack window: the 5 s production give-up window is
+      // what this test waits out; against an in-memory transport a 200 ms
+      // window exercises the identical give-up path without 6 s of real time.
+      final conn = OmiDeviceConnection(_device('3.0.21'), t, enableAckTimeout: const Duration(milliseconds: 200));
       t.emit(DeviceTransportState.connected);
       await _settle();
       await conn.performGetBleAudioBytesListener(onAudioBytesReceived: (_) {});
-      await Future<void>.delayed(const Duration(seconds: 6));
+      await Future<void>.delayed(const Duration(milliseconds: 400));
 
       expect(conn.ringEffectiveCaps & RingProtocol.capRingId, RingProtocol.capRingId);
       expect(conn.ringEffectiveCaps & RingProtocol.capLivePersist, 0);
