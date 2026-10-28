@@ -30,7 +30,7 @@ def _clean_fingerprints(values: Mapping[str, Optional[str]]) -> dict[str, str]:
     return {
         member_id: fingerprint
         for member_id, fingerprint in values.items()
-        if isinstance(member_id, str) and member_id and isinstance(fingerprint, str) and fingerprint
+        if member_id and isinstance(fingerprint, str) and fingerprint
     }
 
 

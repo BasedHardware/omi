@@ -189,7 +189,7 @@ def member_context_rows(
         except Exception as exc:  # noqa: BLE001 - member identity is best effort
             logger.warning('capture group member row read failed: %s', type(exc).__name__)
             continue
-        if member_row_is_shareable(row):
+        if row is not None and member_row_is_shareable(row):
             rows[member['id']] = row
     return rows
 

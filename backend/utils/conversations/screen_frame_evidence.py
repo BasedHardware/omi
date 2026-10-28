@@ -154,7 +154,8 @@ def load_capture_group_frame_evidence(uid: str, conversation: Any) -> tuple[Scre
             )
             external_data = (member_row or {}).get('external_data') or {}
             if (
-                not member_row_is_shareable(member_row)
+                member_row is None
+                or not member_row_is_shareable(member_row)
                 or not get_conversation_screenshot_sharing_enabled(member_row)
                 or not isinstance(external_data, dict)
                 or external_data.get('conversation_role') != 'meeting'
