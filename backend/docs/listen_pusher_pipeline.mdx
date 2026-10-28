@@ -5308,6 +5308,43 @@ the SSRF invalid-target refusal. The arming delivery's own terminal evidence is
 unchanged — the one ERROR, the DLQ write, and the counted per-uid ladder
 failure its caller records — so auto-disable still converges during the hold.
 
+Since 2026-10-28 the invalid-setting sibling converges too. The audio-bytes
+setting stores `'<url>,<seconds>'`, so clearing only the URL leaves a non-empty
+`',5'` value that passes every emptiness gate yet yields an empty URL that can
+never validate; that branch returned BEFORE the per-uid ladder, so a
+configuration fault — the one fault class that can never deliver — looped
+forever while every network fault class retired itself (prod pusher
+2026-10-25..28: ≥1000 `invalid webhook url` warnings/day, 12 distinct uids for
+days, zero auto-disable events among them). The invalid branch now records one
+offline ladder failure (status 0, `InvalidWebhookUrl`) per delivery attempt and
+drives `_handle_dev_webhook_disable` like every counted path: the 100th
+consecutive invalid delivery fires the one-time auto-disable + notification,
+further invalid deliveries stay silent, and a repaired + re-enabled setting
+resets on the first healthy delivery. Absent settings, empty payloads, and
+out-of-range sample rates stay pure no-ops (caller faults, not stored-user
+configuration), and the breaker is untouched — a URL the validator refuses has
+no breaker state to poison.
+
+The same day the marketplace-app realtime lanes (audio bytes and transcript)
+gained the DNS-dead sibling of the transport hold. The SSRF guard's refusal
+carries two faults behind one exception type: a private/loopback DNS answer is
+a stored-URL configuration error (a developer fix, never admitted on a
+re-dial — it keeps the silent, attributed rejection it always had, arming
+nothing so an edited URL is never masked), while an empty DNS answer is an
+endpoint outage that self-heals when the name's records return. The outage
+shape is classified by `utils.http_client.is_unresolved_host_error` (typed and
+host-bound — no string matching at call sites) and arms the same
+`record_transport_holddown` window, consulted BEFORE the guard (the refusal
+happens inside resolution, so a hold checked after it would never be reached).
+One expired `*.trycloudflare.com` tunnel had replayed the guard + fan-out walk
+×1500/day from a single app id (prod pusher 2026-10-28) while the app's own
+24h/72h health ladder never saw a fault. The refusal is deliberately NOT a
+webhook-health failure: the ladder stays reserved for evidence the endpoint
+answers, and the hold leaves the breaker's outage latch untouched. Regression
+guards live in `tests/unit/test_dev_webhook_invalid_setting_convergence.py`
+and `tests/unit/test_app_webhook_dns_dead_holddown.py`; the policy narrative is
+`backend/docs/webhook_delivery_guard_convergence.mdx`.
+
 Failure-Class: FC-deterministic-provider-rejection-burns-connect-retries —
 transport-failure sibling in `backend/utils/webhooks.py` /
 `backend/utils/http_client.py` (developer-webhook delivery, schedule-exhaustion

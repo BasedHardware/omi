@@ -9,6 +9,7 @@ import time
 import httpx
 
 from utils.http_client import (
+    is_unresolved_host_error,
     safe_request_target,
     UnsafeWebhookURLError,
     get_webhook_client,
@@ -951,17 +952,33 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
         separator = '&' if '?' in url else '?'
         url += f'{separator}sample_rate={sample_rate}&uid={uid}'
 
-        # SSRF guard (see trigger_external_integrations): a non-public
-        # developer-configured webhook URL is a config error, not a delivery
-        # failure — reject without recording failure or tripping the breaker.
+        # SSRF guard (see trigger_external_integrations). A refusal here splits
+        # into two faults the delivery policy must treat differently: a
+        # private/loopback answer is the stored URL itself being wrong — a
+        # developer fix, never admitted on a re-dial; a host that answers no
+        # DNS at all is an endpoint outage that self-heals when the name's
+        # records return. Before the hold existed, every delivery of a
+        # DNS-dead endpoint replayed the guard + fan-out walk at the app's
+        # full audio cadence (prod pusher 2026-10-28: one expired
+        # trycloudflare tunnel, `Could not resolve host ... trycloudflare.com`,
+        # x60/hour indefinitely, the app's own ladder untouched for 72h).
+        # The outage shape arms the same short transport holddown a dead
+        # connect arms, so the endpoint cools for one window per arming
+        # delivery while recovery stays observable; the policy shape keeps
+        # its silent, self-healing rejection. The hold is consulted BEFORE the
+        # guard: the refusal happens inside resolution, so a hold checked
+        # only after it would never be reached and the walk would replay
+        # every delivery.
+        cb = get_webhook_circuit_breaker(url)
+        if not cb.allow_request():
+            return
+
         try:
             pinned_url, pin_kwargs = await run_blocking(db_executor, safe_request_target, url)
         except UnsafeWebhookURLError as e:
+            if is_unresolved_host_error(e, url):
+                cb.record_transport_holddown()
             logger.warning('Rejected non-public webhook URL for app %s: %s', app.id, e)
-            return
-
-        cb = get_webhook_circuit_breaker(url)
-        if not cb.allow_request():
             return
 
         try:
@@ -1072,20 +1089,29 @@ async def _async_trigger_realtime_integrations(
         else:
             url += '?uid=' + uid
 
-        # SSRF guard (see trigger_external_integrations): a non-public
-        # developer-configured webhook URL is a config error, not a delivery
-        # failure — reject without recording failure or tripping the breaker.
-        try:
-            pinned_url, pin_kwargs = await run_blocking(db_executor, safe_request_target, url)
-        except UnsafeWebhookURLError as e:
-            journey_attempt.fail('invalid_response')
-            logger.warning('Rejected non-public webhook URL for app %s: %s', app.id, e)
-            return
-
+        # SSRF guard (see trigger_external_integrations). The unresolved-host
+        # refusal shape is an endpoint outage that self-heals with the name's
+        # DNS records, so it arms the same short transport holddown a dead
+        # connect arms — one guard + fan-out walk per window instead of one
+        # per delivery (see the audio lane's guard for the fault split). The
+        # private/loopback shape stays the silent, self-healing policy
+        # rejection it has always been. The hold is consulted BEFORE the
+        # guard: the refusal happens inside resolution, so a hold checked
+        # only after it would never be reached and the walk would replay
+        # every delivery.
         cb = get_webhook_circuit_breaker(url)
         if not cb.allow_request():
             journey_attempt.fail('dependency_unavailable')
             logger.info(f'trigger_realtime_integrations: circuit breaker open for {app.id}')
+            return
+
+        try:
+            pinned_url, pin_kwargs = await run_blocking(db_executor, safe_request_target, url)
+        except UnsafeWebhookURLError as e:
+            journey_attempt.fail('invalid_response')
+            if is_unresolved_host_error(e, url):
+                cb.record_transport_holddown()
+            logger.warning('Rejected non-public webhook URL for app %s: %s', app.id, e)
             return
 
         try:

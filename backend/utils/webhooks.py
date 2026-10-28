@@ -661,6 +661,28 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
         return
     webhook_url = webhook_url_from_setting(WebhookType.audio_bytes, webhook_setting)
     if not _is_valid_audio_bytes_webhook_url(webhook_url):
+        # A stored target that can never be delivered (no URL behind a ',5'
+        # seconds-only setting, a cleared field, a malformed scheme) is a
+        # configuration fault, not a delivery outcome: before the ladder read
+        # it, this branch returned without counting, so the per-uid
+        # auto-disable policy could never see the fault — the loop sensor's
+        # top honest WARNING (prod pusher 2026-10-25..28: ≥1000/day, 12
+        # distinct uids looping for days) fed a policy that provably works
+        # when it is reached (network-fault uids disable at the threshold on
+        # this same seam). Walk the same ladder the counted paths use: the
+        # offline invalid marker advances the per-uid health record, the
+        # threshold fires the one-time auto-disable + notification, and a
+        # re-enabled, repaired setting resets the counter on its first healthy
+        # delivery — the recovery the misconfigured user can actually reach.
+        should_disable = await run_blocking(
+            db_executor,
+            record_dev_webhook_failure,
+            uid,
+            WebhookType.audio_bytes,
+            0,
+            'InvalidWebhookUrl',
+        )
+        await _handle_dev_webhook_disable(uid, WebhookType.audio_bytes, should_disable)
         logger.warning(f'send_audio_bytes_developer_webhook: invalid webhook url for uid={uid}')
         return
 

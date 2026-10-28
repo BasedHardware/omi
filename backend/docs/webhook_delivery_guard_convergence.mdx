@@ -1,0 +1,95 @@
+# Webhook delivery guards: convergence and cooldown
+
+Developer-configured webhook targets (per-user developer webhooks and
+marketplace-app external integrations) share one delivery policy shape: every
+fault class a delivery path can classify is evidence a convergence policy
+consumes. Two guards complete that policy on the realtime lanes; both were
+found by the prod loop sensor as unbounded WARNING loops that no existing
+policy ever retired.
+
+## Developer audio-bytes webhooks: invalid stored settings converge
+
+`send_audio_bytes_developer_webhook` validates its stored URL before any
+delivery. Before 2026-10-28 the invalid branch returned without consulting
+the per-uid disable ladder, so a configuration fault — the one fault class
+that can never deliver — was invisible to the only policy that retires it:
+`audio_bytes` stores `'<url>,<seconds>'`, so clearing only the URL leaves a
+non-empty `',5'` setting that passes every emptiness gate yet yields an empty
+URL forever (prod pusher 2026-10-25..28: ≥1000 warnings/day, 12 distinct
+uids looping for days, zero auto-disable events among them, while
+network-fault uids on the same seam disabled at the 100-failure threshold).
+
+The invalid branch now walks the same ladder the counted paths use
+(`record_dev_webhook_failure` with status 0 / `InvalidWebhookUrl`, then
+`_handle_dev_webhook_disable`): the 100th consecutive invalid delivery fires
+the one-time auto-disable + notification, further invalid deliveries stay
+silent (the already-disabled transition), and a repaired + re-enabled
+setting resets the counter on its first healthy delivery. Deliberately NOT
+counted: an absent setting (emptiness no-op), an empty payload, and an
+out-of-range sample rate — caller/caller-client faults, not stored-user
+configuration. The circuit breaker is untouched on this branch: a URL the
+validator refuses has no breaker state to poison.
+
+Recovery: fix the URL in developer settings and re-enable. The auto-disable
+notification names the surface, and `record_dev_webhook_success` (fired by
+the first healthy delivery, and by the settings endpoint on set/enable)
+resets the counter.
+
+## Marketplace-app realtime lanes: DNS-dead endpoints cool down
+
+`trigger_realtime_audio_bytes` and `trigger_realtime_integrations` run the
+SSRF guard (`safe_request_target` → `assert_public_http_url`) per delivery.
+The guard's `UnsafeWebhookURLError` carries two different faults behind one
+exception type:
+
+- the host ANSWERED DNS with a private/loopback address — the stored URL
+  itself is wrong; a developer fix, never admitted on a re-dial. This shape
+  keeps its prior contract: a silent, attributed WARNING, no hold, no
+  breaker state, self-healing the moment the stored URL changes.
+- the host answered NO DNS at all — an endpoint outage of the same kind a
+  connect timeout is; the stored URL heals on its own when the name's
+  records return. This shape now arms the short transport holddown
+  (`WebhookCircuitBreaker.record_transport_holddown`, 120s) so the endpoint
+  is skipped for one window per arming delivery instead of replaying the
+  guard + fan-out walk at the app's full trigger cadence (prod pusher
+  2026-10-28: one expired `*.trycloudflare.com` tunnel,
+  `Could not resolve host`, ×1500/day from a single app id while the app's
+  graduated ladder never saw the fault).
+
+The two lanes call `is_unresolved_host_error(error, url)` — a typed,
+host-bound classifier in `utils/http_client.py` — instead of string-matching
+the refusal at each site. The hold is consulted BEFORE the guard: the
+refusal happens inside resolution, so a hold checked only after it would
+never be reached and the walk would replay every delivery.
+
+The refusal is deliberately NOT a webhook-health failure: the app ladder
+(24h warn / 72h auto-disable) stays reserved for evidence the endpoint
+itself answers, and the hold leaves the breaker's outage latch untouched —
+an endpoint that heals must never sit open behind refusals that are holds,
+not failures. Recovery: DNS records return (a tunnel is re-created, a
+domain is renewed) and the next window's single real delivery delivers
+again; no developer action is required.
+
+## Related surfaces
+
+- `_post_dev_webhook` (the shared developer-webhook sender) already
+  classifies its own fault families: receiver 4xx/3xx arm the deterministic
+  rejection hold, exhausted transport schedules arm the transport holddown,
+  and every counted path feeds the per-uid ladder (see
+  `test_webhook_rejection_hold.py`, `test_webhook_transport_holddown.py`,
+  `test_dev_webhook_disable_convergence.py`).
+- Marketplace-app durable lanes classify redirect answers as notify-only
+  (`_record_redirect_not_followed`), never as outage evidence.
+
+Regression guards: `tests/unit/test_dev_webhook_invalid_setting_convergence.py`
+(17, real Lua threshold over fakeredis) and
+`tests/unit/test_app_webhook_dns_dead_holddown.py` (13, real breaker
+semantics through the production lanes).
+
+Failure-Class: FC-automated-disable-without-reachable-recovery (developer
+half: nearest registry class on the same webhook-health policy surface —
+the disable policy and the faults it exists to retire must meet, and the
+disable it fires stays clearable through the settings surface the
+notification names) and FC-deterministic-provider-rejection-burns-connect-
+retries (marketplace half: a fault deterministic for the whole target must
+leave the target out of selection for a cooldown, not replay the walk).

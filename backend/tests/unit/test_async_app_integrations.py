@@ -281,6 +281,7 @@ if _http_mod is not None and not hasattr(_http_mod, '__file__'):
         pass
 
     _http_mod.UnsafeWebhookURLError = _UnsafeWebhookURLError
+    _http_mod.is_unresolved_host_error = lambda error, url: False
 
 # Stub executors — must use real ThreadPoolExecutor because asyncio's
 # run_in_executor calls executor.submit() and wraps the returned Future.
@@ -516,7 +517,11 @@ class TestSSRFConfigRejection:
         assert result == {}
         client.post.assert_not_called()
         cb.record_failure.assert_not_called()
-        cb.allow_request.assert_not_called()
+        # The breaker IS consulted before the guard (the DNS-dead hold must be
+        # reachable), but a policy rejection arms nothing: no hold, no outage
+        # tick, and the same silent rejection as before.
+        cb.record_transport_holddown.assert_not_called()
+        cb.record_deterministic_rejection.assert_not_called()
         record_failure.assert_not_called()
 
 

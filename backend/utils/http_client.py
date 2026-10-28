@@ -124,6 +124,26 @@ def assert_public_http_url_all(url: str) -> list[str]:
     return safe_ips
 
 
+def is_unresolved_host_error(error: BaseException, url: str) -> bool:
+    """Whether ``error`` is the SSRF guard's host-resolution refusal for ``url``.
+
+    ``assert_public_http_url`` raises one refusal shape for two different
+    faults: the host answered DNS with a private/loopback address (a policy
+    rejection — the stored URL itself is the config error, and no re-dial of
+    it can ever be admitted), and the host answered no DNS at all (an endpoint
+    outage of the same kind a connect timeout is — the stored URL can heal on
+    its own when the name's records return, with no developer action). Callers
+    that cool a destination down on the outage shape classify through this
+    predicate instead of string-matching the refusal at each site.
+    """
+    if not isinstance(error, UnsafeWebhookURLError):
+        return False
+    host = urlparse(url).hostname
+    if not host:
+        return False
+    return f'Could not resolve host {host!r}' in str(error)
+
+
 def pin_to_resolved_ip(url: str, resolved_ip: str) -> tuple[str, dict]:
     """Rewrite `url` to connect directly to `resolved_ip` instead of trusting
     a second DNS lookup at connect time. Returns (pinned_url, extra) where

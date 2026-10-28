@@ -281,6 +281,7 @@ if _http_mod is not None and not hasattr(_http_mod, '__file__'):
         pass
 
     _http_mod.UnsafeWebhookURLError = _UnsafeWebhookURLError
+    _http_mod.is_unresolved_host_error = lambda error, url: False
 
 # Stub executors — db_executor is a sentinel; run_blocking is a pass-through that
 # actually invokes fn so the production code path runs end to end.
