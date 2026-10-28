@@ -68,6 +68,13 @@ void main() {
     expect(LivePreviewCoverage.uncovered([hole], [finalAt(12, 16), finalAt(0, 4)], origin), [hole]);
   });
 
+  test('out of order preview results retain coverage after sorting the cursor input', () {
+    final later = line('later', 17, 19, text: 'newer speech');
+    final earlier = line('earlier', 10, 11, text: 'already final');
+
+    expect(LivePreviewCoverage.uncovered([later, earlier], [finalAt(9, 14), finalAt(20, 22)], origin), [later]);
+  });
+
   test('adjacent and overlapping spans form a union, holes and invalid spans do not', () {
     final lines = [line('a', 0, 12)];
     expect(LivePreviewCoverage.uncovered(lines, [finalAt(6, 12), finalAt(0, 7)], origin), isEmpty);

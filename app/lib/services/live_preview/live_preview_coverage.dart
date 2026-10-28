@@ -95,7 +95,7 @@ abstract final class LivePreviewCoverage {
 
     // Preview results are normally ordered by audio time. If a platform emits
     // late results out of order, sort only that exceptional candidate list.
-    if (!_isSortedByStart(candidates.map((candidate) => (candidate.startUs, candidate.endUs)).toList())) {
+    if (!_areCandidatesSortedByStart(candidates)) {
       candidates.sort((a, b) {
         final startOrder = a.startUs.compareTo(b.startUs);
         if (startOrder != 0) return startOrder;
@@ -158,6 +158,15 @@ abstract final class LivePreviewCoverage {
     for (final span in spans) {
       if (previousStart != null && span.$1 < previousStart) return false;
       previousStart = span.$1;
+    }
+    return true;
+  }
+
+  static bool _areCandidatesSortedByStart(List<_PreviewCandidate> candidates) {
+    int? previousStart;
+    for (final candidate in candidates) {
+      if (previousStart != null && candidate.startUs < previousStart) return false;
+      previousStart = candidate.startUs;
     }
     return true;
   }
