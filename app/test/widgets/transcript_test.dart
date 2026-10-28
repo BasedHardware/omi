@@ -527,6 +527,95 @@ void main() {
       });
     }
 
+    for (final rowCount in [5, 7]) {
+      final history = rowCount == 5 ? 'short' : 'long';
+      for (final change in ['insert photo', 'grow photo', 'grow older row', 'cross viewport height']) {
+        for (final activity in ['drag', 'fling', 'idle']) {
+          testWidgets('$history live $change preserves the visible row during $activity', (tester) async {
+            segments = List.generate(rowCount, (index) => segmentFor('anchor-$index', 0));
+            var olderRowHeight = 85.0;
+            var photoHeight = change == 'insert photo' ? 0.0 : 10.0;
+            Future<void> pumpRows() => tester.pumpWidget(MaterialApp(
+                  localizationsDelegates: AppLocalizations.localizationsDelegates,
+                  supportedLocales: AppLocalizations.supportedLocales,
+                  home: Scaffold(
+                    body: SizedBox(
+                      height: 400,
+                      child: TranscriptWidget(
+                        segments: segments,
+                        followLatest: true,
+                        bottomMargin: 0,
+                        topMargin: false,
+                        separator: false,
+                        scrollState: scrollState,
+                        contentVersion: contentVersion,
+                        leadingItemIds: photoHeight == 0 ? const [] : const ['photo'],
+                        leadingItems: photoHeight == 0 ? const [] : [SizedBox(height: photoHeight)],
+                        onScrollControllerReady: (value) => controller = value,
+                        segmentBuilder: (context, segment, index) => SizedBox(
+                          height: index == 0 ? olderRowHeight : 85,
+                          child: Text(segment.id),
+                        ),
+                      ),
+                    ),
+                  ),
+                ));
+            await pumpRows();
+            await tester.pumpAndSettle();
+            expect(controller.position.maxScrollExtent, greaterThan(80));
+            final gesture = await tester.startGesture(tester.getCenter(find.bySubtype<CustomScrollView>()));
+            for (var step = 0; step < 3; step++) {
+              await gesture.moveBy(const Offset(0, 20), timeStamp: Duration(milliseconds: (step + 1) * 20));
+              await tester.pump(const Duration(milliseconds: 20));
+            }
+            if (activity == 'fling') {
+              await gesture.up(timeStamp: const Duration(milliseconds: 70));
+              await tester.pump();
+              await tester.pump(const Duration(milliseconds: 16));
+              expect(controller.position.isScrollingNotifier.value, isTrue);
+            } else if (activity == 'idle') {
+              await tester.pump(const Duration(milliseconds: 200));
+              await gesture.up(timeStamp: const Duration(milliseconds: 270));
+              await tester.pumpAndSettle();
+              expect(controller.position.isScrollingNotifier.value, isFalse);
+            }
+            expect(controller.position.maxScrollExtent - controller.offset, greaterThan(24));
+            final row = find.byKey(ValueKey('transcript-segment-anchor-${rowCount - 2}'));
+            final top = tester.getTopLeft(row).dy;
+            final viewport = tester.getRect(find.bySubtype<CustomScrollView>());
+            expect(top, inExclusiveRange(viewport.top, viewport.bottom));
+            if (change == 'grow older row') {
+              final olderRow = find.byKey(const ValueKey('transcript-segment-anchor-0'), skipOffstage: false);
+              expect(tester.getBottomLeft(olderRow).dy, lessThanOrEqualTo(viewport.top));
+              olderRowHeight += 30;
+            } else {
+              photoHeight += change == 'cross viewport height' ? 180 : 30;
+            }
+            contentVersion++;
+            // No elapsed time: content must not move the row on this very frame.
+            await pumpRows();
+            expect(tester.getTopLeft(row).dy, closeTo(top, 0.1));
+            if (activity == 'drag') {
+              await gesture.moveBy(const Offset(0, 10));
+              await tester.pump(const Duration(milliseconds: 16));
+              expect(tester.getTopLeft(row).dy, closeTo(top + 10, 0.1));
+              await gesture.cancel();
+            } else if (activity == 'fling') {
+              expect(controller.position.isScrollingNotifier.value, isTrue);
+              await tester.pump(const Duration(milliseconds: 16));
+              // Momentum continues upward without undoing the correction or
+              // introducing another content-sized jump on the next tick.
+              expect(tester.getTopLeft(row).dy - top, inInclusiveRange(0, 30));
+            }
+            await tester.pumpAndSettle();
+            if (activity == 'idle') {
+              expect(tester.getTopLeft(row).dy, closeTo(top, 0.1));
+            }
+          });
+        }
+      }
+    }
+
     testWidgets('a remount after appends preserves the reader and the scroll origin', (tester) async {
       await pumpTranscript(tester);
       await tester.drag(find.bySubtype<CustomScrollView>(), const Offset(0, 260));

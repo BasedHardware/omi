@@ -1694,6 +1694,7 @@ class _LiveTranscriptRenderViewport extends RenderViewport {
         super(anchor: 1);
 
   bool _initialFollow;
+  bool _hasMeasuredAnchor = false;
 
   double _measuredAnchor = 1;
 
@@ -1708,8 +1709,18 @@ class _LiveTranscriptRenderViewport extends RenderViewport {
     final extent = firstChild?.geometry?.scrollExtent;
     if (extent == null || size.height == 0) return;
     final nextAnchor = (extent / size.height).clamp(0.0, 1.0);
-    final anchorChanged = (nextAnchor - anchor).abs() > 0.001;
+    final leadingEdgeShift = (nextAnchor - anchor) * size.height;
+    final anchorChanged = leadingEdgeShift != 0;
+    if (_hasMeasuredAnchor && anchorChanged) {
+      // Changing the anchor moves the center's leading edge even when pixels
+      // hasn't changed. Keep the reader's rows fixed before paint, including
+      // during drags and flings; a post-frame jump would interrupt the gesture.
+      // The next layout applies the corrected dimensions, so ballistic motion
+      // also continues from the corrected position rather than its old origin.
+      offset.correctBy(leadingEdgeShift);
+    }
     _measuredAnchor = nextAnchor;
+    _hasMeasuredAnchor = true;
     final initialFollow = _initialFollow;
     _initialFollow = false;
     if (initialFollow) {
