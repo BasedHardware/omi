@@ -122,8 +122,11 @@ class PgSimStore(SimStore):
     def oldest_retry(self, priority: int) -> float | None:
         return self.pg.oldest_retry(priority)
 
-    def control_candidate(self, priority: int, pool: str, now: float) -> str | None:
-        return self.pg.control_candidate(priority, pool, now)
+    def pull_claim_hint(self, shard: str) -> dict:
+        return self.pg.pull_claim_hint(shard)
+
+    def control_candidate(self, priority: int, pool: str, now: float, *, worker_id: str = '', exclude=()) -> str | None:
+        return self.pg.control_candidate(priority, pool, now, worker_id=worker_id, exclude=exclude)
 
     def first_pending(self, owner_key: str) -> dict | None:
         return self.pg.run(lambda tx: tx.first_pending(owner_key))

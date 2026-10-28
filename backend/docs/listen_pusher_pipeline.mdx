@@ -6152,6 +6152,22 @@ budget checks precede each percentage flip. Close admission everywhere to roll
 back, retaining worker, integration and recovery drain paths. Unsetting producer
 flags does not remove persisted label authority or reset paid recovery intents.
 
+### Batch pull shard ownership
+
+`BATCH_SHARD_SPREAD_ENABLED` defaults on. Pullers first acquire a separate,
+token-fenced 30-second claim for a control shard, then verify it in the actual
+queue/job transaction. A successful pull (including an owned empty/blocked
+visit) releases the claim atomically with its metadata changes. A crashed or
+failed pull leaves it for bounded expiry; a resumed old token cannot mutate
+the queue after takeover. Claim hints are read-only and never authorize work.
+Equal-service shards use a stable hash of the scheduler instance and shard;
+virtual service remains the first ordering key, DRR and privacy/cap/job fences
+remain authoritative, and a busy fresh shard cannot cause a backfill bypass.
+Contention logs use bounded `operation=batch_claim|batch_pull` and
+`shard=scheduler_NN` fields. No user or worker IDs are logged. Set
+`worker.shardSpreadEnabled=false` in the worker Helm values to restore legacy
+selection; the lead owns deployment and live contention qualification.
+
 ### Batch projection contention and replay
 
 `BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED=false` is a dark control on integration.

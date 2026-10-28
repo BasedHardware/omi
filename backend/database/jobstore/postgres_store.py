@@ -18,6 +18,7 @@ moving them is the A4 outbox + receipt-fence seam, not this PR.
 from __future__ import annotations
 
 import re
+import hashlib
 from contextlib import contextmanager
 from copy import deepcopy
 from typing import Any, Callable, Iterator, TypeVar
@@ -203,17 +204,24 @@ class PostgresStore:
             ).fetchone()
         return row[0]
 
-    def control_candidate(self, priority: int, pool: str, now: float) -> str | None:
+    def pull_claim_hint(self, shard: str) -> dict:
+        with self._read_conn() as conn:
+            return self.read_doc(conn, 'pull_claims', shard)
+
+    def control_candidate(self, priority: int, pool: str, now: float, *, worker_id: str = '', exclude=()) -> str | None:
         if priority not in (0, 1, 2) or pool not in {'batch', 'live'}:
             raise ValueError('bounded priority and pool required')
         p, at = f'p{priority}', f'p{priority}_{pool}_at'
         with self._read_conn() as conn:
-            row = conn.execute(
-                f'SELECT key FROM control WHERE namespace = %s AND {p}_active AND {p}_service >= 0 '
-                f'AND {at} <= %s ORDER BY {p}_service, {at}, key LIMIT 1',
-                (self.namespace, now),
-            ).fetchone()
-        return row[0] if row else None
+            rows = conn.execute(
+                f'SELECT key, {p}_service FROM control WHERE namespace = %s AND {p}_active AND {p}_service >= 0 '
+                f'AND {at} <= %s ORDER BY {p}_service, {at}, key LIMIT %s',
+                (self.namespace, now, 64 if worker_id else 1),
+            ).fetchall()
+        if worker_id:
+            rows = [row for row in rows if row[0] not in exclude]
+            rows.sort(key=lambda row: (row[1], hashlib.sha256(f'{worker_id}:{row[0]}'.encode()).digest()))
+        return rows[0][0] if rows else None
 
     def quarantine_fenced(self, segment_id: str, now: float) -> bool:
         """Revoke a fenced detached lease/retry; same fence recheck and revoke-only write as Firestore."""

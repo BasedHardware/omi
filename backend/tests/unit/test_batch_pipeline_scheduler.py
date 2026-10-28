@@ -95,13 +95,18 @@ class MemoryStore:
         ]
         return min(jobs) if jobs else None
 
-    def control_candidate(self, priority, pool, now):
+    def pull_claim_hint(self, shard):
+        with self.lock:
+            return deepcopy(self.rows.get(('pull_claims', shard), {}))
+
+    def control_candidate(self, priority, pool, now, *, worker_id='', exclude=()):
         from utils.batch_pipeline.control import field
 
         candidates = [
             (v[field(priority, 'service')], v[field(priority, pool + '_available_at')], key)
             for (table, key), v in self.rows.items()
             if table == 'control'
+            and key not in exclude
             and v.get(field(priority, 'active'))
             and v[field(priority, pool + '_available_at')] <= now
         ]
