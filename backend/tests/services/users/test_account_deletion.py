@@ -97,6 +97,7 @@ def _default_to_no_legal_hold(monkeypatch):
     # Existing cases below exercise the immediate kill-switch path. Grace
     # behavior is covered separately with the flag explicitly enabled.
     monkeypatch.setenv('ACCOUNT_DELETION_GRACE_ENABLED', 'false')
+    monkeypatch.setattr(account_deletion.deletion_grace_db, 'promote_grace_to_immediate', lambda _uid: None)
     monkeypatch.setattr(account_deletion, 'acquire_destructive_operation', MagicMock())
     monkeypatch.setattr(account_deletion, 'finish_destructive_operation', MagicMock())
     # A previously collected test may have imported the real users module
@@ -1261,7 +1262,7 @@ def test_start_account_deletion_uses_default_grace_without_dispatch(monkeypatch)
     monkeypatch.setenv('ACCOUNT_DELETION_GRACE_WINDOW_DAYS', '14')
     monkeypatch.setattr(account_deletion, 'account_deletion_grace_window', lambda: timedelta(days=14))
     monkeypatch.setattr(
-        account_deletion.users_db,
+        account_deletion.deletion_grace_db,
         'mark_user_deletion_grace_intent',
         lambda uid, due: {
             'wipe_job_id': 'grace-job',
@@ -1274,7 +1275,7 @@ def test_start_account_deletion_uses_default_grace_without_dispatch(monkeypatch)
     actions = MagicMock()
     monkeypatch.setattr(account_deletion, '_run_immediate_deletion_steps', actions)
     monkeypatch.setattr(
-        account_deletion.users_db, 'mark_user_deletion_grace_actions_complete', MagicMock(return_value=True)
+        account_deletion.deletion_grace_db, 'mark_user_deletion_grace_actions_complete', MagicMock(return_value=True)
     )
     marker = {
         'wipe_status': 'pending_deletion',
@@ -1314,10 +1315,29 @@ def test_start_account_deletion_erase_now_overrides_enabled_grace(monkeypatch):
     enqueue.assert_called_once_with('uid1', 'job-1')
 
 
+def test_erase_now_promotes_existing_grace_intent(monkeypatch):
+    monkeypatch.setenv('ACCOUNT_DELETION_GRACE_ENABLED', 'true')
+    promoted = _new_wipe_intent('grace-job')
+    promote = MagicMock(return_value=promoted)
+    monkeypatch.setattr(account_deletion.deletion_grace_db, 'promote_grace_to_immediate', promote)
+    mark_new_intent = MagicMock()
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_intent', mark_new_intent)
+    monkeypatch.setattr(account_deletion, '_run_immediate_deletion_steps', MagicMock())
+    enqueue = MagicMock()
+    monkeypatch.setattr(account_deletion, 'enqueue_deletion_wipe', enqueue)
+
+    result = account_deletion.start_account_deletion('uid1', erase_now=True)
+
+    assert result['pending_deletion'] is False
+    promote.assert_called_once_with('uid1')
+    mark_new_intent.assert_not_called()
+    enqueue.assert_called_once_with('uid1', 'grace-job')
+
+
 def test_grace_actions_failure_keeps_the_fence_and_does_not_dispatch(monkeypatch):
     monkeypatch.setenv('ACCOUNT_DELETION_GRACE_ENABLED', 'true')
     monkeypatch.setattr(
-        account_deletion.users_db,
+        account_deletion.deletion_grace_db,
         'mark_user_deletion_grace_intent',
         MagicMock(
             return_value={
@@ -1335,7 +1355,7 @@ def test_grace_actions_failure_keeps_the_fence_and_does_not_dispatch(monkeypatch
         MagicMock(side_effect=RuntimeError('Stripe unavailable')),
     )
     mark_complete = MagicMock()
-    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_grace_actions_complete', mark_complete)
+    monkeypatch.setattr(account_deletion.deletion_grace_db, 'mark_user_deletion_grace_actions_complete', mark_complete)
     enqueue = MagicMock()
     monkeypatch.setattr(account_deletion, 'enqueue_deletion_wipe', enqueue)
 
@@ -1361,7 +1381,7 @@ def test_reconciler_retries_incomplete_grace_actions_and_waits_for_due_time(monk
     actions = MagicMock()
     monkeypatch.setattr(account_deletion, '_run_immediate_deletion_steps', actions)
     mark_complete = MagicMock(return_value=True)
-    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_grace_actions_complete', mark_complete)
+    monkeypatch.setattr(account_deletion.deletion_grace_db, 'mark_user_deletion_grace_actions_complete', mark_complete)
     claim = MagicMock(return_value='uid1')
     monkeypatch.setattr(account_deletion.users_db, 'claim_deletion_wipe', claim)
     enqueue = MagicMock()
@@ -1386,7 +1406,7 @@ def test_restore_grace_deletion_keeps_billing_cancelled_and_restores_access(monk
     }
     monkeypatch.setattr(account_deletion.users_db, 'read_account_deletion_marker', lambda _uid: marker)
     restore = MagicMock(return_value='restored')
-    monkeypatch.setattr(account_deletion.users_db, 'restore_user_deletion', restore)
+    monkeypatch.setattr(account_deletion.deletion_grace_db, 'restore_user_deletion', restore)
     enable_auth_user = MagicMock()
     monkeypatch.setattr(account_deletion.firebase_auth, 'update_user', enable_auth_user)
 

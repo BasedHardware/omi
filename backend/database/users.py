@@ -23,13 +23,12 @@ from database.account_deletion_marker import (
     account_deletion_document,
     account_deletion_firestore_client,
     get_user_deletion_wipe_status,
-    read_account_deletion_marker,
 )
+import database.account_deletion_grace as account_deletion_grace_db
 from database.account_deletion_policy import (
     ACCOUNT_DELETION_GRACE_STATUS,
-    account_deletion_restorable,
     deletion_billing_error_is_already_gone,
-    normalize_account_deletion_status,
+    deletion_wipe_retry_delay,
 )
 from database.account_deletion_transitions import (
     adopt_legacy_late_agent_vm_cleanup as _adopt_legacy_late_agent_vm_cleanup_txn,
@@ -69,12 +68,6 @@ import logging
 logger = logging.getLogger(__name__)
 # Run-lock TTL (30 minutes) plus grace for a dead worker's last heartbeat.
 DELETION_WIPE_RUNNING_STALE_AFTER = timedelta(minutes=45)
-# A wipe that fails for a persistent reason (a missing queue, a dependency that is down) is
-# re-selected by every reconciler tick on every pod. Without a delay that is one claim
-# transaction per pod per tick, forever, against a record that cannot make progress. The
-# delay backs off per attempt and stops there: it never gives up on an accepted deletion.
-DELETION_WIPE_RETRY_BASE_DELAY = timedelta(minutes=5)
-DELETION_WIPE_RETRY_MAX_DELAY = timedelta(hours=1)
 _DELETION_WIPE_TERMINAL_STATUSES = frozenset({'completed', 'cancelled'})
 LOCATION_CONTEXT_CONSENT_TTL = timedelta(days=30)
 ONBOARDING_ADMISSION_PATH = "onboarding_admission/current"
@@ -91,20 +84,6 @@ class DeletionWipeIntent(TypedDict):
 
     wipe_job_id: str
     dispatch_claimed: bool
-
-
-class DeletionGraceIntent(TypedDict):
-    """Result of admitting or joining a grace-window deletion intent."""
-
-    wipe_job_id: str
-    dispatch_claimed: bool
-    # ``created``: new grace marker, caller owns scheduling.
-    # ``joined``: an active deletion authority already exists; nothing to do.
-    # ``legacy``: a legacy ``deleting_auth`` intent must keep the immediate
-    # pipeline (Firebase Auth may already be gone, so it is not restorable).
-    mode: Literal['created', 'joined', 'legacy']
-    wipe_status: str
-    wipe_due_at: datetime | None
 
 
 # Conservative low-risk user projections. Do NOT use these policies for
@@ -473,18 +452,6 @@ def _mark_user_deletion_wipe_intent_txn(transaction, doc_ref, wipe_job_id: str) 
         # never reset a claimed/running/completed job backwards.
         if isinstance(existing_job_id, str) and existing_job_id:
             status = data.get('wipe_status')
-            if status == ACCOUNT_DELETION_GRACE_STATUS:
-                now = datetime.now(timezone.utc)
-                transaction.update(
-                    doc_ref,
-                    {
-                        'wipe_status': 'pending',
-                        'wipe_due_at': now,
-                        'wipe_queued_at': now,
-                        'wipe_requested_erase_now': True,
-                    },
-                )
-                return {'wipe_job_id': existing_job_id, 'dispatch_claimed': True}
             # ``deleting_auth`` is a legacy pre-worker state. New admissions
             # create ``pending`` atomically, but a retry may safely promote an
             # older durable intent because the worker owns Firebase Auth
@@ -525,127 +492,6 @@ def mark_user_deletion_wipe_intent(uid: str) -> DeletionWipeIntent:
     doc_ref = account_deletion_document(uid, firestore_client=client)
     transaction = client.transaction()
     return _mark_user_deletion_wipe_intent_txn(transaction, doc_ref, wipe_job_id)
-
-
-@transactional
-def _mark_user_deletion_grace_intent_txn(transaction, doc_ref, wipe_job_id: str, wipe_due_at: datetime):
-    snapshot = doc_ref.get(transaction=transaction)
-    data = (snapshot.to_dict() or {}) if snapshot.exists else {}
-    status = data.get('wipe_status')
-    existing_job_id = data.get('wipe_job_id')
-
-    if status == ACCOUNT_DELETION_GRACE_STATUS and isinstance(existing_job_id, str) and existing_job_id:
-        return {
-            'wipe_job_id': existing_job_id,
-            'dispatch_claimed': False,
-            'mode': 'joined' if data.get('grace_actions_complete') is True else 'created',
-            'wipe_status': status,
-            'wipe_due_at': data.get('wipe_due_at'),
-        }
-
-    # A previously accepted immediate wipe, or a legacy in-flight wipe, keeps
-    # its authority and cannot be converted into a restorable grace intent.
-    if status in {'deleting_auth', 'pending', 'retrying', 'running', 'failed', 'billing_failed', 'completed'}:
-        return {
-            'wipe_job_id': existing_job_id if isinstance(existing_job_id, str) else '',
-            'dispatch_claimed': False,
-            'mode': 'legacy',
-            'wipe_status': status,
-            'wipe_due_at': data.get('wipe_due_at'),
-        }
-
-    transaction.set(
-        doc_ref,
-        {
-            'uid': doc_ref.id,
-            'wipe_status': ACCOUNT_DELETION_GRACE_STATUS,
-            'wipe_intent_at': datetime.now(timezone.utc),
-            'wipe_queued_at': datetime.now(timezone.utc),
-            'wipe_job_id': wipe_job_id,
-            'wipe_due_at': wipe_due_at,
-            'grace_actions_complete': False,
-            'wipe_requested_erase_now': False,
-        },
-        merge=True,
-    )
-    return {
-        'wipe_job_id': wipe_job_id,
-        'dispatch_claimed': True,
-        'mode': 'created',
-        'wipe_status': ACCOUNT_DELETION_GRACE_STATUS,
-        'wipe_due_at': wipe_due_at,
-    }
-
-
-@cache_writer('deletion_marker_cache')
-def mark_user_deletion_grace_intent(uid: str, wipe_due_at: datetime) -> DeletionGraceIntent:
-    """Create or join a restorable deletion marker without dispatching a wipe."""
-    if wipe_due_at.tzinfo is None:
-        raise ValueError('wipe_due_at must be timezone-aware')
-    wipe_job_id = uuid.uuid4().hex
-    client = account_deletion_firestore_client()
-    doc_ref = account_deletion_document(uid, firestore_client=client)
-    result = _mark_user_deletion_grace_intent_txn(client.transaction(), doc_ref, wipe_job_id, wipe_due_at)
-    return result  # type: ignore[return-value]
-
-
-@transactional
-def _mark_user_deletion_grace_actions_complete_txn(transaction, doc_ref, wipe_job_id: str) -> bool:
-    snapshot = doc_ref.get(transaction=transaction)
-    data = (snapshot.to_dict() or {}) if snapshot.exists else {}
-    if data.get('wipe_status') != ACCOUNT_DELETION_GRACE_STATUS or data.get('wipe_job_id') != wipe_job_id:
-        return False
-    now = datetime.now(timezone.utc)
-    transaction.update(
-        doc_ref,
-        {
-            'grace_actions_complete': True,
-            'billing_cancelled_at': now,
-            'sessions_revoked_at': now,
-            'grace_actions_completed_at': now,
-        },
-    )
-    return True
-
-
-@cache_writer('deletion_marker_cache')
-def mark_user_deletion_grace_actions_complete(uid: str, wipe_job_id: str) -> bool:
-    client = account_deletion_firestore_client()
-    doc_ref = account_deletion_document(uid, firestore_client=client)
-    return _mark_user_deletion_grace_actions_complete_txn(client.transaction(), doc_ref, wipe_job_id)
-
-
-@transactional
-def _restore_user_deletion_txn(transaction, doc_ref) -> str:
-    snapshot = doc_ref.get(transaction=transaction)
-    if not snapshot.exists:
-        return 'not_pending'
-    data = snapshot.to_dict() or {}
-    if data.get('wipe_status') != ACCOUNT_DELETION_GRACE_STATUS:
-        return 'not_pending'
-    if data.get('grace_actions_complete') is not True:
-        return 'actions_incomplete'
-    due_at = _aware_utc_datetime(data.get('wipe_due_at'))
-    now = datetime.now(timezone.utc)
-    if due_at is None or due_at <= now:
-        return 'window_expired'
-    transaction.update(
-        doc_ref,
-        {
-            'wipe_status': 'cancelled',
-            'wipe_cancelled_at': now,
-            'wipe_restored_at': now,
-        },
-    )
-    return 'restored'
-
-
-@cache_writer('deletion_marker_cache')
-def restore_user_deletion(uid: str) -> str:
-    """Cancel a grace-period wipe unless the due-time worker has won the race."""
-    client = account_deletion_firestore_client()
-    doc_ref = account_deletion_document(uid, firestore_client=client)
-    return _restore_user_deletion_txn(client.transaction(), doc_ref)
 
 
 @transactional
@@ -852,26 +698,6 @@ def cancel_user_deletion_wipe(uid: str):
     )
 
 
-def deletion_wipe_retry_delay(attempts: int) -> timedelta:
-    """How long a ``failed`` wipe waits before it is selected again.
-
-    Doubles per recorded attempt and saturates at ``DELETION_WIPE_RETRY_MAX_DELAY``. The first
-    failure still retries on the next tick, so a transient error costs nothing.
-    """
-    if attempts <= 1:
-        return timedelta(0)
-    # Clamp the exponent before applying it: ``timedelta * 2 ** large`` overflows, and any
-    # exponent past the cap is the same answer anyway.
-    doublings = min(attempts - 2, 20)
-    return min(DELETION_WIPE_RETRY_BASE_DELAY * (2**doublings), DELETION_WIPE_RETRY_MAX_DELAY)
-
-
-def _aware_utc_datetime(value: Any) -> datetime | None:
-    if not isinstance(value, datetime):
-        return None
-    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
-
-
 def get_pending_deletion_wipes(
     limit: int = 100,
     stale_after: timedelta = timedelta(minutes=10),
@@ -931,18 +757,9 @@ def get_pending_deletion_wipes(
                 result.append(data | {'uid': doc.id})
 
     if len(result) < limit:
-        grace_docs = account_deletion_collection().where('wipe_status', '==', ACCOUNT_DELETION_GRACE_STATUS).stream()
-        for doc in grace_docs:
-            if len(result) >= limit:
-                break
-            data = doc.to_dict()
-            due_at = _aware_utc_datetime(data.get('wipe_due_at'))
-            # Failed admission side effects stay fenced and are retried by the
-            # reconciler. They are never eligible for wipe dispatch until a
-            # completion receipt and the original due time both exist.
-            actions_complete = data.get('grace_actions_complete') is True
-            if not actions_complete or due_at is not None and due_at <= now:
-                result.append(data | {'uid': doc.id})
+        result.extend(
+            account_deletion_grace_db.pending_grace_wipes(account_deletion_collection(), limit - len(result), now)
+        )
 
     if len(result) < limit:
         # Over-fetch *all* pending docs and age-filter in Python. A tight
@@ -1034,11 +851,7 @@ def _claim_deletion_wipe_txn(
         transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
         return snapshot.id
     if status == ACCOUNT_DELETION_GRACE_STATUS:
-        due_at = _aware_utc_datetime(data.get('wipe_due_at'))
-        if data.get('grace_actions_complete') is not True or due_at is None or due_at > now:
-            return None
-        transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
-        return snapshot.id
+        return account_deletion_grace_db.claim_due_grace_txn(transaction, doc_ref, snapshot.id, data, now)
     if status == 'deleting_auth':
         # Recoverable only after the caller verified the Firebase auth user is
         # gone. Re-validate the age inside the transaction so a fresh intent
@@ -1126,8 +939,7 @@ def _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after: tim
     if status in ('cancelled', 'deleting_auth'):
         return 'not_actionable'
     if status == ACCOUNT_DELETION_GRACE_STATUS:
-        due_at = _aware_utc_datetime(data.get('wipe_due_at'))
-        if data.get('grace_actions_complete') is not True or due_at is None or due_at > now:
+        if not account_deletion_grace_db.grace_wipe_is_due(data, now):
             return 'not_actionable'
     if status == 'running':
         running_at = data.get('wipe_running_at')

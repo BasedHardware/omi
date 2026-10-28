@@ -26,12 +26,8 @@ from database._client import get_customer_firestore_client
 from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
 from services.users.data_export import iter_user_data_export, iter_user_data_export_streaming
 from services.users.data_export_response import DataExportStreamingResponse
-from services.users.account_deletion import (
-    account_deletion_status,
-    restore_account_deletion,
-    run_deletion_wipe_with_lease,
-    start_account_deletion,
-)
+from services.users.account_deletion import run_deletion_wipe_with_lease
+from routers.account_deletion import router as account_deletion_router
 from database.app_review_config import should_hide_subscription_ui
 from database.webhook_health import record_dev_webhook_success
 from database.conversation_scan import conversation_scan_budget, people_stats_scan
@@ -182,6 +178,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+router.include_router(account_deletion_router)
 
 
 class MigrationRequest(BaseModel):
@@ -310,85 +307,6 @@ def get_user_profile_endpoint(uid: str = Depends(auth.get_current_user_uid)):
         raise HTTPException(status_code=410, detail="User not found")
     profile.setdefault('uid', uid)
     return profile
-
-
-class DeleteAccountRequest(BaseModel):
-    reason: Optional[str] = None
-    reason_details: Optional[str] = None
-    erase_now: bool = False
-
-
-class AccountDeletionLossSummary(BaseModel):
-    held_recordings: int = 0
-    held_audio_seconds: int = 0
-    backlog_conversations: int = 0
-    backlog_seconds: int = 0
-
-
-class AccountDeletionStatusResponse(BaseModel):
-    status: Optional[str] = None
-    pending_deletion: bool = False
-    wipe_at: Optional[datetime] = None
-    loss_summary: AccountDeletionLossSummary
-
-
-class AccountDeletionActionResponse(BaseModel):
-    status: str
-    message: str
-    pending_deletion: bool = False
-    wipe_at: Optional[datetime] = None
-
-
-class AccountDeletionRestoreResponse(BaseModel):
-    status: str
-    restored: bool
-    billing_cancelled: bool = False
-
-
-@router.delete('/v1/users/delete-account', tags=['v1'], response_model=AccountDeletionActionResponse)
-def delete_account(
-    request: DeleteAccountRequest = DeleteAccountRequest(),
-    uid: str = Depends(auth.get_current_user_uid),
-):
-    try:
-        return start_account_deletion(
-            uid,
-            reason=request.reason,
-            reason_details=request.reason_details,
-            erase_now=request.erase_now,
-        )
-    except Exception as e:
-        logger.info(f'delete_account {sanitize(str(e))}')
-        raise HTTPException(status_code=500, detail='Could not delete account. Please try again.')
-
-
-@router.get('/v1/users/deletion-status', tags=['v1'], response_model=AccountDeletionStatusResponse)
-def get_account_deletion_status_endpoint(
-    uid: str = Depends(auth.get_current_user_uid_for_deletion_status),
-):
-    """Status plus metadata counts used by the account-deletion warning screen."""
-    try:
-        return account_deletion_status(uid)
-    except Exception as error:
-        logger.info('account deletion status read failed: %s', sanitize(str(error)))
-        raise HTTPException(status_code=503, detail='Could not read account deletion status. Please retry.')
-
-
-@router.post('/v1/users/restore-account', tags=['v1'], response_model=AccountDeletionRestoreResponse)
-def restore_account_deletion_endpoint(
-    uid: str = Depends(auth.get_current_user_uid_for_deletion_status),
-):
-    """Cancel a pending grace wipe while the deadline remains in the future."""
-    try:
-        result = restore_account_deletion(uid)
-    except Exception as error:
-        logger.info('account deletion restore failed: %s', sanitize(str(error)))
-        raise HTTPException(status_code=503, detail='Could not restore account. Please retry.')
-    if result.get('restored') is not True:
-        raise HTTPException(
-            status_code=409, detail={'code': 'account_deletion_not_restorable', 'status': result['status']}
-        )
-    return result
 
 
 # response_model omitted: include_in_schema=False Cloud Tasks handler; JSONResponse

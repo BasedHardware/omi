@@ -75,6 +75,7 @@ def users_service():
             'wipe_job_id': 'job-1',
             'dispatch_claimed': True,
         }
+        service.deletion_grace_db.promote_grace_to_immediate.return_value = None
         service.account_deletion_grace_enabled = lambda: False
         service.users_db.mark_user_deletion_wipe_started.return_value = True
         service.users_db.get_existing_user_subscription.return_value = None

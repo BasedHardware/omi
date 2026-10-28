@@ -70,13 +70,15 @@ _utils_sub = types.ModuleType('utils.subscription')
 setattr(_utils_sub, 'get_default_basic_subscription', MagicMock())
 _install_stub('utils.subscription', _utils_sub)
 
-# database.users is imported against the stubs above, so record its prior
+# The deletion modules are imported against the stubs above, so record their prior
 # sys.modules entry now; the autouse fixture below restores/removes it so the
 # half-stubbed module does not leak into other unit-test modules.
-if 'database.users' not in _STUB_PRIORS:
-    _STUB_PRIORS['database.users'] = sys.modules.get('database.users')
+for _module_name in ('database.account_deletion_grace', 'database.users'):
+    if _module_name not in _STUB_PRIORS:
+        _STUB_PRIORS[_module_name] = sys.modules.get(_module_name)
 
 from database import users as users_db  # noqa: E402
+from database import account_deletion_grace as deletion_grace_db  # noqa: E402
 
 # Restore all stubbed sys.modules entries IMMEDIATELY after capturing the
 # users_db reference. pytest imports/collects later test modules before any
@@ -90,8 +92,10 @@ for _name, _prior in _STUB_PRIORS.items():
     else:
         sys.modules[_name] = _prior
 _db_pkg = sys.modules.get('database')
-if _db_pkg is not None and hasattr(_db_pkg, 'users'):
-    delattr(_db_pkg, 'users')
+if _db_pkg is not None:
+    for _attribute in ('users', 'account_deletion_grace'):
+        if hasattr(_db_pkg, _attribute):
+            delattr(_db_pkg, _attribute)
 
 
 def _make_snapshot(data):
@@ -147,7 +151,11 @@ def _run_restore(data):
     txn = _make_txn()
     snapshot = _make_snapshot(data)
     doc_ref = types.SimpleNamespace(get=lambda transaction=None: snapshot)
-    raw_fn = getattr(users_db._restore_user_deletion_txn, 'to_wrap', users_db._restore_user_deletion_txn)
+    raw_fn = getattr(
+        deletion_grace_db._restore_user_deletion_txn,
+        'to_wrap',
+        deletion_grace_db._restore_user_deletion_txn,
+    )
     return raw_fn(txn, doc_ref), txn._updates
 
 
@@ -156,9 +164,9 @@ def _run_mark_grace(data, due_at):
     snapshot = _make_snapshot(data)
     doc_ref = types.SimpleNamespace(id='uid1', get=lambda transaction=None: snapshot)
     raw_fn = getattr(
-        users_db._mark_user_deletion_grace_intent_txn,
+        deletion_grace_db._mark_user_deletion_grace_intent_txn,
         'to_wrap',
-        users_db._mark_user_deletion_grace_intent_txn,
+        deletion_grace_db._mark_user_deletion_grace_intent_txn,
     )
     result = raw_fn(txn, doc_ref, 'new-job', due_at)
     return result, txn._sets, txn._updates

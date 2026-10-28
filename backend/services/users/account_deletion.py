@@ -22,6 +22,7 @@ from database.legal_holds import (
 from database.dev_api_key import delete_dev_key, get_dev_keys_for_user
 from database.mcp_api_key import delete_mcp_key, get_mcp_keys_for_user
 from database.mcp_oauth import delete_user_oauth_credentials
+from database import account_deletion_grace as deletion_grace_db
 from database import users as users_db
 from database import processing_backlog as processing_backlog_db
 from database.action_items import get_action_item_ids
@@ -664,13 +665,19 @@ def start_account_deletion(
     if use_grace:
         wipe_due_at = datetime.now(timezone.utc) + account_deletion_grace_window()
         wipe_intent = _retry_firestore_write(
-            lambda: users_db.mark_user_deletion_grace_intent(uid, wipe_due_at),
+            lambda: deletion_grace_db.mark_user_deletion_grace_intent(uid, wipe_due_at),
             uid=uid,
             fail_msg='Failed to persist deletion-grace intent',
             on_failure='raise',
         )
     else:
-        wipe_intent = _retry_firestore_write(
+        promoted_intent = _retry_firestore_write(
+            lambda: deletion_grace_db.promote_grace_to_immediate(uid),
+            uid=uid,
+            fail_msg='Failed to promote deletion-grace intent',
+            on_failure='raise',
+        )
+        wipe_intent = promoted_intent or _retry_firestore_write(
             lambda: users_db.mark_user_deletion_wipe_intent(uid),
             uid=uid,
             fail_msg='Failed to persist deletion-wipe intent',
@@ -697,7 +704,7 @@ def start_account_deletion(
             # this uid; all ordinary requests receive the pending-deletion
             # fence while the status and restore routes remain available.
             _run_immediate_deletion_steps(uid)
-            if users_db.mark_user_deletion_grace_actions_complete(uid, wipe_job_id) is False:
+            if deletion_grace_db.mark_user_deletion_grace_actions_complete(uid, wipe_job_id) is False:
                 marker = users_db.read_account_deletion_marker(uid) or {}
                 if marker.get('wipe_status') != 'cancelled':
                     raise RuntimeError('deletion grace immediate steps could not be committed')
@@ -764,8 +771,8 @@ def restore_account_deletion(uid: str) -> dict[str, Any]:
         return {'status': 'not_pending', 'restored': False}
     if marker.get('grace_actions_complete') is not True:
         _run_immediate_deletion_steps(uid)
-        users_db.mark_user_deletion_grace_actions_complete(uid, str(marker.get('wipe_job_id') or ''))
-    outcome = users_db.restore_user_deletion(uid)
+        deletion_grace_db.mark_user_deletion_grace_actions_complete(uid, str(marker.get('wipe_job_id') or ''))
+    outcome = deletion_grace_db.restore_user_deletion(uid)
     return {
         'status': outcome,
         'restored': outcome == 'restored',
@@ -814,7 +821,7 @@ def reconcile_pending_deletion_wipes(limit: int = 100) -> dict[str, int]:
                     continue
                 try:
                     _run_immediate_deletion_steps(uid)
-                    actions_completed = users_db.mark_user_deletion_grace_actions_complete(uid, job_id)
+                    actions_completed = deletion_grace_db.mark_user_deletion_grace_actions_complete(uid, job_id)
                 except Exception as error:
                     logger.error(
                         'delete_account grace immediate-action retry failed for %s: %s', uid, sanitize(str(error))
