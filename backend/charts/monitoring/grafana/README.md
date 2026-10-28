@@ -30,9 +30,13 @@ Service or host port. It accepts only GET `/api/omi/stats/wall` (the exact
 private-board route; no query strings) and
 forwards to the fixed `https://admin.omi.me` origin. It forwards no client headers,
 disables redirects/environment proxies, bounds response size/concurrency, and
-never logs tokens, URLs or upstream bodies. Successful responses coalesce/cache
-for 15 minutes (never across UTC midnight); failures coalesce for five seconds,
-release waiting queries and never serve expired success data.
+never logs tokens, URLs or upstream bodies. Each path coalesces on its own lock
+(one slow series never queues the others) and caches 15 minutes, or 15 seconds
+while the admin reports `refreshing`. After a path has answered once, an expired
+or failed refresh serves that last good body (at most 24 hours old, the admin's
+own stale-good bound) while one background refresh per path runs; the body carries
+its own "Data through"/`cacheStale` freshness. Only a path that has never answered
+blocks a panel, and its failure is shared for five seconds.
 The metadata access token is used only for IAM Credentials `generateIdToken`
 on `omi-stats-reader`, audience `https://admin.omi.me/api/omi/stats`, includeEmail.
 The ID token stays in memory and refreshes five minutes early, or once on 401.
