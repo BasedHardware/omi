@@ -22,6 +22,7 @@ from tests.unit.test_live_cost_router import MemoryRedis
 @pytest.fixture(autouse=True)
 def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
+    enabled_live_targets(monkeypatch)
 
 
 class Replacement:
@@ -46,7 +47,6 @@ class Replacement:
 
 
 async def setup_chain(monkeypatch):
-    enabled_live_targets(monkeypatch)
     actual, base, previous, _, _ = await _receiver_for_anchor_replay(monkeypatch, Client(data={'text': ''}))
     actual.host.state.current_conversation_id = 'synthetic'
     monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'modulate-velma-2', 'soniox'])
