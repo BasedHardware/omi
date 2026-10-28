@@ -38,6 +38,7 @@ from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyRea
 from utils.batch_pipeline.projection_index import ProjectionIndex
 from database import conversations as conversations_db
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem, projection_speech_spans
+from utils.batch_pipeline.errors import error_site_field
 from utils.batch_pipeline.correctness_metrics import record_labels
 from utils.batch_pipeline.recovery_disposition import result_outcome
 from database.batch_pipeline_projection_claim import projection_claim
@@ -125,21 +126,6 @@ def error_type(error: BaseException) -> str:
     ):
         return 'FirestoreContentionExhausted'
     return type(error).__name__
-
-
-def error_site_field(error: BaseException) -> str:
-    """` site=<file>:<line>` of the innermost backend frame; static code location only."""
-    import os
-    import traceback
-
-    try:
-        frames = traceback.extract_tb(error.__traceback__)
-    except Exception:
-        return ''
-    for frame in reversed(frames):
-        if 'site-packages' not in frame.filename and 'dist-packages' not in frame.filename:
-            return f' site={os.path.basename(frame.filename)}:{frame.lineno}'
-    return ''
 
 
 def fence_reason_field(error: BaseException) -> str:

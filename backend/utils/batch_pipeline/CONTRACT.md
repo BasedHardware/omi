@@ -36,6 +36,13 @@ record. Live transcription is a preview; the batch result is the record.
   `merge.py:OrderedMerge`; late captures keep their clock and append after the
   committed tail. Per-part receipts in `projection_parts.py`; only complete
   multipart projection advances the owner cursor.
+- **Contention**: `database/batch_pipeline_store.py:FirestoreStore.run` retries
+  fresh Firestore transaction IDs on explicit `Aborted` contention and expired
+  transaction errors (up to five chains; expired chains keep the three-chain
+  ceiling). The worker's pull loop applies a jittered 0.5–30s cooldown after
+  exhaustion. `BATCH_PIPELINE_CONTENTION_RETRY_ENABLED=false` restores the old
+  transaction behavior. Other `InvalidArgument` and application errors are not
+  retried or quarantined as poison without unit-specific evidence.
 - **Receipts**: durable upload status via `intake.py:durable_status`
   (`failed` + `failed_segments` + `batch_worker_quarantined` only for terminal
   quarantine); VAD/silence evidence in the result payload (`contracts.py:projection_speech_spans`);
