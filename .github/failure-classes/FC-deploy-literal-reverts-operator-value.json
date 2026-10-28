@@ -5,7 +5,8 @@
   "canonical_prevention": "Declare operator-owned values in the runtime manifest or the B4 ops file and have deploy actions read them, keeping a hard-coded value only as the default when nothing is declared. Until the ops file reaches main, any remaining action literal must equal the live operator value and be pinned by a contract test that names the incident.",
   "canonical_prevention_artifact": [
     "backend/scripts/runtime_env_validation/workflows.py",
-    "backend/tests/unit/test_batch_pipeline_recovery_runtime_contract.py"
+    "backend/tests/unit/test_batch_pipeline_recovery_runtime_contract.py",
+    "backend/tests/unit/test_render_backend_runtime_env.py"
   ],
   "evidence_prs": [],
   "scope_hints": [

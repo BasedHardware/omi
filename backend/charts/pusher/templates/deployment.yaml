@@ -89,7 +89,10 @@ spec:
             {{- toYaml (list $entry) | nindent 12 }}
             {{- end }}
             {{- end }}
-            {{- range $name, $value := $privateEnv }}
+          {{- range $name, $value := $privateEnv }}
+            {{- if ne $name "MEDIA_NOISE_MODE_SERVE_UID_SHA256S" }}
+            {{- fail "pusher privateEnv allows only MEDIA_NOISE_MODE_SERVE_UID_SHA256S; runtime settings stay ConfigMap-owned" }}
+            {{- end }}
             {{- if not (regexMatch "^[A-Z][A-Z0-9_]*$" $name) }}
             {{- fail "privateEnv has a key that is not an env var name" }}
             {{- end }}

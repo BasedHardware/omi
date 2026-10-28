@@ -553,8 +553,8 @@ jobs:
             echo "No private pusher values configured; chart defaults apply."
             exit 0
           fi
-          # Install before the secret touches disk so no install hook can see it.
-          python3 -m pip install -q pyyaml
+          # Dependency/build hooks must not inherit the step's private-values secret.
+          env -u PUSHER_PRIVATE_VALUES_YAML python3 -m pip install -q pyyaml
           umask 077
           PRIVATE_VALUES_FILE="$(mktemp "${RUNNER_TEMP}/pusher-private-values.XXXXXX")"
           printf '%s\n' "$PUSHER_PRIVATE_VALUES_YAML" > "$PRIVATE_VALUES_FILE"
