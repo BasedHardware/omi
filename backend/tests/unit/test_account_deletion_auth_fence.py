@@ -186,8 +186,13 @@ def test_shared_background_predicate_matches_access_fence(status, blocked):
 
 
 def test_erase_now_route_uses_the_recovery_auth_dependency_and_promotes_pending(monkeypatch):
-    dependency = inspect.signature(deletion_router.delete_account).parameters['uid'].default.dependency
+    route_parameters = inspect.signature(deletion_router.delete_account).parameters
+    dependency = route_parameters['uid'].default.dependency
     assert dependency is endpoints.get_current_user_uid_for_deletion_status
+    assert {
+        inspect.signature(dependency).parameters[name].default.alias
+        for name in ('_x_app_platform', '_x_device_id_hash', '_x_app_version')
+    } == {'X-App-Platform', 'X-Device-Id-Hash', 'X-App-Version'}
     uid = dependency(authorization='Bearer token')
     observed = {}
 

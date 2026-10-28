@@ -176,13 +176,18 @@ def verify_token(token: str) -> str:
 
 def get_current_user_uid_for_deletion_status(
     authorization: str = Header(None),
+    _x_app_platform: str = Header(None, alias='X-App-Platform'),
+    _x_device_id_hash: str = Header(None, alias='X-Device-Id-Hash'),
+    _x_app_version: str = Header(None, alias='X-App-Version'),
     _read_scope: Any = Depends(request_read_scope),
 ) -> str:
     """Authenticate the owner without opening ordinary account access.
 
-    Used only for the deletion status and restore endpoints, which must remain
-    reachable while the normal auth fence blocks a pending-deletion account.
-    No registration, device, BYOK, or content-recovery side effects run here.
+    Used by the account-deletion status, restore, and erase-now endpoints,
+    which must remain reachable while the normal auth fence blocks a
+    pending-deletion account. The optional client headers preserve the
+    released delete-account contract without running registration, device,
+    BYOK, or content-recovery side effects.
     """
     if not authorization:
         raise HTTPException(status_code=401, detail='Authorization header not found')
