@@ -1,10 +1,8 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/payment.dart' as payment_api;
@@ -16,6 +14,7 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/analytics/registry/typed_events.dart';
+import 'package:omi/utils/billing_price.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// Monthly to yearly on the same plan, at the plan's yearly price (backend `utils/yearly_switch.py`).
@@ -64,16 +63,8 @@ String? yearlySwitchCandidate(UsageProvider? provider) {
   return id == null || id.isEmpty ? null : id;
 }
 
-/// [minor] units of [currency] in the reader's locale ("$89.97"); [whole] rounds down ("$89"), so a
-/// saving is never overstated.
-String yearlySwitchMoney(BuildContext context, int minor, String? currency, {bool whole = false}) {
-  final locale = Localizations.localeOf(context).toString();
-  final code = (currency ?? 'usd').toUpperCase();
-  final exact = NumberFormat.simpleCurrency(locale: locale, name: code);
-  final value = minor / math.pow(10, exact.decimalDigits ?? 2);
-  if (!whole) return exact.format(value);
-  return NumberFormat.simpleCurrency(locale: locale, name: code, decimalDigits: 0).format(value.floor());
-}
+/// [minor] units of [currency], exact and unambiguous like every purchase surface ("US$89.97").
+String yearlySwitchMoney(int minor, String? currency) => formatBillingPrice(minor, currency ?? 'usd');
 
 void _emitShown(YearlySwitchSurface surface) => const TypedEvents()
     .emit(SubscriptionYearlySwitchShown(surface: SubscriptionYearlySwitchShownSurface.values.byName(surface.name)));
@@ -288,7 +279,7 @@ class _YearlySwitchSheetState extends State<YearlySwitchSheet> {
       );
     }
     final currency = offer.currency;
-    final dueToday = yearlySwitchMoney(context, offer.amountDueToday!, currency);
+    final dueToday = yearlySwitchMoney(offer.amountDueToday!, currency);
     final renews = OmiDateFormat.of(context).date(DateTime.fromMillisecondsSinceEpoch(offer.renewsAt! * 1000));
     if (_done) {
       return Column(
@@ -324,7 +315,7 @@ class _YearlySwitchSheetState extends State<YearlySwitchSheet> {
       children: [
         _FactRow(
           label: l10n.yearlySwitchPlanLabel,
-          value: l10n.yearlySwitchPlanValue(plan, yearlySwitchMoney(context, offer.yearlyAmount!, currency)),
+          value: l10n.yearlySwitchPlanValue(plan, yearlySwitchMoney(offer.yearlyAmount!, currency)),
         ),
         Divider(height: 1, thickness: 1, color: OmiColors.border),
         _FactRow(
@@ -538,7 +529,7 @@ class _YearlySwitchPlansRowState extends State<YearlySwitchPlansRow> {
       child: YearlySwitchRow(
         key: const Key('yearly_switch_plans_row'),
         title: l10n.yearlySwitchTitle,
-        subtitle: l10n.yearlySwitchRowSavings(yearlySwitchMoney(context, offer.savingsAmount!, offer.currency)),
+        subtitle: l10n.yearlySwitchRowSavings(yearlySwitchMoney(offer.savingsAmount!, offer.currency)),
         color: OmiColors.surface2,
         tileColor: OmiColors.surface3,
         onTap: _open,
@@ -622,8 +613,7 @@ class _YearlySwitchHomeRowState extends State<YearlySwitchHomeRow> {
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       child: YearlySwitchRow(
         key: const Key('yearly_switch_home_row'),
-        title:
-            l10n.yearlySwitchHomeTitle(yearlySwitchMoney(context, offer.savingsAmount!, offer.currency, whole: true)),
+        title: l10n.yearlySwitchHomeTitle(yearlySwitchMoney(offer.savingsAmount!, offer.currency)),
         subtitle: l10n.yearlySwitchHomeSubtitle,
         color: OmiColors.surface1,
         tileColor: OmiColors.surface2,

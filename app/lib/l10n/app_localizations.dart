@@ -26019,13 +26019,13 @@ abstract class AppLocalizations {
   /// **'Switch to Yearly'**
   String get yearlySwitchTitle;
 
-  /// Plans & Billing row subtitle: what switching to yearly saves; amount is a price like $89.97
+  /// Plans & Billing row subtitle for an Omi Pro monthly subscriber: the exact yearly saving with its currency, like US$89.97
   ///
   /// In en, this message translates to:
   /// **'Save {amount} a year'**
   String yearlySwitchRowSavings(String amount);
 
-  /// Home row for a monthly subscriber: yearly billing of the same plan saves this much; amount is a rounded price like $90
+  /// Home row for an Omi Pro monthly subscriber: yearly billing of the same plan saves this much a year; amount is the exact saving with its currency, like US$89.97
   ///
   /// In en, this message translates to:
   /// **'Save {amount} a year with yearly'**

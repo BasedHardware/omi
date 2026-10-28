@@ -171,7 +171,7 @@ void main() {
       final l10n = _l10n(tester);
 
       expect(find.text(l10n.yearlySwitchTitle), findsOneWidget);
-      expect(find.text(l10n.yearlySwitchRowSavings('\$89.97')), findsOneWidget);
+      expect(find.text(l10n.yearlySwitchRowSavings('US\$89.97')), findsOneWidget);
       analytics.expectSingle('Subscription Yearly Switch Shown', {'surface': 'plans'});
 
       await tester.tap(find.byKey(const Key('yearly_switch_plans_row')));
@@ -179,8 +179,8 @@ void main() {
 
       analytics.expectSingle('Subscription Yearly Switch Opened', {'surface': 'plans'});
       expect(backend.loads, [false, true]);
-      expect(find.text(l10n.yearlySwitchPlanValue('Omi Pro', '\$269.91')), findsOneWidget);
-      expect(find.text('\$244.92'), findsOneWidget);
+      expect(find.text(l10n.yearlySwitchPlanValue('Omi Pro', 'US\$269.91')), findsOneWidget);
+      expect(find.text('US\$244.92'), findsOneWidget);
       expect(find.text(_renewsLabel(tester)), findsOneWidget);
       expect(find.text(l10n.yearlySwitchCreditNote), findsOneWidget);
       expect(find.byKey(const Key('yearly_switch_cancel')), findsOneWidget);
@@ -191,7 +191,7 @@ void main() {
       // The switch is charged at the date Stripe previewed, for the amount on screen only.
       expect(backend.switches, [('price_unlimited_year', _prorationDate, 24492)]);
       expect(find.text(l10n.yearlySwitchDoneTitle), findsOneWidget);
-      expect(find.text(l10n.yearlySwitchDoneBody('\$244.92', _renewsLabel(tester))), findsOneWidget);
+      expect(find.text(l10n.yearlySwitchDoneBody('US\$244.92', _renewsLabel(tester))), findsOneWidget);
       expect(usage.fetches, 1);
       analytics.expectSingle('Subscription Yearly Switch Confirmed', {'surface': 'plans'});
       analytics.expectSingle('Subscription Yearly Switch Succeeded', {'surface': 'plans'});
@@ -244,8 +244,8 @@ void main() {
       backend.switchResult = {'status': 'success'};
       await tester.tap(find.byKey(const Key('yearly_switch_confirm')));
       await tester.pumpAndSettle();
-      expect(find.text('\$243.12'), findsOneWidget);
-      expect(find.text('\$244.92'), findsNothing);
+      expect(find.text('US\$243.12'), findsOneWidget);
+      expect(find.text('US\$244.92'), findsNothing);
       expect(backend.switches, hasLength(1));
 
       await tester.tap(find.byKey(const Key('yearly_switch_confirm')));
@@ -313,7 +313,7 @@ void main() {
 
       await tester.tap(find.text(l10n.tryAgain));
       await tester.pumpAndSettle();
-      expect(find.text('\$244.92'), findsOneWidget);
+      expect(find.text('US\$244.92'), findsOneWidget);
       expect(find.byKey(const Key('yearly_switch_confirm')), findsOneWidget);
     });
 
@@ -342,8 +342,8 @@ void main() {
       await _pump(tester, YearlySwitchHomeRow(load: backend.load, apply: backend.apply, now: () => _now));
       final l10n = _l10n(tester);
 
-      // $89.97 a year is shown rounded down, never up.
-      expect(find.text(l10n.yearlySwitchHomeTitle('\$89')), findsOneWidget);
+      // The exact saving, never rounded up.
+      expect(find.text(l10n.yearlySwitchHomeTitle('US\$89.97')), findsOneWidget);
       expect(find.text(l10n.yearlySwitchHomeSubtitle), findsOneWidget);
       analytics.expectSingle('Subscription Yearly Switch Shown', {'surface': 'home'});
       expect(SharedPreferencesUtil().yearlySwitchHomeShownAt, _now.millisecondsSinceEpoch);

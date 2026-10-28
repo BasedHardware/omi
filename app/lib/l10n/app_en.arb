@@ -18017,7 +18017,7 @@
     },
     "yearlySwitchRowSavings": "Save {amount} a year",
     "@yearlySwitchRowSavings": {
-        "description": "Plans & Billing row subtitle: what switching to yearly saves; amount is a price like $89.97",
+        "description": "Plans & Billing row subtitle for an Omi Pro monthly subscriber: the exact yearly saving with its currency, like US$89.97",
         "placeholders": {
             "amount": {
                 "type": "String"
@@ -18026,7 +18026,7 @@
     },
     "yearlySwitchHomeTitle": "Save {amount} a year with yearly",
     "@yearlySwitchHomeTitle": {
-        "description": "Home row for a monthly subscriber: yearly billing of the same plan saves this much; amount is a rounded price like $90",
+        "description": "Home row for an Omi Pro monthly subscriber: yearly billing of the same plan saves this much a year; amount is the exact saving with its currency, like US$89.97",
         "placeholders": {
             "amount": {
                 "type": "String"
