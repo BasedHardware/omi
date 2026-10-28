@@ -1066,7 +1066,7 @@ def test_canonical_dense_capture_is_bounded_before_atomic_replacement(monkeypatc
     ]
 
 
-def test_canonical_capture_deduplicates_per_subject_and_assigns_subject_scoped_ids(monkeypatch):
+def test_canonical_capture_deduplicates_unknown_subjects_without_using_quote_authors(monkeypatch):
     pc = _load_process_conversation()
     from models.conversation import Conversation
     from models.conversation_enums import CategoryEnum, ConversationSource
@@ -1148,6 +1148,8 @@ def test_canonical_capture_deduplicates_per_subject_and_assigns_subject_scoped_i
     )
 
     payloads = mock_service.replace_conversation_memories.call_args.args[2]
-    assert result.count == 2
-    assert [payload["subject_entity_id"] for payload in payloads] == ["person:alice", "person:bob"]
-    assert len({payload["id"] for payload in payloads}) == 2
+    assert result.count == 1
+    assert len(payloads) == 1
+    assert payloads[0]["subject_entity_id"] is None
+    assert payloads[0]["subject_attribution"] == "unknown"
+    assert payloads[0]["subject_kind"] == "unknown"
