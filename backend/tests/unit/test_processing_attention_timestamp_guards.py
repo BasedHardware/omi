@@ -9,7 +9,6 @@ from database.processing_attention import (
     now_utc,
     claim_in_transaction,
     list_items,
-    RETRY_LEASE_SECONDS,
 )
 
 
@@ -142,3 +141,56 @@ def test_explicit_none_retry_field_guards():
         )
     assert exc_info.type.__name__ == 'ClaimRejected'
     assert str(exc_info.value) == 'not_retryable'
+
+
+def test_list_items_null_retry(monkeypatch):
+    mock_db = MagicMock()
+    monkeypatch.setattr("database.processing_attention.db", mock_db)
+
+    attention_doc = MagicMock()
+    attention_doc.to_dict.return_value = {
+        "user_id": "u1",
+        "conversation_id": "c1",
+        "generation": "gen_1",
+        "active": True,
+        "retry": None,
+    }
+
+    conv_doc = MagicMock()
+    conv_doc.exists = True
+    conv_doc.to_dict.return_value = {"user_title": "Test Chat", "structured": {}}
+
+    claim_doc = MagicMock()
+    claim_doc.exists = True
+    claim_doc.to_dict.return_value = {"state": "failed", "operation_id": "op_99"}
+
+    items_coll = MagicMock()
+    items_coll.where.return_value.limit.return_value.stream.return_value = [attention_doc]
+
+    convs_coll = MagicMock()
+    conv_doc_ref = MagicMock()
+    conv_doc_ref.get.return_value = conv_doc
+    conv_doc.reference = conv_doc_ref
+    claim_coll = MagicMock()
+    claim_coll.document.return_value.get.return_value = claim_doc
+    conv_doc_ref.collection.return_value = claim_coll
+    convs_coll.document.return_value = conv_doc_ref
+
+    def coll_router(name):
+        if name == "processing_attention_items":
+            return items_coll
+        if name == "conversations":
+            return convs_coll
+        return MagicMock()
+
+    user_doc = MagicMock()
+    user_doc.collection.side_effect = coll_router
+    users_coll = MagicMock()
+    users_coll.document.return_value = user_doc
+    mock_db.collection.return_value = users_coll
+
+    results = list_items("u1", limit=10)
+    assert len(results) == 1
+    assert results[0]["title"] == "Test Chat"
+    assert results[0]["retry"] == {"state": "failed", "operation_id": "op_99"}
+    assert "generation" not in results[0]

@@ -50,7 +50,7 @@ def timing(row: dict[str, Any]) -> dict[str, Any]:
     raw_end = row.get('finished_at') or raw_start
     start = _coerce_utc_datetime(raw_start)
     end = _coerce_utc_datetime(raw_end)
-    duration = max(0, (end - start).total_seconds()) if start and end else 0
+    duration = max(0, (end - start).total_seconds()) if start is not None and end is not None else 0
     return {'started_at': raw_start, 'duration_seconds': duration}
 
 
