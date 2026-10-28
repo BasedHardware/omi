@@ -24,12 +24,19 @@ class AuthComponent extends StatefulWidget {
 }
 
 class _AuthComponentState extends State<AuthComponent> {
+  // Once per app run: "Use a Different Account" rebuilds this screen, and the funnel's first
+  // step should not count that bounce again.
+  static bool _welcomeSent = false;
+
   @override
   void initState() {
     super.initState();
     // Sign-in is the first onboarding screen now (the Get started page is gone): the funnel's
     // welcome step starts here.
-    PlatformManager.instance.analytics.onboardingWelcomeShown();
+    if (!_welcomeSent) {
+      _welcomeSent = true;
+      PlatformManager.instance.analytics.onboardingWelcomeShown();
+    }
   }
 
   @override

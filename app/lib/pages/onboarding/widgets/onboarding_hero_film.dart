@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 
 import 'package:omi/gen/assets.gen.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/ui/ui.dart';
 
 /// The launch film behind sign-in and data & privacy ([OnboardingHero.video]): full-screen, muted,
@@ -33,7 +34,10 @@ class _OnboardingHeroFilmState extends State<OnboardingHeroFilm> {
       if (!mounted) return;
       if (!MediaQuery.disableAnimationsOf(context)) await _film.play();
       if (mounted) setState(() => _ready = true);
-    }).catchError((Object _) {});
+    }).catchError((Object error) {
+      // The solid background stays; logged so a missing or broken film can be diagnosed.
+      Logger.debug('OnboardingHeroFilm: film failed to load: $error');
+    });
   }
 
   @override
