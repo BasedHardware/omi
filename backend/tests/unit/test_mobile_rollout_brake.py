@@ -105,8 +105,8 @@ class BrakeTests(unittest.TestCase):
         play = FakePlay()
         expected = copy.deepcopy(play.live)
         expected["releases"][1]["status"] = "halted"
-        # Held-changes mode path (constant True): the module default is False
-        # since 2026-10-27, so the held commit parameter is patched in.
+        # Pin held-changes mode explicitly so this commit contract stays clear
+        # if the operational default changes later.
         with patch.object(brake.promote, "CHANGES_NOT_SENT_FOR_REVIEW", True):
             self.assertEqual(
                 self.run_action(play),
@@ -125,9 +125,8 @@ class BrakeTests(unittest.TestCase):
                 self.assertEqual(args["track"], "production")
 
     def test_held_mode_follows_the_shared_constant(self):
-        # With the constant False (the module default since 2026-10-27, when
-        # Play went back to auto-sending changes for review), a brake commit
-        # must not hold its changes: only the in-review guard stays.
+        # Explicitly disable held-changes mode to verify that only the
+        # in-review guard remains in auto-send mode.
         play = FakePlay()
         with patch.object(brake.promote, "CHANGES_NOT_SENT_FOR_REVIEW", False):
             self.assertIn("status_after=halted", self.run_action(play))
@@ -235,8 +234,8 @@ class BrakeTests(unittest.TestCase):
     def test_stage_replaces_only_halted_release_at_requested_fraction(self):
         play = self.halted_play()
         completed = copy.deepcopy(play.live["releases"][0])
-        # Held-changes mode path (constant True): the module default is False
-        # since 2026-10-27, so the held commit parameter is patched in.
+        # Pin held-changes mode explicitly so this commit contract stays clear
+        # if the operational default changes later.
         with patch.object(brake.promote, "CHANGES_NOT_SENT_FOR_REVIEW", True):
             result = self.stage(play)
         self.assertTrue(result.startswith("BRAKE_RESULT action=stage versionCode=1477 status_before=absent"))

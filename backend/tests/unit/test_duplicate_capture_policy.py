@@ -275,3 +275,55 @@ def test_sync_processor_links_only_after_successful_completion(harness, monkeypa
         UID, 'en', conversation, trigger=processor.ProcessingTrigger.USER_REPROCESS, defer_memory_extraction=True
     )
     assert ('duplicate_capture_of' in harness.rows[path('desktop')]['external_data']) is persisted
+
+
+@pytest.mark.asyncio
+async def test_finalization_evaluates_capture_group_primary_notes_refresh(harness, monkeypatch):
+    """The durable finalizer offers the finalized row to the notes refresh step.
+
+    The refresh itself is fenced, once-per-revision and never raises (its own
+    test file); the finalizer contract is that the evaluation runs after the
+    duplicate-capture step and the finalization outcome is unchanged.
+    """
+    harness.rows.update({path('pendant'): row('pendant', 'omi'), path('desktop'): row('desktop', 'desktop', 100, 590)})
+    calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(finalizer, 'refresh_primary_notes', lambda uid, cid: calls.append((uid, cid)) or False)
+    assert await finalize('desktop') == finalizer.ConversationFinalizationDisposition.completed
+    assert calls == [(UID, 'desktop')]
+
+
+def test_group_notes_refresh_persists_notes_without_derived_fanout(harness, monkeypatch):
+    original = row('pendant', 'omi')
+    original['transcript_segments'] = [
+        {'text': 'We reviewed the launch plan.', 'start': 0, 'end': 60, 'speaker_id': 0, 'is_user': False}
+    ]
+    harness.rows[path('pendant')] = deepcopy(original)
+    conversation = finalizer.deserialize_conversation(original)
+    original_segments = deepcopy(conversation.transcript_segments)
+    conversation.external_data['capture_group_notes_revision'] = {'group_id': 'g', 'revision': 3}
+    monkeypatch.setattr(processor, '_enrich_meeting_context', MagicMock())
+    summarize = MagicMock(return_value=(conversation.structured, False))
+    monkeypatch.setattr(processor, '_get_structured', summarize)
+    monkeypatch.setattr(processor, '_get_conversation_obj', lambda *a, **kw: conversation)
+    apps = MagicMock(side_effect=AssertionError('app fanout must not run'))
+    memories = MagicMock(side_effect=AssertionError('memory extraction must not run'))
+    tasks = MagicMock(side_effect=AssertionError('task writes must not run'))
+    monkeypatch.setattr(processor, 'trigger_conversation_apps', apps)
+    monkeypatch.setattr(processor, '_extract_memories', memories)
+    monkeypatch.setattr(processor, '_save_action_items', tasks)
+
+    def persist(uid, payload):
+        harness.rows[path(payload['id'], uid)].update(payload)
+        return True
+
+    monkeypatch.setattr(processor.lifecycle_service, 'persist_processed_conversation', persist)
+    processor.process_conversation(
+        UID, 'en', conversation, trigger=processor.ProcessingTrigger.CAPTURE_GROUP, defer_derived_effects=True
+    )
+    stored = harness.rows[path('pendant')]
+    assert stored['external_data']['capture_group_notes_revision'] == {'group_id': 'g', 'revision': 3}
+    assert finalizer.deserialize_conversation(stored).transcript_segments == original_segments
+    summarize.assert_called_once()
+    apps.assert_not_called()
+    memories.assert_not_called()
+    tasks.assert_not_called()

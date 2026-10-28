@@ -19,7 +19,7 @@ from utils.llm.conversation_notes_prompts import conversation_note_density
 from utils.llm.notes_lengths import length_guide
 from utils.llm.notes_refactor_metrics import shadow
 from utils.observability.fallback import record_fallback
-from utils.llm.output_language import resolve_output_language
+from utils.llm.output_language import normalize_language, resolve_output_language
 from utils.llm.speaker_evidence_prompt import render_speaker_evidence, SPEAKER_RULES
 
 PACKET_VERSION = 2
@@ -105,7 +105,13 @@ def build_notes_packet(
 ) -> dict[str, Any]:
     """One builder. Supplemental agent lookups enrich the same contract, never replace it."""
     people: list[dict[str, Any]] = list(inputs.get('people') or ())
-    language = inputs.get('output_language_code') or resolve_output_language(uid or '', inputs.get('language_code'))
+    language = normalize_language(inputs.get('output_language_code'))
+    if not language:
+        language = (
+            resolve_output_language(uid or '', inputs.get('language_code'))
+            if serving_for(FLAG, uid)
+            else normalize_language(inputs.get('language_code')) or 'en'
+        )
     owner = prefix.account_owner_name or next(iter(prefix.owner_names), None)
     spellings = list(
         dict.fromkeys(str(person.get('name') or person.get('spelling') or '').strip() for person in people)

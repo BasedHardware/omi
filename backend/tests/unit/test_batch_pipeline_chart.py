@@ -11,12 +11,12 @@ import yaml
 CHART = Path(__file__).resolve().parents[2] / 'charts' / 'batch-pipeline-worker'
 
 
-def render(*arguments):
+def render(*arguments, namespace='synthetic'):
     helm = shutil.which('helm')
     if helm is None:
         pytest.skip('Helm unavailable; render check runs on the packaging host')
     return subprocess.run(
-        [helm, 'template', 'synthetic-worker', str(CHART), '--namespace', 'synthetic', *arguments],
+        [helm, 'template', 'synthetic-worker', str(CHART), '--namespace', namespace, *arguments],
         capture_output=True,
         text=True,
     )
@@ -184,13 +184,13 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     assert deployment['spec']['progressDeadlineSeconds'] == 2400
     pod = deployment['spec']['template']['spec']
     if environment == 'prod':
-        assert len(deployments) == 1 and deployment['spec']['replicas'] == 4
+        assert len(deployments) == 1 and deployment['spec']['replicas'] == 3  # ratified floor 3 (114a22)
         assert 'omi.ai/required-companion-deployment' not in deployment['metadata'].get('annotations', {})
     else:
         assert len(deployments) == 1 and deployment['spec']['replicas'] == 1
     assert pod['serviceAccountName'] == 'batch-pipeline-worker'
     expected_selector = {'service': 'batch-pipeline', 'env': stage}
-    if environment == 'dev':
+    if environment in ('dev', 'prod'):  # prod pins OD-first (f05065); dev keeps its pool pin
         expected_selector['cloud.google.com/gke-nodepool'] = 'batch-pipeline-pool'
     assert pod['nodeSelector'] == expected_selector
     assert {(item['key'], item['operator'], item['value'], item['effect']) for item in pod['tolerations']} == {
@@ -227,12 +227,9 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
 
 def test_balanced_pools_have_distinct_ownership_and_shared_fresh_queue_scope():
     result = render(
-        '-f',
-        str(CHART / 'prod_omi_batch-pipeline-worker_values.yaml'),
-        '--set-string',
-        'image.digest=sha256:' + 'b' * 64,
+        *enabled_arguments(),
         '--set',
-        'autoscaling.enabled=true,autoscaling.balancedPools.enabled=true',
+        'autoscaling.enabled=true,autoscaling.balancedPools.enabled=true,autoscaling.minReplicas=2,autoscaling.maxReplicas=24,worker.stageProfilingEnabled=true',
     )
     assert result.returncode == 0, result.stderr
     docs = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
@@ -275,6 +272,7 @@ def test_balanced_pools_have_distinct_ownership_and_shared_fresh_queue_scope():
     [
         'autoscaling.enabled=false',
         'autoscaling.minReplicas=1',
+        'autoscaling.minReplicas=3',
         'autoscaling.maxReplicas=23',
         'autoscaling.maxReplicas=0',
         'autoscaling.balancedPools.spotNodePool=batch-pipeline-pool',
@@ -283,16 +281,66 @@ def test_balanced_pools_have_distinct_ownership_and_shared_fresh_queue_scope():
 )
 def test_balanced_pools_refuse_unsafe_or_ambiguous_budgets(setting):
     result = render(
-        '-f',
-        str(CHART / 'prod_omi_batch-pipeline-worker_values.yaml'),
-        '--set-string',
-        'image.digest=sha256:' + 'b' * 64,
+        *enabled_arguments(),
         '--set',
         'autoscaling.enabled=true,autoscaling.balancedPools.enabled=true',
         '--set',
         setting,
     )
     assert result.returncode != 0
+
+
+@pytest.mark.parametrize('min_replicas', [3, 4])
+def test_production_values_refuse_balanced_pools_even_with_replica_override(min_replicas):
+    # Lead f05065 (10-28): production only uses one OD-pinned HPA. The explicit
+    # production guard must also reject an even min override that would split
+    # the OD floor below three when Spot is unavailable.
+    result = render(
+        '-f',
+        str(CHART / 'prod_omi_batch-pipeline-worker_values.yaml'),
+        '--set-string',
+        'image.digest=sha256:' + 'b' * 64,
+        '--set',
+        f'autoscaling.enabled=true,autoscaling.balancedPools.enabled=true,autoscaling.minReplicas={min_replicas}',
+    )
+    assert result.returncode != 0
+    assert 'production requires a single OD-pinned HPA' in result.stderr
+
+
+def test_production_release_namespace_refuses_balanced_pools_with_dev_values():
+    # The deploy workflow installs production releases into prod-omi-backend;
+    # changing both chart values to dev must not bypass the release namespace guard.
+    result = render(
+        *enabled_arguments(),
+        '--set',
+        'autoscaling.enabled=true,autoscaling.balancedPools.enabled=true,autoscaling.minReplicas=4',
+        namespace='prod-omi-backend',
+    )
+    assert result.returncode != 0
+    assert 'production requires a single OD-pinned HPA' in result.stderr
+
+
+def test_production_cutover_is_single_od_hpa_min3_max16():
+    # The actual cutover shape (lead f05065): one HPA pinned to the on-demand
+    # pool, floor 3 (114a22) to ceiling 16; no -spot deployment.
+    result = render(
+        '-f',
+        str(CHART / 'prod_omi_batch-pipeline-worker_values.yaml'),
+        '--set-string',
+        'image.digest=sha256:' + 'b' * 64,
+        '--set',
+        'autoscaling.enabled=true',
+    )
+    assert result.returncode == 0, result.stderr
+    docs = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
+    hpas = {d['metadata']['name']: d['spec'] for d in docs if d['kind'] == 'HorizontalPodAutoscaler'}
+    assert list(hpas) == ['synthetic-worker']
+    assert hpas['synthetic-worker']['minReplicas'] == 3
+    assert hpas['synthetic-worker']['maxReplicas'] == 16
+    pods = [d for d in docs if d['kind'] == 'Deployment']
+    assert len(pods) == 1
+    selector = pods[0]['spec']['template']['spec']['nodeSelector']
+    assert selector['cloud.google.com/gke-nodepool'] == 'batch-pipeline-pool'
 
 
 @pytest.mark.parametrize('service,timeout', [('batch-pipeline-worker', '2400s'), ('diarizer', '600s')])
@@ -386,7 +434,7 @@ def test_production_worker_policy_binding_matches_accepted_identity():
     assert env['BATCH_PIPELINE_ENABLED'] == 'false'
     assert env['BATCH_PIPELINE_API_URL'] == config['worker']['apiUrl'] == config['worker']['audience']
     assert env['BATCH_PIPELINE_WORKER_AUDIENCE'] == config['worker']['audience']
-    assert docs['Deployment']['spec']['replicas'] == 4
+    assert docs['Deployment']['spec']['replicas'] == 3  # ratified floor 3 (lead 114a22/724762, 10-28)
     assert 'HorizontalPodAutoscaler' not in docs
 
 
