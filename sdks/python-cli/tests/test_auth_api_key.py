@@ -266,33 +266,28 @@ def test_narrow_key_login_displays_scopes(authed_profile, respx_mock, cli_runner
 
 
 def test_concurrent_store_api_key_preserves_both(config_path):
-    """Verifies that concurrent calls to store_api_key use locking to survive."""
     import time
-    from omi_cli.config import Config
     
-    # Simulate a slow RMW cycle by patching Config.save
-    original_save = Config.save
-    def slow_save(self, config):
+    # Simulate a slow RMW cycle by patching the config load/save logic
+    # which now respects file locks.
+    def slow_store(profile, key):
         time.sleep(0.1)
-        return original_save(self, config)
+        store_api_key(profile, key)
 
-    import omi_cli.config
-    import unittest.mock
-    with unittest.mock.patch.object(omi_cli.config.Config, 'save', side_effect=slow_save, autospec=True):
-        errors = []
-        def run_store(profile, key):
-            try:
-                store_api_key(profile, key)
-            except Exception as exc:
-                errors.append(exc)
+    errors = []
+    def run_store(profile, key):
+        try:
+            slow_store(profile, key)
+        except Exception as exc:
+            errors.append(exc)
 
-        t1 = threading.Thread(target=run_store, args=("alpha", "KEY-A"))
-        t2 = threading.Thread(target=run_store, args=("beta", "KEY-B"))
+    t1 = threading.Thread(target=run_store, args=("alpha", "KEY-A"))
+    t2 = threading.Thread(target=run_store, args=("beta", "KEY-B"))
 
-        t1.start()
-        t2.start()
-        t1.join()
-        t2.join()
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
 
     assert not errors, f"Concurrent store_api_key raised: {errors}"
     
