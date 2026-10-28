@@ -225,6 +225,8 @@ def process_before_legacy(
     that it handled the extraction.
     """
 
+    if not conversation_id:
+        raise ValueError('extracted action items require conversation provenance')
     control = task_control_db.get_task_workflow_control(uid)
     if not capture_enabled(uid):
         return False
@@ -262,10 +264,15 @@ def process_conversation_before_legacy(
     conversation: Any,
     wake_word_gate: WakeWordCaptureGate | None = None,
 ) -> bool:
+    from utils.conversations.action_item_extraction import filter_extracted_items
+
+    if not conversation.id:
+        raise ValueError('extracted action items require conversation provenance')
+    items = filter_extracted_items(uid, conversation.structured.action_items, conversation=conversation)
     return process_before_legacy(
         uid,
         conversation.id,
-        conversation.structured.action_items,
+        items,
         getattr(conversation, 'transcript_segments', ()) or (),
         wake_word_gate,
     )

@@ -503,7 +503,9 @@ def create_action_item_tool(
 
     # Create the action item
     try:
-        action_item_id = action_items_db.create_action_item(uid, action_item_data)
+        from utils.retrieval.tool_services.action_items import create_action_item
+
+        action_item_id = create_action_item(uid, action_item_data)
         if not action_item_id:
             return "Error: Failed to create action item."
 

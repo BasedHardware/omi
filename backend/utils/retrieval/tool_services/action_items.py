@@ -23,6 +23,21 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def create_action_item(uid: str, data: Dict[str, Any], **kwargs) -> str:
+    """Shared create boundary; callers retain their HTTP/tool error contracts."""
+    from utils.task_intelligence.task_source_validation import validate_task_sources
+
+    validate_task_sources(uid, [data])
+    return action_items_db.create_action_item(uid, data, **kwargs)
+
+
+def create_action_items_batch(uid: str, items: List[Dict[str, Any]]) -> List[str]:
+    from utils.task_intelligence.task_source_validation import validate_task_sources
+
+    validate_task_sources(uid, items)  # Validate the whole batch before any write.
+    return action_items_db.create_action_items_batch(uid, items)
+
+
 def get_action_items_text(
     uid: str,
     limit: int = 50,
@@ -178,7 +193,7 @@ def create_action_item_text(
         pass
 
     try:
-        action_item_id = action_items_db.create_action_item(uid, action_item_data)
+        action_item_id = create_action_item(uid, action_item_data)
         if not action_item_id:
             return "Error: Failed to create action item."
 
