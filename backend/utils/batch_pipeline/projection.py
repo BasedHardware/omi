@@ -33,9 +33,12 @@ from database.batch_pipeline_quarantine_recovery import held_candidates
 from database.batch_pipeline_store import PROJECTION_ASSIGNMENT_STATES, PROJECTION_FINISH_STATES, FirestoreStore
 from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
 from utils.batch_pipeline.projection_disposition import persist_disposition, mirror_assignment
+from utils.batch_pipeline.projection_privacy import PRIVACY_HELD, settle_refusals
+from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason
 from utils.batch_pipeline.projection_index import ProjectionIndex
 from database import conversations as conversations_db
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem, projection_speech_spans
+from utils.batch_pipeline.errors import error_site_field
 from utils.batch_pipeline.correctness_metrics import record_labels
 from utils.batch_pipeline.recovery_disposition import result_outcome
 from database.batch_pipeline_projection_claim import projection_claim
@@ -44,6 +47,7 @@ from utils.batch_pipeline.voice_evidence import prepare as prepare_voice_evidenc
 from utils.batch_pipeline.projection_parts import align_projection_words, bounded_projection_words
 from utils.sync.assignment_errors import SyncAssignmentSuperseded
 from utils.sync.intake_completion import log_sync_lineage_stamp_gap_refused
+from utils.stt.transcript_admission import filter_admission
 
 if TYPE_CHECKING:
     from utils.batch_pipeline.projection_prefetch import Prefetched
@@ -122,21 +126,6 @@ def error_type(error: BaseException) -> str:
     ):
         return 'FirestoreContentionExhausted'
     return type(error).__name__
-
-
-def error_site_field(error: BaseException) -> str:
-    """` site=<file>:<line>` of the innermost backend frame; static code location only."""
-    import os
-    import traceback
-
-    try:
-        frames = traceback.extract_tb(error.__traceback__)
-    except Exception:
-        return ''
-    for frame in reversed(frames):
-        if 'site-packages' not in frame.filename and 'dist-packages' not in frame.filename:
-            return f' site={os.path.basename(frame.filename)}:{frame.lineno}'
-    return ''
 
 
 def fence_reason_field(error: BaseException) -> str:
@@ -249,9 +238,20 @@ def build_incoming(
             segment.speaker_identity_status = 'ambiguous' if abstained else 'no_match'
             segment.speaker_match_source = 'batch_abstention' if abstained else 'batch_pyannote'
     started = datetime.fromtimestamp(item.capture_at, timezone.utc)
+    finished = datetime.fromtimestamp(item.capture_at + max(s.end for s in segments), timezone.utc)
+    # Projected sync must use the same narrow admission rules as legacy sync.
+    # Keep original clocks/accounting; shadow retains the identical segments.
+    segments, admission_receipts = filter_admission(item.owner_id, segments, origin='sync')
+    for reason in sorted({receipt.rule for receipt in admission_receipts}):
+        logger.info(
+            'event=batch_media_admission reason=%s count=%d serving=%s',
+            reason,
+            sum(receipt.rule == reason for receipt in admission_receipts),
+            str(any(receipt.dropped for receipt in admission_receipts)).lower(),
+        )
     create = CreateConversation(
         started_at=started,
-        finished_at=datetime.fromtimestamp(item.capture_at + max(s.end for s in segments), timezone.utc),
+        finished_at=finished,
         transcript_segments=segments,
         source=ConversationSource(binding.source),
         language=binding.language or payload.get('language'),
@@ -443,17 +443,17 @@ class Projector:
             job, entry, binding = self.store.read(segment_id)
         self._persist_read(segment_id, job, entry, binding)
 
+    @settle_refusals(assignment=True)
     def _persist_read(self, segment_id, job, entry, binding, *, hint=None, claimed=False):
         if job.get('shadow'):
             raise ProjectionBlocked('shadow publication forbidden')
         if claimed:
             # The walk holds this owner's claim for its whole step.
-            self._assign(segment_id, job, entry, binding, finish=False, hint=hint)
-            return
+            return self._assign(segment_id, job, entry, binding, finish=False, hint=hint)
         with projection_claim(self.store.store.namespace, owner_key(binding.owner_id)) as acquired:
             if not acquired:
                 raise ProjectionBlocked('projection assignment claim busy')
-            self._assign(segment_id, job, entry, binding, finish=False, hint=hint)
+            return self._assign(segment_id, job, entry, binding, finish=False, hint=hint)
 
     async def start_followups(self, priority=()):
         # Imported lazily: the synchronous worker seam remains lightweight.
@@ -468,12 +468,14 @@ class Projector:
     def project(self, segment_id: str) -> dict | None:
         return self._project_read(segment_id, *self.store.read(segment_id))
 
+    @settle_refusals()
     def _project_read(self, segment_id, job, entry, binding, *, hint=None, claimed=False):
         if job.get('shadow'):
             raise ProjectionBlocked('shadow publication forbidden')
         policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
         if policy.async_projection:
-            self._persist_read(segment_id, job, entry, binding, hint=hint, claimed=claimed)
+            if self._persist_read(segment_id, job, entry, binding, hint=hint, claimed=claimed) is PRIVACY_HELD:
+                return None
             job, entry, binding = self.store.read(segment_id)
             return self._finish(segment_id, job, entry, binding)
         if policy.projection_contention:
@@ -505,6 +507,9 @@ class Projector:
         policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
         item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
         session = self.store.session(segment_id, binding, self.clock(), policy=policy)
+        if job.get('_projection_privacy_deleted'):
+            persist_disposition(session, privacy_deleted=True)
+            return
         # A walk's fresh read showed no receipt; the transaction still fences.
         prechecked = not (hint is not None and hint.successor and not entry.get('projection'))
         if prechecked:
@@ -512,6 +517,11 @@ class Projector:
                 with projection_phase('predecessor', policy):
                     self.store.check(session)
             except ProjectionReplay:
+                return
+            except BatchPrivacyBlocked as error:
+                if error.reason != BatchPrivacyReason.CONVERSATION_DELETED:
+                    raise
+                persist_disposition(session, privacy_deleted=True)
                 return
         if entry['result']['outcome'] in {'silence', 'no_recoverable_speech'}:
             if entry['result']['outcome'] == 'no_recoverable_speech':
@@ -535,6 +545,10 @@ class Projector:
                 # Without the pre-check this is the replay it would have seen.
             except SyncAssignmentSuperseded:
                 self.supersede(session)
+            except BatchPrivacyBlocked as error:
+                if error.reason != BatchPrivacyReason.CONVERSATION_DELETED:
+                    raise
+                persist_disposition(session, privacy_deleted=True)
         else:
             with projection_phase('assignment', policy):
                 self.assign_parts(item, entry, binding, finish=finish, policy=policy, hint=hint)
@@ -588,6 +602,7 @@ class Projector:
             return False, None
         return candidate is not None, candidate
 
+    @settle_refusals()
     def _finish(self, segment_id, job, entry, binding):
         if job.get('shadow'):
             raise ProjectionBlocked('shadow publication forbidden')
@@ -824,7 +839,8 @@ class Projector:
                             batch_segment_id=item.segment_id,
                             policy=policy,
                         )
-                    session.speaker_scope = incoming['transcript_segments'][0]['speaker_id_scope']
+                    if incoming['transcript_segments']:
+                        session.speaker_scope = incoming['transcript_segments'][0]['speaker_id_scope']
                     if binding.record_origin:
                         incoming['_batch_replace_live'] = {
                             'start': item.capture_at,
@@ -846,7 +862,7 @@ class Projector:
                         receipt_box[:] = [session.persist(transaction, planned)]
 
                     candidate = None
-                    if context.target_id is None:
+                    if context.target_id is None and incoming['transcript_segments']:
                         with projection_phase('candidate', policy):
                             span = (int(incoming['started_at'].timestamp()), int(incoming['finished_at'].timestamp()))
                             deadline = hint.deadline if hint is not None else None
@@ -891,6 +907,16 @@ class Projector:
                 receipt = persist_disposition(session, quarantined=True)
             except SyncAssignmentSuperseded:
                 receipt = self.supersede(session)
+            except BatchPrivacyBlocked as error:
+                if error.reason != BatchPrivacyReason.CONVERSATION_DELETED:
+                    if policy.projection_contention:
+                        logger.error(
+                            'event=batch_projection action=assignment outcome=error exception_type=%s%s',
+                            error_type(error),
+                            fence_reason_field(error),
+                        )
+                    raise
+                receipt = persist_disposition(session, privacy_deleted=True)
             except Exception as error:
                 if policy.projection_contention:
                     logger.error(
@@ -907,6 +933,10 @@ class Projector:
 
     def finish_part(self, item, binding, receipt, index, *, policy=None):
         policy = policy or self.store.policy(item.segment_id)
+        if receipt.get('conversation_id'):
+            self.store.settle_deleted_output(
+                item.segment_id, binding, self.clock(), receipt, part_index=index, policy=policy
+            )
         if receipt['state'] in {'ready', 'quarantined'}:
             return
         if receipt.get('conversation_id'):
@@ -922,15 +952,19 @@ class Projector:
                         silent=receipt.get('silent_redrive') is True,
                     )
                 )
-            if receipt.get('audio_required') and not binding.native_record:
-                with projection_phase('playback', policy):
-                    if self.playback is not None:
-                        self.playback(item, canonical)
-                    else:
-                        self.persist_playback(item, binding, canonical, receipt)
+            outputs = receipt.get('size_rollover_outputs') or [{'conversation_id': canonical}]
+            for output in outputs:
+                output_id = output['conversation_id']
+                if receipt.get('audio_required') and not binding.native_record:
+                    with projection_phase('playback', policy):
+                        if self.playback is not None:
+                            self.playback(item, output_id)
+                        else:
+                            self.persist_playback(item, binding, output_id, receipt)
             if receipt['enrichment_required']:
                 if (receipt.get('speaker_scope') or '').startswith('final:batch:'):
-                    prepare_voice_evidence(self, item, binding, canonical)
+                    for output in outputs:
+                        prepare_voice_evidence(self, item, binding, output['conversation_id'])
                 with projection_phase('enrichment', policy):
                     self.store.mark_enrichment(
                         item.segment_id,
@@ -1223,8 +1257,11 @@ class Projector:
                     parallel_candidate=prefetch is not None,
                     deadline=deadline,
                 )
+                privacy_held = False
                 if policy.async_projection:
-                    self._persist_read(segment_id, job, entry, binding, hint=hint, claimed=drain)
+                    privacy_held = (
+                        self._persist_read(segment_id, job, entry, binding, hint=hint, claimed=drain) is PRIVACY_HELD
+                    )
                 else:
                     self._project_read(segment_id, job, entry, binding, hint=hint, claimed=drain)
             except StepDeadline:
@@ -1250,7 +1287,7 @@ class Projector:
             if policy.async_projection:
                 if segment_id == recovered:
                     first = binding.content_id
-                if not owe(segment_id, binding):
+                if not privacy_held and not owe(segment_id, binding):
                     break
         else:
             more = True
@@ -1298,9 +1335,10 @@ class Projector:
                     continue
                 policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
                 contention = contention or policy.projection_contention
+                privacy_held = False
                 if policy.async_projection:
                     self.has_async_followups = True
-                    self._persist_read(segment_id, job, entry, binding)
+                    privacy_held = self._persist_read(segment_id, job, entry, binding) is PRIVACY_HELD
                     result = None
                 else:
                     result = self._project_read(segment_id, job, entry, binding)
@@ -1366,7 +1404,7 @@ class Projector:
                     if chain_deadline is None:
                         chain_deadline = time.monotonic() + OWNER_CHAIN_SECONDS
                     budget = max(0.0, min(OWNER_CHAIN_SECONDS, chain_deadline - time.monotonic()))
-                seed = (segment_id, binding) if policy.async_projection else None
+                seed = (segment_id, binding) if policy.async_projection and not privacy_held else None
                 if budget > 0 or seed is not None:
                     if budget > 0:
                         walked.add(binding.owner_id)

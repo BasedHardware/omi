@@ -389,7 +389,7 @@ void main() {
     analytics.expectSingle('Diagnostics Send Failed', {
       'failure_stage': 'dialog_cancelled',
       'status_code': 0,
-      'schema_version': 2,
+      'schema_version': 3,
       'disconnect_count': 1,
     });
     expect(analytics.propertiesOf('Diagnostics Send Failed').single['bundle_bytes'] as int, greaterThan(0));
@@ -411,7 +411,7 @@ void main() {
     analytics.expectSingle('Diagnostics Send Failed', {
       'failure_stage': 'upload',
       'status_code': 503,
-      'schema_version': 2,
+      'schema_version': 3,
       'disconnect_count': 1,
     });
     expect(analytics.propertiesOf('Diagnostics Send Failed').single['bundle_bytes'] as int, greaterThan(0));
@@ -432,7 +432,7 @@ void main() {
     analytics.expectSingle('Diagnostics Send Failed', {
       'failure_stage': 'ticket_parse',
       'status_code': 0,
-      'schema_version': 2,
+      'schema_version': 3,
       'disconnect_count': 1,
     });
   });
@@ -452,7 +452,7 @@ void main() {
     analytics.expectSingle('Diagnostics Send Failed', {
       'failure_stage': 'upload',
       'status_code': 0,
-      'schema_version': 2,
+      'schema_version': 3,
       'disconnect_count': 1,
     });
     expect(analytics.propertiesOf('Diagnostics Send Failed').single['bundle_bytes'] as int, greaterThan(0));
@@ -471,7 +471,7 @@ void main() {
 
     expect(find.text('OMI-TKT-42'), findsOneWidget);
     analytics.expectSingle('Diagnostics Sent', {
-      'schema_version': 2,
+      'schema_version': 3,
       'disconnect_count': 1,
     });
     expect(analytics.propertiesOf('Diagnostics Sent').single['bundle_bytes'] as int, greaterThan(0));

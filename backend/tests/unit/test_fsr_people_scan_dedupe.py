@@ -1,6 +1,6 @@
 """Task-attempt raw People reuse: counted streams, explicit safety and fill fences."""
 
-from contextvars import copy_context
+from contextvars import Context, copy_context
 from copy import deepcopy
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -19,13 +19,40 @@ class CountingFirestore:
         self.scans = []
         self.after_snapshot = None
         self.failure = None
+        self.generations = {uid: 1 for uid in self.rows}
+        self.generation_reads = []
+        self.generation_failure = None
+        self.document_reads = 0
 
     def collection(self, name):
         assert name == 'users'
-        return SimpleNamespace(document=lambda uid: SimpleNamespace(collection=lambda name: Query(self, uid, name)))
+        return SimpleNamespace(document=lambda uid: Owner(self, uid))
 
     def transaction(self):
-        return SimpleNamespace(update=lambda ref, patch: self.rows[ref.uid][ref.person_id].update(deepcopy(patch)))
+        return SimpleNamespace(
+            update=lambda ref, patch: self.rows[ref.uid][ref.person_id].update(deepcopy(patch)),
+            set=lambda ref, patch, **kwargs: self.generations.__setitem__(
+                ref.uid, self.generations.get(ref.uid, 0) + 1
+            ),
+        )
+
+
+class Owner:
+    def __init__(self, db, uid):
+        self.db, self.uid = db, uid
+
+    def collection(self, name):
+        if name == 'people':
+            return Query(self.db, self.uid, name)
+        assert name == 'people_meta'
+        return SimpleNamespace(document=lambda key: SimpleNamespace(uid=self.uid, get=self.generation))
+
+    def generation(self):
+        self.db.generation_reads.append(self.uid)
+        if self.db.generation_failure:
+            raise self.db.generation_failure
+        value = self.db.generations.get(self.uid)
+        return SimpleNamespace(exists=value is not None, to_dict=lambda: {'generation': value}, update_time=value)
 
 
 class Query:
@@ -39,6 +66,8 @@ class Query:
     def document(self, person_id):
         return SimpleNamespace(
             uid=self.uid,
+            id=person_id,
+            parent=SimpleNamespace(parent=Owner(self.db, self.uid)),
             person_id=person_id,
             get=lambda **kwargs: SimpleNamespace(
                 exists=person_id in self.db.rows[self.uid],
@@ -53,6 +82,7 @@ class Query:
         rows = list(self.db.rows[self.uid].items())
         if self.cap is not None:
             rows = rows[: self.cap]
+        self.db.document_reads += max(1, len(rows))
         snapshots = [SimpleNamespace(id=key, to_dict=lambda row=deepcopy(row): row) for key, row in rows]
         if self.db.after_snapshot:
             callback, self.db.after_snapshot = self.db.after_snapshot, None
@@ -311,3 +341,111 @@ def test_serialization_failure_preserves_live_result(db, monkeypatch):
         assert hint(db) == hint(db)
         assert people._people_scan_memo.get().entries == {}
     assert len(db.scans) == 2
+
+
+def test_known_spellings_hint_reader_reuses_attempt_scan(db, monkeypatch):
+    from utils.llm import known_spellings
+
+    monkeypatch.setattr(known_spellings, 'get_firestore_client', lambda: db)
+    with people.people_scan_attempt():
+        first = known_spellings._people_spellings('u1')
+        assert first == known_spellings._people_spellings('u1') == [{'name': 'Alice'}]
+    assert db.scans == [('u1', 200)]
+
+
+@pytest.mark.parametrize('raw', ['', '{"people_scan_dedupe":0}'])
+def test_known_spellings_off_path_keeps_live_reads(db, monkeypatch, raw):
+    from utils.llm import known_spellings
+
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', raw)
+    monkeypatch.setattr(known_spellings, 'get_firestore_client', lambda: db)
+    with people.people_scan_attempt():
+        assert known_spellings._people_spellings('u1') == [{'name': 'Alice'}]
+        db.rows['u1']['p1']['name'] = 'Renamed live'
+        assert known_spellings._people_spellings('u1') == [{'name': 'Renamed live'}]
+    assert db.scans == [('u1', 200), ('u1', 200)]
+
+
+@pytest.mark.parametrize('write', ['dismiss', 'rename'])
+def test_generation_invalidates_across_fresh_request_context(db, monkeypatch, write):
+    monkeypatch.setattr(people, 'dismiss_person_transaction', people.dismiss_person_transaction.to_wrap)
+    monkeypatch.setattr(people, 'update_person_name_transaction', people.update_person_name_transaction.to_wrap)
+    with people.people_scan_attempt():
+        assert hint(db)[0]['name'] == 'Alice'
+        assert len(db.generation_reads) == 1
+        if write == 'dismiss':
+            Context().run(people.dismiss_person_soft, db, 'u1', 'p1')
+        else:
+            Context().run(people.rename_person_retaining_aliases, db, 'u1', 'p1', 'Alicia')
+        # A fresh Context cannot invalidate the memo's in-process counter.
+        assert len(people._people_scan_memo.get().entries) == 1
+        result = hint(db)
+        if write == 'dismiss':
+            assert result == []
+        else:
+            assert result[0]['name'] == 'Alicia'
+            assert result[0]['aliases'] == ['Ally', 'Alice']
+        assert len(db.generation_reads) == 2
+        assert hint(db) == result
+        assert len(db.generation_reads) == 3
+    assert len(db.scans) == 2
+
+
+def test_unchanged_hit_costs_exactly_one_generation_read(db):
+    with people.people_scan_attempt():
+        hint(db)
+        before = len(db.generation_reads)
+        assert hint(db)[0]['name'] == 'Alice'
+        assert len(db.generation_reads) - before == 1
+    assert len(db.scans) == 1
+
+
+def test_cross_request_write_during_fill_does_not_stamp_old_result_current(db, monkeypatch):
+    monkeypatch.setattr(people, 'dismiss_person_transaction', people.dismiss_person_transaction.to_wrap)
+    db.after_snapshot = lambda: Context().run(people.dismiss_person_soft, db, 'u1', 'p1')
+    with people.people_scan_attempt():
+        assert hint(db)[0]['name'] == 'Alice'
+        assert hint(db) == []
+        assert hint(db) == []
+    assert len(db.scans) == 2 and len(db.generation_reads) == 3
+
+
+@pytest.mark.parametrize('mode', ['missing', 'malformed', 'unavailable'])
+def test_untrusted_generation_cannot_serve_or_admit_memo(db, mode):
+    with people.people_scan_attempt():
+        hint(db)
+        db.rows['u1']['p1']['is_dismissed'] = True
+        if mode == 'missing':
+            del db.generations['u1']
+        elif mode == 'malformed':
+            db.generations['u1'] = 'invalid'
+        else:
+            db.generation_failure = RuntimeError('metadata unavailable')
+        assert hint(db) == hint(db) == []
+        assert not people._people_scan_memo.get().entries
+    assert len(db.scans) == 3
+
+
+def test_hint_reader_cross_request_dismissal_is_fenced(db, monkeypatch):
+    from utils.llm import known_spellings
+
+    monkeypatch.setattr(known_spellings, 'get_firestore_client', lambda: db)
+    monkeypatch.setattr(people, 'dismiss_person_transaction', people.dismiss_person_transaction.to_wrap)
+    with people.people_scan_attempt():
+        assert known_spellings._people_spellings('u1') == [{'name': 'Alice'}]
+        Context().run(people.dismiss_person_soft, db, 'u1', 'p1')
+        assert known_spellings._people_spellings('u1') == []
+    assert db.scans == [('u1', 200), ('u1', 200)]
+
+
+@pytest.mark.parametrize('enabled,expected_reads', [(False, 1000), (True, 110)])
+def test_billed_document_read_reduction_includes_generation_lookups(db, monkeypatch, enabled, expected_reads):
+    db.rows['u1'] = {f'p{i}': {'name': f'Person {i}'} for i in range(100)}
+    if not enabled:
+        monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"people_scan_dedupe":0}')
+    with people.people_scan_attempt():
+        for _ in range(10):
+            assert len(hint(db)) == 100
+    # 10 x 100 off; 100 people + 10 generation lookups on (includes the fill).
+    assert db.document_reads + len(db.generation_reads) == expected_reads
+    assert len(db.generation_reads) == (10 if enabled else 0)

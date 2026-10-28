@@ -1,0 +1,4 @@
+{
+  "change": "Omi Glass can recover its connection in the background after Bluetooth setup stalls",
+  "platforms": ["ios"]
+}

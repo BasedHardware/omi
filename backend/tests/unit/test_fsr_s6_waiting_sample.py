@@ -35,7 +35,9 @@ class Query:
     def __init__(self, store, uid=None, maximum=None, ordered=False):
         self.store, self.uid, self.maximum, self.ordered = store, uid, maximum, ordered
 
-    def where(self, field, op, uid):
+    def where(self, field=None, op=None, uid=None, *, filter=None):
+        if filter is not None:
+            field, op, uid = filter.field_path, filter.op_string, filter.value
         assert (field, op) == ('uid', '==')
         return Query(self.store, uid, self.maximum, self.ordered)
 

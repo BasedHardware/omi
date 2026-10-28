@@ -7,82 +7,50 @@ or raw exception representations.
 
 from __future__ import annotations
 
-import contextvars
 from datetime import datetime, timezone
-from pathlib import Path
-from types import ModuleType
 from unittest.mock import MagicMock
-from zoneinfo import ZoneInfo
+from types import SimpleNamespace
 
 import pytest
+from database import chat_edits, notifications as notification_db
+from utils.retrieval.tool_services import action_items as service
+from utils.retrieval.tools import action_item_tools as tools
 
-from testing.import_isolation import load_module_fresh, stub_modules
 
-BACKEND_DIR = Path(__file__).resolve().parents[2]
-
-
-@pytest.fixture(scope="module")
-def action_tools_module():
-    """Load utils.retrieval.tools.action_item_tools with isolated stubs."""
-    db_action_items = ModuleType("database.action_items")
-    db_action_items.get_action_items = MagicMock(return_value=[])
-    db_action_items.create_action_item = MagicMock(return_value="test_item_123")
-    db_action_items.get_action_item = MagicMock(
-        return_value={
-            "id": "test_item_123",
-            "description": "Test task",
-            "completed": False,
-            "due_at": datetime.now(timezone.utc),
-        }
+@pytest.fixture
+def action_tools_module(monkeypatch):
+    database = SimpleNamespace(
+        get_action_items=MagicMock(return_value=[]),
+        create_action_item=MagicMock(return_value='test_item_123'),
+        get_action_item=MagicMock(
+            return_value={
+                'id': 'test_item_123',
+                'description': 'Test task',
+                'completed': False,
+                'due_at': datetime.now(timezone.utc),
+            }
+        ),
+        update_action_item=MagicMock(return_value=True),
     )
-    db_action_items.update_action_item = MagicMock(return_value=True)
-
-    db_chat_edits = ModuleType("database.chat_edits")
-    db_chat_edits.snapshot = MagicMock(return_value={"completed": False})
-    db_chat_edits.envelope = lambda snapshot, summary: {"_snapshot": snapshot, "_summary": summary}
-
-    db_notifications = ModuleType("database.notifications")
-    db_notifications.get_user_time_zone = MagicMock(return_value="UTC")
-
-    utils_notifications = ModuleType("utils.notifications")
-    utils_notifications.send_action_item_completed_notification = MagicMock()
-    utils_notifications.send_action_item_created_notification = MagicMock()
-    utils_notifications.send_action_item_data_message = MagicMock()
-    utils_notifications.sync_action_item_reminder = MagicMock()
-
-    utils_conversations_render = ModuleType("utils.conversations.render")
-    utils_conversations_render.resolve_display_tz = lambda tz: (ZoneInfo(tz) if tz else timezone.utc, tz or "UTC")
-    utils_conversations_render.format_local_time = lambda dt, display_tz, tz_label: f"{dt.isoformat()} {tz_label}"
-
-    utils_retrieval_chat_scope = ModuleType("utils.retrieval.chat_scope")
-    utils_retrieval_chat_scope.apply_chat_scope_dates = lambda scope, s, e: (s, e, None)
-    utils_retrieval_chat_scope.chat_scope_from_config = lambda c: c.get("chat_scope") if isinstance(c, dict) else None
-
-    utils_retrieval_agentic = ModuleType("utils.retrieval.agentic")
-    utils_retrieval_agentic.agent_config_context = contextvars.ContextVar("agent_config", default=None)
-
-    langchain_core_tools = ModuleType("langchain_core.tools")
-    langchain_core_tools.tool = lambda f: f
-
-    langchain_core_runnables = ModuleType("langchain_core.runnables")
-    langchain_core_runnables.RunnableConfig = dict
-
-    fakes: dict[str, ModuleType | None] = {
-        "database.action_items": db_action_items,
-        "database.chat_edits": db_chat_edits,
-        "database.notifications": db_notifications,
-        "utils.notifications": utils_notifications,
-        "utils.conversations.render": utils_conversations_render,
-        "utils.retrieval.chat_scope": utils_retrieval_chat_scope,
-        "utils.retrieval.agentic": utils_retrieval_agentic,
-        "langchain_core.tools": langchain_core_tools,
-        "langchain_core.runnables": langchain_core_runnables,
-    }
-
-    tool_path = BACKEND_DIR / "utils" / "retrieval" / "tools" / "action_item_tools.py"
-    with stub_modules(fakes):
-        mod = load_module_fresh("utils.retrieval.tools.action_item_tools", str(tool_path))
-        yield mod
+    monkeypatch.setattr(tools, 'action_items_db', database)
+    monkeypatch.setattr(service, 'action_items_db', database)
+    monkeypatch.setattr(notification_db, 'get_user_time_zone', lambda *_: 'UTC')
+    monkeypatch.setattr(chat_edits, 'snapshot', MagicMock(return_value={'completed': False}))
+    monkeypatch.setattr(chat_edits, 'envelope', lambda snapshot, summary: {'_snapshot': snapshot, '_summary': summary})
+    monkeypatch.setattr(tools, 'record_write', MagicMock(return_value=''))
+    for name in (
+        'send_action_item_completed_notification',
+        'send_action_item_created_notification',
+        'send_action_item_data_message',
+        'sync_action_item_reminder',
+    ):
+        monkeypatch.setattr(tools, name, MagicMock())
+    return SimpleNamespace(
+        action_items_db=database,
+        get_action_items_tool=tools.get_action_items_tool.func,
+        create_action_item_tool=tools.create_action_item_tool.func,
+        update_action_item_tool=tools.update_action_item_tool.func,
+    )
 
 
 def _valid_config():

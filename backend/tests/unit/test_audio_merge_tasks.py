@@ -238,12 +238,18 @@ class TestUnavailableContract:
         missing = handler[handler.index('except FileNotFoundError') : handler.index("'chunks_missing'}")]
         assert 'mark_playback_unavailable' in missing
 
-    def test_urls_reports_unavailable_without_enqueue(self):
-        src = _read_source(os.path.join('utils', 'sync', 'playback.py'))
-        fn = src[src.index('def _get_audio_urls_via_artifacts') : src.index('def get_audio_signed_urls')]
-        unavailable = fn[fn.index('is_playback_unavailable') : fn.index('else:')]
-        assert '"unavailable"' in unavailable
-        assert 'to_enqueue.append' not in unavailable
+    def test_urls_reports_unavailable_without_enqueue(self, monkeypatch):
+        playback = routers_sync.sync_playback
+        monkeypatch.setattr(playback, 'get_playback_artifact_signed_url', lambda *_: None)
+        monkeypatch.setattr(playback, 'get_merged_audio_signed_url', lambda *_: None)
+        monkeypatch.setattr(playback, 'is_playback_unavailable', lambda *_: True)
+        monkeypatch.setattr(playback, 'get_playback_failure_retry_epoch', lambda *_: None)
+        monkeypatch.setattr(playback, '_conversation_audio_urls_entry', lambda *_: {'status': 'unavailable'})
+        enqueue = MagicMock()
+        monkeypatch.setattr(playback, 'enqueue_conversation_audio_merge', enqueue)
+        result = playback._get_audio_urls_via_artifacts('u', 'c', [{'id': 'file'}])
+        assert result['audio_files'][0]['status'] == 'unavailable'
+        enqueue.assert_not_called()
 
     def test_storage_marker_helpers(self):
         src = _read_source(os.path.join('utils', 'other', 'storage.py'))

@@ -312,7 +312,7 @@ def money(amount_minor: int) -> str:
 def format_money(amount_minor: int, currency: str) -> str:
     """Format a minor-unit amount in its price currency.
 
-    USD uses a dollar sign. Other currencies keep a trailing ISO code.
+    USD uses an unambiguous US$ prefix. Other currencies keep a trailing ISO code.
     Thousands separators always apply. A whole major unit drops a trailing
     ``.00`` (or ``.000``); a non-zero fraction keeps the currency's decimals
     (``$499.90``). Zero-decimal currencies such as JPY are not divided by 100.
@@ -326,7 +326,7 @@ def format_money(amount_minor: int, currency: str) -> str:
     else:
         rendered = format(amount, f',.{exponent}f')
     if code.lower() == 'usd':
-        return f'${rendered}'
+        return f'US${rendered}'
     return f'{rendered} {code.upper()}'
 
 
@@ -369,6 +369,7 @@ def current_line(
     legacy: bool,
     locale: str | None = None,
     currency: str = 'usd',
+    price_label: str | None = None,
 ) -> tuple[str, str | None]:
     text = copy_for(locale)['current']
     note = text['legacy_note'] if legacy else None
@@ -379,13 +380,13 @@ def current_line(
     # Legacy keeps the previous "ends {date}" line; resubscribe is not offered.
     if cancel and not legacy and amount_minor is not None and interval in {'month', 'year'}:
         period = _period_word(interval, locale)
-        price = format_money(amount_minor, currency)
+        price = price_label if price_label is not None else format_money(amount_minor, currency)
         return text['cancel'].format(plan=plan_name_text, price=price, period=period), note
     if cancel and date:
         return text['cancel_ends'].format(plan=plan_name_text, date=date), note
     if amount_minor is not None and interval in {'month', 'year'}:
         period = _period_word(interval, locale)
-        price = format_money(amount_minor, currency)
+        price = price_label if price_label is not None else format_money(amount_minor, currency)
         if date:
             return text['paid'].format(plan=plan_name_text, price=price, period=period, date=date), note
         return text['paid_no_date'].format(plan=plan_name_text, price=price, period=period), note
@@ -554,9 +555,8 @@ def _meter_hours_line(text: dict[str, Any], *, shown: int, left: int, reset: str
 def chat_at_cap(plan_id: str, reset_at: int, locale: str | None = None) -> dict[str, Any]:
     """One backend-owned pause state shared by admission, quota and storefront."""
     text = copy_for(locale)['chat_at_cap']
-    upgrade = {'basic': ('plus', 'Plus'), 'plus': ('operator', 'Pro'), 'operator': ('architect', 'Architect')}.get(
-        plan_id
-    )
+    # Omi Pro is the only plan sold; Omi Pro and Architect have nothing to upgrade to.
+    upgrade = ('unlimited_v2', 'Omi Pro') if plan_id not in ('unlimited_v2', 'architect') else None
     return {
         'state': 'paused',
         'title': text['title'],

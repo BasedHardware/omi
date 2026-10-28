@@ -254,6 +254,7 @@ from utils.sync.telemetry import bounded_sync_language as _bounded_retry_languag
 from utils.sync.telemetry import bounded_sync_model as _bounded_sync_model
 from utils.sync.telemetry import bounded_sync_phase as _bounded_sync_phase
 from utils.sync.telemetry import new_attempt_ref as _new_attempt_ref
+from utils.sync.size_telemetry import size_fields, with_size_attribution
 from utils.sync.merge_audio import store_partial_merge_survivor_audio, store_intake_audio, store_sync_audio_chunk
 from utils.sync.assignment import fragment_rule
 from utils.sync.speaker_identity import PersonEmbeddingsCache, SpeakerIdentityDependencies, USER_SELF_PERSON_ID
@@ -1428,6 +1429,7 @@ def _assign_segment_speakers(
     return transcript_segments, segment_end_timestamp
 
 
+@with_size_attribution
 def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pipeline sits at Pyright's analyzer complexity ceiling
     path: str,
     uid: str,
@@ -1488,6 +1490,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
         'job_id': job_id,
     }
     conversation_id = None
+    incoming: dict | None = None
     conversation_turns: list[conversation_turn_lease.ConversationTurn | None] = []
     provider = 'unknown'
     model = 'unknown'
@@ -1940,13 +1943,13 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
             # never log exception text, document IDs, paths, or transcript.
             logger.error(
                 'event=sync_persistence_exception exception_type=%s firestore_error=%s firestore_doc_kind=%s '
-                'job_ref=%s attempt_ref=%s value_error_reason=%s',
+                'value_error_reason=%s %s',
                 _bounded_exception_type(e),
                 _firestore_error_class(e),
                 _firestore_doc_kind(e),
-                _bounded_correlation_ref(job_id),
-                _bounded_correlation_ref(attempt_ref),
                 value_error_reason(e),
+                getattr(e, 'sync_size_fields', size_fields(incoming))
+                + (' outcome=rejected' if is_document_size_limit_error(e) else ''),
             )
         if phase == 'finalize':
             logger.error(
@@ -2239,11 +2242,11 @@ def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
     for file in files:
         filename = file.filename
         if not filename:
-            raise HTTPException(status_code=400, detail='Uploaded file is missing a filename')
-        if not filename.endswith('.bin'):
-            raise HTTPException(status_code=400, detail='Invalid sync file format')
+            raise HTTPException(status_code=400, detail={'code': 'invalid_file', 'message': 'Missing sync filename'})
+        if '/' in filename or '\\' in filename or not filename.endswith('.bin'):
+            raise HTTPException(status_code=400, detail={'code': 'invalid_file', 'message': 'Invalid sync file format'})
         if '_' not in filename:
-            raise HTTPException(status_code=400, detail='Invalid sync file format')
+            raise HTTPException(status_code=400, detail={'code': 'invalid_file', 'message': 'Invalid sync file format'})
         try:
             timestamp = get_timestamp_from_path(filename)
         except CaptureTimeWindowError as error:

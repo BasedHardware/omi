@@ -59,7 +59,7 @@ describe('StorefrontPlans', () => {
     const onSelect = renderPlans(golden('free_settings'));
     fireEvent.click(screen.getByRole('radio', { name: 'Yearly · 2 months free' }));
     const plus = screen.getByTestId('storefront-tier-plus');
-    expect(within(plus).getByText('$16.66/month')).toBeTruthy();
+    expect(within(plus).getByText('US$16.66/month')).toBeTruthy();
     fireEvent.click(within(plus).getByRole('button', { name: 'Get Plus' }));
     expect(onSelect.mock.calls[0][1].id).toBe('price_plus_year');
   });
@@ -115,7 +115,7 @@ describe('StorefrontPanel purchase routing', () => {
     api.getStorefront.mockResolvedValue(golden('plus_monthly_yearly_toggle'));
     api.upgradeSubscription.mockResolvedValue({ status: 'success' });
     render(<StorefrontPanel source="web_plans" onSubscriptionUpdate={vi.fn()} />);
-    const label = 'Switch to yearly · save $39.98';
+    const label = 'Switch to yearly · save US$39.98';
     fireEvent.click(await screen.findByRole('button', { name: label }));
     expect(
       await screen.findByText('Your monthly plan continues until Nov 1'),

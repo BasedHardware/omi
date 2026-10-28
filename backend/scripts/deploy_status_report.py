@@ -282,14 +282,29 @@ def render_gke_report(
     findings: list[Finding] = []
     release_prefix = namespace.removesuffix('-backend')
 
+    deployment_names: list[str] = []
+    companion_images: dict[str, str] = {}
+    warm_members: set[str] = set()
     for service in services:
         deployment_name = service if service.startswith(release_prefix) else f'{release_prefix}-{service}'
         if service == 'backend-listen':
             deployment_name = f'{release_prefix}-backend-listen'
+        if deployment_name not in deployment_names:
+            deployment_names.append(deployment_name)
+        original = deployments.get(deployment_name, {})
+        companion = (original.get('metadata', {}).get('annotations') or {}).get('omi.ai/required-companion-deployment')
+        if companion:
+            warm_members.update((deployment_name, companion))
+            companion_images[companion] = first_container_image(original)
+            if companion not in deployment_names:
+                deployment_names.append(companion)
+
+    for deployment_name in deployment_names:
         deployment = deployments.get(deployment_name)
         if not deployment:
             lines.append(f'| `{deployment_name}` | - | - | - | - | missing |')
-            findings.append(Finding('WARN', deployment_name, 'deployment not found in report input'))
+            severity = 'FAIL' if deployment_name in companion_images else 'WARN'
+            findings.append(Finding(severity, deployment_name, 'deployment not found in report input'))
             continue
 
         spec = deployment.get('spec', {})
@@ -303,6 +318,12 @@ def render_gke_report(
         observed_generation = int(status.get('observedGeneration') or 0)
         image = first_container_image(deployment)
         deploy_status = 'ok'
+        if deployment_name in warm_members and desired < 1:
+            deploy_status = 'degraded'
+            findings.append(Finding('FAIL', deployment_name, 'required warm deployment has no desired replicas'))
+        if deployment_name in companion_images and image != companion_images[deployment_name]:
+            deploy_status = 'degraded'
+            findings.append(Finding('FAIL', deployment_name, 'required companion image differs from the primary'))
         if desired and (updated < desired or available < desired):
             deploy_status = 'degraded'
             findings.append(

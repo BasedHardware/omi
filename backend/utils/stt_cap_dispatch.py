@@ -8,6 +8,7 @@ from contextvars import ContextVar
 from typing import Any, Callable
 from utils.stt.socket import STTSocket
 from utils.stt.live_router import connecting_target
+from utils.observability.demand_cohort import current_transport_origin
 
 from config.stt_cap_dispatch import (
     enabled,
@@ -268,7 +269,11 @@ class LiveAdmission:
         accepted = raw.send(data, *args, **kwargs)
         if accepted is not False:
             self.observe_capture(True)
-        if accepted is not False and not customer_funded(provider):
+        if (
+            accepted is not False
+            and not customer_funded(provider)
+            and getattr(raw, 'defer_admission_charge', False) is not True
+        ):
             seconds = len(data) / (2 * rate)
             record_audio('live', 'accepted', provider, seconds, self.reason == 'plan_allowance_exhausted')
             if self.remaining_units is not None:
@@ -418,12 +423,15 @@ def live_provider(provider, rate_index):
                 return await fn(*args, **kwargs)
             rate = kwargs.get('sample_rate') or args[rate_index]
             target = connecting_target.get()
+            origin = current_transport_origin.get()
 
             async def factory():
                 token = connecting_target.set(target)
+                origin_token = current_transport_origin.set(origin)
                 try:
                     return await fn(*args, **kwargs)
                 finally:
+                    current_transport_origin.reset(origin_token)
                     connecting_target.reset(token)
 
             allowed = admission.allowed(provider)

@@ -15,6 +15,7 @@ from itertools import cycle
 
 from config.rollout_cohorts import legacy_membership
 from datetime import timedelta, timezone
+from zoneinfo import ZoneInfo
 from types import SimpleNamespace
 from typing import Any
 
@@ -141,6 +142,7 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
+    'database.batch_pipeline_store.FirestoreStore.ready_for_capacity': '975eabd92f43ba5da3d847439f4d8e3592525ccd31c11dcac6463365535eac10',
     'database.monthly_usage_totals._rebuild': '2c9be83589399a6824fbb2ef7376cd7baf8492e8a780671e31b67a8294b40db0',
     'database.batch_pipeline_shadow.ShadowStore._busy': '3be03e458c8e65c535fed1475cbfae9c97421970c89dc751e2f4eaa4a46a4467',
     'database.batch_pipeline_shadow.ShadowStore.reap': 'e5ea33125389c09c8ad556fab4a6319142f223e4dfa655095dcd89c64e976a8d',
@@ -162,7 +164,7 @@ BODY_DIGEST = {
     'database.batch_pipeline_store.FirestoreStore.longest_ready_pending': 'c36f3f2504728cdf4473b0443f0371b3c15e124eb1a2f740fab411eee14f6337',
     'database.batch_pipeline_store.FirestoreStore.fresh_pending': 'd9b3d9c6a869efec2ed3ff0379930dbe43de3cadc01bba28c96051986be058c2',
     'database.batch_pipeline_store.FirestoreStore.held_merge_owners': '55ac8d67e8e3e3fb689c9e9e086084a6acbcd7f5bb3b0b3f6186f5014cafc143',
-    'database.dream_scheduler.discover': 'e614de2d842268bb1b96e7e7a12c885b3e1bbcef9bd63da881baccf177d1c722',
+    'database.dream_scheduler.discover': '3d93d04de0f8e275f39ec72d8546af67ff2d583fb061d7faa25db084460ae492',
     'database.proactivity_producers.mentor_history_query': '716c4f332e0ff0cf6fda3bcea41f479ce3bb7eb2956c8bfe37c61e0baabbfdb3',
     'database.proactivity_producers.recent_mentor_query': 'dc28a1084121daa40a430764d1c638ec4fe090e66dff499e0bec152444035dee',
     'database.proactivity_producers.task_items_query': '9e98b929e35f9118cdb76076bb526e41a5383d94d0304f098d17a0a2a3bc3cb5',
@@ -171,17 +173,23 @@ BODY_DIGEST = {
     'database.action_items._apply_action_item_date_filters': 'b69dc9810414753e0b0715560b872121566b965f36bdefc5b91869587037336f',
     'database.action_items._harvest_legacy_docs': 'f4b8069a91feae96d257470687bc383bb0652b002a009e79979815be58814f9a',
     'database.action_items._probe_legacy_completion_rows': '57a375ed6e56cdd9c6156ef4cee5944dbfb089a2477844c5b9c52de9a3214a30',
-    'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': 'edf090b47ae28c017f15251bc0c9a4fe6d92445745f3b89f585159ac51f0c8d1',
+    # Re-reviewed: quiet admission uses the shared speech clock; query/read shapes are unchanged.
+    'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': 'a6c91232a5a2cff334260675817331cb46b5b670cad91acd6bdd9c46ed58ee67',
     'database.durable_queue_age._publish_queue_ages': '58e66cfc32f39bdc2e9b1e6c805d18599c1ff14be8dbcff68eadc23506656d9b',
     'database.firestore_query_types.FirestoreQuerySpec.build': '2c26a157a8e87be2bcfef668e3bd5cdc0a9c0d96e0b56bada98c30741c8be01a',
-    'database.sync_backfill_sequencer._pending_for_uid': '0215df28fdc7128cc68bf0abf087e4f98854698851b22821008460b68b699ea9',
+    # Re-reviewed: positional .where converted to filter=FieldFilter — same field/op/value shape.
+    'database.sync_backfill_sequencer._pending_for_uid': 'fc7bb91a5b03e84f63950c00ca896eaadcd97f055c571fac6a761e4d6bb4fa1d',
     # Re-reviewed: the post-commit task-list cache invalidation adds no query.
     'database.workstreams.import_task_goal_links': '5d2384ad2102107cc487d29c18a47204f5d5fea0201c9ae0d2a56f5959b91971',
     # Re-reviewed: public size guard rename and correction-parent rejection add
     # no query. Post-commit quiet retirement adds document reads only; terminal
     # streams still belong to the two driven callees. Retained extraction
     # re-encryption on protection upgrade adds no query or document read.
-    'database.smart_merge.absorb_conversation': '55c3b4249fd2ac67d6f49a0da36bbdd24715b803c62d2e44191de2de2b3a2a40',
+    # Donor dedupe uses the decoded transaction snapshot; its cohort gate can
+    # refresh a document read, while post-commit bridge logging adds no query.
+    # Encoded-size preflight and the size backstop add no serving query; the
+    # discarded-barrier scan is still covered by the same two driven callees.
+    'database.smart_merge.absorb_conversation': 'fdf7e55e3f9795791e5abcf02752dcbe2c9d04d978ae22921cf5d35434fc6b23',
     'database.client_telemetry.recent_owner_ids': '65fe8200d7ad9418b793ccb0fa53a172b2576a80bba644caa3b36cdb53b74510',
     'database.client_telemetry_ops.purge_expired_observations': '8526c30b11ad8548356a136220232a607937bc464628c0eb5326e0a2e928897f',
     # Open-loop store: whole-subcollection stream by document id, filtered in Python.
@@ -219,6 +227,14 @@ _add(
     )
 )
 _add(DriverEntry('database._client.get_users_uid'))
+_add(
+    DriverEntry(
+        'database.hidden_noise_counts.count_hidden_noise_by_day',
+        base={'uid': UID, 'start_date': T0, 'end_date': T1},
+        profiles=(CallerProfile('home-hidden-noise-counts', {}),),
+        neutrals={'tz': (ZoneInfo('UTC'), 'in-memory day bucketing only; query shape is fixed')},
+    )
+)
 _add(
     DriverEntry(
         'database.quiet_check_retirement.stop_quiet_checks_for_account',
@@ -807,6 +823,21 @@ _add(
 )
 _add(DriverEntry('database.conversation_finalization_jobs.get_finalization_job_summary'))
 
+_add(
+    DriverEntry(
+        'database.transcript_search.read_transcript_search_page',
+        base={'uid': UID, 'query': 'invoice'},
+        domains={'start_date': [None, T0], 'end_date': [None, T1]},
+        neutrals={
+            'cursor': _CURSOR,
+            'budget': (
+                ListReadBudget(deadline_monotonic=12.0, max_documents=50, clock=lambda: 0.0),
+                'required bounded scan budget; frozen clock, fresh per driver trial',
+            ),
+        },
+    )
+)
+
 
 def _byok_reclaim_cursor(client, combo, trial):
     if trial:
@@ -1100,8 +1131,16 @@ _add(
     DriverEntry(
         'database.daily_summaries.get_daily_summaries',
         base={'uid': UID},
-        domains={'start_date': [None, '2026-01-01'], 'end_date': [None, '2026-01-02']},
-        neutrals={'limit': _LIMIT, 'offset': _OFFSET},
+        domains={
+            'start_date': [None, '2026-01-01'],
+            'end_date': [None, '2026-01-02'],
+        },
+        neutrals={
+            'limit': _LIMIT,
+            'offset': _OFFSET,
+            'record_filter': (bool, 'post-stream response validation; no server filter/order or index effect'),
+            'read_budget': _BUDGET,
+        },
     )
 )
 _add(DriverEntry('database.daily_summaries.get_daily_summary_by_date', base={'uid': UID, 'date': '2026-01-01'}))
@@ -1531,6 +1570,13 @@ _add(DriverEntry('database.knowledge_graph.find_node_by_label_or_alias', base={'
 _add(
     DriverEntry(
         'database.knowledge_graph.prune_memory_citations_from_kg', base={'uid': UID, 'memory_ids': ['mem-1', 'mem-2']}
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.knowledge_graph._citation_nodes',
+        covered_by=('database.knowledge_graph.prune_memory_citations_from_kg',),
+        reason='The prune driver exercises the native reverse-citation query before global orphan cleanup.',
     )
 )
 _add(
@@ -2217,7 +2263,11 @@ _add(
     DriverEntry(
         'database.smart_merge.find_preceding_conversations',
         base={'uid': UID, 'source': 'omi', 'created_before': T0},
-        domains={'discarded': [False, True], 'transaction': [None, ref_transaction()]},
+        domains={
+            'discarded': [False, True],
+            'transaction': [None, ref_transaction()],
+            'client_device_id': [None, 'pendant-1'],
+        },
         neutrals={'limit': _LIMIT_OPT},
     )
 )
@@ -3458,7 +3508,12 @@ _add(
     DriverEntry(
         'utils.processing_backlog_worker._page',
         base={'uid': UID},
-        domains={'kind': ['audio', 'text'], 'cursor': [None, {'at': 1, 'id': 'cursor'}]},
+        # The malformed cursor domain proves the defensive rewind builds the
+        # same cursorless shape as None instead of a server-rejected query.
+        domains={
+            'kind': ['audio', 'text'],
+            'cursor': [None, {'at': 1, 'id': 'cursor'}, {'at': None, 'id': ''}],
+        },
     )
 )
 _add(
@@ -3494,6 +3549,7 @@ _add(
 _add(
     DriverEntry(
         'database.cap_hold_redrive.page',
+        neutrals={'limit': _LIMIT},
         domains={
             'kind': ['choices', 'staging', 'cleanup'],
             'after': [None, 'users/synthetic/processing_backlog/current'],
@@ -3503,10 +3559,16 @@ _add(
 _add(
     DriverEntry(
         'database.cap_hold_redrive.discover',
+        neutrals={'limit': _LIMIT},
         domains={'kind': ['choices', 'staging', 'cleanup']},
     )
 )
-_add(DriverEntry('database.cap_hold_redrive.fleet_snapshot'))
+_add(
+    DriverEntry(
+        'database.cap_hold_redrive.fleet_snapshot',
+        neutrals={'timeout': (60.0, 'per-RPC budget; does not change the query shape')},
+    )
+)
 
 
 # WQ7 canonical_statuses_dedupe: the lever-on helper batches missing-ID lookups as

@@ -177,6 +177,13 @@
     },
     {
       "path": "utils/episodes/finalize.py",
+      "function": "_queue_retry",
+      "kind": "submit_with_context_retry",
+      "count": 1,
+      "why": "PR #23828: saturation admission retry for the already-inventoried best-effort episode finalize/intake overlay hooks in this module. Runs on the same pool with at most 64 deferred calls and synchronous producer backpressure. No source processing authority is delegated: transcript/audio/job/task/memory persistence precedes the hook. SIGKILL or shutdown cancellation can leave derived notes or episode attachment stale; a later finalize/close can repair from retained transcripts. This site and the executor admission implementation are both inventoried; future retry callers must declare their own lifetime."
+    },
+    {
+      "path": "utils/episodes/finalize.py",
       "function": "schedule_synced_intake_attach",
       "kind": "submit_with_context",
       "count": 1,
@@ -188,6 +195,13 @@
       "kind": "start_background_task",
       "count": 1,
       "why": "reviewed safe (Episodes v1.1): the session-end flush is itself the recovery for an in-process buffer; if it is lost at SIGKILL the conversation's finalization tail applies the same segments past the episode's applied offset"
+    },
+    {
+      "path": "utils/executors.py",
+      "function": "MonitoredThreadPoolExecutor._drain_deferred",
+      "kind": "executor.submit",
+      "count": 1,
+      "why": "PR #23828: bounded admission retry for the existing best-effort episode finalize/intake hooks above, on their same executor. At most 64 deferred submissions; overflow backpressures synchronous producers, capacity callbacks retry admission, and shutdown explicitly cancels pending work. No conversation, audio, job, task or memory authority is delegated: source transcripts and ordinary processing remain persisted. SIGKILL can leave an ordinary WAL row unfolded or derived episode notes/shadow reconciliation stale, matching the existing hooks' documented lifetime; a later finalize/close can repair from retained transcripts. Saturation, context and shutdown behavior are tested in test_episodes_finalize_paths.py and test_executors.py."
     },
     {
       "path": "utils/llm/byok_errors.py",
@@ -293,6 +307,13 @@
       "kind": "start_background_task",
       "count": 1,
       "why": "reviewed safe: telemetry-only vendor sample; losing it only leaves the gauge stale and has no listen-request or admission effect"
+    },
+    {
+      "path": "utils/sync/cap_hold_redrive.py",
+      "function": "_schedule_fleet_snapshot",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "reviewed safe: fleet snapshot is telemetry only and owns no hold, lease, reservation, or provider work; SIGKILL can lose one gauge refresh, and a later sweep or process restart schedules a fresh sample"
     },
     {
       "path": "utils/sync/pipeline.py",

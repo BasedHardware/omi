@@ -6,8 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/services/wals/wal_derived_sync_views.dart';
 import 'package:omi/backend/http/api_result.dart';
-import 'package:omi/backend/schema/bt_device/bt_device.dart' show BleAudioCodec;
+import 'package:omi/backend/schema/bt_device/bt_device.dart' show BtDevice, BleAudioCodec;
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/review.dart';
@@ -30,7 +31,7 @@ import '../harness.dart';
 import 'capture.dart';
 
 /// A SyncProvider reporting one fixed offline-sync pipeline state.
-class _SyncAuditProvider extends ChangeNotifier implements SyncProvider {
+class _SyncAuditProvider extends ChangeNotifier with WalDerivedSyncViews implements SyncProvider {
   _SyncAuditProvider({this.wals = const [], this.phase = SyncPhase.idle});
 
   final List<Wal> wals;
@@ -59,13 +60,16 @@ final _now = DateTime.now();
 final _today = DateTime(_now.year, _now.month, _now.day);
 DateTime _at(int daysAgo, int hour, int minute) => DateTime(_now.year, _now.month, _now.day - daysAgo, hour, minute);
 
-Wal _wal(DateTime start, int minutes, WalStatus status, {WalStorage storage = WalStorage.disk}) => Wal(
+Wal _wal(DateTime start, int minutes, WalStatus status,
+        {WalStorage storage = WalStorage.disk, String? rejectionReason}) =>
+    Wal(
       timerStart: start.millisecondsSinceEpoch ~/ 1000,
       codec: BleAudioCodec.opus,
       seconds: minutes * 60,
       status: status,
       storage: storage,
       device: 'pendant',
+      uploadRejectionReason: rejectionReason,
     );
 
 ServerConversation _convo(String id, String title, String emoji, DateTime at, int minutes) => ServerConversation(
@@ -173,7 +177,12 @@ class _CatchUpCapture extends AuditCaptureProvider {
   void removeMetricsListener() {}
 }
 
-Future<void> _runDevice(AuditRun a, SyncProvider sync, {List<PendingWorkItem> pending = const []}) async {
+Future<void> _runDevice(
+  AuditRun a,
+  SyncProvider sync, {
+  List<PendingWorkItem> pending = const [],
+  DeviceProvider? deviceProvider,
+}) async {
   final store = PendingWorkStore(
     loadPending: () async => ApiSuccess(PendingWorkSnapshot(enabled: true, attentionUnseenCount: 0, items: pending)),
     loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
@@ -182,7 +191,7 @@ Future<void> _runDevice(AuditRun a, SyncProvider sync, {List<PendingWorkItem> pe
   addTearDown(store.dispose);
   addTearDown(conversations.dispose);
   await a.pump(DeviceSettings(pendingWork: store), scaffold: false, providers: [
-    ChangeNotifierProvider<DeviceProvider>.value(value: AuditDeviceProvider()),
+    ChangeNotifierProvider<DeviceProvider>.value(value: deviceProvider ?? AuditDeviceProvider()),
     ChangeNotifierProvider<CaptureProvider>.value(value: _CatchUpCapture()),
     ChangeNotifierProvider<ConversationProvider>.value(value: conversations),
     ChangeNotifierProvider<SyncProvider>.value(value: sync),
@@ -286,11 +295,11 @@ final offlineProcessingScenarios = <AuditScenario>[
             _wal(_at(0, 15, 0), 70, WalStatus.miss, storage: WalStorage.sdcard),
             _wal(_at(0, 11, 0), 110, WalStatus.miss, storage: WalStorage.sdcard),
           ]));
-      expect(find.text('Catching up'), findsOneWidget);
-      expect(find.byKey(const Key('device_catching_up_status')), findsOneWidget);
+      final tile = find.byKey(const Key('device_stat_catching_up'));
+      expect(tile, findsOneWidget);
       expect(find.byType(LinearProgressIndicator), findsNothing);
-      expect(find.byKey(const Key('device_catching_up_span')), findsOneWidget);
-      await a.shot('Large backlog lives on Device with its status and audio span');
+      expect(find.descendant(of: tile, matching: find.text('3h')), findsOneWidget);
+      await a.shot('Large backlog is the Catching up tile: a duration, no stage or span');
     },
   ),
   for (final multiple in [false, true])
@@ -309,14 +318,13 @@ final offlineProcessingScenarios = <AuditScenario>[
               startedAt: _at(0, 11, 0),
               durationSeconds: 720),
         ]);
-        expect(find.text('Catching up'), findsOneWidget);
-        expect(find.text('Processing'), findsOneWidget);
-        expect(find.byKey(const Key('device_catching_up_on_the_way')), findsOneWidget);
-        await a.shot('Server work stays visible on Device until it finishes');
-        await a.tester.tap(find.byKey(const Key('device_catching_up_on_the_way')));
+        expect(find.descendant(of: find.byKey(const Key('device_stat_catching_up')), matching: find.text('12m')),
+            findsOneWidget);
+        await a.shot('Server work stays on the Catching up tile until it finishes');
+        await a.tester.tap(find.byKey(const Key('device_stat_catching_up')));
         await a.settle();
         expect(find.byType(OnTheWayPage), findsOneWidget);
-        await a.shot('The card opens On the Way', step: 'on-the-way');
+        await a.shot('The tile opens On the Way', step: 'on-the-way');
       },
     ),
   AuditScenario(
@@ -324,7 +332,7 @@ final offlineProcessingScenarios = <AuditScenario>[
     title: 'On the Way',
     page: 'lib/pages/conversations/on_the_way_page.dart (OnTheWayPage)',
     state: 'One recording transcribing, one uploading from the phone, one still on the pendant, '
-        'and one the server refused',
+        'and three the server refused: too old, an invalid capture date, and too large',
     run: (a) async {
       final sync = _SyncAuditProvider(
         phase: SyncPhase.uploadingToCloud,
@@ -333,6 +341,8 @@ final offlineProcessingScenarios = <AuditScenario>[
           _wal(_at(0, 17, 58), 3, WalStatus.miss)..isSyncing = true,
           _wal(_at(0, 17, 40), 1, WalStatus.miss, storage: WalStorage.sdcard),
           _wal(_at(2, 9, 0), 5, WalStatus.outsideRecoveryWindow),
+          _wal(_at(2, 8, 30), 2, WalStatus.uploadRejected, rejectionReason: WalUploadRejection.invalidCaptureTime),
+          _wal(_at(2, 8, 0), 4, WalStatus.uploadRejected, rejectionReason: WalUploadRejection.tooLarge),
         ],
       );
       await a.pump(
@@ -341,8 +351,8 @@ final offlineProcessingScenarios = <AuditScenario>[
         providers: [ChangeNotifierProvider<SyncProvider>.value(value: sync)],
       );
       expect(find.text('On the Way'), findsOneWidget);
-      expect(find.text('Sync details'), findsOneWidget);
-      await a.shot('Open On the Way from the device catch-up card');
+      expect(find.text('Details for support'), findsOneWidget);
+      await a.shot('Open On the Way from the device Catching up tile');
     },
   ),
   AuditScenario(
@@ -433,6 +443,27 @@ final offlineProcessingScenarios = <AuditScenario>[
       expect(find.text('Activity'), findsOneWidget);
       expect(find.byKey(const Key('activity_new_dot')), findsOneWidget);
       await a.shot('Open the bell');
+    },
+  ),
+  AuditScenario(
+    id: 'device-sync-stall-alerts',
+    title: 'Device Settings: sync stall alert toggle while stalled',
+    page: 'lib/pages/settings/device_settings.dart (DeviceSettings)',
+    state: 'Nothing connected right now and the sync watchdog declared a stall: the Sync Health '
+        'Alerts row says how long the pipeline has been silent',
+    run: (a) async {
+      // A remembered-but-absent pendant keeps the hermetic harness off the live
+      // feature load (empty id early-returns it) while the toggle still renders.
+      await _runDevice(
+        a,
+        _SyncAuditProvider(),
+        deviceProvider: AuditDeviceProvider(device: BtDevice.empty(), syncStalled: true),
+      );
+      final toggle = find.byKey(const Key('sync_health_alerts_toggle'));
+      expect(toggle, findsOneWidget);
+      expect(find.text('Sync Health Alerts'), findsOneWidget);
+      expect(find.textContaining('No recordings synced for over'), findsOneWidget);
+      await a.shot('The stall alert toggle, on by default, names the silence under Device');
     },
   ),
 ];

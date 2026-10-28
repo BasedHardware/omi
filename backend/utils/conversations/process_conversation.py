@@ -29,6 +29,7 @@ from utils.conversations.transcript_for_llm import (
     conversation_transcript_for_llm,
     conversation_transcripts_for_llm,
     memory_transcript_from_segments,
+    owner_safe_transcript_segments,
 )
 from utils.conversations.wake_word import has_structural_wake_word_marker
 import database.conversations as conversations_db
@@ -71,7 +72,7 @@ from utils.conversations.relevance_salience import finish_home_salience
 from utils.conversations.relevance_content import exclude_from_derived, noise_hidden_from_home
 from utils.conversations.relevance_media_metrics import observe_owner_memory_admission
 from utils.llm.notes_short_clip import quiet_minimum
-from utils.llm.output_language import resolve_output_language
+from utils.llm.output_language import normalize_language, resolve_output_language
 from utils.conversations.deterministic_minimum import (
     build_deterministic_minimum_structured,
     deterministic_minimum_title,
@@ -125,6 +126,12 @@ from utils.conversations.owner_attribution import (
     OwnerAttributionEvidence,
     may_attribute_to_owner,
     confident_owner_segments,
+    speaker_role_projection,
+    grounded_quote_segments,
+    normalized_evidence_quote,
+    owner_spoken_for_quotes,
+    quote_source_attribution,
+    explicitly_self_referential,
 )
 from utils.conversations.speaker_resolution import resolve_speakers_for_processing
 from utils.observability.owner_identity_retry import identity_pass
@@ -246,6 +253,11 @@ from utils.conversations.meeting_context import (
     stored_meeting_context as _stored_meeting_context,
     store_meeting_context as _store_meeting_context,
 )
+from utils.conversations.capture_group_meeting_context import (
+    dispatch_primary_notes_refresh,
+    merged_member_contexts,
+    MEMBER_CONTEXT_FIELD,
+)
 from utils.conversations.meeting_notes_wiring import (
     notes_agent_inputs,
     rich_notes_inputs,
@@ -353,6 +365,7 @@ def _get_structured(
     recovery_minimum_fallback_observer: Optional[Callable[[], None]] = None,
     llm_hashes: dict[str, str] | None = None,
     open_loop_out: Optional[dict[str, Any]] = None,
+    meeting_context_override: Optional[CalendarMeetingContext] = None,
 ) -> Tuple[Structured, bool]:
     try:
         if is_recovery_trigger(trigger) and not recovery_transcript_decoded:
@@ -376,7 +389,10 @@ def _get_structured(
         user_language = (
             resolve_output_language(uid, language_code)
             if serving_for('NOTES_PACKET_V2_MODE', uid)
-            else users_db.get_user_language_preference(uid) or language_code
+            # Normalized so a 'multi'/'auto' capture tag can never reach a notes prompt.
+            else normalize_language(users_db.get_user_language_preference(uid))
+            or normalize_language(language_code)
+            or 'en'
         )
         minimum = quiet_minimum(uid, conversation, tz=tz)
         if minimum is not None:
@@ -392,22 +408,24 @@ def _get_structured(
             or str(uuid.uuid4())
         )
 
-        direct_calendar_context = getattr(conversation, 'calendar_meeting_context', None)
-        calendar_context: Optional[CalendarMeetingContext] = (
-            direct_calendar_context
-            if isinstance(direct_calendar_context, CalendarMeetingContext)
-            else (
-                CalendarMeetingContext(**direct_calendar_context)
-                if isinstance(direct_calendar_context, dict) and direct_calendar_context
-                else None
+        calendar_context = meeting_context_override
+        if calendar_context is None:
+            direct_calendar_context = getattr(conversation, 'calendar_meeting_context', None)
+            calendar_context = (
+                direct_calendar_context
+                if isinstance(direct_calendar_context, CalendarMeetingContext)
+                else (
+                    CalendarMeetingContext(**direct_calendar_context)
+                    if isinstance(direct_calendar_context, dict) and direct_calendar_context
+                    else None
+                )
             )
-        )
-        if hasattr(conversation, 'external_data'):
-            external_data_value = cast(Optional[Dict[str, Any]], getattr(conversation, 'external_data', None))
-            if external_data_value:
-                calendar_data = external_data_value.get('calendar_meeting_context')
-                if calendar_data:
-                    calendar_context = CalendarMeetingContext(**calendar_data)
+            if hasattr(conversation, 'external_data'):
+                external_data_value = cast(Optional[Dict[str, Any]], getattr(conversation, 'external_data', None))
+                if external_data_value:
+                    calendar_data = external_data_value.get('calendar_meeting_context')
+                    if calendar_data:
+                        calendar_context = CalendarMeetingContext(**calendar_data)
 
         # Segment uploads can carry provenance without external text-only fields.
         if isinstance(conversation, ExternalIntegrationCreateConversation) and (
@@ -747,7 +765,10 @@ def trigger_conversation_apps(
     produced or paid for.
     """
     if serving_for('NOTES_PACKET_V2_MODE', uid):
-        language_code = resolve_output_language(uid, conversation.language or language_code)
+        language_code = resolve_output_language(uid, normalize_language(conversation.language) or language_code)
+    else:
+        # The legacy branch never resolved: a 'multi' capture tag reached app prompts verbatim.
+        language_code = normalize_language(conversation.language) or normalize_language(language_code) or 'en'
     if first_party_only and app_id:
         raise ValueError('first_party_only excludes an explicit app selection')
     if usage_attribution is None:
@@ -1150,7 +1171,7 @@ def _l1_quote_matched_segments(evidence_quotes: List[str], segments: List[Any]) 
     ]
 
 
-def _l1_candidate_subject(
+def _legacy_l1_candidate_subject(
     *,
     source_id: str,
     about: str,
@@ -1272,6 +1293,60 @@ def _l1_candidate_subject(
     return None, SubjectAttribution.unknown, "unknown"
 
 
+def _l1_candidate_subject(
+    *,
+    source_id: str,
+    about: str,
+    speaker_label: Optional[str],
+    evidence_quotes: List[str],
+    user_name: Optional[str],
+    segments: List[Any],
+) -> Tuple[Optional[str], SubjectAttribution, str]:
+    roles = speaker_role_projection(segments)
+    about_norm = _normalized_l1_subject_label(about)
+    if roles is not None and about_norm in {
+        '',
+        'unknown',
+        'unclear',
+        'uncertain',
+        'speaker',
+        'the speaker',
+        'unidentified non primary speaker',
+    }:
+        # Utterance authorship is evidence about who spoke, not what the
+        # extracted claim is about. Preserve unknown aboutness instead of
+        # replacing it with the quote author's identity.
+        return None, SubjectAttribution.unknown, 'unknown'
+    prompt_segments = owner_safe_transcript_segments(segments)[0] if roles is not None else segments
+    subject = _legacy_l1_candidate_subject(
+        source_id=source_id,
+        about=about,
+        speaker_label=speaker_label,
+        evidence_quotes=evidence_quotes,
+        user_name=user_name,
+        segments=prompt_segments,
+    )
+    if roles is not None:
+        about_norm = _normalized_l1_subject_label(about)
+        user_alias = _normalized_l1_subject_label(user_name)
+        owner_about = about_norm in {'user', 'the user', 'primary user'} or bool(
+            user_alias and about_norm == user_alias
+        )
+        if owner_about and not explicitly_self_referential(evidence_quotes, segments):
+            # A speaker can report somebody else's fact. An ungrounded model
+            # subject must not be silently replaced with the quote's author.
+            return None, SubjectAttribution.unknown, 'unknown'
+    if roles is not None and subject[1] == SubjectAttribution.user:
+        # Aboutness and utterance source are separate. Even the owner's own
+        # voice can be reporting another person's circumstances. No fallback
+        # from a model's about=user or speaker label may create an owner fact.
+        if not explicitly_self_referential(evidence_quotes, segments) or not owner_spoken_for_quotes(
+            evidence_quotes, segments
+        ):
+            return None, SubjectAttribution.unknown, 'unknown'
+    return subject
+
+
 def _l1_candidate_sensitivity_labels(candidate: Any) -> List[str]:
     labels = [
         str(label).strip().lower() for label in (getattr(candidate, "risk_flags", []) or []) if str(label).strip()
@@ -1286,24 +1361,18 @@ def _l1_candidate_sensitivity_labels(candidate: Any) -> List[str]:
 
 
 def _normalized_l1_evidence_quote(value: str) -> str:
-    return re.sub(r"[\W_]+", " ", value.casefold()).strip()
+    return normalized_evidence_quote(value)
 
 
 def _grounded_l1_evidence_quotes(evidence_quotes: List[str], segments: List[Any]) -> List[str]:
     """Return quotes only when each has one unambiguous authoritative source segment."""
+    if grounded_quote_segments(evidence_quotes, segments) is None:
+        return []
     grounded: List[str] = []
     seen: Set[str] = set()
     for raw_quote in evidence_quotes:
         quote = raw_quote.strip()
         normalized_quote = _normalized_l1_evidence_quote(quote)
-        matched_segments = [
-            segment
-            for segment in segments
-            if normalized_quote
-            and f" {normalized_quote} " in f" {_normalized_l1_evidence_quote(str(getattr(segment, 'text', '') or ''))} "
-        ]
-        if not normalized_quote or len(matched_segments) != 1:
-            return []
         if normalized_quote in seen:
             continue
         seen.add(normalized_quote)
@@ -1321,20 +1390,7 @@ def _l1_owner_spoken_for_grounded_quotes(evidence_quotes: List[str], segments: L
     to the owner's cluster.
     """
 
-    owner_evidence = OwnerAttributionEvidence.from_segments(segments)
-    if not evidence_quotes or not may_attribute_to_owner(owner_evidence):
-        return False
-    for raw_quote in evidence_quotes:
-        normalized_quote = _normalized_l1_evidence_quote(raw_quote)
-        matched_segments = [
-            segment
-            for segment in segments
-            if normalized_quote
-            and f" {normalized_quote} " in f" {_normalized_l1_evidence_quote(str(getattr(segment, 'text', '') or ''))} "
-        ]
-        if len(matched_segments) != 1 or not may_attribute_to_owner(owner_evidence, segment=matched_segments[0]):
-            return False
-    return True
+    return owner_spoken_for_quotes(evidence_quotes, segments)
 
 
 def _canonical_quote_ref(
@@ -1343,13 +1399,8 @@ def _canonical_quote_ref(
     source_id: str,
     segments: List[Any],
 ) -> Dict[str, Any]:
-    normalized_quote = _normalized_l1_evidence_quote(quote)
-    matched_segments = [
-        segment
-        for segment in segments
-        if f" {normalized_quote} " in f" {_normalized_l1_evidence_quote(str(getattr(segment, 'text', '') or ''))} "
-    ]
-    if len(matched_segments) != 1:
+    matched_segments = grounded_quote_segments([quote], segments)
+    if not matched_segments:
         raise RuntimeError("canonical conversation quote lost its unique source binding")
     segment = matched_segments[0]
     raw_speaker = getattr(segment, "speaker", None)
@@ -1633,6 +1684,8 @@ def _extract_memories_canonical(
                 if _l1_owner_spoken_for_grounded_quotes(evidence_quotes, conversation.transcript_segments)
                 else "third_party" if subject_attribution == SubjectAttribution.third_party else "unknown"
             )
+            if speaker_role_projection(conversation.transcript_segments) is not None:
+                source_attribution = quote_source_attribution(evidence_quotes, conversation.transcript_segments)
             memory.capture_context = MemoryCaptureContext(
                 source_type="conversation",
                 captured_at=source_captured_at,
@@ -2294,6 +2347,9 @@ def _normal_persist_payload(conversation: Conversation, *, clear_terminal_marker
     that lands the clear.
     """
     payload = conversation.dict()
+    # The field is excluded from client projections; write it explicitly so a
+    # reprocess after group separation clears the prior derived context.
+    payload[MEMBER_CONTEXT_FIELD] = getattr(conversation, '_capture_group_member_context', None)
     if clear_terminal_marker:
         payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = None
     if payload.get('processing_state') is None:
@@ -2334,7 +2390,7 @@ def _calendar_overlap_retains_conversation(
         return False
 
 
-def _enrich_meeting_context(uid: str, conversation: Any) -> None:
+def _enrich_meeting_context(uid: str, conversation: Any) -> Optional[CalendarMeetingContext]:
     """Read identity context before summarization without mutating calendar providers.
 
     Sources, best first — each merges only the participants the better sources did
@@ -2342,9 +2398,11 @@ def _enrich_meeting_context(uid: str, conversation: Any) -> None:
     failing the conversation:
       1. stored calendar-backed meeting (exact Redis mapping, else time overlap)
       2. `calendar_meeting_context` sent directly on the create request
-      3. Google Calendar event overlapping the conversation window (read-only)
-      4. stored on-device screen-derived meeting identity
-      5. conferencing-window OCR already synced to the server (legacy fallback)
+      3. `calendar_meeting_context` carried by confirmed same-event capture-group
+         members (the desktop meeting halves of this event)
+      4. Google Calendar event overlapping the conversation window (read-only)
+      5. stored on-device screen-derived meeting identity
+      6. conferencing-window OCR already synced to the server (legacy fallback)
     """
     started_at = getattr(conversation, 'started_at', None)
     finished_at = getattr(conversation, 'finished_at', None)
@@ -2396,17 +2454,52 @@ def _enrich_meeting_context(uid: str, conversation: Any) -> None:
             duration_seconds=conversation_duration_seconds(conversation),
         )
 
-    context = resolve_meeting_context(
-        direct=_stored_meeting_context(conversation),
-        stored=_stored if _stored_meeting_lookup_enabled() else None,
-        calendar=_calendar if has_window else None,
-        screen=_screen if has_window else None,
-        on_error=lambda source, exc: logger.error(
-            'Error reading %s meeting context before summarization: %s', source, exc
-        ),
+    cached: dict[str, Any] = {}
+
+    def once(name: str, supplier):
+        def read():
+            if name not in cached:
+                try:
+                    cached[name] = (True, supplier())
+                except Exception as exc:
+                    cached[name] = (False, exc)
+            succeeded, value = cached[name]
+            if not succeeded:
+                raise value
+            return value
+
+        return read
+
+    stored_supplier = once('stored', _stored) if _stored_meeting_lookup_enabled() else None
+    calendar_supplier = once('calendar', _calendar) if has_window else None
+    screen_supplier = once('screen', _screen) if has_window else None
+    direct_context = _stored_meeting_context(conversation)
+    on_error = lambda source, exc: logger.error(
+        'Error reading %s meeting context before summarization: %s', source, exc
     )
-    if context:
-        _store_meeting_context(conversation, context)
+    own_context = resolve_meeting_context(
+        direct=direct_context,
+        stored=stored_supplier,
+        calendar=calendar_supplier,
+        screen=screen_supplier,
+        on_error=on_error,
+    )
+    member_context = merged_member_contexts(uid, conversation)
+    context = resolve_meeting_context(
+        direct=direct_context,
+        stored=stored_supplier,
+        member_contexts=lambda: member_context,
+        calendar=calendar_supplier,
+        screen=screen_supplier,
+        on_error=on_error,
+    )
+    if own_context:
+        _store_meeting_context(conversation, own_context)
+    if isinstance(conversation, Conversation):
+        conversation._capture_group_member_context = (
+            member_context.model_dump(mode='json') if member_context is not None else None
+        )
+    return context
 
 
 @spelling_context_run
@@ -2472,6 +2565,7 @@ def process_conversation(
     user_kept: bool = False,
     speaker_receipt_observer: Callable[[bool], None] | None = None,
     smart_merge_refresh: tuple[int, str] | None = None,
+    capture_group_refresh_fence: tuple[str, int, str] | None = None,
     recovery_transcript_decoded: bool = True,
     prior_relevance_decision: Mapping[str, Any] | None = None,
     created_webhook_observer: Callable[[Callable[[], None]], None] | None = None,
@@ -2548,6 +2642,7 @@ def process_conversation(
         # to finalizer.py after the fanout fence, including completed replays.
         if current and completed is not None and not defer_derived_effects and not silent_backfill:
             link_duplicate_captures(uid, completed)
+            dispatch_primary_notes_refresh(uid, completed)
 
     is_initial_creation = _is_ingress_create(conversation)
     if funded_processing.enabled(uid, 'batch'):
@@ -2669,8 +2764,9 @@ def process_conversation(
         report_persistence(False)
         return cast(Conversation, conversation)
 
+    meeting_context_override = None
     if not silent_backfill:
-        _enrich_meeting_context(uid, conversation)
+        meeting_context_override = _enrich_meeting_context(uid, conversation)
     # Everything below reads speaker_id as one voice; capture only guarantees that per piece.
     with identity_pass(None if already_observed else 'first'):
         speaker_receipt_applied = False if silent_backfill else resolve_speakers_for_processing(uid, conversation)
@@ -2710,6 +2806,7 @@ def process_conversation(
         recovery_minimum_fallback_observer=_mark_recovery_minimum_fallback,
         llm_hashes=llm_hashes,
         open_loop_out=open_loop_sink,
+        meeting_context_override=meeting_context_override,
     )
     if recovery_minimum_fallback:
         sys.stdout.write(
@@ -2816,6 +2913,14 @@ def process_conversation(
     conversation.summary_retryable = None  # merge-cleared by the payload the same way
     if is_initial_creation:
         persisted = lifecycle_service.create_completed_conversation(uid, payload, idempotent=True)
+    elif capture_group_refresh_fence is not None:
+        group_id, group_revision, reservation_id = capture_group_refresh_fence
+        persisted = lifecycle_service.persist_processed_conversation(
+            uid,
+            payload,
+            expected_capture_group=(group_id, group_revision),
+            capture_group_notes_refresh=(group_id, reservation_id),
+        )
     elif smart_merge_refresh is not None:
         persisted = lifecycle_service.persist_processed_conversation(
             uid, payload, smart_merge_refresh=smart_merge_refresh

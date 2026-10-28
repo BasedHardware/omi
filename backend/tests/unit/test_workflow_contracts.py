@@ -363,7 +363,7 @@ def test_backend_unit_suite_is_sharded_with_a_literal_gate_and_budget():
     test time, and sharing processes across files is blocked by dense
     sys.modules contamination (see the BACKEND_PYTEST_PARALLEL_SESSION
     measurement in backend/test.sh). The workflow therefore runs the SAME
-    selection as six parallel shard jobs whose interleaved slices partition
+    selection as six parallel shard jobs whose weighted partitions cover
     the sorted file list exactly (union = full selection), plus a concurrent
     guardrails job, and publishes the verdict through a literal-named gate so
     the required check surface never changes. Each shard carries a wall-clock
@@ -391,12 +391,13 @@ def test_backend_unit_suite_is_sharded_with_a_literal_gate_and_budget():
     assert '::notice title=Heavy CI deferred::' in workflow
     assert 'echo "Heavy CI deferred: $notice" >> "$GITHUB_STEP_SUMMARY"' in workflow
     assert 'guardrails_required=skipped' in workflow
-    # The runner slices the deterministic selection round-robin with the
-    # one-based mapping (line i runs in shard ((i - 1) % total) + 1, so
-    # shard labels match the files they carry); `index` is an awk builtin,
-    # so the shard variable must be named anything else.
-    assert "(NR - 1) % total == shard - 1" in runner
-    assert "awk -v index=" not in runner
+    # The runner deals the deterministic selection heaviest-first (measured
+    # weights) to the least loaded shard (PR #23767: round-robin left walls
+    # 433-754s); ties fall back to round-robin with one-based shard labels.
+    assert "backend_unit_shard_weights.tsv" in runner
+    assert (BACKEND_DIR / "scripts/backend_unit_shard_weights.tsv").is_file()
+    assert "key=lambda index: (load[index], count[index], index)" in runner
+    assert "assigned[path] = target + 1" in runner
 
 
 def test_backend_test_runner_defaults_python_to_utf8():
@@ -2053,6 +2054,7 @@ def _composite_control_root(tmp_path: Path) -> Path:
         'review_queries.py',
         'messaging_queries.py',
         'sync_pipeline_indexes.py',
+        'batch_pipeline_indexes.py',
     ):
         (database_dir / name).write_text((backend / 'database' / name).read_text(encoding='utf-8'), encoding='utf-8')
     (scripts_dir / '__init__.py').write_text('', encoding='utf-8')

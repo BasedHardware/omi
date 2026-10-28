@@ -7,6 +7,27 @@ allowlist/percentage after qualification. Agent A does not deploy or apply index
 
 ## Host settings and rollback
 
+### Language inheritance for sync pieces
+
+`BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED` ships on. New batch uploads
+use the bound conversation's recognized language, then the user's configured
+language. Blank, auto, multi and unrecognized codes remain unknown. Only when
+both are unknown does each decoded unit run the existing self/vendor LID.
+This also applies to pieces under ten seconds: ambient speech cannot replace
+a known English conversation language with Vietnamese or Japanese.
+
+The decision is frozen as declared language evidence in the authenticated
+audio context, so the worker's existing unsupported-language guard still
+applies. Legacy eligibility and durable route ownership are unchanged.
+Set the switch to `false` on backend-sync to restore the former per-piece
+input selection for new intakes; already staged units retain their evidence.
+No transcript rewrite or paid recovery is part of this switch.
+
+The v1 listen transcript writer also retains the earlier capture start when
+the first words arrive late or after reconnect. Segment offsets are computed
+against that retained start. This writer fix needs a backend-listen release;
+the v2 audio-timeline origin pin continues to follow its existing contract.
+
 ### Partial-ramp owner isolation
 
 `BATCH_PIPELINE_RAMP_EXCLUDE_HEAVY_OWNERS` ships on; only `off` disables
@@ -239,7 +260,7 @@ Merging config is not a deployment or a successful production E2E receipt.
 | `main.py` → `start_serving_from_env` → recovery/projection/cleanup | Only Cloud Run `backend-integration`; existing deployment has minimum three instances and CPU throttling disabled. Other CPU hosts keep the pump off |
 | `compute_client.from_env` | Dedicated GPU worker; HTTPS base `https://backend-sync-hhibjajaja-uc.a.run.app`, exact same OIDC audience |
 | `routers/batch_pipeline.verify_worker` → spend admission | Only Cloud Run `backend-sync` is configured to accept `batch-pipeline-worker@based-hardware.iam.gserviceaccount.com` with that audience |
-| `diarizer.batch_pipeline_runtime` | Separate prod worker chart: process on, two fixed replicas (one L4 node each), autoscaling off, L4 `batch-pipeline-pool`; worker's own upload-admission gate stays false |
+| `diarizer.batch_pipeline_runtime` | Separate prod worker chart, fixed4 with scaler off until qualification. The prepared OD/Spot cutover has each HPA1–12 on fresh admissible queued-unit counts (total2–24), requiring a measured target and approval; worker's own upload-admission gate stays false. |
 | `pusher.main` | No batch upload admission, serving-loop or dedicated-worker consumer; no pusher flag change |
 
 Intake and worker ceilings both stay at 3600 seconds, ASR/segmentation/VAD model
@@ -654,6 +675,46 @@ unit can become visible only after every committed predecessor has persisted
 (or its privacy erasure receipt permits progress). Captures admitted after a
 later commit retain the existing explicit `late_capture` behavior. No disjoint
 segment independence is assumed.
+
+Assignment excludes `deleted_conversations` tombstones transactionally, even
+when a failed DELETE left the conversation row live. If plan validation finds
+deleted ancestry, one read-only re-plan excludes the denied source and its
+carriers. If donor ancestry still refuses, the input's complete speech is
+projected into a new deterministic identity with no inherited donor ancestry.
+A no-text, zero-speech superseded receipt with `privacy_reason=conversation_deleted`
+requires a transactional tombstone proof on the unit's own source/target or its
+guarded redirect chain. A donor refusal alone never authorizes dropping input.
+The final part advances the owner watermark; unrelated later captures continue.
+An ID-free completion carries `reason_code=conversation_deleted`. Settlement
+rechecks immutable binding, ledger ownership, predecessor, account and privacy
+generation. No deleted source is projected.
+
+Other recognized mutation privacy refusals (account deletion/missing account,
+protection or generation changes, recording consent, redirect cycle/missing
+target and the 256-document fence budget) settle as a separate **held ordering
+receipt**. The same transaction rechecks the actual refusal, immutable result
+binding, ledger owner and predecessor. It writes only batch control metadata,
+retires follow-ups and advances ordering once; it cannot write conversations,
+the user ledger, usage, derived content or audio. The original worker result,
+audio identity and existing part progress remain. Unknown reasons and lost
+result leases still fail closed. An unrelated donor graph/budget refusal first
+tries an isolated input-only plan under all ordinary privacy fences.
+
+Privacy holds retain `quarantine_held`, so the existing unfinished-obligation age
+metric includes them. They are not client success or measured silence; unknown
+held speech remains unknown. Protocol 2 plus a versioned privacy checkpoint
+fences older projectors, and persisted part states retain their previous values
+for repair. The owner repair planner discovers these holds and binds their
+control state into its reviewed digest; unpinned policy still refuses operator
+apply. After the fence is repaired, ordinary serving projection rechecks all
+privacy/ownership fences, restores prior progress and reuses the retained result
+without another recognizer call. Replaying an older held unit never rewinds a
+newer owner watermark. No admission or runtime flag is changed by this logic.
+
+Cascade DELETE acquires the account destructive-operation gate before writing
+the conversation tombstone. Its post-intent retraction check and nested memory
+retraction run under that gate. A busy gate returns the existing retryable 409
+before any intent or cleanup is written; successful DELETE remains HTTP 204.
 
 ### Bounded merge head wait
 

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "catalog_revision": 11,
+  "catalog_revision": 12,
   "authority": {
     "plan_identity": "catalog",
     "price_identity": "repository_ledger",
@@ -245,7 +245,7 @@
         "pro"
       ],
       "wire_fallback_plan": null,
-      "lifecycle": "current",
+      "lifecycle": "deprecated",
       "is_paid": true,
       "storefronts": [
         "macos",
@@ -325,7 +325,7 @@
       "display_name": "Pro",
       "wire_aliases": [],
       "wire_fallback_plan": null,
-      "lifecycle": "current",
+      "lifecycle": "deprecated",
       "is_paid": true,
       "storefronts": [
         "macos",
@@ -403,7 +403,7 @@
       "display_name": "Plus",
       "wire_aliases": [],
       "wire_fallback_plan": "unlimited",
-      "lifecycle": "current",
+      "lifecycle": "deprecated",
       "is_paid": true,
       "storefronts": [
         "android",
@@ -489,7 +489,7 @@
         "ios",
         "web"
       ],
-      "desktop_profile": "desktop_free",
+      "desktop_profile": "desktop_full",
       "conditional_desktop_profiles": [],
       "fair_use_profile": "unlimited_transcription",
       "phone_calls_profile": "paid",

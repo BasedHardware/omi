@@ -4,18 +4,23 @@ from dataclasses import asdict
 import hashlib
 import math
 import logging
+import random
+from threading import Lock
 import uuid
+from time import monotonic
 
 from database.batch_pipeline_store import Store, Transaction
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.firestore_transaction_retry import FirestoreContentionExhausted
 from config.batch_pipeline import FRESH_CAPTURE_LAG_SECONDS, scheduler_control_key
 from config.policy import resolve_batch_policy
+from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
 from database.batch_pipeline_policy import stage_in_transaction, record_policy_observations
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult, PoolCapacity, attach_held_vad
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.control import read_control, activate, field, migrate_legacy
-from utils.batch_pipeline.errors import validate_worker_failure
+from utils.batch_pipeline.errors import error_site_field, validate_worker_failure
 from utils.batch_pipeline.retry_policy import quarantine_job, expire_lease, observe_recovery
 
 QUANTUM_SECONDS = 30.0
@@ -24,6 +29,7 @@ RETRY_BACKOFF_CAP_SECONDS = 600
 MAX_ACTIVE_OWNERS = 1024
 MAX_VISITS = 128
 HEAD_OWNER_BUDGET = 64
+CONTENTION_BACKOFF_CAP_SECONDS = 30.0
 logger = logging.getLogger(__name__)
 
 
@@ -152,6 +158,10 @@ class Scheduler:
         self.store = store
         self.metrics = metrics
         self.pool = pool
+        self._contention_failures = 0
+        self._contention_backoff_until = 0.0
+        self._contention_generation = 0
+        self._contention_lock = Lock()
 
     def enqueue(self, item: WorkItem, now: float) -> bool:
         return self.store.run(lambda tx: self.enqueue_in_transaction(tx, item, now))
@@ -191,6 +201,10 @@ class Scheduler:
             'owner_key': key,
             'enqueued_at': now,
             'state': 'ready',
+            # Capacity may follow a newly admitted first attempt. This is not
+            # paid permission: per-lease admission replaces it with allowed or
+            # held, or removes it on an unevaluated refusal (also on old workers).
+            'compute_decision': {'outcome': 'unattempted'},
             'attempt': 0,
             'token': '',
             'lease_until': 0.0,
@@ -212,6 +226,10 @@ class Scheduler:
     def pull(self, now: float, limit: int = 1, *, capacity: PoolCapacity | None = None) -> list[LeasedWork]:
         if not 1 <= limit <= 32:
             raise ValueError('pull limit must be in [1, 32]')
+        with self._contention_lock:
+            if self._contention_backoff_until > monotonic():
+                return []
+            contention_generation = self._contention_generation
         if self.pool == 'live' and (capacity is None or not capacity.shared_with_live):
             return []
         if self.pool == 'batch' and capacity is not None and capacity.shared_with_live:
@@ -224,6 +242,7 @@ class Scheduler:
             limit = min(limit, slots)
             backfill_budget = max(0, slots - capacity.reserved_fresh_slots)
         result = []
+        contention_deferred = False
         for _ in range(limit):
             try:
                 lease = self._pull_one(
@@ -233,13 +252,40 @@ class Scheduler:
                     shared_gpu_id=capacity.gpu_id if capacity is not None and capacity.shared_with_live else None,
                 )
             except Exception as error:
+                if isinstance(error, FirestoreContentionExhausted):
+                    with self._contention_lock:
+                        self._contention_failures += 1
+                        maximum = min(
+                            CONTENTION_BACKOFF_CAP_SECONDS,
+                            2.0 ** min(self._contention_failures - 1, 5),
+                        )
+                        delay = maximum * (0.5 + 0.5 * random.random())
+                        failed_at = monotonic()
+                        self._contention_backoff_until = max(
+                            self._contention_backoff_until,
+                            failed_at + delay,
+                        )
+                        retry_after_ms = round((self._contention_backoff_until - failed_at) * 1000)
+                        self._contention_generation += 1
+                        contention_failures = self._contention_failures
+                    contention_deferred = True
+                    logger.error(
+                        'event=batch_pull outcome=backoff failures=%d retry_after_ms=%d%s',
+                        contention_failures,
+                        retry_after_ms,
+                        error_site_field(error),
+                    )
+                    break
                 if not result:
                     raise
                 # Each earlier lease is its own committed transaction. Raising
                 # would strand them leased until LEASE_SECONDS expiry and
                 # charge a retry; hand them to the caller instead.
                 logger.error(
-                    'event=batch_pull outcome=partial leased=%d exception_type=%s', len(result), type(error).__name__
+                    'event=batch_pull outcome=partial leased=%d exception_type=%s%s',
+                    len(result),
+                    type(error).__name__,
+                    error_site_field(error),
                 )
                 break
             if lease is None:
@@ -249,6 +295,11 @@ class Scheduler:
                 backfill_budget -= 1
             if capacity is not None and capacity.shared_with_live:
                 break  # One non-preemptible short item, never a mixed long batch.
+        if not contention_deferred:
+            with self._contention_lock:
+                if self._contention_generation == contention_generation:
+                    self._contention_failures = 0
+                    self._contention_backoff_until = 0.0
         return result
 
     def _pull_one(
@@ -385,6 +436,10 @@ class Scheduler:
                     lease_until=now + LEASE_SECONDS,
                     shared_gpu_key=gpu_key,
                 )
+                if not job.get('requires_compute_admission') and not cap_dispatch_enabled(job['owner_id'], 'batch'):
+                    # The pump dispatches this lease without admission, so it
+                    # is a real commitment: a parked hold must not hide it.
+                    job.pop('last_policy_hold', None)
                 if gpu_key:
                     tx.put(
                         'gpus',
@@ -551,7 +606,10 @@ class Scheduler:
         decision that caused the defer; it records the latest decision in the
         same transaction, so an outside reader can classify the wait without
         a second round-trip. Refund defers (shutdown, GPU abort) pass none and
-        preserve the previously recorded decision.
+        preserve the previously recorded decision. ``last_policy_hold`` keeps
+        the latest hold across an unevaluated re-evaluation (which clears the
+        decision to BLIND) until an allow is sealed or another hold replaces
+        it, so the uncommitted-age proxy does not flap on a parked job.
         """
 
         def commit(tx):
@@ -579,6 +637,7 @@ class Scheduler:
             )
             if held_reason:
                 job['compute_decision'] = {'reason': held_reason, 'outcome': 'held', 'at': now}
+                job['last_policy_hold'] = {'reason': held_reason, 'at': now}
             tx.put('jobs', segment_id, job)
             return True
 

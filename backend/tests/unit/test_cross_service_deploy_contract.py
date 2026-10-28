@@ -166,15 +166,20 @@ def _worker_without_head_priority() -> dict[str, str]:
     return {WORKER_VALUES: yaml.safe_dump(values, sort_keys=False)}
 
 
-def _worker_without_independent_recovery() -> dict[str, str]:
+def _worker_without_independent_recovery_chart() -> dict[str, str]:
     path = 'backend/charts/batch-pipeline-worker/templates/deployment.yaml'
     original = (REPO_ROOT / path).read_text(encoding='utf-8')
     lines = original.splitlines(keepends=True)
     kept = [line for line in lines if 'name: BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED,' not in line]
     assert len(kept) == len(lines) - 1
-    # Defaults are now off. Simulate a future source-default change as well:
-    # the explicit worker setting must still prevent a reader split while the
-    # CPU deployment remains pinned off.
+    return {path: ''.join(kept)}
+
+
+def _worker_without_independent_recovery() -> dict[str, str]:
+    # Prod recovery is declared on; dev stays off. Simulate a future source-default
+    # change as well: the explicit worker setting must still prevent a reader split
+    # in dev, where the recovery host remains pinned off.
+    overrides = _worker_without_independent_recovery_chart()
     config_path = 'backend/config/batch_language_recovery.py'
     source = (REPO_ROOT / config_path).read_text(encoding='utf-8')
     changed = source.replace(
@@ -182,7 +187,7 @@ def _worker_without_independent_recovery() -> dict[str, str]:
         "os.getenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'true')",
     )
     assert changed != source
-    return {path: ''.join(kept), config_path: changed}
+    return {**overrides, config_path: changed}
 
 
 MUTATIONS: dict[str, Callable[[], dict[str, str]]] = {
@@ -201,8 +206,13 @@ MUTATIONS: dict[str, Callable[[], dict[str, str]]] = {
     'prod_url_in_dev': _manifest_mutation(_prod_url_in_dev),
     'worker_without_head_priority': _worker_without_head_priority,
     'worker_without_independent_recovery': _worker_without_independent_recovery,
+    'worker_without_independent_recovery_default_off': _worker_without_independent_recovery_chart,
 }
-HELM_MUTATIONS = {'worker_without_head_priority', 'worker_without_independent_recovery'}
+HELM_MUTATIONS = {
+    'worker_without_head_priority',
+    'worker_without_independent_recovery',
+    'worker_without_independent_recovery_default_off',
+}
 
 
 @dataclass
@@ -300,14 +310,23 @@ def test_worker_missing_head_priority_fails_like_22121(results: Results) -> None
 
 
 @pytest.mark.skipif(not HAS_HELM, reason='Helm unavailable; worker chart render runs where helm is installed')
-def test_worker_missing_independent_recovery_kill_switch_fails(results: Results) -> None:
-    found = results.mutations['worker_without_independent_recovery']
+@pytest.mark.parametrize(
+    'mutation,envs',
+    [
+        # Source default flipped on: dev's pinned-off recovery host would split.
+        ('worker_without_independent_recovery', {'dev'}),
+        # Source default off: prod's declared-on recovery host would split.
+        ('worker_without_independent_recovery_default_off', {'prod'}),
+    ],
+)
+def test_worker_missing_independent_recovery_kill_switch_fails(results: Results, mutation: str, envs: set) -> None:
+    found = results.mutations[mutation]
     assert {
         v.env
         for v in found
         if v.invariant == 'reader-split'
         and v.scope == 'helm/batch-pipeline-worker/BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED'
-    } == {'dev', 'prod'}
+    } == envs
 
 
 def test_unparseable_boolean_value_fails(results: Results) -> None:

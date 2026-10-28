@@ -1,13 +1,14 @@
 """State-machine tests over an atomic snapshot store, not a Firestore emulator."""
 
 from copy import deepcopy
-from threading import RLock
+from threading import Event, RLock, Thread, current_thread
+from unittest.mock import Mock
 
 import pytest
 
 from config.batch_pipeline import admit_or_legacy, enabled_for, priority_for, scheduler_control_key
 from utils.batch_pipeline.scheduler import owner_key
-from utils.batch_pipeline.contracts import Priority, WorkItem, WorkResult
+from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.scheduler import Scheduler, LEASE_SECONDS
 
@@ -235,11 +236,68 @@ def test_failures_stop_at_default_ceiling_without_fabricating_result():
     assert job['state'] == 'quarantined' and not job['merge_pending']
     assert job['quarantine_reason'] == 'worker_failed' and job['recovery_state'] == 'held'
     assert 'retry_started_at' not in job and 'result' not in job
+    assert job['audio_uri'] == 'gs://synthetic/a'  # retained source for fenced operator recovery
     assert queue.recover(99999) == 0 and queue.pull(99999) == []
     assert not queue.redrive_dead('a', 99999)
     assert not queue.complete(WorkResult('a', 'gs://results/stale'), lease.token, 99999)
     assert OrderedMerge(store).commit_next('heavy', 99999) is None
     assert ('results', 'a') not in store.rows
+
+
+def test_contention_backoff_returns_prior_leases_and_suppresses_hot_repull(monkeypatch):
+    from database.firestore_transaction_retry import FirestoreContentionExhausted
+    from utils.batch_pipeline import scheduler as scheduler_module
+
+    now = [100.0]
+    monkeypatch.setattr(scheduler_module, 'monotonic', lambda: now[0])
+    monkeypatch.setattr(scheduler_module.random, 'random', lambda: 0.0)
+    queue = Scheduler(MemoryStore())
+    lease = LeasedWork(item('leased'), 'synthetic-token', 1, 120.0)
+    pull_one = Mock(side_effect=[lease, FirestoreContentionExhausted('bounded'), None])
+    monkeypatch.setattr(queue, '_pull_one', pull_one)
+
+    assert queue.pull(0, 2) == [lease]
+    assert queue._contention_backoff_until == 100.5
+    assert queue.pull(1) == []
+    assert pull_one.call_count == 2
+    now[0] = 100.5
+    assert queue.pull(1) == []
+    assert pull_one.call_count == 3
+    assert queue._contention_failures == 0
+
+
+def test_overlapping_pull_cannot_clear_a_newer_contention_backoff(monkeypatch):
+    from database.firestore_transaction_retry import FirestoreContentionExhausted
+    from utils.batch_pipeline import scheduler as scheduler_module
+
+    now = [100.0]
+    monkeypatch.setattr(scheduler_module, 'monotonic', lambda: now[0])
+    monkeypatch.setattr(scheduler_module.random, 'random', lambda: 0.0)
+    queue = Scheduler(MemoryStore())
+    entered = Event()
+    finish = Event()
+
+    def pull_one(*_args, **_kwargs):
+        if current_thread().name == 'overlapping-pull':
+            entered.set()
+            assert finish.wait(timeout=5)
+            return None
+        raise FirestoreContentionExhausted('bounded')
+
+    monkeypatch.setattr(queue, '_pull_one', pull_one)
+    overlapping_pull = Thread(name='overlapping-pull', target=lambda: queue.pull(0))
+    overlapping_pull.start()
+    assert entered.wait(timeout=5)
+
+    assert queue.pull(1) == []
+    cooldown = queue._contention_backoff_until
+    assert cooldown == 100.5
+
+    finish.set()
+    overlapping_pull.join(timeout=5)
+    assert not overlapping_pull.is_alive()
+    assert queue._contention_backoff_until == cooldown
+    assert queue.pull(2) == []
 
 
 def test_out_of_order_completion_and_idempotent_ordered_commit():

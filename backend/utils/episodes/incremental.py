@@ -25,6 +25,7 @@ from config.episodes import (
     JEV_LANE,
     JEV_TIMEOUT_SECONDS,
     MOMENT_TEXT_MAX_CHARS,
+    episode_output_language_pinned,
 )
 from config.refactor_modes import serving_for, shadow_or_serve
 from database.auth import get_user_name
@@ -75,11 +76,15 @@ PROMPT_PREFIX = _MOMENT_OPENING + _MOMENT_LEGACY_LANGUAGE + _MOMENT_RULES
 
 
 def _moment_prompt(output_language: str) -> str:
+    # Keep the resolved-language directive last so it governs titles, headings,
+    # bullets and every other generated field regardless of the speech language.
     return (
-        _MOMENT_OPENING + f'- Write all fields, including title and moment_heading, in {output_language}. '
-        'Be concrete: names, places, numbers, decisions.\n'
-        '- Use names only from confident speaker evidence; hedge likely matches as "likely X"; '
-        'unknown voices are "a speaker". Never assign personal stories to a name without evidence.\n' + _MOMENT_RULES
+        _MOMENT_OPENING
+        + '- Be concrete: names, places, numbers, decisions.\n'
+        + '- Use names only from confident speaker evidence; hedge likely matches as "likely X"; '
+        'unknown voices are "a speaker". Never assign personal stories to a name without evidence.\n'
+        + _MOMENT_RULES
+        + f'\nWrite all output in {output_language}. Keep names and quoted words verbatim.\n'
     )
 
 
@@ -105,6 +110,7 @@ class MomentText:
     text: str
     words: int
     voice_order: tuple[str, ...] = ()
+    truncated: bool = False
 
 
 def _resolve_owner_name(uid: str | None) -> str | None:
@@ -137,8 +143,10 @@ def render_moment(
         text, words = render_segments(segments, evidence=evidence, owner_name=owner)
         shadow('moment_render', 'agree' if text == legacy[0] else 'disagree', rendered_chars=len(text), words=words)
         if serving:
-            return MomentText(_bounded_moment(text), words, display.voice_order)
-    return MomentText(_bounded_moment(legacy[0]), legacy[1], display.voice_order)
+            return MomentText(_bounded_moment(text), words, display.voice_order, len(text) > MOMENT_TEXT_MAX_CHARS)
+    return MomentText(
+        _bounded_moment(legacy[0]), legacy[1], display.voice_order, len(legacy[0]) > MOMENT_TEXT_MAX_CHARS
+    )
 
 
 def _legacy_moment(segments: Sequence[Mapping[str, Any]], display: Any) -> tuple[str, int]:
@@ -180,15 +188,23 @@ def _bounded_moment(rendered: str) -> str:
 
 
 def build_messages(
-    state_json: str, moment: str, *, now: datetime, tz_name: str, output_language: str | None = None
+    state_json: str,
+    moment: str,
+    *,
+    now: datetime,
+    tz_name: str,
+    output_language: str | None = None,
+    repair_instruction: str | None = None,
 ) -> list[tuple[str, str]]:
     """Fixed prefix first; the clock, state and new speech last."""
     try:
         local = now.astimezone(ZoneInfo(tz_name))
     except Exception:
         local, tz_name = now, 'UTC'
+    repair = f'{repair_instruction}\n' if repair_instruction else ''
     volatile = (
         f'Local time now: {local.strftime("%Y-%m-%d %H:%M")} ({tz_name})\n'
+        f'{repair}'
         f'Episode state so far:\n{state_json}\n\n'
         f'Newest moment:\n{moment}'
     )
@@ -237,12 +253,15 @@ def run_incremental_update(
     invoke=None,
     output_language: str | None = None,
     conversation_language: str | None = None,
+    repair_instruction: str | None = None,
 ) -> ModelResult:
     """One cheap call. Raises ``ModelCallFailed`` (llm_error | parse_error); never partial state."""
     language = None
-    if serving_for('NOTES_PACKET_V2_MODE', uid):
+    if episode_output_language_pinned() or serving_for('NOTES_PACKET_V2_MODE', uid):
         language = output_language or resolve_output_language(uid, conversation_language)
-    messages = build_messages(state_json, moment, now=now, tz_name=tz_name, output_language=language)
+    messages = build_messages(
+        state_json, moment, now=now, tz_name=tz_name, output_language=language, repair_instruction=repair_instruction
+    )
     started = time.monotonic()
     try:
         reply = (invoke or invoke_model)(uid, messages)

@@ -11,10 +11,12 @@ from typing import Any, Callable, Protocol, TypeVar
 
 from google.cloud import firestore
 
+from config.batch_pipeline import contention_retry_enabled
 from config.firestore_read_levers import lever_enabled
 from database._client import get_data_plane_firestore_client
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyMemo
 from database.batch_pipeline_recovery import quarantine_fenced
+from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from utils.sync.stage import collection_name
 
 # Every state an obligation can drain from. Assignment needs only ``pending``;
@@ -43,6 +45,7 @@ class Store(Protocol):
     def due(self, state: str, now: float, limit: int) -> list[str]: ...
     def oldest(self, priority: int, *, ready_only: bool) -> float | None: ...
     def oldest_retry(self, priority: int) -> float | None: ...
+    def ready_for_capacity(self, priority: int, now: float) -> int: ...
     def control_candidate(self, priority: int, pool: str, now: float) -> str | None: ...
     def quarantine_fenced(self, segment_id: str, now: float) -> bool: ...
     def longest_ready_pending(self, owner_key: str) -> dict | None: ...
@@ -174,20 +177,33 @@ class FirestoreStore:
         return self._client if self._client is not None else get_data_plane_firestore_client()
 
     def run(self, body):
+        client = self.client
+
         @firestore.transactional
         def commit(transaction):
-            view = FirestoreTransaction(self.client, self.namespace, transaction)
+            view = FirestoreTransaction(client, self.namespace, transaction)
             result = body(view)
             view.flush()
             return result
 
-        return commit(self.client.transaction())
+        if not contention_retry_enabled():
+            return commit(client.transaction())
+        # The outer budget owns fresh transaction IDs and all retries. The
+        # SDK's same-ID commit loop would multiply the contention window.
+        return run_with_transaction_contention_retry(
+            lambda: client.transaction(max_attempts=1),
+            commit,
+            operation_name='batch_pipeline_store',
+        )
 
     def due(self, state: str, now: float, limit: int = 100) -> list[str]:
         return due(self.client, self.namespace, state, now, limit)
 
     def oldest(self, priority: int, *, ready_only: bool = False) -> float | None:
         return oldest(self.client, self.namespace, priority, ready_only=ready_only)
+
+    def ready_for_capacity(self, priority: int, now: float) -> int:
+        return ready_for_capacity(self.client, self.namespace, priority, now)
 
     def control_candidate(self, priority: int, pool: str, now: float) -> str | None:
         return control_candidate(self.client, self.namespace, priority, pool, now)
@@ -407,10 +423,43 @@ def is_allowance_policy_hold(job: dict[str, Any]) -> bool:
     commitment, so age-based safety proxies must not measure it (2026-10-25:
     131 such holds, ~26h old, kept the in-cluster guard's
     uncommitted_job_age_over_30m proxy tripped permanently and masked real
-    wedges).
+    wedges). An unevaluated re-evaluation clears the decision to BLIND without
+    ending the hold; until an allow or another hold replaces it, the job's
+    last_policy_hold still classifies it (2026-10-27: held jobs re-read as
+    decisionless between evaluations flapped the proxy to ~54h).
     """
-    decision = job.get('compute_decision') or {}
+    decision = job.get('compute_decision')
+    if not decision:
+        return (job.get('last_policy_hold') or {}).get('reason') == 'allowance_exhausted'
     return decision.get('outcome') == 'held' and decision.get('reason') == 'allowance_exhausted'
+
+
+def ready_for_capacity(client: Any, namespace: str, priority: int, now: float) -> int:
+    """Count work awaiting a first/re-authorized attempt, never held legacy debt.
+
+    New admission explicitly records unattempted; existing workers already
+    replace it with allowed/held or clear it on an unevaluated refusal. Reusing
+    that authoritative state avoids a new eligibility bit that old workers
+    would fail to clear during a mixed-version roll. Unmarked legacy jobs remain
+    durable/drainable but cannot buy GPUs. This hint never grants paid compute.
+    """
+    query = (
+        client.collection(f'{namespace}_jobs')
+        .where('priority', '==', priority)
+        .where('state', '==', 'ready')
+        .where('merge_pending', '==', True)
+        .where('compute_decision.outcome', 'in', ['unattempted', 'allowed'])
+        .where('available_at', '<=', now)
+    )
+    count = query.count().get()[0][0].value
+    # The pinned SDK decodes integer_value=0 through ``integer or double``,
+    # yielding 0.0. Preserve that real empty result; do not coerce missing,
+    # fractional, negative or otherwise malformed responses into capacity.
+    if type(count) is float and count == 0.0:
+        count = 0
+    if type(count) is not int or count < 0:
+        raise ValueError('nonnegative integer capacity count required')
+    return count
 
 
 def oldest(client: Any, namespace: str, priority: int, *, ready_only: bool = False) -> float | None:

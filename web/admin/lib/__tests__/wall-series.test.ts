@@ -16,6 +16,7 @@ import {
   SeriesSources,
   STORE_FAIL_LIMIT,
   UNIT_DAYS,
+  warmSeries,
 } from "../wall-series";
 import { resetWallCache, wallPayload } from "../wall-cache";
 import {
@@ -35,6 +36,7 @@ import {
   VARIABLE_MARGIN_TARGET,
 } from "../wall-cost";
 import { HEALTH_COST_DAYS } from "../wall-finops";
+import { WallSourceError } from "../wall-source-error";
 
 const now = new Date("2026-10-15T12:00Z");
 const end = utcDay(now);
@@ -949,6 +951,162 @@ describe("v3 series cold-load and cache rules", () => {
       s
     );
     expect(s.query).toHaveBeenCalledTimes(6);
+  });
+});
+
+describe("the warm scheduler fills legs off the viewing path", () => {
+  it("runs every leg to completion so the first viewer reads complete legs", async () => {
+    const store = memorySeriesStore();
+    const w = { ...sources(), store, instance: "warm" };
+    const legs = await warmSeries(now, w);
+    // Every usage leg completed; legs whose sources this fixture omits report why.
+    for (const leg of ["growth", "curve", "retainedHistory", "captureSource"])
+      expect(legs[leg]).toMatchObject({ complete: true, reason: null });
+    resetSeriesCache(); // a viewer on another instance, same shared store
+    const v = { ...sources(), store, instance: "viewer" };
+    const growth = await seriesPayload("growth", Promise.resolve(null), now, v);
+    const retention = await seriesPayload(
+      "retention",
+      Promise.resolve(null),
+      now,
+      v
+    );
+    expect(v.query).not.toHaveBeenCalled();
+    expect(growth).toMatchObject({ refreshing: false, partial: false });
+    expect(retention.refreshing).toBe(false);
+  });
+
+  it("is a store read only once the day is complete", async () => {
+    const store = memorySeriesStore();
+    const w = { ...sources(), store, instance: "warm" };
+    await warmSeries(now, w);
+    const reads = (w.query as ReturnType<typeof vi.fn>).mock.calls.length;
+    await warmSeries(new Date(now.getTime() + 10 * 60_000), w);
+    expect((w.query as ReturnType<typeof vi.fn>).mock.calls.length).toBe(reads);
+  });
+
+  it("answers within its budget while unfinished fills keep running", async () => {
+    vi.useFakeTimers();
+    const w = { ...sources(), store: memorySeriesStore(), instance: "warm" };
+    w.query = vi.fn(() => new Promise<never>(() => {}));
+    const retain = vi.fn();
+    const pending = warmSeries(now, w, 1_000, retain);
+    await vi.advanceTimersByTimeAsync(1_000);
+    const legs = await pending;
+    expect(legs.growth).toMatchObject({ complete: false });
+    expect(retain).toHaveBeenCalled(); // the fill outlives the request
+  });
+
+  it("never serves a leg value older than 24 hours", async () => {
+    const store = memorySeriesStore();
+    const s = { ...sources(), store };
+    await seriesPayload("growth", Promise.resolve(null), now, s);
+    // The next day's refresh is still running when the board reads the leg.
+    vi.useFakeTimers();
+    s.query = vi.fn(() => new Promise<never>(() => {}));
+    const later = new Date(now.getTime() + 24 * 3_600_000 + 60_000);
+    resetSeriesCache();
+    const pending = seriesPayload("growth", Promise.resolve(null), later, s);
+    await vi.advanceTimersByTimeAsync(5_000);
+    const served = await pending;
+    expect(served.frames.weekly).toEqual([]);
+    expect(served.gaps.growth).toBe("Series data older than 24h");
+    expect(served.staleUntil).toBeNull(); // nothing served, nothing to bound
+  });
+
+  it("bounds a retained snapshot metric by when it was retained", async () => {
+    const s = { ...sources(), store: memorySeriesStore() };
+    const wall = await computeWall(s, now);
+    const retained = new Date(now.getTime() - 20 * 3_600_000).toISOString();
+    const kept = {
+      ...wall,
+      metrics: wall.metrics.map((m, i) =>
+        i === 0 ? { ...m, value: m.value ?? 1, retainedSince: retained } : m
+      ),
+    };
+    const served = await seriesPayload(
+      "headline",
+      Promise.resolve(kept),
+      now,
+      s
+    );
+    expect(Date.parse(served.staleUntil!)).toBe(
+      Date.parse(retained) + 24 * 3_600_000
+    );
+  });
+
+  it("drops a retained snapshot metric 24h after it was retained", async () => {
+    const s = { ...sources(), store: memorySeriesStore() };
+    const wall = await computeWall(s, now);
+    const retained = new Date(now.getTime() - 25 * 3_600_000).toISOString();
+    const kept = {
+      ...wall,
+      metrics: wall.metrics.map((m, i) =>
+        i === 0 ? { ...m, value: m.value ?? 1, retainedSince: retained } : m
+      ),
+    };
+    const served = await seriesPayload(
+      "headline",
+      Promise.resolve(kept),
+      now,
+      s
+    );
+    // The bound now comes only from values still within 24h.
+    expect(Date.parse(served.staleUntil!)).toBeGreaterThan(now.getTime());
+    // Its trend points go too. Mark them with a sentinel the legs never produce.
+    const SENTINEL = 987_654;
+    const marked = (since?: string) => ({
+      ...wall,
+      metrics: wall.metrics.map((m) =>
+        m.id === "growth.wau"
+          ? {
+              ...m,
+              retainedSince: since,
+              trend: m.trend.map((t) => ({ ...t, value: SENTINEL })),
+            }
+          : m
+      ),
+    });
+    expect(
+      wall.metrics.find((m) => m.id === "growth.wau")!.trend.length
+    ).toBeGreaterThan(0);
+    const within = await seriesPayload(
+      "growth",
+      Promise.resolve(
+        marked(new Date(now.getTime() - 3_600_000).toISOString())
+      ),
+      now,
+      s
+    );
+    expect(JSON.stringify(within.frames)).toContain(String(SENTINEL));
+    const expired = await seriesPayload(
+      "growth",
+      Promise.resolve(marked(retained)),
+      now,
+      s
+    );
+    expect(JSON.stringify(expired.frames)).not.toContain(String(SENTINEL));
+  });
+
+  it("tells the proxy when its oldest served value turns 24h old", async () => {
+    const s = { ...sources(), store: memorySeriesStore() };
+    const served = await seriesPayload("growth", Promise.resolve(null), now, s);
+    expect(Date.parse(served.staleUntil!)).toBe(now.getTime() + 24 * 3_600_000);
+  });
+
+  it("reports a failing leg's controlled reason instead of hiding it", async () => {
+    const w = { ...sources(), store: memorySeriesStore(), instance: "warm" };
+    w.planCost = vi.fn(async () => {
+      throw new WallSourceError(
+        "omi_finops.mercury_saas_daily not readable by the admin BigQuery identity (missing dataViewer grant)"
+      );
+    });
+    const legs = await warmSeries(now, w);
+    expect(legs.planCost).toMatchObject({
+      complete: false,
+      reason:
+        "omi_finops.mercury_saas_daily not readable by the admin BigQuery identity (missing dataViewer grant)",
+    });
   });
 });
 

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-output-language-follows-newest-speech",
+  "violated_contract": "The language of a user-facing artifact derived from speech is the resolved output language: the user's explicit preference first, else the capture's dominant language. The newest moment's speech is not the language authority, sentinel tags (multi/auto/unknown) are not languages, and a prior artifact written in the wrong language must not be fed back as state that keeps the wrong language.",
+  "canonical_prevention": "Resolve one output language at every derivation boundary behind a default-on kill switch, normalize sentinel tags to unset, and pin the prompt to the resolved language. Stamp the artifact with the language it is written in; when the stored state's language differs (stamp, or detection for unstamped legacy state), instruct the update to rewrite the state in the resolved language instead of feeding it back, and only re-stamp once the state matches.",
+  "canonical_prevention_artifact": [
+    "backend/utils/episodes/output_language.py",
+    "backend/tests/unit/test_episode_output_language.py",
+    "backend/tests/unit/test_episodes_service.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/episodes/",
+    "backend/utils/llm/output_language.py"
+  ],
+  "status": "open"
+}

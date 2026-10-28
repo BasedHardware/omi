@@ -59,13 +59,12 @@ bool canClaimLiveCapture(List<Wal> batch, List<Wal> pendingForConversation, int 
 /// failure still stops within one connectivity epoch rather than re-uploading
 /// the same bytes forever. The per-recording manual Retry
 /// ([LocalWalSyncImpl.syncWal]) deliberately ignores this budget.
-@visibleForTesting
-bool isAutoUploadEligible(Wal wal) =>
+bool isAutoUploadEligible(Wal wal, {int? nowSeconds}) =>
     !wal.onDeviceOnly &&
-    !wal.holdForUser &&
-    wal.status == WalStatus.miss &&
     wal.storage == WalStorage.disk &&
-    wal.retryCount < walMaxAutoRetries;
+    ((wal.status == WalStatus.uploadRejected &&
+            wal.refusalRetryDue(nowSeconds ?? DateTime.now().millisecondsSinceEpoch ~/ 1000)) ||
+        (!wal.holdForUser && wal.status == WalStatus.miss && wal.retryCount < walMaxAutoRetries));
 
 /// Pause tolerance for saved utterance gaps and WAL edges; coverage only suppresses automatic
 /// repair, never deletes audio, so short gaps are treated as pauses while the copy stays recoverable.
@@ -128,6 +127,148 @@ bool isDefinitiveUploadRefusal(Object error) =>
     error is SyncUploadHttpException && _kDefinitiveUploadRefusalStatusCodes.contains(error.statusCode);
 
 typedef WalCoverageTelemetryEmitter = void Function(Map<String, Object?> fields);
+
+/// The bounded refusal token for a terminal upload HTTP status.
+String uploadRejectionTokenForStatus(int statusCode) =>
+    statusCode == 413 ? WalUploadRejection.tooLarge : WalUploadRejection.serverRefused;
+
+/// Capture-time refusals share the daily, bounded recovery policy. Dates and
+/// bytes stay intact so a server correction can recover the original audio.
+extension InvalidCaptureTimeRepair on LocalWalSyncImpl {
+  /// A request-level refusal proves nothing about every member: isolate the
+  /// batch so the next attempt names the actual file, exactly like a
+  /// definitive 400/413. A single-file refusal gets that file's verdict.
+  Future<void> handleBatchInvalidCaptureTime(
+    List<Wal> batchWals,
+    int generation,
+    SyncInvalidCaptureTimeException e, {
+    required Set<String> isolateAfterRefusal,
+    required Set<String> attemptedWalIds,
+    required String Function(Wal wal) walAttemptKey,
+  }) async {
+    if (batchWals.length > 1) {
+      await isolateBatchAfterRefusal(
+        batchWals,
+        generation,
+        isolateAfterRefusal: isolateAfterRefusal,
+        attemptedWalIds: attemptedWalIds,
+        walAttemptKey: walAttemptKey,
+        reason: 'invalid_capture_time',
+      );
+      return;
+    }
+    await applyInvalidCaptureTimeRefusal(batchWals, generation, e);
+    await _saveWalsToFile(generation);
+    _notifyUpdated(generation);
+  }
+
+  /// The single-recording retry path's share of the same verdict.
+  Future<void> handleSingleInvalidCaptureTime(
+    Wal wal,
+    int generation,
+    SyncInvalidCaptureTimeException e,
+  ) async {
+    wal.isSyncing = false;
+    wal.syncStartedAt = null;
+    wal.syncEtaSeconds = null;
+    await applyInvalidCaptureTimeRefusal([wal], generation, e);
+    await _saveWalsToFile(generation);
+    _notifyUpdated(generation);
+  }
+
+  /// Re-queues every member of a refused batch for its own single-file
+  /// attempt: clears the in-flight flags, pulls the batch's attempt keys, and
+  /// records the isolation. Shared by the definitive 400/413 handler and the
+  /// invalid-capture-time handler, whose refusals are equally unattributed at
+  /// the request level.
+  Future<void> isolateBatchAfterRefusal(
+    List<Wal> batchWals,
+    int generation, {
+    required Set<String> isolateAfterRefusal,
+    required Set<String> attemptedWalIds,
+    required String Function(Wal wal) walAttemptKey,
+    int statusCode = 400,
+    String reason = '',
+  }) async {
+    for (final wal in batchWals) {
+      final key = walAttemptKey(wal);
+      isolateAfterRefusal.add(key);
+      attemptedWalIds.remove(key);
+      wal.isSyncing = false;
+      wal.syncStartedAt = null;
+      wal.syncEtaSeconds = null;
+    }
+    DebugLogManager.logEvent('local_upload_batch_isolated', {
+      'statusCode': statusCode,
+      'walCount': batchWals.length,
+      if (reason.isNotEmpty) 'reason': reason,
+    });
+    await _saveWalsToFile(generation);
+    _notifyUpdated(generation);
+  }
+
+  Future<bool> reserveRefusalRetries(List<Wal> wals, int generation, int nowSeconds) async {
+    var changed = false;
+    for (final wal in wals) {
+      if (wal.status != WalStatus.uploadRejected) continue;
+      if (wal.uploadRejectedAt == 0) wal.uploadRejectedAt = nowSeconds;
+      wal.uploadRefusalLastAttemptAt = nowSeconds;
+      changed = true;
+    }
+    if (changed && !await _saveWalsToFile(generation)) return false;
+    return _isCurrent(generation);
+  }
+
+  Future<void> applyUploadRefusals(List<Wal> wals, int generation, SyncUploadHttpException error) async {
+    final reason = WalUploadRejection.bounded(error.reasonCode ?? uploadRejectionTokenForStatus(error.statusCode));
+    for (final wal in wals) {
+      await applyUploadRefusal(wal, generation, reason: reason, statusCode: error.statusCode);
+    }
+    DebugLogManager.logEvent('local_upload_terminal_http_refusal', {
+      'statusCode': error.statusCode,
+      'walCount': wals.length,
+    });
+  }
+
+  Future<void> applyUploadRefusal(Wal wal, int generation, {required String reason, required int statusCode}) async {
+    final path = await Wal.getFilePath(wal.filePath);
+    if (!_isCurrent(generation)) return;
+    var empty = false;
+    if (path != null) {
+      try {
+        empty = await File(path).length() <= 4;
+      } catch (_) {/* Keep unreadable audio. */}
+    }
+    if (!_isCurrent(generation)) return;
+    final now = _now().millisecondsSinceEpoch ~/ 1000;
+    wal.markUploadRejected(reasonCode: empty ? 'empty_clip' : reason, statusCode: statusCode, nowSeconds: now);
+    _backlogTelemetry.uploadRefused(reason: empty ? 'empty_clip' : reason, statusCode: statusCode);
+    if (empty) {
+      // A four-byte length prefix without payload contains no audio frames.
+      // This is a local no-op receipt; short encoded speech never takes it.
+      wal.status = WalStatus.synced;
+      wal.syncedAt = now;
+      wal.holdForUser = false;
+    }
+  }
+
+  Future<void> applyInvalidCaptureTimeRefusal(
+    List<Wal> wals,
+    int generation,
+    SyncInvalidCaptureTimeException e,
+  ) async {
+    for (final wal in wals) {
+      wal.isSyncing = false;
+      wal.syncStartedAt = null;
+      wal.syncEtaSeconds = null;
+      await applyUploadRefusal(wal, generation, reason: WalUploadRejection.invalidCaptureTime, statusCode: 400);
+      DebugLogManager.logEvent('invalid_capture_time_terminal', {
+        'walId': wal.id,
+        'reason': WalUploadRejection.invalidCaptureTime,
+      });
+    }
+  }
+}
 
 /// Lookup/proof helpers shared by native custody producers.
 extension NativeCustodyInventory on LocalWalSyncImpl {

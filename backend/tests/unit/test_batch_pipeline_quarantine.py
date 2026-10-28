@@ -205,7 +205,7 @@ def test_quarantine_counter_and_recovery_hold_emit_once(monkeypatch, caplog):
 
 def test_quarantine_transaction_reads_before_writes_and_telemetry_cannot_escape(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
-    monkeypatch.setenv('BATCH_PIPELINE_MAX_ATTEMPTS', '1')
+    monkeypatch.setenv('BATCH_PIPELINE_MAX_ATTEMPTS', '5')
     memory = MemoryStore()
     queue = Scheduler(memory)
     queue.enqueue(replace(item('bad', owner='synthetic-owner'), privacy_generation=0), 0)
@@ -218,8 +218,10 @@ def test_quarantine_transaction_reads_before_writes_and_telemetry_cannot_escape(
     monkeypatch.setattr(
         'utils.batch_pipeline.scheduler.logger.error', Mock(side_effect=RuntimeError('synthetic logger failure'))
     )
-    assert queue.fail('bad', lease.token, 1)
-    assert client.rows[('batch_pipeline_dev_jobs', 'bad')]['state'] == 'quarantined'
+    assert queue.fail('bad', lease.token, 1, worker_failure={'stage': 'vad_windows', 'reason': 'unsupported_language'})
+    quarantined = client.rows[('batch_pipeline_dev_jobs', 'bad')]
+    assert quarantined['state'] == 'quarantined' and quarantined['worker_failure']['reason'] == 'unsupported_language'
+    assert quarantined['audio_uri'] == 'gs://synthetic/bad'
     assert not queue.fail('bad', lease.token, 2)
 
 

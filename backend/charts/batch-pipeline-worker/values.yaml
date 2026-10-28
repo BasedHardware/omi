@@ -26,6 +26,10 @@ tolerations:
     value: present
     effect: NoSchedule
 worker:
+  # Ship-on bounded Firestore transaction retry; false restores legacy behavior.
+  contentionRetryEnabled: true
+  # null preserves the runtime's stage-dependent profiling default.
+  stageProfilingEnabled: null
   # Same original-lane/owner policy as CPU admission. Non-live widening is
   # blocked by #22352 and needs separate approval; these defaults are inert.
   capDispatchEnforcement: false
@@ -74,15 +78,23 @@ resources:
     memory: 14Gi
     nvidia.com/gpu: "1"
 autoscaling:
-  # Enable only after scoped queue-age series and adapter are verified live.
+  # Enable only after scoped admissible-count series/adapter and target qualify.
   enabled: false
   minReplicas: 1
   maxReplicas: 6
+  # Total min/max above are divided equally between pool-pinned HPAs when on.
+  # The original deployment name stays on OD; a -spot deployment shares its
+  # queue metric scope but has a distinct pod selector and PodMonitoring.
+  # Superseded as the cutover shape 10-28 (lead f05065): the qualified path is
+  # a single OD-pinned HPA (prod 3/16); balanced stays machinery-only.
+  balancedPools:
+    enabled: false
+    onDemandNodePool: batch-pipeline-pool
+    spotNodePool: batch-pipeline-pool-spot
   # External metrics from the supplied Prometheus adapter rules must be installed
   # and freshly sampled. A failed/stale metric prevents unsafe HPA scale-down.
-  targets:
-    fresh: 30
-    recent: 300
-    deep: 3600
+  # PROVISIONAL development target: slot bound only, NOT throughput evidence.
+  # Qualify useful throughput/queue latency before the production apply.
+  targetQueuedUnitsPerWorker: 16
 podMonitoring:
   enabled: true

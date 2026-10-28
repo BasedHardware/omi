@@ -6,6 +6,7 @@
 schema_version: 1
 service: backend-main
 routes:
+  - {route_type: http, method: GET, path: /v1/conversations/hidden-noise-counts, policy: {review_status: reviewed, auth: {mechanisms: [firebase_id_token, admin_key_uid_prefix], placement: dependency, scopes: []}, byok: validated_when_headers_present, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: default_method, surface: first_party_app, visibility: first_party, data_domain: conversations, deprecation: {state: active}, owner: backend}}
   # Exact app/account/conversation-scoped HS256 capability, followed by current
   # account, installation and conversation eligibility checks in the handler.
   - {route_type: http, method: GET, path: "/v1/apps/{app_id}/backup-audio/{conversation_id}", policy: {review_status: reviewed, auth: {mechanisms: [plugin_capability], placement: handler, scopes: [audio]}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: default_method, surface: developer_api, visibility: internal, data_domain: sync_audio, deprecation: {state: active}, owner: backend}}

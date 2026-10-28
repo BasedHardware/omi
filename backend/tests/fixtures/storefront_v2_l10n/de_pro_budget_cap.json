@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "catalog_revision": 11,
+  "catalog_revision": 12,
   "show_subscription_ui": true,
   "header": "Sie haben die gesamte Nutzung für diesen Monat verbraucht",
   "current": {
@@ -10,8 +10,11 @@
     "interval": "month",
     "legacy": false,
     "cancel_at_period_end": false,
-    "line": "Sie nutzen Pro · $49.99/Mon. · verlängert sich am 1. Nov.",
-    "legacy_note": null
+    "line": "Sie nutzen Pro · US$49.99/Mon. · verlängert sich am 1. Nov.",
+    "legacy_note": null,
+    "amount_minor": 4999,
+    "currency": "usd",
+    "line_template": "Sie nutzen Pro · {price}/Mon. · verlängert sich am 1. Nov."
   },
   "usage": {
     "kind": "usage_budget",
@@ -48,7 +51,7 @@
           "interval": "month",
           "amount_minor": 19900,
           "currency": "usd",
-          "headline": "$199/Monat",
+          "headline": "US$199/Monat",
           "subline": null,
           "renewal_line": "Verlängert sich monatlich, bis Sie kündigen. Sie können jederzeit in den Einstellungen kündigen."
         },
@@ -57,8 +60,8 @@
           "interval": "year",
           "amount_minor": 199000,
           "currency": "usd",
-          "headline": "$165.83/Monat",
-          "subline": "$1,990 jährlich abgerechnet · 2 Monate gratis",
+          "headline": "US$165.83/Monat",
+          "subline": "US$1,990 jährlich abgerechnet · 2 Monate gratis",
           "renewal_line": "Verlängert sich jährlich, bis Sie kündigen. Sie können jederzeit in den Einstellungen kündigen.",
           "months_free": 2
         }
@@ -86,7 +89,7 @@
           "interval": "month",
           "amount_minor": 1999,
           "currency": "usd",
-          "headline": "$19.99/Monat",
+          "headline": "US$19.99/Monat",
           "subline": null,
           "renewal_line": "Verlängert sich monatlich, bis Sie kündigen. Sie können jederzeit in den Einstellungen kündigen."
         },
@@ -95,8 +98,8 @@
           "interval": "year",
           "amount_minor": 19990,
           "currency": "usd",
-          "headline": "$16.66/Monat",
-          "subline": "$199.90 jährlich abgerechnet · 2 Monate gratis",
+          "headline": "US$16.66/Monat",
+          "subline": "US$199.90 jährlich abgerechnet · 2 Monate gratis",
           "renewal_line": "Verlängert sich jährlich, bis Sie kündigen. Sie können jederzeit in den Einstellungen kündigen.",
           "months_free": 2
         }
@@ -120,16 +123,23 @@
           "interval": "year",
           "amount_minor": 49990,
           "currency": "usd",
-          "headline": "$49.99/Monat",
-          "subline": "$499.90 jährlich abgerechnet · 2 Monate gratis",
+          "headline": "US$49.99/Monat",
+          "subline": "US$499.90 jährlich abgerechnet · 2 Monate gratis",
           "renewal_line": "Verlängert sich jährlich, bis Sie kündigen. Sie können jederzeit in den Einstellungen kündigen.",
           "months_free": 2,
           "confirm_lines": [
             "Ihr Monatsplan läuft bis 1. Nov. weiter",
-            "Ihre Zahlungsmethode wird $499.90 belastet, sobald Ihr Jahresplan beginnt",
+            "Ihre Zahlungsmethode wird US$499.90 belastet, sobald Ihr Jahresplan beginnt",
             "Ihr Jahresplan beginnt am 1. Nov."
           ],
-          "cta_label": "Auf jährlich wechseln · $99.98 sparen"
+          "cta_label": "Auf jährlich wechseln · US$99.98 sparen",
+          "cta_label_template": "Auf jährlich wechseln · {saving} sparen",
+          "saving_minor": 9998,
+          "confirm_line_templates": [
+            "Ihr Monatsplan läuft bis 1. Nov. weiter",
+            "Ihre Zahlungsmethode wird {price} belastet, sobald Ihr Jahresplan beginnt",
+            "Ihr Jahresplan beginnt am 1. Nov."
+          ]
         }
       ]
     }

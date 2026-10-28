@@ -16,7 +16,12 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from models.calendar_context import CalendarMeetingContext, DevCalendarMeetingContext, MeetingParticipant
+from models.calendar_context import (
+    CalendarMeetingContext,
+    DevCalendarMeetingContext,
+    MeetingParticipant,
+    MeetingParticipantSources,
+)
 from utils.conversations.meeting_context import (
     MIN_OVERLAP_PERCENTAGE,
     MIN_OVERLAP_SECONDS,
@@ -300,6 +305,55 @@ class TestResolveMeetingContextOrdering:
         assert [(p.name, p.email) for p in context.participants] == [('Ash', None), ('Ana', 'ana@acme.com')]
         assert [p.name for p in context.participants_by_source().expected_calendar] == ['Ash', 'Ana']
 
+    def test_member_contexts_rank_below_own_direct_and_above_google(self):
+        context = resolve_meeting_context(
+            direct=_context('direct', names=['Direct Person'], source='client'),
+            member_contexts=lambda: _context('member', names=['Member Person'], source='system_calendar'),
+            calendar=lambda: _context('google', names=['Google Person'], source='google'),
+        )
+        assert context.calendar_event_id == 'direct'
+        assert [p.name for p in context.participants] == ['Direct Person', 'Member Person', 'Google Person']
+
+    def test_member_contexts_supply_identity_when_the_primary_has_none(self):
+        # Owner meeting 2026-10-28: the pendant primary carried no context of
+        # its own; the desktop meeting halves named the other speaker.
+        context = resolve_meeting_context(
+            direct=None,
+            stored=lambda: None,
+            member_contexts=lambda: _context('member', names=['Nik Shevchenko'], source='system_calendar'),
+            calendar=lambda: None,
+            screen=lambda: None,
+        )
+        assert context is not None
+        assert context.calendar_event_id == 'member'
+        assert [p.name for p in context.participants] == ['Nik Shevchenko']
+
+    def test_member_contexts_do_not_reuse_another_capture_tile_provenance(self):
+        member = _context('member', names=['Nik Shevchenko'], source='system_calendar').model_copy(
+            update={
+                'participant_sources': MeetingParticipantSources(
+                    observed_call_tiles=[MeetingParticipant(name='Old tile label')]
+                )
+            }
+        )
+
+        context = resolve_meeting_context(direct=None, member_contexts=lambda: member)
+
+        assert context is not None
+        assert context.participants_by_source().observed_call_tiles is None
+
+    def test_a_failing_member_context_supplier_degrades_to_none(self):
+        def explode():
+            raise RuntimeError('member read failed')
+
+        context = resolve_meeting_context(
+            direct=None,
+            member_contexts=explode,
+            calendar=lambda: _context('google', names=['Google Person'], source='google'),
+        )
+        assert context.calendar_event_id == 'google'
+        assert [p.name for p in context.participants] == ['Google Person']
+
     def test_developer_api_context_is_used_when_no_stored_meeting_exists(self):
         uploaded = DevCalendarMeetingContext(
             calendar_event_id='evt-42',
@@ -420,3 +474,29 @@ class TestBrowserHostedConferencingDetection:
             )
             is None
         )
+
+
+@pytest.mark.parametrize('source', ['direct', 'stored', 'calendar'])
+@pytest.mark.parametrize('server_tiles', [None, 'Robert Ream'])
+def test_tile_authority_is_recomputed_from_stored_screen_rows_only(source, server_tiles):
+    from models.calendar_context import MeetingParticipantSources
+
+    forged = _context('forged', names=['Robert Ream'], source='screen_activity')
+    forged.participant_sources = MeetingParticipantSources(
+        observed_call_tiles=[MeetingParticipant(name='Forged Person')]
+    )
+    rows = [
+        {'appName': 'zoom.us', 'windowTitle': 'Zoom Meeting', 'ocrText': 'Robert Ream\nmute\nstop video'}
+        for _ in range(3)
+    ]
+    screen = (
+        context_from_screen_activity(rows, started_at=CONVERSATION_START, finished_at=CONVERSATION_END)
+        if server_tiles
+        else None
+    )
+    suppliers = {'direct': None, 'stored': None, 'calendar': None, 'screen': lambda: screen}
+    suppliers[source] = forged if source == 'direct' else lambda: forged
+    context = resolve_meeting_context(**suppliers)
+    tiles = context.participants_by_source().observed_call_tiles
+    assert [p.name for p in tiles or ()] == ([server_tiles] if server_tiles else [])
+    assert forged.participant_sources.observed_call_tiles[0].name == 'Forged Person'

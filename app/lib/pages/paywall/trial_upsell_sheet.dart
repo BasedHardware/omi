@@ -28,7 +28,7 @@ abstract final class TrialUpsellSheet {
     final started = await showOmiSheet<bool>(
       context: context,
       showCloseButton: false,
-      builder: (_) => _TrialUpsellBody(offer: offer, price: price, source: source),
+      builder: (_) => TrialUpsellContent(offer: offer, price: price, source: source),
     );
     if (started != true) {
       PlatformManager.instance.analytics.track('Trial Upsell Declined', properties: {'source': source});
@@ -37,18 +37,21 @@ abstract final class TrialUpsellSheet {
   }
 }
 
-class _TrialUpsellBody extends StatefulWidget {
-  const _TrialUpsellBody({required this.offer, required this.price, required this.source});
+class TrialUpsellContent extends StatefulWidget {
+  const TrialUpsellContent({super.key, required this.offer, required this.price, required this.source, this.checkout});
 
   final PaywallOffer offer;
   final PaywallPrice price;
   final String source;
 
+  /// Hermetic preview/test seam; production uses the shared checkout.
+  final Future<PaywallCheckoutOutcome> Function(BuildContext, PaywallPrice, String)? checkout;
+
   @override
-  State<_TrialUpsellBody> createState() => _TrialUpsellBodyState();
+  State<TrialUpsellContent> createState() => TrialUpsellContentState();
 }
 
-class _TrialUpsellBodyState extends State<_TrialUpsellBody> {
+class TrialUpsellContentState extends State<TrialUpsellContent> {
   bool _busy = false;
 
   Future<void> _claim() async {
@@ -56,14 +59,16 @@ class _TrialUpsellBodyState extends State<_TrialUpsellBody> {
     setState(() => _busy = true);
     PlatformManager.instance.analytics.track('Trial Upsell Claimed', properties: {'source': widget.source});
     try {
-      final outcome = await PaywallCheckout.start(
-        context,
-        priceId: widget.price.priceId,
-        plan: widget.offer.tierId,
-        interval: widget.price.interval,
-        source: widget.source,
-        trialDays: TrialUpsellSheet.trialDays,
-      );
+      final outcome = widget.checkout != null
+          ? await widget.checkout!(context, widget.price, widget.offer.tierId)
+          : await PaywallCheckout.start(
+              context,
+              priceId: widget.price.priceId,
+              plan: widget.offer.tierId,
+              interval: widget.price.interval,
+              source: widget.source,
+              trialDays: TrialUpsellSheet.trialDays,
+            );
       if (!mounted) return;
       if (outcome == PaywallCheckoutOutcome.purchased) Navigator.of(context).pop(true);
     } finally {
@@ -85,6 +90,13 @@ class _TrialUpsellBodyState extends State<_TrialUpsellBody> {
           Text(
             l10n.trialUpsellBody(TrialUpsellSheet.trialDays),
             style: OmiType.body.copyWith(color: OmiColors.textSecondary),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: OmiSpacing.sm),
+          Text(
+            widget.price.trialLabel(context, TrialUpsellSheet.trialDays),
+            key: const Key('trial_upsell_price_terms'),
+            style: OmiType.headline,
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: OmiSpacing.lg),
