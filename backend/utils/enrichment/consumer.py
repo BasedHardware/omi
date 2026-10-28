@@ -104,7 +104,7 @@ class EnrichmentConsumer:
             return Result(Outcome.DONE, ConsumerReason.PROCESSED)
 
         summary_policy = rows.summary_policy_for(row)
-        context = (
+        context: dict[str, Any] | None = (
             {'owner': claim.lease_token, 'lease_until': claim.lease_until}
             if (summary_policy and not row.get('summary_seen')) or row.get('sync_hold')
             else None

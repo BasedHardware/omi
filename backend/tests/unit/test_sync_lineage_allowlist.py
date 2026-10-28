@@ -23,6 +23,7 @@ import yaml
 import tests.unit.test_listen_reconnect_continuity as continuity
 from config import sync_lineage
 from utils import rollout_cohorts
+from utils.sync import assignment
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_cross_job_assignment import intake
 from tests.unit.test_sync_recording_lineage import (  # noqa: F401 - fixtures
@@ -333,6 +334,8 @@ async def test_narrowing_preserves_an_already_owed_refresh(coordinator, monkeypa
 
 
 def _pinned_append(monkeypatch, config, store=None):
+    # Content parity comparisons must use one scheduling instant.
+    monkeypatch.setattr(assignment.time, 'time', lambda: 1760000000.0)
     configure(monkeypatch, config, 'u')
     store = store or seeded_store([generation(L, audio_timeline={'version': 2})])
     origin = gen_start(L)

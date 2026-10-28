@@ -31,6 +31,7 @@ from utils.conversations.summary_delivery import (
     PROCESS_CONTEXT,
     REPAIR_CONTEXT,
     SummaryRepairSuperseded,
+    present as summary_output_present,
     refusal as summary_repair_refusal,
     repair_fenced,
 )
@@ -169,11 +170,16 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
     ):
         # Preserve the smart-merge refresh lease/checkpoints and its vector work.
         refresh_survivor(uid, conversation_id, owner=context['owner'], settled=True)
-        if context.get('hold_snapshot') is not None and not conversations_db.complete_sync_processing_hold(
-            uid, conversation_id, conversation_data.get('sync_content_revision'), context['hold_snapshot']
+        refreshed = conversations_db.get_conversation(uid, conversation_id)
+        if (
+            refreshed
+            and (refreshed.get('discarded') or summary_output_present(refreshed.get('structured')))
+            and context.get('hold_snapshot') is not None
+            and not conversations_db.complete_sync_processing_hold(
+                uid, conversation_id, conversation_data.get('sync_content_revision'), context['hold_snapshot']
+            )
         ):
             raise SyncConversationPersistenceFenced('hold completion snapshot changed')
-        refreshed = conversations_db.get_conversation(uid, conversation_id)
         return deserialize_conversation(refreshed) if refreshed else None
 
     # Convert to Conversation object
@@ -209,6 +215,7 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
     if (
         context is not None
         and context.get('hold_snapshot') is not None
+        and (processed_conversation.discarded or summary_output_present(processed_conversation.structured))
         and not conversations_db.complete_sync_processing_hold(
             uid, conversation_id, conversation_data.get('sync_content_revision'), context['hold_snapshot']
         )
@@ -244,5 +251,5 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
     # WAL append re-runs it and is a no-op once joined.
     schedule_after_finalization(uid, conversation_id, ProcessingTrigger.SYNC_UPDATE)
 
-    logger.info(f'Successfully reprocessed conversation {conversation_id}')
+    logger.info('event=sync_reprocess_callback outcome=processed')
     return processed_conversation

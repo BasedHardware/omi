@@ -54,6 +54,7 @@ from utils.conversations.summary_delivery import (
     REPAIR_CONTEXT,
     PROCESS_CONTEXT,
     SummaryRepairSuperseded,
+    present as summary_output_present,
 )
 from database import users as users_db
 from database.auth import get_user_name
@@ -1154,11 +1155,16 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     ):
         # Preserve the smart-merge refresh lease/checkpoints and its vector work.
         refresh_survivor(uid, conversation_id, owner=context['owner'], settled=True)
-        if context.get('hold_snapshot') is not None and not conversations_db.complete_sync_processing_hold(
-            uid, conversation_id, conversation_data.get('sync_content_revision'), context['hold_snapshot']
+        refreshed = conversations_db.get_conversation(uid, conversation_id)
+        if (
+            refreshed
+            and (refreshed.get('discarded') or summary_output_present(refreshed.get('structured')))
+            and context.get('hold_snapshot') is not None
+            and not conversations_db.complete_sync_processing_hold(
+                uid, conversation_id, conversation_data.get('sync_content_revision'), context['hold_snapshot']
+            )
         ):
             raise SyncConversationPersistenceFenced('hold completion snapshot changed')
-        refreshed = conversations_db.get_conversation(uid, conversation_id)
         return deserialize_conversation(refreshed) if refreshed else None
 
     # Convert to Conversation object
@@ -1194,6 +1200,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     if (
         context is not None
         and context.get('hold_snapshot') is not None
+        and (processed_conversation.discarded or summary_output_present(processed_conversation.structured))
         and not conversations_db.complete_sync_processing_hold(
             uid, conversation_id, conversation_data.get('sync_content_revision'), context['hold_snapshot']
         )
@@ -2074,7 +2081,8 @@ def _reprocess_merged_conversations(
 
     from config.demand_processing import enabled as demand_enabled
 
-    coalescing = (processing_hold.enabled() or coalesce_enabled() or demand_enabled(uid)) and not user_selected
+    hold = processing_hold.scheduling_enabled()
+    coalescing = (hold or coalesce_enabled() or demand_enabled(uid)) and not user_selected
     merged = response.pop('_merged', {})
     if coalescing:
         # Partial-result IDs survive a crash after append/checkpoint but before
@@ -2100,7 +2108,7 @@ def _reprocess_merged_conversations(
             if coalescing:
                 from utils.sync.reprocess import mark
 
-                mark(uid, conversation_id, language, sync_hold=processing_hold.enabled())
+                mark(uid, conversation_id, language, sync_hold=hold)
             else:
                 _reprocess_conversation_after_update(uid, conversation_id, language)
                 if user_selected:

@@ -154,6 +154,7 @@ def test_real_consumer_keeps_hold_metadata_and_deferred_wake(state, monkeypatch)
 
 
 def test_smart_merge_refresh_is_handed_off_without_full_processing(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     world = World(monkeypatch)
     world.add(
         'parent',
@@ -206,7 +207,8 @@ def test_first_summary_repair_cannot_bypass_a_stored_hold(monkeypatch):
     full.assert_not_called()
 
 
-def test_late_wal_after_smart_refresh_still_processes_new_content(monkeypatch):
+@pytest.mark.parametrize('has_summary', [True, False])
+def test_late_wal_after_smart_refresh_still_processes_new_content(monkeypatch, has_summary):
     world = World(monkeypatch)
     world.add(
         'parent',
@@ -218,12 +220,15 @@ def test_late_wal_after_smart_refresh_still_processes_new_content(monkeypatch):
     )
     current = world.get('user-1', 'parent')
     monkeypatch.setattr(callback.conversations_db, 'get_conversation', lambda *_: current)
-    monkeypatch.setattr(callback.conversations_db, 'complete_sync_processing_hold', lambda *_: True)
+    complete = Mock(return_value=True)
+    monkeypatch.setattr(callback.conversations_db, 'complete_sync_processing_hold', complete)
     monkeypatch.setattr(callback, 'repair_fenced', lambda _: False)
     monkeypatch.setattr(callback, 'claim_from_snapshot', lambda *_: True)
     monkeypatch.setattr(callback, 'get_firestore_client', lambda: world.store)
     monkeypatch.setattr(callback, 'schedule_after_finalization', lambda *_: None)
     monkeypatch.setattr(callback.time, 'time', lambda: 700)
+    if not has_summary:
+        current['structured'] = {'title': 'Synthetic minimum'}
     full = Mock(return_value=callback.deserialize_conversation(current))
     smart = Mock(side_effect=AssertionError('a completed merge receipt cannot consume new WAL content'))
     monkeypatch.setattr(callback, 'process_conversation', full)
@@ -235,3 +240,14 @@ def test_late_wal_after_smart_refresh_still_processes_new_content(monkeypatch):
         PROCESS_CONTEXT.reset(token)
     full.assert_called_once()
     smart.assert_not_called()
+    assert complete.call_count == int(has_summary)
+
+
+@pytest.mark.parametrize(
+    'stage,emulator,expected',
+    [('prod', '', True), ('dev', '', False), ('local', '127.0.0.1:8080', True), ('', '', False)],
+)
+def test_hold_scheduling_respects_the_existing_outbox_runtime_boundary(monkeypatch, stage, emulator, expected):
+    monkeypatch.setenv('OMI_ENV_STAGE', stage)
+    monkeypatch.setenv('FIRESTORE_EMULATOR_HOST', emulator)
+    assert hold.scheduling_enabled() is expected

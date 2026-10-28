@@ -7822,7 +7822,8 @@ lineage remain evidence work under ANX step `fbreview-p4-task-integrity-1028`.
 content-revision transaction. Sync enrichment enrolls the durable enrichment
 outbox, waits 600 seconds after the last content append or smart merge, and
 rechecks the current row before any full notes/title/memory/task work. The
-first pending instant bounds the wait to 3600 seconds even with continuous
+shared outbox remains production/emulator-only; dev hosts keep local eager
+processing rather than writing the production outbox. The first pending instant bounds the wait to 3600 seconds even with continuous
 uploads. The existing rule-discard, live-in-progress, deletion, lease, account
 and revision fences still apply. Cheap server-minimum titles and episode
 attachment stay at intake.

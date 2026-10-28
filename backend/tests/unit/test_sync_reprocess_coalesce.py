@@ -28,6 +28,7 @@ def state(monkeypatch):
         return result
 
     monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setattr(reprocess, '_mutate', mutate)
     monkeypatch.setattr(reprocess, '_enqueue', lambda row: tasks.append(deepcopy(row)))
     monkeypatch.setattr(reprocess, '_wake_exists', lambda *_: False)
@@ -227,6 +228,7 @@ def test_owns_runtime_only_allows_production_or_emulator(monkeypatch, stage, nam
 
 
 def test_partial_result_replay_recovers_intent_without_transient_merged_map(pipeline, monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setenv('SYNC_REPROCESS_COALESCE_ENABLED', 'true')
     mark = Mock()
     monkeypatch.setattr(reprocess, 'mark', mark)

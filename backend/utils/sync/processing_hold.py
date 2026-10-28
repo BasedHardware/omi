@@ -25,6 +25,14 @@ def enabled() -> bool:
     return os.getenv('SYNC_PROCESSING_HOLD_ENABLED', 'true').strip().lower() not in {'false', '0', 'off', 'no'}
 
 
+def scheduling_enabled() -> bool:
+    # The shared enrichment outbox is intentionally production/emulator-only.
+    # Dev hosts must retain their local eager path, never write the prod outbox.
+    return enabled() and (
+        os.getenv('OMI_ENV_STAGE', '').strip().lower() == 'prod' or bool(os.getenv('FIRESTORE_EMULATOR_HOST'))
+    )
+
+
 def sync_sourced(row: Mapping[str, Any]) -> bool:
     return FIELD in row or row.get('sync_relevance') is not None or bool(row.get('sync_live_target'))
 
