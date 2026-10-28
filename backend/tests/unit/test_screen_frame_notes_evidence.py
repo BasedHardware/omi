@@ -521,6 +521,18 @@ class TestWiring:
 class TestCaptureGroupFrames:
     """A split meeting's frames live under the desktop members' conversation ids."""
 
+    def test_kill_switch_keeps_only_own_frames(self, monkeypatch):
+        monkeypatch.setenv('CAPTURE_GROUP_PRIMARY_NOTES_REFRESH_ENABLED', 'off')
+        queried = []
+        monkeypatch.setattr(
+            evidence_mod,
+            'load_screen_frame_evidence',
+            lambda uid, cid: queried.append(cid) or (_evidence('own', 5),),
+        )
+        result = load_capture_group_frame_evidence('u', self._conversation([('pendant', 'omi'), ('half-b', 'desktop')]))
+        assert queried == ['pendant']
+        assert [item.frame_id for item in result] == ['own']
+
     def _conversation(self, members):
         return SimpleNamespace(
             id='pendant',

@@ -35,6 +35,7 @@ from utils.conversations.meeting_context import merge_meeting_contexts
 logger = logging.getLogger(__name__)
 
 KILL_SWITCH_ENV = 'CAPTURE_GROUP_PRIMARY_NOTES_REFRESH_ENABLED'
+NOTES_REVISION_FIELD = 'capture_group_notes_revision'
 _OFF_VALUES = frozenset({'0', 'false', 'off', 'no'})
 
 
@@ -135,6 +136,8 @@ def merged_member_contexts(
     firestore_client: Any = None,
 ) -> Optional[CalendarMeetingContext]:
     """The members' stored meeting contexts merged in record order, or None."""
+    if not capture_group_primary_notes_enabled():
+        return None
     rows = (
         member_rows
         if member_rows is not None
@@ -171,11 +174,12 @@ def primary_notes_gap(
     """Whether the group primary's stored context misses member-held identity.
 
     Pure: callers pass the current primary row and the members' raw rows. A gap
-    exists when the primary has no stored context at all, or when the merged
-    member context names at least one participant (by name or email) the
+    exists when the primary has not summarized this group revision, has no
+    stored context at all, or when the merged member context names at least
+    one participant (by name or email) the
     primary's stored context does not. After one refresh the primary stores the
-    merged context, so the same state stops qualifying — the refresh is
-    naturally once per context arrival, not per finalization.
+    merged context and revision receipt, so the same state stops qualifying.
+    New membership qualifies even with the same roster, to include new frames.
     """
     group = primary_row.get('capture_group') or {}
     group_id = group.get('id')
@@ -192,6 +196,9 @@ def primary_notes_gap(
             merged = merge_meeting_contexts(merged, _context_from_row(member_rows.get(member_id)))
     if merged is None:
         return None
+    receipt = (primary_row.get('external_data') or {}).get(NOTES_REVISION_FIELD)
+    if receipt != {'group_id': str(group_id), 'revision': int(group.get('revision') or 0)}:
+        return PrimaryNotesGap(str(group_id), int(group.get('revision') or 0), primary_id, merged)
     primary_context = _context_from_row(primary_row)
     if primary_context is None:
         return PrimaryNotesGap(str(group_id), int(group.get('revision') or 0), primary_id, merged)

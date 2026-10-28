@@ -1511,13 +1511,17 @@ is set off:
   These run on every processing, so a user reprocess also picks them up.
 - `capture_group_notes_refresh.refresh_primary_notes` runs after the
   duplicate-capture step in the durable finalizer (and after the inline
-  sync/REST completion path): when the primary's stored context misses a
-  participant the merged member contexts name, it regenerates the primary's
-  notes once per group revision through `ProcessingTrigger.CAPTURE_GROUP`
+  sync/REST completion path): when members hold meeting context and the primary
+  has not summarized this membership revision, it regenerates its notes once per
+  group revision through `ProcessingTrigger.CAPTURE_GROUP`
   (no created-side effects, relevance keep) behind the shared
   `processing_retry_claims` claim, idempotency key
-  `capture-group-notes:{group id}:{revision}` — a user reprocess or a live
-  writer wins the claim and the refresh skips. The entry read is
+  `capture-group-notes:{group id}:{revision}`. A revision receipt is persisted
+  atomically with the notes in `external_data.capture_group_notes_revision`,
+  so a second desktop half with the same roster still refreshes its new screen
+  evidence once. Derived fanout is deferred and never emitted by this refresh:
+  it does not rerun apps, rewrite task records, or re-extract memories.
+  A user reprocess or a live writer wins the claim and the refresh skips. The entry read is
   field-projected, so an ungrouped finalization pays one cheap snapshot; the
   full document loads only once a gap is proven. A failed attempt marks the
   claim failed and is not retried at the same revision. Membership, transcripts,

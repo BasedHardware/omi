@@ -32,6 +32,7 @@ from database.screen_frames import get_conversation_screen_frames, own_frames
 from database.users import get_meeting_note_screenshots_enabled
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant
 from utils.conversations.capture_group_meeting_context import group_members as capture_group_members
+from utils.conversations.capture_group_meeting_context import capture_group_primary_notes_enabled
 from utils.conversations.meeting_context import is_ai_agent_tile_name, strip_leading_tile_glyphs
 from utils.conversations.meeting_participants import looks_like_ai_agent_name
 from utils.llm.meeting_notes_rich_prompts import NotesFrameImage
@@ -125,6 +126,8 @@ def load_capture_group_frame_evidence(uid: str, conversation: Any) -> tuple[Scre
     """
     own_id = getattr(conversation, 'id', None)
     evidence = [replace(item, conversation_id=own_id) for item in load_screen_frame_evidence(uid, own_id)]
+    if not capture_group_primary_notes_enabled():
+        return tuple(evidence)
     members = [
         member['id']
         for member in capture_group_members(conversation)

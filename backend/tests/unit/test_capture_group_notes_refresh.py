@@ -63,7 +63,11 @@ def store(monkeypatch):
 
     monkeypatch.setattr(refresh.conversations_db, 'get_conversation_raw_snapshot', raw_snapshot)
     monkeypatch.setattr(refresh.conversations_db, 'get_conversation', lambda uid, cid, **kw: rows.get(cid))
-    monkeypatch.setattr(refresh, 'deserialize_conversation', lambda row: SimpleNamespace(language=row.get('language')))
+    monkeypatch.setattr(
+        refresh,
+        'deserialize_conversation',
+        lambda row: SimpleNamespace(language=row.get('language'), external_data=dict(row.get('external_data') or {})),
+    )
 
     def claim(uid, cid, attention_id=None, expected_generation=None, idempotency_key=None, restart_succeeded=False):
         calls['claim'] = (uid, cid, idempotency_key, restart_succeeded)
@@ -84,6 +88,8 @@ def store(monkeypatch):
 
     def process(uid, language, conversation, **kwargs):
         calls['processed'] = (uid, language, kwargs.get('trigger'))
+        assert kwargs['defer_derived_effects'] is True
+        assert conversation.external_data[refresh.NOTES_REVISION_FIELD] == {'group_id': 'group-1', 'revision': 3}
         kwargs['persistence_observer'](True)
         return conversation
 
@@ -120,9 +126,25 @@ def test_no_refresh_without_a_group_or_without_member_context(store):
 
 def test_no_refresh_once_the_primary_stores_the_member_context(store):
     store.rows['pendant'] = store_row('pendant', group=GROUP, context=MEMBER_CONTEXT)
+    store.rows['pendant']['external_data'][refresh.NOTES_REVISION_FIELD] = {'group_id': 'group-1', 'revision': 3}
     store.rows['half-b'] = store_row('half-b', group=GROUP, context=MEMBER_CONTEXT)
     assert refresh.refresh_primary_notes(UID, 'pendant') is False
     assert store.calls['claim'] is None
+
+
+def test_second_desktop_half_with_same_roster_still_refreshes_screen_evidence(store):
+    store.rows['pendant'] = store_row('pendant', group=GROUP, context=MEMBER_CONTEXT)
+    store.rows['pendant']['external_data'][refresh.NOTES_REVISION_FIELD] = {'group_id': 'group-1', 'revision': 2}
+    store.rows['half-b'] = store_row('half-b', group=GROUP, context=MEMBER_CONTEXT)
+    assert refresh.refresh_primary_notes(UID, 'half-b') is True
+
+
+def test_missing_full_row_releases_owned_claim(store, monkeypatch):
+    store.rows['pendant'] = store_row('pendant', group=GROUP)
+    store.rows['half-b'] = store_row('half-b', group=GROUP, context=MEMBER_CONTEXT)
+    monkeypatch.setattr(refresh.conversations_db, 'get_conversation', lambda *a, **kw: None)
+    assert refresh.refresh_primary_notes(UID, 'half-b') is False
+    assert store.calls['finish'] == 'failed'
 
 
 def test_kill_switch_disables_the_refresh(store, monkeypatch):

@@ -146,9 +146,11 @@ class TestPrimaryNotesGap:
         assert gap is not None
 
     def test_no_gap_when_primary_already_names_every_member_participant(self):
+        primary = self.primary(own=context(['Ash Kalb', 'Nik Shevchenko']))
+        primary['external_data'][cg.NOTES_REVISION_FIELD] = {'group_id': 'group-1', 'revision': 3}
         assert (
             cg.primary_notes_gap(
-                self.primary(own=context(['Ash Kalb', 'Nik Shevchenko'])),
+                primary,
                 self.member_rows({'half-b': context(['Nik Shevchenko'])}),
             )
             is None
@@ -164,6 +166,11 @@ class TestPrimaryNotesGap:
 
 
 class TestKillSwitch:
+    def test_off_disables_member_context_reads(self, monkeypatch):
+        monkeypatch.setenv(cg.KILL_SWITCH_ENV, 'off')
+        monkeypatch.setattr(cg, 'member_context_rows', lambda *a, **kw: (_ for _ in ()).throw(AssertionError('read')))
+        assert cg.merged_member_contexts('u', conversation()) is None
+
     def test_on_by_default_and_off_only_when_set_off(self, monkeypatch):
         monkeypatch.delenv(cg.KILL_SWITCH_ENV, raising=False)
         assert cg.capture_group_primary_notes_enabled() is True

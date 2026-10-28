@@ -10,9 +10,10 @@ meeting identity sits on hidden members (owner meeting 2026-10-28).
 ``refresh_primary_notes`` closes that gap exactly once per group revision: the
 shared processing claim (``database.processing_attention``) with an
 idempotency key pinned to ``(group id, revision)`` fences concurrent writers,
-and after one successful refresh the primary stores the merged context, so the
-same group state never qualifies again. Membership, transcripts, discard state
-and audio are untouched; only the primary's derived notes regenerate
+and after one successful refresh the primary stores a revision receipt with
+the notes, so the same group state never qualifies again. A new desktop half
+qualifies even if its roster matches, because it can carry new screen evidence.
+Membership, transcripts, discard state and audio are untouched; only notes regenerate
 (``ProcessingTrigger.CAPTURE_GROUP``: no created-side effects, relevance keep).
 A refresh that fails marks its attempt failed and is not retried for the same
 revision — the next membership change or a user reprocess picks it up.
@@ -32,6 +33,7 @@ from database import processing_attention as attention_db
 from database.firestore_read_metrics import FirestoreReadSite
 from utils.conversations.capture_group_meeting_context import (
     capture_group_primary_notes_enabled,
+    NOTES_REVISION_FIELD,
     member_context_rows,
     primary_notes_gap,
 )
@@ -57,11 +59,13 @@ def _eligible_primary_row(row: Any) -> bool:
 def refresh_primary_notes(uid: str, conversation_id: str) -> bool:
     """Regenerate the primary's notes if its group holds meeting context it lacks.
 
-    Best effort by contract: never raises, never blocks the caller's
-    finalization. Returns whether a refresh ran.
+    Best effort by contract: never raises into the caller's finalization.
+    Returns whether a refresh ran.
     """
     if not capture_group_primary_notes_enabled() or not conversation_id:
         return False
+    operation = None
+    owned = False
     try:
         entry = _meta_row(uid, conversation_id)
         group = (entry or {}).get('capture_group') or {}
@@ -83,23 +87,39 @@ def refresh_primary_notes(uid: str, conversation_id: str) -> bool:
         if not owned or not attention_db.owns_live_claim(uid, operation):
             return False
         full_row = conversations_db.get_conversation(uid, primary_id, read_site=FirestoreReadSite.CAPTURE_GROUP_NOTES)
-        if full_row is None or not _eligible_primary_row(full_row):
-            return False
     except attention_db.ClaimRejected:
         return False
     except Exception as exc:  # noqa: BLE001 - the refresh may never fail finalization
         logger.warning('event=capture_group_notes_refresh outcome=error exception_type=%s', type(exc).__name__)
+        if operation is not None and owned:
+            try:
+                attention_db.finish(uid, operation, 'failed')
+            except Exception:
+                logger.warning('event=capture_group_notes_refresh outcome=release_failed')
         return False
 
     persisted = {'owned': False}
     try:
+        if full_row is None or not _eligible_primary_row(full_row):
+            attention_db.finish(uid, operation, 'failed')
+            return False
+        # Recheck the group after claiming: a member may have joined while
+        # the first metadata snapshot was being read. Do not stamp newer
+        # membership as summarized by an older attempt.
+        current_group = full_row.get('capture_group') or {}
+        if current_group.get('id') != gap.group_id or current_group.get('revision') != gap.revision:
+            attention_db.finish(uid, operation, 'failed')
+            return False
         conversation = deserialize_conversation(full_row)
+        conversation.external_data = dict(conversation.external_data or {})
+        conversation.external_data[NOTES_REVISION_FIELD] = {'group_id': gap.group_id, 'revision': gap.revision}
         process_conversation(
             uid,
             conversation.language or 'en',
             conversation,
             trigger=ProcessingTrigger.CAPTURE_GROUP,
             persistence_observer=lambda owned: persisted.__setitem__('owned', owned),
+            defer_derived_effects=True,
         )
         attention_db.finish(uid, operation, 'succeeded' if persisted['owned'] else 'failed')
         logger.info(
