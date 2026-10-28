@@ -1,3 +1,4 @@
+import 'package:omi/services/wals/wal_derived_sync_views.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -17,7 +18,7 @@ import 'package:omi/services/wals/wal.dart';
 
 /// Failures stay behind the bell; catch-up work alone never lights its dot.
 
-class _IdleSync extends ChangeNotifier implements SyncProvider {
+class _IdleSync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvider {
   @override
   List<Wal> get allWals => const [];
   @override

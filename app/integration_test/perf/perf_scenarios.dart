@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nested/nested.dart';
 import 'package:provider/provider.dart';
+import 'package:omi/services/wals/wal_derived_sync_views.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/env/env.dart';
@@ -460,7 +461,7 @@ List<SingleChildWidget> providersFor(String name, PerfWorld world) => switch (na
 
 /// A sync in progress: a device catch-up with WALs still missing, read by the device page
 /// through its production selectors.
-class _PerfSyncProvider extends ChangeNotifier implements SyncProvider {
+class _PerfSyncProvider extends ChangeNotifier with WalDerivedSyncViews implements SyncProvider {
   @override
   SyncState get syncState => const SyncState(status: SyncStatus.syncing);
   @override

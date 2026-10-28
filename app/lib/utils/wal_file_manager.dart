@@ -13,6 +13,7 @@ import 'package:omi/services/wals.dart';
 import 'package:omi/services/wals/mobile_batch_buffer.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/off_ui_isolate.dart';
+import 'package:omi/utils/wal_index_worker.dart';
 import 'package:omi/startup/boot_journal.dart';
 
 class WalFileManager {
@@ -46,56 +47,10 @@ class WalFileManager {
   static Future<List<Wal>?> _loadIndex(File file) async {
     try {
       final content = await file.readAsString();
-      final decoded = jsonDecode(content);
-      if (decoded is! Map<String, dynamic> || decoded['wals'] is! List) {
-        await _quarantineIndex(file, 'invalid_schema');
-        return null;
-      }
-      final loaded = <Wal>[];
-      var invalid = false;
-      for (final entry in decoded['wals'] as List) {
-        try {
-          if (entry is! Map<String, dynamic>) throw const FormatException();
-          // Old indices can omit new optional fields, but a WAL without its
-          // identity or with a wrong scalar type must never enter sync admission.
-          if (entry['timer_start'] is! int || entry['codec'] is! String) throw const FormatException();
-          for (final key in [
-            'channel',
-            'sample_rate',
-            'seconds',
-            'storage_offset',
-            'storage_total_bytes',
-            'file_num',
-            'total_frames',
-            'synced_frame_offset',
-            'retry_count',
-            'last_retry_at',
-            'uploaded_at',
-            'source_frame_start',
-            'source_clock_epoch',
-            'live_ring_id',
-            'live_ordinal_start',
-            'live_ordinal_end',
-          ]) {
-            if (entry[key] != null && entry[key] is! int) throw const FormatException();
-          }
-          for (final key in [
-            'file_path',
-            'device',
-            'device_model',
-            'conversation_id',
-            'recording_session_id',
-            'owner_uid',
-            'capture_root',
-            'job_id',
-          ]) {
-            if (entry[key] != null && entry[key] is! String) throw const FormatException();
-          }
-          loaded.add(Wal.fromJson(entry));
-        } catch (_) {
-          invalid = true;
-        }
-      }
+      final result = await offUiIsolate(() => _decodeIndex(content),
+          size: content.length, threshold: 0, debugName: 'wal_index_decode');
+      final loaded = result.wals;
+      final invalid = result.invalid;
       if (invalid) {
         await _quarantineIndex(file, 'invalid_entry');
         if (identical(file, _walFile)) {
@@ -107,10 +62,74 @@ class WalFileManager {
         }
       }
       return loaded;
-    } catch (_) {
-      await _quarantineIndex(file, 'unreadable');
+    } catch (error) {
+      await _quarantineIndex(
+          file, error is FormatException && error.message == 'invalid_schema' ? 'invalid_schema' : 'unreadable');
       return null;
     }
+  }
+
+  static Future<WalIndexWorker> createIndexWorker({bool seedFromDisk = false}) async {
+    if (_walFile == null) await init();
+    return WalIndexWorker.start(_walFile!.path, seedFromDisk: seedFromDisk);
+  }
+
+  static ({List<Wal> wals, bool invalid}) _decodeIndex(String content) {
+    final decoded = jsonDecode(content);
+    if (decoded is! Map<String, dynamic> || decoded['wals'] is! List) {
+      throw const FormatException('invalid_schema');
+    }
+    final loaded = <Wal>[];
+    var invalid = false;
+    for (final entry in decoded['wals'] as List) {
+      try {
+        if (entry is! Map<String, dynamic>) throw const FormatException();
+        // Old indices can omit new optional fields, but a WAL without its
+        // identity or with a wrong scalar type must never enter sync admission.
+        if (entry['timer_start'] is! int || entry['codec'] is! String) throw const FormatException();
+        for (final key in [
+          'channel',
+          'sample_rate',
+          'seconds',
+          'storage_offset',
+          'storage_total_bytes',
+          'file_num',
+          'total_frames',
+          'synced_frame_offset',
+          'retry_count',
+          'last_retry_at',
+          'uploaded_at',
+          'source_frame_start',
+          'source_clock_epoch',
+          'live_ring_id',
+          'live_ordinal_start',
+          'live_ordinal_end',
+        ]) {
+          if (entry[key] != null && entry[key] is! int) throw const FormatException();
+        }
+        for (final key in [
+          'file_path',
+          'device',
+          'device_model',
+          'conversation_id',
+          'recording_session_id',
+          'owner_uid',
+          'capture_root',
+          'job_id',
+        ]) {
+          if (entry[key] != null && entry[key] is! String) throw const FormatException();
+        }
+        loaded.add(Wal.fromJson(entry));
+      } catch (_) {
+        invalid = true;
+      }
+    }
+    if (!invalid) {
+      for (var i = 0; i < loaded.length; i++) {
+        loaded[i].loadedIndexToken = i;
+      }
+    }
+    return (wals: loaded, invalid: invalid);
   }
 
   static Future<void> _quarantineIndex(File file, String reason) async {
@@ -232,7 +251,10 @@ class WalFileManager {
         // before it may replace the last good backup.
         final content = await walFile.readAsString();
         if (content.isEmpty) return;
-        jsonDecode(content);
+        await offUiIsolate(() {
+          jsonDecode(content);
+          return true;
+        }, size: content.length, threshold: 0, debugName: 'wal_backup_validate');
       }
       await walFile.copy(backupFile.path);
     } on FileSystemException catch (e) {
@@ -396,7 +418,7 @@ class WalFileManager {
 
   /// Also migrate any WALs that might be in inconsistent state from old implementation.
   /// This fixes WALs that have storage=flashPage but already have a local file.
-  static Future<bool> migrateInconsistentWals(List<Wal> wals) async {
+  static Future<bool> migrateInconsistentWals(List<Wal> wals, {Future<void> Function()? persist}) async {
     bool needsSave = false;
 
     for (var wal in wals) {
@@ -420,7 +442,11 @@ class WalFileManager {
     }
 
     if (needsSave) {
-      await saveWals(wals);
+      if (persist != null) {
+        await persist();
+      } else {
+        await saveWals(wals);
+      }
       Logger.debug('WalFileManager: Saved WALs after inconsistency fixes');
     }
 
