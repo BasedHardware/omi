@@ -14,6 +14,8 @@ device partition and a user-managed row are.
 
 from __future__ import annotations
 
+from utils.sync import processing_hold
+
 import re
 from copy import deepcopy
 from dataclasses import dataclass
@@ -341,7 +343,10 @@ def check_pair(
         return PairCheck(reason)
     if partition(survivor) != partition(new):
         return PairCheck(SkipReason.NO_PREDECESSOR)
-    if refresh_owed(survivor):
+    if refresh_owed(survivor) and not (
+        processing_hold.enabled()
+        and int(smart_merge_state(survivor).get('delegated_revision') or 0) >= revision(survivor)
+    ):
         return PairCheck(SkipReason.PREDECESSOR_REFRESH_PENDING)
     if has_wake_word(survivor_segments):
         return PairCheck(SkipReason.WAKE_WORD)
@@ -564,6 +569,8 @@ def absorb_payloads(
     # live survivors too: a processor started before this absorb must not write
     # its old transcript or summary over the newly joined occasion.
     survivor_update['sync_content_revision'] = int(survivor.get('sync_content_revision') or 0) + 1
+    if processing_hold.enabled() and (processing_hold.sync_sourced(survivor) or processing_hold.sync_sourced(donor)):
+        survivor_update[processing_hold.FIELD] = processing_hold.activity_patch(survivor, merged_at.timestamp())
     donor_update: dict[str, Any] = {
         'deleted': True,
         # Hide the redirect from discarded == False list indexes, exactly like a
