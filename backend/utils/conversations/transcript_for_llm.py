@@ -58,6 +58,7 @@ class SpeakerCluster:
     names: tuple[str, ...]
     speech_seconds: float
     words: int
+    prompt_key: Optional[str] = None
 
 
 class SpeakerMap(dict[str, Optional[str]]):
@@ -108,6 +109,7 @@ def _speaker_map(
     speaker_map = SpeakerMap(owner_name=owner_name)
     display = display or display_participants(segments, names=people_map, owner_name=user_name)
     tallies: dict[tuple[Optional[str], int], tuple[bool, list[str], float, int]] = {}
+    prompt_keys: dict[tuple[Optional[str], int], set[str]] = {}
     for segment in segments:
         speaker_id = getattr(segment, 'speaker_id', None)
         if speaker_id is None:
@@ -117,6 +119,7 @@ def _speaker_map(
             person_name = None
         prompt_key = display.for_segment(segment).key
         key = (getattr(segment, 'speaker_id_scope', None), speaker_id)
+        prompt_keys.setdefault(key, set()).add(prompt_key)
         owner, names, seconds, words = tallies.get(key, (False, [], 0.0, 0))
         tagged = (person_name or '').strip()
         if not getattr(segment, 'is_user', False) and tagged and tagged not in names:
@@ -137,6 +140,9 @@ def _speaker_map(
             names=tuple(names),
             speech_seconds=seconds,
             words=words,
+            prompt_key=(
+                next(iter(prompt_keys[(scope, speaker_id)])) if len(prompt_keys[(scope, speaker_id)]) == 1 else None
+            ),
         )
         for (scope, speaker_id), (owner, names, seconds, words) in tallies.items()
     )

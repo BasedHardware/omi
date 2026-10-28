@@ -7380,10 +7380,17 @@ no agent tiles. The packet supplies `screen_speaker_bindings` with the speaker k
 name and screen evidence for the notes participant citation. This does not change
 People records, stored speaker labels, or voice identity. Calendar invitees,
 profile pages and legacy screen listings alone cannot authorize this exception.
-Filtered tiles travel in `participant_sources.observed_call_tiles` through the
-calendar upload, source merge and prompt prefix, so the exception does not require
-backend screen-activity sync. Old clients omit it and retain cautious attribution
-unless current in-call OCR independently corroborates a tile.
+Only stored screen-activity rows authorize `participant_sources.observed_call_tiles`:
+create/process and meeting-upload requests strip caller-supplied provenance. The
+resolver discards earlier tile evidence and recomputes it from the current screen
+read. Tile provenance stores names only; meeting GET endpoints omit that internal
+source. Without synced screen evidence, attribution stays anonymous.
+The gate abstains when the roster/calendar has multiple remote humans, including
+namesakes. Duplicate tile labels also abstain. Tile persistence uses the latest
+call window and five minutes of sightings; a name must still appear in the latest
+frame, and a new label cannot lose to an older label's vote count. The captured
+owner's key comes from its owner-marked cluster; conflicting display mappings
+abstain. Both agentic and one-shot packets carry the same explicit binding.
 Both screen extractors exclude all observed app/window titles and browser-tab OCR
 above a Meet address; owner filtering also runs after roster/email extraction.
 The shared call-tile vectors pin the 10-28 incident lists in Python and Swift.

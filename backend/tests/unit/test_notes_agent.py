@@ -1016,3 +1016,35 @@ def test_agent_serving_receives_the_screen_binding_that_its_identity_repair_acce
     (binding,) = packet['screen_speaker_bindings']
     assert binding['speaker'] == 'c1' and binding['name'] == 'Robert Ream'
     assert binding['evidence_kind'] == 'screen' and binding['evidence']
+
+
+def test_capped_agent_screen_read_cannot_authorize_an_outdated_tile(monkeypatch):
+    rows = [
+        dict(
+            timestamp=(START + timedelta(seconds=i)).isoformat(),
+            appName='zoom.us',
+            windowTitle='Zoom Meeting',
+            ocrText='Robert Ream\nmute\nstop video',
+        )
+        for i in range(400)
+    ]
+    monkeypatch.setattr(tools.calendar_db, 'get_meetings_in_time_range', lambda *a, **k: [])
+    monkeypatch.setattr(tools.screen_activity_db, 'get_screen_activity', lambda *a, **k: rows)
+    packet, _ = tools.build_packet(
+        uid=OWNER,
+        conversation_id='capped-screen',
+        started_at=START,
+        finished_at=START + timedelta(minutes=30),
+        timezone_name='UTC',
+        response_language='en',
+        length='LENGTH',
+        transcript_words=0,
+        account_owner_name='David',
+        task_intelligence_capture=False,
+        open_tasks=[],
+        roster=None,
+        owner_names=['David'],
+        background=None,
+        frames=(),
+    )
+    assert packet['call_tile_names'] == []

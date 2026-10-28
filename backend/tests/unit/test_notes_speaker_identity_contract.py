@@ -324,11 +324,11 @@ def test_identity_kill_switch_restores_unrepaired_notes_on_all_paths(monkeypatch
 
 # Exact incident participant lists, synthesized as UI metadata in the shared
 # extractor vectors. No production transcript or screenshot content is used.
-def incident_prefix(*, owner=True, extra_voice=False, desktop=True, scope=None, calendar_context=None):
+def incident_prefix(*, owner=True, extra_voice=False, desktop=True, scope=None, calendar_context=None, roster=None):
     speakers = SpeakerMap({'c0': 'David Zhang' if owner else None, 'c1': None}, owner_name='David Zhang')
     speakers.clusters = (
-        SpeakerCluster(0, None, owner, (), 10, 10),
-        SpeakerCluster(1, scope, False, (), 10, 10),
+        SpeakerCluster(0, None, owner, (), 10, 10, 'c0'),
+        SpeakerCluster(1, scope, False, (), 10, 10, 'c1'),
     )
     if extra_voice:
         speakers['c2'] = None
@@ -342,6 +342,7 @@ def incident_prefix(*, owner=True, extra_voice=False, desktop=True, scope=None, 
         speaker_map=speakers,
         desktop_meeting_capture=desktop,
         calendar_context=calendar_context,
+        roster=roster,
     )
 
 
@@ -480,3 +481,70 @@ def test_legacy_listing_does_not_claim_filtered_call_tile_provenance():
 @pytest.mark.parametrize('names', [['David Zhang'], ['David'], ['Otter Bot'], ['Robert Ream', 'Otter Bot']])
 def test_owner_and_agent_names_never_count_as_the_credible_remote_human(names):
     assert notes_identity(incident_prefix(), {}, {'call_tile_names': names}).screen_bindings == ()
+
+
+@pytest.mark.parametrize(
+    'names', [('Robert Ream', 'Alice Smith'), ('Robert Ream', 'Robert Ream'), ('Robert Ream', 'David Smith')]
+)
+@pytest.mark.parametrize('source', ['roster', 'prefix_roster', 'calendar', 'packet_calendar', 'packet_roster'])
+def test_one_remote_channel_abstains_for_multiple_remote_humans(names, source):
+    roster = MeetingRoster(tuple(RosterEntry(name, None, None, 'human', 'calendar') for name in names), None, False)
+    calendar = CalendarMeetingContext(
+        calendar_event_id='invite',
+        title='Planning',
+        start_time=datetime.now(timezone.utc),
+        duration_minutes=30,
+        participants=[{'name': name} for name in names],
+    )
+    prefix = incident_prefix(
+        calendar_context=calendar if source == 'calendar' else None,
+        roster=roster if source == 'prefix_roster' else None,
+    )
+    packet = {'call_tile_names': ['Robert Ream']}
+    if source == 'packet_calendar':
+        packet['calendar_overlap'] = [{'participants': list(names)}]
+    if source == 'packet_roster':
+        packet['listed_participants'] = [{'name': name, 'kind': 'human'} for name in names]
+    identity = notes_identity(prefix, {'roster': roster} if source == 'roster' else {}, packet)
+    assert identity.screen_bindings == ()
+    assert not identity.supported('Robert Ream', 'c1')
+
+
+def test_invalid_background_tile_does_not_protect_unsupported_first_name_alias():
+    prefix = incident_prefix(desktop=False)
+    identity = notes_identity(prefix, {}, {'call_tile_names': ['Michael Brown']})
+    assert 'Michael Brown' not in identity.meeting_names
+    fixed, _ = repair_identity(submission(), identity)
+    assert 'Michael' not in str(fixed)
+
+
+@pytest.mark.parametrize(
+    'owner_name,remote_name,expected',
+    [
+        (None, 'David Zhang', None),
+        ('Wrong Person', None, None),
+        (None, None, 'c7'),
+        ('David Zhang', None, 'c7'),
+    ],
+)
+def test_owner_key_comes_from_cluster_binding_and_conflicts_abstain(owner_name, remote_name, expected):
+    speakers = SpeakerMap(
+        {'c3': remote_name, 'c7': owner_name},
+        owner_name='David Zhang',
+        clusters=(
+            SpeakerCluster(91, None, False, (), 10, 10, 'c3'),
+            SpeakerCluster(42, None, True, (), 10, 10, 'c7'),
+        ),
+    )
+    prefix = build_conversation_prompt_prefix(
+        conversation_id='owner-key',
+        transcript='[s1 c7] Hello',
+        started_at=datetime.now(timezone.utc),
+        timezone_name='UTC',
+        language_code='en',
+        speaker_map=speakers,
+        desktop_meeting_capture=True,
+    )
+    assert prefix.owner_call_speaker == expected
+    identity = notes_identity(prefix, {}, {'call_tile_names': ['Robert Ream']})
+    assert identity.screen_bindings == ((('c3', 'Robert Ream'),) if expected else ())

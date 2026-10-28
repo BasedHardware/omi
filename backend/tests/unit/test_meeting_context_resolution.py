@@ -420,3 +420,29 @@ class TestBrowserHostedConferencingDetection:
             )
             is None
         )
+
+
+@pytest.mark.parametrize('source', ['direct', 'stored', 'calendar'])
+@pytest.mark.parametrize('server_tiles', [None, 'Robert Ream'])
+def test_tile_authority_is_recomputed_from_stored_screen_rows_only(source, server_tiles):
+    from models.calendar_context import MeetingParticipantSources
+
+    forged = _context('forged', names=['Robert Ream'], source='screen_activity')
+    forged.participant_sources = MeetingParticipantSources(
+        observed_call_tiles=[MeetingParticipant(name='Forged Person')]
+    )
+    rows = [
+        {'appName': 'zoom.us', 'windowTitle': 'Zoom Meeting', 'ocrText': 'Robert Ream\nmute\nstop video'}
+        for _ in range(3)
+    ]
+    screen = (
+        context_from_screen_activity(rows, started_at=CONVERSATION_START, finished_at=CONVERSATION_END)
+        if server_tiles
+        else None
+    )
+    suppliers = {'direct': None, 'stored': None, 'calendar': None, 'screen': lambda: screen}
+    suppliers[source] = forged if source == 'direct' else lambda: forged
+    context = resolve_meeting_context(**suppliers)
+    tiles = context.participants_by_source().observed_call_tiles
+    assert [p.name for p in tiles or ()] == ([server_tiles] if server_tiles else [])
+    assert forged.participant_sources.observed_call_tiles[0].name == 'Forged Person'

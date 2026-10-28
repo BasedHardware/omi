@@ -64,6 +64,7 @@ class ConversationPromptPrefix:
     owner_call_speaker: Optional[str] = None
     call_tile_names: tuple[str, ...] = ()
     call_tile_agent_names: tuple[str, ...] = ()
+    call_identity_ambiguous: bool = False
 
     @property
     def cache_key(self) -> str:
@@ -368,13 +369,45 @@ def build_conversation_prompt_prefix(
         and len(source_speaker_names) == 2
         and 'others' not in source_speaker_names
     ):
-        owner_keys = [
-            key
-            for key, name in source_speaker_names.items()
-            if name and name.casefold() == (account_owner_name or 'You').casefold()
-        ]
-        if len(owner_keys) == 1:
-            owner_call_speaker = owner_keys[0]
+        owner_cluster = next(cluster for cluster in clusters if cluster.owner)
+        keys = [cluster.prompt_key for cluster in clusters]
+        owner_key = owner_cluster.prompt_key
+        owner_labels = {(account_owner_name or 'You').casefold(), 'you'}
+        owner_display_name = source_speaker_names.get(owner_key)
+        if (
+            set(keys) == set(source_speaker_names)
+            and owner_key in source_speaker_names
+            and (not owner_display_name or owner_display_name.casefold() in owner_labels)
+            and not any(
+                name and name.casefold() in owner_labels
+                for key, name in source_speaker_names.items()
+                if key != owner_key
+            )
+        ):
+            owner_call_speaker = owner_key
+
+    def remote_human(name: Optional[str]) -> bool:
+        return (
+            not name
+            or not name.strip()
+            or (
+                not looks_like_ai_agent_name(name)
+                and name.strip().casefold() not in {(account_owner_name or 'You').strip().casefold(), 'you'}
+            )
+        )
+
+    # Count people before names are deduplicated: namesakes can share a channel.
+    ambiguous = bool(roster and sum(entry.kind == 'human' for entry in roster.entries) > 1)
+    if calendar_context:
+        sources = calendar_context.participants_by_source()
+        ambiguous = ambiguous or any(
+            sum(remote_human(p.name) for p in participants or ()) > 1
+            for participants in (
+                calendar_context.participants,
+                sources.expected_calendar,
+                sources.observed_screen_listing,
+            )
+        )
     observed_tiles = calendar_context.participants_by_source().observed_call_tiles if calendar_context else None
     return ConversationPromptPrefix(
         conversation_id=conversation_id,
@@ -395,6 +428,7 @@ def build_conversation_prompt_prefix(
         ),
         transcript_body=transcript,
         owner_call_speaker=owner_call_speaker,
+        call_identity_ambiguous=ambiguous,
         call_tile_names=tuple(p.name for p in observed_tiles or () if p.name and not looks_like_ai_agent_name(p.name)),
         call_tile_agent_names=tuple(
             p.name for p in observed_tiles or () if p.name and looks_like_ai_agent_name(p.name)

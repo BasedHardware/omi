@@ -376,8 +376,10 @@ def build_packet(
             for row in rows or []
             if isinstance(row, dict) and (at := _as_utc(row.get('timestamp'))) is not None and start <= at <= end
         ]
-        call_tiles = call_tile_names(in_call_rows, owner_names=owner_names)
-        call_agents = call_tile_agent_names(in_call_rows, owner_names=owner_names)
+        # A full ascending page cannot prove we saw the latest label.
+        if len(rows or []) < 400:
+            call_tiles = call_tile_names(in_call_rows, owner_names=owner_names, current_only=True)
+            call_agents = call_tile_agent_names(in_call_rows, owner_names=owner_names, current_only=True)
         windows = _top_windows(rows or [])
         leads = screen_people_leads(rows or [], started_at=start, finished_at=end, owner_names=owner_names)
     except Exception as error:  # noqa: BLE001
