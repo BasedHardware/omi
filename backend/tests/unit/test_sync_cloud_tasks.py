@@ -7,6 +7,7 @@ utils/cloud_tasks.py, and the structural contract of the /v2/sync-jobs/run
 handler in routers/sync.py.
 """
 
+from utils.sync import size_telemetry  # noqa: F401 - retain real scoped telemetry across legacy package stubs
 from utils.other import owned_paths  # noqa: F401 - retain real scratch guard across legacy package stubs
 from models import conversation_continuity  # noqa: F401 - retain pure policy across legacy package stubs
 from utils import dream_vocabulary  # noqa: F401 - retain shared keyterms across legacy package stubs
@@ -686,8 +687,8 @@ class TestFinalizationDiagnostics:
             )
 
         records = [r.getMessage() for r in caplog.records if 'event=sync_transcription_job_finalized' in r.getMessage()]
-        assert f'job_ref={uuid.UUID(job_id).hex}' in records[0]
-        assert f'attempt_ref={attempt_ref}' in records[0]
+        assert f'job_ref={sync_jobs.bounded_correlation_ref(job_id)}' in records[0]
+        assert f'attempt_ref={sync_jobs.bounded_correlation_ref(attempt_ref)}' in records[0]
         assert 'failure_phase=provider_call' in records[0]
         assert 'failure_class=TimeoutError' in records[0]
         assert 'failure_subtype=provenance_mismatch' in records[0]
@@ -3839,7 +3840,11 @@ async def test_oversized_backfill_upload_is_rejected_before_staging_or_custody_t
         )
     )
     try:
-        uploads = [UploadFile(filename='test.opus', file=BytesIO(b'')) for _ in range(MAX_BACKFILL_FILES + 1)]
+        # Admission limits apply to audio payloads; empty clips now complete as no-ops.
+        uploads = [
+            UploadFile(filename='test.opus', file=BytesIO(b'\x01\x00\x00\x00\x42'))
+            for _ in range(MAX_BACKFILL_FILES + 1)
+        ]
         with pytest.raises(module.HTTPException) as error:
             await module.sync_local_files_v2(files=uploads, uid='test-uid')
         assert error.value.status_code == 413
@@ -3897,7 +3902,11 @@ async def test_over_cap_upload_in_the_final_fresh_lane_is_not_rejected_by_the_ba
         module.classify_sync_lane = MagicMock(return_value=_decision(module, module.SyncLane.FRESH))
     module.validate_backfill_uploads = MagicMock()
     try:
-        uploads = [UploadFile(filename='test.opus', file=BytesIO(b'')) for _ in range(MAX_BACKFILL_FILES + 1)]
+        # Admission limits apply to audio payloads; empty clips now complete as no-ops.
+        uploads = [
+            UploadFile(filename='test.opus', file=BytesIO(b'\x01\x00\x00\x00\x42'))
+            for _ in range(MAX_BACKFILL_FILES + 1)
+        ]
         try:
             await module.sync_local_files_v2(files=uploads, uid='test-uid')
         except module.HTTPException as error:
@@ -3922,7 +3931,11 @@ async def test_v1_over_limit_backfill_upload_keeps_the_retryable_503_not_a_413()
     )
     module.get_sync_ledger_fence_mode = MagicMock(return_value=module.SyncLedgerFenceMode.ACTIVE)
     try:
-        uploads = [UploadFile(filename='test.opus', file=BytesIO(b'')) for _ in range(MAX_BACKFILL_FILES + 1)]
+        # Admission limits apply to audio payloads; empty clips now complete as no-ops.
+        uploads = [
+            UploadFile(filename='test.opus', file=BytesIO(b'\x01\x00\x00\x00\x42'))
+            for _ in range(MAX_BACKFILL_FILES + 1)
+        ]
         request = MagicMock()
         request.headers = {}
         response = await module.sync_local_files(
@@ -4099,7 +4112,9 @@ def test_legacy_fresh_http_multipart_measures_bytes_and_returns_lane(monkeypatch
         async def upload(files: list[UploadFile] = File(...)):
             return await module.sync_local_files_v2(files=files, uid='test-uid')
 
-        response = TestClient(app).post('/v2/sync-local-files', files={'files': ('recent.bin', b'abc', 'audio/opus')})
+        response = TestClient(app).post(
+            '/v2/sync-local-files', files={'files': ('recent.bin', b'\x01\x00\x00\x00\x42', 'audio/opus')}
+        )
         assert response.status_code == 202
         assert response.json()['lane'] == expected
         assert module.enqueue_sync_job.call_args.args[0]['lane'] == expected
@@ -4145,7 +4160,7 @@ async def test_fresh_only_refusal_demotes_legacy_but_keeps_device_bound_429(monk
     module.logger = MagicMock()
     module.start_background_task = MagicMock()
     try:
-        upload = UploadFile(filename='recent.bin', file=BytesIO(b'abc'), size=3)
+        upload = UploadFile(filename='recent.bin', file=BytesIO(b'\x01\x00\x00\x00\x42'), size=5)
         response = await module.sync_local_files_v2(files=[upload], uid='test-uid')
         if trust == 'legacy':
             assert response.status_code == 202
@@ -4215,7 +4230,7 @@ async def test_legacy_fresh_refusal_preserves_backfill_pause_instead_of_429(monk
     module._fair_use_restriction_response = AsyncMock()
     try:
         response = await module.sync_local_files_v2(
-            files=[UploadFile(filename='recent.bin', file=BytesIO(b'abc'), size=3)], uid='test-uid'
+            files=[UploadFile(filename='recent.bin', file=BytesIO(b'\x01\x00\x00\x00\x42'), size=5)], uid='test-uid'
         )
         assert response.status_code == 503
         assert json.loads(response.body)['code'] == 'backfill_capacity'

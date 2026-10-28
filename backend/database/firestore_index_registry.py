@@ -13,6 +13,7 @@ from database.mcp_read_queries import (
 )
 from database.review_queries import REVIEW_QUERY_SPECS
 from database.sync_pipeline_indexes import SYNC_PIPELINE_INDEX_REQUIREMENTS
+from database.batch_pipeline_indexes import BATCH_PIPELINE_INDEX_REQUIREMENTS
 from database.messaging_queries import MESSAGING_INDEX_REQUIREMENTS, MESSAGING_FIELD_REQUIREMENTS
 from .firestore_query_types import (
     FieldIndexRequirement,
@@ -38,24 +39,7 @@ def _contains(field_path: str) -> FirestoreIndexField:
 # These explicit requirements preserve the current deployed index set while
 # callers migrate one compound serving query at a time into QUERY_SPECS.
 INDEX_ONLY_REQUIREMENTS = (
-    *(
-        FirestoreIndexRequirement(
-            f'{stage}_batch_ramp_owner_load',
-            f'batch_pipeline_{stage}_jobs',
-            'COLLECTION',
-            (_asc('owner_id'), _asc('enqueued_at'), _asc('__name__')),
-        )
-        for stage in ('prod', 'dev')
-    ),
-    *(
-        FirestoreIndexRequirement(
-            f'{stage}_batch_ready_predecessor',
-            f'batch_pipeline_{stage}_jobs',
-            'COLLECTION',
-            (_asc('owner_key'), _asc('priority'), _asc('state'), _asc('next'), _asc('__name__')),
-        )
-        for stage in ('prod', 'dev')
-    ),
+    *BATCH_PIPELINE_INDEX_REQUIREMENTS,
     *SYNC_PIPELINE_INDEX_REQUIREMENTS,
     *MESSAGING_INDEX_REQUIREMENTS,
     FirestoreIndexRequirement(
@@ -1935,6 +1919,24 @@ CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('discarded'), _asc('source'), _asc('status'), _desc('created_at'), _desc('__name__')),
 )
 
+CONVERSATIONS_SMART_MERGE_PARTITION_QUERY = FirestoreQuerySpec(
+    identifier='conversations_smart_merge_device_preceding',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(
+        *CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY.filters,
+        FirestoreQueryFilter('client_device_id', '==', 'client_device_id'),
+    ),
+    index_fields=(
+        _asc('discarded'),
+        _asc('source'),
+        _asc('status'),
+        _asc('client_device_id'),
+        _desc('created_at'),
+        _desc('__name__'),
+    ),
+)
+
 
 CONVERSATION_PHOTOS_NAME_RANGE_QUERY = FirestoreQuerySpec(
     identifier='conversation_photos_name_range_export',
@@ -2028,6 +2030,7 @@ QUERY_SPECS = (
     DAY3_REENGAGEMENT_RETURNED_CONVERSATIONS_QUERY,
     DAILY_SUMMARY_RECIPIENTS_QUERY,
     CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY,
+    CONVERSATIONS_SMART_MERGE_PARTITION_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)

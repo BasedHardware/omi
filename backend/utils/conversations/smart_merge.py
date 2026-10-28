@@ -492,6 +492,7 @@ def _decide(
 def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMergeMode, owner: str) -> bool:
     merged_at = datetime.now(timezone.utc)
     flattened_count = 0
+    size_suffix = ''
     admission_path = plan.admission_path
 
     def payloads(
@@ -548,6 +549,8 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
         )
         outcome, reason, audit = result.outcome, result.reason, result.audit
         flattened_count = result.flattened_ancestor_count
+        if result.projected_size_bucket is not None:
+            size_suffix = f' projected_size_bucket={result.projected_size_bucket}'
         if smart_merge_flatten_enabled():
             if outcome == 'absorbed':
                 record_smart_merge_flatten('absorbed', 'none')
@@ -584,7 +587,7 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
             conversation_id,
             plan.survivor_id,
             flattened_count,
-            f' gap_path={admission_path}' if admission_path else '',
+            (f' gap_path={admission_path}' if admission_path else '') + size_suffix,
         )
         return False
 
@@ -610,7 +613,7 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
         conversation_id,
         plan.survivor_id,
         flattened_count,
-        f' gap_path={admission_path}' if admission_path else '',
+        (f' gap_path={admission_path}' if admission_path else '') + size_suffix,
     )
     finish_absorb(uid, conversation_id, owner=owner)
     return True

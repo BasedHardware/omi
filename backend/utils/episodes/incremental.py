@@ -105,6 +105,7 @@ class MomentText:
     text: str
     words: int
     voice_order: tuple[str, ...] = ()
+    truncated: bool = False
 
 
 def _resolve_owner_name(uid: str | None) -> str | None:
@@ -137,8 +138,10 @@ def render_moment(
         text, words = render_segments(segments, evidence=evidence, owner_name=owner)
         shadow('moment_render', 'agree' if text == legacy[0] else 'disagree', rendered_chars=len(text), words=words)
         if serving:
-            return MomentText(_bounded_moment(text), words, display.voice_order)
-    return MomentText(_bounded_moment(legacy[0]), legacy[1], display.voice_order)
+            return MomentText(_bounded_moment(text), words, display.voice_order, len(text) > MOMENT_TEXT_MAX_CHARS)
+    return MomentText(
+        _bounded_moment(legacy[0]), legacy[1], display.voice_order, len(legacy[0]) > MOMENT_TEXT_MAX_CHARS
+    )
 
 
 def _legacy_moment(segments: Sequence[Mapping[str, Any]], display: Any) -> tuple[str, int]:

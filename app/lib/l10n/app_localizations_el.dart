@@ -13713,32 +13713,6 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals καθ\' οδόν';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'Μεταφόρτωση: $count';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'Σχεδόν έτοιμες: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count χρειάζονται προσοχή',
-      one: '1 χρειάζεται προσοχή',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Δεν υπάρχει δραστηριότητα ακόμα';
 
   @override
@@ -14527,13 +14501,7 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Άνοιγμα προηγούμενου επεισοδίου';
-
-  @override
   String get episodeNotesSoon => 'Οι σημειώσεις εμφανίζονται μετά τα πρώτα λεπτά συζήτησης.';
-
-  @override
-  String get episodeOpenAll => 'Άνοιγμα όλων';
 
   @override
   String get episodeWrapUpNow => 'Ολοκλήρωση τώρα';
@@ -14672,22 +14640,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get othersSpeakerLabel => 'Άλλοι';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Ολοκληρώθηκε';
@@ -14717,4 +14673,88 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'Οι μεταφορτώσεις τέθηκαν προσωρινά σε παύση — θα συνεχιστούν αυτόματα';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Συνέχεια «$title»';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· από $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Οι σημειώσεις ξεκινούν όταν φτάσει η τελική απομαγνητοφώνηση.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Συντάσσονται στο τηλέφωνό σας καθώς μιλάτε. Οι πλήρεις σημειώσεις έρχονται με την τελική απομαγνητοφώνηση.';
+
+  @override
+  String get episodeOnThisPhone => 'Σε αυτό το τηλέφωνο';
+
+  @override
+  String get episodeOpenTranscript => 'Άνοιγμα απομαγνητοφώνησης';
+
+  @override
+  String get liveCardTitle => 'Ζωντανά';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'Η τελική απομαγνητοφώνηση υστερεί περίπου $duration';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'Η τελική απομαγνητοφώνηση ενημερώνεται';
+
+  @override
+  String get livePreviewNoEngineBody => 'Τα λόγια σας εμφανίζονται εδώ ένα έως δύο λεπτά μετά τα πείτε.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Ασφαλή εγγραφή';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'Ζωντανά σε αυτό το τηλέφωνο';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Ενεργοποίηση ζωντανού κειμένου';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'στο δρόμο';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'μόλις επανέλθει η σύνδεση';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return 'Απομένουν $duration';
+  }
+
+  @override
+  String get onTheWayUploadsByItself =>
+      'Μεταφορτώνεται από μόνο του. Οι συνομιλίες συμπληρώνονται μόλις φτάσουν οι ηχογραφήσεις.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Μεταφορτώνεται από μόνο του μόλις επανέλθει η σύνδεσή σας. Οι συνομιλίες συμπληρώνονται μόλις φτάσουν οι ηχογραφήσεις.';
+
+  @override
+  String get onTheWayDayUploading => 'Γίνεται μεταφόρτωση';
+
+  @override
+  String get onTheWayDayNext => 'Ακολουθεί';
+
+  @override
+  String get onTheWayDayQueued => 'Σε αναμονή';
+
+  @override
+  String get onTheWayNoDate => 'Χωρίς ημερομηνία';
+
+  @override
+  String get onTheWayFootnote =>
+      'Οι ηχογραφήσεις που αποτυγχάνουν συνεχίζουν να δοκιμάζουν στο παρασκήνιο. Οτιδήποτε δεν μπορούμε να μεταγράψουμε αναφέρεται αυτόματα σε εμάς.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Λεπτομέρειες για την υποστήριξη';
 }

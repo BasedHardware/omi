@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from utils.observability.sync_phases import sync_phase
 from config.batch_pipeline import live_record_enabled_for, record_capture_eligible
+from config import server_batch
 from config.policy import resolve_batch_policy
 from database.batch_ramp import ramp_admission_policy
 
@@ -107,12 +108,28 @@ def _require_status(data: Mapping[str, Any], *allowed: ConversationStatus) -> No
 
 
 @set_data_protection_level(data_arg_name='conversation_data')
-def _reserve_batch_live_capture(uid: str, conversation_data: dict[str, Any]) -> None:
+def _reserve_batch_live_capture(
+    uid: str,
+    conversation_data: dict[str, Any],
+    *,
+    server_batch_requested: bool = False,
+    server_batch_continuation: bool = False,
+) -> None:
     # Resolve privacy at the existing write boundary before deciding ownership.
     # The downstream DB decorator sees the resolved value and performs no second lookup.
     if conversation_data.get('record_lane_owner'):
         return
     policy = resolve_batch_policy(uid)
+    if server_batch_requested and server_batch.eligible(
+        conversation_data, uid, batch_admitted=policy.batch_enabled or server_batch_continuation
+    ):
+        conversation_data['record_lane_owner'] = 'batch_live_v1'
+        conversation_data['server_batch_audio_received'] = False
+        conversation_data['external_data'] = {
+            **(conversation_data.get('external_data') or {}),
+            server_batch.MARKER: True,
+        }
+        return
     if (
         record_capture_eligible(uid, conversation_data, policy=policy)
         and ramp_admission_policy(uid, policy).live_record_enabled
@@ -120,10 +137,22 @@ def _reserve_batch_live_capture(uid: str, conversation_data: dict[str, Any]) -> 
         conversation_data['record_lane_owner'] = 'batch_live_v1'
 
 
-def create_in_progress_conversation(uid: str, conversation_data: dict[str, Any], *, idempotent: bool = False) -> bool:
+def create_in_progress_conversation(
+    uid: str,
+    conversation_data: dict[str, Any],
+    *,
+    idempotent: bool = False,
+    server_batch_requested: bool = False,
+    server_batch_continuation: bool = False,
+) -> bool:
     """Create the one durable in-progress resource for a recording generation."""
     _require_status(conversation_data, ConversationStatus.in_progress)
-    if live_record_enabled_for(uid):
+    if server_batch_requested:
+        # The decorated reservation resolves a missing/None privacy level first.
+        _reserve_batch_live_capture(
+            uid, conversation_data, server_batch_requested=True, server_batch_continuation=server_batch_continuation
+        )
+    elif live_record_enabled_for(uid):
         _reserve_batch_live_capture(uid, conversation_data)
     if idempotent:
         return conversations_db.create_conversation_if_absent_with_lifecycle(uid, conversation_data)
@@ -176,7 +205,8 @@ def ingest_sync_conversation(
     assigned, created, survivors = conversations_db.assign_sync_conversation(
         uid, incoming, candidate_id=candidate_id, target_id=target_id, **checkpoint_hooks
     )
-    record_sync_intake_outcome(created=created)
+    size_bucket = assigned.pop('_sync_projected_size_bucket', None)
+    record_sync_intake_outcome(created=created, projected_size_bucket=size_bucket)
     if created:
         observe_completed_conversation_shape(uid, assigned)
     return assigned, created, survivors
@@ -283,6 +313,26 @@ def ensure_processing(uid: str, conversation_id: str) -> bool:
     if status in {ConversationStatus.completed.value, ConversationStatus.failed.value}:
         return False
     return admit_processing(uid, conversation_id)
+
+
+def complete_server_batch_capture(uid: str, conversation_id: str, capture: Mapping[str, Any]) -> bool:
+    """Close only a reserved raw capture, after its batch obligation was written."""
+    if not server_batch.owned(capture):
+        return False
+    return conversations_db.claim_conversation_status(
+        uid,
+        conversation_id,
+        ConversationStatus.processing,
+        ConversationStatus.completed,
+        expected_fields={
+            'record_lane_owner': 'batch_live_v1',
+            'external_data': capture.get('external_data'),
+            'private_cloud_sync_enabled': True,
+            'deleted': False,
+            'is_locked': False,
+            'uses_custom_stt': False,
+        },
+    )
 
 
 def complete(uid: str, conversation_id: str) -> bool:
@@ -726,6 +776,7 @@ def delete_empty_recording_conversation(
     recovery_cutoff: datetime | None = None,
     require_expired_recording_lease: bool = False,
     firestore_client: Any = None,
+    allow_empty_server_batch: bool = False,
 ) -> bool:
     """Delete only a still-empty listen generation and tombstone it atomically."""
     deleted_conversation: dict[str, Any] = {}
@@ -734,6 +785,8 @@ def delete_empty_recording_conversation(
         recovery_guards = dict(recovery_cutoff=recovery_cutoff, require_expired_recording_lease=True)
     if firestore_client is not None:
         recovery_guards['firestore_client'] = firestore_client
+    if allow_empty_server_batch:
+        recovery_guards['allow_empty_server_batch'] = True
     deleted = recording_sessions_db.tombstone_and_delete_empty_conversation(
         uid,
         conversation_id,
@@ -775,6 +828,10 @@ def _discard_unreferenced_audio(
     still be reprocessed or restored. Only a generation that never registered any
     audio can be leaving chunks nothing will ever reference again (#11742).
     """
+    if server_batch.owned(deleted_conversation):
+        # Empty/zero-sample captures can still have immutable original receipts.
+        # Removing the display row must never sweep their only retained bytes.
+        return
     if deleted_conversation.get('audio_files'):
         logger.info(
             'Retained registered audio for empty conversation uid=%s conversation_id=%s',

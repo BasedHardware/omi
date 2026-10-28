@@ -723,7 +723,7 @@ def test_staged_desktop_production_controls_render_without_runtime_checkout(tmp_
     assert result.stdout == ''
     workflow_outputs = renderer_output.read_text(encoding='utf-8')
     assert (
-        'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"backfill_task_reads":100\\,"batch_privacy_memoize":100\\,"candidates_page":100\\,"canonical_statuses_dedupe":100\\,"deletion_marker_cache":100\\,"finjob_candidate_queries":5\\,"historical_scan_memo":100\\,"ledger_purge_coalesce":100\\,"mcp_conversation_cards_cache":100\\,"memory_list_index_window":100\\,"people_scan_dedupe":0\\,"queue_age_sample_budget":100\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":100\\,"subscription_cache":100\\,"usage_month_cache":100}\n'
+        'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"backfill_task_reads":100\\,"batch_privacy_memoize":0\\,"candidates_page":100\\,"canonical_statuses_dedupe":100\\,"deletion_marker_cache":100\\,"finjob_candidate_queries":5\\,"historical_scan_memo":100\\,"ledger_purge_coalesce":100\\,"mcp_conversation_cards_cache":100\\,"memory_list_index_window":0\\,"people_scan_dedupe":100\\,"queue_age_sample_budget":100\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":100\\,"subscription_cache":100\\,"usage_month_cache":100\\,"usage_month_total":0}\n'
         in workflow_outputs
     )
     assert workflow_outputs.endswith('__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n')
@@ -1307,3 +1307,60 @@ def test_full_render_refuses_to_emit_when_a_service_key_would_be_removed(monkeyp
     with pytest.raises(ValueError, match='Cloud Run service backend env does not render every manifest key'):
         _MODULE['main']()
     assert _read_workflow_outputs() == ''
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(environment):
+    """A base edit must neither enable unqualified readers nor miss CR overrides."""
+    config = _MANIFEST['environments'][environment]
+    cloud_run = config['cloud_run']['services']
+    assert set(cloud_run) == {'backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'}
+    expected = {
+        'action_items_page': 100,
+        'backfill_task_reads': 100,
+        'batch_privacy_memoize': 0,
+        'candidates_page': 100,
+        'canonical_statuses_dedupe': 100,
+        'deletion_marker_cache': 100,
+        'finjob_candidate_queries': 5,
+        'historical_scan_memo': 100,
+        'ledger_purge_coalesce': 100,
+        'mcp_conversation_cards_cache': 100,
+        'memory_list_index_window': 0,
+        'people_scan_dedupe': 100,
+        'queue_age_sample_budget': 100,
+        'request_read_dedupe': 100,
+        'serving_config_cache': 100,
+        'singleton_loops': 100,
+        'subscription_cache': 100,
+        'usage_month_cache': 100,
+        'usage_month_total': 0,
+    }
+    hosts = [(f'gke/{name}', config['gke'][name]['env']) for name in ('backend-listen', 'pusher')]
+    hosts += [('desktop', config['desktop_backend']['env'])]
+    hosts += [(f'cloud_run/{name}', host['env']) for name, host in cloud_run.items()]
+    hosts += [(f'job/{name}', host['env']) for name, host in config['cloud_run']['jobs'].items()]
+    for name, env in hosts:
+        assert 'FIRESTORE_READ_LEVERS' in env, name
+        enabled = environment == 'prod' and name.startswith('cloud_run/')
+        literal = env['FIRESTORE_READ_LEVERS']
+        assert set(literal) == {'value', 'category'}, name
+        wanted = {**expected, 'usage_month_total': 100 if enabled else 0}
+        assert json.loads(literal['value']) == wanted, name
+        epoch = 'c2fs_20261026_r1' if enabled else 'v1'
+        assert env['FSR_USAGE_MONTH_TOTAL_EPOCH']['value'] == epoch, name
+        if name.startswith('cloud_run/'):
+            rendered = {
+                entry['name']: entry.get('value')
+                for entry in _MODULE['_render_env_entries'](
+                    {key: env[key] for key in ('FIRESTORE_READ_LEVERS', 'FSR_USAGE_MONTH_TOTAL_EPOCH')}
+                )
+            }
+            assert json.loads(rendered['FIRESTORE_READ_LEVERS']) == wanted, name
+            assert rendered['FSR_USAGE_MONTH_TOTAL_EPOCH'] == epoch, name
+    for chart in ('backend-listen', 'pusher'):
+        values_path = _SCRIPT.parents[1] / 'charts' / chart / f'{environment}_omi_{chart.replace("-", "_")}_values.yaml'
+        values = yaml.safe_load(values_path.read_text())
+        chart_env = {entry['name']: entry.get('value') for entry in values['env']}
+        assert json.loads(chart_env['FIRESTORE_READ_LEVERS']) == expected
+        assert chart_env['FSR_USAGE_MONTH_TOTAL_EPOCH'] == 'v1'

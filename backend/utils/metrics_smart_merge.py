@@ -54,6 +54,7 @@ CONVERSATION_SMART_MERGE_REASONS = frozenset(
         'jev_same',
         'jev_different',
         'absorbed',
+        'size_cap_stop',
         'survivor_changed',
         'error',
         'flatten_ancestor_invalid',

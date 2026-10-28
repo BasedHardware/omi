@@ -13697,32 +13697,6 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals en camí';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return '$count pujant';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'Gairebé a punt: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count requereixen atenció',
-      one: '1 requereix atenció',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'Encara no hi ha activitat';
 
   @override
@@ -14505,13 +14479,7 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'Obre l’episodi anterior';
-
-  @override
   String get episodeNotesSoon => 'Les notes apareixen després dels primers minuts de conversa.';
-
-  @override
-  String get episodeOpenAll => 'Obre-ho tot';
 
   @override
   String get episodeWrapUpNow => 'Tanca ara';
@@ -14650,22 +14618,10 @@ class AppLocalizationsCa extends AppLocalizations {
   String get othersSpeakerLabel => 'Altres';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'Fet';
@@ -14695,4 +14651,88 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'Les pujades estan en pausa un moment — es reprendran automàticament';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'Continua «$title»';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· des de $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'Les notes comencen quan arriba la transcripció final.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'Redactades al teu telèfon mentre parles. Les notes completes arriben amb la transcripció final.';
+
+  @override
+  String get episodeOnThisPhone => 'En aquest telèfon';
+
+  @override
+  String get episodeOpenTranscript => 'Obre la transcripció';
+
+  @override
+  String get liveCardTitle => 'En directe';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'La transcripció final va amb uns $duration de retard';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'La transcripció final s’està posant al dia';
+
+  @override
+  String get livePreviewNoEngineBody => 'Les teves paraules apareixen aquí un o dos minuts després de dir-les.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'Enregistrant de forma segura';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'En directe en aquest telèfon';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'Activa el text en directe';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'en camí';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'quan hi hagi connexió';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return 'Falten $duration per pujar';
+  }
+
+  @override
+  String get onTheWayUploadsByItself =>
+      'Es puja automàticament. Les converses es van creant a mesura que arriben les gravacions.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'Es puja automàticament quan torneu a tenir connexió. Les converses es van creant a mesura que arriben les gravacions.';
+
+  @override
+  String get onTheWayDayUploading => 'S\'està pujant';
+
+  @override
+  String get onTheWayDayNext => 'Següents';
+
+  @override
+  String get onTheWayDayQueued => 'A la cua';
+
+  @override
+  String get onTheWayNoDate => 'Sense data';
+
+  @override
+  String get onTheWayFootnote =>
+      'Els enregistraments que fallin es tornen a provar en segon pla. Tot allò que no puguem transcriure se\'ns notifica automàticament.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'Detalls per al suport';
 }

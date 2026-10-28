@@ -43,6 +43,7 @@ class Store(Protocol):
     def due(self, state: str, now: float, limit: int) -> list[str]: ...
     def oldest(self, priority: int, *, ready_only: bool) -> float | None: ...
     def oldest_retry(self, priority: int) -> float | None: ...
+    def ready_for_capacity(self, priority: int, now: float) -> int: ...
     def control_candidate(self, priority: int, pool: str, now: float) -> str | None: ...
     def quarantine_fenced(self, segment_id: str, now: float) -> bool: ...
     def longest_ready_pending(self, owner_key: str) -> dict | None: ...
@@ -188,6 +189,9 @@ class FirestoreStore:
 
     def oldest(self, priority: int, *, ready_only: bool = False) -> float | None:
         return oldest(self.client, self.namespace, priority, ready_only=ready_only)
+
+    def ready_for_capacity(self, priority: int, now: float) -> int:
+        return ready_for_capacity(self.client, self.namespace, priority, now)
 
     def control_candidate(self, priority: int, pool: str, now: float) -> str | None:
         return control_candidate(self.client, self.namespace, priority, pool, now)
@@ -416,6 +420,34 @@ def is_allowance_policy_hold(job: dict[str, Any]) -> bool:
     if not decision:
         return (job.get('last_policy_hold') or {}).get('reason') == 'allowance_exhausted'
     return decision.get('outcome') == 'held' and decision.get('reason') == 'allowance_exhausted'
+
+
+def ready_for_capacity(client: Any, namespace: str, priority: int, now: float) -> int:
+    """Count work awaiting a first/re-authorized attempt, never held legacy debt.
+
+    New admission explicitly records unattempted; existing workers already
+    replace it with allowed/held or clear it on an unevaluated refusal. Reusing
+    that authoritative state avoids a new eligibility bit that old workers
+    would fail to clear during a mixed-version roll. Unmarked legacy jobs remain
+    durable/drainable but cannot buy GPUs. This hint never grants paid compute.
+    """
+    query = (
+        client.collection(f'{namespace}_jobs')
+        .where('priority', '==', priority)
+        .where('state', '==', 'ready')
+        .where('merge_pending', '==', True)
+        .where('compute_decision.outcome', 'in', ['unattempted', 'allowed'])
+        .where('available_at', '<=', now)
+    )
+    count = query.count().get()[0][0].value
+    # The pinned SDK decodes integer_value=0 through ``integer or double``,
+    # yielding 0.0. Preserve that real empty result; do not coerce missing,
+    # fractional, negative or otherwise malformed responses into capacity.
+    if type(count) is float and count == 0.0:
+        count = 0
+    if type(count) is not int or count < 0:
+        raise ValueError('nonnegative integer capacity count required')
+    return count
 
 
 def oldest(client: Any, namespace: str, priority: int, *, ready_only: bool = False) -> float | None:

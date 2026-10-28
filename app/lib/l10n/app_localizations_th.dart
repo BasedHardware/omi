@@ -13561,32 +13561,6 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals กำลังมา';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'กำลังอัปโหลด $count';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'ใกล้เสร็จแล้ว $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ต้องการความสนใจ $count',
-      one: 'ต้องการความสนใจ 1',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'ยังไม่มีกิจกรรม';
 
   @override
@@ -14360,13 +14334,7 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'เปิดตอนก่อนหน้า';
-
-  @override
   String get episodeNotesSoon => 'บันทึกจะแสดงหลังจากพูดคุยไปสองสามนาทีแรก';
-
-  @override
-  String get episodeOpenAll => 'เปิดทั้งหมด';
 
   @override
   String get episodeWrapUpNow => 'สรุปตอนนี้';
@@ -14504,22 +14472,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String get othersSpeakerLabel => 'คนอื่น ๆ';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'เสร็จแล้ว';
@@ -14549,4 +14505,87 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'การอัปโหลดหยุดชั่วคราว — จะดำเนินต่อโดยอัตโนมัติ';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'ต่อจาก “$title”';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· ตั้งแต่ $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'โน้ตจะเริ่มเมื่อถอดความฉบับสุดท้ายมาถึง';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'ถอดและร่างไว้บนมือถือของคุณขณะพูด โน้ตฉบับเต็มจะมาพร้อมกับถอดความฉบับสุดท้าย';
+
+  @override
+  String get episodeOnThisPhone => 'บนเครื่องนี้';
+
+  @override
+  String get episodeOpenTranscript => 'เปิดถอดความ';
+
+  @override
+  String get liveCardTitle => 'แสดงสด';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'ถอดความฉบับสุดท้ายตามหลังอยู่ประมาณ $duration';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'ถอดความฉบับสุดท้ายกำลังตามมา';
+
+  @override
+  String get livePreviewNoEngineBody => 'คำของคุณจะปรากฏที่นี่ในหนึ่งถึงสองนาทีหลังจากพูด';
+
+  @override
+  String get livePreviewNoEngineTitle => 'กำลังบันทึกอย่างปลอดภัย';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'แสดงสดบนเครื่องนี้';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'เปิดข้อความสด';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'กำลังจะมาถึง';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'เมื่อกลับมาออนไลน์';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return 'กำลังไล่ตามอีก $duration';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'อัปโหลดเองอัตโนมัติ เมื่อถึงแล้ว การสนทนาจะเติมเต็มให้เอง';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'จะอัปโหลดเองอัตโนมัติเมื่อคุณกลับมาออนไลน์ เมื่อถึงแล้ว การสนทนาจะเติมเต็มให้เอง';
+
+  @override
+  String get onTheWayDayUploading => 'กำลังอัปโหลด';
+
+  @override
+  String get onTheWayDayNext => 'ถัดไป';
+
+  @override
+  String get onTheWayDayQueued => 'อยู่ในคิว';
+
+  @override
+  String get onTheWayNoDate => 'ไม่มีวันที่';
+
+  @override
+  String get onTheWayFootnote =>
+      'การบันทึกที่ล้มเหลวจะลองใหม่ต่อในเบื้องหลัง ส่วนสิ่งที่เราถอดเสียงไม่ได้จะถูกรายงานถึงเราโดยอัตโนมัติ';
+
+  @override
+  String get onTheWayDetailsForSupport => 'รายละเอียดสำหรับฝ่ายสนับสนุน';
 }

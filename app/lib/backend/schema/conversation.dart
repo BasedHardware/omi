@@ -392,6 +392,9 @@ class ServerConversation {
   ConversationStatus status;
   bool discarded;
   final bool deleted;
+  final String? syncMergedInto;
+  bool get isMergedDonor => syncMergedInto != null && syncMergedInto!.isNotEmpty;
+  bool get isHiddenFromDefaultList => discarded || deleted || isMergedDonor;
   final bool isLocked;
   bool starred;
   String? folderId;
@@ -445,6 +448,7 @@ class ServerConversation {
     this.conversationAudio,
     this.discarded = false,
     this.deleted = false,
+    this.syncMergedInto,
     this.source,
     this.language,
     this.externalIntegration,
@@ -491,6 +495,7 @@ class ServerConversation {
         conversationAudio: conversationAudio,
         discarded: discarded,
         deleted: deleted,
+        syncMergedInto: syncMergedInto,
         source: source,
         language: language,
         externalIntegration: externalIntegration,
@@ -543,6 +548,7 @@ class ServerConversation {
       structured: structured,
       geolocation: json['geolocation'] is Map<String, dynamic> ? Geolocation.fromJson(json['geolocation']) : null,
       deleted: json['deleted'] ?? false,
+      syncMergedInto: json['sync_merged_into'] as String?,
       siriVisibilityValid: json['siri_visibility_valid'] != false &&
           (json['visibility'] == null || const ['private', 'shared', 'public'].contains(json['visibility'])),
       matchSnippets: snippets,
@@ -558,6 +564,7 @@ class ServerConversation {
     Structured? structured,
     Geolocation? geolocation,
     bool deleted = false,
+    String? syncMergedInto,
     bool siriVisibilityValid = true,
     bool? processingDeferred,
     List<TranscriptMatchSnippet>? matchSnippets,
@@ -590,6 +597,7 @@ class ServerConversation {
           generated.source != null ? ConversationSource.values.asNameMap()[generated.source] : ConversationSource.omi,
       language: generated.language,
       deleted: deleted,
+      syncMergedInto: syncMergedInto,
       externalIntegration:
           generated.externalData != null ? ConversationExternalData.fromJson(generated.externalData!) : null,
       calendarEvent: generated.calendarEvent == null ? null : CalendarEventLink.fromGenerated(generated.calendarEvent!),
@@ -629,6 +637,7 @@ class ServerConversation {
       'geolocation': geolocation?.toJson(),
       'photos': photos.map((photo) => photo.toJson()).toList(),
       'discarded': discarded,
+      'sync_merged_into': syncMergedInto,
       'deleted': deleted,
       // Cache/webhook payloads use the wire value (for example `sdcard`),
       // not Dart's enum rendering (`ConversationSource.sdcard`).

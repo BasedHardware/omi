@@ -13533,32 +13533,6 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals בדרך';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return 'בהעלאה: $count';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return 'כמעט מוכנות: $count';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count דורשות תשומת לב',
-      one: 'אחת דורשת תשומת לב',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'אין פעילות עדיין';
 
   @override
@@ -14329,13 +14303,7 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'פתח את הפרק הקודם';
-
-  @override
   String get episodeNotesSoon => 'ההערות יופיעו אחרי הדקות הראשונות של השיחה.';
-
-  @override
-  String get episodeOpenAll => 'פתח הכול';
 
   @override
   String get episodeWrapUpNow => 'סכם עכשיו';
@@ -14473,22 +14441,10 @@ class AppLocalizationsHe extends AppLocalizations {
   String get othersSpeakerLabel => 'אחרים';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'בוצע';
@@ -14518,4 +14474,84 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'ההעלאות הושהו לרגע — הן יימשכו אוטומטית';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'ממשיך את “$title”';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· מ-$time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'הפתקים מתחילים כשמגיע התמליל הסופי.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote => 'נערכות בטלפון שלך בזמן שאתה מדבר. הפתקים המלאים מגיעים עם התמליל הסופי.';
+
+  @override
+  String get episodeOnThisPhone => 'בטלפון הזה';
+
+  @override
+  String get episodeOpenTranscript => 'פתח תמליל';
+
+  @override
+  String get liveCardTitle => 'בשידור חי';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'התמליל הסופי בפיגור של כ-$duration';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'התמליל הסופי מתעדכן';
+
+  @override
+  String get livePreviewNoEngineBody => 'המילים שלך מופיעות כאן דקה או שתיים אחרי שאמרת אותן.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'מקליט בבטחה';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'בשידור חי בטלפון הזה';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'הפעל טקסט חי';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'בדרך';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'כשיש חיבור';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return 'נותרו $duration לעיבוד';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'מעלה לבד. השיחות מושלמות בהדרגה כשההקלטות מגיעות.';
+
+  @override
+  String get onTheWayUploadsWhenOnline => 'מעלה לבד ברגע שתחזור החיבור. השיחות מושלמות בהדרגה כשההקלטות מגיעות.';
+
+  @override
+  String get onTheWayDayUploading => 'מועלה';
+
+  @override
+  String get onTheWayDayNext => 'הבא בתור';
+
+  @override
+  String get onTheWayDayQueued => 'בתור';
+
+  @override
+  String get onTheWayNoDate => 'ללא תאריך';
+
+  @override
+  String get onTheWayFootnote => 'הקלטות שנכשלות ממשיכות לנסות שוב ברקע. כל מה שלא ניתן לתמלול מדווח לנו אוטומטית.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'פרטים לתמיכה';
 }

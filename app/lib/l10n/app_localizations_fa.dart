@@ -13624,32 +13624,6 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String onTheWaySummary(String totals) {
-    return '$totals در راه';
-  }
-
-  @override
-  String onTheWayUploadingCount(int count) {
-    return '$count در حال بارگذاری';
-  }
-
-  @override
-  String onTheWayAlmostReadyCount(int count) {
-    return '$count تقریباً آماده';
-  }
-
-  @override
-  String onTheWayNeedsAttentionCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count مورد نیازمند توجه',
-      one: '۱ مورد نیازمند توجه',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get activityEmpty => 'هنوز فعالیتی نیست';
 
   @override
@@ -14427,13 +14401,7 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String get episodeOpenPrevious => 'باز کردن قسمت قبلی';
-
-  @override
   String get episodeNotesSoon => 'یادداشت‌ها پس از چند دقیقهٔ اول گفت‌وگو نمایش داده می‌شوند.';
-
-  @override
-  String get episodeOpenAll => 'باز کردن همه';
 
   @override
   String get episodeWrapUpNow => 'اکنون جمع‌بندی کن';
@@ -14571,22 +14539,10 @@ class AppLocalizationsFa extends AppLocalizations {
   String get othersSpeakerLabel => 'دیگران';
 
   @override
-  String get livePreviewLabel => 'Live preview';
-
-  @override
-  String get livePreviewExplanation => 'On-device preview. The final transcript replaces it shortly.';
-
-  @override
   String get livePreviewListening => 'Listening… words appear here as you speak.';
 
   @override
   String get livePreviewStarting => 'Starting live preview…';
-
-  @override
-  String get livePreviewTranscribingTitle => 'Transcribing…';
-
-  @override
-  String get livePreviewTranscribingMessage => 'Your transcript appears in Conversations when processing finishes.';
 
   @override
   String get openLoopAnswerDone => 'انجام شد';
@@ -14616,4 +14572,87 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get syncCardUploadsPaused => 'بارگذاری لحظه‌ای متوقف شد — به‌طور خودکار ادامه می‌یابد';
+
+  @override
+  String episodeContinues(Object title) {
+    return 'ادامه «$title»';
+  }
+
+  @override
+  String episodeLiveSince(Object time) {
+    return '· از $time';
+  }
+
+  @override
+  String get episodeNotesStartWithTranscript => 'یادداشت‌ها با رسیدن پی‌نوشت نهایی شروع می‌شوند.';
+
+  @override
+  String get episodeOnDeviceNotesFootnote =>
+      'همان‌طور که حرف می‌زنی روی گوشی‌ات نوشته می‌شود. یادداشت‌های کامل همراه با پی‌نوشت نهایی می‌رسند.';
+
+  @override
+  String get episodeOnThisPhone => 'روی این گوشی';
+
+  @override
+  String get episodeOpenTranscript => 'باز کردن پی‌نوشت';
+
+  @override
+  String get liveCardTitle => 'زنده';
+
+  @override
+  String livePreviewBehind(Object duration) {
+    return 'پی‌نوشت نهایی حدود $duration عقب است';
+  }
+
+  @override
+  String get livePreviewCatchingUp => 'پی‌نوشت نهایی در حال رسیدن است';
+
+  @override
+  String get livePreviewNoEngineBody => 'حرف‌هایت یک تا دو دقیقه بعد از گفتن اینجا ظاهر می‌شود.';
+
+  @override
+  String get livePreviewNoEngineTitle => 'با امنیت ضبط می‌کند';
+
+  @override
+  String get livePreviewOnPhoneDivider => 'زنده روی این گوشی';
+
+  @override
+  String get livePreviewTurnOnLiveText => 'روشن کردن متن زنده';
+
+  @override
+  String get deviceCatchUpOnItsWay => 'در راه است';
+
+  @override
+  String get deviceCatchUpWhenOnline => 'وقتی آنلاین باشد';
+
+  @override
+  String onTheWayCatchingUp(String duration) {
+    return '$duration درحال تکمیل';
+  }
+
+  @override
+  String get onTheWayUploadsByItself => 'خودش بارگذاری می‌کند. با رسیدن آن‌ها، گفتگوها تکمیل می‌شوند.';
+
+  @override
+  String get onTheWayUploadsWhenOnline =>
+      'وقتی دوباره آنلاین باشید، خودش بارگذاری می‌کند. با رسیدن آن‌ها، گفتگوها تکمیل می‌شوند.';
+
+  @override
+  String get onTheWayDayUploading => 'درحال بارگذاری';
+
+  @override
+  String get onTheWayDayNext => 'بعدی';
+
+  @override
+  String get onTheWayDayQueued => 'در صف';
+
+  @override
+  String get onTheWayNoDate => 'بدون تاریخ';
+
+  @override
+  String get onTheWayFootnote =>
+      'ضبط‌هایی که موفق نمی‌شوند، در پس‌زمینه دوباره تلاش می‌شوند. هر آنچه نتوانیم رونویسی کنیم، به‌طور خودکار به ما گزارش داده می‌شود.';
+
+  @override
+  String get onTheWayDetailsForSupport => 'جزئیات برای پشتیبانی';
 }

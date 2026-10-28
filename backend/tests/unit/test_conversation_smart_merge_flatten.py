@@ -1301,3 +1301,15 @@ def test_ordinary_target_hint_falls_back_without_chain_checks(world):
     assert created is True
     assert world.raw('g1')['sync_merged_into'] == 'n'
     assert world.raw('n')['sync_merged_into'] == 'p'
+
+
+def test_absorb_cap_checks_every_inherited_redirect_before_writing(world):
+    _setup_pair(world)
+    world.raw('g1')['retained_metadata'] = 'x' * (801 * 1024)
+    before = deepcopy(world.store.rows)
+    assert not world.finish('n')
+    assert world.raw('n')['smart_merge_decision']['reason'] == 'size_cap_stop'
+    for cid in ('p', 'g1', 'g2'):
+        assert world.raw(cid) == before[_path(cid)]
+    assert not world.raw('n').get('deleted')
+    assert not world.retracted and not world.processed

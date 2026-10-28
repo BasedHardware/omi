@@ -93,12 +93,10 @@ class WalListItem extends StatelessWidget {
     if (state == WalSyncDisplayState.syncing) {
       return const OmiSpinner(size: OmiSpinnerSize.small);
     }
-    // A too_large refusal is deterministic — the same bytes are the same size —
-    // so it offers Delete even while the failed-sync banner (hasError) points
-    // at this row: never a Retry that is guaranteed to fail again.
-    final tooLargeRefusal =
-        state == WalSyncDisplayState.uploadRejected && wal.uploadRejectionReason == WalUploadRejection.tooLarge;
-    if (!tooLargeRefusal && (hasError || walRetryCanHelp(wal) || state == WalSyncDisplayState.retrying)) {
+    // Refusals recover through the daily policy, including stale error banners.
+    // An explicit removal remains available in the full inventory.
+    final uploadRefusal = state == WalSyncDisplayState.uploadRejected;
+    if (!uploadRefusal && (hasError || walRetryCanHelp(wal) || state == WalSyncDisplayState.retrying)) {
       return OmiButton.secondary(
         label: context.l10n.tryAgain,
         size: OmiButtonSize.compact,
@@ -110,7 +108,7 @@ class WalListItem extends StatelessWidget {
     if (state == WalSyncDisplayState.corrupted ||
         state == WalSyncDisplayState.outsideRecoveryWindow ||
         state == WalSyncDisplayState.unsupportedAudio ||
-        tooLargeRefusal) {
+        uploadRefusal) {
       return OmiButton.destructive(
         label: context.l10n.delete,
         size: OmiButtonSize.compact,
