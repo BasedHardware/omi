@@ -62,6 +62,27 @@ def test_deletion_status_authentication_keeps_pending_account_recovery_route_ope
     assert endpoints.get_current_user_uid_for_deletion_status(authorization="Bearer token") == "old-uid"
 
 
+@pytest.mark.parametrize(
+    ("status", "erase_now", "allowed"),
+    [
+        (None, True, True),
+        ("pending_deletion", True, True),
+        ("pending_deletion", False, False),
+        ("pending", True, False),
+        ("running", True, False),
+    ],
+)
+def test_erase_now_auth_is_limited_to_restorable_grace_status(monkeypatch, status, erase_now, allowed):
+    monkeypatch.setattr(endpoints, "get_user_deletion_wipe_status", lambda _uid: status)
+
+    if allowed:
+        endpoints.enforce_account_deletion_http_access("old-uid", allow_grace_erase_now=erase_now)
+    else:
+        with pytest.raises(HTTPException) as error:
+            endpoints.enforce_account_deletion_http_access("old-uid", allow_grace_erase_now=erase_now)
+        assert error.value.status_code == 403
+
+
 @pytest.mark.parametrize("status", [None, "cancelled", "billing_failed"])
 def test_terminal_or_pre_acceptance_state_allows_auth(monkeypatch, status):
     monkeypatch.setattr(endpoints, "get_user_deletion_wipe_status", lambda _uid: status)
@@ -189,6 +210,7 @@ def test_erase_now_route_uses_the_recovery_auth_dependency_and_promotes_pending(
     route_parameters = inspect.signature(deletion_router.delete_account).parameters
     dependency = route_parameters['uid'].default.dependency
     assert dependency is endpoints.get_current_user_uid_for_deletion_status
+    monkeypatch.setattr(endpoints, "get_user_deletion_wipe_status", lambda _uid: "pending_deletion")
     assert {
         inspect.signature(dependency).parameters[name].default.alias
         for name in ('_x_app_platform', '_x_device_id_hash', '_x_app_version')
@@ -208,6 +230,21 @@ def test_erase_now_route_uses_the_recovery_auth_dependency_and_promotes_pending(
 
     assert observed == {'uid': 'old-uid', 'reason': None, 'reason_details': None, 'erase_now': True}
     assert result['status'] == 'pending'
+
+
+def test_erase_now_route_rejects_an_already_queued_immediate_wipe(monkeypatch):
+    monkeypatch.setattr(endpoints, "get_user_deletion_wipe_status", lambda _uid: "pending")
+    start = MagicMock()
+    monkeypatch.setattr(deletion_router, 'start_account_deletion', start)
+
+    with pytest.raises(HTTPException) as error:
+        deletion_router.delete_account(
+            request=deletion_router.DeleteAccountRequest(erase_now=True),
+            uid='old-uid',
+        )
+
+    assert error.value.status_code == 403
+    start.assert_not_called()
 
 
 def test_auth_fence_refuses_when_the_deletion_marker_is_only_on_the_data_plane(monkeypatch):

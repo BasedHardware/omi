@@ -53,6 +53,11 @@ def delete_account(
     request: DeleteAccountRequest = DeleteAccountRequest(),
     uid: str = Depends(auth.get_current_user_uid_for_deletion_status),
 ):
+    # This recovery-auth route is open for status and restore operations, and
+    # accepts erase-now only while the marker is still in its restorable grace
+    # state. Once an immediate wipe has been queued or claimed, ordinary
+    # deletion auth fencing applies again.
+    auth.enforce_account_deletion_http_access(uid, allow_grace_erase_now=request.erase_now)
     try:
         return start_account_deletion(
             uid,

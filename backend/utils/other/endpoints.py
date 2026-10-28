@@ -17,7 +17,7 @@ import redis as redis_pkg
 from database.redis_db import check_rate_limit, try_acquire_listen_lock
 from database import users as users_db
 from database.firestore_tier_context import bind_request_owner
-from database.account_deletion_policy import account_deletion_blocks_access
+from database.account_deletion_policy import ACCOUNT_DELETION_GRACE_STATUS, account_deletion_blocks_access
 from database.users import record_client_device, record_user_platform
 from utils.account_cutover.access import (
     cutover_enforcement_enabled,
@@ -81,9 +81,11 @@ def _account_deletion_status(uid: str) -> str | None:
         ) from error
 
 
-def enforce_account_deletion_http_access(uid: str) -> None:
+def enforce_account_deletion_http_access(uid: str, *, allow_grace_erase_now: bool = False) -> None:
     bind_request_owner(uid)
     status = _account_deletion_status(uid)
+    if allow_grace_erase_now and status == ACCOUNT_DELETION_GRACE_STATUS:
+        return
     if account_deletion_blocks_access(status):
         raise HTTPException(
             status_code=403,

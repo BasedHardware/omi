@@ -161,6 +161,10 @@ def _stub_external_deletion_boundaries(monkeypatch) -> None:
     monkeypatch.setattr(account_deletion.firebase_auth, "revoke_refresh_tokens", lambda _uid: None)
     monkeypatch.setattr(account_deletion.users_db, "get_user_subscription", lambda _uid: None)
     monkeypatch.setattr(account_deletion.stripe_utils, "find_billable_app_subscription_ids", lambda _uid: [])
+    # The harness disables Typesense globally. The account-deletion service
+    # requires a verified owner purge before completion, so keep this external
+    # boundary hermetic just like Stripe, Firebase, and storage.
+    monkeypatch.setattr(account_deletion, "purge_user_conversation_index", lambda _uid: None)
     monkeypatch.setattr(account_deletion, "delete_user_caller_ids", lambda _uid: None)
     monkeypatch.setattr(account_deletion, "delete_agent_vm_for_account", lambda _uid: None)
     monkeypatch.setattr(account_deletion, "delete_account_credentials", lambda _uid: None)
@@ -225,6 +229,12 @@ def test_account_deletion_cloud_task_completes_once_and_redelivery_is_acked(
     _configure_durable_account_deletion(monkeypatch)
     _stub_external_deletion_boundaries(monkeypatch)
     purge_calls: list[str] = []
+    wipe_failures: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        account_deletion,
+        "_emit_deletion_telemetry",
+        lambda _uid, event, properties: wipe_failures.append({"event": event, **properties}),
+    )
 
     def successful_purge(uid: str) -> dict[str, list[dict[str, str]]]:
         purge_calls.append(uid)
@@ -260,7 +270,7 @@ def test_account_deletion_cloud_task_completes_once_and_redelivery_is_acked(
     completed = client.post(
         "/v1/users/account-deletion-wipes/run", json=payload, headers=_worker_headers(retry_count=0)
     )
-    assert completed.status_code == 200, completed.text
+    assert completed.status_code == 200, f"{completed.text}; wipe_failures={wipe_failures!r}"
     assert completed.json() == {"status": "done"}
     assert _read_marker(fake_firestore, test_uid)["wipe_status"] == "completed"
     _assert_user_data_deleted(fake_firestore, test_uid)
