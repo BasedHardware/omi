@@ -471,4 +471,60 @@ void main() {
           reason: 'opening Activity marks the capture rows seen; a new episode re-lights the bell');
     });
   });
+
+  group('sync silence row (watchdog stall, #15501)', () {
+    void seedSyncSilence(CaptureWedgeMonitor monitor, {Duration silentFor = const Duration(hours: 26)}) =>
+        monitor.observeSyncSilence(stalled: true, since: DateTime.now().subtract(silentFor));
+
+    testWidgets('a sustained sync stall renders its row after the upload row', (tester) async {
+      final monitor = _monitor();
+      addTearDown(monitor.dispose);
+      seedSyncSilence(monitor);
+
+      await tester.pumpWidget(_app(const SizedBox(), monitor: monitor));
+      expect(find.byKey(const Key('activity_attention_sync_stalled')), findsOneWidget);
+      expect(find.text("Omi isn't syncing"), findsOneWidget);
+      expect(find.textContaining('No recordings synced for over'), findsOneWidget);
+      expect(find.byType(OmiButton), findsNothing, reason: 'a settings-style row: no button');
+      expect(find.byIcon(Icons.chevron_right), findsOneWidget, reason: 'the row opens Offline Sync');
+    });
+
+    testWidgets('the row is absent while the pipeline has recent activity', (tester) async {
+      final monitor = _monitor();
+      addTearDown(monitor.dispose);
+      monitor.observeSyncSilence(stalled: false, since: DateTime.now());
+
+      await tester.pumpWidget(_app(const SizedBox(), monitor: monitor));
+      expect(find.byKey(const Key('activity_attention_sync_stalled')), findsNothing);
+    });
+
+    testWidgets('tapping the sync stall row opens Offline Sync once', (tester) async {
+      final monitor = _monitor();
+      addTearDown(monitor.dispose);
+      seedSyncSilence(monitor);
+      final pushes = _PushCounter();
+
+      await tester.pumpWidget(_app(const SizedBox(), monitor: monitor, observer: pushes));
+      final baseline = pushes.count;
+
+      await tester.tap(find.text("Omi isn't syncing"));
+      expect(pushes.count - baseline, 1, reason: 'the row opens the Offline Sync entry exactly once');
+    });
+
+    testWidgets('an upload stall and a sync stall render together with one divider between them', (tester) async {
+      final monitor = _monitor();
+      addTearDown(monitor.dispose);
+      _seedUploadStall(monitor);
+      seedSyncSilence(monitor);
+
+      await tester.pumpWidget(_app(const SizedBox(), monitor: monitor));
+      expect(find.byKey(const Key('activity_attention_upload_stalled')), findsOneWidget);
+      expect(find.byKey(const Key('activity_attention_sync_stalled')), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.byKey(const Key('activity_attention_upload_stalled'))).dy,
+        lessThan(tester.getTopLeft(find.byKey(const Key('activity_attention_sync_stalled'))).dy),
+        reason: 'the broadest, slowest condition reads last',
+      );
+    });
+  });
 }
