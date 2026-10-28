@@ -24,6 +24,8 @@ wire.GeneratedYearlySwitchResponse _offer({
   String reason = 'eligible',
   bool firstBillingPeriod = false,
   bool preview = false,
+  int amountDueToday = 24492,
+  int? prorationDate,
 }) =>
     wire.GeneratedYearlySwitchResponse(
       eligible: eligible,
@@ -35,9 +37,9 @@ wire.GeneratedYearlySwitchResponse _offer({
       yearlyAmount: eligible ? 26991 : null,
       savingsAmount: eligible ? 8997 : null,
       firstBillingPeriod: eligible ? firstBillingPeriod : null,
-      amountDueToday: eligible && preview ? 24492 : null,
+      amountDueToday: eligible && preview ? amountDueToday : null,
       renewsAt: eligible && preview ? _renewsAt : null,
-      prorationDate: eligible && preview ? _prorationDate : null,
+      prorationDate: eligible && preview ? (prorationDate ?? _prorationDate) : null,
     );
 
 /// Answers like GET /v1/payments/yearly-switch and the plan-change endpoint.
@@ -47,23 +49,40 @@ class _Backend {
   wire.GeneratedYearlySwitchResponse? offer;
   int previewFailures;
   Map<String, dynamic>? switchResult;
+  int amountDueToday = 24492;
+
+  /// What a plain lookup answers after a switch whose response was lost (null: unreadable).
+  wire.GeneratedYearlySwitchResponse? Function()? afterSwitch;
   final loads = <bool>[];
-  final switches = <(String, int?)>[];
+  final switches = <(String, int, int)>[];
+  int _previews = 0;
 
   Future<wire.GeneratedYearlySwitchResponse?> load({bool preview = false}) async {
     loads.add(preview);
     final base = offer;
+    if (!preview && switches.isNotEmpty && afterSwitch != null) return afterSwitch!();
     if (base == null) return null;
     if (!preview) return base;
     if (previewFailures > 0) {
       previewFailures--;
       return null;
     }
-    return _offer(eligible: base.eligible, reason: base.reason, preview: true);
+    // Each preview is a new Stripe proration date, one second after the last.
+    return _offer(
+      eligible: base.eligible,
+      reason: base.reason,
+      preview: true,
+      amountDueToday: amountDueToday,
+      prorationDate: _prorationDate + _previews++,
+    );
   }
 
-  Future<Map<String, dynamic>?> apply({required String priceId, int? prorationDate}) async {
-    switches.add((priceId, prorationDate));
+  Future<Map<String, dynamic>?> apply({
+    required String priceId,
+    required int prorationDate,
+    required int expectedAmountDue,
+  }) async {
+    switches.add((priceId, prorationDate, expectedAmountDue));
     return switchResult;
   }
 }
@@ -160,7 +179,7 @@ void main() {
 
       analytics.expectSingle('Subscription Yearly Switch Opened', {'surface': 'plans'});
       expect(backend.loads, [false, true]);
-      expect(find.text(l10n.yearlySwitchPlanValue('Unlimited', '\$269.91')), findsOneWidget);
+      expect(find.text(l10n.yearlySwitchPlanValue('Omi Pro', '\$269.91')), findsOneWidget);
       expect(find.text('\$244.92'), findsOneWidget);
       expect(find.text(_renewsLabel(tester)), findsOneWidget);
       expect(find.text(l10n.yearlySwitchCreditNote), findsOneWidget);
@@ -169,8 +188,8 @@ void main() {
       await tester.tap(find.byKey(const Key('yearly_switch_confirm')));
       await tester.pumpAndSettle();
 
-      // The switch is charged at the date Stripe previewed, so the charge is the one on screen.
-      expect(backend.switches, [('price_unlimited_year', _prorationDate)]);
+      // The switch is charged at the date Stripe previewed, for the amount on screen only.
+      expect(backend.switches, [('price_unlimited_year', _prorationDate, 24492)]);
       expect(find.text(l10n.yearlySwitchDoneTitle), findsOneWidget);
       expect(find.text(l10n.yearlySwitchDoneBody('\$244.92', _renewsLabel(tester))), findsOneWidget);
       expect(usage.fetches, 1);
@@ -200,12 +219,66 @@ void main() {
       expect(usage.fetches, 0);
       analytics.expectSingle('Subscription Yearly Switch Failed', {'surface': 'plans', 'reason': 'declined'});
 
-      // Same sheet, same price: a second try goes through.
+      // A second try re-previews first (a fresh proration date and idempotency key), same amount: it goes through.
       backend.switchResult = {'status': 'success'};
       await tester.tap(find.byKey(const Key('yearly_switch_confirm')));
       await tester.pumpAndSettle();
-      expect(backend.switches, hasLength(2));
+      expect(backend.loads, [false, true, true]);
+      expect(backend.switches, [
+        ('price_unlimited_year', _prorationDate, 24492),
+        ('price_unlimited_year', _prorationDate + 1, 24492),
+      ]);
       expect(find.text(l10n.yearlySwitchDoneTitle), findsOneWidget);
+    });
+
+    testWidgets('a retry whose amount moved shows the new amount and charges nothing until confirmed', (tester) async {
+      final backend = _Backend(offer: _offer(), switchResult: {'error': true, 'status_code': 409});
+      await _pump(tester, YearlySwitchPlansRow(load: backend.load, apply: backend.apply));
+      await tester.tap(find.byKey(const Key('yearly_switch_plans_row')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('yearly_switch_confirm')));
+      await tester.pumpAndSettle();
+      expect(backend.switches, hasLength(1));
+
+      backend.amountDueToday = 24312;
+      backend.switchResult = {'status': 'success'};
+      await tester.tap(find.byKey(const Key('yearly_switch_confirm')));
+      await tester.pumpAndSettle();
+      expect(find.text('\$243.12'), findsOneWidget);
+      expect(find.text('\$244.92'), findsNothing);
+      expect(backend.switches, hasLength(1));
+
+      await tester.tap(find.byKey(const Key('yearly_switch_confirm')));
+      await tester.pumpAndSettle();
+      expect(backend.switches.last, ('price_unlimited_year', _prorationDate + 1, 24312));
+      expect(find.text(_l10n(tester).yearlySwitchDoneTitle), findsOneWidget);
+    });
+
+    testWidgets('a lost response is settled by reading Stripe again, never guessed', (tester) async {
+      final backend = _Backend(offer: _offer(), switchResult: null)
+        ..afterSwitch = () => _offer(eligible: false, reason: 'not_monthly');
+      final usage = await _pump(tester, YearlySwitchPlansRow(load: backend.load, apply: backend.apply));
+      await tester.tap(find.byKey(const Key('yearly_switch_plans_row')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('yearly_switch_confirm')));
+      await tester.pumpAndSettle();
+      // The switch landed even though its response was lost: the reader sees it, not an error.
+      expect(find.text(_l10n(tester).yearlySwitchDoneTitle), findsOneWidget);
+      expect(usage.fetches, 1);
+      analytics.expectSingle('Subscription Yearly Switch Succeeded', {'surface': 'plans'});
+    });
+
+    testWidgets('an unreadable outcome does not claim the reader is still monthly', (tester) async {
+      final backend = _Backend(offer: _offer(), switchResult: null)..afterSwitch = () => null;
+      await _pump(tester, YearlySwitchPlansRow(load: backend.load, apply: backend.apply));
+      final l10n = _l10n(tester);
+      await tester.tap(find.byKey(const Key('yearly_switch_plans_row')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('yearly_switch_confirm')));
+      await tester.pumpAndSettle();
+      expect(find.text(l10n.somethingWentWrong), findsOneWidget);
+      expect(find.text(l10n.yearlySwitchFailed), findsNothing);
+      expect(find.text(l10n.yearlySwitchDoneTitle), findsNothing);
     });
 
     testWidgets('a refused or failed switch says nothing changed', (tester) async {
@@ -269,7 +342,8 @@ void main() {
       await _pump(tester, YearlySwitchHomeRow(load: backend.load, apply: backend.apply, now: () => _now));
       final l10n = _l10n(tester);
 
-      expect(find.text(l10n.yearlySwitchHomeTitle('\$90')), findsOneWidget);
+      // $89.97 a year is shown rounded down, never up.
+      expect(find.text(l10n.yearlySwitchHomeTitle('\$89')), findsOneWidget);
       expect(find.text(l10n.yearlySwitchHomeSubtitle), findsOneWidget);
       analytics.expectSingle('Subscription Yearly Switch Shown', {'surface': 'home'});
       expect(SharedPreferencesUtil().yearlySwitchHomeShownAt, _now.millisecondsSinceEpoch);

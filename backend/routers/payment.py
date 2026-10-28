@@ -114,9 +114,10 @@ class CreateCheckoutRequest(BaseModel):
 class UpgradeSubscriptionRequest(BaseModel):
     price_id: str = Field(..., min_length=1, max_length=255)
     promotion_code: Optional[str] = None
-    # Monthly to yearly on the same plan, charged now at the previewed proration_date (utils/yearly_switch.py).
+    # Omi Pro monthly to yearly, charged now: only the previewed amount at its proration_date (utils/yearly_switch.py).
     switch_now: bool = False
     proration_date: Optional[int] = None
+    expected_amount_due: Optional[int] = None
 
 
 class PaymentMutationResponse(BaseModel):
@@ -900,8 +901,13 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
             raise HTTPException(status_code=400, detail=change_error)
 
         # The yearly switch offer's rules: no trial (#23298), past_due, scheduled change or discount.
-        refusal = request.switch_now and yearly_switch.request_refusal(
-            stripe_sub, request.price_id, request.promotion_code, request.proration_date
+        refusal = request.switch_now and (
+            yearly_switch.request_refusal(
+                stripe_sub, request.price_id, request.promotion_code, request.proration_date, request.expected_amount_due
+            )
+            or yearly_switch.charge_refusal(
+                stripe_sub, request.price_id, request.proration_date, request.expected_amount_due
+            )
         )
         if refusal:
             logger.info(f"Yearly switch refused for user {uid}: {refusal}")
@@ -932,8 +938,8 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                 modify_params['discounts'] = [{'promotion_code': resolved_promo_id}]
             if request.switch_now:
                 modify_params['metadata']['omi_yearly_switch'] = 'in_app'
-                if request.proration_date is not None:
-                    modify_params['proration_date'] = request.proration_date
+                modify_params['proration_date'] = request.proration_date
+                modify_params['idempotency_key'] = yearly_switch.idempotency_key(stripe_sub['id'], request.proration_date)
 
             updated_sub = stripe.Subscription.modify(stripe_sub['id'], **modify_params)
             updated_sub_dict = updated_sub.to_dict()

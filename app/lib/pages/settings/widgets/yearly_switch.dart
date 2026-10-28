@@ -27,10 +27,32 @@ enum YearlySwitchSurface { home, plans }
 typedef YearlySwitchLoader = Future<wire.GeneratedYearlySwitchResponse?> Function({bool preview});
 
 /// The plan-change endpoint's result map (`error`/`status_code` on a refusal), or null.
-typedef YearlySwitchApplier = Future<Map<String, dynamic>?> Function({required String priceId, int? prorationDate});
+typedef YearlySwitchApplier = Future<Map<String, dynamic>?> Function({
+  required String priceId,
+  required int prorationDate,
+  required int expectedAmountDue,
+});
 
-Future<Map<String, dynamic>?> _applyYearlySwitch({required String priceId, int? prorationDate}) =>
-    payment_api.upgradeSubscription(priceId: priceId, switchNow: true, prorationDate: prorationDate);
+Future<Map<String, dynamic>?> _applyYearlySwitch({
+  required String priceId,
+  required int prorationDate,
+  required int expectedAmountDue,
+}) =>
+    payment_api.upgradeSubscription(
+      priceId: priceId,
+      switchNow: true,
+      prorationDate: prorationDate,
+      expectedAmountDue: expectedAmountDue,
+    );
+
+bool _usablePreview(wire.GeneratedYearlySwitchResponse? offer) =>
+    offer != null &&
+    offer.eligible &&
+    offer.priceId != null &&
+    offer.amountDueToday != null &&
+    offer.yearlyAmount != null &&
+    offer.renewsAt != null &&
+    offer.prorationDate != null;
 
 /// A paid, renewing Stripe subscription the offer could apply to; null hides every entry point.
 String? yearlySwitchCandidate(UsageProvider provider) {
@@ -41,14 +63,15 @@ String? yearlySwitchCandidate(UsageProvider provider) {
   return id == null || id.isEmpty ? null : id;
 }
 
-/// [minor] units of [currency] in the reader's locale ("$89.97"); [whole] rounds ("$90").
+/// [minor] units of [currency] in the reader's locale ("$89.97"); [whole] rounds down ("$89"), so a
+/// saving is never overstated.
 String yearlySwitchMoney(BuildContext context, int minor, String? currency, {bool whole = false}) {
   final locale = Localizations.localeOf(context).toString();
   final code = (currency ?? 'usd').toUpperCase();
   final exact = NumberFormat.simpleCurrency(locale: locale, name: code);
   final value = minor / math.pow(10, exact.decimalDigits ?? 2);
   if (!whole) return exact.format(value);
-  return NumberFormat.simpleCurrency(locale: locale, name: code, decimalDigits: 0).format(value.round());
+  return NumberFormat.simpleCurrency(locale: locale, name: code, decimalDigits: 0).format(value.floor());
 }
 
 void _emitShown(YearlySwitchSurface surface) => const TypedEvents()
@@ -81,8 +104,9 @@ Future<bool> showYearlySwitchSheet(
   return switched;
 }
 
-/// The confirm step. Loads Stripe's preview, then switches at the previewed proration date, so the
-/// charge is the one on screen. A declined card changes nothing: the reader stays on monthly.
+/// The confirm step. Loads Stripe's preview, then switches at the previewed proration date for the
+/// previewed amount only, so the charge is the one on screen. A declined card changes nothing: the
+/// reader stays on monthly. After any failure the next tap re-previews before it charges.
 class YearlySwitchSheet extends StatefulWidget {
   const YearlySwitchSheet({super.key, required this.surface, this.load, this.apply, this.onSwitched});
 
@@ -101,6 +125,8 @@ class _YearlySwitchSheetState extends State<YearlySwitchSheet> {
   bool _unavailable = false;
   bool _switching = false;
   bool _done = false;
+  // The last attempt failed: its preview (and the idempotency key bound to it) is spent.
+  bool _stale = false;
   String? _error;
 
   @override
@@ -116,12 +142,7 @@ class _YearlySwitchSheetState extends State<YearlySwitchSheet> {
     });
     final offer = await (widget.load ?? payment_api.getYearlySwitch)(preview: true);
     if (!mounted) return;
-    final usable = offer != null &&
-        offer.eligible &&
-        offer.priceId != null &&
-        offer.amountDueToday != null &&
-        offer.yearlyAmount != null &&
-        offer.renewsAt != null;
+    final usable = _usablePreview(offer);
     final refused = offer != null && !offer.eligible && offer.reason != 'unavailable';
     if (!usable) {
       _emitFailed(
@@ -139,7 +160,7 @@ class _YearlySwitchSheetState extends State<YearlySwitchSheet> {
   }
 
   Future<void> _switch() async {
-    final offer = _offer;
+    var offer = _offer;
     if (offer == null || _switching) return;
     HapticFeedback.mediumImpact();
     const TypedEvents().emit(SubscriptionYearlySwitchConfirmed(
@@ -148,15 +169,58 @@ class _YearlySwitchSheetState extends State<YearlySwitchSheet> {
       _switching = true;
       _error = null;
     });
+    final load = widget.load ?? payment_api.getYearlySwitch;
+    if (_stale) {
+      // A retry charges only a fresh preview. If the amount moved, show it and wait for another tap.
+      final fresh = await load(preview: true);
+      if (!mounted) return;
+      if (!_usablePreview(fresh)) {
+        _emitFailed(widget.surface, SubscriptionYearlySwitchFailedReason.previewUnavailable);
+        setState(() {
+          _switching = false;
+          _error = context.l10n.yearlySwitchPreviewFailed;
+        });
+        return;
+      }
+      final moved = fresh!.amountDueToday != offer.amountDueToday;
+      setState(() {
+        _offer = fresh;
+        _stale = false;
+        if (moved) _switching = false;
+      });
+      if (moved) return;
+      offer = fresh;
+    }
     Map<String, dynamic>? result;
     try {
-      result = await (widget.apply ?? _applyYearlySwitch)(priceId: offer.priceId!, prorationDate: offer.prorationDate);
+      result = await (widget.apply ?? _applyYearlySwitch)(
+        priceId: offer.priceId!,
+        prorationDate: offer.prorationDate!,
+        expectedAmountDue: offer.amountDueToday!,
+      );
     } catch (_) {
       result = null;
     }
     if (!mounted) return;
+    var outcome = result == null
+        ? _Outcome.unknown
+        : result['error'] != true
+            ? _Outcome.switched
+            : result['status_code'] is int
+                ? _Outcome.failed
+                : _Outcome.unknown;
+    if (outcome == _Outcome.unknown) {
+      // No answer (timeout, server error): read Stripe again before saying anything about the plan.
+      final after = await load(preview: false);
+      if (!mounted) return;
+      outcome = after?.eligible == true
+          ? _Outcome.failed
+          : after?.reason == 'not_monthly'
+              ? _Outcome.switched
+              : _Outcome.unknown;
+    }
     final l10n = context.l10n;
-    if (result != null && result['error'] != true) {
+    if (outcome == _Outcome.switched) {
       const TypedEvents().emit(SubscriptionYearlySwitchSucceeded(
           surface: SubscriptionYearlySwitchSucceededSurface.values.byName(widget.surface.name)));
       widget.onSwitched?.call();
@@ -181,7 +245,12 @@ class _YearlySwitchSheetState extends State<YearlySwitchSheet> {
     );
     setState(() {
       _switching = false;
-      _error = declined ? l10n.yearlySwitchDeclined : l10n.yearlySwitchFailed;
+      _stale = true;
+      _error = declined
+          ? l10n.yearlySwitchDeclined
+          : outcome == _Outcome.unknown
+              ? l10n.somethingWentWrong
+              : l10n.yearlySwitchFailed;
     });
   }
 
@@ -297,6 +366,9 @@ class _YearlySwitchSheetState extends State<YearlySwitchSheet> {
     );
   }
 }
+
+/// What a switch attempt did: [unknown] when neither the response nor a re-read of Stripe says.
+enum _Outcome { switched, failed, unknown }
 
 /// One line of the preview: what it is on the left, its value on the right, aligned with the title.
 class _FactRow extends StatelessWidget {

@@ -6005,6 +6005,7 @@ export interface UpdateSummaryRequest {
 }
 
 export interface UpgradeSubscriptionRequest {
+  expected_amount_due?: number | null;
   price_id: string;
   promotion_code?: string | null;
   proration_date?: number | null;
@@ -23151,4 +23152,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 531 client methods generated.
+// Total: 532 client methods generated.

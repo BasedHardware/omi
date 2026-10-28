@@ -117,13 +117,14 @@ Future<wire.GeneratedYearlySwitchResponse?> getYearlySwitch({bool preview = fals
   }
 }
 
-/// [switchNow] charges a monthly-to-yearly change today (prorated) instead of scheduling it, at the
-/// [prorationDate] the yearly-switch preview returned.
+/// [switchNow] charges a monthly-to-yearly change today (prorated) instead of scheduling it: only
+/// [expectedAmountDue], the amount the yearly-switch preview showed at its [prorationDate].
 Future<Map<String, dynamic>?> upgradeSubscription({
   required String priceId,
   String? promotionCode,
   bool switchNow = false,
   int? prorationDate,
+  int? expectedAmountDue,
 }) async {
   final body = <String, dynamic>{'price_id': priceId};
   if (promotionCode != null && promotionCode.trim().isNotEmpty) {
@@ -131,7 +132,8 @@ Future<Map<String, dynamic>?> upgradeSubscription({
   }
   if (switchNow) {
     body['switch_now'] = true;
-    if (prorationDate != null) body['proration_date'] = prorationDate;
+    body['proration_date'] = prorationDate;
+    body['expected_amount_due'] = expectedAmountDue;
   }
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/payments/upgrade-subscription',

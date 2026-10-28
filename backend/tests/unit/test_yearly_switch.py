@@ -94,7 +94,7 @@ def _invoice(amount_due=24492, currency='usd'):
     }
 
 
-def test_monthly_unlimited_is_offered_the_plans_yearly_price_with_the_real_savings():
+def test_omi_pro_monthly_is_offered_omi_pro_yearly_with_the_real_savings():
     offer = ys.evaluate(_sub(), YEARLY, NOW)
     assert offer.eligible
     assert (offer.plan_id, offer.price_id, offer.currency) == ('unlimited_v2', 'price_uy', 'usd')
@@ -121,8 +121,12 @@ def test_monthly_unlimited_is_offered_the_plans_yearly_price_with_the_real_savin
         (_sub(discounts=['di_1']), 'discounted'),
         (_sub(discount={'coupon': {'id': 'omi-retention-50off-3mo'}}), 'discounted'),
         (_sub(price_id='price_uy', amount=26991, interval='year'), 'not_monthly'),
+        # Retired plans (2026-10-26) are not offered a new yearly term, even their own.
+        (_sub(price_id='price_pm', amount=1799), 'not_offered'),
         (_sub(price_id='price_neo_m', amount=1999), 'not_offered'),
         (_sub(price_id='price_om', amount=4999), 'not_offered'),
+        # A JPY subscription manages through its own prices (#23584); the offer is USD only.
+        (_sub(currency='jpy'), 'currency'),
         (_sub(price_id='price_retained', amount=2999), 'not_offered'),
         (_sub(amount=0), 'free_price'),
     ],
@@ -131,6 +135,12 @@ def test_only_an_active_renewing_undiscounted_monthly_plan_is_offered(sub, reaso
     assert ys.refusal(sub, NOW) == reason
     offer = ys.evaluate(sub, YEARLY, NOW)
     assert not offer.eligible and offer.reason == reason
+
+
+def test_a_price_billed_in_another_currency_is_not_offered():
+    sub = _sub()
+    sub['items']['data'][0]['price']['currency'] = 'eur'
+    assert ys.refusal(sub, NOW) == 'currency'
 
 
 def test_two_items_or_a_quantity_are_not_offered():
@@ -182,7 +192,7 @@ def test_switch_refusal_uses_the_offer_rules_and_only_the_plans_yearly_price():
 @pytest.mark.parametrize(
     'proration_date,reason',
     [
-        (None, None),
+        (None, 'preview_required'),
         (NOW - 60, None),
         (NOW + 60, 'preview_expired'),
         (NOW - 2 * 3600, 'preview_expired'),
@@ -191,6 +201,53 @@ def test_switch_refusal_uses_the_offer_rules_and_only_the_plans_yearly_price():
 )
 def test_a_previewed_proration_date_is_honored_for_an_hour_inside_the_period(proration_date, reason):
     assert ys.proration_date_refusal(_sub(), proration_date, NOW) == reason
+
+
+def test_the_switch_charges_only_a_previewed_amount_and_never_a_promotion_code():
+    assert ys.request_refusal(_sub(), 'price_uy', None, NOW - 60, 24492, NOW) is None
+    assert ys.request_refusal(_sub(), 'price_uy', 'SAVE20', NOW - 60, 24492, NOW) == 'promotion_code'
+    assert ys.request_refusal(_sub(), 'price_uy', None, None, 24492, NOW) == 'preview_required'
+    assert ys.request_refusal(_sub(), 'price_uy', None, NOW - 60, None, NOW) == 'preview_required'
+    assert ys.request_refusal(_sub(status='past_due'), 'price_uy', None, NOW - 60, 24492, NOW) == 'status'
+
+
+@pytest.mark.parametrize(
+    'preview,expected,reason',
+    [
+        ({'return_value': _invoice()}, 24492, None),
+        # The amount moved since the reader saw it (balance, tax): refuse, the app re-previews.
+        ({'return_value': _invoice(amount_due=24000)}, 24492, 'preview_changed'),
+        ({'return_value': dict(_invoice(), total_discount_amounts=[{'amount': 13496}])}, 24492, 'discounted'),
+        ({'return_value': dict(_invoice(), discounts=['di_customer'])}, 24492, 'discounted'),
+        ({'return_value': _invoice(currency='jpy')}, 24492, 'preview_unavailable'),
+        ({'side_effect': ys.stripe.error.APIConnectionError('down')}, 24492, 'preview_unavailable'),
+    ],
+)
+def test_charge_refusal_reruns_the_preview_at_the_readers_proration_date(preview, expected, reason):
+    with patch.object(ys.stripe.Invoice, 'create_preview', **preview) as create_preview:
+        assert ys.charge_refusal(_sub(), 'price_uy', NOW - 60, expected) == reason
+    create_preview.assert_called_once_with(
+        customer='cus_1',
+        subscription='sub_1',
+        subscription_details={
+            'items': [{'id': 'si_1', 'price': 'price_uy'}],
+            'proration_behavior': 'always_invoice',
+            'proration_date': NOW - 60,
+        },
+    )
+
+
+def test_charge_refusal_without_a_preview_never_calls_stripe():
+    with patch.object(ys.stripe.Invoice, 'create_preview') as create_preview:
+        assert ys.charge_refusal(_sub(), 'price_uy', None, 24492) == 'preview_required'
+        assert ys.charge_refusal(_sub(), 'price_uy', NOW, None) == 'preview_required'
+    create_preview.assert_not_called()
+
+
+def test_idempotency_key_is_one_per_subscription_and_preview():
+    assert ys.idempotency_key('sub_1', NOW) == ys.idempotency_key('sub_1', NOW)
+    assert ys.idempotency_key('sub_1', NOW) != ys.idempotency_key('sub_1', NOW + 1)
+    assert ys.idempotency_key('sub_1', NOW) != ys.idempotency_key('sub_2', NOW)
 
 
 def test_preview_asks_stripe_for_the_immediate_prorated_switch_and_reads_its_invoice():
@@ -255,6 +312,18 @@ def test_a_preview_that_does_not_describe_the_switch_hides_it(invoice):
     ):
         offer = ys.get_offer('sub_1', preview=True, now=NOW)
     assert (offer.eligible, offer.reason) == (False, 'unavailable')
+
+
+def test_a_customer_coupon_on_the_preview_refuses_the_offer():
+    with (
+        patch.object(ys.stripe.Subscription, 'retrieve', return_value=_sub()),
+        patch.object(ys.stripe.Price, 'retrieve', return_value=YEARLY),
+        patch.object(
+            ys.stripe.Invoice, 'create_preview', return_value=dict(_invoice(), total_discount_amounts=[{'amount': 500}])
+        ),
+    ):
+        offer = ys.get_offer('sub_1', preview=True, now=NOW)
+    assert (offer.eligible, offer.reason) == (False, 'discounted')
 
 
 def test_stripe_failure_hides_the_offer_instead_of_raising():

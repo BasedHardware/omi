@@ -37071,6 +37071,17 @@
       },
       "UpgradeSubscriptionRequest": {
         "properties": {
+          "expected_amount_due": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Amount Due"
+          },
           "price_id": {
             "maxLength": 255,
             "minLength": 1,

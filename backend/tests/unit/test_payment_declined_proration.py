@@ -436,10 +436,12 @@ def test_declined_proration_past_due_snapshot_returns_402_and_never_projects_bas
     router.set_credits_invalidation_signal.assert_not_called()
 
 
-# Yearly switch (switch_now): a monthly -> yearly change on the same plan takes the same immediate,
-# declined-safe path, and is refused for every state the in-app offer hides (#23298 trials, past_due,
-# scheduled cancel or change, discounts, promotion codes).
+# Yearly switch (switch_now): Omi Pro monthly -> yearly takes the same immediate, declined-safe path,
+# charges only the previewed amount, and is refused for every state the in-app offer hides (#23298
+# trials, past_due, scheduled cancel or change, discounts, promotion codes, other currencies).
 _YS_NOW = int(time.time())
+_YS_PRORATION = _YS_NOW - 30
+_YS_DUE = 24492
 _YS_DEFINITIONS = [
     {
         "plan_type": PlanTypeForDefinitions.unlimited_v2,
@@ -454,6 +456,29 @@ _YS_DEFINITIONS = [
         "legacy": False,
     },
 ]
+
+
+def _ys_invoice(amount_due=_YS_DUE, **over):
+    invoice = {
+        "currency": "usd",
+        "amount_due": amount_due,
+        "discounts": [],
+        "total_discount_amounts": [],
+        "lines": {"data": [{"proration": False, "period": {"start": _YS_NOW, "end": _YS_NOW + 365 * 86400}}]},
+    }
+    invoice.update(over)
+    return invoice
+
+
+def _ys_request(router, **over):
+    params = {
+        "price_id": "price_uy",
+        "switch_now": True,
+        "proration_date": _YS_PRORATION,
+        "expected_amount_due": _YS_DUE,
+        **over,
+    }
+    return router.UpgradeSubscriptionRequest(**params)
 
 
 def _ys_stripe_sub(**over):
@@ -490,7 +515,7 @@ def _ys_stripe_sub(**over):
 
 
 @contextmanager
-def _ys_patches(router, stripe_sub_dict, modify):
+def _ys_patches(router, stripe_sub_dict, modify, invoice=None):
     """Stripe and catalog for a monthly Unlimited subscriber; yields the mocks tests assert on."""
     retrieved_sub = MagicMock()
     retrieved_sub.to_dict.return_value = stripe_sub_dict
@@ -501,6 +526,9 @@ def _ys_patches(router, stripe_sub_dict, modify):
             schedule_create=stack.enter_context(patch.object(router.stripe.SubscriptionSchedule, "create")),
             schedule_modify=stack.enter_context(patch.object(router.stripe.SubscriptionSchedule, "modify")),
             promo=stack.enter_context(patch.object(router.stripe.PromotionCode, "list")),
+            preview=stack.enter_context(
+                patch.object(router.yearly_switch.stripe.Invoice, "create_preview", return_value=invoice or _ys_invoice())
+            ),
         )
         stack.enter_context(patch.object(router.stripe.Subscription, "retrieve", return_value=retrieved_sub))
         stack.enter_context(
@@ -541,19 +569,23 @@ def test_yearly_switch_charges_now_with_error_if_incomplete_and_the_previewed_pr
         items={"data": [{"id": "si_monthly", "price": {"id": "price_uy", "recurring": {"interval": "year"}}}]},
     )
     with _ys_patches(router, _ys_stripe_sub(), {"return_value": switched}) as mocks:
-        result = router.upgrade_subscription_endpoint(
-            router.UpgradeSubscriptionRequest(price_id="price_uy", switch_now=True, proration_date=_YS_NOW - 30),
-            uid="u1",
-        )
+        result = router.upgrade_subscription_endpoint(_ys_request(router), uid="u1")
 
     assert result["status"] == "success"
+    # The charge is re-previewed at the reader's proration date before Stripe is written.
+    assert mocks.preview.call_args.kwargs["subscription_details"] == {
+        "items": [{"id": "si_monthly", "price": "price_uy"}],
+        "proration_behavior": "always_invoice",
+        "proration_date": _YS_PRORATION,
+    }
     mocks.modify.assert_called_once_with(
         "sub_monthly",
         items=[{"id": "si_monthly", "price": "price_uy"}],
         proration_behavior="always_invoice",
         payment_behavior="error_if_incomplete",
         metadata={"uid": "u1", "sub_type": "unlimited_v2", "omi_yearly_switch": "in_app"},
-        proration_date=_YS_NOW - 30,
+        proration_date=_YS_PRORATION,
+        idempotency_key=f"omi-yearly-switch-sub_monthly-{_YS_PRORATION}",
     )
     mocks.schedule_create.assert_not_called()
     written_sub = router.users_db.update_user_subscription.call_args.args[1]
@@ -572,9 +604,7 @@ def test_declined_yearly_switch_returns_402_and_keeps_the_monthly_plan(payment_r
     )
     with _ys_patches(router, _ys_stripe_sub(), {"side_effect": card_error}) as mocks:
         with pytest.raises(router.HTTPException) as exc_info:
-            router.upgrade_subscription_endpoint(
-                router.UpgradeSubscriptionRequest(price_id="price_uy", switch_now=True), uid="u1"
-            )
+            router.upgrade_subscription_endpoint(_ys_request(router), uid="u1")
 
     assert exc_info.value.status_code == 402
     mocks.modify.assert_called_once()
@@ -584,32 +614,63 @@ def test_declined_yearly_switch_returns_402_and_keeps_the_monthly_plan(payment_r
 
 
 @pytest.mark.parametrize(
-    "over,request_over",
+    "over,request_over,invoice",
     [
-        ({"status": "trialing", "trial_end": _YS_NOW + 3 * 86400}, {}),  # #23298
-        ({"trial_end": _YS_NOW + 3 * 86400}, {}),
-        ({"status": "past_due"}, {}),
-        ({"schedule": "sub_sched_1"}, {}),
-        ({"discounts": ["di_retention"]}, {}),
-        ({"discount": {"coupon": {"id": "omi-retention-50off-3mo"}}}, {}),
-        ({}, {"promotion_code": "SAVE20"}),
-        ({}, {"proration_date": _YS_NOW - 2 * 3600}),  # a stale preview
-        ({}, {"price_id": "price_py"}),  # another plan's yearly price
+        ({"status": "trialing", "trial_end": _YS_NOW + 3 * 86400}, {}, None),  # #23298
+        ({"trial_end": _YS_NOW + 3 * 86400}, {}, None),
+        ({"status": "past_due"}, {}, None),
+        ({"status": "unpaid"}, {}, None),
+        ({"schedule": "sub_sched_1"}, {}, None),
+        ({"pending_update": {"expires_at": _YS_NOW + 86400}}, {}, None),
+        ({"discounts": ["di_retention"]}, {}, None),
+        ({"discount": {"coupon": {"id": "omi-retention-50off-3mo"}}}, {}, None),
+        ({"currency": "jpy"}, {}, None),
+        ({}, {"promotion_code": "SAVE20"}, None),
+        ({}, {"proration_date": _YS_NOW - 2 * 3600}, None),  # a stale preview
+        ({}, {"proration_date": None}, None),  # no preview, no charge
+        ({}, {"expected_amount_due": None}, None),
+        ({}, {"expected_amount_due": _YS_DUE + 1}, None),  # not the amount Stripe would charge now
+        ({}, {}, _ys_invoice(total_discount_amounts=[{"amount": 500}])),  # a customer-level coupon
+        ({}, {"price_id": "price_py"}, None),  # another plan's yearly price
     ],
 )
-def test_yearly_switch_is_refused_for_every_state_the_offer_hides(payment_router, over, request_over):
+def test_yearly_switch_is_refused_for_every_state_the_offer_hides(payment_router, over, request_over, invoice):
     router = payment_router
     _ys_stored(router)
-    params = {"price_id": "price_uy", "switch_now": True, **request_over}
-    with _ys_patches(router, _ys_stripe_sub(**over), {"return_value": MagicMock()}) as mocks:
+    with _ys_patches(router, _ys_stripe_sub(**over), {"return_value": MagicMock()}, invoice) as mocks:
         with pytest.raises(router.HTTPException) as exc_info:
-            router.upgrade_subscription_endpoint(router.UpgradeSubscriptionRequest(**params), uid="u1")
+            router.upgrade_subscription_endpoint(_ys_request(router, **request_over), uid="u1")
 
     assert exc_info.value.status_code == 409
     mocks.modify.assert_not_called()
     mocks.schedule_create.assert_not_called()
     mocks.promo.assert_not_called()
     router.users_db.update_user_subscription.assert_not_called()
+
+
+def test_a_repeated_yearly_switch_after_it_landed_never_charges_again(payment_router):
+    """A retry or second tap after the switch succeeded finds the yearly price and stops before Stripe."""
+    router = payment_router
+    _ys_stored(router)
+    yearly = _ys_stripe_sub(
+        items={
+            "data": [
+                {
+                    "id": "si_monthly",
+                    "quantity": 1,
+                    "price": {"id": "price_uy", "currency": "usd", "recurring": {"interval": "year"}},
+                }
+            ]
+        }
+    )
+    with _ys_patches(router, yearly, {"return_value": MagicMock()}) as mocks:
+        with pytest.raises(router.HTTPException) as exc_info:
+            router.upgrade_subscription_endpoint(_ys_request(router), uid="u1")
+
+    assert exc_info.value.status_code == 400
+    mocks.preview.assert_not_called()
+    mocks.modify.assert_not_called()
+    mocks.schedule_create.assert_not_called()
 
 
 def test_same_plan_yearly_without_switch_now_is_still_scheduled_for_the_period_end(payment_router):

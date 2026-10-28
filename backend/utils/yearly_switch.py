@@ -1,4 +1,4 @@
-"""Monthly to yearly switch on the same plan, at the plan's existing yearly price.
+"""Omi Pro monthly to Omi Pro yearly, at the existing yearly price.
 
 Offered to monthly payers in Plans & Billing and on Home. The switch applies now: Stripe credits
 the unused part of the current month against the first yearly invoice, charges it today, and the
@@ -6,9 +6,12 @@ yearly period starts today. POST /v1/payments/upgrade-subscription applies it (`
 with ``payment_behavior='error_if_incomplete'``, so a declined charge changes nothing and the
 reader stays on monthly (#23301).
 
-Only an active, renewing, undiscounted monthly subscription qualifies: no trial (#23298), no
-past_due, no scheduled cancellation or plan change, no discount (a coupon would carry onto the
-yearly invoice). No new prices, coupons or discounts.
+Only an active, renewing, undiscounted USD monthly subscription on Omi Pro's configured monthly
+price qualifies: no trial (#23298), no past_due, no scheduled cancellation or plan change, no
+discount (a coupon would carry onto the yearly invoice). No new prices, coupons or discounts.
+
+The charge is the one the reader saw: the switch re-runs the preview at the same proration date
+and refuses unless the amount matches, and it carries an idempotency key bound to that preview.
 """
 
 import logging
@@ -20,9 +23,11 @@ import stripe
 
 logger = logging.getLogger(__name__)
 
-# The plans the phone sells (plan-catalog.md). Desktop plans stay manage-only on mobile, legacy Neo
-# is not offered a new term.
-SWITCH_PLAN_IDS = frozenset({'plus', 'unlimited_v2'})
+# Omi Pro is the only plan sold (plan-catalog.md, 2026-10-26). A retired plan is not offered a new
+# yearly term, and moving its monthly payers onto Omi Pro yearly is a price change, not this offer.
+SWITCH_PLAN_IDS = frozenset({'unlimited_v2'})
+# Billing currencies the offer supports. A JPY subscription manages through its own prices (#23584).
+SWITCH_CURRENCIES = frozenset({'usd'})
 # A reader inside this long of their first paid period is in their first billing month.
 FIRST_PERIOD_SECONDS = 7 * 86400
 # A preview's proration date the switch still honors.
@@ -44,6 +49,14 @@ class YearlySwitch:
     amount_due_today: Optional[int] = None
     renews_at: Optional[int] = None
     proration_date: Optional[int] = None
+
+
+class _Refused(Exception):
+    """A preview that shows the switch must not run (``reason`` is the refusal)."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
 
 
 def _ineligible(reason: str) -> YearlySwitch:
@@ -112,6 +125,9 @@ def refusal(sub: Any, now: Optional[int] = None) -> Optional[str]:
         return 'not_monthly'
     if not _get(price, 'unit_amount'):
         return 'free_price'
+    sub_currency = _get(sub, 'currency') or _get(price, 'currency')
+    if sub_currency not in SWITCH_CURRENCIES or _get(price, 'currency') not in SWITCH_CURRENCIES:
+        return 'currency'
     if _monthly_target(_get(price, 'id')) is None:
         return 'not_offered'
     return None
@@ -173,18 +189,42 @@ def request_refusal(
     target_price_id: str,
     promotion_code: Optional[str] = None,
     proration_date: Optional[int] = None,
+    expected_amount_due: Optional[int] = None,
     now: Optional[int] = None,
 ) -> Optional[str]:
-    """Why POST upgrade-subscription with ``switch_now`` must refuse; None when the switch may run."""
+    """Why POST upgrade-subscription with ``switch_now`` must refuse, before any Stripe write."""
     if promotion_code:
         return 'promotion_code'  # no new discounts
+    if proration_date is None or expected_amount_due is None:
+        return 'preview_required'  # the switch charges only an amount the reader saw
     return switch_refusal(sub, target_price_id, now) or proration_date_refusal(sub, proration_date, now)
+
+
+def charge_refusal(
+    sub: Any, target_price_id: str, proration_date: Optional[int], expected_amount_due: Optional[int]
+) -> Optional[str]:
+    """Re-runs the preview at the reader's proration date; refuses unless it charges what they saw."""
+    if proration_date is None or expected_amount_due is None:
+        return 'preview_required'
+    try:
+        amount_due, _, _ = preview_invoice(sub, target_price_id, proration_date)
+    except _Refused as refused:
+        return refused.reason
+    except Exception as exc:  # noqa: BLE001 - an unreadable preview never charges
+        logger.warning('yearly switch charge preview failed: %s', type(exc).__name__)
+        return 'preview_unavailable'
+    return None if amount_due == expected_amount_due else 'preview_changed'
+
+
+def idempotency_key(subscription_id: str, proration_date: int) -> str:
+    """One charge per preview: a retried or doubled request replays Stripe's first result."""
+    return f'omi-yearly-switch-{subscription_id}-{proration_date}'
 
 
 def proration_date_refusal(sub: Any, proration_date: Optional[int], now: Optional[int] = None) -> Optional[str]:
     """A preview's proration date is honored only inside the current period and for an hour."""
     if proration_date is None:
-        return None
+        return 'preview_required'
     now = int(now if now is not None else time.time())
     period_start = int(_get(sub, 'current_period_start') or 0)
     if proration_date > now or proration_date < period_start or now - proration_date > PRORATION_DATE_MAX_AGE_SECONDS:
@@ -192,30 +232,46 @@ def proration_date_refusal(sub: Any, proration_date: Optional[int], now: Optiona
     return None
 
 
-def _preview(sub: Any, offer: YearlySwitch, now: int) -> YearlySwitch:
-    """Stripe's own invoice for the switch: what is charged today and when the yearly plan renews."""
+def preview_invoice(sub: Any, price_id: str, proration_date: int) -> tuple[int, int, str]:
+    """Stripe's own invoice for the switch at ``proration_date``: (amount due, renewal, currency).
+
+    The same items and proration behavior as the switch itself, so the amount is the charge.
+    """
     item_id = _get(_get(_get(sub, 'items'), 'data')[0], 'id')
     params: dict[str, Any] = {
         'customer': _get(sub, 'customer'),
         'subscription': _get(sub, 'id'),
         'subscription_details': {
-            'items': [{'id': item_id, 'price': offer.price_id}],
+            'items': [{'id': item_id, 'price': price_id}],
             'proration_behavior': 'always_invoice',
-            'proration_date': now,
+            'proration_date': proration_date,
         },
     }
     invoice = stripe.Invoice.create_preview(**params)
-    if _get(invoice, 'currency') != offer.currency or _get(invoice, 'amount_due') is None:
+    currency = _get(invoice, 'currency')
+    if currency not in SWITCH_CURRENCIES or _get(invoice, 'amount_due') is None:
         raise ValueError('preview_mismatch')
+    # A customer-level coupon still discounts the yearly invoice: not an undiscounted switch.
+    if _get(invoice, 'discounts') or any(
+        int(_get(d, 'amount') or 0) for d in (_get(invoice, 'total_discount_amounts') or [])
+    ):
+        raise _Refused('discounted')
     ends = [
         int(_get(_get(line, 'period'), 'end') or 0)
         for line in (_get(_get(invoice, 'lines'), 'data') or [])
         if not _get(line, 'proration')
     ]
-    renews_at = max(ends) if ends and max(ends) > now else None
+    renews_at = max(ends) if ends and max(ends) > proration_date else None
     if renews_at is None:
         raise ValueError('preview_without_period')
-    return replace(offer, amount_due_today=int(_get(invoice, 'amount_due')), renews_at=renews_at, proration_date=now)
+    return int(_get(invoice, 'amount_due')), renews_at, currency
+
+
+def _preview(sub: Any, offer: YearlySwitch, now: int) -> YearlySwitch:
+    amount_due, renews_at, currency = preview_invoice(sub, offer.price_id or '', now)
+    if currency != offer.currency:
+        raise ValueError('preview_mismatch')
+    return replace(offer, amount_due_today=amount_due, renews_at=renews_at, proration_date=now)
 
 
 def get_offer(subscription_id: Optional[str], preview: bool = False, now: Optional[int] = None) -> YearlySwitch:
@@ -232,6 +288,8 @@ def get_offer(subscription_id: Optional[str], preview: bool = False, now: Option
         if not offer.eligible or not preview:
             return offer
         return _preview(sub, offer, now)
+    except _Refused as refused:
+        return _ineligible(refused.reason)
     except Exception as exc:  # noqa: BLE001 - the offer is optional
         logger.warning('yearly switch lookup failed: %s', type(exc).__name__)
         return _ineligible('unavailable')
