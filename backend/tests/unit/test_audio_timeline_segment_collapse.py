@@ -32,6 +32,7 @@ import httpx
 import numpy as np
 import pytest
 
+from tests.unit.fixtures.live_stt_registry import enabled_live_targets
 import utils.stt.parakeet_window as window
 import utils.stt.live_session as live_session_module
 import utils.stt.provider_resilience as provider_resilience
@@ -768,6 +769,7 @@ class _RecordingSocket(STTSocket):
 )
 async def test_managed_prod_order_mints_fresh_epoch_after_failover(monkeypatch, first, second):
     """Drive the configured live-chain callback/leg rather than a bare translator."""
+    enabled_live_targets(monkeypatch)
     from utils.audio import AudioRingBuffer
 
     monkeypatch.setattr(st, 'stt_service_models', ['modulate-velma-2', 'soniox', 'dg-nova-3', 'parakeet'])
