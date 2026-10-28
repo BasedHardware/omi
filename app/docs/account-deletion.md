@@ -28,6 +28,12 @@ Unknown/foreign ownership is excluded, as are unreadable/corrupt or server-rejec
 unsupported audio. Server-held recordings get immediate-loss warnings only without
 a reported grace window. Phone-only recordings always warn of loss on deletion.
 
+The backend lane's DELETE route currently uses normal `get_current_user_uid`,
+which rejects `pending_deletion` before `erase_now` can be handled. The backend
+must grant authenticated, owner-only deletion access for this operation while
+keeping ordinary product writes fenced. Until then Finish deleting fails safely
+and retains the decision screen and local audio.
+
 `POST /v1/users/restore-account` must return `restored: true` before the app resumes.
 Restoration restarts shell initialization and rechecks status. It does not restart
 billing or reconnect revoked integrations. Finish deleting first reveals a second
