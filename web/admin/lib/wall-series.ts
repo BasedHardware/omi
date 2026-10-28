@@ -1792,7 +1792,7 @@ export async function seriesPayload(
   );
   const flights = starts.flatMap((s) => (s ? [s.flight] : []));
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const [wall] = await Promise.all([
+  const [served] = await Promise.all([
     snapshot.catch(() => null),
     flights.length
       ? Promise.race([
@@ -1802,6 +1802,17 @@ export async function seriesPayload(
       : null,
   ]);
   if (timer) clearTimeout(timer);
+  // A metric the snapshot retained is shown for 24h from `retainedSince`,
+  // never longer, whatever the age of the snapshot that carries it.
+  const wall = served && {
+    ...served,
+    metrics: served.metrics.map((m) =>
+      m.retainedSince &&
+      now.getTime() - Date.parse(m.retainedSince) >= MAX_STALE
+        ? { ...m, value: null }
+        : m
+    ),
+  };
   const legs: Legs = {};
   const gaps: Record<string, string> = {};
   let cacheStale = Boolean(wall?.cacheStale);

@@ -150,7 +150,8 @@ class StatsProxy:
                 self.good[path] = (at, body, serve_until)
                 expires = min(expires, serve_until)
             if bound is not None and bound <= stamp:
-                expires = stamp  # already past its bound: answer once, keep nothing
+                # Already past its own data-age bound: not data the board may show.
+                status, body, expires = 502, UNAVAILABLE, stamp + FAILURE_TTL
         self.cache[path] = (expires, status, body)
         return status, body
 

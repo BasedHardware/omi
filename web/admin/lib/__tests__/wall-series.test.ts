@@ -1035,6 +1035,26 @@ describe("the warm scheduler fills legs off the viewing path", () => {
     );
   });
 
+  it("drops a retained snapshot metric 24h after it was retained", async () => {
+    const s = { ...sources(), store: memorySeriesStore() };
+    const wall = await computeWall(s, now);
+    const retained = new Date(now.getTime() - 25 * 3_600_000).toISOString();
+    const kept = {
+      ...wall,
+      metrics: wall.metrics.map((m, i) =>
+        i === 0 ? { ...m, value: m.value ?? 1, retainedSince: retained } : m
+      ),
+    };
+    const served = await seriesPayload(
+      "headline",
+      Promise.resolve(kept),
+      now,
+      s
+    );
+    // The bound now comes only from values still within 24h.
+    expect(Date.parse(served.staleUntil!)).toBeGreaterThan(now.getTime());
+  });
+
   it("tells the proxy when its oldest served value turns 24h old", async () => {
     const s = { ...sources(), store: memorySeriesStore() };
     const served = await seriesPayload("growth", Promise.resolve(null), now, s);

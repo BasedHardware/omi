@@ -538,3 +538,14 @@ def test_a_cached_answer_expires_at_its_stale_bound_not_its_ttl():
     path = "/api/omi/stats/wall/series/growth"
     proxy.fetch(path)
     assert proxy.cache[path][0] == datetime(2027, 1, 15, 9, tzinfo=timezone.utc).timestamp()
+
+
+def test_a_body_already_past_its_stale_bound_is_not_served():
+    now = [datetime(2027, 1, 15, 9, 1, tzinfo=timezone.utc).timestamp()]
+    proxy = StatsProxy(clock=lambda: now[0], spawn=inline)
+    proxy.identity_token = lambda: "synthetic"
+    proxy.request = lambda *args, **kwargs: b'{"staleUntil":"2027-01-15T09:00:00Z"}'
+    path = "/api/omi/stats/wall/series/headline"
+    assert proxy.fetch(path)[0] == 502
+    assert path not in proxy.good
+    assert proxy.fetch(path)[0] == 502  # shared for FAILURE_TTL, not re-forwarded
