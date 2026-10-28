@@ -7755,6 +7755,11 @@ the cited capture context. The conversation capture adapter repeats the final
 check with cited transcript context before proposing Candidates. Extraction and
 wake-word capture continue to consume P2's existing shared role-label context;
 the validity heuristic never infers a task's subject from the speaking voice.
+The downstream refresh reconciler receives canonical rows after extraction has
+passed this gate. With source provenance but no retained context/segment text,
+the guard abstains rather than rejecting a previously grounded task. Unrelated
+topic words cannot resolve a speaker-only target: that requires an explicit
+referent/callback relation in the supplied evidence, without guessing a name.
 
 `ACTION_ITEM_VALIDITY_MODE` defaults to `shadow` with zero serving percent and
 empty digest allowlist. Text-free aggregate `event=action_item_validity` receipts

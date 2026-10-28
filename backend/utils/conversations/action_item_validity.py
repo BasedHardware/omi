@@ -18,11 +18,20 @@ _DEICTIC_ONLY = re.compile(
     r'(?:it|this|that|them)(?:\s+(?:here|there))?[.!?]*$',
     re.I,
 )
+_EXPLICIT_TARGET = re.compile(
+    r'\b(?:speaker\s*\d+|the other (?:speaker|person|one)|another speaker)\s+'
+    r'(?:is|means|refers to)\s+|\b(?:asked|requested)\s+(?:me\s+)?(?:for\s+)?(?:a\s+)?(?:callback|call back)\b',
+    re.I,
+)
 _GENERIC = frozenset(
     'i me my you your he him his she her we us our they their it this that them here there the a an to for of on in with '
     'will would should can could said says send email share bring move put do review check '
-    'follow up call ask asked speaker person other another one task agreed promised please'.split()
+    'follow up call ask asked is means refers speaker person other another one someone task agreed promised please'.split()
 )
+
+
+def _meaningful(text: str) -> set[str]:
+    return {word.casefold() for word in re.findall(r'\w+', _PLACEHOLDER.sub('', text))} - _GENERIC
 
 
 def field(item: Any, name: str) -> Any:
@@ -45,9 +54,10 @@ def unresolved_reference(
     placeholder = bool(_PLACEHOLDER.search(text))
     if not placeholder and not _DEICTIC_ONLY.fullmatch(text):
         return None
-    evidence = ' '.join((text, context, *source_texts))
-    meaningful = {word.casefold() for word in re.findall(r'\w+', _PLACEHOLDER.sub('', evidence))} - _GENERIC
-    if meaningful:
+    if _meaningful(text):
+        return None  # A concrete description is not rejected for mentioning a label.
+    evidence = ' '.join((context, *source_texts))
+    if _meaningful(evidence) and (not placeholder or _EXPLICIT_TARGET.search(evidence)):
         return None
     return 'unresolved_reference'
 
@@ -61,6 +71,12 @@ def select_valid_items(uid: str, items: Sequence[Any], *, transcript_segments: S
     unresolved = 0
     for item in items:
         ids = field(item, 'source_segment_ids') or ()
+        if not transcript_segments and field(item, 'source') == 'conversation' and field(item, 'provenance'):
+            # Refresh receives the canonical projection after this gate already
+            # ran at extraction. It has lost context/segment text; reclassifying
+            # that projection cannot establish that a reference is unresolved.
+            selected.append(item)
+            continue
         if ids and not transcript_segments:
             # Legacy desktop prefilter lacks capture context; the capture adapter
             # repeats this final check with the actual segments and shared roles.
