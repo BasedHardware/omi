@@ -25,6 +25,7 @@ import database.screen_activity as screen_activity_db
 from database.users import get_ai_user_profile
 from models.agent_tools import Search
 from utils.agent_capabilities.search import OwnerSearch
+from utils.conversations.meeting_context import call_tile_names, call_tile_agent_names
 from utils.conversations.meeting_context_pack import gather_prior_meetings, load_people_documents
 from utils.conversations.screen_people_leads import LEAD_MINUTES_BEFORE, screen_people_leads
 from utils.conversations.screen_text_digest import MESSAGING_APPS
@@ -457,10 +458,21 @@ def build_packet(
     except Exception as error:  # noqa: BLE001 - every packet source degrades independently
         logger.warning('notes agent packet calendar read failed uid=%s: %s', uid, type(error).__name__)
     leads: list[dict[str, Any]] = []
+    call_tiles: list[str] = []
+    call_agents: list[str] = []
     try:
         rows: Any = screen_activity_db.get_screen_activity(
             uid, start_date=start - timedelta(minutes=LEAD_MINUTES_BEFORE), end_date=end, limit=400
         )
+        in_call_rows = [
+            row
+            for row in rows or []
+            if isinstance(row, dict) and (at := _as_utc(row.get('timestamp'))) is not None and start <= at <= end
+        ]
+        # A full ascending page cannot prove we saw the latest label.
+        if len(rows or []) < 400:
+            call_tiles = call_tile_names(in_call_rows, owner_names=owner_names, current_only=True)
+            call_agents = call_tile_agent_names(in_call_rows, owner_names=owner_names, current_only=True)
         windows = _top_windows(rows or [])
         if lookup_efficiency_enabled():
             conversation_rows = [
@@ -515,6 +527,8 @@ def build_packet(
         'calendar_overlap': calendar,
         'listed_participants': listed,
         'people_on_screen': leads,
+        'call_tile_names': call_tiles,
+        'call_tile_agent_names': call_agents,
         'top_windows_during_conversation': windows,
         'screenshots': [{'id': frame.frame_id, 'at': frame.offset_label} for frame in frames],
         'related_past_meetings': related,

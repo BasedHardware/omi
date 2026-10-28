@@ -230,7 +230,7 @@ def test_spend_denial_does_not_erase_an_already_generated_day(producer, monkeypa
 def test_media_dependency_delegates_to_v2_and_preserves_rollback(monkeypatch):
     from utils.conversations import media_consumers
 
-    monkeypatch.delenv('MEDIA_NOISE_MODE', raising=False)
+    monkeypatch.setenv('MEDIA_NOISE_MODE', 'shadow')
     calls = []
 
     def policy(uid, row, **kwargs):

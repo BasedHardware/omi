@@ -9,13 +9,15 @@ from utils.speakers.display import display_participants
 
 SPEAKER_RULES = '''SPEAKER ATTRIBUTION
 - Speaker keys identify voice clusters, never people by themselves.
-- Use names only for a label_eligible candidate in the confident band.
-- For likely, unknown or unavailable identity say "someone said" when attributing a statement.
+- Use names only for a label_eligible candidate in the confident band or an explicit server-provided
+  screen_speaker_bindings entry (notes-only two-speaker call attribution; cite that screen evidence).
+- Without such a binding, for likely, unknown or unavailable identity say "someone said" when attributing a statement.
   Do not name a likely candidate or turn their personal story into the account owner's experience.
 - Never attribute personal stories to a named person without evidence.
 - When candidates compete, prefer the higher probability; a listing or contact spelling alone never identifies a voice.
 - Never infer the owner from a speaker number, a first-person story, the calendar, or an account profile.
-- With unavailable speaker resolution, retain only supported existing labels; unresolved voices stay anonymous.
+- With unavailable speaker resolution, retain only supported existing labels and explicit server-provided
+  screen_speaker_bindings; other unresolved voices stay anonymous.
 - Contact spellings correct close sound-alikes, not identities: "Nick" may be spelled "Nik Shevchenko" when that
   contact corroborates the spoken name, but a contact entry alone does not establish that they spoke.
 - If more than one contact could match a spoken name, keep the transcript spelling and do not pick one.

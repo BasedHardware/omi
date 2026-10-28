@@ -3471,6 +3471,7 @@ export interface MeetingParticipant {
 
 export interface MeetingParticipantSources {
   expected_calendar?: Array<MeetingParticipant> | null;
+  observed_call_tiles?: Array<MeetingParticipant> | null;
   observed_screen_listing?: Array<MeetingParticipant> | null;
 }
 
@@ -5289,6 +5290,7 @@ export interface StoreMeetingRequest {
   end_time: string;
   meeting_link?: string | null;
   notes?: string | null;
+  participant_sources?: MeetingParticipantSources | null;
   participants?: Array<MeetingParticipant>;
   platform?: string | null;
   start_time: string;

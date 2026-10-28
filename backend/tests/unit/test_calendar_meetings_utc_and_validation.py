@@ -147,3 +147,80 @@ def test_query_helpers_emit_no_positional_filter_userwarning(monkeypatch):
             datetime(2026, 9, 24, 9, 45, 0, tzinfo=timezone.utc),
         )
         assert [item['id'] for item in overlapping] == ['m-1']
+
+
+def test_meeting_upload_strips_caller_supplied_provenance(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(calendar_db, 'get_meeting_id_by_calendar_event', lambda *args: None)
+    monkeypatch.setattr(calendar_db, 'create_meeting', lambda uid, data: captured.update(data) or 'meeting-1')
+    request = calendar_router.StoreMeetingRequest(
+        calendar_event_id='screen-call',
+        calendar_source='screen_activity',
+        title='Meet - abc-defg-hij',
+        start_time=datetime(2026, 10, 28, 12, tzinfo=timezone.utc),
+        end_time=datetime(2026, 10, 28, 12, 30, tzinfo=timezone.utc),
+        participants=[{'name': 'Robert Ream'}],
+        participant_sources={
+            'observed_screen_listing': [{'name': 'Robert Ream'}],
+            'observed_call_tiles': [{'name': 'Robert Ream'}],
+        },
+    )
+    calendar_router.store_calendar_meeting(request, uid='synthetic-owner')
+    context = calendar_router.CalendarMeetingContext(**captured)
+    assert request.participant_sources is None
+    assert context.participant_sources is None
+    assert context.to_storage_dict()['participant_sources'] is None
+
+
+def test_process_request_strips_client_provenance_before_processing():
+    from models.conversation import ProcessConversationRequest
+
+    context = {
+        'calendar_event_id': 'fake',
+        'title': 'Fake provenance',
+        'start_time': datetime.now(timezone.utc),
+        'duration_minutes': 30,
+        'participant_sources': {'observed_call_tiles': [{'name': 'Forged Person', 'email': 'private@example.com'}]},
+    }
+    for value in (context, calendar_router.CalendarMeetingContext(**context)):
+        request = ProcessConversationRequest(calendar_meeting_context=value)
+        assert request.calendar_meeting_context.participant_sources is None
+        assert 'Forged Person' not in str(request.model_dump())
+
+
+@pytest.mark.parametrize('endpoint', ['get', 'list'])
+def test_meeting_reads_omit_internal_tile_provenance(monkeypatch, endpoint):
+    meeting = {
+        'calendar_event_id': 'old',
+        'title': 'Planning',
+        'start_time': datetime.now(timezone.utc),
+        'duration_minutes': 30,
+        'participant_sources': {'observed_call_tiles': [{'name': 'Robert Ream', 'email': 'private@example.com'}]},
+    }
+    if endpoint == 'get':
+        monkeypatch.setattr(calendar_db, 'get_meeting', lambda *args: meeting)
+        result = calendar_router.get_calendar_meeting('meeting-1', uid='owner')
+    else:
+        monkeypatch.setattr(calendar_db, 'list_meetings', lambda *args, **kwargs: [meeting])
+        result = calendar_router.list_calendar_meetings(uid='owner')[0]
+    assert result.participant_sources.observed_call_tiles is None
+    assert 'private@example.com' not in str(result.model_dump())
+
+
+@pytest.mark.parametrize('nested', [False, True])
+def test_create_request_strips_provenance_from_both_meeting_inputs(nested):
+    from models.conversation import CreateConversation
+
+    at = datetime.now(timezone.utc)
+    context = {
+        'calendar_event_id': 'fake',
+        'title': 'Planning',
+        'start_time': at,
+        'duration_minutes': 30,
+        'participant_sources': {'observed_call_tiles': [{'name': 'Forged Person'}]},
+    }
+    fields = (
+        {'external_data': {'calendar_meeting_context': context}} if nested else {'calendar_meeting_context': context}
+    )
+    request = CreateConversation(started_at=at, finished_at=at, transcript_segments=[], **fields)
+    assert 'Forged Person' not in str(request.model_dump())

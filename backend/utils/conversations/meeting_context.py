@@ -347,7 +347,7 @@ def _is_owner_name(name: str, owner_names: set[str], owner_locals: set[str]) -> 
     for owner in owner_names:
         owner_tokens = owner.split()
         if folded == owner or (
-            len(owner_tokens) >= 2 and tokens[0] == owner_tokens[0] and tokens[-1] == owner_tokens[-1]
+            owner_tokens and tokens[0] == owner_tokens[0] and (len(owner_tokens) == 1 or tokens[-1] == owner_tokens[-1])
         ):
             return True
     joined = ''.join(tokens)
@@ -392,14 +392,94 @@ def _row_text(row: dict[str, Any]) -> str:
     return f'{row.get("windowTitle") or ""}\n{row.get("ocrText") or ""}'
 
 
+def _call_content(row: dict[str, Any]) -> str:
+    """Exclude the browser tab strip before a visible Meet address, when present."""
+    text = str(row.get('ocrText') or '')
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if re.match(r'\s*(?:https?://)?meet\.google\.com/[a-z]{3}-[a-z]{4}-[a-z]{3}', line, re.IGNORECASE):
+            return '\n'.join(lines[index + 1 :])
+    return text
+
+
+def _screen_chrome_names(rows: list[dict[str, Any]]) -> set[str]:
+    # One observed app/window title is enough to disqualify it. The old majority
+    # check needed three non-call rows in the *same* browser and missed other apps.
+    excluded: set[str] = set()
+    for row in rows:
+        excluded.add(_title_part(str(row.get('appName') or '')))
+        if not _is_messaging_call_app(str(row.get('appName') or '')):
+            for part in _TITLE_SEPARATORS.split(str(row.get('windowTitle') or '')):
+                excluded.add(_title_part(part))
+    return excluded
+
+
+def _other_screen_participants(
+    participants: list[MeetingParticipant],
+    rows: list[dict[str, Any]],
+    owner_names: Iterable[str],
+    owner_emails: Iterable[str],
+) -> list[MeetingParticipant]:
+    owners = {_clean_line(name).casefold() for name in owner_names if name}
+    emails = {email.strip().casefold() for email in owner_emails if email}
+    locals_ = {email.split('@', 1)[0] for email in emails}
+    for row in rows:
+        for raw in str(row.get('ocrText') or '').splitlines():
+            if _OWNER_TILE_MARKER.search(_clean_line(raw)):
+                owners.add(_clean_line(_NAME_DECORATION.sub('', _clean_line(raw))).casefold())
+    chrome = _screen_chrome_names(rows)
+    return [
+        participant
+        for participant in participants
+        if (
+            not participant.name
+            or (participant.name.casefold() not in chrome and not _is_owner_name(participant.name, owners, locals_))
+        )
+        and (not participant.email or participant.email.casefold() not in emails)
+    ]
+
+
+def latest_call_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Latest call window, bounded to five minutes of sightings.
+
+    Production rows are chronological. Sort timestamped rows as callers may
+    supply a reversed page. Untimed fixtures retain their supplied order.
+    A different call title/app starts a new interval; old calls never vote.
+    """
+
+    def at(row):
+        value = row.get('timestamp')
+        try:
+            dt = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+            return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+        except (ValueError, TypeError):
+            return None
+
+    ordered = sorted(rows, key=lambda row: at(row) or datetime.min.replace(tzinfo=timezone.utc))
+    calls = [row for row in ordered if _is_call_window_row(row)]
+    if not calls:
+        return []
+    last = calls[-1]
+    identity = lambda row: (row.get('appName'), row.get('windowTitle'))
+    recent = []
+    end = at(last)
+    for row in reversed(calls):
+        time = at(row)
+        if identity(row) != identity(last) or (end and time and (end - time).total_seconds() > 300):
+            break
+        recent.append(row)
+    return list(reversed(recent))
+
+
 def call_tile_names(
     rows: list[dict[str, Any]],
     *,
     owner_names: Iterable[str] = (),
     owner_emails: Iterable[str] = (),
+    current_only: bool = False,
 ) -> list[str]:
     """Human names shown as call-tile labels (see _call_tile_labels)."""
-    return _call_tile_labels(rows, owner_names, owner_emails, agents=False)
+    return _call_tile_labels(rows, owner_names, owner_emails, agents=False, current_only=current_only)
 
 
 def call_tile_agent_names(
@@ -407,6 +487,7 @@ def call_tile_agent_names(
     *,
     owner_names: Iterable[str] = (),
     owner_emails: Iterable[str] = (),
+    current_only: bool = False,
 ) -> list[str]:
     """AI-agent tiles that pass the same persistence rule.
 
@@ -415,7 +496,7 @@ def call_tile_agent_names(
     bind a mixed remote channel to the one visible human. Only names the roster
     classifier also recognises as agents are returned, so none becomes a human.
     """
-    labels = _call_tile_labels(rows, owner_names, owner_emails, agents=True)
+    labels = _call_tile_labels(rows, owner_names, owner_emails, agents=True, current_only=current_only)
     return [name for name in labels if looks_like_ai_agent_name(name)]
 
 
@@ -425,6 +506,7 @@ def _call_tile_labels(
     owner_emails: Iterable[str],
     *,
     agents: bool,
+    current_only: bool = False,
 ) -> list[str]:
     """Names shown as call-tile labels, by persistence across the call's rows.
 
@@ -435,20 +517,19 @@ def _call_tile_labels(
     or email), not an AI agent, not part of a conferencing window title, and
     not chrome that recurs across the non-call rows as well.
     """
-    call_rows = [row for row in rows if _is_call_window_row(row)]
+    call_rows = latest_call_rows(rows) if current_only else [row for row in rows if _is_call_window_row(row)]
     if len(call_rows) < MIN_TILE_ROWS:
         return []
     owner_set = {_clean_line(name).casefold() for name in owner_names if name and name.strip()}
     owner_locals = {email.strip().casefold().split('@', 1)[0] for email in owner_emails if email and '@' in email}
-    title_parts: set[str] = set()
+    title_parts = _screen_chrome_names(rows)
     counts: dict[str, int] = {}
     spelling: dict[str, str] = {}
     order: list[str] = []
+    latest_seen: set[str] = set()
     for row in call_rows:
-        title = _clean_line(str(row.get('windowTitle') or ''))
-        title_parts.update(_title_part(part) for part in _TITLE_SEPARATORS.split(title) if part.strip())
         seen: set[str] = set()
-        for raw_line in str(row.get('ocrText') or '').splitlines():
+        for raw_line in _call_content(row).splitlines():
             line = _clean_line(raw_line)
             name = _tile_name(line)
             if name is None:
@@ -457,6 +538,9 @@ def _call_tile_labels(
             if _OWNER_TILE_MARKER.search(line):
                 owner_set.add(key)
             if key in seen:
+                if current_only:
+                    # Two tiles with the same label are two possible people.
+                    return []
                 continue
             seen.add(key)
             if key not in counts:
@@ -464,6 +548,7 @@ def _call_tile_labels(
                 spelling[key] = name
                 order.append(key)
             counts[key] += 1
+        latest_seen = seen
 
     # Browser chrome (tab strip, bookmarks) recurs in the same app's other windows.
     call_apps = {str(row.get('appName') or '').casefold() for row in call_rows}
@@ -472,9 +557,10 @@ def _call_tile_labels(
     ]
     minimum = max(MIN_TILE_ROWS, MIN_TILE_ROW_SHARE * len(call_rows))
     accepted: list[str] = []
+    chrome = set(title_parts)
     for key in order:
         name = spelling[key]
-        if counts[key] < minimum or key in title_parts:
+        if counts[key] < minimum or key in title_parts or (current_only and key not in latest_seen):
             continue
         if _is_owner_name(name, owner_set, owner_locals) or is_ai_agent_tile_name(name) != agents:
             continue
@@ -485,8 +571,23 @@ def _call_tile_labels(
                 if any(_tile_name(_clean_line(raw)) == name for raw in _row_text(row).splitlines())
             )
             if elsewhere > MAX_NON_CALL_ROW_SHARE * len(non_call_rows):
+                chrome.add(key)
                 continue
         accepted.append(name)
+    # A new/unqualified label or an agent in the latest frame can represent
+    # another remote person too. Never let the older, persistent name win alone.
+    if (
+        current_only
+        and not agents
+        and any(
+            key not in chrome
+            and not _is_owner_name(spelling[key], owner_set, owner_locals)
+            and spelling[key] not in accepted
+            and not (is_ai_agent_tile_name(spelling[key]) and counts[key] >= minimum)
+            for key in latest_seen
+        )
+    ):
+        return []
     accepted.sort(key=lambda name: (-counts[name.casefold()], order.index(name.casefold())))
     return accepted[:MAX_TILE_NAMES]
 
@@ -609,15 +710,23 @@ def context_from_screen_activity(
     persistence is judged over every row, not the character-budgeted selection:
     three full-desktop frames exhaust that budget.
     """
+    owner_names, owner_emails = tuple(owner_names), tuple(owner_emails)
     selected = _select_conferencing_rows(rows)
     if not selected:
         return None
 
     tiles = call_tile_names(rows, owner_names=owner_names, owner_emails=owner_emails)
     tiles += call_tile_agent_names(rows, owner_names=owner_names, owner_emails=owner_emails)
-    participants = participants_from_ocr((str(row.get('ocrText') or '') for row in selected), tile_names=tiles)
+    current_tiles = call_tile_names(rows, owner_names=owner_names, owner_emails=owner_emails, current_only=True)
+    current_tiles += call_tile_agent_names(rows, owner_names=owner_names, owner_emails=owner_emails, current_only=True)
+    # The ascending screen read may have omitted newer rows at its cap.
+    if len(rows) >= MAX_SCREEN_CONTEXT_ROWS:
+        current_tiles = []
+    participants = participants_from_ocr((_call_content(row) for row in selected), tile_names=tiles)
     if not participants:
         participants = _messaging_call_participants(rows)
+    # Apply to every extraction path, including email/roster corroboration.
+    participants = _other_screen_participants(participants, rows, owner_names, owner_emails)
     if not participants:
         return None
 
@@ -637,6 +746,10 @@ def context_from_screen_activity(
         start_time=started_at,
         duration_minutes=max(1, int(effective_seconds / 60)),
         calendar_source='screen_activity',
+        participant_sources=MeetingParticipantSources(
+            observed_screen_listing=participants,
+            observed_call_tiles=[MeetingParticipant(name=name) for name in current_tiles],
+        ),
     )
 
 
@@ -680,6 +793,7 @@ def merge_meeting_contexts(
     for source, left, right in (
         ('expected_calendar', primary_sources.expected_calendar, fallback_sources.expected_calendar),
         ('observed_screen_listing', primary_sources.observed_screen_listing, fallback_sources.observed_screen_listing),
+        ('observed_call_tiles', primary_sources.observed_call_tiles, fallback_sources.observed_call_tiles),
     ):
         if left is None and right is None:
             source_sets[source] = None
@@ -823,15 +937,20 @@ def resolve_meeting_context(
                 on_error(name, exc)
             return None
 
+    direct = direct.without_tile_provenance() if direct else None
     stored_context = _call('stored', stored)
+    stored_context = stored_context.without_tile_provenance() if stored_context else None
     stored_screen = stored_context if stored_context and stored_context.calendar_source == 'screen_activity' else None
     stored_calendar = None if stored_screen else stored_context
     direct_screen = direct if direct and direct.calendar_source == 'screen_activity' else None
     direct_calendar = None if direct_screen else direct
 
     context = merge_meeting_contexts(stored_calendar, direct_calendar)
-    context = merge_meeting_contexts(context, _call('member_contexts', member_contexts))
-    context = merge_meeting_contexts(context, _call('calendar', calendar))
+    member_context = _call('member_contexts', member_contexts)
+    member_context = member_context.without_tile_provenance() if member_context else None
+    context = merge_meeting_contexts(context, member_context)
+    calendar_context = _call('calendar', calendar)
+    context = merge_meeting_contexts(context, calendar_context.without_tile_provenance() if calendar_context else None)
     context = merge_meeting_contexts(context, stored_screen)
     context = merge_meeting_contexts(context, direct_screen)
     return merge_meeting_contexts(context, _call('screen', screen))
