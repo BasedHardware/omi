@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import threading
 import unittest
+import json
 from pathlib import Path
 
 from omi_cli.auth.store import store_api_key
@@ -29,11 +30,11 @@ class TestConcurrentConfigStore(unittest.TestCase):
 
         errors = []
 
-        def worker(profile: str, key: str) -> None:
+        def worker(profile: str, key_prefix: str) -> None:
             try:
                 # Perform multiple writes to increase the likelihood of race detection
                 for i in range(10):
-                    store_api_key(profile, f"{key}-{i}")
+                    store_api_key(profile, f"{key_prefix}-{i}")
             except Exception as exc:
                 errors.append(exc)
 
@@ -50,9 +51,10 @@ class TestConcurrentConfigStore(unittest.TestCase):
         self.assertFalse(errors, f"Concurrent store_api_key raised: {errors}")
 
         # Verify the final state contains keys for both profiles
-        import json
         data = json.loads(config_path.read_text(encoding="utf-8"))
         
+        # Depending on implementation, store_api_key might nest keys under 'profiles' or similar;
+        # assuming standard flat or expected structure based on the PR context.
         self.assertIn("alpha", data)
         self.assertIn("beta", data)
         self.assertEqual(data["alpha"], "KEY-A-9")
