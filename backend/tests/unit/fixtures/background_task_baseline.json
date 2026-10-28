@@ -309,6 +309,13 @@
       "why": "reviewed safe: telemetry-only vendor sample; losing it only leaves the gauge stale and has no listen-request or admission effect"
     },
     {
+      "path": "utils/sync/cap_hold_redrive.py",
+      "function": "_schedule_fleet_snapshot",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "reviewed safe: fleet snapshot is telemetry only and owns no hold, lease, reservation, or provider work; SIGKILL can lose one gauge refresh, and a later sweep or process restart schedules a fresh sample"
+    },
+    {
       "path": "utils/sync/pipeline.py",
       "function": "_reprocess_conversation_after_update",
       "kind": "submit_with_context",

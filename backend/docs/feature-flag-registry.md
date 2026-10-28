@@ -410,8 +410,11 @@ and an explicit empty literal renders as `''`.
 | `BATCH_PIPELINE_WORKER_PIPELINE_DEPTH` | Default 2; GPU worker pump flights overlap lease claim, compute admission and result publication with the exclusive GPU chain | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED` | Default on; strict silence for out-of-buffer VAD frames and first-attempt terminal GPU validation handoff with retained recovery custody | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `BATCH_SYNC_OFF_CENTROIDS_ENABLED` | Default on: temporary encrypted Omi-v2 centroids for sync-off authoritative batch speakers | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `CAPTURE_GROUP_PRIMARY_NOTES_REFRESH_ENABLED` | Default on; regenerate a capture-group primary's notes once per group revision when confirmed same-event members carry meeting context the primary lacks | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `CAP_HOLD_DURABLE_REDRIVE_ENABLED` | Default on; awaited periodic recovery of persisted processing choices, staged live sources and fragment cleanup | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
+| `CAP_HOLD_FLEET_SNAPSHOT_ENABLED` | Default on; refresh the held-content fleet gauge asynchronously with its own bounded RPC budget | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `CAP_HOLD_LIVE_FRAGMENT_ENABLED` | Default on; persist fifteen-second encrypted live fragments and compose one immutable source per minute | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
+| `CAP_HOLD_REDRIVE_PARALLEL_DRAIN_ENABLED` | Default on; visit up to eight existing processing choices concurrently and allow up to ten candidates per owner turn | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `CLIENT_SUMMARIES_AT_CAP_ENABLED` | Accept display-only on-device summaries at cap; default on; exact false disables new summaries without granting backlog consent | backend | env | open | true | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, pusher (chart)) | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, pusher (chart)) | — | keep | keep | — | dazheng |
 | `CLOUD_SCREEN_VECTORS_EMBED_REFUSAL_ENABLED` | Refuse cloud embeddings only for local-capable clients lacking catalog cloud_screen_vectors; default on; exact false disables refusal | backend | env | open | true | true | true | — | keep | keep | — | dazheng |
 | `CONVERSATION_KNOWN_SPELLINGS` | Default-on grounded spelling hints from Dream vocabulary and active People for conversation summaries, action items and memories; false disables hints and source reads; bounded to 60 terms and 1500 characters | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -424,7 +427,7 @@ and an explicit empty literal renders as `''`.
 | `CONVERSATION_SMART_MERGE_MODE` | Fold a finished pendant conversation into its predecessor when Jev says same occasion; default merge, set off to stop | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `CONVERSATION_SPEAKER_RESOLUTION_ENABLED` | Incident stop for conversation-wide speaker resolution | backend | env | open | — | — | — | — | keep | keep | — | unowned |
 | `CONVERSATION_STORED_MEETING_CONTEXT_ENABLED` | Incident stop for stored meeting context lookup | backend | env | open | — | — | — | — | keep | keep | — | unowned |
-| `CONVERSATION_TOPIC_DETERMINISTIC_SHORT_ENABLED` | Default on; the desktop provisional-topic endpoint answers transcripts under the notes short-clip word floor deterministically (first-sentence title, no emoji) instead of one conv_structure model call per request | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `CONVERSATION_TOPIC_DETERMINISTIC_SHORT_ENABLED` | Default on; the desktop provisional-topic endpoint answers short transcripts deterministically only when the conversation language matches the resolved output language; a mismatch uses one pinned conv_structure call | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `DAY3_REENGAGEMENT_EMAIL_KILL_SWITCH` | Stop day-three re-engagement email | backend | env | inverted | false | false | false | — | keep | keep | — | unowned |
 | `DEEPGRAM_SELF_HOSTED_ENABLED` | Retired 2026-08-27 with the rest of Deepgram; env removed from all charts and forbidden_env on every Cloud Run owner | backend | env | closed | — | — | — | — | keep | keep | — | unowned |
 | `DESKTOP_LOOP_WATCHDOG_ENABLED` | Desktop event-loop stall warning and liveness signal; default on, false disables both | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -432,6 +435,7 @@ and an explicit empty literal renders as `''`.
 | `DREAM_AGENT_ENABLED` | Global Dream harness kill switch; false prevents admission, model dispatch and effects | backend | env | closed | — | — | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | keep | keep | — | dazheng |
 | `DREAM_GATEWAY_PROBE_ENABLED` | Default-on 3.8 reservation probe through the LLM gateway's reserved Dream route; 0/false/off/no makes no probe call and admission relies on fresh evidence from real Dream turns | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODES_ENABLED` | Default on unless set to a non-on value; live episodes overlay (per-moment gpt-5-nano update, provisional items, /v1/episodes capability). Off reports enabled=false and apps keep today's per-conversation UI | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `EPISODE_OUTPUT_LANGUAGE_PIN` | Default on unless set off (0/false/off/no); pins generated output to a safe language for live episodes, provisional topics, daily recaps, and proactive notifications; multi/auto captures use dominant in-memory segment language | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `FAIR_USE_ENABLED` | Enforce fair-use metering; set false to stop enforcement | backend | env | closed | — | true (backend-listen (chart)) | true (backend-listen (chart)) | — | keep | keep | — | unowned |
 | `FAIR_USE_KILL_SWITCH` | Emergency stop for fair-use enforcement | backend | env | inverted | — | false (backend-listen (chart)) | false (backend-listen (chart)) | — | keep | keep | — | unowned |
 | `FSR_KG_CITATION_INDEX` | Default on; query native reverse citations for KG node pruning; off restores the node scan | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -809,9 +813,12 @@ their code default (`fail` tells you which way a missing value resolves).
 - `CAPTURE_COVERAGE_MODE_SERVE_PERCENT` — Capture coverage serve cohort percentage; default zero, invalid values admit nobody (fail: closed)
 - `CAPTURE_COVERAGE_MODE_SERVE_UID_SHA256S` — Capture coverage explicit serve cohort; comma-separated SHA-256 identity digests, default empty (fail: closed)
 - `CAPTURE_COVERAGE_MODE_SHADOW_PERCENT` — Shadow ledger sample percentage; default 5 (code constant). The serve cohort always records; other uids record and query the coverage ledger in shadow only inside this sample (fail: closed)
+- `CAPTURE_GROUP_PRIMARY_NOTES_REFRESH_ENABLED` — Default on; regenerate a capture-group primary's notes once per group revision when confirmed same-event members carry meeting context the primary lacks (fail: open)
 - `CAPTURE_SHARED_SPEECH_UID_ALLOWLIST` — Comma-separated exact accounts admitted to shared speech mode; default empty, union with stable percentage cohort (fail: closed)
 - `CAP_HOLD_DURABLE_REDRIVE_ENABLED` — Default on; awaited periodic recovery of persisted processing choices, staged live sources and fragment cleanup (fail: closed)
+- `CAP_HOLD_FLEET_SNAPSHOT_ENABLED` — Default on; refresh the held-content fleet gauge asynchronously with its own bounded RPC budget (fail: closed)
 - `CAP_HOLD_LIVE_FRAGMENT_ENABLED` — Default on; persist fifteen-second encrypted live fragments and compose one immutable source per minute (fail: closed)
+- `CAP_HOLD_REDRIVE_PARALLEL_DRAIN_ENABLED` — Default on; visit up to eight existing processing choices concurrently and allow up to ten candidates per owner turn (fail: closed)
 - `CLIENTS_FROM_SEGMENTS_CHUNKS_MODE` — off/shadow/serve via refactor_modes; default shadow rejects continuation without acknowledging partial completion (fail: closed)
 - `CLIENTS_FROM_SEGMENTS_CHUNKS_MODE_SERVE_PERCENT` — Continuation serve cohort percentage; default zero (fail: closed)
 - `CLIENTS_FROM_SEGMENTS_CHUNKS_MODE_SERVE_UID_SHA256S` — Continuation digest serve cohort; default empty (fail: closed)
@@ -826,7 +833,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `CONVERSATION_SMART_MERGE_MODE` — Fold a finished pendant conversation into its predecessor when Jev says same occasion; default merge, set off to stop (fail: open)
 - `CONVERSATION_SPEAKER_RESOLUTION_ENABLED` — Incident stop for conversation-wide speaker resolution (fail: open)
 - `CONVERSATION_STORED_MEETING_CONTEXT_ENABLED` — Incident stop for stored meeting context lookup (fail: open)
-- `CONVERSATION_TOPIC_DETERMINISTIC_SHORT_ENABLED` — Default on; the desktop provisional-topic endpoint answers transcripts under the notes short-clip word floor deterministically (first-sentence title, no emoji) instead of one conv_structure model call per request (fail: open)
+- `CONVERSATION_TOPIC_DETERMINISTIC_SHORT_ENABLED` — Default on; the desktop provisional-topic endpoint answers short transcripts deterministically only when the conversation language matches the resolved output language; a mismatch uses one pinned conv_structure call (fail: open)
 - `DEEPGRAM_SELF_HOSTED_ENABLED` — Retired 2026-08-27 with the rest of Deepgram; env removed from all charts and forbidden_env on every Cloud Run owner (fail: closed)
 - `DESKTOP_LOOP_WATCHDOG_ENABLED` — Desktop event-loop stall warning and liveness signal; default on, false disables both (fail: open)
 - `DIARIZATION_V2_ENABLED` — Enable the separate batch-only diarizer app; default false; startup loads models before readiness (fail: closed)
@@ -844,6 +851,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `EPISODE_BOUNDARIES_MODE_SERVE_PERCENT` — Serve cohort percentage in shadow mode, default 0 (fail: closed)
 - `EPISODE_BOUNDARIES_MODE_SERVE_UID_SHA256S` — Serve cohort account digests in shadow mode, default empty; never raw account identifiers (fail: closed)
 - `EPISODE_BOUNDARIES_MODE_SHADOW_PERCENT` — Boundary evidence database writes sampled in shadow; default 5 percent, serve cohort always writes (fail: closed)
+- `EPISODE_OUTPUT_LANGUAGE_PIN` — Default on unless set off (0/false/off/no); pins generated output to a safe language for live episodes, provisional topics, daily recaps, and proactive notifications; multi/auto captures use dominant in-memory segment language (fail: open)
 - `FIRESTORE_CACHE_ENABLED` — Enable Firestore response cache (fail: closed)
 - `FIRST_SUMMARY_DEADLINE_SECONDS` — First required summary dispatch budget; default 120 seconds, bounded 60 to 120 (fail: closed)
 - `FIRST_SUMMARY_UID_ALLOWLIST` — Optional summary canary owner allowlist; empty admits only the positive percentage cohort when global gate is on (fail: closed)

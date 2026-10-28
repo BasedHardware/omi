@@ -1,4 +1,4 @@
-from database import conversation_visibility_counts, processing_backlog, speaker_auto_enroll
+from database import conversation_visibility_counts, processing_backlog, speaker_auto_enroll, capture_group_notes
 from utils.conversations import summary_delivery, lifecycle_clocks
 from config.refactor_modes import serving_for, shadow_or_serve
 import copy
@@ -1197,6 +1197,8 @@ def persist_processing_result_with_lifecycle(
     *,
     on_first_completion: Callable[[], None] | None = None,
     smart_merge_refresh: tuple[int, str] | None = None,
+    expected_capture_group: tuple[str, int] | None = None,
+    capture_group_notes_refresh: tuple[str, str] | None = None,
 ) -> bool:
     """Merge a processor result into its conversation.
 
@@ -1221,14 +1223,16 @@ def persist_processing_result_with_lifecycle(
     first_completed = False
     summary_receipt = None
     summary_changed = False
+    notes_refresh_state_write = None
 
     @firestore.transactional
     def _persist(transaction) -> bool:
-        nonlocal stale_sync_revision, first_completed, summary_receipt, summary_changed
+        nonlocal stale_sync_revision, first_completed, summary_receipt, summary_changed, notes_refresh_state_write
         summary_changed = False
         summary_receipt = None
         stale_sync_revision = False
         first_completed = False
+        notes_refresh_state_write = None
         write_data = copy.deepcopy(conversation_data)
         # Capture-group membership has one writer (database.capture_groups).
         write_data.pop(CAPTURE_GROUP_FIELD, None)
@@ -1241,6 +1245,24 @@ def persist_processing_result_with_lifecycle(
             return False
 
         existing = existing_snapshot.to_dict() or {}
+        if expected_capture_group is not None:
+            expected_group_id, expected_group_revision = expected_capture_group
+            current_group = existing.get(CAPTURE_GROUP_FIELD) or {}
+            if current_group.get('id') != expected_group_id or current_group.get('revision') != expected_group_revision:
+                return False
+        if capture_group_notes_refresh is not None:
+            group_id, reservation_id = capture_group_notes_refresh
+            if expected_capture_group is None or expected_capture_group[0] != group_id:
+                return False
+            notes_refresh_state_write = capture_group_notes.read_success_write(
+                transaction,
+                uid,
+                group_id,
+                reservation_id,
+                firestore_client=db,
+            )
+            if notes_refresh_state_write is None:
+                return False
         preserve_duplicate_hint(write_data, existing)
         if existing.get('record_lane_owner'):
             write_data['record_lane_owner'] = existing['record_lane_owner']
@@ -1361,6 +1383,9 @@ def persist_processing_result_with_lifecycle(
             transaction, uid, conversation_data['id'], existing, write_data, firestore_client=db
         )
         transaction.set(conversation_ref, write_data, merge=True)
+        if notes_refresh_state_write is not None:
+            state_document, state_update = notes_refresh_state_write
+            transaction.set(state_document, state_update)
         existing_status = existing.get('status')
         write_status = write_data.get('status')
         first_completed = existing_status not in (

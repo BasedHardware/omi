@@ -791,6 +791,7 @@ def resolve_meeting_context(
     *,
     direct: Optional[CalendarMeetingContext],
     stored: Optional[Callable[[], Optional[CalendarMeetingContext]]] = None,
+    member_contexts: Optional[Callable[[], Optional[CalendarMeetingContext]]] = None,
     calendar: Optional[Callable[[], Optional[CalendarMeetingContext]]] = None,
     screen: Optional[Callable[[], Optional[CalendarMeetingContext]]] = None,
     on_error: Optional[Callable[[str, Exception], None]] = None,
@@ -800,8 +801,13 @@ def resolve_meeting_context(
     `direct` is the context already on the conversation (sent by the client on the
     create request). The suppliers are called in order and each is optional; a
     supplier that is None is a disabled layer, and a supplier that raises is
-    reported via `on_error` and skipped. A better source always wins the scalar
-    fields; weaker sources only contribute participants the better ones missed.
+    reported via `on_error` and skipped. `member_contexts` supplies the merged
+    context carried by this capture's confirmed same-event group members: it
+    ranks below the conversation's own stored/direct context (which describe
+    this capture) and above a fresh calendar-overlap read, because shared speech
+    proved the members observed the same event. A better source always wins the
+    scalar fields; weaker sources only contribute participants the better ones
+    missed.
 
     Returning None is a normal outcome, not a failure: summarization proceeds
     without a CALENDAR MEETING CONTEXT block.
@@ -824,6 +830,7 @@ def resolve_meeting_context(
     direct_calendar = None if direct_screen else direct
 
     context = merge_meeting_contexts(stored_calendar, direct_calendar)
+    context = merge_meeting_contexts(context, _call('member_contexts', member_contexts))
     context = merge_meeting_contexts(context, _call('calendar', calendar))
     context = merge_meeting_contexts(context, stored_screen)
     context = merge_meeting_contexts(context, direct_screen)

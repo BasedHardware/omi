@@ -300,6 +300,41 @@ class TestResolveMeetingContextOrdering:
         assert [(p.name, p.email) for p in context.participants] == [('Ash', None), ('Ana', 'ana@acme.com')]
         assert [p.name for p in context.participants_by_source().expected_calendar] == ['Ash', 'Ana']
 
+    def test_member_contexts_rank_below_own_direct_and_above_google(self):
+        context = resolve_meeting_context(
+            direct=_context('direct', names=['Direct Person'], source='client'),
+            member_contexts=lambda: _context('member', names=['Member Person'], source='system_calendar'),
+            calendar=lambda: _context('google', names=['Google Person'], source='google'),
+        )
+        assert context.calendar_event_id == 'direct'
+        assert [p.name for p in context.participants] == ['Direct Person', 'Member Person', 'Google Person']
+
+    def test_member_contexts_supply_identity_when_the_primary_has_none(self):
+        # Owner meeting 2026-10-28: the pendant primary carried no context of
+        # its own; the desktop meeting halves named the other speaker.
+        context = resolve_meeting_context(
+            direct=None,
+            stored=lambda: None,
+            member_contexts=lambda: _context('member', names=['Nik Shevchenko'], source='system_calendar'),
+            calendar=lambda: None,
+            screen=lambda: None,
+        )
+        assert context is not None
+        assert context.calendar_event_id == 'member'
+        assert [p.name for p in context.participants] == ['Nik Shevchenko']
+
+    def test_a_failing_member_context_supplier_degrades_to_none(self):
+        def explode():
+            raise RuntimeError('member read failed')
+
+        context = resolve_meeting_context(
+            direct=None,
+            member_contexts=explode,
+            calendar=lambda: _context('google', names=['Google Person'], source='google'),
+        )
+        assert context.calendar_event_id == 'google'
+        assert [p.name for p in context.participants] == ['Google Person']
+
     def test_developer_api_context_is_used_when_no_stored_meeting_exists(self):
         uploaded = DevCalendarMeetingContext(
             calendar_event_id='evt-42',

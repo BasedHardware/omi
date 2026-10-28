@@ -428,6 +428,12 @@ class AppLocalizationsDa extends AppLocalizations {
   String get autoSync => 'Automatisk synkronisering';
 
   @override
+  String get syncHealthAlerts => 'Synkroniseringsadvarsler';
+
+  @override
+  String get syncHealthAlertsDescription => 'Advar, hvis Omi ikke har synkroniseret optagelser i over et døgn';
+
+  @override
   String get autoSyncDescription => 'Synkroniser offline-optagelser automatisk, når din enhed opretter forbindelse';
 
   @override
@@ -9036,6 +9042,14 @@ class AppLocalizationsDa extends AppLocalizations {
   String get syncCardWaitingInternet => 'Venter på internet';
 
   @override
+  String get syncStallAlertTitle => 'Omi synkroniserer ikke';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Der er ikke synkroniseret optagelser fra din Omi i over $hours timer. Åbn Omi for at tjekke din enheds forbindelse.';
+  }
+
+  @override
   String syncCardNeedsAttention(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13661,6 +13675,14 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'Optagelser sat på pause';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi synkroniserer ikke';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Ingen optagelser synkroniseret i over $hours timer';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'Upload er gået i stå';
