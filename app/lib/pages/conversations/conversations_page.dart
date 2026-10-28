@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/held_audio/held_audio_views.dart';
@@ -294,7 +295,7 @@ List<ServerConversation>? _lockedRunAt(List<_ConversationListRow> rows, int inde
   return [for (var i = index; i < end; i++) rows[i].conversation!];
 }
 
-/// Home: the live capture row, the Daily Recaps row, then every conversation, newest first, loading
+/// Home: the live capture row, the Daily Recaps row (when on), then every conversation, newest first, loading
 /// more as it scrolls. Search, folders, starred and places live in the search overlay the header's
 /// search button opens, so this list is never filtered in place.
 class ConversationsPage extends StatefulWidget {
@@ -650,10 +651,16 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
               // Review absorbs the voice prompts; the old card shows only while Review is off.
               const SliverToBoxAdapter(child: ReviewEntryCard()),
+              // Opt-in from Developer Settings. Hidden, the row is not mounted, so nothing is fetched.
               SliverToBoxAdapter(
-                child: widget.loadRecaps == null
-                    ? HomeDailyRecaps(key: _recapsKey)
-                    : HomeDailyRecaps(key: _recapsKey, load: widget.loadRecaps!),
+                child: ValueListenableBuilder<bool>(
+                  valueListenable: SharedPreferencesUtil().homeDailyRecapsListenable,
+                  builder: (context, shown, _) => !shown
+                      ? const SizedBox.shrink()
+                      : widget.loadRecaps == null
+                          ? HomeDailyRecaps(key: _recapsKey)
+                          : HomeDailyRecaps(key: _recapsKey, load: widget.loadRecaps!),
+                ),
               ),
               // Phone-local recordings stay with their conversations. Device catch-up lives on Device.
               const SliverToBoxAdapter(child: OnDeviceQueueBanner()),

@@ -4505,5 +4505,7 @@
     "onTheWayDetailsForSupport": "Détails pour le support",
     "homeNoiseFoldHidden": "{count, plural, =1{1 extrait court masqué} other{{count} extraits courts masqués}}",
     "homeNoiseFoldShow": "Afficher",
-    "homeNoiseFoldHide": "{count, plural, =1{Masquer 1 extrait court} other{Masquer {count} extraits courts}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Masquer 1 extrait court} other{Masquer {count} extraits courts}}",
+    "dailyRecapsOnHome": "Récapitulatifs quotidiens sur l'Accueil",
+    "dailyRecapsOnHomeDescription": "Affiche vos derniers récapitulatifs en haut de l'Accueil."
 }

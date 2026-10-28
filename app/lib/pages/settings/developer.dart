@@ -305,6 +305,14 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
           value: provider.vadGateEnabled,
           onChanged: provider.onVadGateChanged,
         ),
+        OmiSettingsRow.toggle(
+          key: const Key('developer_home_daily_recaps_toggle'),
+          leading: const FaIcon(FontAwesomeIcons.calendarDay),
+          title: l10n.dailyRecapsOnHome,
+          subtitle: l10n.dailyRecapsOnHomeDescription,
+          value: SharedPreferencesUtil().homeDailyRecapsEnabled,
+          onChanged: (v) => setState(() => SharedPreferencesUtil().homeDailyRecapsEnabled = v),
+        ),
       ],
     );
   }

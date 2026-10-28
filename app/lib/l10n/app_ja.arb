@@ -4470,5 +4470,7 @@
     "onTheWayDetailsForSupport": "サポート用の詳細",
     "homeNoiseFoldHidden": "{count, plural, =1{短いクリップ1件を非表示にしました} other{{count}件の短いクリップを非表示にしました}}",
     "homeNoiseFoldShow": "表示",
-    "homeNoiseFoldHide": "{count, plural, =1{短いクリップ1件を非表示にする} other{{count}件の短いクリップを非表示にする}}"
+    "homeNoiseFoldHide": "{count, plural, =1{短いクリップ1件を非表示にする} other{{count}件の短いクリップを非表示にする}}",
+    "dailyRecapsOnHome": "ホームの日次の要約",
+    "dailyRecapsOnHomeDescription": "最新の要約をホームの上部に表示します。"
 }

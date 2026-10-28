@@ -11896,5 +11896,7 @@
     "onTheWayDetailsForSupport": "Детаљи за подршку",
     "homeNoiseFoldHidden": "{count, plural, =1{Скривен је 1 кратак снимак} other{{count} кратких снимака је скривено}}",
     "homeNoiseFoldShow": "Прикажи",
-    "homeNoiseFoldHide": "{count, plural, =1{Сакриј 1 кратак снимак} other{Сакриј {count} кратких снимака}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Сакриј 1 кратак снимак} other{Сакриј {count} кратких снимака}}",
+    "dailyRecapsOnHome": "Дневни резимеи на почетној",
+    "dailyRecapsOnHomeDescription": "Прикажи најновије резимее на врху почетне."
 }

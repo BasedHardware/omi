@@ -26012,6 +26012,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}'**
   String homeNoiseFoldHide(int count);
+
+  /// Developer Settings toggle title: show the Daily Recaps row on Home
+  ///
+  /// In en, this message translates to:
+  /// **'Daily Recaps on Home'**
+  String get dailyRecapsOnHome;
+
+  /// Subtitle for the Daily Recaps on Home toggle in Developer Settings
+  ///
+  /// In en, this message translates to:
+  /// **'Show your latest recaps at the top of Home.'**
+  String get dailyRecapsOnHomeDescription;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

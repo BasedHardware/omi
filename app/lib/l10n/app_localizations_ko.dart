@@ -14529,4 +14529,10 @@ class AppLocalizationsKo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get dailyRecapsOnHome => '홈의 일일 요약';
+
+  @override
+  String get dailyRecapsOnHomeDescription => '홈 상단에 최근 요약을 표시합니다.';
 }

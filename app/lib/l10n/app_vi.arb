@@ -4470,5 +4470,7 @@
     "onTheWayDetailsForSupport": "Chi tiết cho bộ phận hỗ trợ",
     "homeNoiseFoldHidden": "{count, plural, =1{Đã ẩn 1 clip ngắn} other{Đã ẩn {count} clip ngắn}}",
     "homeNoiseFoldShow": "Hiển thị",
-    "homeNoiseFoldHide": "{count, plural, =1{Ẩn 1 clip ngắn} other{Ẩn {count} clip ngắn}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Ẩn 1 clip ngắn} other{Ẩn {count} clip ngắn}}",
+    "dailyRecapsOnHome": "Tóm tắt hàng ngày trên Trang chủ",
+    "dailyRecapsOnHomeDescription": "Hiển thị các tóm tắt mới nhất ở đầu Trang chủ."
 }

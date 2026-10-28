@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io' show Platform;
 
 import 'package:collection/collection.dart';
-import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/foundation.dart' show ValueListenable, ValueNotifier, visibleForTesting;
 import 'package:flutter/services.dart' show MethodChannel, PlatformException;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -95,6 +95,7 @@ class SharedPreferencesUtil {
     if (!PhysicalQualification.enabled) await PreferenceQuarantine.restoreThenPrune(_preferences!);
     if (!PhysicalQualification.enabled) await _quarantineBootSettings();
     await _migrateAppearanceDefault();
+    _homeDailyRecaps.value = _instance.homeDailyRecapsEnabled;
     _mirrorNativeAuthToken = mirrorNativeAuthToken ?? Platform.isAndroid;
     await _loadCapturePolicy();
     await _reconcileNativeCapturePolicy();
@@ -943,6 +944,19 @@ class SharedPreferencesUtil {
 
   set devModeEnabled(bool value) => saveBool('devModeEnabled', value);
 
+  /// Daily Recaps on Home. Off by default; Developer Settings turns it on, and Home rebuilds from
+  /// [homeDailyRecapsListenable] when it flips.
+  static final ValueNotifier<bool> _homeDailyRecaps = ValueNotifier(false);
+
+  ValueListenable<bool> get homeDailyRecapsListenable => _homeDailyRecaps;
+
+  bool get homeDailyRecapsEnabled => getBool('homeDailyRecapsEnabled');
+
+  set homeDailyRecapsEnabled(bool value) {
+    _homeDailyRecaps.value = value;
+    saveBool('homeDailyRecapsEnabled', value);
+  }
+
   // Auto-recording feature (macOS only)
   bool get autoRecordingEnabled => getBool('autoRecordingEnabled', defaultValue: true);
 
@@ -1624,6 +1638,7 @@ class SharedPreferencesUtil {
     // Drop any in-flight background conversation cache write (sign-out, account deletion).
     _cachedConversationsGeneration++;
     _authTokenCache = '';
+    _homeDailyRecaps.value = false;
     await _deleteSecureAuthToken();
     return await _preferences?.clear() ?? false;
   }

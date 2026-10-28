@@ -582,6 +582,9 @@ void main() {
       final screen = await tester.runAsync(
         () => buildTypedConversationScreen(provider, sync: sync, loadRecaps: recaps),
       );
+      // Daily Recaps on Home is opt-in; these cases check where the row sits when it is on.
+      SharedPreferencesUtil().homeDailyRecapsEnabled = true;
+      addTearDown(() => SharedPreferencesUtil().homeDailyRecapsEnabled = false);
       await tester.pumpWidget(screen!);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));

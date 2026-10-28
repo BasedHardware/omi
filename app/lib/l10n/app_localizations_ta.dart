@@ -14832,4 +14832,10 @@ class AppLocalizationsTa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get dailyRecapsOnHome => 'முகப்பில் தினசரி சுருக்கங்கள்';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'முகப்பின் மேலே உங்கள் சமீபத்திய சுருக்கங்களைக் காட்டு.';
 }
