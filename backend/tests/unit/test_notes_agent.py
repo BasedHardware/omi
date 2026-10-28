@@ -366,6 +366,25 @@ def test_identical_lookups_reuse_result_without_spending_budget(monkeypatch):
     assert result.force_reason == 'turn_limit'
 
 
+@pytest.mark.parametrize('efficient', [True, False])
+@pytest.mark.parametrize('batch_size', [8, 64])
+def test_duplicate_spam_keeps_a_forced_submit_turn(monkeypatch, efficient, batch_size):
+    monkeypatch.setenv(policy.LOOKUP_EFFICIENCY, str(efficient))
+    box = CountingToolbox()
+    model = ScriptedModel(lookups_per_turn=batch_size)
+    result = run_agent(model, policy.NotesAgentBudget(max_turns=4, max_tool_calls=2), toolbox=box)
+    if efficient:
+        assert result.stop == 'forced_submit' and result.submission is not None
+        assert result.force_reason == 'turn_limit'
+        assert result.tool_calls == box.calls == 1
+        assert result.duplicate_lookups == batch_size * 3 - 1
+        assert model.choices[-1] == {'type': 'function', 'function': {'name': prompt.SUBMIT}}
+    elif batch_size == 64:
+        assert result.stop == 'no_submission' and box.calls == 0
+    else:
+        assert result.stop == 'forced_submit' and box.calls == 2 and result.force_reason == 'lookup_cap'
+
+
 def test_submission_rejected_at_cap_has_its_own_reason(monkeypatch):
     class RejectAtCap:
         calls = 0
@@ -388,6 +407,30 @@ def test_submission_rejected_at_cap_has_its_own_reason(monkeypatch):
     assert result.refused_lookups == 0
 
 
+def test_mixed_rejected_submit_and_refused_lookup_keeps_first_reason(monkeypatch):
+    class MixedBatch:
+        turns = 0
+
+        async def __call__(self, messages, tool_choice):
+            self.turns += 1
+            if self.turns == 1:
+                return agent.CompletionTurn(tool_calls=[call('search_people', {'query': 'Maya'})])
+            if self.turns == 2:
+                return agent.CompletionTurn(
+                    tool_calls=[
+                        call(
+                            prompt.SUBMIT, submission(sections=[{'heading': 'Discussion', 'body_markdown': 'Prose.'}])
+                        ),
+                        call('search_people', {'query': 'Different person'}),
+                    ]
+                )
+            return agent.CompletionTurn(tool_calls=[call(prompt.SUBMIT, submission())])
+
+    result = run_agent(MixedBatch(), policy.NotesAgentBudget(max_turns=5, max_tool_calls=1))
+    assert result.stop == 'forced_submit' and result.refused_lookups == 1
+    assert result.force_reason == 'submission_rejected_at_cap'
+
+
 def test_people_batch_matches_each_name_and_loads_once(toolbox, monkeypatch):
     monkeypatch.setenv(policy.LOOKUP_EFFICIENCY, 'true')
     box, calls = toolbox
@@ -395,6 +438,33 @@ def test_people_batch_matches_each_name_and_loads_once(toolbox, monkeypatch):
     single = json.loads(run(box.call('search_people', {'query': 'Maya'})).content)
     assert batch['people'] == single['people']
     assert [kind for kind, _ in calls].count('people') == 1
+
+
+def test_oversized_people_batches_have_order_independent_truncation_and_notice(toolbox, monkeypatch):
+    monkeypatch.setenv(policy.LOOKUP_EFFICIENCY, 'true')
+    people = [{'name': f'Contact {index:02d}'} for index in range(13)]
+    monkeypatch.setattr(tools, 'load_people_documents', lambda _uid: people)
+    box, _calls = toolbox
+    names = [p['name'] for p in people]
+    forward = json.loads(run(box.call('search_people', {'names': names})).content)
+    reverse = json.loads(run(box.call('search_people', {'names': list(reversed(names)) + [names[0]]})).content)
+    assert forward == reverse
+    assert [p['name'] for p in forward['people']] == names[:12]
+    assert forward['names_dropped'] == 1 and 'dropped' in forward['note']
+
+
+@pytest.mark.parametrize('tool', ['get_calendar', 'get_screen_activity'])
+def test_prefetched_tool_results_have_the_same_clip_as_live_results(tool):
+    packet = {
+        'prefetched_tools': [tool],
+        'calendar_overlap': [{'title': 'x' * 10000}],
+        'screen_activity': {'rows': [{'text': 'x' * 10000}]},
+    }
+    result = tools.prefetched_results(packet)[tool].content
+    raw = shaped_agent.model_json(
+        {'meetings': packet['calendar_overlap']} if tool == 'get_calendar' else packet['screen_activity']
+    )
+    assert result == raw[: tools.MAX_RESULT_CHARACTERS] + '…(truncated)'
 
 
 def test_prefetch_credit_satisfies_lookup_floor(monkeypatch):
@@ -436,6 +506,11 @@ def test_efficiency_switch_restores_prompt_tools_packet_and_charging(monkeypatch
     monkeypatch.delenv(policy.LOOKUP_EFFICIENCY)
     assert policy.lookup_efficiency_enabled()
     assert 'five to eight' not in prompt.instructions_for_run()
+    assert prompt.INSTRUCTIONS.count('then confirm with search_people,') == 1
+    assert (
+        'then confirm with the packet’s matched_people records or batched search_people(names=[...]),'
+        in prompt.instructions_for_run()
+    )
     assert 'names' in next(
         t['function']['parameters']['properties']
         for t in prompt.tools_for_run()

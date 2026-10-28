@@ -7347,6 +7347,11 @@ stays split in both modes: `lookup_cap` requires a refused lookup, while a
 rejected submission at the cap uses `submission_rejected_at_cap`.
 `omi_notes_agent_duplicate_lookups_total` and
 `omi_notes_agent_refused_lookups_total` count both cases by bounded tool name.
+Cache hits are free in both the lookup budget and shaped-loop tool-call budget,
+including repeats within one batch; model turns, token cost and wall time remain
+bounded. Other shaped adapters retain the default charge of one slot per call.
+People batches sort and deduplicate names before the 12-name cap and explicitly
+report any dropped names. Prefetched replies use the live tools' result clip.
 
 ### Wave 2 evidence and consumers
 

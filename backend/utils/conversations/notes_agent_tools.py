@@ -67,6 +67,13 @@ class ToolOutcome:
     image: Optional[NotesFrameImage] = None
 
 
+def _tool_outcome(result: Any) -> ToolOutcome:
+    text = model_json(result)
+    if len(text) > MAX_RESULT_CHARACTERS:
+        text = text[:MAX_RESULT_CHARACTERS] + '…(truncated)'
+    return ToolOutcome(text)
+
+
 @dataclass
 class NotesToolbox:
     """Tools for one owner's one conversation. Construct only from server-side state."""
@@ -124,10 +131,7 @@ class NotesToolbox:
             return ToolOutcome(json.dumps({'error': 'lookup unavailable; continue without it'}))
         if isinstance(result, ToolOutcome):
             return result
-        text = model_json(result)
-        if len(text) > MAX_RESULT_CHARACTERS:
-            text = text[:MAX_RESULT_CHARACTERS] + '…(truncated)'
-        return ToolOutcome(text)
+        return _tool_outcome(result)
 
     def _window(self, start: Any, end: Any) -> tuple[datetime, datetime]:
         return self.window.resolve(start, end, max_span=timedelta(hours=MAX_WINDOW_HOURS))
@@ -189,7 +193,11 @@ class NotesToolbox:
         if names is not None and not any(n.strip() for n in names) and not query:
             return {'people': []}
         people = await self._load_people()
-        queries = [str(query or '')] if names is None else [*names[:12], *([query] if query else [])]
+        normalized_names = (
+            sorted({' '.join(name.split()).casefold() for name in names if name.strip()}) if names is not None else []
+        )
+        dropped = max(0, len(normalized_names) - 12)
+        queries = [str(query or '')] if names is None else [*normalized_names[:12], *([query] if query else [])]
         wanted = [[word.casefold() for word in name.split() if word] for name in queries]
         wanted = [words for words in wanted if words]
         found = []
@@ -201,6 +209,13 @@ class NotesToolbox:
             found.append(person_row(person))
             if len(found) >= MAX_PEOPLE:
                 break
+        if dropped:
+            return {
+                'note': f'{dropped} additional unique names were dropped after the first 12 sorted names; '
+                'search those names in a smaller batch.',
+                'names_dropped': dropped,
+                'people': found,
+            }
         return {'people': found}
 
     async def _owner_search(self, collection: str, query: str, limit: int, mode: str, **extra):
@@ -352,9 +367,9 @@ def enrich_lookup_packet(packet: dict[str, Any], *, people_loader, capture_evide
 def prefetched_results(packet: Mapping[str, Any]) -> dict[str, ToolOutcome]:
     results = {}
     if 'get_calendar' in (packet.get('prefetched_tools') or []):
-        results['get_calendar'] = ToolOutcome(model_json({'meetings': packet.get('calendar_overlap') or []}))
+        results['get_calendar'] = _tool_outcome({'meetings': packet.get('calendar_overlap') or []})
     if 'get_screen_activity' in (packet.get('prefetched_tools') or []):
-        results['get_screen_activity'] = ToolOutcome(model_json(packet['screen_activity']))
+        results['get_screen_activity'] = _tool_outcome(packet['screen_activity'])
     return results
 
 

@@ -161,6 +161,39 @@ def notes_agent_mount(
     )
 
 
+def _lookup_arguments(call: Mapping[str, Any]) -> dict[str, Any]:
+    raw = call.get('arguments') or '{}'
+    if not isinstance(raw, str) or len(raw.encode()) > MAX_ARGUMENT_BYTES:
+        raise ValueError('arguments too large or not text')
+    arguments = json.loads(raw)
+    if not isinstance(arguments, dict):
+        raise ValueError('arguments must be an object')
+    return arguments
+
+
+def _lookup_key(name: str, arguments: Mapping[str, Any]) -> str:
+    # Canonical JSON ignores argument-key order. Search text ignores case/whitespace;
+    # identifiers and screenshot ids retain their exact bytes.
+    normalized = dict(arguments)
+    for key in ('query', 'person'):
+        if isinstance(normalized.get(key), str):
+            normalized[key] = ' '.join(normalized[key].split()).casefold()
+    if isinstance(normalized.get('names'), list) and all(isinstance(n, str) for n in normalized['names']):
+        normalized['names'] = sorted(
+            set(' '.join(n.split()).casefold() for n in normalized['names'] if isinstance(n, str))
+        )
+    # Omitted/default values identify the same conversation-window read.
+    defaults: dict[str, Any] = {'start': None, 'end': None}
+    if name == 'get_screen_activity':
+        defaults['query'] = ''
+        defaults['limit'] = 25
+    if name in {'get_calendar', 'get_screen_activity'}:
+        normalized = {
+            key: value for key, value in normalized.items() if key not in defaults or value not in (defaults[key], '')
+        }
+    return name + ':' + json.dumps(normalized, sort_keys=True, ensure_ascii=False)
+
+
 def _force_submit_choice() -> dict[str, Any]:
     return {'type': 'function', 'function': {'name': SUBMIT}}
 
@@ -220,6 +253,28 @@ async def run_notes_agent(
             return 'deadline'
         return None
 
+    def charged_calls(calls: tuple[Any, ...]) -> int:
+        # Predict sequential cache fills inside this batch using the same parser/key
+        # as execute(). Refused lookups never fill the cache and still cost a slot.
+        cached = set(lookup_cache)
+        remaining = max(0, budget.max_tool_calls - result.tool_calls)
+        charged = 0
+        for call in calls:
+            name = call.get('name')
+            if name in toolbox.names:
+                try:
+                    key = _lookup_key(name, _lookup_arguments(call))
+                except (ValueError, TypeError):
+                    charged += 1
+                    continue
+                if key in cached:
+                    continue
+                if remaining:
+                    cached.add(key)
+                    remaining -= 1
+            charged += 1
+        return charged
+
     async def model_turn(_shape: Mount, messages: list[Any]) -> Turn:
         reason = forced_reason(result.turns)
         forced = reason is not None
@@ -253,10 +308,12 @@ async def run_notes_agent(
         }
         if not reply.tool_calls:
             assistant.pop('tool_calls')
+        # run_loop stops on an empty tool list; a nudge keeps the loop alive for the forced submit.
+        calls = tuple(reply.tool_calls) or (({'id': 'nudge', 'name': '__nudge__'},) if state['force'] else ())
         return Turn(
             value=reply.content,
-            # run_loop stops on an empty tool list; a nudge keeps the loop alive for the forced submit.
-            tool_calls=tuple(reply.tool_calls) or (({'id': 'nudge', 'name': '__nudge__'},) if state['force'] else ()),
+            tool_calls=calls,
+            charged_tool_calls=charged_calls(calls) if efficient else None,
             messages=(assistant,),
             tokens=reply.prompt_tokens + reply.completion_tokens,
             prompt_tokens=reply.prompt_tokens,
@@ -274,13 +331,8 @@ async def run_notes_agent(
             if name == '__nudge__':
                 responses.append({'role': 'user', 'content': 'Call submit_notes now with the finished notes.'})
                 continue
-            raw = call.get('arguments') or '{}'
             try:
-                if len(raw.encode()) > MAX_ARGUMENT_BYTES:
-                    raise ValueError('arguments too large')
-                arguments = json.loads(raw)
-                if not isinstance(arguments, dict):
-                    raise ValueError('arguments must be an object')
+                arguments = _lookup_arguments(call)
             except (ValueError, TypeError):
                 responses.append(_tool_reply(call, {'error': 'arguments were not a JSON object; retry'}))
                 continue
@@ -342,28 +394,7 @@ async def run_notes_agent(
             if name not in toolbox.names:
                 responses.append(_tool_reply(call, {'error': f'unknown tool {name}'}))
                 continue
-            # Canonical JSON ignores argument-key order. Search text ignores case/whitespace;
-            # identifiers and screenshot ids retain their exact bytes.
-            normalized = dict(arguments)
-            for key in ('query', 'person'):
-                if isinstance(normalized.get(key), str):
-                    normalized[key] = ' '.join(normalized[key].split()).casefold()
-            if isinstance(normalized.get('names'), list) and all(isinstance(n, str) for n in normalized['names']):
-                normalized['names'] = sorted(
-                    set(' '.join(n.split()).casefold() for n in normalized['names'] if isinstance(n, str))
-                )
-            # Omitted/default values identify the same conversation-window read.
-            defaults: dict[str, Any] = {'start': None, 'end': None}
-            if name == 'get_screen_activity':
-                defaults['query'] = ''
-                defaults['limit'] = 25
-            if name in {'get_calendar', 'get_screen_activity'}:
-                normalized = {
-                    key: value
-                    for key, value in normalized.items()
-                    if key not in defaults or value not in (defaults[key], '')
-                }
-            cache_key = name + ':' + json.dumps(normalized, sort_keys=True, ensure_ascii=False)
+            cache_key = _lookup_key(name, arguments)
             if cache_key in seen_lookups:
                 result.duplicate_lookups += 1
                 DUPLICATE_LOOKUPS.labels(tool=name).inc()
@@ -377,7 +408,7 @@ async def run_notes_agent(
                 result.refused_lookups += 1
                 REFUSED_LOOKUPS.labels(tool=name).inc()
                 state['force'] = True
-                state['force_reason'] = 'lookup_cap'
+                state['force_reason'] = state.get('force_reason') or 'lookup_cap'
                 responses.append(_tool_reply(call, {'error': 'lookup budget exhausted; call submit_notes now'}))
                 continue
             result.tool_calls += 1
