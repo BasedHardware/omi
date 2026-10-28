@@ -232,6 +232,9 @@ class Wal {
   /// without sending or serializing the unchanged history back to it.
   int? loadedIndexToken;
 
+  /// The exact file validated by the loader, including backup recovery.
+  String? loadedIndexSource;
+
   // Persisted object fields follow replacement semantics (see persistentFingerprint).
   // Subscribers track identity: device timestamps and paths can change.
   final Set<void Function(Wal)> _changeListeners = {};

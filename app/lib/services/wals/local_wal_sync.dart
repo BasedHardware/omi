@@ -1414,6 +1414,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   Future<int> enforceRetentionPolicyForTesting() => _evaluateRetentionPressure();
 
   Future<WalIndexWorker>? _indexWorker;
+  bool _rebuildIndexWorker = false;
+  @visibleForTesting
+  Future<WalIndexWorker>? get indexWorkerForTesting => _indexWorker;
   Future<void>? _indexWriteInFlight;
   bool _forceIndexWrite = true;
 

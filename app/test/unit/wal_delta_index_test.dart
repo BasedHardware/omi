@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -67,6 +69,7 @@ void main() {
     await WalFileManager.init();
   });
   tearDown(() async {
+    WalFileManager.quarantineRenameForTesting = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(const MethodChannel('plugins.flutter.io/path_provider'), null);
     await dir.delete(recursive: true);
@@ -244,5 +247,175 @@ void main() {
     expect(rows.fold<int>(0, (sum, w) => sum + w.fingerprints), 0);
     expect((await WalFileManager.loadWals()).singleWhere((w) => w.timerStart == rows.last.timerStart).retryCount, 3);
     await sync.stop();
+  });
+
+  test('worker exit fails every pending request instead of wedging saves', () async {
+    final beforeWrite = ReceivePort();
+    addTearDown(beforeWrite.close);
+    final entered = Completer<void>();
+    beforeWrite.listen((_) => entered.complete());
+    final worker = await WalIndexWorker.start('${dir.path}/wals.json', beforeWriteForTesting: beforeWrite.sendPort);
+    addTearDown(worker.close);
+    final first = worker.apply({0: _CountedWal(1).toJson()}, []);
+    final second = worker.apply({1: _CountedWal(2).toJson()}, []);
+    final firstFailed = expectLater(first, throwsA(isA<FileSystemException>()));
+    final secondFailed = expectLater(second, throwsA(isA<FileSystemException>()));
+    await entered.future;
+    worker.close(); // Real VM isolate termination, while a write is admitted.
+    await Future.wait([firstFailed, secondFailed]).timeout(const Duration(seconds: 5));
+    expect(worker.isDead, isTrue);
+    expect(File('${dir.path}/wals.json').existsSync(), isFalse, reason: 'no false durable acknowledgement');
+    await expectLater(worker.apply({}, []), throwsA(isA<FileSystemException>()));
+  });
+
+  test('LocalWalSync replaces a dead worker using current tokens and all custody buckets', () async {
+    final a = _CountedWal(1), removed = _CountedWal(2), b = _CountedWal(3);
+    final retired = _CountedWal(4)..ownerUid = 'retired';
+    final foreign = _CountedWal(5)..ownerUid = 'foreign';
+    final discardedForeign = _CountedWal(8)..ownerUid = 'foreign';
+    final memory = _CountedWal(6)..storage = WalStorage.mem;
+    final sync = LocalWalSyncImpl(_Listener());
+    sync.testWals = [a, removed, b, memory];
+    sync.testRetiredWals.add(retired);
+    sync.testForeignWals.addAll([foreign, discardedForeign]);
+    await sync.persistRetryMetadata(a);
+    sync.testWals.remove(removed); // Disk compacts; main tokens retain the gap.
+    await sync.persistRetryMetadata(a);
+    final dead = (await sync.indexWorkerForTesting)!;
+    addTearDown(dead.close);
+    dead.close();
+    b.retryCount = 7;
+    await expectLater(
+        sync.persistRetryMetadata(b).timeout(const Duration(seconds: 5)), throwsA(isA<FileSystemException>()));
+    expect(sync.indexWorkerForTesting, isNull);
+    // Mutations and removals arriving after the failed write must also survive.
+    a.retryCount = 9;
+    sync.testForeignWals.remove(discardedForeign);
+    final added = _CountedWal(7);
+    sync.testWals.add(added);
+    await sync.persistRetryMetadata(added);
+    final replacement = (await sync.indexWorkerForTesting)!;
+    addTearDown(replacement.close);
+    final loaded = await WalFileManager.loadWals();
+    expect(loaded.map((w) => w.timerStart), [1, 3, 4, 5, 7]);
+    expect(loaded.map((w) => w.retryCount), [9, 7, 0, 0, 0]);
+    expect(loaded.singleWhere((w) => w.timerStart == 4).ownerUid, 'retired');
+    expect(loaded.singleWhere((w) => w.timerStart == 5).ownerUid, 'foreign');
+    // Subsequent deltas still address the same tokens, not compacted disk ordinals.
+    b.retryCount = 8;
+    await sync.persistRetryMetadata(b);
+    expect((await WalFileManager.loadWals()).map((w) => (w.timerStart, w.retryCount)),
+        [(1, 9), (3, 8), (4, 0), (5, 0), (7, 0)]);
+  });
+
+  test('a replacement whose disk write fails still applies removals on its next retry', () async {
+    final a = _CountedWal(1), b = _CountedWal(2);
+    final sync = LocalWalSyncImpl(_Listener());
+    sync.testWals = [a, b];
+    await sync.persistRetryMetadata(a);
+    final dead = (await sync.indexWorkerForTesting)!;
+    addTearDown(dead.close);
+    dead.close();
+    a.retryCount = 1;
+    await expectLater(sync.persistRetryMetadata(a), throwsA(isA<FileSystemException>()));
+    final blockedTmp = Directory('${dir.path}/wals.json.tmp');
+    await blockedTmp.create();
+    await expectLater(sync.persistRetryMetadata(a), throwsA(isA<FileSystemException>()));
+    final replacement = (await sync.indexWorkerForTesting)!;
+    addTearDown(replacement.close);
+    expect(replacement.isDead, isFalse);
+    expect((await WalFileManager.loadWals()).map((w) => w.retryCount), [0, 0], reason: 'failed write was not durable');
+    sync.testWals.remove(b);
+    a.retryCount = 2;
+    await blockedTmp.delete();
+    await sync.persistRetryMetadata(a);
+    expect((await WalFileManager.loadWals()).map((w) => (w.timerStart, w.retryCount)), [(1, 2)]);
+  });
+
+  test('backup seed survives an unreadable main that cannot be quarantined', () async {
+    final file = File('${dir.path}/wals.json');
+    await file.writeAsString('{unreadable');
+    final backup = File('${dir.path}/wals_backup.json');
+    await backup.writeAsString(jsonEncode({
+      'version': 1,
+      'wals': [_CountedWal(1).toJson(), _CountedWal(2).toJson()]
+    }));
+    WalFileManager.quarantineRenameForTesting = (_) async => throw const FileSystemException('rename denied');
+    final sync = LocalWalSyncImpl(_Listener());
+    await sync.loadForOnDeviceWorker();
+    expect(sync.testWals, hasLength(2));
+    expect(sync.testWals.first.loadedIndexSource, backup.path);
+    sync.testWals.last.retryCount = 3;
+    await sync.persistRetryMetadata(sync.testWals.last);
+    addTearDown((await sync.indexWorkerForTesting)!.close);
+    expect((await WalFileManager.loadWals()).map((w) => (w.timerStart, w.retryCount)), [(1, 0), (2, 3)]);
+    expect(jsonDecode(await backup.readAsString())['wals'], hasLength(2), reason: 'corrupt main never replaces backup');
+  });
+
+  test('an unseedable startup fails closed and retries from admitted rows in-session', () async {
+    final file = File('${dir.path}/wals.json');
+    await file.writeAsString(jsonEncode({
+      'version': 1,
+      'wals': [_CountedWal(1).toJson(), _CountedWal(2).toJson()]
+    }));
+    final sync = LocalWalSyncImpl(_Listener());
+    await sync.loadForOnDeviceWorker();
+    await file.delete(); // The validated source becomes unavailable before spawn.
+    final added = _CountedWal(3);
+    sync.testWals.add(added);
+    await expectLater(
+        sync.persistRetryMetadata(added).timeout(const Duration(seconds: 5)), throwsA(isA<FileSystemException>()));
+    expect(sync.indexWorkerForTesting, isNull);
+    expect(await file.exists(), isFalse);
+    sync.testWals.first.retryCount = 6;
+    await sync.persistRetryMetadata(added);
+    addTearDown((await sync.indexWorkerForTesting)!.close);
+    expect((await WalFileManager.loadWals()).map((w) => (w.timerStart, w.retryCount)), [(1, 6), (2, 0), (3, 0)]);
+  });
+
+  test('load-time invalid-entry repair and live worker share writer serialization', () async {
+    final file = File('${dir.path}/wals.json');
+    await file.writeAsString(jsonEncode({
+      'version': 1,
+      'wals': [_CountedWal(1).toJson(), _CountedWal(2).toJson()]
+    }));
+    final beforeWrite = ReceivePort();
+    addTearDown(beforeWrite.close);
+    var workerEntered = false;
+    beforeWrite.listen((resume) {
+      workerEntered = true;
+      (resume as SendPort).send(null);
+    });
+    final worker =
+        await WalFileManager.createIndexWorker(seedFromDisk: true, beforeWriteForTesting: beforeWrite.sendPort);
+    addTearDown(worker.close);
+    // External damage after the worker was seeded: load keeps readable entries.
+    await file.writeAsString(jsonEncode({
+      'version': 1,
+      'wals': [
+        _CountedWal(1).toJson(),
+        {'broken': true}
+      ]
+    }));
+    final quarantineEntered = Completer<void>();
+    final releaseQuarantine = Completer<void>();
+    WalFileManager.quarantineRenameForTesting = (source) async {
+      await source.rename('${source.path}.corrupt-test');
+      quarantineEntered.complete();
+      await releaseQuarantine.future;
+    };
+    final load = WalFileManager.loadWals();
+    await quarantineEntered.future;
+    final write = worker.apply({1: (_CountedWal(2)..retryCount = 5).toJson(), 2: _CountedWal(3).toJson()}, []);
+    await pumpEventQueue();
+    expect(workerEntered, isFalse, reason: 'no worker tmp/rename while load holds the repair lock');
+    releaseQuarantine.complete();
+    expect((await load).map((w) => w.timerStart), [1]);
+    await write;
+    expect(workerEntered, isTrue);
+    expect((await WalFileManager.loadWals()).map((w) => (w.timerStart, w.retryCount)), [(1, 0), (2, 5), (3, 0)]);
+    expect(await File('${file.path}.tmp').exists(), isFalse);
+    final backup = jsonDecode(await File('${dir.path}/wals_backup.json').readAsString());
+    expect((backup['wals'] as List).map((w) => w['timer_start']), [1]);
   });
 }
