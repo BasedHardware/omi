@@ -92,11 +92,12 @@ def episodes_client_channels() -> frozenset[str]:
 
 
 def episode_output_language_pinned() -> bool:
-    """Whether every episode moment resolves and pins one output language.
+    """Whether the shared output-language prompt pin is enabled.
 
-    On unless the kill switch is explicitly set off (unknown values stay on). Off
-    restores the pre-pin behavior: only the ``NOTES_PACKET_V2_MODE``/``LIFECYCLE_V2_MODE``
-    serve cohorts resolved a language.
+    The kill switch also covers provisional conversation topics, daily recaps, and
+    proactive notification prompts so one setting rolls the prompt changes back.
+    Unknown values stay on. Off restores each surface's legacy prompt wording and
+    the former cohort-gated episode language behavior.
     """
     return modes_default_on(EPISODE_OUTPUT_LANGUAGE_PIN_ENV)
 

@@ -7,7 +7,14 @@ instruction derived from get_user_language_preference(uid), threaded in by the m
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from utils.llm import proactive_notification as pn
+
+
+@pytest.fixture(autouse=True)
+def _language_pin_on(monkeypatch):
+    monkeypatch.setenv('EPISODE_OUTPUT_LANGUAGE_PIN', 'on')
 
 
 def _prompt_from(fn, **kwargs):
@@ -75,6 +82,18 @@ def test_language_instruction_for_nonenglish():
     assert "Write all output in ja." in gen
     crit = pn.language_instruction("ja", for_critic=True)
     assert "Reject the notification unless it is written entirely in ja" in crit
+
+
+def test_shared_kill_switch_restores_legacy_notification_language_prompts(monkeypatch):
+    monkeypatch.setenv('EPISODE_OUTPUT_LANGUAGE_PIN', 'off')
+    assert pn.language_instruction('en') == ''
+    assert (
+        pn.language_instruction('ja')
+        == "\n- Write the notification entirely in the user's language (language/locale code: ja)"
+    )
+    assert pn.language_instruction('ja', for_critic=True) == (
+        "\n- The notification is written in a language other than the user's (expected code: ja)"
+    )
 
 
 def test_language_instruction_accepts_valid_locale_codes():

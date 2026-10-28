@@ -77,6 +77,10 @@ logger = logging.getLogger(__name__)
 _LAST_CLOSED_CACHE_MAX = 10_000
 _last_closed_cache: dict[str, tuple[Optional[dict[str, Any]], float]] = {}
 _last_closed_lock = threading.Lock()
+_OUTPUT_LANGUAGE_CACHE_SECONDS = 4 * 60 * 60
+_OUTPUT_LANGUAGE_CACHE_MAX = 20_000
+_output_language_cache: dict[tuple[str, str, str, str, int], tuple[str, float]] = {}
+_output_language_cache_lock = threading.Lock()
 
 RECONCILE_TRIGGERS = frozenset({'capture_end', 'client_finalize', 'server_recovery', 'sync_update'})
 CLIENT_FINALIZE = 'client_finalize'
@@ -141,7 +145,7 @@ def _owner_name(uid: str, c: Collaborators) -> str:
         return 'You'
 
 
-def _conversation_language(uid: str, conversation_id: str, c: Collaborators) -> str:
+def _conversation_language(uid: str, conversation_id: str, c: Collaborators) -> Optional[str]:
     """The conversation's dominant language tag, for moments the stream did not carry one."""
     if not conversation_id:
         return ''
@@ -152,7 +156,58 @@ def _conversation_language(uid: str, conversation_id: str, c: Collaborators) -> 
         return str((row or {}).get('language') or '')
     except Exception as error:
         logger.warning('event=episode_moment conversation_language_failed exception_type=%s', type(error).__name__)
-        return ''
+        return None
+
+
+def _language_cache_get(key: tuple[str, str, str, str, int]) -> Optional[str]:
+    now = time.monotonic()
+    with _output_language_cache_lock:
+        cached = _output_language_cache.get(key)
+        if cached is None:
+            return None
+        language, expires_at = cached
+        if now >= expires_at:
+            _output_language_cache.pop(key, None)
+            return None
+        return language
+
+
+def _language_cache_set(key: tuple[str, str, str, str, int], language: str) -> None:
+    with _output_language_cache_lock:
+        if len(_output_language_cache) >= _OUTPUT_LANGUAGE_CACHE_MAX:
+            now = time.monotonic()
+            expired = [cache_key for cache_key, (_, expiry) in _output_language_cache.items() if expiry <= now]
+            for cache_key in expired:
+                _output_language_cache.pop(cache_key, None)
+            while len(_output_language_cache) >= _OUTPUT_LANGUAGE_CACHE_MAX:
+                _output_language_cache.pop(next(iter(_output_language_cache)))
+        _output_language_cache[key] = (language, time.monotonic() + _OUTPUT_LANGUAGE_CACHE_SECONDS)
+
+
+def _episode_language_inputs(
+    uid: str,
+    session_id: str,
+    moment: MomentInput,
+    c: Collaborators,
+) -> tuple[str, str]:
+    """Resolve and memoize conversation language and user preference for this session."""
+    client_key = id(c.firestore_client)
+    conversation_key = ('conversation', uid, session_id, moment.conversation_id, client_key)
+    conversation_language = _language_cache_get(conversation_key)
+    if conversation_language is None:
+        stored = _conversation_language(uid, moment.conversation_id, c)
+        authority = stored if stored is not None and stored.strip() else (moment.language or '')
+        conversation_language = episode_language.normalize_language(authority)
+        if not conversation_language:
+            conversation_language = episode_language.dominant_segment_language(moment.segments)
+        _language_cache_set(conversation_key, conversation_language)
+
+    preference_key = ('preference', uid, session_id, '', client_key)
+    preference = _language_cache_get(preference_key)
+    if preference is None:
+        preference = episode_language.language_preference(uid)
+        _language_cache_set(preference_key, preference)
+    return conversation_language, preference
 
 
 def _empty_episode(moment: MomentInput, now: datetime) -> dict[str, Any]:
@@ -655,15 +710,11 @@ def _record_moment_once(
     output_language, repair = '', None
     conversation_language = moment.language or ''
     if episode_output_language_pinned():
-        conversation_tag = _conversation_language(uid, moment.conversation_id, c)
-        # Recovery moments may carry the same conversation-level tag. Prefer the
-        # stored conversation authority whenever present so a moment tag cannot
-        # overrule the language that represents the whole conversation.
-        if conversation_tag.strip():
-            conversation_language = conversation_tag
-        output_language = episode_language.resolve_episode_language(uid, conversation_language)
+        session_id = str(base.get('primary_conversation_id') or moment.conversation_id)
+        conversation_language, preference = _episode_language_inputs(uid, session_id, moment, c)
+        output_language = episode_language.resolve_episode_language(uid, conversation_language, preference=preference)
         prior = episode_language.state_language(base, hint_language=conversation_language)
-        if prior and prior != output_language:
+        if prior and not episode_language.languages_match(prior, output_language):
             repair = episode_language.repair_instruction(prior, output_language)
     try:
         result = incremental.run_incremental_update(
@@ -699,6 +750,11 @@ def _record_moment_once(
     start_offset = min((_segment_start(s) for s in segments), default=0.0)
     changes = apply_update(
         base, result.update, conversation_id=moment.conversation_id, segment_offset=end_offset, now=now
+    )
+    detected_output_language = (
+        episode_language.detected_state_language({**base, **changes}, hint_language=output_language)
+        if output_language
+        else ''
     )
     moments = [dict(m) for m in base.get('moments') or []]
     heading = result.update.moment_heading or clean_text(result.update.title, 48)
@@ -755,12 +811,11 @@ def _record_moment_once(
         'calendar_identity': base.get('calendar_identity') or moment.calendar_identity,
     }
     if output_language:
-        if repair:
-            # The stamp says what the state is written in; a repair update may not have
-            # landed it, so clear the stamp and re-detect rather than loop repairs on it.
-            updates['output_language'] = None
-        else:
-            updates['output_language'] = output_language
+        # A prompt instruction does not prove the model followed it. Only stamp
+        # observed state text; otherwise the next update detects and repairs it.
+        updates['output_language'] = (
+            output_language if episode_language.languages_match(detected_output_language, output_language) else None
+        )
     if pending is not None:
         updates['pending_boundary'] = {k: v for k, v in _pending(base).items() if k != moment.conversation_id}
     if episode is None:
@@ -1462,6 +1517,8 @@ def last_closed_episode(
 def reset_for_tests() -> None:
     with _last_closed_lock:
         _last_closed_cache.clear()
+    with _output_language_cache_lock:
+        _output_language_cache.clear()
 
 
 def episode_by_id(

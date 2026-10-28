@@ -12,6 +12,7 @@ import pytz
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import ValidationError
 from config.daily_summary_depth import normalize_daily_summary_depth
+from config.episodes import episode_output_language_pinned
 import database.action_items as action_items_db
 import database.daily_summaries as daily_summaries_db
 import database.goals as goals_db
@@ -291,7 +292,12 @@ def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
         return ''
     require_generated_compute(uid, 'daily_summary_simple')
     user_name, memories_str = get_prompt_memories(uid)
-    user_language = resolve_output_language(uid, None)
+    language_pin_enabled = episode_output_language_pinned()
+    user_language = (
+        resolve_output_language(uid, None)
+        if language_pin_enabled
+        else normalize_language(users_db.get_user_language_preference(uid))
+    )
 
     all_person_ids: List[str] = []
     for m in memories:
@@ -304,9 +310,16 @@ def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
 
     conversation_history = conversations_to_string(memories, people=people)
 
-    language_instruction = (
-        f'Write all output in {user_language}. Keep names and quoted words verbatim; do not switch languages.'
-    )
+    if language_pin_enabled:
+        language_instruction = (
+            f'Write all output in {user_language}. Keep names and quoted words verbatim; do not switch languages.'
+        )
+    else:
+        language_instruction = (
+            f'You MUST respond entirely in {user_language}. Do NOT respond in English.'
+            if user_language and user_language != 'en'
+            else ''
+        )
 
     prompt = f"""
     You are an experienced mentor, that helps people achieve their goals and improve their lives.
@@ -374,7 +387,15 @@ def generate_comprehensive_daily_summary(
     user_name, memories_str = get_prompt_memories(uid)
 
     # Get user's language preference for generating summary in their language
+    language_pin_enabled = episode_output_language_pinned()
     output_language = normalize_language(user_profile.get('language')) or 'en'
+    language_rule = (
+        f'OUTPUT LANGUAGE: {output_language}. Write all output in {output_language}, regardless of the conversation '
+        'languages. Keep names and quoted words verbatim.'
+        if language_pin_enabled
+        else f'OUTPUT LANGUAGE: {output_language}. You MUST write every word of this summary in {output_language}, '
+        'regardless of the language the conversations are in.'
+    )
     depth = normalize_daily_summary_depth(user_profile.get('daily_summary_depth'))
     overview_copy, highlight_copy, depth_rules = _daily_summary_depth_copy(depth)
     question_copy, decision_copy, learning_copy = _daily_summary_entry_examples(depth)
@@ -508,7 +529,7 @@ def generate_comprehensive_daily_summary(
     convo_id_map = {i + 1: c.id for i, c in enumerate(non_discarded)}
 
     prompt = f"""You are creating a daily summary for {user_name}. {memories_str}
-OUTPUT LANGUAGE: {output_language}. Write all output in {output_language}, regardless of the conversation languages. Keep names and quoted words verbatim.
+{language_rule}
 
 Today's date: {date_str}
 Conversations available for recap: {len(non_discarded)} (total recordings in day: {total_conversations})

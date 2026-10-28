@@ -37,6 +37,7 @@ def _patch(monkeypatch, content: str, capture: dict | None = None):
 @pytest.fixture(autouse=True)
 def no_language_preference(monkeypatch):
     monkeypatch.setattr(users_db, 'get_user_language_preference', lambda _uid: None)
+    monkeypatch.setenv('EPISODE_OUTPUT_LANGUAGE_PIN', 'on')
 
 
 def test_empty_transcript_returns_empty_topic():
@@ -57,6 +58,27 @@ def test_short_transcript_answers_deterministically_without_a_model(monkeypatch)
 
     assert result == conversation_topic.ConversationTopic(emoji='', title='Call mom tomorrow')
     assert _deterministic_short_answers() == before + 1
+
+
+def test_short_transcript_without_language_keeps_the_model_call_saving(monkeypatch):
+    def fail_get_llm(_feature):
+        raise AssertionError('an unconfigured short transcript keeps the deterministic path')
+
+    monkeypatch.setattr(conversation_topic, 'get_llm', fail_get_llm)
+    assert conversation_topic.generate_conversation_topic('uid', 'Call mom tomorrow').title == 'Call mom tomorrow'
+
+
+def test_shared_kill_switch_restores_the_legacy_topic_prompt(monkeypatch):
+    capture: dict = {}
+    _patch(monkeypatch, '{"emoji": "📞", "title": "Mom call"}', capture)
+    monkeypatch.setenv('EPISODE_OUTPUT_LANGUAGE_PIN', 'off')
+
+    result = conversation_topic.generate_conversation_topic(
+        'uid', 'We met to review the migration plan, owners, timing, risks, and the Friday launch.'
+    )
+
+    assert result is not None
+    assert 'Write all output in ' not in capture['prompt']
 
 
 def test_short_transcript_still_calls_model_when_switch_is_off(monkeypatch):

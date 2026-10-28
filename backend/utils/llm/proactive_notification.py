@@ -1,12 +1,12 @@
 from utils.generated_compute import current_generated_compute_allowed
 import hashlib
 import os
-import re
 from typing import Any, Mapping, Optional, Sequence, cast
 
 from langchain_core.messages import BaseMessage, HumanMessage
 from pydantic import BaseModel, Field
 
+from config.episodes import episode_output_language_pinned
 from utils.byok import has_byok_keys
 from utils.llm.clients import get_llm
 from utils.llm.gateway_client import should_route_features_through_gateway
@@ -199,12 +199,7 @@ APPROVE only if ALL of these are true:
 - NOT seeing this notification could lead to a missed opportunity or avoidable mistake"""
 
 
-# Accept only clean BCP-47-style language/locale tokens (e.g. ja, pt-BR, zh-TW). The language comes
-# from a user-controlled preference and is interpolated into the prompts, so reject anything else
-# (newlines, punctuation, extra text) to prevent prompt injection.
-_BCP47_LANGUAGE_RE = re.compile(r'[A-Za-z]{2,8}(-[A-Za-z0-9]{2,8})*')
-
-
+# The shared normalizer accepts only supported BCP-47 language tokens before they reach a prompt.
 def language_instruction(output_language: str, *, for_critic: bool = False) -> str:
     """Instruction telling the model to write (or, for the critic, reject if not written in) the
     user's language (#5214).
@@ -215,7 +210,14 @@ def language_instruction(output_language: str, *, for_critic: bool = False) -> s
     languages.
     """
     lang = normalize_language(output_language)
-    if not lang or not _BCP47_LANGUAGE_RE.fullmatch(lang):
+    if not episode_output_language_pinned():
+        # Preserve the pre-pin notification wording when the shared rollback is off.
+        if not lang or lang.startswith('en'):
+            return ''
+        if for_critic:
+            return f"\n- The notification is written in a language other than the user's (expected code: {lang})"
+        return f"\n- Write the notification entirely in the user's language (language/locale code: {lang})"
+    if not lang:
         lang = 'en'
     if for_critic:
         return f'\n- Reject the notification unless it is written entirely in {lang} (expected code: {lang})'

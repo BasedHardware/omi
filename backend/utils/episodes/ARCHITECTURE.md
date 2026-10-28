@@ -51,13 +51,15 @@ one capture window's evidence.
      prefix comes first and the clock, state and new speech come last.
      One output language is resolved for every moment (`output_language.py`,
      kill switch `EPISODE_OUTPUT_LANGUAGE_PIN`): the user's explicit preference,
-     then the conversation's dominant language tag — never the newest moment's
-     speech or the episode's previous output deciding on its own, and
-     `multi`/`auto`/`unknown` count as unset. The
-     prompt pins that language, the resolved value is stamped on the episode as
-     `output_language`, and a state detected in a different language is
-     rewritten in the update instead of being fed back, so a wrong-language
-     episode recovers on its next moment.
+     then the conversation's dominant language tag or, for `multi`/`auto`, the
+     weighted dominant language of the in-memory segment batch — never the
+     episode's previous output deciding on its own. Conversation language and
+     user preference are cached for the episode/session, so later moments do
+     not repeat Firestore reads. The prompt pins that language; the episode only
+     stamps `output_language` when local detection confirms the resulting state.
+     An unstamped or wrong-language state is detected and repaired on its next
+     moment. The same kill switch also covers provisional topic, recap and
+     proactive-notification prompt changes.
    - **Compare-and-swap store** (`database/episodes.py`): speech-derived fields are
      sealed with the user's key. A lost race retries once.
 3. When a conversation's finalize starts, its live episode closes
