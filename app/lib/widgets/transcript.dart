@@ -9,6 +9,8 @@ import 'package:flutter/rendering.dart'
         RenderAbstractViewport,
         RenderBox,
         RenderObject,
+        RenderViewport,
+        ViewportOffset,
         RenderSliverMultiBoxAdaptor,
         ScrollDirection,
         SliverMultiBoxAdaptorParentData;
@@ -226,7 +228,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   final GlobalKey _listKey = GlobalKey();
   final _liveCenterKey = const ValueKey('transcript_live_center');
   String? _liveBoundaryId;
-  double _liveViewportAnchor = 1;
 
   bool get _endAnchored => widget.followLatest && !widget.isConversationDetail;
 
@@ -579,31 +580,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     _setIsAtBottom(false);
   }
 
-  bool _updateLiveViewportAnchor() {
-    final rows = _listSlivers();
-    final viewport = _scrollController.position.viewportDimension;
-    if (rows.isNotEmpty && rows.first.geometry != null && viewport > 0) {
-      // If all older rows fit, put their beginning at the top, like a normal
-      // short transcript. Long histories retain the newest-end anchor.
-      final anchor = (rows.first.geometry!.scrollExtent / viewport).clamp(0.0, 1.0);
-      if ((anchor - _liveViewportAnchor).abs() > 0.001) {
-        final restore = _userHasScrolled;
-        _pendingAnchorRestore = restore;
-        setState(() => _liveViewportAnchor = anchor);
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          if (restore) {
-            _restoreAnchor();
-          } else {
-            _scrollToBottomGently(animated: false);
-          }
-        });
-        return true;
-      }
-    }
-    return false;
-  }
-
   void _setIsAtBottom(bool value) {
     if (_isAtBottom == value || !mounted) return;
     // Saved transcripts have no jump-to-latest control. Updating their scroll
@@ -917,10 +893,10 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
               }
             },
             child: _endAnchored
-                ? CustomScrollView(
+                ? _LiveTranscriptScrollView(
                     key: _listKey,
                     controller: _scrollController,
-                    anchor: _liveViewportAnchor,
+                    startAtLatest: !_userHasScrolled,
                     center: _liveCenterKey,
                     slivers: [
                       SliverList(
@@ -1675,4 +1651,73 @@ String tryDecodingText(String text) {
     }
   }
   return _decodedTextCache[text]!;
+}
+
+// Measure the upward-growing history before paint. A post-frame anchor change
+// leaves short transcripts below the viewport for their first frame.
+class _LiveTranscriptScrollView extends CustomScrollView {
+  const _LiveTranscriptScrollView(
+      {super.key, super.controller, super.center, super.slivers, required this.startAtLatest});
+
+  final bool startAtLatest;
+
+  @override
+  Widget buildViewport(BuildContext context, ViewportOffset offset, AxisDirection axisDirection, List<Widget> slivers) {
+    return _LiveTranscriptViewport(offset: offset, center: center, slivers: slivers, startAtLatest: startAtLatest);
+  }
+}
+
+class _LiveTranscriptViewport extends Viewport {
+  _LiveTranscriptViewport({required super.offset, super.center, required super.slivers, required this.startAtLatest});
+
+  final bool startAtLatest;
+
+  @override
+  RenderViewport createRenderObject(BuildContext context) => _LiveTranscriptRenderViewport(
+        offset: offset,
+        startAtLatest: startAtLatest,
+        crossAxisDirection: Viewport.getDefaultCrossAxisDirection(context, AxisDirection.down),
+      );
+
+  @override
+  void updateRenderObject(BuildContext context, RenderViewport renderObject) {
+    // The render object owns its measured anchor; don't reset it on rebuild.
+    renderObject
+      ..offset = offset
+      ..crossAxisDirection = Viewport.getDefaultCrossAxisDirection(context, AxisDirection.down);
+  }
+}
+
+class _LiveTranscriptRenderViewport extends RenderViewport {
+  _LiveTranscriptRenderViewport({required super.offset, required super.crossAxisDirection, required bool startAtLatest})
+      : _initialFollow = startAtLatest,
+        super(anchor: 1);
+
+  bool _initialFollow;
+
+  double _measuredAnchor = 1;
+
+  @override
+  double get anchor => _measuredAnchor;
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    // The first sliver contains history in reverse growth order. Its extent is
+    // exact when it fits; a long history only lays out the live-edge window.
+    final extent = firstChild?.geometry?.scrollExtent;
+    if (extent == null || size.height == 0) return;
+    final nextAnchor = (extent / size.height).clamp(0.0, 1.0);
+    final anchorChanged = (nextAnchor - anchor).abs() > 0.001;
+    _measuredAnchor = nextAnchor;
+    final initialFollow = _initialFollow;
+    _initialFollow = false;
+    if (initialFollow) {
+      // On creation the center contains only the newest row and footer. Both
+      // are measured here, so opening needs no post-frame jump to reveal them.
+      final latest = max(0.0, (center?.geometry?.scrollExtent ?? 0) - size.height * (1 - anchor));
+      offset.correctBy(latest - offset.pixels);
+    }
+    if (anchorChanged || initialFollow) super.performLayout();
+  }
 }

@@ -50,7 +50,9 @@ extension _TranscriptPlaybackScrolling on _TranscriptWidgetState {
   double _viewportTopOf(RenderBox row) =>
       RenderAbstractViewport.of(row).getOffsetToReveal(row, 0).offset -
       _scrollController.offset +
-      (_endAnchored ? _scrollController.position.viewportDimension * _liveViewportAnchor : 0);
+      (_endAnchored
+          ? _scrollController.position.viewportDimension * (RenderAbstractViewport.of(row) as RenderViewport).anchor
+          : 0);
 
   List<RenderSliverMultiBoxAdaptor> _listSlivers() {
     final root = _listKey.currentContext?.findRenderObject();
@@ -170,7 +172,6 @@ extension _TranscriptPlaybackScrolling on _TranscriptWidgetState {
   }
 
   bool _onScrollMetrics(ScrollMetricsNotification notification) {
-    if (_endAnchored && notification.depth == 0 && _updateLiveViewportAnchor()) return false;
     if (!widget.followLatest || _isAutoScrolling || _isUserScrolling || _userInterruptedAutoScroll) return false;
     final shouldFollow = !_userHasScrolled;
     if (shouldFollow && notification.metrics.extentAfter > 0.5) {

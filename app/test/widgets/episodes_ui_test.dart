@@ -655,12 +655,6 @@ void main() {
         episodes: episodes,
       );
 
-      // Finish the live-edge follow and short-list anchor correction. The
-      // page's live clock keeps ticking, so pump a bounded set of frames.
-      for (var frame = 0; frame < 5; frame++) {
-        await tester.pump(const Duration(milliseconds: 100));
-      }
-
       expect(find.textContaining('Where should we go for lunch?', findRichText: true), findsOneWidget);
       expect(find.textContaining('Booking'), findsWidgets);
       expect(find.byKey(const ValueKey('episode_item_i1')), findsOneWidget);
