@@ -231,8 +231,7 @@ async def test_sim_1028_modulate_never_becomes_sole_primary_while_soniox_trials(
         assert pod.stage(SONIOX.id) == 25
         clock[0] += 700
         for i in range(25):
-            await pod.vote(SONIOX.id, _uid(1200 + i), False)
-            if i < 5:
+            for _ in range(3):
                 await pod.vote(SONIOX.id, _uid(1200 + i), False)
         assert pod.stage(SONIOX.id) == 100
         await pod.vote(MODULATE.id, _uid(2000), False)  # the hold lifts: not sole anymore
@@ -398,3 +397,27 @@ async def test_real_lua_cas_persists_surge_only_with_winning_bench():
             await redis.eval(CAS, 1, key, json.dumps(benched.encode()), json.dumps(GateState(stage=5).encode()), 0) == 1
         )
         assert float(await redis.get(surge_key)) == deadline
+
+
+@pytest.mark.parametrize(
+    'soniox_stage,parakeet_stage,held', [(5, 0, True), (25, 5, True), (0, 5, False), (100, 0, False), (5, 100, False)]
+)
+@pytest.mark.asyncio
+async def test_real_lua_promotion_hold_reads_current_shared_stages(soniox_stage, parakeet_stage, held):
+    async with fakeredis.aioredis.FakeRedis(decode_responses=True) as redis:
+        key = live_stt_state.cost_key(MODULATE, 'all')
+        others = [PARAKEET, SONIOX]
+        keys = [key, *(live_stt_state.cost_key(target, lang) for target in others for lang in ('all', 'en'))]
+        old = json.dumps(GateState(stage=25).encode())
+        promoted = json.dumps(GateState(stage=100).encode())
+        held_state = json.dumps(GateState(stage=25, n=61).encode())
+        await redis.set(key, old)
+        for target, stage in [(PARAKEET, parakeet_stage), (SONIOX, soniox_stage)]:
+            for lang in ('all', 'en'):
+                await redis.set(live_stt_state.cost_key(target, lang), json.dumps(GateState(stage=stage).encode()))
+        result = await redis.eval(CAS, len(keys), *keys, old, promoted, 900, 'hold', held_state, 4)
+        assert result == (2 if held else 1)
+        state = GateState.decode(json.loads(await redis.get(key)))
+        assert state.stage == (25 if held else 100)
+        assert state.n == (61 if held else 0)
+        assert await redis.ttl(key) == (-1 if held else 900)

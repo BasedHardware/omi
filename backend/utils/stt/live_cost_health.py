@@ -82,15 +82,35 @@ COST_CACHE_CAP = 4096
 CAS = """
 local current = redis.call('GET', KEYS[1])
 if (current or '') ~= ARGV[1] then return 0 end
-redis.call('SET', KEYS[1], ARGV[2])
-if tonumber(ARGV[3]) > 0 then redis.call('EXPIRE', KEYS[1], ARGV[3]) end
-if #KEYS > 1 then
+local encoded = ARGV[2]
+local ttl = tonumber(ARGV[3])
+local result = 1
+if ARGV[4] == 'hold' then
+    local guard = 0
+    local full_share = false
+    for index = 2, #KEYS, 2 do
+        local global = redis.call('GET', KEYS[index])
+        local language = redis.call('GET', KEYS[index + 1])
+        local stage = math.min(global and cjson.decode(global).stage or 100,
+                               language and cjson.decode(language).stage or 100)
+        if index == tonumber(ARGV[6]) then guard = stage end
+        if stage == 100 then full_share = true end
+    end
+    if guard >= 5 and not full_share then
+        encoded = ARGV[5]
+        ttl = 0
+        result = 2
+    end
+end
+redis.call('SET', KEYS[1], encoded)
+if ttl > 0 then redis.call('EXPIRE', KEYS[1], ttl) end
+if #KEYS == 2 then
     local clock = redis.call('TIME')
     local now = tonumber(clock[1]) + tonumber(clock[2]) / 1000000
     local seconds = tonumber(ARGV[4])
     redis.call('SET', KEYS[2], tostring(now + seconds), 'EX', seconds)
 end
-return 1
+return result
 """
 
 # A bench mass-failovers long-lived sessions onto the remaining targets over
@@ -340,7 +360,7 @@ class CostHealthMixin(ABC):
 
         Benching a target mass-failovers its in-flight sessions onto the
         remaining targets; their connect deaths in the window are censored
-        from breadth evidence (2026-10-28 burst bench at a 1.0% rate).
+        from burst evidence (2026-10-28 burst bench at a 1.0% rate).
         """
         try:
             others = [entry.id for entry in registry() if entry.id != benched]
@@ -382,35 +402,6 @@ class CostHealthMixin(ABC):
                     key = (target.id, lang)
                     stage = min(stage, self._cost_view(key, self._cost_is_fresh(key, now)).stage)
                 stages[target.id] = stage
-        return stages
-
-    async def _fresh_target_stages(self, exclude: str, language: str, identity: str) -> dict[str, int]:
-        """Conservative stages of every other registry target, read from Redis.
-
-        The sole-primary hold must not miss a just-committed bench because a
-        pod cache is seconds stale, so the decision reads the shared keys.
-        """
-        try:
-            targets = [entry for entry in registry() if entry.id != exclude]
-        except (ValueError, TypeError):
-            return {}
-        if not targets:
-            return {}
-        keys = [live_stt_state.cost_key(entry, lang) for entry in targets for lang in ('all', language)]
-        try:
-            values = await self._redis().mget(keys)
-        except Exception as exc:
-            raise _RedisCallFailed('Redis stage MGET failed') from exc
-        if self._check_identity() != identity:
-            raise _IdentityChanged('live STT state identity changed')
-        stages: dict[str, int] = {}
-        for index, entry in enumerate(targets):
-            stage = 100
-            for offset, lang in enumerate(('all', language)):
-                raw = values[index * 2 + offset]
-                state = GateState.decode(json.loads(raw)) if raw else GateState()
-                stage = min(stage, state.stage)
-            stages[entry.id] = stage
         return stages
 
     def prefer_recovery(self, target: str, language: str) -> None:
@@ -650,6 +641,7 @@ class CostHealthMixin(ABC):
         expected_identity: str | None = None,
         on_commit: Callable[[], None] | None = None,
         on_identity_changed: Callable[[str], None] | None = None,
+        hold_update: Callable[[GateState], GateState] | None = None,
     ) -> GateState:
         identity = self._check_identity()
         if expected_identity is not None and identity != expected_identity:
@@ -691,6 +683,16 @@ class CostHealthMixin(ABC):
             try:
                 bench = old.stage != 0 and new.stage == 0
                 keys = [redis_key, live_stt_state.cost_surge_key(target)] if bench else [redis_key]
+                extra = [FAILOVER_SURGE_CENSOR_SECONDS] if bench else []
+                held = None
+                if old.stage == 25 and new.stage == 100 and hold_update is not None:
+                    others = [entry for entry in registry() if entry.id != target.id]
+                    guard = SOLE_PRIMARY_HOLD[target.id]
+                    guard_index = next((2 + 2 * i for i, entry in enumerate(others) if entry.id == guard), 0)
+                    if guard_index:
+                        held = hold_update(old)
+                        keys += [live_stt_state.cost_key(entry, lang) for entry in others for lang in ('all', key[1])]
+                        extra = ['hold', json.dumps(held.encode(), separators=(',', ':')), guard_index]
                 committed = await self._redis().eval(
                     CAS,
                     len(keys),
@@ -698,11 +700,13 @@ class CostHealthMixin(ABC):
                     raw or '',
                     encoded,
                     900 if new.stage == 100 else 0,
-                    *([FAILOVER_SURGE_CENSOR_SECONDS] if bench else []),
+                    *extra,
                 )
             except Exception as exc:
                 raise _RedisCallFailed('Redis cost-state CAS failed') from exc
             if committed:
+                if committed == 2 and held is not None:
+                    new = held
                 if on_commit is not None:
                     try:
                         on_commit()
@@ -768,13 +772,11 @@ class CostHealthMixin(ABC):
                 raise _IdentityChanged('live STT state identity changed')
             now = await self._server_now(identity)
             surge = failed and self._failover_surge_open(target, now)
-            hold = False
-            if sole_primary_hold_enabled() and target in SOLE_PRIMARY_HOLD:
-                hold = self._sole_primary_blocked(target, await self._fresh_target_stages(target, language, identity))
+            guarded = sole_primary_hold_enabled() and target in SOLE_PRIMARY_HOLD
             for lang in ('all', language):
                 result = 'applied'
 
-                def update(state: GateState, lang: str = lang) -> GateState:
+                def update(state: GateState, lang: str = lang, *, hold: bool = False) -> GateState:
                     nonlocal result
                     result = 'applied'
                     if 0 < state.stage < minimum_share:
@@ -814,6 +816,7 @@ class CostHealthMixin(ABC):
                     expected_identity=identity,
                     on_commit=record_commit,
                     on_identity_changed=record_drop,
+                    hold_update=(lambda state: update(state, hold=True)) if guarded else None,
                 )
                 if write_committed and write_dropped:
                     return

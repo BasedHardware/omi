@@ -85,10 +85,24 @@ class MemoryRedis:
         expected, new, _ttl = args[_numkeys : _numkeys + 3]
         if self.data.get(key, '') != expected:
             return 0
+        result = 1
+        if _numkeys > 2:
+            mode, held, guard_index = args[_numkeys + 3 :]
+            assert mode == 'hold'
+            stages = {
+                index
+                + 1: min(
+                    json.loads(self.data.get(args[index], '{"stage":100}'))['stage'],
+                    json.loads(self.data.get(args[index + 1], '{"stage":100}'))['stage'],
+                )
+                for index in range(1, _numkeys, 2)
+            }
+            if stages[guard_index] >= 5 and all(stage < 100 for stage in stages.values()):
+                new, result = held, 2
         self.data[key] = new
         if _numkeys == 2:
             self.data[args[1]] = str(self.clock() + int(args[_numkeys + 3]))
-        return 1
+        return result
 
     @staticmethod
     def _bench_deadline(raw, kind):
