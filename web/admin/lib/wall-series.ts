@@ -1807,9 +1807,13 @@ export async function seriesPayload(
   let cacheStale = Boolean(wall?.cacheStale);
   let refreshing = false;
   let staleUntil = Infinity;
-  const wallAt = wall ? Date.parse(wall.generatedAt) : NaN;
-  if (wall?.metrics.some((m) => m.value != null) && Number.isFinite(wallAt))
-    staleUntil = wallAt + MAX_STALE;
+  // A retained snapshot metric ages from `retainedSince`, not the snapshot's
+  // newer generatedAt (Luna r3).
+  for (const m of wall?.metrics || []) {
+    if (m.value == null) continue;
+    const at = Date.parse(m.retainedSince || wall!.generatedAt);
+    if (Number.isFinite(at)) staleUntil = Math.min(staleUntil, at + MAX_STALE);
+  }
   for (const leg of LEGS_FOR[name]) {
     const state = local.get(leg);
     const entry = state?.doc?.entry;

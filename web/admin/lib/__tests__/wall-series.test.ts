@@ -1014,6 +1014,27 @@ describe("the warm scheduler fills legs off the viewing path", () => {
     expect(served.staleUntil).toBeNull(); // nothing served, nothing to bound
   });
 
+  it("bounds a retained snapshot metric by when it was retained", async () => {
+    const s = { ...sources(), store: memorySeriesStore() };
+    const wall = await computeWall(s, now);
+    const retained = new Date(now.getTime() - 20 * 3_600_000).toISOString();
+    const kept = {
+      ...wall,
+      metrics: wall.metrics.map((m, i) =>
+        i === 0 ? { ...m, value: m.value ?? 1, retainedSince: retained } : m
+      ),
+    };
+    const served = await seriesPayload(
+      "headline",
+      Promise.resolve(kept),
+      now,
+      s
+    );
+    expect(Date.parse(served.staleUntil!)).toBe(
+      Date.parse(retained) + 24 * 3_600_000
+    );
+  });
+
   it("tells the proxy when its oldest served value turns 24h old", async () => {
     const s = { ...sources(), store: memorySeriesStore() };
     const served = await seriesPayload("growth", Promise.resolve(null), now, s);

@@ -65,13 +65,14 @@ def allowed_path(path):
     )
 
 
-def stale_until(body, default):
-    """The admin's `staleUntil` (ISO time its oldest served value turns 24h old)."""
+def stale_until(body):
+    """The admin's `staleUntil` (ISO time its oldest served value turns 24h old),
+    or None when the body carries no valid bound."""
     try:
         value = json.loads(body).get("staleUntil")
-        return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp() if value else default
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
     except Exception:
-        return default
+        return None
 
 
 class StatsProxy:
@@ -133,14 +134,24 @@ class StatsProxy:
             len(self.cache) >= 32 or sum(len(v[2]) for v in self.cache.values()) + len(body) > MAX_CACHE_BYTES
         ):
             del self.cache[next(iter(self.cache))]
-        self.cache[path] = (stamp + ttl, status, body)
+        expires = stamp + ttl
         if status == 200:
             # A `refreshing` body keeps the age of the last settled answer, so
             # repeated refreshing answers cannot extend MAX_STALE indefinitely.
             prior = self.good.get(path)
             at = prior[0] if refreshing and prior else stamp
-            # Never past the body's own data-age bound (admin `staleUntil`).
-            self.good[path] = (at, body, min(at + MAX_STALE, stale_until(body, at + MAX_STALE)))
+            # Fail closed: only a body that states its own data-age bound
+            # (admin `staleUntil`) is ever served stale, and never past it.
+            bound = stale_until(body)
+            if bound is None or bound <= stamp:
+                self.good.pop(path, None)
+            else:
+                serve_until = min(at + MAX_STALE, bound)
+                self.good[path] = (at, body, serve_until)
+                expires = min(expires, serve_until)
+            if bound is not None and bound <= stamp:
+                expires = stamp  # already past its bound: answer once, keep nothing
+        self.cache[path] = (expires, status, body)
         return status, body
 
     def upstream(self, path):
