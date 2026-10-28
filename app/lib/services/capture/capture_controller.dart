@@ -1480,6 +1480,21 @@ class CaptureController extends ChangeNotifier
     }
   }
 
+  bool get _customLiveRequiresRealtimeAudio {
+    final config = _preferences.customSttConfig;
+    return config.isEnabled && config.isLive;
+  }
+
+  /// Custom Live consumes the same native BLE ingress as Omi's live socket.
+  /// Transcribe Later writes future frames directly to local batch files and
+  /// would otherwise leave the Custom Live WebSocket connected but silent.
+  Future<void> _reconcileCustomLiveBatchMode() async {
+    final requiresRealtimeAudio = _customLiveRequiresRealtimeAudio;
+    if (!requiresRealtimeAudio && !_preferences.batchModeSuspendedForCustomLive) return;
+    final outcome = await _capture.dispatch(CustomLiveBatchChanged(suspended: requiresRealtimeAudio));
+    outcome.throwIfFailed();
+  }
+
   // Interactive device onboarding needs the realtime transcript + voice paths, which Transcribe
   // Later (batch mode) disables. Flipping batchModeEnabled off also re-opens the native->Dart audio
   // forward — the native BatchAudioWriter gate reads this same pref — so BLE audio reaches Dart again.
@@ -1496,7 +1511,16 @@ class CaptureController extends ChangeNotifier
 
   Future<void> _suspendBatchForOnboardingBody() async {
     if (_preferences.batchModeSuspendedForOnboarding) return;
-    if (!_preferences.batchModeEnabled) return;
+    if (!_preferences.batchModeEnabled) {
+      // Custom Live may already have opened the realtime lane. Retain the
+      // onboarding reason independently so it cannot be undone by a Custom
+      // Live settings change while onboarding still needs live audio.
+      if (_preferences.batchModeSuspendedForCustomLive) {
+        _preferences.batchModeSuspendedForOnboarding = true;
+        notifyListeners();
+      }
+      return;
+    }
     _preferences.batchModeSuspendedForOnboarding = true;
     _preferences.batchModeEnabled = false;
     await _applyLimitlessRealtimeSuppression(false);
@@ -1509,6 +1533,45 @@ class CaptureController extends ChangeNotifier
   Future<void> _restoreBatchAfterOnboardingBody() async {
     if (!_preferences.batchModeSuspendedForOnboarding) return;
     _preferences.batchModeSuspendedForOnboarding = false;
+    if (_preferences.batchModeSuspendedForCustomLive) {
+      notifyListeners();
+      return;
+    }
+    _preferences.batchModeEnabled = true;
+    await _applyLimitlessRealtimeSuppression(true);
+    notifyListeners();
+    try {
+      await _resetState();
+    } catch (_) {}
+  }
+
+  Future<void> _suspendBatchForCustomLiveBody() async {
+    if (_preferences.batchModeSuspendedForCustomLive) return;
+    if (!_preferences.batchModeEnabled) {
+      // Onboarding may already have disabled batch mode. Track our own
+      // reason so its eventual cleanup cannot restore batch prematurely.
+      if (_preferences.batchModeSuspendedForOnboarding) {
+        _preferences.batchModeSuspendedForCustomLive = true;
+        notifyListeners();
+      }
+      return;
+    }
+    _preferences.batchModeSuspendedForCustomLive = true;
+    _preferences.batchModeEnabled = false;
+    await _applyLimitlessRealtimeSuppression(false);
+    notifyListeners();
+    try {
+      await _resetState();
+    } catch (_) {}
+  }
+
+  Future<void> _restoreBatchAfterCustomLiveBody() async {
+    if (!_preferences.batchModeSuspendedForCustomLive) return;
+    _preferences.batchModeSuspendedForCustomLive = false;
+    if (_preferences.batchModeSuspendedForOnboarding) {
+      notifyListeners();
+      return;
+    }
     _preferences.batchModeEnabled = true;
     await _applyLimitlessRealtimeSuppression(true);
     notifyListeners();
@@ -1520,6 +1583,7 @@ class CaptureController extends ChangeNotifier
   /// Called when transcription settings are changed (e.g., custom STT provider)
   /// This resets the socket connection to use the new configuration
   Future<void> onTranscriptionSettingsChanged() async {
+    await _reconcileCustomLiveBatchMode();
     final outcome = await _capture.dispatch(const TranscriptionSettingsChanged());
     outcome.throwIfFailed();
   }
@@ -3323,6 +3387,10 @@ class CaptureController extends ChangeNotifier
       _deferDeviceStartPastSyncPass();
       return;
     }
+    // Recover the persisted Custom Live marker before the native BLE service
+    // chooses its ingress path. This also self-heals an app restart midway
+    // through the switch without touching stored recordings or uploads.
+    await _reconcileCustomLiveBatchMode();
     final outcome = await _capture.dispatch(DeviceStartRequested(device: device));
     outcome.throwIfFailed();
   }
@@ -3833,10 +3901,11 @@ class CaptureController extends ChangeNotifier
 
     if (event is CaptureCommittedEvent) {
       final phone = _wal.getSyncs().phone;
-      if (phone is LocalWalSyncImpl)
+      if (phone is LocalWalSyncImpl) {
         unawaited(phone.recordCaptureCommitted(event).catchError((Object _) {
           Logger.debug('event=refactor_shadow lane=L5 check=custody_commit outcome=error');
         }));
+      }
       return;
     }
     if (event is SpeakerLabelSuggestionEvent) {
@@ -4481,6 +4550,8 @@ class CaptureController extends ChangeNotifier
         paused: isPaused,
         batchModeEnabled: _preferences.batchModeEnabled,
         batchModeSuspendedForOnboarding: _preferences.batchModeSuspendedForOnboarding,
+        batchModeSuspendedForCustomLive: _preferences.batchModeSuspendedForCustomLive,
+        customLiveRealtimeRequired: _customLiveRequiresRealtimeAudio,
         deviceSupportsTranscribeLater: deviceSupportsTranscribeLater,
         networkConnected: _connectivity.isConnected,
         signedIn: _auth.isSignedIn,
@@ -4588,6 +4659,8 @@ class CaptureController extends ChangeNotifier
           RecordProfileStage() => _resetState(),
           OnboardingBatchStage() =>
             stage.suspended ? _suspendBatchForOnboardingBody() : _restoreBatchAfterOnboardingBody(),
+          CustomLiveBatchStage() =>
+            stage.suspended ? _suspendBatchForCustomLiveBody() : _restoreBatchAfterCustomLiveBody(),
           StartPhoneBatchStage() => _startPhoneMicBatchBody(auto: stage.auto),
         };
 

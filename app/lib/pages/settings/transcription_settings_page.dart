@@ -185,8 +185,10 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       // Load all provider configs from preferences
       _loadAllProviderConfigs();
 
-      // If current provider has no saved config but active config matches, use it
-      if (_configsPerProvider[_selectedProvider] == null && activeConfig.provider == _selectedProvider) {
+      // The active configuration is authoritative for its provider.  A stale
+      // per-provider draft must never make the editor show or overwrite a
+      // different Custom Live route than the one currently in use.
+      if (activeConfig.provider == _selectedProvider) {
         _configsPerProvider[_selectedProvider] = activeConfig;
       }
 
@@ -238,20 +240,26 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       });
     }
 
-    // Restore JSON configs if customized
+    // Restore JSON configs if customized.  A Custom Live URL is itself a
+    // meaningful request customization; treating URL-only settings as default
+    // hid the exact live-route code in the editor even while that route was
+    // active.
     if (config != null) {
-      final hasCustomRequest = config.requestType != null ||
+      final defaults = providerDefaults.buildRequestConfig(
+        apiKey: config.apiKey,
+        language: _languageFor(_selectedProvider),
+        model: config.model ?? providerDefaults.defaultModel,
+      );
+      final configuredUrl = config.url?.trim();
+      final defaultUrl = defaults['url']?.toString().trim();
+      final hasCustomUrl = configuredUrl != null && configuredUrl.isNotEmpty && configuredUrl != defaultUrl;
+      final hasCustomRequest = hasCustomUrl ||
+          config.requestType != null ||
           config.headers != null ||
           config.params != null ||
           config.audioFieldName != null;
 
       if (hasCustomRequest) {
-        final defaults = providerDefaults.buildRequestConfig(
-          apiKey: config.apiKey,
-          language: _languageFor(_selectedProvider),
-          model: config.model ?? providerDefaults.defaultModel,
-        );
-
         final requestConfig = <String, dynamic>{};
         requestConfig['url'] = config.url ?? defaults['url'];
         requestConfig['request_type'] = config.requestType ?? defaults['request_type'];

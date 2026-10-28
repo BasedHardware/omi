@@ -225,6 +225,77 @@ class WalSyncs implements IWalSync {
   Future<SyncLocalFilesResponse?> syncLiveCaptureOnly({IWalSyncProgressListener? progress}) =>
       _phoneSync.syncLiveCaptureOnly(progress: progress);
 
+  /// Copy recordings that still live on the hardware device into durable phone
+  /// storage, without starting any cloud upload.
+  ///
+  /// This is deliberately separate from [syncAll]. A successful device-page
+  /// acknowledgement is allowed only after the device implementation has
+  /// durably written the page on the phone, but custom/on-device
+  /// transcription must not turn that acknowledgement into an implicit Omi
+  /// cloud-sync request. The flash-page implementation also owns its bounded
+  /// resume loop here, so a forward-progress BLE stall continues from the
+  /// last acknowledged page instead of requiring another manual tap.
+  Future<SyncLocalFilesResponse?> syncDeviceWalsToPhone({IWalSyncProgressListener? progress}) async {
+    _isCancelled = false;
+    final response = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
+    final allMissing = await getMissingWals();
+    DebugLogManager.logEvent('local_device_offload_started', {
+      'totalMissingWals': allMissing.length,
+      'sdcard': allMissing.where((w) => w.storage == WalStorage.sdcard).length,
+      'flashPage': allMissing.where((w) => w.storage == WalStorage.flashPage).length,
+    });
+
+    // Phase 0: firmware-specific device storage.
+    final fwVersion = _resolvedFirmware;
+    if (isRingBufferFirmware(fwVersion)) {
+      await _ringSync.refreshWalsFromDevice();
+      final ringMissing = await _ringSync.getMissingWals();
+      if (ringMissing.isNotEmpty) {
+        Logger.debug('WalSyncs: Local device offload - ring-buffer sync (fw=$fwVersion)');
+        progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
+        await _ringSync.syncAll(progress: progress);
+      }
+    } else {
+      await _storageSync.refreshWalsFromDevice();
+      final storageMissing = await _storageSync.getMissingWals();
+      if (storageMissing.isNotEmpty) {
+        Logger.debug('WalSyncs: Local device offload - multi-file storage sync (fw=$fwVersion)');
+        progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
+        await _storageSync.syncAll(progress: progress);
+      }
+    }
+
+    if (_isCancelled) return response;
+
+    // Phase 1a: legacy SD-card device storage.
+    final missingSDCardWals = (await _sdcardSync.getMissingWals()).where((w) => w.status == WalStatus.miss).toList();
+    if (missingSDCardWals.isNotEmpty) {
+      Logger.debug('WalSyncs: Local device offload - SD card sync');
+      progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
+      await _sdcardSync.syncAll(progress: progress);
+    }
+
+    if (_isCancelled) return response;
+
+    // Phase 1b: Limitless flash pages. [syncAll] is the bounded, resumable
+    // device drain; do not replace it with a one-off [syncWal] call.
+    await _flashPageSync.refreshWalsFromDevice();
+    final flashMissing = (await _flashPageSync.getMissingWals()).where((w) => w.status == WalStatus.miss).toList();
+    if (flashMissing.isNotEmpty) {
+      Logger.debug('WalSyncs: Local device offload - flash-page sync');
+      progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
+      await _flashPageSync.syncAll(progress: progress);
+    }
+
+    if (!_isCancelled) {
+      DebugLogManager.logEvent('local_device_offload_completed', {
+        'sdcard': missingSDCardWals.length,
+        'flashPage': flashMissing.length,
+      });
+    }
+    return response;
+  }
+
   @override
   void start() {
     _phoneSync.start();

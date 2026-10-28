@@ -537,6 +537,8 @@ class CaptureEnvironment {
     this.appSuspended = false,
     this.appSuspendedAt,
     this.appResumedAt,
+    this.batchModeSuspendedForCustomLive = false,
+    this.customLiveRealtimeRequired = false,
   });
 
   /// `_preferences.capturePolicy.muted`.
@@ -549,6 +551,12 @@ class CaptureEnvironment {
 
   final bool batchModeEnabled;
   final bool batchModeSuspendedForOnboarding;
+
+  /// A Custom Live STT configuration requires the native BLE ingress to
+  /// forward audio to Dart instead of writing a Transcribe Later file.
+  final bool batchModeSuspendedForCustomLive;
+  final bool customLiveRealtimeRequired;
+
   final bool deviceSupportsTranscribeLater;
   final bool networkConnected;
   final bool Function() signedIn;
@@ -772,6 +780,15 @@ class RecordProfileChanged extends CaptureEvent {
 /// `suspendBatchModeForOnboarding` / `restoreBatchModeAfterOnboarding`.
 class OnboardingBatchChanged extends CaptureEvent {
   const OnboardingBatchChanged({required this.suspended});
+  final bool suspended;
+}
+
+/// Keeps the selected Custom Live STT route on the realtime audio path.
+///
+/// This changes only the capture mode for future frames. Existing batch files,
+/// uploaded recordings, and the sync backlog remain untouched.
+class CustomLiveBatchChanged extends CaptureEvent {
+  const CustomLiveBatchChanged({required this.suspended});
   final bool suspended;
 }
 
@@ -1081,6 +1098,12 @@ class RecordProfileStage extends CaptureStage {
 /// Speech-profile / onboarding batch suspend or restore.
 class OnboardingBatchStage extends CaptureStage {
   const OnboardingBatchStage({required this.suspended});
+  final bool suspended;
+}
+
+/// Applies the persisted Custom Live batch marker at the effect boundary.
+class CustomLiveBatchStage extends CaptureStage {
+  const CustomLiveBatchStage({required this.suspended});
   final bool suspended;
 }
 
@@ -1552,7 +1575,7 @@ class CaptureCoordinator {
                       _state.phase == CapturePhase.phoneBatchPaused && priorDebt?.reason == SuspendReason.phone
                           ? priorDebt
                           : null;
-                  return _failClosed(
+                  return await _failClosed(
                     working,
                     error,
                     recoverPendant: working.callActive ? null : recoverPendant,
@@ -1564,7 +1587,7 @@ class CaptureCoordinator {
                 }
                 return CaptureDispatchOutcome.completed(state: _state, result: false);
               }
-              return _failClosed(
+              return await _failClosed(
                 working,
                 StateError('capture transition superseded by a newer capture intent'),
                 recoverPendant: recoverPendant,
@@ -1573,7 +1596,7 @@ class CaptureCoordinator {
               );
             }
           } else if (value is CaptureStageFailure) {
-            return _failClosed(
+            return await _failClosed(
               working,
               value.error,
               absorbed: value.absorbed,
@@ -1588,7 +1611,7 @@ class CaptureCoordinator {
           if (transition.effects[i] is CheckPhonePermission) {
             return CaptureDispatchOutcome.completed(state: _state, error: error, stackTrace: stack);
           }
-          return _failClosed(
+          return await _failClosed(
             working,
             error,
             stackTrace: stack,
@@ -1608,7 +1631,7 @@ class CaptureCoordinator {
           _lastPersistedSnapshot = encoded;
         }
       } catch (error, stack) {
-        return _failClosed(
+        return await _failClosed(
           working,
           error,
           stackTrace: stack,
@@ -1760,6 +1783,7 @@ CaptureTransition transitionCapture(CaptureCoordinatorState state, CaptureEvent 
       TranscriptionSettingsChanged() => CaptureTransition(state, const [RunStage(TranscriptionSettingsStage())]),
       RecordProfileChanged() => CaptureTransition(state, const [RunStage(RecordProfileStage())]),
       OnboardingBatchChanged() => _reduceOnboardingBatch(state, event, env),
+      CustomLiveBatchChanged() => _reduceCustomLiveBatch(state, event, env),
       LaunchRecovery() => _reduceLaunchRecovery(state, event, env),
     };
 
@@ -2797,6 +2821,12 @@ CaptureTransition _reduceKeepAlive(CaptureCoordinatorState state, KeepAliveTick 
 }
 
 CaptureTransition _reduceBatchMode(CaptureCoordinatorState state, BatchModeSetRequested event, CaptureEnvironment env) {
+  if (event.enabled && env.customLiveRealtimeRequired) {
+    // The native writer bypasses the realtime audio callback in Transcribe
+    // Later mode. Do not let a Custom Live connection appear healthy while it
+    // can receive no Pendant audio.
+    return CaptureTransition(state, const [], result: false);
+  }
   if (event.enabled == env.batchModeEnabled) {
     return CaptureTransition(state, const [], result: true);
   }
@@ -2873,17 +2903,51 @@ CaptureTransition _reduceOnboardingBatch(
   OnboardingBatchChanged event,
   CaptureEnvironment env,
 ) {
-  // Suspending flips batchMode off (pendant -> live), restoring flips it back on only if
-  // something was actually suspended — batch mode may already have been off, in which case
-  // restoring must leave the phase alone instead of turning batch mode on.
-  if (!event.suspended && !env.batchModeSuspendedForOnboarding) {
-    return CaptureTransition(state, [
-      RunStage(OnboardingBatchStage(suspended: event.suspended)),
-    ]);
+  return _reduceRealtimeBatchSuspension(
+    state,
+    suspended: event.suspended,
+    thisReasonAlreadySuspended: env.batchModeSuspendedForOnboarding,
+    otherRealtimeSuspensionActive: env.batchModeSuspendedForCustomLive,
+    batchModeEnabled: env.batchModeEnabled,
+    stage: OnboardingBatchStage(suspended: event.suspended),
+  );
+}
+
+CaptureTransition _reduceCustomLiveBatch(
+  CaptureCoordinatorState state,
+  CustomLiveBatchChanged event,
+  CaptureEnvironment env,
+) {
+  return _reduceRealtimeBatchSuspension(
+    state,
+    suspended: event.suspended,
+    thisReasonAlreadySuspended: env.batchModeSuspendedForCustomLive,
+    otherRealtimeSuspensionActive: env.batchModeSuspendedForOnboarding,
+    batchModeEnabled: env.batchModeEnabled,
+    stage: CustomLiveBatchStage(suspended: event.suspended),
+  );
+}
+
+/// A realtime consumer (onboarding or Custom Live) can temporarily suppress
+/// Transcribe Later. Multiple consumers compose: releasing one must not restore
+/// batch mode while the other still needs the native BLE audio forwarded.
+CaptureTransition _reduceRealtimeBatchSuspension(
+  CaptureCoordinatorState state, {
+  required bool suspended,
+  required bool thisReasonAlreadySuspended,
+  required bool otherRealtimeSuspensionActive,
+  required bool batchModeEnabled,
+  required CaptureStage stage,
+}) {
+  // A suspend with batch already off changes no phase; a restore only changes
+  // it if this reason actually suspended batch earlier.
+  final changesPhase = suspended ? batchModeEnabled : thisReasonAlreadySuspended;
+  if (!changesPhase) {
+    return CaptureTransition(state, [RunStage(stage)]);
   }
   var phase = state.phase;
   var active = state.active;
-  final toBatch = !event.suspended;
+  final toBatch = !suspended && !otherRealtimeSuspensionActive;
   switch (state.phase) {
     case CapturePhase.pendantLive:
     case CapturePhase.pendantBatchLive:
@@ -2914,9 +2978,7 @@ CaptureTransition _reduceOnboardingBatch(
     default:
       break;
   }
-  return CaptureTransition(state.copyWith(phase: phase, active: () => active), [
-    RunStage(OnboardingBatchStage(suspended: event.suspended)),
-  ]);
+  return CaptureTransition(state.copyWith(phase: phase, active: () => active), [RunStage(stage)]);
 }
 
 CaptureTransition _reducePhoneBatchStart(CaptureCoordinatorState state, PhoneBatchStartRequested event) {

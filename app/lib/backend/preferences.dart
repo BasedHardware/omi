@@ -685,6 +685,13 @@ class SharedPreferencesUtil {
 
   set batchModeSuspendedForOnboarding(bool value) => saveBool('batchModeSuspendedForOnboarding', value);
 
+  // Set while an explicitly selected Custom Live STT route temporarily suspends
+  // Transcribe Later. The marker preserves the user's offline preference and
+  // lets a process restart restore it only after Custom Live is disabled.
+  bool get batchModeSuspendedForCustomLive => getBool('batchModeSuspendedForCustomLive');
+
+  set batchModeSuspendedForCustomLive(bool value) => saveBool('batchModeSuspendedForCustomLive', value);
+
   // Double tap behavior: 0 = end conversation (default), 1 = pause/mute, 2 = star ongoing conversation
   int get doubleTapAction => getInt('doubleTapAction');
 
@@ -698,6 +705,9 @@ class SharedPreferencesUtil {
   // Custom STT configuration
   CustomSttConfig get customSttConfig {
     final configJson = getString('customSttConfig');
+    // Custom Live must be an explicit user setting.  A missing or corrupt
+    // preference must never silently switch an existing Omi archive or
+    // recording workflow to a local route.
     if (configJson.isEmpty) return CustomSttConfig.defaultConfig;
     try {
       return CustomSttConfig.fromJson(jsonDecode(configJson));
