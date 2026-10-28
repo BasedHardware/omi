@@ -97,14 +97,13 @@ def test_backend_listen_helm_template_uses_runtime_project_for_google_cloud_proj
     assert 'name: TRANSLATION_NEGATIVE_CACHE_TTL\n              value: "21600"' in rendered
 
 
-def test_prod_listen_carries_the_paired_25_mobile_batch_only_percent():
-    """Ruling 73b217 / lead 0e6067: the mobile batch-only cohort is a reviewed listen value; this ramp PR sets 25,
-    paired with the Cloud Run batch 25% step. Its pre-reviewed revert restores the explicit 0.
+def test_prod_listen_carries_an_explicit_zero_mobile_batch_only_percent():
+    """Ruling 73b217: the mobile batch-only cohort is a reviewed listen value, explicit 0 until a ramp PR changes it.
 
     The value must reach the rendered container env (not only the values file), so a listen roll applies it.
     """
     values = _load_values(ENV_IDENTITY_DEFAULTS["prod"]["values_file"])
-    assert _env_value(values, "SERVER_BATCH_ONLY_MOBILE_PERCENT") == "25"
+    assert _env_value(values, "SERVER_BATCH_ONLY_MOBILE_PERCENT") == "0"
     names = [entry.get("name") for entry in values.get("env", []) or [] if isinstance(entry, dict)]
     assert names.count("SERVER_BATCH_ONLY_MOBILE_PERCENT") == 1
 
@@ -126,7 +125,7 @@ def test_prod_listen_carries_the_paired_25_mobile_batch_only_percent():
         capture_output=True,
         text=True,
     ).stdout
-    assert 'name: SERVER_BATCH_ONLY_MOBILE_PERCENT\n              value: "25"' in rendered
+    assert 'name: SERVER_BATCH_ONLY_MOBILE_PERCENT\n              value: "0"' in rendered
 
 
 def test_backend_listen_helm_template_requires_image_tag():
