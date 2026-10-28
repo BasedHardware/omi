@@ -28,5 +28,7 @@
   {"description":"Email the speaker notes to the team","reason":null},
   {"description":"Put milk in the fridge","reason":null},
   {"description":"Bring this report tomorrow","reason":null},
-  {"description":"Send the link to them","reason":null}
+  {"description":"Send the link to them","reason":null},
+  {"description":"Remove the Speaker 2 placeholder from the demo UI","reason":null},
+  {"description":"Speaker 2 to email the budget spreadsheet","reason":null}
 ]

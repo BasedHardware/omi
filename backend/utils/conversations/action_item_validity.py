@@ -45,7 +45,7 @@ def unresolved_reference(
     placeholder = bool(_PLACEHOLDER.search(text))
     if not placeholder and not _DEICTIC_ONLY.fullmatch(text):
         return None
-    evidence = ' '.join((context, *source_texts))
+    evidence = ' '.join((text, context, *source_texts))
     meaningful = {word.casefold() for word in re.findall(r'\w+', _PLACEHOLDER.sub('', evidence))} - _GENERIC
     if meaningful:
         return None
