@@ -4495,7 +4495,7 @@
     "onTheWayNoDate": "Brak daty",
     "onTheWayFootnote": "Nagrania, których nie uda się wgrać, będą ponawiane w tle. Wszystko, czego nie potrafimy transkrybować, zostanie automatycznie zgłoszone.",
     "onTheWayDetailsForSupport": "Szczegóły dla działu wsparcia",
-    "homeNoiseFoldHidden": "{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}",
-    "homeNoiseFoldShow": "Show",
-    "homeNoiseFoldHide": "{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}"
+    "homeNoiseFoldHidden": "{count, plural, =1{Ukryto 1 krótki klip} other{Ukryto {count} krótkich klipów}}",
+    "homeNoiseFoldShow": "Pokaż",
+    "homeNoiseFoldHide": "{count, plural, =1{Ukryj 1 krótki klip} other{Ukryj {count} krótkich klipów}}"
 }

@@ -11886,7 +11886,7 @@
     "onTheWayNoDate": "Без даты",
     "onTheWayFootnote": "Запісы, якія не ўдалося загрузіць, працягнуць спробы ў фонавым рэжыме. Пра ўсё, што мы не зможам пераўтварыць у тэкст, нам паведамяць аўтаматычна.",
     "onTheWayDetailsForSupport": "Падрабязнасці для падтрымкі",
-    "homeNoiseFoldHidden": "{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}",
-    "homeNoiseFoldShow": "Show",
-    "homeNoiseFoldHide": "{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}"
+    "homeNoiseFoldHidden": "{count, plural, =1{1 кароткі запіс схаваны} other{Схаваныя кароткія запісы: {count}}}",
+    "homeNoiseFoldShow": "Паказаць",
+    "homeNoiseFoldHide": "{count, plural, =1{Схаваць 1 кароткі запіс} other{Схаваць кароткія запісы: {count}}}"
 }

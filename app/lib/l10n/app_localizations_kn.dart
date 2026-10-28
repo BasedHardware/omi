@@ -14714,22 +14714,22 @@ class AppLocalizationsKn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count short clips hidden',
-      one: '1 short clip hidden',
+      other: '$count ಸಣ್ಣ ಕ್ಲಿಪ್‌ಗಳನ್ನು ಮರೆಮಾಡಲಾಗಿದೆ',
+      one: '1 ಸಣ್ಣ ಕ್ಲಿಪ್ ಮರೆಮಾಡಲಾಗಿದೆ',
     );
     return '$_temp0';
   }
 
   @override
-  String get homeNoiseFoldShow => 'Show';
+  String get homeNoiseFoldShow => 'ತೋರಿಸಿ';
 
   @override
   String homeNoiseFoldHide(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Hide $count short clips',
-      one: 'Hide 1 short clip',
+      other: '$count ಸಣ್ಣ ಕ್ಲಿಪ್‌ಗಳನ್ನು ಮರೆಮಾಡಿ',
+      one: '1 ಸಣ್ಣ ಕ್ಲಿಪ್ ಮರೆಮಾಡಿ',
     );
     return '$_temp0';
   }

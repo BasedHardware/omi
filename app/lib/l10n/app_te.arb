@@ -11886,7 +11886,7 @@
     "onTheWayNoDate": "తేదీ లేదు",
     "onTheWayFootnote": "విఫలమైన రికార్డింగ్‌లు నేపథ్యంలో మళ్లీ ప్రయత్నిస్తూనే ఉంటాయి. మేము ట్రాన్స్‌క్రైబ్ చేయలేనివి ఆటోమేటిక్‌గా మాకు నివేదించబడతాయి.",
     "onTheWayDetailsForSupport": "సపోర్ట్ కోసం వివరాలు",
-    "homeNoiseFoldHidden": "{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}",
-    "homeNoiseFoldShow": "Show",
-    "homeNoiseFoldHide": "{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}"
+    "homeNoiseFoldHidden": "{count, plural, =1{1 చిన్న క్లిప్ దాచబడింది} other{{count} చిన్న క్లిప్‌లు దాచబడ్డాయి}}",
+    "homeNoiseFoldShow": "చూపండి",
+    "homeNoiseFoldHide": "{count, plural, =1{1 చిన్న క్లిప్‌ను దాచండి} other{{count} చిన్న క్లిప్‌లను దాచండి}}"
 }

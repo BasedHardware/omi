@@ -14700,22 +14700,22 @@ class AppLocalizationsBe extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count short clips hidden',
-      one: '1 short clip hidden',
+      other: 'Схаваныя кароткія запісы: $count',
+      one: '1 кароткі запіс схаваны',
     );
     return '$_temp0';
   }
 
   @override
-  String get homeNoiseFoldShow => 'Show';
+  String get homeNoiseFoldShow => 'Паказаць';
 
   @override
   String homeNoiseFoldHide(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Hide $count short clips',
-      one: 'Hide 1 short clip',
+      other: 'Схаваць кароткія запісы: $count',
+      one: 'Схаваць 1 кароткі запіс',
     );
     return '$_temp0';
   }

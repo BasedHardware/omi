@@ -11886,7 +11886,7 @@
     "onTheWayNoDate": "Bez datuma",
     "onTheWayFootnote": "Snimci koji ne uspiju i dalje se pokušavaju u pozadini. Sve što ne možemo transkribirati automatski nam se prijavljuje.",
     "onTheWayDetailsForSupport": "Detalji za podršku",
-    "homeNoiseFoldHidden": "{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}",
-    "homeNoiseFoldShow": "Show",
-    "homeNoiseFoldHide": "{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}"
+    "homeNoiseFoldHidden": "{count, plural, =1{1 kratki isječak skriven} other{{count} kratkih isječaka skriveno}}",
+    "homeNoiseFoldShow": "Prikaži",
+    "homeNoiseFoldHide": "{count, plural, =1{Skrij 1 kratki isječak} other{Skrij {count} kratkih isječaka}}"
 }

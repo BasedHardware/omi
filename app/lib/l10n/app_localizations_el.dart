@@ -14763,22 +14763,22 @@ class AppLocalizationsEl extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count short clips hidden',
-      one: '1 short clip hidden',
+      other: 'Κρύφτηκαν $count σύντομα αποσπάσματα',
+      one: 'Κρύφτηκε 1 σύντομο απόσπασμα',
     );
     return '$_temp0';
   }
 
   @override
-  String get homeNoiseFoldShow => 'Show';
+  String get homeNoiseFoldShow => 'Εμφάνιση';
 
   @override
   String homeNoiseFoldHide(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Hide $count short clips',
-      one: 'Hide 1 short clip',
+      other: 'Απόκρυψη $count σύντομων αποσπασμάτων',
+      one: 'Απόκρυψη 1 σύντομου αποσπάσματος',
     );
     return '$_temp0';
   }

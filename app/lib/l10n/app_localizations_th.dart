@@ -14594,22 +14594,22 @@ class AppLocalizationsTh extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count short clips hidden',
-      one: '1 short clip hidden',
+      other: 'ซ่อนคลิปสั้นไว้ $count รายการ',
+      one: 'ซ่อนคลิปสั้นไว้ 1 รายการ',
     );
     return '$_temp0';
   }
 
   @override
-  String get homeNoiseFoldShow => 'Show';
+  String get homeNoiseFoldShow => 'แสดง';
 
   @override
   String homeNoiseFoldHide(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Hide $count short clips',
-      one: 'Hide 1 short clip',
+      other: 'ซ่อนคลิปสั้น $count รายการ',
+      one: 'ซ่อนคลิปสั้น 1 รายการ',
     );
     return '$_temp0';
   }

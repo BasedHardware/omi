@@ -11886,7 +11886,7 @@
     "onTheWayNoDate": "তারিখ নেই",
     "onTheWayFootnote": "ব্যর্থ হওয়া রেকর্ডিং পটভূমিতে আবার চেষ্টা করতে থাকে। আমরা যা ট্রান্সক্রাইব করতে পারি না, তা স্বয়ংক্রিয়ভাবে আমাদের কাছে জানানো হয়।",
     "onTheWayDetailsForSupport": "সাপোর্টের জন্য বিস্তারিত",
-    "homeNoiseFoldHidden": "{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}",
-    "homeNoiseFoldShow": "Show",
-    "homeNoiseFoldHide": "{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}"
+    "homeNoiseFoldHidden": "{count, plural, =1{1টি ছোট ক্লিপ লুকানো হয়েছে} other{{count}টি ছোট ক্লিপ লুকানো হয়েছে}}",
+    "homeNoiseFoldShow": "দেখান",
+    "homeNoiseFoldHide": "{count, plural, =1{1টি ছোট ক্লিপ লুকান} other{{count}টি ছোট ক্লিপ লুকান}}"
 }

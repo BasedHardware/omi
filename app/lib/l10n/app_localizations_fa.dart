@@ -14661,22 +14661,22 @@ class AppLocalizationsFa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count short clips hidden',
-      one: '1 short clip hidden',
+      other: '$count کلیپ کوتاه مخفی شده‌اند',
+      one: '۱ کلیپ کوتاه مخفی شده',
     );
     return '$_temp0';
   }
 
   @override
-  String get homeNoiseFoldShow => 'Show';
+  String get homeNoiseFoldShow => 'نمایش';
 
   @override
   String homeNoiseFoldHide(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Hide $count short clips',
-      one: 'Hide 1 short clip',
+      other: 'مخفی‌کردن $count کلیپ کوتاه',
+      one: 'مخفی‌کردن ۱ کلیپ کوتاه',
     );
     return '$_temp0';
   }

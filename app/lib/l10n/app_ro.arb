@@ -4460,7 +4460,7 @@
     "onTheWayNoDate": "Fără dată",
     "onTheWayFootnote": "Înregistrările care eșuează continuă să fie reîncercate în fundal. Orice nu putem transcrie ni se raportează automat.",
     "onTheWayDetailsForSupport": "Detalii pentru suport",
-    "homeNoiseFoldHidden": "{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}",
-    "homeNoiseFoldShow": "Show",
-    "homeNoiseFoldHide": "{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}"
+    "homeNoiseFoldHidden": "{count, plural, =1{1 clip scurt ascuns} other{{count} clipuri scurte ascunse}}",
+    "homeNoiseFoldShow": "Afișează",
+    "homeNoiseFoldHide": "{count, plural, =1{Ascunde 1 clip scurt} other{Ascunde {count} clipuri scurte}}"
 }

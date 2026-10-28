@@ -4460,7 +4460,7 @@
     "onTheWayNoDate": "Ohne Datum",
     "onTheWayFootnote": "Bei fehlgeschlagenen Aufnahmen wird im Hintergrund immer wieder versucht, sie hochzuladen. Alles, was wir nicht transkribieren können, wird uns automatisch gemeldet.",
     "onTheWayDetailsForSupport": "Details für den Support",
-    "homeNoiseFoldHidden": "{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}",
-    "homeNoiseFoldShow": "Show",
-    "homeNoiseFoldHide": "{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}"
+    "homeNoiseFoldHidden": "{count, plural, =1{1 kurzer Clip ausgeblendet} other{{count} kurze Clips ausgeblendet}}",
+    "homeNoiseFoldShow": "Anzeigen",
+    "homeNoiseFoldHide": "{count, plural, =1{1 kurzen Clip ausblenden} other{{count} kurze Clips ausblenden}}"
 }

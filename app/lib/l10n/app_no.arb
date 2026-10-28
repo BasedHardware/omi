@@ -4460,7 +4460,7 @@
     "onTheWayNoDate": "Ingen dato",
     "onTheWayFootnote": "Opptak som feiler, prøver på nytt i bakgrunnen. Alt vi ikke får transkribert, rapporteres automatisk til oss.",
     "onTheWayDetailsForSupport": "Detaljer for kundestøtte",
-    "homeNoiseFoldHidden": "{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}",
-    "homeNoiseFoldShow": "Show",
-    "homeNoiseFoldHide": "{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}"
+    "homeNoiseFoldHidden": "{count, plural, =1{1 kort klipp skjult} other{{count} korte klipp skjult}}",
+    "homeNoiseFoldShow": "Vis",
+    "homeNoiseFoldHide": "{count, plural, =1{Skjul 1 kort klipp} other{Skjul {count} korte klipp}}"
 }

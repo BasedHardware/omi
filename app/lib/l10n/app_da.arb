@@ -4502,7 +4502,7 @@
     "onTheWayNoDate": "Ingen dato",
     "onTheWayFootnote": "Optagelser, der fejler, bliver ved med at prøve igen i baggrunden. Alt, hvad vi ikke kan transskribere, bliver automatisk rapporteret til os.",
     "onTheWayDetailsForSupport": "Detaljer til support",
-    "homeNoiseFoldHidden": "{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}",
-    "homeNoiseFoldShow": "Show",
-    "homeNoiseFoldHide": "{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}"
+    "homeNoiseFoldHidden": "{count, plural, =1{1 kort klip skjult} other{{count} korte klip skjult}}",
+    "homeNoiseFoldShow": "Vis",
+    "homeNoiseFoldHide": "{count, plural, =1{Skjul 1 kort klip} other{Skjul {count} korte klip}}"
 }

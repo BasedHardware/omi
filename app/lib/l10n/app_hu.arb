@@ -4556,7 +4556,7 @@
     "onTheWayNoDate": "Dátum nélkül",
     "onTheWayFootnote": "A sikertelen felvételek a háttérben újra és újra próbálkoznak. Amit nem tudunk átírni, arról automatikusan értesítést kapunk.",
     "onTheWayDetailsForSupport": "Részletek az ügyfélszolgálatnak",
-    "homeNoiseFoldHidden": "{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}",
-    "homeNoiseFoldShow": "Show",
-    "homeNoiseFoldHide": "{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}"
+    "homeNoiseFoldHidden": "{count, plural, =1{1 rövid felvétel elrejtve} other{{count} rövid felvétel elrejtve}}",
+    "homeNoiseFoldShow": "Megjelenítés",
+    "homeNoiseFoldHide": "{count, plural, =1{1 rövid felvétel elrejtése} other{{count} rövid felvétel elrejtése}}"
 }

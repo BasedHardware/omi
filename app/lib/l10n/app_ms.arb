@@ -4460,7 +4460,7 @@
     "onTheWayNoDate": "Tiada tarikh",
     "onTheWayFootnote": "Rakaman yang gagal akan terus dicuba semula di latar belakang. Apa-apa yang tidak dapat kami transkripsi akan dilaporkan kepada kami secara automatik.",
     "onTheWayDetailsForSupport": "Butiran untuk sokongan",
-    "homeNoiseFoldHidden": "{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}",
-    "homeNoiseFoldShow": "Show",
-    "homeNoiseFoldHide": "{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}"
+    "homeNoiseFoldHidden": "{count, plural, =1{1 klip pendek disembunyikan} other{{count} klip pendek disembunyikan}}",
+    "homeNoiseFoldShow": "Tunjukkan",
+    "homeNoiseFoldHide": "{count, plural, =1{Sembunyikan 1 klip pendek} other{Sembunyikan {count} klip pendek}}"
 }

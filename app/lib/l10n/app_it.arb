@@ -4460,7 +4460,7 @@
     "onTheWayNoDate": "Nessuna data",
     "onTheWayFootnote": "Le registrazioni che falliscono continuano a riprovare in background. Tutto ciò che non riusciamo a trascrivere ci viene segnalato automaticamente.",
     "onTheWayDetailsForSupport": "Dettagli per l'assistenza",
-    "homeNoiseFoldHidden": "{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}",
-    "homeNoiseFoldShow": "Show",
-    "homeNoiseFoldHide": "{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}"
+    "homeNoiseFoldHidden": "{count, plural, =1{1 clip breve nascosto} other{{count} clip brevi nascosti}}",
+    "homeNoiseFoldShow": "Mostra",
+    "homeNoiseFoldHide": "{count, plural, =1{Nascondi 1 clip breve} other{Nascondi {count} clip brevi}}"
 }

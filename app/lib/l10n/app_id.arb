@@ -4495,7 +4495,7 @@
     "onTheWayNoDate": "Tanpa tanggal",
     "onTheWayFootnote": "Rekaman yang gagal terus dicoba ulang di latar belakang. Apa pun yang tidak bisa kami transkripsikan akan otomatis dilaporkan ke kami.",
     "onTheWayDetailsForSupport": "Detail untuk dukungan",
-    "homeNoiseFoldHidden": "{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}",
-    "homeNoiseFoldShow": "Show",
-    "homeNoiseFoldHide": "{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}"
+    "homeNoiseFoldHidden": "{count, plural, =1{1 klip pendek disembunyikan} other{{count} klip pendek disembunyikan}}",
+    "homeNoiseFoldShow": "Tampilkan",
+    "homeNoiseFoldHide": "{count, plural, =1{Sembunyikan 1 klip pendek} other{Sembunyikan {count} klip pendek}}"
 }

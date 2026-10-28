@@ -14464,22 +14464,22 @@ class AppLocalizationsKo extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count short clips hidden',
-      one: '1 short clip hidden',
+      other: '짧은 클립 $count개 숨겨짐',
+      one: '짧은 클립 1개 숨겨짐',
     );
     return '$_temp0';
   }
 
   @override
-  String get homeNoiseFoldShow => 'Show';
+  String get homeNoiseFoldShow => '표시';
 
   @override
   String homeNoiseFoldHide(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Hide $count short clips',
-      one: 'Hide 1 short clip',
+      other: '짧은 클립 $count개 숨기기',
+      one: '짧은 클립 1개 숨기기',
     );
     return '$_temp0';
   }

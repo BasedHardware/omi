@@ -14767,22 +14767,22 @@ class AppLocalizationsTa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count short clips hidden',
-      one: '1 short clip hidden',
+      other: '$count குறுகிய பதிவுகள் மறைக்கப்பட்டன',
+      one: '1 குறுகிய பதிவு மறைக்கப்பட்டது',
     );
     return '$_temp0';
   }
 
   @override
-  String get homeNoiseFoldShow => 'Show';
+  String get homeNoiseFoldShow => 'காட்டவும்';
 
   @override
   String homeNoiseFoldHide(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Hide $count short clips',
-      one: 'Hide 1 short clip',
+      other: '$count குறுகிய பதிவுகளை மறைக்கவும்',
+      one: '1 குறுகிய பதிவை மறைக்கவும்',
     );
     return '$_temp0';
   }

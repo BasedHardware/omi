@@ -14665,22 +14665,22 @@ class AppLocalizationsCs extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count short clips hidden',
-      one: '1 short clip hidden',
+      other: 'Skryto krátkých nahrávek: $count',
+      one: 'Skrytá 1 krátká nahrávka',
     );
     return '$_temp0';
   }
 
   @override
-  String get homeNoiseFoldShow => 'Show';
+  String get homeNoiseFoldShow => 'Zobrazit';
 
   @override
   String homeNoiseFoldHide(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Hide $count short clips',
-      one: 'Hide 1 short clip',
+      other: 'Skrýt krátké nahrávky: $count',
+      one: 'Skrýt 1 krátkou nahrávku',
     );
     return '$_temp0';
   }
