@@ -18,7 +18,7 @@ def _agent_config() -> Optional[Dict[str, Any]]:
     try:
         val = agent_config_context.get()
         return val if isinstance(val, dict) else None
-    except (LookupError, AttributeError):
+    except LookupError:
         return None
 
 
@@ -69,8 +69,10 @@ def create_chart_tool(
     safe_data_points = []
     for l, v in zip(labels, values):
         label_str = str(l) if l is not None else ""
-        if v is None or isinstance(v, bool):
+        if v is None:
             val_float = 0.0
+        elif isinstance(v, bool):
+            val_float = 1.0 if v else 0.0
         else:
             try:
                 val_float = float(v)

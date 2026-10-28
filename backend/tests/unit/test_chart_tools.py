@@ -4,7 +4,6 @@ Ensures that create_chart_tool safely binds chart_data into configurable even wh
 configurable is omitted or None, and coerces malformed data points without raising.
 """
 
-import os
 import unittest
 from pathlib import Path
 from types import ModuleType
@@ -15,11 +14,6 @@ import pytest
 from testing.import_isolation import load_module_fresh, stub_modules
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
-
-os.environ.setdefault(
-    "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
-)
 
 
 def _module(name, **attrs):
@@ -120,7 +114,7 @@ class TestChartTools(unittest.TestCase):
             points = config["configurable"]["chart_data"]["datasets"][0]["data_points"]
             self.assertEqual(points[0], {"label": "Mon", "value": 12.5})
             self.assertEqual(points[1], {"label": "", "value": 0.0})
-            self.assertEqual(points[2], {"label": "Wed", "value": 0.0})
+            self.assertEqual(points[2], {"label": "Wed", "value": 1.0})
         finally:
             chart_mod.agent_config_context.reset(token)
 
@@ -153,7 +147,7 @@ class TestChartTools(unittest.TestCase):
         self.assertEqual(err3, "Error: at least one data point is required.")
 
     def test_create_chart_tool_works_without_context(self):
-        # When context var is None
+        # When context var is unset
         res = chart_mod.create_chart_tool.func(
             chart_type="line",
             title="No Context",
@@ -161,6 +155,34 @@ class TestChartTools(unittest.TestCase):
             values=[10.0, 20.0],
         )
         self.assertIn("Chart created: No Context", res)
+
+    def test_create_chart_tool_context_is_none(self):
+        # When context var is explicitly None
+        token = chart_mod.agent_config_context.set(None)
+        try:
+            res = chart_mod.create_chart_tool.func(
+                chart_type="line",
+                title="Context None",
+                labels=["Mon", "Tue"],
+                values=[10.0, 20.0],
+            )
+            self.assertIn("Chart created: Context None", res)
+        finally:
+            chart_mod.agent_config_context.reset(token)
+
+    def test_create_chart_tool_non_dict_truthy_context_skips_attachment(self):
+        # When context var is a non-dict truthy value (e.g. string or object)
+        token = chart_mod.agent_config_context.set("non_dict_context_string")
+        try:
+            res = chart_mod.create_chart_tool.func(
+                chart_type="line",
+                title="Non Dict Context",
+                labels=["Mon", "Tue"],
+                values=[10.0, 20.0],
+            )
+            self.assertIn("Chart created: Non Dict Context", res)
+        finally:
+            chart_mod.agent_config_context.reset(token)
 
 
 if __name__ == "__main__":
