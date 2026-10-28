@@ -1,7 +1,6 @@
 """Unit tests for notification_settings_tools input validation, hour coercion, and config fallbacks."""
 
-from unittest.mock import MagicMock, patch
-import pytest
+from unittest.mock import patch
 
 import utils.retrieval.tools.notification_settings_tools as notif_tools
 
