@@ -173,6 +173,7 @@ def load(db_path: str, json_paths: Sequence[str]) -> Tuple[int, int, int]:
     try:
         conn.execute(SCHEMA)
         before = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
+        changes_before = conn.total_changes
         conn.executemany(
             "INSERT OR REPLACE INTO memories "
             "(id, content, category, visibility, tags, created_at, raw_json) "
@@ -180,31 +181,38 @@ def load(db_path: str, json_paths: Sequence[str]) -> Tuple[int, int, int]:
             rows,
         )
         conn.commit()
+        changed = conn.total_changes - changes_before
         after = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
     finally:
         conn.close()
 
-    new_rows = after - before
-    return loaded, new_rows, after
+    # Each INSERT OR REPLACE counts as exactly one change, so this is the
+    # number of rows inserted or replaced (new + updated), not just net-new.
+    return loaded, changed, after
 
 
 if __name__ == "__main__":
+    usage = (
+        "Usage: python memories_to_sqlite.py memories.json [more.json ...] -o memories.db\n"
+        "   or: python memories_to_sqlite.py memories.json memories.db"
+    )
     args = sys.argv[1:]
     if "-o" in args:
         idx = args.index("-o")
+        if idx + 1 >= len(args):
+            sys.exit(usage)
         db_path = args[idx + 1]
         json_paths = args[:idx] + args[idx + 2 :]
     elif len(args) >= 2:
         db_path = args[-1]
         json_paths = args[:-1]
     else:
-        sys.exit(
-            "Usage: python memories_to_sqlite.py memories.json [more.json ...] -o memories.db\n"
-            "   or: python memories_to_sqlite.py memories.json memories.db"
-        )
+        sys.exit(usage)
+    if not json_paths:
+        sys.exit(usage)
 
     try:
         loaded, added, total = load(db_path, json_paths)
         print(f"Loaded {loaded} rows | New/updated: {added} | Total in DB: {total}")
-    except (OSError, ValueError, json.JSONDecodeError):
+    except (OSError, ValueError, sqlite3.Error):
         sys.exit("SQLite export failed")

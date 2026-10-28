@@ -304,5 +304,46 @@ class TestMemoriesToSqlite(unittest.TestCase):
             conn.close()
 
 
+class TestChangeCountAndCli(unittest.TestCase):
+    def setUp(self):
+        self.tmp_dir = tempfile.TemporaryDirectory()
+        self.dir_path = Path(self.tmp_dir.name)
+        self.db_path = self.dir_path / "memories.sqlite"
+
+    def tearDown(self):
+        self.tmp_dir.cleanup()
+
+    def test_reimport_of_updated_row_counts_as_changed(self):
+        """Re-importing an edited memory reports it as new/updated, not 0."""
+        page = self.dir_path / "page.json"
+        page.write_text(json.dumps([SAMPLE_MEMORIES[0]]), encoding="utf-8")
+        _, added, _ = load(str(self.db_path), [str(page)])
+        self.assertEqual(added, 1)
+
+        edited = {**SAMPLE_MEMORIES[0], "content": "Edited content."}
+        page.write_text(json.dumps([edited]), encoding="utf-8")
+        loaded, added, total = load(str(self.db_path), [str(page)])
+        self.assertEqual((loaded, added, total), (1, 1, 1))
+
+    def test_trailing_o_flag_prints_usage_instead_of_traceback(self):
+        """`-o` with no value exits with the usage message, not an IndexError."""
+        import subprocess
+        import sys
+
+        page = self.dir_path / "page.json"
+        page.write_text(json.dumps([SAMPLE_MEMORIES[0]]), encoding="utf-8")
+        for argv in ([str(page), "-o"], ["-o", str(self.db_path)]):
+            result = subprocess.run(
+                [sys.executable, str(script_path), *argv],
+                capture_output=True,
+                text=True,
+                cwd=self.dir_path,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Usage:", result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
+        self.assertFalse(self.db_path.exists())
+
+
 if __name__ == "__main__":
     unittest.main()

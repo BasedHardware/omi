@@ -3,8 +3,8 @@
 Use this recipe when you want to query your Omi memories with SQL — filter by
 category or visibility, search content, or join against conversation exports.
 It reads one or more saved JSON exports, makes no network requests, and
-complements [`memories_csv.md`](memories_csv.md) and
-[`memories_markdown.md`](memories_markdown.md).
+complements [`memories_markdown.md`](memories_markdown.md) (a CSV sibling is
+in review in #20405).
 
 You need Python 3.10+ and an authenticated `omi-cli` for the initial export.
 The `python -m sqlite3` interactive shell examples below require Python 3.12+.
