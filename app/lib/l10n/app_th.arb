@@ -4485,9 +4485,11 @@
     "deleteRestoreSubtitle": "เปลี่ยนใจแล้วหรือไม่? กู้คืนบัญชีก่อนที่ข้อมูลจะถูกลบ",
     "deleteRestoreKeepData": "กู้คืนความทรงจำและบทสนทนาของคุณ",
     "deleteRestoreBillingNotice": "การสมัครสมาชิกของคุณยังคงถูกยกเลิก หลังจากกู้คืนแล้ว ให้เชื่อมต่อแอปและการเชื่อมต่ออีกครั้ง",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{คุณมีเวลาอย่างน้อย 1 วันในการกู้คืนบัญชี} other{คุณมีเวลาอย่างน้อย {days} วันในการกู้คืนบัญชี}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{คุณเหลือเวลาอีก 1 วันในการกู้คืนบัญชีของคุณ} other{คุณเหลือเวลาอีก {days} วันในการกู้คืนบัญชีของคุณ}}",
     "deleteRestoreButton": "กู้คืนบัญชีของฉัน",
     "deleteFinishButton": "ลบให้เสร็จ",
     "deleteFinishNowButton": "ลบบัญชีของฉันทันที",
-    "deleteFinishNowWarning": "การดำเนินการนี้จะสิ้นสุดช่วงเวลากู้คืน บัญชีและรายการบันทึกทั้งหมดจะถูกลบอย่างถาวร"
+    "deleteFinishNowWarning": "การดำเนินการนี้จะสิ้นสุดช่วงเวลากู้คืน บัญชีและรายการบันทึกทั้งหมดจะถูกลบอย่างถาวร",
+    "deleteRestoreLessThanDayRemaining": "คุณเหลือเวลาไม่ถึง 1 วันในการกู้คืนบัญชีของคุณ",
+    "deleteFinishNowTitle": "ลบบัญชีของคุณ?"
 }

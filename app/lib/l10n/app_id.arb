@@ -4520,9 +4520,11 @@
     "deleteRestoreSubtitle": "Berubah pikiran? Pulihkan akun Anda sebelum dihapus.",
     "deleteRestoreKeepData": "Pulihkan kenangan dan percakapan Anda.",
     "deleteRestoreBillingNotice": "Langganan Anda tetap dibatalkan. Hubungkan kembali aplikasi dan integrasi setelah memulihkan akun.",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{Anda memiliki setidaknya 1 hari lagi untuk memulihkan akun.} other{Anda memiliki setidaknya {days} hari lagi untuk memulihkan akun.}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{Anda memiliki 1 hari lagi untuk memulihkan akun Anda.} other{Anda memiliki {days} hari lagi untuk memulihkan akun Anda.}}",
     "deleteRestoreButton": "Pulihkan akun saya",
     "deleteFinishButton": "Selesaikan penghapusan",
     "deleteFinishNowButton": "Hapus akun saya sekarang",
-    "deleteFinishNowWarning": "Ini akan mengakhiri masa pemulihan. Akun dan rekaman Anda akan dihapus secara permanen."
+    "deleteFinishNowWarning": "Ini akan mengakhiri masa pemulihan. Akun dan rekaman Anda akan dihapus secara permanen.",
+    "deleteRestoreLessThanDayRemaining": "Anda memiliki waktu kurang dari satu hari untuk memulihkan akun Anda.",
+    "deleteFinishNowTitle": "Hapus Akun Anda?"
 }

@@ -14613,8 +14613,8 @@ class AppLocalizationsJa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'アカウントの復元期限まで、少なくともあと$days日あります。',
-      one: 'アカウントの復元期限まで、少なくともあと1日あります。',
+      other: 'アカウントを復元できるのは残り$days日です。',
+      one: 'アカウントを復元できるのは残り1日です。',
     );
     return '$_temp0';
   }
@@ -14630,4 +14630,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get deleteFinishNowWarning => 'これにより復元期間が終了します。アカウントと録音は完全に消去されます。';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'アカウントを復元できるのは残り1日未満です。';
+
+  @override
+  String get deleteFinishNowTitle => 'アカウントを完全に削除しますか？';
 }

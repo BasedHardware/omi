@@ -26097,10 +26097,10 @@ abstract class AppLocalizations {
   /// **'Your subscription stays cancelled. Reconnect apps and integrations after restoring.'**
   String get deleteRestoreBillingNotice;
 
-  /// Whole days rounded down from server wipe_at
+  /// Restore screen line showing whole days remaining until the backend wipe_at deadline. {days} is the whole-day count rounded down.
   ///
   /// In en, this message translates to:
-  /// **'{days, plural, =1{You have at least 1 day left to restore your account.} other{You have at least {days} days left to restore your account.}}'**
+  /// **'{days, plural, =1{You have 1 day left to restore your account.} other{You have {days} days left to restore your account.}}'**
   String deleteRestoreDaysRemaining(int days);
 
   /// Primary action on pending deletion sign-in
@@ -26126,6 +26126,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This ends the restore window. Your account and its recordings will be permanently erased.'**
   String get deleteFinishNowWarning;
+
+  /// Restore screen line shown when the backend wipe_at deadline is less than one day away.
+  ///
+  /// In en, this message translates to:
+  /// **'You have less than a day left to restore your account.'**
+  String get deleteRestoreLessThanDayRemaining;
+
+  /// Title of the final confirmation dialog after the user taps Erase my account now on the pending-deletion restore screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Erase Your Account?'**
+  String get deleteFinishNowTitle;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

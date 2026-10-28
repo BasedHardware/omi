@@ -4485,9 +4485,11 @@
     "deleteRestoreSubtitle": "Hai cambiato idea? Ripristina il tuo account prima che venga cancellato.",
     "deleteRestoreKeepData": "Ripristina i tuoi ricordi e le conversazioni.",
     "deleteRestoreBillingNotice": "Il tuo abbonamento resta annullato. Ricollega app e integrazioni dopo aver ripristinato l’account.",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{Hai ancora almeno 1 giorno per ripristinare il tuo account.} other{Hai ancora almeno {days} giorni per ripristinare il tuo account.}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{Hai ancora 1 giorno per recuperare il tuo account.} other{Hai ancora {days} giorni per recuperare il tuo account.}}",
     "deleteRestoreButton": "Ripristina il mio account",
     "deleteFinishButton": "Completa l’eliminazione",
     "deleteFinishNowButton": "Elimina subito il mio account",
-    "deleteFinishNowWarning": "Così terminerà il periodo di ripristino. Il tuo account e le sue registrazioni verranno eliminati definitivamente."
+    "deleteFinishNowWarning": "Così terminerà il periodo di ripristino. Il tuo account e le sue registrazioni verranno eliminati definitivamente.",
+    "deleteRestoreLessThanDayRemaining": "Hai meno di un giorno per recuperare il tuo account.",
+    "deleteFinishNowTitle": "Eliminare il tuo account?"
 }

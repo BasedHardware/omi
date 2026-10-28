@@ -14594,8 +14594,8 @@ class AppLocalizationsZh extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: '您至少还有 $days 天可以恢复账户。',
-      one: '您至少还有 1 天可以恢复账户。',
+      other: '您还剩 $days 天时间恢复您的账户。',
+      one: '您还剩 1 天时间恢复您的账户。',
     );
     return '$_temp0';
   }
@@ -14611,4 +14611,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deleteFinishNowWarning => '此操作会结束恢复期限。您的账户及其中的录音将被永久擦除。';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => '您还剩不到 1 天时间恢复您的账户。';
+
+  @override
+  String get deleteFinishNowTitle => '删除您的账户？';
 }

@@ -4485,9 +4485,11 @@
     "deleteRestoreSubtitle": "Har du ombestemt deg? Gjenopprett kontoen før den slettes.",
     "deleteRestoreKeepData": "Gjenopprett minnene og samtalene dine.",
     "deleteRestoreBillingNotice": "Abonnementet ditt forblir avsluttet. Koble til apper og integrasjoner på nytt etter at du har gjenopprettet kontoen.",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{Du har minst 1 dag igjen til å gjenopprette kontoen din.} other{Du har minst {days} dager igjen til å gjenopprette kontoen din.}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{Du har 1 dag igjen for å gjenopprette kontoen din.} other{Du har {days} dager igjen for å gjenopprette kontoen din.}}",
     "deleteRestoreButton": "Gjenopprett kontoen min",
     "deleteFinishButton": "Fullfør slettingen",
     "deleteFinishNowButton": "Slett kontoen min nå",
-    "deleteFinishNowWarning": "Dette avslutter perioden for kontogjenoppretting. Kontoen din og opptakene dine blir slettet permanent."
+    "deleteFinishNowWarning": "Dette avslutter perioden for kontogjenoppretting. Kontoen din og opptakene dine blir slettet permanent.",
+    "deleteRestoreLessThanDayRemaining": "Du har mindre enn en dag igjen for å gjenopprette kontoen din.",
+    "deleteFinishNowTitle": "Slette kontoen din?"
 }

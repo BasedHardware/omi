@@ -14873,8 +14873,8 @@ class AppLocalizationsRu extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'У вас осталось как минимум $days дней, чтобы восстановить аккаунт.',
-      one: 'У вас остался как минимум 1 день, чтобы восстановить аккаунт.',
+      other: 'Осталось $days дн. на восстановление аккаунта.',
+      one: 'Остался 1 день на восстановление аккаунта.',
     );
     return '$_temp0';
   }
@@ -14891,4 +14891,10 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get deleteFinishNowWarning =>
       'После этого восстановить аккаунт будет нельзя. Ваш аккаунт и записи будут удалены без возможности восстановления.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Осталось менее одного дня на восстановление аккаунта.';
+
+  @override
+  String get deleteFinishNowTitle => 'Удалить аккаунт?';
 }

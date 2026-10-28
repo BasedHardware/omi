@@ -14888,8 +14888,8 @@ class AppLocalizationsRo extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Mai ai cel puțin $days zile pentru a-ți restaura contul.',
-      one: 'Mai ai cel puțin 1 zi pentru a-ți restaura contul.',
+      other: 'Mai ai $days zile pentru a-ți recupera contul.',
+      one: 'Mai ai 1 zi pentru a-ți recupera contul.',
     );
     return '$_temp0';
   }
@@ -14906,4 +14906,10 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get deleteFinishNowWarning =>
       'Astfel se încheie perioada de restaurare. Contul și înregistrările tale vor fi șterse definitiv.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Mai ai mai puțin de o zi pentru a-ți recupera contul.';
+
+  @override
+  String get deleteFinishNowTitle => 'Ștergi contul?';
 }

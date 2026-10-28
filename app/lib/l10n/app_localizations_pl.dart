@@ -14869,8 +14869,8 @@ class AppLocalizationsPl extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Pozostało Ci co najmniej $days dni na przywrócenie konta.',
-      one: 'Pozostał Ci co najmniej 1 dzień na przywrócenie konta.',
+      other: 'Masz jeszcze $days dni na przywrócenie konta.',
+      one: 'Masz jeszcze 1 dzień na przywrócenie konta.',
     );
     return '$_temp0';
   }
@@ -14886,4 +14886,10 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get deleteFinishNowWarning => 'To kończy okres przywracania. Twoje konto i nagrania zostaną trwale usunięte.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Masz mniej niż 1 dzień na przywrócenie konta.';
+
+  @override
+  String get deleteFinishNowTitle => 'Usunąć konto?';
 }

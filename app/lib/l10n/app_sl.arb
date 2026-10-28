@@ -11911,9 +11911,11 @@
     "deleteRestoreSubtitle": "Ste si premislili? Obnovite račun, preden bo izbrisan.",
     "deleteRestoreKeepData": "Obnovite svoje spomine in pogovore.",
     "deleteRestoreBillingNotice": "Vaša naročnina ostane preklicana. Po obnovitvi znova povežite aplikacije in integracije.",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{Za obnovitev računa imate še vsaj 1 dan.} other{Za obnovitev računa imate še vsaj {days} dni.}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{Za obnovitev računa imate še 1 dan.} other{Za obnovitev računa imate še {days} dni.}}",
     "deleteRestoreButton": "Obnovi moj račun",
     "deleteFinishButton": "Dokončaj brisanje",
     "deleteFinishNowButton": "Zdaj izbriši moj račun",
-    "deleteFinishNowWarning": "S tem se konča obdobje za obnovitev. Vaš račun in posnetki bodo trajno izbrisani."
+    "deleteFinishNowWarning": "S tem se konča obdobje za obnovitev. Vaš račun in posnetki bodo trajno izbrisani.",
+    "deleteRestoreLessThanDayRemaining": "Za obnovitev računa imate še manj kot 1 dan.",
+    "deleteFinishNowTitle": "Izbriši račun?"
 }

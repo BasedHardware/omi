@@ -14873,8 +14873,8 @@ class AppLocalizationsKn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'ನಿಮ್ಮ ಖಾತೆಯನ್ನು ಮರುಸ್ಥಾಪಿಸಲು ಕನಿಷ್ಠ $days ದಿನಗಳು ಬಾಕಿಯಿವೆ.',
-      one: 'ನಿಮ್ಮ ಖಾತೆಯನ್ನು ಮರುಸ್ಥಾಪಿಸಲು ಕನಿಷ್ಠ 1 ದಿನ ಬಾಕಿಯಿದೆ.',
+      other: 'ನಿಮ್ಮ ಖಾತೆಯನ್ನು ಮರುಪಡೆಯಲು $days ದಿನಗಳು ಬಾಕಿ ಉಳಿದಿವೆ.',
+      one: 'ನಿಮ್ಮ ಖಾತೆಯನ್ನು ಮರುಪಡೆಯಲು 1 ದಿನ ಬಾಕಿ ಉಳಿದಿದೆ.',
     );
     return '$_temp0';
   }
@@ -14891,4 +14891,10 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get deleteFinishNowWarning =>
       'ಇದರಿಂದ ಮರುಸ್ಥಾಪನೆಯ ಅವಧಿ ಮುಗಿಯುತ್ತದೆ. ನಿಮ್ಮ ಖಾತೆ ಮತ್ತು ಅದರ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಶಾಶ್ವತವಾಗಿ ಅಳಿಸಲಾಗುತ್ತದೆ.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'ನಿಮ್ಮ ಖಾತೆಯನ್ನು ಮರುಪಡೆಯಲು ಒಂದು ದಿನಕ್ಕಿಂತ ಕಡಿಮೆ ಸಮಯ ಬಾಕಿ ಉಳಿದಿದೆ.';
+
+  @override
+  String get deleteFinishNowTitle => 'ನಿಮ್ಮ ಖಾತೆಯನ್ನು ಅಳಿಸಬೇಕೆ?';
 }

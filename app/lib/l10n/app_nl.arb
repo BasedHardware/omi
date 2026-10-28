@@ -4485,9 +4485,11 @@
     "deleteRestoreSubtitle": "Van gedachten veranderd? Herstel je account voordat het wordt gewist.",
     "deleteRestoreKeepData": "Herstel je herinneringen en gesprekken.",
     "deleteRestoreBillingNotice": "Je abonnement blijft opgezegd. Koppel apps en integraties opnieuw nadat je je account hebt hersteld.",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{Je hebt nog minstens 1 dag om je account te herstellen.} other{Je hebt nog minstens {days} dagen om je account te herstellen.}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{Je hebt nog 1 dag om je account te herstellen.} other{Je hebt nog {days} dagen om je account te herstellen.}}",
     "deleteRestoreButton": "Mijn account herstellen",
     "deleteFinishButton": "Verwijderen afronden",
     "deleteFinishNowButton": "Mijn account nu wissen",
-    "deleteFinishNowWarning": "Hiermee eindigt de herstelperiode. Je account en opnames worden definitief gewist."
+    "deleteFinishNowWarning": "Hiermee eindigt de herstelperiode. Je account en opnames worden definitief gewist.",
+    "deleteRestoreLessThanDayRemaining": "Je hebt nog minder dan een dag om je account te herstellen.",
+    "deleteFinishNowTitle": "Je account wissen?"
 }

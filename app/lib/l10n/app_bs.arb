@@ -11911,9 +11911,11 @@
     "deleteRestoreSubtitle": "Predomislili ste se? Vratite svoj račun prije nego što bude izbrisan.",
     "deleteRestoreKeepData": "Vratite svoje uspomene i razgovore.",
     "deleteRestoreBillingNotice": "Vaša pretplata ostaje otkazana. Ponovo povežite aplikacije i integracije nakon vraćanja računa.",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{Preostao vam je barem 1 dan da vratite svoj račun.} other{Preostalo vam je barem {days} dana da vratite svoj račun.}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{Imate 1 dan preostalo za oporavak vašeg naloga.} other{Imate {days} dana preostalo za oporavak vašeg naloga.}}",
     "deleteRestoreButton": "Vrati moj račun",
     "deleteFinishButton": "Završi brisanje",
     "deleteFinishNowButton": "Izbriši moj račun sada",
-    "deleteFinishNowWarning": "Time se završava period za vraćanje računa. Vaš račun i njegovi snimci bit će trajno izbrisani."
+    "deleteFinishNowWarning": "Time se završava period za vraćanje računa. Vaš račun i njegovi snimci bit će trajno izbrisani.",
+    "deleteRestoreLessThanDayRemaining": "Imate manje od jednog dana za oporavak vašeg naloga.",
+    "deleteFinishNowTitle": "Izbrisati vaš nalog?"
 }

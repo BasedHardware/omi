@@ -14832,8 +14832,8 @@ class AppLocalizationsMr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'तुमचे खाते पुनर्संचयित करण्यासाठी किमान $days दिवस बाकी आहेत.',
-      one: 'तुमचे खाते पुनर्संचयित करण्यासाठी किमान १ दिवस बाकी आहे.',
+      other: 'तुमचे खाते पुनर्संचयित करण्यासाठी तुमच्याकडे $days दिवस बाकी आहे.',
+      one: 'तुमचे खाते पुनर्संचयित करण्यासाठी तुमच्याकडे 1 दिवस बाकी आहे.',
     );
     return '$_temp0';
   }
@@ -14850,4 +14850,10 @@ class AppLocalizationsMr extends AppLocalizations {
   @override
   String get deleteFinishNowWarning =>
       'यामुळे खाते पुनर्संचयित करण्याची मुदत संपेल. तुमचे खाते आणि त्यातील रेकॉर्डिंग कायमची पुसली जातील.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'तुमचे खाते पुनर्संचयित करण्यासाठी एका दिवसापेक्षा कमी वेळ बाकी आहे.';
+
+  @override
+  String get deleteFinishNowTitle => 'तुमचे खाते हटवायचे आहे का?';
 }

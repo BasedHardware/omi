@@ -14829,8 +14829,8 @@ class AppLocalizationsNo extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Du har minst $days dager igjen til å gjenopprette kontoen din.',
-      one: 'Du har minst 1 dag igjen til å gjenopprette kontoen din.',
+      other: 'Du har $days dager igjen for å gjenopprette kontoen din.',
+      one: 'Du har 1 dag igjen for å gjenopprette kontoen din.',
     );
     return '$_temp0';
   }
@@ -14847,4 +14847,10 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get deleteFinishNowWarning =>
       'Dette avslutter perioden for kontogjenoppretting. Kontoen din og opptakene dine blir slettet permanent.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Du har mindre enn en dag igjen for å gjenopprette kontoen din.';
+
+  @override
+  String get deleteFinishNowTitle => 'Slette kontoen din?';
 }

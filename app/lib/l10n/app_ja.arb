@@ -4485,9 +4485,11 @@
     "deleteRestoreSubtitle": "気が変わりましたか？消去される前にアカウントを復元してください。",
     "deleteRestoreKeepData": "記憶と会話を復元します。",
     "deleteRestoreBillingNotice": "サブスクリプションは解約されたままです。復元後にアプリと連携機能を再接続してください。",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{アカウントの復元期限まで、少なくともあと1日あります。} other{アカウントの復元期限まで、少なくともあと{days}日あります。}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{アカウントを復元できるのは残り1日です。} other{アカウントを復元できるのは残り{days}日です。}}",
     "deleteRestoreButton": "アカウントを復元",
     "deleteFinishButton": "削除を完了",
     "deleteFinishNowButton": "今すぐアカウントを消去",
-    "deleteFinishNowWarning": "これにより復元期間が終了します。アカウントと録音は完全に消去されます。"
+    "deleteFinishNowWarning": "これにより復元期間が終了します。アカウントと録音は完全に消去されます。",
+    "deleteRestoreLessThanDayRemaining": "アカウントを復元できるのは残り1日未満です。",
+    "deleteFinishNowTitle": "アカウントを完全に削除しますか？"
 }

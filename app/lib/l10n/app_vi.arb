@@ -4485,9 +4485,11 @@
     "deleteRestoreSubtitle": "Bạn đổi ý? Khôi phục tài khoản trước khi tài khoản bị xóa.",
     "deleteRestoreKeepData": "Khôi phục kỷ niệm và cuộc trò chuyện của bạn.",
     "deleteRestoreBillingNotice": "Gói đăng ký vẫn bị hủy. Kết nối lại ứng dụng và tích hợp sau khi khôi phục.",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{Bạn còn ít nhất 1 ngày để khôi phục tài khoản.} other{Bạn còn ít nhất {days} ngày để khôi phục tài khoản.}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{Bạn còn 1 ngày để khôi phục tài khoản của mình.} other{Bạn còn {days} ngày để khôi phục tài khoản của mình.}}",
     "deleteRestoreButton": "Khôi phục tài khoản của tôi",
     "deleteFinishButton": "Hoàn tất xóa",
     "deleteFinishNowButton": "Xóa tài khoản của tôi ngay",
-    "deleteFinishNowWarning": "Thao tác này sẽ kết thúc thời hạn khôi phục. Tài khoản và các bản ghi của bạn sẽ bị xóa vĩnh viễn."
+    "deleteFinishNowWarning": "Thao tác này sẽ kết thúc thời hạn khôi phục. Tài khoản và các bản ghi của bạn sẽ bị xóa vĩnh viễn.",
+    "deleteRestoreLessThanDayRemaining": "Bạn còn chưa đến 1 ngày để khôi phục tài khoản của mình.",
+    "deleteFinishNowTitle": "Xóa tài khoản của bạn?"
 }

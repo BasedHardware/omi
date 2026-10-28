@@ -14838,8 +14838,8 @@ class AppLocalizationsId extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Anda memiliki setidaknya $days hari lagi untuk memulihkan akun.',
-      one: 'Anda memiliki setidaknya 1 hari lagi untuk memulihkan akun.',
+      other: 'Anda memiliki $days hari lagi untuk memulihkan akun Anda.',
+      one: 'Anda memiliki 1 hari lagi untuk memulihkan akun Anda.',
     );
     return '$_temp0';
   }
@@ -14856,4 +14856,11 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get deleteFinishNowWarning =>
       'Ini akan mengakhiri masa pemulihan. Akun dan rekaman Anda akan dihapus secara permanen.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining =>
+      'Anda memiliki waktu kurang dari satu hari untuk memulihkan akun Anda.';
+
+  @override
+  String get deleteFinishNowTitle => 'Hapus Akun Anda?';
 }

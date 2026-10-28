@@ -11911,9 +11911,11 @@
     "deleteRestoreSubtitle": "نظرتان عوض شد؟ پیش از پاک شدن حساب، آن را بازیابی کنید.",
     "deleteRestoreKeepData": "خاطرات و گفتگوهای خود را بازیابی کنید.",
     "deleteRestoreBillingNotice": "اشتراک شما همچنان لغوشده می‌ماند. پس از بازیابی، برنامه‌ها و یکپارچه‌سازی‌ها را دوباره وصل کنید.",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{حداقل ۱ روز برای بازیابی حساب فرصت دارید.} other{حداقل {days} روز برای بازیابی حساب فرصت دارید.}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{برای بازیابی حساب خود ۱ روز باقی مانده است.} other{برای بازیابی حساب خود {days} روز باقی مانده است.}}",
     "deleteRestoreButton": "بازیابی حساب من",
     "deleteFinishButton": "پایان حذف",
     "deleteFinishNowButton": "همین حالا حسابم را پاک کن",
-    "deleteFinishNowWarning": "با این کار مهلت بازیابی پایان می‌یابد. حساب شما و ضبط‌های آن برای همیشه پاک خواهند شد."
+    "deleteFinishNowWarning": "با این کار مهلت بازیابی پایان می‌یابد. حساب شما و ضبط‌های آن برای همیشه پاک خواهند شد.",
+    "deleteRestoreLessThanDayRemaining": "برای بازیابی حساب خود کمتر از یک روز باقی مانده است.",
+    "deleteFinishNowTitle": "حساب خود را حذف می‌کنید؟"
 }

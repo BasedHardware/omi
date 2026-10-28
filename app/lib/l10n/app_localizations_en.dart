@@ -14810,8 +14810,8 @@ class AppLocalizationsEn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'You have at least $days days left to restore your account.',
-      one: 'You have at least 1 day left to restore your account.',
+      other: 'You have $days days left to restore your account.',
+      one: 'You have 1 day left to restore your account.',
     );
     return '$_temp0';
   }
@@ -14828,4 +14828,10 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get deleteFinishNowWarning =>
       'This ends the restore window. Your account and its recordings will be permanently erased.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'You have less than a day left to restore your account.';
+
+  @override
+  String get deleteFinishNowTitle => 'Erase Your Account?';
 }

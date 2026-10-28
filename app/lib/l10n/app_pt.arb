@@ -4520,9 +4520,11 @@
     "deleteRestoreSubtitle": "Mudou de ideia? Restaure sua conta antes que ela seja apagada.",
     "deleteRestoreKeepData": "Restaure suas memórias e conversas.",
     "deleteRestoreBillingNotice": "Sua assinatura continuará cancelada. Reconecte os apps e as integrações depois de restaurar a conta.",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{Você tem pelo menos mais 1 dia para restaurar sua conta.} other{Você tem pelo menos mais {days} dias para restaurar sua conta.}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{Você tem 1 dia restante para restaurar sua conta.} other{Você tem {days} dias restantes para restaurar sua conta.}}",
     "deleteRestoreButton": "Restaurar minha conta",
     "deleteFinishButton": "Concluir exclusão",
     "deleteFinishNowButton": "Apagar minha conta agora",
-    "deleteFinishNowWarning": "Isso encerra o prazo para restauração. Sua conta e suas gravações serão apagadas permanentemente."
+    "deleteFinishNowWarning": "Isso encerra o prazo para restauração. Sua conta e suas gravações serão apagadas permanentemente.",
+    "deleteRestoreLessThanDayRemaining": "Você tem menos de um dia para restaurar sua conta.",
+    "deleteFinishNowTitle": "Apagar sua conta?"
 }

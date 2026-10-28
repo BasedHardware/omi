@@ -14862,8 +14862,8 @@ class AppLocalizationsMs extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Anda mempunyai sekurang-kurangnya $days hari lagi untuk memulihkan akaun.',
-      one: 'Anda mempunyai sekurang-kurangnya 1 hari lagi untuk memulihkan akaun.',
+      other: 'Anda ada $days hari lagi untuk memulihkan akaun anda.',
+      one: 'Anda ada 1 hari lagi untuk memulihkan akaun anda.',
     );
     return '$_temp0';
   }
@@ -14880,4 +14880,10 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get deleteFinishNowWarning =>
       'Ini menamatkan tempoh pemulihan. Akaun dan rakaman anda akan dipadamkan secara kekal.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Anda ada kurang daripada sehari untuk memulihkan akaun anda.';
+
+  @override
+  String get deleteFinishNowTitle => 'Padam akaun anda?';
 }

@@ -4520,9 +4520,11 @@
     "deleteRestoreSubtitle": "Vous avez changé d'avis ? Restaurez votre compte avant son effacement.",
     "deleteRestoreKeepData": "Restaurez vos souvenirs et conversations.",
     "deleteRestoreBillingNotice": "Votre abonnement restera résilié. Reconnectez vos applications et intégrations après la restauration.",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{Il vous reste au moins 1 jour pour restaurer votre compte.} other{Il vous reste au moins {days} jours pour restaurer votre compte.}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{Il vous reste 1 jour pour restaurer votre compte.} other{Il vous reste {days} jours pour restaurer votre compte.}}",
     "deleteRestoreButton": "Restaurer mon compte",
     "deleteFinishButton": "Terminer la suppression",
     "deleteFinishNowButton": "Effacer mon compte maintenant",
-    "deleteFinishNowWarning": "Cette action met fin au délai de restauration. Votre compte et ses enregistrements seront définitivement effacés."
+    "deleteFinishNowWarning": "Cette action met fin au délai de restauration. Votre compte et ses enregistrements seront définitivement effacés.",
+    "deleteRestoreLessThanDayRemaining": "Il vous reste moins d'un jour pour restaurer votre compte.",
+    "deleteFinishNowTitle": "Effacer votre compte ?"
 }

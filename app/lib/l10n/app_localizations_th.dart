@@ -14752,8 +14752,8 @@ class AppLocalizationsTh extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'คุณมีเวลาอย่างน้อย $days วันในการกู้คืนบัญชี',
-      one: 'คุณมีเวลาอย่างน้อย 1 วันในการกู้คืนบัญชี',
+      other: 'คุณเหลือเวลาอีก $days วันในการกู้คืนบัญชีของคุณ',
+      one: 'คุณเหลือเวลาอีก 1 วันในการกู้คืนบัญชีของคุณ',
     );
     return '$_temp0';
   }
@@ -14770,4 +14770,10 @@ class AppLocalizationsTh extends AppLocalizations {
   @override
   String get deleteFinishNowWarning =>
       'การดำเนินการนี้จะสิ้นสุดช่วงเวลากู้คืน บัญชีและรายการบันทึกทั้งหมดจะถูกลบอย่างถาวร';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'คุณเหลือเวลาไม่ถึง 1 วันในการกู้คืนบัญชีของคุณ';
+
+  @override
+  String get deleteFinishNowTitle => 'ลบบัญชีของคุณ?';
 }

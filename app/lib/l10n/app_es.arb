@@ -4485,9 +4485,11 @@
     "deleteRestoreSubtitle": "¿Has cambiado de opinión? Restaura tu cuenta antes de que se borre.",
     "deleteRestoreKeepData": "Restaura tus recuerdos y conversaciones.",
     "deleteRestoreBillingNotice": "Tu suscripción seguirá cancelada. Vuelve a conectar las apps y las integraciones después de restaurar la cuenta.",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{Te queda al menos 1 día para restaurar tu cuenta.} other{Te quedan al menos {days} días para restaurar tu cuenta.}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{Te queda 1 día para recuperar tu cuenta.} other{Te quedan {days} días para recuperar tu cuenta.}}",
     "deleteRestoreButton": "Restaurar mi cuenta",
     "deleteFinishButton": "Terminar de eliminar",
     "deleteFinishNowButton": "Borrar mi cuenta ahora",
-    "deleteFinishNowWarning": "Esto pone fin al plazo de restauración. Tu cuenta y sus grabaciones se borrarán de forma permanente."
+    "deleteFinishNowWarning": "Esto pone fin al plazo de restauración. Tu cuenta y sus grabaciones se borrarán de forma permanente.",
+    "deleteRestoreLessThanDayRemaining": "Te queda menos de un día para recuperar tu cuenta.",
+    "deleteFinishNowTitle": "¿Borrar tu cuenta?"
 }

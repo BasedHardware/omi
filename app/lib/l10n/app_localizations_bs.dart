@@ -14853,8 +14853,8 @@ class AppLocalizationsBs extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Preostalo vam je barem $days dana da vratite svoj račun.',
-      one: 'Preostao vam je barem 1 dan da vratite svoj račun.',
+      other: 'Imate $days dana preostalo za oporavak vašeg naloga.',
+      one: 'Imate 1 dan preostalo za oporavak vašeg naloga.',
     );
     return '$_temp0';
   }
@@ -14871,4 +14871,10 @@ class AppLocalizationsBs extends AppLocalizations {
   @override
   String get deleteFinishNowWarning =>
       'Time se završava period za vraćanje računa. Vaš račun i njegovi snimci bit će trajno izbrisani.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Imate manje od jednog dana za oporavak vašeg naloga.';
+
+  @override
+  String get deleteFinishNowTitle => 'Izbrisati vaš nalog?';
 }

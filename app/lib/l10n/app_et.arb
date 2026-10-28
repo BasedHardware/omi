@@ -4485,9 +4485,11 @@
     "deleteRestoreSubtitle": "Mõtlesid ümber? Taasta oma konto enne selle kustutamist.",
     "deleteRestoreKeepData": "Taasta oma mälestused ja vestlused.",
     "deleteRestoreBillingNotice": "Sinu tellimus jääb tühistatuks. Ühenda rakendused ja integratsioonid pärast taastamist uuesti.",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{Sul on konto taastamiseks jäänud vähemalt 1 päev.} other{Sul on konto taastamiseks jäänud vähemalt {days} päeva.}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{Teil on veel 1 päev aega oma konto taastamiseks.} other{Teil on veel {days} päeva aega oma konto taastamiseks.}}",
     "deleteRestoreButton": "Taasta minu konto",
     "deleteFinishButton": "Lõpeta kustutamine",
     "deleteFinishNowButton": "Kustuta minu konto kohe",
-    "deleteFinishNowWarning": "See lõpetab konto taastamise võimaluse. Sinu konto ja selle salvestised kustutatakse jäädavalt."
+    "deleteFinishNowWarning": "See lõpetab konto taastamise võimaluse. Sinu konto ja selle salvestised kustutatakse jäädavalt.",
+    "deleteRestoreLessThanDayRemaining": "Teil on vähem kui üks päev aega oma konto taastamiseks.",
+    "deleteFinishNowTitle": "Kas kustutada oma konto?"
 }

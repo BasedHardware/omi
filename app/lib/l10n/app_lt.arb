@@ -4485,9 +4485,11 @@
     "deleteRestoreSubtitle": "Persigalvojote? Atkurkite paskyrą, kol ji dar neištrinta.",
     "deleteRestoreKeepData": "Atkurkite savo prisiminimus ir pokalbius.",
     "deleteRestoreBillingNotice": "Jūsų prenumerata liks atšaukta. Atkūrę paskyrą iš naujo prijunkite programėles ir integracijas.",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{Paskyrai atkurti liko bent 1 diena.} other{Paskyrai atkurti liko bent {days} dienos.}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{Paskyrai atkurti liko 1 diena.} other{Paskyrai atkurti liko {days} dienų.}}",
     "deleteRestoreButton": "Atkurti mano paskyrą",
     "deleteFinishButton": "Baigti ištrynimą",
     "deleteFinishNowButton": "Ištrinti mano paskyrą dabar",
-    "deleteFinishNowWarning": "Taip baigsis paskyros atkūrimo laikotarpis. Jūsų paskyra ir joje esantys įrašai bus ištrinti visam laikui."
+    "deleteFinishNowWarning": "Taip baigsis paskyros atkūrimo laikotarpis. Jūsų paskyra ir joje esantys įrašai bus ištrinti visam laikui.",
+    "deleteRestoreLessThanDayRemaining": "Paskyrai atkurti liko mažiau nei viena diena.",
+    "deleteFinishNowTitle": "Ištrinti jūsų paskyrą?"
 }

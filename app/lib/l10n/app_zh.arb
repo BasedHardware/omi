@@ -4485,9 +4485,11 @@
     "deleteRestoreSubtitle": "改变主意了？请在账户被擦除前恢复账户。",
     "deleteRestoreKeepData": "恢复您的记忆和对话。",
     "deleteRestoreBillingNotice": "您的订阅仍会保持取消状态。恢复后，请重新连接应用和集成。",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{您至少还有 1 天可以恢复账户。} other{您至少还有 {days} 天可以恢复账户。}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{您还剩 1 天时间恢复您的账户。} other{您还剩 {days} 天时间恢复您的账户。}}",
     "deleteRestoreButton": "恢复我的账户",
     "deleteFinishButton": "完成删除",
     "deleteFinishNowButton": "立即擦除我的账户",
-    "deleteFinishNowWarning": "此操作会结束恢复期限。您的账户及其中的录音将被永久擦除。"
+    "deleteFinishNowWarning": "此操作会结束恢复期限。您的账户及其中的录音将被永久擦除。",
+    "deleteRestoreLessThanDayRemaining": "您还剩不到 1 天时间恢复您的账户。",
+    "deleteFinishNowTitle": "删除您的账户？"
 }

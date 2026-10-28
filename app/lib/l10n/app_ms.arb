@@ -4485,9 +4485,11 @@
     "deleteRestoreSubtitle": "Berubah fikiran? Pulihkan akaun anda sebelum dipadamkan.",
     "deleteRestoreKeepData": "Pulihkan kenangan dan perbualan anda.",
     "deleteRestoreBillingNotice": "Langganan anda kekal dibatalkan. Sambungkan semula aplikasi dan integrasi selepas memulihkan akaun.",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{Anda mempunyai sekurang-kurangnya 1 hari lagi untuk memulihkan akaun.} other{Anda mempunyai sekurang-kurangnya {days} hari lagi untuk memulihkan akaun.}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{Anda ada 1 hari lagi untuk memulihkan akaun anda.} other{Anda ada {days} hari lagi untuk memulihkan akaun anda.}}",
     "deleteRestoreButton": "Pulihkan akaun saya",
     "deleteFinishButton": "Selesaikan pemadaman",
     "deleteFinishNowButton": "Padam akaun saya sekarang",
-    "deleteFinishNowWarning": "Ini menamatkan tempoh pemulihan. Akaun dan rakaman anda akan dipadamkan secara kekal."
+    "deleteFinishNowWarning": "Ini menamatkan tempoh pemulihan. Akaun dan rakaman anda akan dipadamkan secara kekal.",
+    "deleteRestoreLessThanDayRemaining": "Anda ada kurang daripada sehari untuk memulihkan akaun anda.",
+    "deleteFinishNowTitle": "Padam akaun anda?"
 }

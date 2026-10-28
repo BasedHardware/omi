@@ -14830,8 +14830,8 @@ class AppLocalizationsFi extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Sinulla on vähintään $days päivää aikaa palauttaa tilisi.',
-      one: 'Sinulla on vähintään 1 päivä aikaa palauttaa tilisi.',
+      other: 'Sinulla on $days päivää aikaa palauttaa tilisi.',
+      one: 'Sinulla on 1 päivä aikaa palauttaa tilisi.',
     );
     return '$_temp0';
   }
@@ -14847,4 +14847,10 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get deleteFinishNowWarning => 'Tämä päättää palautusajan. Tilisi ja sen tallenteet poistetaan pysyvästi.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Sinulla on alle päivä aikaa palauttaa tilisi.';
+
+  @override
+  String get deleteFinishNowTitle => 'Poista tilisi?';
 }

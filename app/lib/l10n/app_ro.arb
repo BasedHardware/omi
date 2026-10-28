@@ -4485,9 +4485,11 @@
     "deleteRestoreSubtitle": "Te-ai răzgândit? Restaurează-ți contul înainte să fie șters.",
     "deleteRestoreKeepData": "Restaurează-ți amintirile și conversațiile.",
     "deleteRestoreBillingNotice": "Abonamentul tău rămâne anulat. Reconectează aplicațiile și integrările după restaurare.",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{Mai ai cel puțin 1 zi pentru a-ți restaura contul.} other{Mai ai cel puțin {days} zile pentru a-ți restaura contul.}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{Mai ai 1 zi pentru a-ți recupera contul.} other{Mai ai {days} zile pentru a-ți recupera contul.}}",
     "deleteRestoreButton": "Restaurează-mi contul",
     "deleteFinishButton": "Finalizează ștergerea",
     "deleteFinishNowButton": "Șterge-mi contul acum",
-    "deleteFinishNowWarning": "Astfel se încheie perioada de restaurare. Contul și înregistrările tale vor fi șterse definitiv."
+    "deleteFinishNowWarning": "Astfel se încheie perioada de restaurare. Contul și înregistrările tale vor fi șterse definitiv.",
+    "deleteRestoreLessThanDayRemaining": "Mai ai mai puțin de o zi pentru a-ți recupera contul.",
+    "deleteFinishNowTitle": "Ștergi contul?"
 }

@@ -4485,9 +4485,11 @@
     "deleteRestoreSubtitle": "Du hast es dir anders überlegt? Stelle dein Konto wieder her, bevor es gelöscht wird.",
     "deleteRestoreKeepData": "Stelle deine Erinnerungen und Gespräche wieder her.",
     "deleteRestoreBillingNotice": "Dein Abo bleibt gekündigt. Verbinde Apps und Integrationen nach der Wiederherstellung erneut.",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{Du hast noch mindestens 1 Tag Zeit, um dein Konto wiederherzustellen.} other{Du hast noch mindestens {days} Tage Zeit, um dein Konto wiederherzustellen.}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{Sie haben noch 1 Tag, um Ihr Konto wiederherzustellen.} other{Sie haben noch {days} Tage, um Ihr Konto wiederherzustellen.}}",
     "deleteRestoreButton": "Mein Konto wiederherstellen",
     "deleteFinishButton": "Löschung abschließen",
     "deleteFinishNowButton": "Mein Konto jetzt löschen",
-    "deleteFinishNowWarning": "Dadurch endet der Wiederherstellungszeitraum. Dein Konto und die darin gespeicherten Aufnahmen werden endgültig gelöscht."
+    "deleteFinishNowWarning": "Dadurch endet der Wiederherstellungszeitraum. Dein Konto und die darin gespeicherten Aufnahmen werden endgültig gelöscht.",
+    "deleteRestoreLessThanDayRemaining": "Sie haben noch weniger als einen Tag, um Ihr Konto wiederherzustellen.",
+    "deleteFinishNowTitle": "Ihr Konto löschen?"
 }

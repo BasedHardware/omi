@@ -14820,8 +14820,8 @@ class AppLocalizationsFa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'حداقل $days روز برای بازیابی حساب فرصت دارید.',
-      one: 'حداقل ۱ روز برای بازیابی حساب فرصت دارید.',
+      other: 'برای بازیابی حساب خود $days روز باقی مانده است.',
+      one: 'برای بازیابی حساب خود ۱ روز باقی مانده است.',
     );
     return '$_temp0';
   }
@@ -14838,4 +14838,10 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get deleteFinishNowWarning =>
       'با این کار مهلت بازیابی پایان می‌یابد. حساب شما و ضبط‌های آن برای همیشه پاک خواهند شد.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'برای بازیابی حساب خود کمتر از یک روز باقی مانده است.';
+
+  @override
+  String get deleteFinishNowTitle => 'حساب خود را حذف می‌کنید؟';
 }

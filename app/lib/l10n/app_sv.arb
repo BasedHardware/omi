@@ -4485,9 +4485,11 @@
     "deleteRestoreSubtitle": "Har du ändrat dig? Återställ kontot innan det raderas.",
     "deleteRestoreKeepData": "Återställ dina minnen och konversationer.",
     "deleteRestoreBillingNotice": "Din prenumeration förblir uppsagd. Anslut appar och integrationer igen efter återställningen.",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{Du har minst 1 dag kvar på dig att återställa ditt konto.} other{Du har minst {days} dagar kvar på dig att återställa ditt konto.}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{Du har 1 dag kvar för att återställa ditt konto.} other{Du har {days} dagar kvar för att återställa ditt konto.}}",
     "deleteRestoreButton": "Återställ mitt konto",
     "deleteFinishButton": "Slutför raderingen",
     "deleteFinishNowButton": "Radera mitt konto nu",
-    "deleteFinishNowWarning": "Detta avslutar perioden då du kan återställa kontot. Ditt konto och dina inspelningar raderas permanent."
+    "deleteFinishNowWarning": "Detta avslutar perioden då du kan återställa kontot. Ditt konto och dina inspelningar raderas permanent.",
+    "deleteRestoreLessThanDayRemaining": "Du har mindre än en dag kvar för att återställa ditt konto.",
+    "deleteFinishNowTitle": "Ta bort ditt konto?"
 }

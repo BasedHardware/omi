@@ -11911,9 +11911,11 @@
     "deleteRestoreSubtitle": "Nagbago ang isip mo? Ibalik ang account mo bago ito mabura.",
     "deleteRestoreKeepData": "Ibalik ang mga alaala at pag-uusap mo.",
     "deleteRestoreBillingNotice": "Mananatiling kanselado ang subscription mo. Ikonekta ulit ang mga app at integration pagkatapos maibalik ang account.",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{May natitira ka pang kahit 1 araw para maibalik ang account mo.} other{May natitira ka pang kahit {days} araw para maibalik ang account mo.}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{May natitira pang 1 araw para i-restore ang iyong account.} other{May natitira pang {days} araw para i-restore ang iyong account.}}",
     "deleteRestoreButton": "Ibalik ang account ko",
     "deleteFinishButton": "Tapusin ang pagtanggal",
     "deleteFinishNowButton": "Burahin na ang account ko",
-    "deleteFinishNowWarning": "Matatapos na ang panahon para maibalik ang account. Permanenteng mabubura ang account mo at ang mga recording nito."
+    "deleteFinishNowWarning": "Matatapos na ang panahon para maibalik ang account. Permanenteng mabubura ang account mo at ang mga recording nito.",
+    "deleteRestoreLessThanDayRemaining": "May natitira pang kulang sa isang araw para i-restore ang iyong account.",
+    "deleteFinishNowTitle": "Tanggalin ang Iyong Account?"
 }

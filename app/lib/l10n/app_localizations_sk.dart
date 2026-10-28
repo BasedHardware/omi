@@ -14820,8 +14820,8 @@ class AppLocalizationsSk extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Na obnovenie účtu vám zostáva aspoň $days dní.',
-      one: 'Na obnovenie účtu vám zostáva aspoň 1 deň.',
+      other: 'Na obnovenie účtu máte ešte $days dní.',
+      one: 'Na obnovenie účtu máte ešte 1 deň.',
     );
     return '$_temp0';
   }
@@ -14837,4 +14837,10 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get deleteFinishNowWarning => 'Tým sa skončí obdobie na obnovenie. Váš účet a nahrávky sa natrvalo vymažú.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Na obnovenie účtu vám zostáva menej ako 1 deň.';
+
+  @override
+  String get deleteFinishNowTitle => 'Odstrániť účet?';
 }

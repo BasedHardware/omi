@@ -4527,9 +4527,11 @@
     "deleteRestoreSubtitle": "Har du skiftet mening? Gendan din konto, før den slettes.",
     "deleteRestoreKeepData": "Gendan dine minder og samtaler.",
     "deleteRestoreBillingNotice": "Dit abonnement forbliver opsagt. Tilslut apps og integrationer igen, når kontoen er gendannet.",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{Du har mindst 1 dag tilbage til at gendanne din konto.} other{Du har mindst {days} dage tilbage til at gendanne din konto.}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{Du har 1 dag tilbage til at gendanne din konto.} other{Du har {days} dage tilbage til at gendanne din konto.}}",
     "deleteRestoreButton": "Gendan min konto",
     "deleteFinishButton": "Afslut sletning",
     "deleteFinishNowButton": "Slet min konto nu",
-    "deleteFinishNowWarning": "Dette afslutter perioden, hvor kontoen kan gendannes. Din konto og dens optagelser slettes permanent."
+    "deleteFinishNowWarning": "Dette afslutter perioden, hvor kontoen kan gendannes. Din konto og dens optagelser slettes permanent.",
+    "deleteRestoreLessThanDayRemaining": "Du har mindre end en dag tilbage til at gendanne din konto.",
+    "deleteFinishNowTitle": "Slet din konto?"
 }

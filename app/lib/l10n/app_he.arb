@@ -11911,9 +11911,11 @@
     "deleteRestoreSubtitle": "שיניתם את דעתכם? שחזרו את החשבון לפני שיימחק.",
     "deleteRestoreKeepData": "שחזרו את הזיכרונות והשיחות שלכם.",
     "deleteRestoreBillingNotice": "המינוי שלכם יישאר מבוטל. לאחר השחזור, חברו מחדש את האפליקציות והאינטגרציות.",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{נותר לכם לפחות יום אחד לשחזור החשבון.} other{נותרו לכם לפחות {days} ימים לשחזור החשבון.}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{נותר לך יום אחד לשחזר את החשבון שלך.} other{נותרו לך {days} ימים לשחזר את החשבון שלך.}}",
     "deleteRestoreButton": "שחזור החשבון שלי",
     "deleteFinishButton": "סיום המחיקה",
     "deleteFinishNowButton": "מחקו את החשבון שלי עכשיו",
-    "deleteFinishNowWarning": "פעולה זו תסיים את תקופת השחזור. החשבון שלכם וההקלטות שבו יימחקו לצמיתות."
+    "deleteFinishNowWarning": "פעולה זו תסיים את תקופת השחזור. החשבון שלכם וההקלטות שבו יימחקו לצמיתות.",
+    "deleteRestoreLessThanDayRemaining": "נותר לך פחות מיום לשחזר את החשבון שלך.",
+    "deleteFinishNowTitle": "למחוק את החשבון שלך?"
 }

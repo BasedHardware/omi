@@ -14853,8 +14853,8 @@ class AppLocalizationsPt extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Você tem pelo menos mais $days dias para restaurar sua conta.',
-      one: 'Você tem pelo menos mais 1 dia para restaurar sua conta.',
+      other: 'Você tem $days dias restantes para restaurar sua conta.',
+      one: 'Você tem 1 dia restante para restaurar sua conta.',
     );
     return '$_temp0';
   }
@@ -14871,4 +14871,10 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get deleteFinishNowWarning =>
       'Isso encerra o prazo para restauração. Sua conta e suas gravações serão apagadas permanentemente.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Você tem menos de um dia para restaurar sua conta.';
+
+  @override
+  String get deleteFinishNowTitle => 'Apagar sua conta?';
 }

@@ -4581,9 +4581,11 @@
     "deleteRestoreSubtitle": "Meggondoltad magad? Állítsd vissza a fiókodat, mielőtt töröljük.",
     "deleteRestoreKeepData": "Állítsd vissza emlékeidet és beszélgetéseidet.",
     "deleteRestoreBillingNotice": "Az előfizetésed továbbra is lemondott marad. A visszaállítás után csatlakoztasd újra az alkalmazásokat és integrációkat.",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{Legalább 1 napod maradt a fiókod visszaállítására.} other{Legalább {days} napod maradt a fiókod visszaállítására.}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{1 napod maradt a fiókod visszaállítására.} other{{days} napod maradt a fiókod visszaállítására.}}",
     "deleteRestoreButton": "Fiókom visszaállítása",
     "deleteFinishButton": "Törlés befejezése",
     "deleteFinishNowButton": "Fiókom törlése most",
-    "deleteFinishNowWarning": "Ezzel véget ér a visszaállítási időszak. Fiókodat és a hozzá tartozó felvételeket véglegesen töröljük."
+    "deleteFinishNowWarning": "Ezzel véget ér a visszaállítási időszak. Fiókodat és a hozzá tartozó felvételeket véglegesen töröljük.",
+    "deleteRestoreLessThanDayRemaining": "Kevesebb mint egy napod maradt a fiókod visszaállítására.",
+    "deleteFinishNowTitle": "Törlöd a fiókodat?"
 }

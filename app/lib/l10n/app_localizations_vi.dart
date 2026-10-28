@@ -14827,8 +14827,8 @@ class AppLocalizationsVi extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Bạn còn ít nhất $days ngày để khôi phục tài khoản.',
-      one: 'Bạn còn ít nhất 1 ngày để khôi phục tài khoản.',
+      other: 'Bạn còn $days ngày để khôi phục tài khoản của mình.',
+      one: 'Bạn còn 1 ngày để khôi phục tài khoản của mình.',
     );
     return '$_temp0';
   }
@@ -14845,4 +14845,10 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get deleteFinishNowWarning =>
       'Thao tác này sẽ kết thúc thời hạn khôi phục. Tài khoản và các bản ghi của bạn sẽ bị xóa vĩnh viễn.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Bạn còn chưa đến 1 ngày để khôi phục tài khoản của mình.';
+
+  @override
+  String get deleteFinishNowTitle => 'Xóa tài khoản của bạn?';
 }

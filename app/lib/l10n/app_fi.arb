@@ -4485,9 +4485,11 @@
     "deleteRestoreSubtitle": "Muuttiko mielesi? Palauta tilisi ennen sen poistamista.",
     "deleteRestoreKeepData": "Palauta muistosi ja keskustelusi.",
     "deleteRestoreBillingNotice": "Tilauksesi pysyy peruutettuna. Yhdistä sovellukset ja integraatiot uudelleen palautuksen jälkeen.",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{Sinulla on vähintään 1 päivä aikaa palauttaa tilisi.} other{Sinulla on vähintään {days} päivää aikaa palauttaa tilisi.}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{Sinulla on 1 päivä aikaa palauttaa tilisi.} other{Sinulla on {days} päivää aikaa palauttaa tilisi.}}",
     "deleteRestoreButton": "Palauta tilini",
     "deleteFinishButton": "Viimeistele poistaminen",
     "deleteFinishNowButton": "Poista tilini nyt",
-    "deleteFinishNowWarning": "Tämä päättää palautusajan. Tilisi ja sen tallenteet poistetaan pysyvästi."
+    "deleteFinishNowWarning": "Tämä päättää palautusajan. Tilisi ja sen tallenteet poistetaan pysyvästi.",
+    "deleteRestoreLessThanDayRemaining": "Sinulla on alle päivä aikaa palauttaa tilisi.",
+    "deleteFinishNowTitle": "Poista tilisi?"
 }

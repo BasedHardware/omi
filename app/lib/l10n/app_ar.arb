@@ -4485,9 +4485,11 @@
     "deleteRestoreSubtitle": "هل غيّرت رأيك؟ استعد حسابك قبل محوه.",
     "deleteRestoreKeepData": "استعد ذكرياتك ومحادثاتك.",
     "deleteRestoreBillingNotice": "سيظل اشتراكك ملغى. أعد ربط التطبيقات وعمليات التكامل بعد استعادة حسابك.",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{لا يزال أمامك يوم واحد على الأقل لاستعادة حسابك.} other{لا يزال أمامك {days} يومًا على الأقل لاستعادة حسابك.}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{لديك يوم واحد متبقٍ لاستعادة حسابك.} other{لديك {days} من الأيام المتبقية لاستعادة حسابك.}}",
     "deleteRestoreButton": "استعادة حسابي",
     "deleteFinishButton": "إنهاء الحذف",
     "deleteFinishNowButton": "محو حسابي الآن",
-    "deleteFinishNowWarning": "سينهي هذا فترة الاستعادة. سيتم محو حسابك والتسجيلات الموجودة فيه نهائيًا."
+    "deleteFinishNowWarning": "سينهي هذا فترة الاستعادة. سيتم محو حسابك والتسجيلات الموجودة فيه نهائيًا.",
+    "deleteRestoreLessThanDayRemaining": "لديك أقل من يوم لاستعادة حسابك.",
+    "deleteFinishNowTitle": "حذف حسابك؟"
 }

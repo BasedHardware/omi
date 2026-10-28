@@ -14927,8 +14927,8 @@ class AppLocalizationsTa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'உங்கள் கணக்கை மீட்டெடுக்க குறைந்தது $days நாட்கள் மீதமுள்ளன.',
-      one: 'உங்கள் கணக்கை மீட்டெடுக்க குறைந்தது 1 நாள் மீதமுள்ளது.',
+      other: 'உங்கள் கணக்கை மீட்டெடுப்பதற்கு இன்னும் $days நாட்கள் உள்ளன.',
+      one: 'உங்கள் கணக்கை மீட்டெடுப்பதற்கு இன்னும் 1 நாள் உள்ளது.',
     );
     return '$_temp0';
   }
@@ -14945,4 +14945,11 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get deleteFinishNowWarning =>
       'இதனால் மீட்டெடுக்கும் காலம் முடிவடையும். உங்கள் கணக்கும் பதிவுகளும் நிரந்தரமாக அழிக்கப்படும்.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining =>
+      'உங்கள் கணக்கை மீட்டெடுப்பதற்கு இன்னும் ஒரு நாளுக்கும் குறைவாகவே உள்ளது.';
+
+  @override
+  String get deleteFinishNowTitle => 'உங்கள் கணக்கை நீக்கவா?';
 }

@@ -14924,8 +14924,8 @@ class AppLocalizationsEl extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Έχετε τουλάχιστον $days ημέρες ακόμη για να επαναφέρετε τον λογαριασμό σας.',
-      one: 'Έχετε τουλάχιστον 1 ημέρα ακόμη για να επαναφέρετε τον λογαριασμό σας.',
+      other: 'Έχετε $days ημέρες για να επαναφέρετε τον λογαριασμό σας.',
+      one: 'Έχετε 1 ημέρα για να επαναφέρετε τον λογαριασμό σας.',
     );
     return '$_temp0';
   }
@@ -14942,4 +14942,10 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get deleteFinishNowWarning =>
       'Έτσι λήγει το χρονικό περιθώριο επαναφοράς. Ο λογαριασμός σας και οι ηχογραφήσεις του θα διαγραφούν οριστικά.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Έχετε λιγότερο από μία ημέρα για να επαναφέρετε τον λογαριασμό σας.';
+
+  @override
+  String get deleteFinishNowTitle => 'Διαγραφή του λογαριασμού σας;';
 }

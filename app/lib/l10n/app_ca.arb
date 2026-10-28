@@ -4485,9 +4485,11 @@
     "deleteRestoreSubtitle": "Heu canviat d'opinió? Restaureu el compte abans que s'esborri.",
     "deleteRestoreKeepData": "Restaureu els vostres records i converses.",
     "deleteRestoreBillingNotice": "La subscripció continuarà cancel·lada. Torneu a connectar les aplicacions i integracions després de restaurar el compte.",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{Us queda almenys un dia per restaurar el compte.} other{Us queden almenys {days} dies per restaurar el compte.}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{Teniu 1 dia per recuperar el vostre compte.} other{Teniu {days} dies per recuperar el vostre compte.}}",
     "deleteRestoreButton": "Restaura el meu compte",
     "deleteFinishButton": "Acaba d'eliminar",
     "deleteFinishNowButton": "Esborra el meu compte ara",
-    "deleteFinishNowWarning": "Això posa fi al període de restauració. El compte i els seus enregistraments s'esborraran definitivament."
+    "deleteFinishNowWarning": "Això posa fi al període de restauració. El compte i els seus enregistraments s'esborraran definitivament.",
+    "deleteRestoreLessThanDayRemaining": "Teniu menys d'un dia per recuperar el vostre compte.",
+    "deleteFinishNowTitle": "Voleu eliminar el vostre compte?"
 }

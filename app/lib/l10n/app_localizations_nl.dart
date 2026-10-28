@@ -14864,8 +14864,8 @@ class AppLocalizationsNl extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Je hebt nog minstens $days dagen om je account te herstellen.',
-      one: 'Je hebt nog minstens 1 dag om je account te herstellen.',
+      other: 'Je hebt nog $days dagen om je account te herstellen.',
+      one: 'Je hebt nog 1 dag om je account te herstellen.',
     );
     return '$_temp0';
   }
@@ -14882,4 +14882,10 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get deleteFinishNowWarning =>
       'Hiermee eindigt de herstelperiode. Je account en opnames worden definitief gewist.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Je hebt nog minder dan een dag om je account te herstellen.';
+
+  @override
+  String get deleteFinishNowTitle => 'Je account wissen?';
 }

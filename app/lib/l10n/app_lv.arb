@@ -4485,9 +4485,11 @@
     "deleteRestoreSubtitle": "Pārdomājāt? Atjaunojiet savu kontu, pirms tas tiek dzēsts.",
     "deleteRestoreKeepData": "Atjaunojiet savas atmiņas un sarunas.",
     "deleteRestoreBillingNotice": "Jūsu abonements paliks atcelts. Pēc konta atjaunošanas no jauna pievienojiet lietotnes un integrācijas.",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{Jums ir atlicis vismaz 1 diena konta atjaunošanai.} other{Jums ir atlikušas vismaz {days} dienas konta atjaunošanai.}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{Jums ir atlikusi 1 diena, lai atjaunotu savu kontu.} other{Jums ir atlikušas {days} dienas, lai atjaunotu savu kontu.}}",
     "deleteRestoreButton": "Atjaunot manu kontu",
     "deleteFinishButton": "Pabeigt dzēšanu",
     "deleteFinishNowButton": "Dzēst manu kontu tagad",
-    "deleteFinishNowWarning": "Tādējādi beigsies konta atjaunošanas periods. Jūsu konts un tajā esošie ieraksti tiks neatgriezeniski dzēsti."
+    "deleteFinishNowWarning": "Tādējādi beigsies konta atjaunošanas periods. Jūsu konts un tajā esošie ieraksti tiks neatgriezeniski dzēsti.",
+    "deleteRestoreLessThanDayRemaining": "Jums ir atlikusi mazāk nekā diena, lai atjaunotu savu kontu.",
+    "deleteFinishNowTitle": "Dzēst jūsu kontu?"
 }

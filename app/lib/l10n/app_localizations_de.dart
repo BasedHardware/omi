@@ -14937,8 +14937,8 @@ class AppLocalizationsDe extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Du hast noch mindestens $days Tage Zeit, um dein Konto wiederherzustellen.',
-      one: 'Du hast noch mindestens 1 Tag Zeit, um dein Konto wiederherzustellen.',
+      other: 'Sie haben noch $days Tage, um Ihr Konto wiederherzustellen.',
+      one: 'Sie haben noch 1 Tag, um Ihr Konto wiederherzustellen.',
     );
     return '$_temp0';
   }
@@ -14955,4 +14955,11 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get deleteFinishNowWarning =>
       'Dadurch endet der Wiederherstellungszeitraum. Dein Konto und die darin gespeicherten Aufnahmen werden endgültig gelöscht.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining =>
+      'Sie haben noch weniger als einen Tag, um Ihr Konto wiederherzustellen.';
+
+  @override
+  String get deleteFinishNowTitle => 'Ihr Konto löschen?';
 }

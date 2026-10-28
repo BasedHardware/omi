@@ -14901,8 +14901,8 @@ class AppLocalizationsIt extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Hai ancora almeno $days giorni per ripristinare il tuo account.',
-      one: 'Hai ancora almeno 1 giorno per ripristinare il tuo account.',
+      other: 'Hai ancora $days giorni per recuperare il tuo account.',
+      one: 'Hai ancora 1 giorno per recuperare il tuo account.',
     );
     return '$_temp0';
   }
@@ -14919,4 +14919,10 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get deleteFinishNowWarning =>
       'Così terminerà il periodo di ripristino. Il tuo account e le sue registrazioni verranno eliminati definitivamente.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Hai meno di un giorno per recuperare il tuo account.';
+
+  @override
+  String get deleteFinishNowTitle => 'Eliminare il tuo account?';
 }

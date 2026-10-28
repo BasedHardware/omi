@@ -14859,8 +14859,8 @@ class AppLocalizationsBe extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'У вас засталося прынамсі $days дзён, каб аднавіць уліковы запіс.',
-      one: 'У вас засталося прынамсі 1 дзень, каб аднавіць уліковы запіс.',
+      other: 'У вас засталося $days дзён, каб аднавіць ваш рахунак.',
+      one: 'У вас застаўся 1 дзень, каб аднавіць ваш рахунак.',
     );
     return '$_temp0';
   }
@@ -14877,4 +14877,10 @@ class AppLocalizationsBe extends AppLocalizations {
   @override
   String get deleteFinishNowWarning =>
       'Пасля гэтага аднаўленне будзе немагчымае. Ваш уліковы запіс і запісы будуць выдалены назаўжды.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'У вас засталося менш за дзень, каб аднавіць ваш рахунак.';
+
+  @override
+  String get deleteFinishNowTitle => 'Выдаліць ваш рахунак?';
 }

@@ -4520,9 +4520,11 @@
     "deleteRestoreSubtitle": "Fikriniz mi değişti? Silinmeden önce hesabınızı geri yükleyin.",
     "deleteRestoreKeepData": "Anılarınızı ve konuşmalarınızı geri yükleyin.",
     "deleteRestoreBillingNotice": "Aboneliğiniz iptal edilmiş olarak kalır. Geri yükledikten sonra uygulama ve entegrasyonları yeniden bağlayın.",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{Hesabınızı geri yüklemek için en az 1 gününüz kaldı.} other{Hesabınızı geri yüklemek için en az {days} gününüz kaldı.}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{Hesabınızı geri yüklemek için 1 gününüz kaldı.} other{Hesabınızı geri yüklemek için {days} gününüz kaldı.}}",
     "deleteRestoreButton": "Hesabımı geri yükle",
     "deleteFinishButton": "Silmeyi tamamla",
     "deleteFinishNowButton": "Hesabımı şimdi sil",
-    "deleteFinishNowWarning": "Bu işlem geri yükleme süresini sona erdirir. Hesabınız ve kayıtları kalıcı olarak silinir."
+    "deleteFinishNowWarning": "Bu işlem geri yükleme süresini sona erdirir. Hesabınız ve kayıtları kalıcı olarak silinir.",
+    "deleteRestoreLessThanDayRemaining": "Hesabınızı geri yüklemek için bir günden az süreniz kaldı.",
+    "deleteFinishNowTitle": "Hesabınız Silinsin mi?"
 }

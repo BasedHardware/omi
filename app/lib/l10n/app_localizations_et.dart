@@ -14818,8 +14818,8 @@ class AppLocalizationsEt extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Sul on konto taastamiseks jäänud vähemalt $days päeva.',
-      one: 'Sul on konto taastamiseks jäänud vähemalt 1 päev.',
+      other: 'Teil on veel $days päeva aega oma konto taastamiseks.',
+      one: 'Teil on veel 1 päev aega oma konto taastamiseks.',
     );
     return '$_temp0';
   }
@@ -14836,4 +14836,10 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get deleteFinishNowWarning =>
       'See lõpetab konto taastamise võimaluse. Sinu konto ja selle salvestised kustutatakse jäädavalt.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Teil on vähem kui üks päev aega oma konto taastamiseks.';
+
+  @override
+  String get deleteFinishNowTitle => 'Kas kustutada oma konto?';
 }

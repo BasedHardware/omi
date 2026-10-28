@@ -14859,8 +14859,8 @@ class AppLocalizationsLv extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Jums ir atlikušas vismaz $days dienas konta atjaunošanai.',
-      one: 'Jums ir atlicis vismaz 1 diena konta atjaunošanai.',
+      other: 'Jums ir atlikušas $days dienas, lai atjaunotu savu kontu.',
+      one: 'Jums ir atlikusi 1 diena, lai atjaunotu savu kontu.',
     );
     return '$_temp0';
   }
@@ -14877,4 +14877,10 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get deleteFinishNowWarning =>
       'Tādējādi beigsies konta atjaunošanas periods. Jūsu konts un tajā esošie ieraksti tiks neatgriezeniski dzēsti.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Jums ir atlikusi mazāk nekā diena, lai atjaunotu savu kontu.';
+
+  @override
+  String get deleteFinishNowTitle => 'Dzēst jūsu kontu?';
 }

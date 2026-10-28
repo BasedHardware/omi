@@ -14900,8 +14900,8 @@ class AppLocalizationsCa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Us queden almenys $days dies per restaurar el compte.',
-      one: 'Us queda almenys un dia per restaurar el compte.',
+      other: 'Teniu $days dies per recuperar el vostre compte.',
+      one: 'Teniu 1 dia per recuperar el vostre compte.',
     );
     return '$_temp0';
   }
@@ -14918,4 +14918,10 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get deleteFinishNowWarning =>
       'Això posa fi al període de restauració. El compte i els seus enregistraments s\'esborraran definitivament.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Teniu menys d\'un dia per recuperar el vostre compte.';
+
+  @override
+  String get deleteFinishNowTitle => 'Voleu eliminar el vostre compte?';
 }

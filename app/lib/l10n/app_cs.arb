@@ -4485,9 +4485,11 @@
     "deleteRestoreSubtitle": "Rozmysleli jste si to? Obnovte svůj účet, než bude smazán.",
     "deleteRestoreKeepData": "Obnovte své vzpomínky a konverzace.",
     "deleteRestoreBillingNotice": "Vaše předplatné zůstane zrušené. Po obnovení znovu připojte aplikace a integrace.",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{Na obnovení účtu vám zbývá alespoň 1 den.} other{Na obnovení účtu vám zbývá alespoň {days} dnů.}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{Zbývá vám 1 den na obnovení vašeho účtu.} other{Zbývá vám {days} dní na obnovení vašeho účtu.}}",
     "deleteRestoreButton": "Obnovit můj účet",
     "deleteFinishButton": "Dokončit mazání",
     "deleteFinishNowButton": "Smazat můj účet hned",
-    "deleteFinishNowWarning": "Tím skončí lhůta pro obnovení. Váš účet i jeho záznamy budou trvale smazány."
+    "deleteFinishNowWarning": "Tím skončí lhůta pro obnovení. Váš účet i jeho záznamy budou trvale smazány.",
+    "deleteRestoreLessThanDayRemaining": "Zbývá vám méně než den na obnovení vašeho účtu.",
+    "deleteFinishNowTitle": "Smazat váš účet?"
 }

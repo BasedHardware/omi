@@ -14817,8 +14817,8 @@ class AppLocalizationsDa extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Du har mindst $days dage tilbage til at gendanne din konto.',
-      one: 'Du har mindst 1 dag tilbage til at gendanne din konto.',
+      other: 'Du har $days dage tilbage til at gendanne din konto.',
+      one: 'Du har 1 dag tilbage til at gendanne din konto.',
     );
     return '$_temp0';
   }
@@ -14835,4 +14835,10 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get deleteFinishNowWarning =>
       'Dette afslutter perioden, hvor kontoen kan gendannes. Din konto og dens optagelser slettes permanent.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Du har mindre end en dag tilbage til at gendanne din konto.';
+
+  @override
+  String get deleteFinishNowTitle => 'Slet din konto?';
 }

@@ -4520,9 +4520,11 @@
     "deleteRestoreSubtitle": "Zmieniłeś zdanie? Przywróć konto, zanim zostanie wymazane.",
     "deleteRestoreKeepData": "Przywróć swoje wspomnienia i rozmowy.",
     "deleteRestoreBillingNotice": "Twoja subskrypcja pozostanie anulowana. Po przywróceniu konta ponownie połącz aplikacje i integracje.",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{Pozostał Ci co najmniej 1 dzień na przywrócenie konta.} other{Pozostało Ci co najmniej {days} dni na przywrócenie konta.}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{Masz jeszcze 1 dzień na przywrócenie konta.} other{Masz jeszcze {days} dni na przywrócenie konta.}}",
     "deleteRestoreButton": "Przywróć moje konto",
     "deleteFinishButton": "Zakończ usuwanie",
     "deleteFinishNowButton": "Usuń moje konto teraz",
-    "deleteFinishNowWarning": "To kończy okres przywracania. Twoje konto i nagrania zostaną trwale usunięte."
+    "deleteFinishNowWarning": "To kończy okres przywracania. Twoje konto i nagrania zostaną trwale usunięte.",
+    "deleteRestoreLessThanDayRemaining": "Masz mniej niż 1 dzień na przywrócenie konta.",
+    "deleteFinishNowTitle": "Usunąć konto?"
 }

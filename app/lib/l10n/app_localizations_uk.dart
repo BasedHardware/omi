@@ -14855,8 +14855,8 @@ class AppLocalizationsUk extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'У вас є щонайменше $days днів, щоб відновити обліковий запис.',
-      one: 'У вас є щонайменше 1 день, щоб відновити обліковий запис.',
+      other: 'У вас залишилося $days днів, щоб відновити свій обліковий запис.',
+      one: 'У вас залишився 1 день, щоб відновити свій обліковий запис.',
     );
     return '$_temp0';
   }
@@ -14873,4 +14873,11 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get deleteFinishNowWarning =>
       'Після цього період відновлення завершиться. Ваш обліковий запис і його записи буде стерто назавжди.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining =>
+      'У вас залишилося менше ніж день, щоб відновити свій обліковий запис.';
+
+  @override
+  String get deleteFinishNowTitle => 'Видалити ваш обліковий запис?';
 }

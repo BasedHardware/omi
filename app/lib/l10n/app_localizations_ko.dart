@@ -14619,8 +14619,8 @@ class AppLocalizationsKo extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: '계정을 복원할 수 있는 기간이 최소 $days일 남았습니다.',
-      one: '계정을 복원할 수 있는 기간이 최소 1일 남았습니다.',
+      other: '계정을 복구할 수 있는 시간이 $days일 남았습니다.',
+      one: '계정을 복구할 수 있는 시간이 1일 남았습니다.',
     );
     return '$_temp0';
   }
@@ -14636,4 +14636,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get deleteFinishNowWarning => '복원 기간이 종료됩니다. 계정과 녹음이 영구적으로 삭제됩니다.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => '계정을 복구할 수 있는 시간이 하루도 남지 않았습니다.';
+
+  @override
+  String get deleteFinishNowTitle => '계정을 완전히 삭제하시겠습니까?';
 }

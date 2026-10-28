@@ -14889,8 +14889,8 @@ class AppLocalizationsMk extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Ви остануваат најмалку $days дена за да ја обновите сметката.',
-      one: 'Ви останува најмалку 1 ден за да ја обновите сметката.',
+      other: 'Имате уште $days дена за да го вратите вашиот профил.',
+      one: 'Имате уште 1 ден за да го вратите вашиот профил.',
     );
     return '$_temp0';
   }
@@ -14907,4 +14907,10 @@ class AppLocalizationsMk extends AppLocalizations {
   @override
   String get deleteFinishNowWarning =>
       'Со ова завршува периодот за обновување. Вашата сметка и снимките во неа ќе бидат трајно избришани.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Имате помалку од еден ден за да го вратите вашиот профил.';
+
+  @override
+  String get deleteFinishNowTitle => 'Да го избришете вашиот профил?';
 }

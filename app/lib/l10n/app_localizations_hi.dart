@@ -14807,8 +14807,8 @@ class AppLocalizationsHi extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'आपके खाते को बहाल करने के लिए कम से कम $days दिन बाकी हैं।',
-      one: 'आपके खाते को बहाल करने के लिए कम से कम 1 दिन बाकी है।',
+      other: 'आपका खाता रिस्टोर करने के लिए $days दिन बाकी है।',
+      one: 'आपका खाता रिस्टोर करने के लिए 1 दिन बाकी है।',
     );
     return '$_temp0';
   }
@@ -14825,4 +14825,10 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get deleteFinishNowWarning =>
       'इससे बहाली की अवधि समाप्त हो जाएगी। आपका खाता और उसकी रिकॉर्डिंग हमेशा के लिए मिटा दी जाएंगी।';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'आपका खाता रिस्टोर करने के लिए एक दिन से कम समय बाकी है।';
+
+  @override
+  String get deleteFinishNowTitle => 'अपना खाता मिटाएं?';
 }

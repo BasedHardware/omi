@@ -14883,8 +14883,8 @@ class AppLocalizationsHu extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Legalább $days napod maradt a fiókod visszaállítására.',
-      one: 'Legalább 1 napod maradt a fiókod visszaállítására.',
+      other: '$days napod maradt a fiókod visszaállítására.',
+      one: '1 napod maradt a fiókod visszaállítására.',
     );
     return '$_temp0';
   }
@@ -14901,4 +14901,10 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get deleteFinishNowWarning =>
       'Ezzel véget ér a visszaállítási időszak. Fiókodat és a hozzá tartozó felvételeket véglegesen töröljük.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Kevesebb mint egy napod maradt a fiókod visszaállítására.';
+
+  @override
+  String get deleteFinishNowTitle => 'Törlöd a fiókodat?';
 }

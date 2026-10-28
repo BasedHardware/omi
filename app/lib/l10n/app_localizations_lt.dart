@@ -14847,8 +14847,8 @@ class AppLocalizationsLt extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Paskyrai atkurti liko bent $days dienos.',
-      one: 'Paskyrai atkurti liko bent 1 diena.',
+      other: 'Paskyrai atkurti liko $days dienų.',
+      one: 'Paskyrai atkurti liko 1 diena.',
     );
     return '$_temp0';
   }
@@ -14865,4 +14865,10 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get deleteFinishNowWarning =>
       'Taip baigsis paskyros atkūrimo laikotarpis. Jūsų paskyra ir joje esantys įrašai bus ištrinti visam laikui.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Paskyrai atkurti liko mažiau nei viena diena.';
+
+  @override
+  String get deleteFinishNowTitle => 'Ištrinti jūsų paskyrą?';
 }

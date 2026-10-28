@@ -14942,8 +14942,8 @@ class AppLocalizationsTl extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'May natitira ka pang kahit $days araw para maibalik ang account mo.',
-      one: 'May natitira ka pang kahit 1 araw para maibalik ang account mo.',
+      other: 'May natitira pang $days araw para i-restore ang iyong account.',
+      one: 'May natitira pang 1 araw para i-restore ang iyong account.',
     );
     return '$_temp0';
   }
@@ -14960,4 +14960,11 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get deleteFinishNowWarning =>
       'Matatapos na ang panahon para maibalik ang account. Permanenteng mabubura ang account mo at ang mga recording nito.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining =>
+      'May natitira pang kulang sa isang araw para i-restore ang iyong account.';
+
+  @override
+  String get deleteFinishNowTitle => 'Tanggalin ang Iyong Account?';
 }

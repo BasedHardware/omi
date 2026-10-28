@@ -18085,9 +18085,9 @@
     "@deleteRestoreBillingNotice": {
         "description": "Restoring does not restart billing or reconnect revoked integrations"
     },
-    "deleteRestoreDaysRemaining": "{days, plural, =1{You have at least 1 day left to restore your account.} other{You have at least {days} days left to restore your account.}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{You have 1 day left to restore your account.} other{You have {days} days left to restore your account.}}",
     "@deleteRestoreDaysRemaining": {
-        "description": "Whole days rounded down from server wipe_at",
+        "description": "Restore screen line showing whole days remaining until the backend wipe_at deadline. {days} is the whole-day count rounded down.",
         "placeholders": {
             "days": {
                 "type": "int"
@@ -18109,5 +18109,13 @@
     "deleteFinishNowWarning": "This ends the restore window. Your account and its recordings will be permanently erased.",
     "@deleteFinishNowWarning": {
         "description": "Final warning before erase_now"
+    },
+    "deleteRestoreLessThanDayRemaining": "You have less than a day left to restore your account.",
+    "@deleteRestoreLessThanDayRemaining": {
+        "description": "Restore screen line shown when the backend wipe_at deadline is less than one day away."
+    },
+    "deleteFinishNowTitle": "Erase Your Account?",
+    "@deleteFinishNowTitle": {
+        "description": "Title of the final confirmation dialog after the user taps Erase my account now on the pending-deletion restore screen."
     }
 }

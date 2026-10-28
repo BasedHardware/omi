@@ -14887,8 +14887,8 @@ class AppLocalizationsTe extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'మీ ఖాతాను పునరుద్ధరించడానికి కనీసం $days రోజులు ఉన్నాయి.',
-      one: 'మీ ఖాతాను పునరుద్ధరించడానికి కనీసం 1 రోజు ఉంది.',
+      other: 'మీ ఖాతాను పునరుద్ధరించడానికి మీకు $days రోజుల సమయం మిగిలి ఉంది.',
+      one: 'మీ ఖాతాను పునరుద్ధరించడానికి మీకు 1 రోజు సమయం మిగిలి ఉంది.',
     );
     return '$_temp0';
   }
@@ -14905,4 +14905,11 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String get deleteFinishNowWarning =>
       'దీంతో పునరుద్ధరణ గడువు ముగుస్తుంది. మీ ఖాతా, దానిలోని రికార్డింగ్‌లు శాశ్వతంగా తొలగించబడతాయి.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining =>
+      'మీ ఖాతాను పునరుద్ధరించడానికి మీకు ఒక రోజు కంటే తక్కువ సమయం మిగిలి ఉంది.';
+
+  @override
+  String get deleteFinishNowTitle => 'మీ ఖాతాను తొలగించాలా?';
 }

@@ -14838,8 +14838,8 @@ class AppLocalizationsTr extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       days,
       locale: localeName,
-      other: 'Hesabınızı geri yüklemek için en az $days gününüz kaldı.',
-      one: 'Hesabınızı geri yüklemek için en az 1 gününüz kaldı.',
+      other: 'Hesabınızı geri yüklemek için $days gününüz kaldı.',
+      one: 'Hesabınızı geri yüklemek için 1 gününüz kaldı.',
     );
     return '$_temp0';
   }
@@ -14856,4 +14856,10 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get deleteFinishNowWarning =>
       'Bu işlem geri yükleme süresini sona erdirir. Hesabınız ve kayıtları kalıcı olarak silinir.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Hesabınızı geri yüklemek için bir günden az süreniz kaldı.';
+
+  @override
+  String get deleteFinishNowTitle => 'Hesabınız Silinsin mi?';
 }

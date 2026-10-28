@@ -4485,9 +4485,11 @@
     "deleteRestoreSubtitle": "क्या आपका मन बदल गया? मिटाए जाने से पहले अपना खाता बहाल करें।",
     "deleteRestoreKeepData": "अपनी यादें और बातचीत बहाल करें।",
     "deleteRestoreBillingNotice": "आपकी सदस्यता रद्द ही रहेगी। बहाली के बाद ऐप्स और इंटीग्रेशन फिर से कनेक्ट करें।",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{आपके खाते को बहाल करने के लिए कम से कम 1 दिन बाकी है।} other{आपके खाते को बहाल करने के लिए कम से कम {days} दिन बाकी हैं।}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{आपका खाता रिस्टोर करने के लिए 1 दिन बाकी है।} other{आपका खाता रिस्टोर करने के लिए {days} दिन बाकी है।}}",
     "deleteRestoreButton": "मेरा खाता बहाल करें",
     "deleteFinishButton": "हटाना पूरा करें",
     "deleteFinishNowButton": "मेरा खाता अभी मिटाएं",
-    "deleteFinishNowWarning": "इससे बहाली की अवधि समाप्त हो जाएगी। आपका खाता और उसकी रिकॉर्डिंग हमेशा के लिए मिटा दी जाएंगी।"
+    "deleteFinishNowWarning": "इससे बहाली की अवधि समाप्त हो जाएगी। आपका खाता और उसकी रिकॉर्डिंग हमेशा के लिए मिटा दी जाएंगी।",
+    "deleteRestoreLessThanDayRemaining": "आपका खाता रिस्टोर करने के लिए एक दिन से कम समय बाकी है।",
+    "deleteFinishNowTitle": "अपना खाता मिटाएं?"
 }

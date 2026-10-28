@@ -11911,9 +11911,11 @@
     "deleteRestoreSubtitle": "ارادہ بدل گیا؟ مٹائے جانے سے پہلے اپنا اکاؤنٹ بحال کریں۔",
     "deleteRestoreKeepData": "اپنی یادیں اور گفتگوئیں بحال کریں۔",
     "deleteRestoreBillingNotice": "آپ کی سبسکرپشن منسوخ ہی رہے گی۔ بحالی کے بعد ایپس اور انٹیگریشنز دوبارہ منسلک کریں۔",
-    "deleteRestoreDaysRemaining": "{days, plural, =1{آپ کے اکاؤنٹ کی بحالی کے لیے کم از کم 1 دن باقی ہے۔} other{آپ کے اکاؤنٹ کی بحالی کے لیے کم از کم {days} دن باقی ہیں۔}}",
+    "deleteRestoreDaysRemaining": "{days, plural, =1{اپنا اکاؤنٹ بحال کرنے کے لیے آپ کے پاس 1 دن باقی ہے۔} other{اپنا اکاؤنٹ بحال کرنے کے لیے آپ کے پاس {days} دن باقی ہیں۔}}",
     "deleteRestoreButton": "میرا اکاؤنٹ بحال کریں",
     "deleteFinishButton": "حذف کرنا مکمل کریں",
     "deleteFinishNowButton": "میرا اکاؤنٹ ابھی مٹا دیں",
-    "deleteFinishNowWarning": "اس سے بحالی کی مہلت ختم ہو جائے گی۔ آپ کا اکاؤنٹ اور اس کی ریکارڈنگز مستقل طور پر مٹا دی جائیں گی۔"
+    "deleteFinishNowWarning": "اس سے بحالی کی مہلت ختم ہو جائے گی۔ آپ کا اکاؤنٹ اور اس کی ریکارڈنگز مستقل طور پر مٹا دی جائیں گی۔",
+    "deleteRestoreLessThanDayRemaining": "اپنا اکاؤنٹ بحال کرنے کے لیے آپ کے پاس ایک دن سے کم وقت باقی ہے۔",
+    "deleteFinishNowTitle": "اپنا اکاؤنٹ حذف کریں؟"
 }
