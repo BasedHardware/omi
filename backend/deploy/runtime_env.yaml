@@ -776,7 +776,11 @@ environments:
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
             FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
             BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
-            BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
+            BATCH_PIPELINE_PERCENT:
+              env_var: BATCH_PIPELINE_PERCENT_DEPLOY_OVERRIDE
+              provisional: true
+              category: rollout
+              value: '0'
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_WORKER_ENABLED:
               value: 'false'
@@ -1038,7 +1042,11 @@ environments:
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
             FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
             BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
-            BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
+            BATCH_PIPELINE_PERCENT:
+              env_var: BATCH_PIPELINE_PERCENT_DEPLOY_OVERRIDE
+              provisional: true
+              category: rollout
+              value: '0'
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_WORKER_ENABLED:
               value: 'false'
@@ -1329,7 +1337,11 @@ environments:
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
             FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
             BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
-            BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
+            BATCH_PIPELINE_PERCENT:
+              env_var: BATCH_PIPELINE_PERCENT_DEPLOY_OVERRIDE
+              provisional: true
+              category: rollout
+              value: '0'
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_WORKER_ENABLED:
               value: 'false'
@@ -1601,7 +1613,11 @@ environments:
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
             FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
             BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
-            BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
+            BATCH_PIPELINE_PERCENT:
+              env_var: BATCH_PIPELINE_PERCENT_DEPLOY_OVERRIDE
+              provisional: true
+              category: rollout
+              value: '0'
             BATCH_PIPELINE_SERVING_ENABLED: {category: rollout, value: 'false'}
             BATCH_PIPELINE_WORKER_ENABLED:
               value: 'false'
@@ -2881,7 +2897,10 @@ environments:
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
             FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
             BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
-            BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
+            BATCH_PIPELINE_PERCENT:
+              env_var: BATCH_PIPELINE_PERCENT_DEPLOY_OVERRIDE
+              provisional: true
+              category: rollout
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_WORKER_ENABLED:
               value: 'false'
@@ -3237,7 +3256,10 @@ environments:
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
             BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
-            BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
+            BATCH_PIPELINE_PERCENT:
+              env_var: BATCH_PIPELINE_PERCENT_DEPLOY_OVERRIDE
+              provisional: true
+              category: rollout
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_WORKER_ENABLED:
               value: 'false'
@@ -3614,7 +3636,10 @@ environments:
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
             BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
-            BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
+            BATCH_PIPELINE_PERCENT:
+              env_var: BATCH_PIPELINE_PERCENT_DEPLOY_OVERRIDE
+              provisional: true
+              category: rollout
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_WORKER_ENABLED:
               value: 'false'
@@ -3971,7 +3996,10 @@ environments:
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
             BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
-            BATCH_PIPELINE_PERCENT: {value: '0', category: rollout}
+            BATCH_PIPELINE_PERCENT:
+              env_var: BATCH_PIPELINE_PERCENT_DEPLOY_OVERRIDE
+              provisional: true
+              category: rollout
             BATCH_PIPELINE_SERVING_ENABLED: {category: rollout, value: 'true'}
             BATCH_PIPELINE_WORKER_ENABLED:
               value: 'false'

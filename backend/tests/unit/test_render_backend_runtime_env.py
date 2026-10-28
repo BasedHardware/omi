@@ -82,6 +82,25 @@ def test_provisional_env_var_missing_is_omitted(monkeypatch):
     assert rendered == 'MEMORY_MODE=canonical'
 
 
+def test_prod_cloud_run_deploys_never_write_the_ramp_owned_batch_percent(monkeypatch):
+    """David-approved (lead 9d8819): a prod deploy must not re-assert BATCH_PIPELINE_PERCENT=0 over the ramp
+    controller's serving value (FC-deploy-literal-reverts-operator-value). With the input unset the key is absent from
+    the deploy-cloudrun env (env merge keeps the live value); dev still renders an explicit 0."""
+    monkeypatch.delenv('BATCH_PIPELINE_PERCENT_DEPLOY_OVERRIDE', raising=False)
+    environments = _MANIFEST['environments']
+
+    def render(stage, service):
+        entry = environments[stage]['cloud_run']['services'][service]['env']['BATCH_PIPELINE_PERCENT']
+        return _MODULE['_render_env_vars']({'BATCH_PIPELINE_PERCENT': entry})
+
+    for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
+        assert render('prod', service) == '', service
+        assert render('dev', service) == 'BATCH_PIPELINE_PERCENT=0', service
+    # an explicit deploy input is still honoured (e.g. a deliberate operator re-pin)
+    monkeypatch.setenv('BATCH_PIPELINE_PERCENT_DEPLOY_OVERRIDE', '5')
+    assert render('prod', 'backend') == 'BATCH_PIPELINE_PERCENT=5'
+
+
 def test_provisional_env_var_present_is_rendered(monkeypatch):
     monkeypatch.setenv('OMI_LLM_GATEWAY_URL', 'http://10.0.0.1')
     rendered = _MODULE['_render_env_vars'](

@@ -153,6 +153,32 @@ def test_current_tree_mirrors_prod():
     assert staging_check.staging_diff(ROOT) == []
 
 
+def test_unset_optional_deploy_input_is_omitted_in_both_rendered_environments(tmp_path):
+    root = _copy_tree(tmp_path)
+    path = root / 'backend/deploy/runtime_env/_base.yaml'
+    doc = yaml.safe_load(path.read_text())
+    env = doc['environment_shared']['cloud_run']['services']['backend']['env']
+    env['SYNTHETIC_OPTIONAL_DEPLOY_INPUT'] = {
+        'env_var': 'SYNTHETIC_OPTIONAL_DEPLOY_INPUT_SOURCE',
+        'provisional': True,
+        'category': 'rollout',
+    }
+    path.write_text(yaml.safe_dump(doc, sort_keys=False))
+    assert staging_check.staging_diff(root) == []
+
+
+def test_optional_input_handling_retains_literal_defaults_and_required_inputs():
+    actual = staging_check._env_values(
+        {
+            'OMITTED': {'env_var': 'OPTIONAL_SOURCE', 'provisional': True},
+            'LITERAL': {'value': '0', 'env_var': 'SOURCE', 'provisional': True},
+            'FALLBACK': {'env_var': 'DEFAULTED_SOURCE', 'default': '0', 'provisional': True},
+            'REQUIRED': {'env_var': 'REQUIRED_SOURCE'},
+        }
+    )
+    assert actual == {'LITERAL': '0', 'FALLBACK': None, 'REQUIRED': None}
+
+
 def test_non_allowlisted_difference_is_reported(tmp_path):
     root = _copy_tree(tmp_path)
 
@@ -160,6 +186,14 @@ def test_non_allowlisted_difference_is_reported(tmp_path):
         doc['overlay']['cloud_run']['services']['backend']['env']['BATCH_PIPELINE_PERCENT'] = {'value': '7'}
 
     _edit_staging_overlay(root, mutate)
+    # The literal override survives the base's inherited optional env_var, so the checker must reject its drift.
+    composer = staging_check._load_composer(root)
+    staging = composer.compose_staging(
+        base_path=root / 'backend/deploy/runtime_env/_base.yaml',
+        runtime_env_dir=root / 'backend/deploy/runtime_env',
+        inputs=INPUTS,
+    )
+    assert staging['cloud_run']['services']['backend']['env']['BATCH_PIPELINE_PERCENT']['value'] == '7'
     problems = staging_check.staging_diff(root)
     assert ('backend', 'BATCH_PIPELINE_PERCENT', 'env value differs from prod') in problems or (
         'backend',

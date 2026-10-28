@@ -91,6 +91,18 @@ def _env_values(entries: dict[str, Any]) -> dict[str, str | None]:
     """Static env value per name; ``None`` for a deploy-time input (env_var) whose prod value is not in Git."""
     out: dict[str, str | None] = {}
     for name, entry in (entries or {}).items():
+        # compose_staging omits an unset provisional deploy input. It is an omission in prod's rendered env too,
+        # not a static runtime value that staging must manufacture. Explicit staging literals still show up below
+        # as an extra key and fail comparison; literal defaults and required dynamic inputs retain their checks.
+        if (
+            isinstance(entry, dict)
+            and entry.get('provisional') is True
+            and isinstance(entry.get('env_var'), str)
+            and entry['env_var']
+            and 'value' not in entry
+            and entry.get('default') is None
+        ):
+            continue
         if isinstance(entry, dict) and 'value' in entry:
             out[name] = str(entry['value'])
         else:

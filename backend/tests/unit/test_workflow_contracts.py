@@ -1982,6 +1982,62 @@ _LISTEN_SUBSTITUTIONS = {
 }
 
 
+_ADMIT_GIT_STUB = """#!/bin/bash
+case "$*" in
+  "rev-parse HEAD") echo "$STUB_HEAD" ;;
+  "rev-parse --short=7 "*) echo "${3:0:7}" ;;
+  "rev-parse origin/main") echo "$STUB_HEAD" ;;
+  fetch*|"merge-base --is-ancestor "*) exit 0 ;;
+  *) echo "unexpected git $*" >&2; exit 97 ;;
+esac
+"""
+
+
+def test_listen_admit_step_enforces_the_expected_source_before_any_mutation(tmp_path):
+    """David-approved 2026-10-28: a queued prod listen run checks out whatever main is when it starts. With
+    expected_source_sha set, the admit step must refuse any other checkout (or workflow commit) before anything is
+    written; blank keeps today's behaviour."""
+    document = yaml.safe_load(
+        (BACKEND_DIR.parent / '.github/workflows/gcp_backend_listen_helm.yml').read_text(encoding='utf-8')
+    )
+    trigger = document.get('on', document.get(True))  # PyYAML reads the bare `on:` key as True
+    inputs = trigger['workflow_dispatch']['inputs']
+    assert inputs['expected_source_sha']['required'] is False and inputs['expected_source_sha']['default'] == ''
+    steps = document['jobs']['helm-upgrade']['steps']
+    names = [step.get('name') for step in steps]
+    admit = names.index('Admit checked-out production source and image identity')
+    assert names[:admit] == ['Validate Environment Input', 'Checkout']  # nothing can have mutated before it
+    step = steps[admit]
+    # the input reaches the script only through env, never interpolated into it
+    assert step['env'] == {
+        'EXPECTED_SOURCE_SHA': '${{ github.event.inputs.expected_source_sha }}',
+        'WORKFLOW_SHA': '${{ github.workflow_sha }}',
+    }
+    assert 'inputs.expected_source_sha' not in step['run']
+
+    bin_dir = tmp_path / 'bin'
+    bin_dir.mkdir()
+    (bin_dir / 'git').write_text(_ADMIT_GIT_STUB, encoding='utf-8')
+    (bin_dir / 'git').chmod(0o755)
+    head, other = 'a' * 40, 'b' * 40
+    base = {'PATH': f"{bin_dir}{os.pathsep}{os.environ['PATH']}", 'STUB_HEAD': head}
+    subs = {'github.event.inputs.environment': 'prod'}
+    for name, expected, workflow, ok, message in [
+        ('blank keeps behaviour', '', other, True, None),
+        ('exact pin', head, head, True, 'Expected deployment source pinned'),
+        ('later main checked out', other, other, False, 'is not the expected'),
+        ('workflow commit differs', head, other, False, 'workflow commit'),
+        ('short sha refused', head[:12], head, False, 'full 40-hex'),
+    ]:
+        env = base | {'EXPECTED_SOURCE_SHA': expected, 'WORKFLOW_SHA': workflow}
+        proc, outputs = _run_step(step['run'], env, subs, tmp_path / name.replace(' ', '-'))
+        assert (proc.returncode == 0) is ok, (name, proc.stderr)
+        if ok:
+            assert outputs['checked_out_sha'] == head, name
+        if message:
+            assert message in (proc.stdout + proc.stderr), name
+
+
 def test_listen_deploy_tag_resolution_executes_against_stubbed_tools(tmp_path):
     step = _workflow_run_step('gcp_backend_listen_helm.yml', 'Resolve backend-listen image tag')
     run = step['run']
