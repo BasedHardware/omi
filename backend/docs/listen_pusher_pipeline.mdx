@@ -1486,13 +1486,42 @@ removes it from its group first. `POST
 /v1/conversations/{id}/capture-group/separate` leaves the group stickily; a
 pair dissolves when one member leaves.
 
-Grouping is presentation metadata only. Transcripts, summaries, discard state
-and derived effects stay per capture. Clients render one row per group from
+Grouping is presentation metadata only. Transcripts, discard state
+and membership stay per capture. Clients render one row per group from
 the members they have loaded and keep every member reachable.
 `omi_product_event_total{event="capture_group_joined"}` counts the outcomes:
 `applied`, `none` (window match without shared speech) and `conflict`. A
 failure records `duplicate_capture_check → separate_captures` and never blocks
 finalization.
+
+**Primary notes carry the group's meeting identity** (owner meeting 2026-10-28).
+One exception to "summaries stay per capture": the primary is usually finalized
+before its group exists, and a desktop meeting member's `calendar_meeting_context`
+and approved screen frames describe the event the rendered row must summarize.
+Two seams close that gap, both on unless `CAPTURE_GROUP_PRIMARY_NOTES_REFRESH_ENABLED`
+is set off:
+
+- Summarization-time context resolution adds a `member_contexts` layer to
+  `resolve_meeting_context` (below the conversation's own stored/direct context,
+  above a Google Calendar overlap read): confirmed same-event members' stored
+  contexts merge, contributing participants the better sources missed.
+  `load_capture_group_frame_evidence` likewise joins the desktop members'
+  approved frames (≤3 members queried) into roster names, screen moments and
+  frame images, with each frame downloading under its owning member's path.
+  These run on every processing, so a user reprocess also picks them up.
+- `capture_group_notes_refresh.refresh_primary_notes` runs after the
+  duplicate-capture step in the durable finalizer (and after the inline
+  sync/REST completion path): when the primary's stored context misses a
+  participant the merged member contexts name, it regenerates the primary's
+  notes once per group revision through `ProcessingTrigger.CAPTURE_GROUP`
+  (no created-side effects, relevance keep) behind the shared
+  `processing_retry_claims` claim, idempotency key
+  `capture-group-notes:{group id}:{revision}` — a user reprocess or a live
+  writer wins the claim and the refresh skips. The entry read is
+  field-projected, so an ungrouped finalization pays one cheap snapshot; the
+  full document loads only once a gap is proven. A failed attempt marks the
+  claim failed and is not retried at the same revision. Membership, transcripts,
+  discard state and audio are untouched, and the step never fails finalization.
 
 The candidate read is bounded to 100 rows ordered by finish time; dense histories
 or delayed finalization may exceed it. Saturation and lookup/write/config failures

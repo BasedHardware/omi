@@ -246,6 +246,10 @@ from utils.conversations.meeting_context import (
     stored_meeting_context as _stored_meeting_context,
     store_meeting_context as _store_meeting_context,
 )
+from utils.conversations.capture_group_meeting_context import (
+    dispatch_primary_notes_refresh,
+    merged_member_contexts,
+)
 from utils.conversations.meeting_notes_wiring import (
     notes_agent_inputs,
     rich_notes_inputs,
@@ -2342,9 +2346,11 @@ def _enrich_meeting_context(uid: str, conversation: Any) -> None:
     failing the conversation:
       1. stored calendar-backed meeting (exact Redis mapping, else time overlap)
       2. `calendar_meeting_context` sent directly on the create request
-      3. Google Calendar event overlapping the conversation window (read-only)
-      4. stored on-device screen-derived meeting identity
-      5. conferencing-window OCR already synced to the server (legacy fallback)
+      3. `calendar_meeting_context` carried by confirmed same-event capture-group
+         members (the desktop meeting halves of this event)
+      4. Google Calendar event overlapping the conversation window (read-only)
+      5. stored on-device screen-derived meeting identity
+      6. conferencing-window OCR already synced to the server (legacy fallback)
     """
     started_at = getattr(conversation, 'started_at', None)
     finished_at = getattr(conversation, 'finished_at', None)
@@ -2399,6 +2405,7 @@ def _enrich_meeting_context(uid: str, conversation: Any) -> None:
     context = resolve_meeting_context(
         direct=_stored_meeting_context(conversation),
         stored=_stored if _stored_meeting_lookup_enabled() else None,
+        member_contexts=lambda: merged_member_contexts(uid, conversation),
         calendar=_calendar if has_window else None,
         screen=_screen if has_window else None,
         on_error=lambda source, exc: logger.error(
@@ -2548,6 +2555,7 @@ def process_conversation(
         # to finalizer.py after the fanout fence, including completed replays.
         if current and completed is not None and not defer_derived_effects and not silent_backfill:
             link_duplicate_captures(uid, completed)
+            dispatch_primary_notes_refresh(uid, completed)
 
     is_initial_creation = _is_ingress_create(conversation)
     if funded_processing.enabled(uid, 'batch'):

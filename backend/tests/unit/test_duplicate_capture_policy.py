@@ -275,3 +275,18 @@ def test_sync_processor_links_only_after_successful_completion(harness, monkeypa
         UID, 'en', conversation, trigger=processor.ProcessingTrigger.USER_REPROCESS, defer_memory_extraction=True
     )
     assert ('duplicate_capture_of' in harness.rows[path('desktop')]['external_data']) is persisted
+
+
+@pytest.mark.asyncio
+async def test_finalization_evaluates_capture_group_primary_notes_refresh(harness, monkeypatch):
+    """The durable finalizer offers the finalized row to the notes refresh step.
+
+    The refresh itself is fenced, once-per-revision and never raises (its own
+    test file); the finalizer contract is that the evaluation runs after the
+    duplicate-capture step and the finalization outcome is unchanged.
+    """
+    harness.rows.update({path('pendant'): row('pendant', 'omi'), path('desktop'): row('desktop', 'desktop', 100, 590)})
+    calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(finalizer, 'refresh_primary_notes', lambda uid, cid: calls.append((uid, cid)) or False)
+    assert await finalize('desktop') == finalizer.ConversationFinalizationDisposition.completed
+    assert calls == [(UID, 'desktop')]
