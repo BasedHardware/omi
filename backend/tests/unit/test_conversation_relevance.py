@@ -198,6 +198,7 @@ def test_stored_decision_reports_the_structuring_models_empty_title():
 
 
 def test_withheld_model_keeps_what_the_rules_cannot_settle():
+    """Free-tier desktop and local recovery models receive the nearest neighbor to resolve fragments."""
     decision = decide_relevance(
         trigger=ProcessingTrigger.CAPTURE_END,
         texts=['Coming over there in a second.'],
