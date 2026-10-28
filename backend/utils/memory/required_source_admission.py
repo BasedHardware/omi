@@ -36,7 +36,9 @@ def source_revisions(uid, item, *, db_client):
         return {}
     if not speaker_serving and not media_observing:
         return {}
-    if len(audio) > 4:
+    source_ids = {ev.conversation_id or ev.source_id for ev in audio}
+    readable_ids = {source_id for source_id in source_ids if source_id and '/' not in source_id}
+    if len(readable_ids) > 4:
         # Retain the existing speaker bound. Observational media work cannot
         # turn an over-budget source into a serving rejection.
         relevance_media_metrics.observe('memories', 'error')

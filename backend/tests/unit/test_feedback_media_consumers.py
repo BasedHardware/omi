@@ -59,7 +59,9 @@ def source(kind=None):
                 speaker_id=0,
                 speaker_id_scope='sync:fixture',
                 is_user=True,
-                speaker_label_source='manual',
+                speaker_label_source='auto',
+                speaker_identity_status='user',
+                speaker_match_source='conversation_voice',
             ),
             dict(
                 id='other',
@@ -125,12 +127,65 @@ def test_required_sources_read_each_document_once_and_cap_at_four(monkeypatch):
     revisions = admission.source_revisions(UID, item(('0', '0', '1', '2')), db_client=client)
     assert len(revisions) == len(reads) == 3
     reads.clear()
+    assert admission.source_revisions(UID, item(('0',) * 5), db_client=client) == {f'users/{UID}/conversations/0': NOW}
+    assert len(reads) == 1
+    reads.clear()
     assert admission.source_revisions(UID, item(tuple(str(i) for i in range(5))), db_client=client) is None
     assert not reads
     monkeypatch.setenv('SPEAKER_EVIDENCE_MODE', 'off')
     monkeypatch.setenv(FLAG, 'shadow')
     assert admission.source_revisions(UID, item(tuple(str(i) for i in range(5))), db_client=client) == {}
     assert not reads
+
+
+@pytest.mark.parametrize('protection', ['restored', 'manual_owner', 'photos', 'user_title'])
+@pytest.mark.parametrize('kind', ['media', 'noise'])
+def test_current_user_authority_overrides_stale_media_for_every_consumer(monkeypatch, protection, kind):
+    monkeypatch.setenv(FLAG, 'serve')
+    row = source(kind)
+    if protection == 'restored':
+        row['sync_relevance_user_kept'] = True
+    elif protection == 'manual_owner':
+        row['transcript_segments'][0]['speaker_label_source'] = 'manual'
+    elif protection == 'photos':
+        row['photos'] = [{'id': 'synthetic-photo'}]
+    else:
+        row['user_title'] = 'Synthetic user title'
+    before = deepcopy(row)
+    for consumer in ('memories', 'daily_summary', 'recap', 'action_items'):
+        assert not media_consumers.is_excluded(UID, row, consumer=consumer)
+    client, reads = client_for(monkeypatch, {'source': row})
+    assert admission.source_revisions(UID, item(), db_client=client) is not None
+    assert len(reads) == 1 and row == before
+
+
+def test_manual_media_protection_keeps_the_existing_scoped_duration_floor(monkeypatch):
+    monkeypatch.setenv(FLAG, 'serve')
+    row = source('media')
+    owner = row['transcript_segments'][0]
+    owner['speaker_label_source'] = 'manual'
+    owner['end'] = 1
+    assert media_consumers.is_excluded(UID, row, consumer='memories')
+    # A sibling of the manual excerpt is still not owner speech.
+    row['transcript_segments'].append({**owner, 'id': 'sibling', 'speaker_label_source': 'carried', 'end': 600})
+    assert media_consumers.is_excluded(UID, row, consumer='memories')
+    owner['end'] = 6
+    assert not media_consumers.is_excluded(UID, row, consumer='memories')
+
+
+@pytest.mark.parametrize('unscoped', [False, True])
+def test_uncertain_manual_owner_anchor_protects_without_promoting_identity(monkeypatch, unscoped):
+    monkeypatch.setenv(FLAG, 'serve')
+    row = source('media')
+    owner = row['transcript_segments'][0]
+    owner['speaker_label_source'] = 'manual'
+    if unscoped:
+        owner.pop('speaker_id')
+    else:
+        other = row['transcript_segments'][1]
+        other.update(is_user=True, speaker_label_source='manual')
+    assert all(role.role == 'unknown' for role in owner_attribution.speaker_role_map(row['transcript_segments']).roles)
+    assert not media_consumers.is_excluded(UID, row, consumer='memories')
 
 
 @pytest.mark.parametrize('media_mode', ['off', 'shadow', 'serve'])
