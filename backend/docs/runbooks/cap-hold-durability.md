@@ -99,11 +99,17 @@ listing times; it does not move authorized audio beyond the cutoff. A source
 created after cutoff remains excluded. Waiting-choice users are never processed.
 
 Each of three independent discovery streams (choices, staging/sealing, cleanup)
-reads at most five rows per sweep, ordered by full document name with a durable
-keyset cursor. Each wraps on a short/empty page. The cursor advances before work,
+reads a bounded page per sweep, ordered by full document name with a durable
+keyset cursor. Staging/sealing and cleanup stay at five rows; the choices page is
+`CAP_HOLD_REDRIVE_CHOICES_PAGE` (default 20, ceiling 50) while
+`CAP_HOLD_REDRIVE_PARALLEL_DRAIN_ENABLED` is on (default), and five when it is
+off — the legacy drain shape. `CAP_HOLD_REDRIVE_ITEMS_PER_OWNER` (default 1,
+ceiling 10) bounds one owner's candidates per rotation turn; turns still advance
+every visited owner equally before any peer gets another turn. Each stream wraps
+on a short/empty page. The cursor advances before work,
 so a blocked owner cannot hide later existing users. A crash can defer that page
 until the next rotation; it cannot erase intent. For N queued owners, discovery
-latency is roughly `ceil(N/5)` successful scheduler executions; blocked choices
+latency is roughly `ceil(N/choices_page)` successful scheduler executions; blocked choices
 also consume visits. A long request delays subsequent scheduler delivery.
 [Cloud Scheduler's Job.schedule contract](https://docs.cloud.google.com/scheduler/docs/reference/rpc/google.cloud.scheduler.v1#job)
 serializes regular executions of the same job: a later scheduled execution waits
@@ -123,6 +129,21 @@ no throughput or two-minute SLA is claimed under saturation. Budget expiry does
 not cancel a billable call mid-flight or clear a reservation. A killed owner can
 still wait for its 30-minute lease plus a discovery rotation. Endpoints await work;
 failed requests may be retried and never acknowledge memory-only work as done.
+
+The fleet gauge aggregation runs beside the sweep, never ahead of its discovery
+or owner work: the sweep schedules it, does its own work, then waits at most
+`CAP_HOLD_FLEET_SNAPSHOT_WAIT_SECONDS` (default 90) to publish before returning;
+a slower aggregation keeps running under its own budget and publishes late. At
+most one aggregation runs per process at a time and no more often than
+`CAP_HOLD_FLEET_SNAPSHOT_MIN_INTERVAL_SECONDS` (default 600). Each of its RPCs
+is bounded by `CAP_HOLD_FLEET_SNAPSHOT_TIMEOUT_SECONDS` (default 60; a fixed
+10 s budget failed every sweep against the multi-million-row held population
+with RetryError). `CAP_HOLD_FLEET_SNAPSHOT_ENABLED=false` stops gauge
+refresh without touching drain work. A malformed stored queue cursor (non-map,
+null/boolean/non-finite `at`, empty or non-string `id`) is logged once per
+encounter as `event=processing_backlog outcome=cursor_invalid` and rewound to
+newest — the same widening-preserving rewind `finish()` uses for skipped scope —
+instead of rebuilding a query the server rejects on every visit.
 
 ## Provider spend and uncertainty
 
