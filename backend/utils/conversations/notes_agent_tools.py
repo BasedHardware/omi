@@ -181,7 +181,7 @@ class NotesToolbox:
             self._people = await run_blocking(db_executor, load_people_documents, self.uid)
         return self._people
 
-    async def search_people(self, query: str = '', names: Optional[list[str]] = None):
+    async def search_people(self, query: str = '', names: Any = None):
         if names is not None and not lookup_efficiency_enabled():
             raise TypeError('names is unavailable')
         if names is not None and (not isinstance(names, list) or any(not isinstance(n, str) for n in names)):
@@ -194,8 +194,8 @@ class NotesToolbox:
         wanted = [words for words in wanted if words]
         found = []
         for person in people or []:
-            names = [person.get('name'), *(person.get('aliases') or [])]
-            blob = ' '.join(str(name) for name in names if isinstance(name, str)).casefold()
+            person_names = [person.get('name'), *(person.get('aliases') or [])]
+            blob = ' '.join(str(name) for name in person_names if isinstance(name, str)).casefold()
             if wanted and not any(all(word in blob for word in words) for words in wanted):
                 continue
             found.append(person_row(person))

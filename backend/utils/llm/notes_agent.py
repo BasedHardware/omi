@@ -353,7 +353,7 @@ async def run_notes_agent(
                     set(' '.join(n.split()).casefold() for n in normalized['names'] if isinstance(n, str))
                 )
             # Omitted/default values identify the same conversation-window read.
-            defaults = {'start': None, 'end': None}
+            defaults: dict[str, Any] = {'start': None, 'end': None}
             if name == 'get_screen_activity':
                 defaults['query'] = ''
                 defaults['limit'] = 25
