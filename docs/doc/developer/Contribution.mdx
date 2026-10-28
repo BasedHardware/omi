@@ -50,48 +50,71 @@ Contributors who land significant work get the **Contributor role in Discord**, 
 Good PRs are easy to review and come with evidence that the change works.
 
 - **Bug fixes** include the regression test that would have caught the bug.
-- **Classify reactive fixes.** A `fix:` commit responds to a triggering defect
-  and must declare `Failure-Class: FC-<slug> | new | none` in its PR body. A
-  `harden:` commit strengthens a boundary or contract without a triggering
-  incident; it may cite a class but needs no declaration. The validator is
-  offline and required; its `report` command is advisory and only identifies
-  classes eligible for a maintainer to mark `dormant`.
-- **Keep instance fixes compact.** An existing-class declaration replaces the
-  root-cause and durable-guard narrative. Provide that extended narrative only
-  when declaring `new`, changing a class's canonical prevention primitive or
-  owner, or making a registry-only lifecycle transition. An instance-fix PR never
-  edits registry data. To mark a class dormant, a separate registry-only PR sets
-  `status` to `dormant` with a UTC ISO-8601 `dormant_since`. When `report` flags a
-  recurrence after that timestamp, merge a separate registry-only reopen PR that
-  sets `status` to `open` and removes `dormant_since`, then classify the instance
-  fix. IDs use stable semantic lower-kebab slugs such as `FC-malformed-doc-read`;
-  use `scripts/failure-class prepare` or `explain` for the exact field and
-  relevant context.
-- **Prefer primitives to guards.** Before adding a check or ratchet, answer in
-  the PR body: "Why isn't this a shared primitive instead?" A new guard must
-  cite the real merged PR or incident it would have caught; no real instance
-  means the check does not land.
-- **Small features** can go straight to PR when they are well scoped: test the core path and the main error path, and describe any manual verification you did.
-- **Show your verification.** List the commands you ran and what they showed in the PR description. "It compiles" is not evidence — exercising the real user-facing path is.
-- **Tests that run in CI must be hermetic** — no live services, no network. Validation against a live service is welcome as extra evidence, but it can never be the only proof a PR works.
-- **CI on fork PRs** — fork PRs run the cheap checks (Hygiene, Formatting, metadata, affected backend/Python units, Static Contracts, and OpenAPI). App PRs also run `Dart Analyze & Tests` (the analyzer ratchet and regular Flutter tests), including forks without `ci:full`. `Mobile Release Eligibility` fails if selected Flutter coverage did not run and pass. Once maintainers require that status on main, app PRs cannot merge without passing Flutter coverage. Generated-file checks, iOS compile, Android compile and JVM tests, emulator acceptance, seeded journeys, slow backend guardrails, and the Windows Python ACL check still wait for full CI on fork PRs. When a contribution is ready for full review, ask a maintainer to add the `ci:full` label, then use **Re-run all jobs** on the PR's latest commit. CI reads the current labels on rerun; adding a label alone does not start new workflows or cancel an in-flight run. The label persists across new commits, which then get full CI automatically. Heavy aggregate checks name this flow when coverage is deferred.
-- **Backend hermetic gate** — every PR reports `Backend Hermetic Merge Gate`. Affected full-tier PRs run the backend E2E harness; emulator gauntlets run for their integration inputs, main, and nightly. A cheap-tier fork reports deferral instead of a green heavy-check verdict.
-- **Behavioral tests execute production behavior.** Source-string assertions are
-  static tripwires only; they do not prove lifecycle, concurrency, or integration
-  behavior.
-- **Product invariants** — if you touch paths listed on a locked invariant, name the ID (for example `INV-CHAT-1`) in the PR body.
-- **Fast local deterministic checks** — run `make preflight`. Selection includes staged, unstaged, and untracked files; commit-based checks still need a final run after committing. New deterministic diff-scoped checks belong in `.github/checks-manifest.yaml`, never directly in workflow YAML.
-- **CI budget** — when adding or changing a workflow or job, run `python3 .github/scripts/check_ci_budget.py --refresh`, then review `.github/ci-budget.yaml`. Set a p50 runtime budget, expected PR runs per day, owner, and rationale for new jobs. A wider trigger, larger matrix, runner change, or raised budget needs an explicit budget and rationale edit in the same PR. After CI diet changes merge, re-seed measured fields with `--refresh --reseed --seed-dayruns <dayruns.tsv> --seed-dayjobs <dayjobs.tsv>` and review the diff. The checked-in caps cover PR Linux and macOS runner minutes per day and internal time-to-signal. The weekly audit samples completed PR runs with `GITHUB_TOKEN`, publishes a report artifact, and updates one tracking issue on overrun or insufficient samples.
-- **PR metadata contract check** — draft the body, then run `scripts/pr-preflight --pr-body-file /path/to/draft-pr-body.md`.
-  Use `scripts/pr-preflight --suggest` when you need the paste-ready invariant section. Once the branch has a PR,
-  `scripts/pr-preflight` reads its current body automatically with `gh` (or set `OMI_PR_BODY_FILE`). Pre-push runs these
-  same contracts. When editing only the PR body, use
-  `scripts/pr-preflight --metadata-only --pr-body-file /path/to/draft-pr-body.md`.
-  This runs every applicable metadata-dependent check and reports all failures together.
-  CI uses this mode for title, body, and label edits; code updates still run the full preflight.
-  Metadata success validates the PR description and does not replace the source-code verdict.
+- **Small features** can go straight to a PR when well scoped: test the core path and the main error path.
+- **Large or ambiguous features** start as an issue so maintainers can agree on scope first.
+- **Show your verification.** List the commands you ran and what they showed. "It compiles" is not evidence; exercising the real user-facing path is.
+- **Tests in CI are hermetic**: no live services, no network. Live validation is welcome as extra evidence, never as the only proof.
+- **Name product invariants** you touch (for example `INV-CHAT-1`) in the PR body.
+- **Run `make preflight`** before pushing, then `scripts/pr-preflight --pr-body-file <draft>` to validate the PR body.
 
-### Mobile capture changes
+The repository has more specific rules for some kinds of change. Your agent or `make preflight` will point you to the relevant one; the details are below.
+
+<AccordionGroup>
+  <Accordion title="Fix classification and new checks">
+
+**Classify reactive fixes.** A `fix:` commit responds to a triggering defect
+and must declare `Failure-Class: FC-<slug> | new | none` in its PR body. A
+`harden:` commit strengthens a boundary or contract without a triggering
+incident; it may cite a class but needs no declaration. The validator is
+offline and required; its `report` command is advisory and only identifies
+classes eligible for a maintainer to mark `dormant`.
+
+**Keep instance fixes compact.** An existing-class declaration replaces the
+root-cause and durable-guard narrative. Provide that extended narrative only
+when declaring `new`, changing a class's canonical prevention primitive or
+owner, or making a registry-only lifecycle transition. An instance-fix PR never
+edits registry data. To mark a class dormant, a separate registry-only PR sets
+`status` to `dormant` with a UTC ISO-8601 `dormant_since`. When `report` flags a
+recurrence after that timestamp, merge a separate registry-only reopen PR that
+sets `status` to `open` and removes `dormant_since`, then classify the instance
+fix. IDs use stable semantic lower-kebab slugs such as `FC-malformed-doc-read`;
+use `scripts/failure-class prepare` or `explain` for the exact field and
+relevant context.
+
+**Prefer primitives to guards.** Before adding a check or ratchet, answer in
+the PR body: "Why isn't this a shared primitive instead?" A new guard must
+cite the real merged PR or incident it would have caught; no real instance
+means the check does not land.
+
+  </Accordion>
+  <Accordion title="CI on fork PRs and the backend gate">
+
+**CI on fork PRs** — fork PRs run the cheap checks (Hygiene, Formatting, metadata, affected backend/Python units, Static Contracts, and OpenAPI). App PRs also run `Dart Analyze & Tests` (the analyzer ratchet and regular Flutter tests), including forks without `ci:full`. `Mobile Release Eligibility` fails if selected Flutter coverage did not run and pass. Once maintainers require that status on main, app PRs cannot merge without passing Flutter coverage. Generated-file checks, iOS compile, Android compile and JVM tests, emulator acceptance, seeded journeys, slow backend guardrails, and the Windows Python ACL check still wait for full CI on fork PRs. When a contribution is ready for full review, ask a maintainer to add the `ci:full` label, then use **Re-run all jobs** on the PR's latest commit. CI reads the current labels on rerun; adding a label alone does not start new workflows or cancel an in-flight run. The label persists across new commits, which then get full CI automatically. Heavy aggregate checks name this flow when coverage is deferred.
+
+**Backend hermetic gate** — every PR reports `Backend Hermetic Merge Gate`. Affected full-tier PRs run the backend E2E harness; emulator gauntlets run for their integration inputs, main, and nightly. A cheap-tier fork reports deferral instead of a green heavy-check verdict.
+
+**Behavioral tests execute production behavior.** Source-string assertions are
+static tripwires only; they do not prove lifecycle, concurrency, or integration
+behavior.
+
+  </Accordion>
+  <Accordion title="Local checks, PR metadata, and CI budget">
+
+**Fast local deterministic checks** — run `make preflight`. Selection includes staged, unstaged, and untracked files; commit-based checks still need a final run after committing. New deterministic diff-scoped checks belong in `.github/checks-manifest.yaml`, never directly in workflow YAML.
+
+**PR metadata contract check** — draft the body, then run `scripts/pr-preflight --pr-body-file /path/to/draft-pr-body.md`.
+Use `scripts/pr-preflight --suggest` when you need the paste-ready invariant section. Once the branch has a PR,
+`scripts/pr-preflight` reads its current body automatically with `gh` (or set `OMI_PR_BODY_FILE`). Pre-push runs these
+same contracts. When editing only the PR body, use
+`scripts/pr-preflight --metadata-only --pr-body-file /path/to/draft-pr-body.md`.
+This runs every applicable metadata-dependent check and reports all failures together.
+CI uses this mode for title, body, and label edits; code updates still run the full preflight.
+Metadata success validates the PR description and does not replace the source-code verdict.
+
+**CI budget** — when adding or changing a workflow or job, run `python3 .github/scripts/check_ci_budget.py --refresh`, then review `.github/ci-budget.yaml`. Set a p50 runtime budget, expected PR runs per day, owner, and rationale for new jobs. A wider trigger, larger matrix, runner change, or raised budget needs an explicit budget and rationale edit in the same PR. After CI diet changes merge, re-seed measured fields with `--refresh --reseed --seed-dayruns <dayruns.tsv> --seed-dayjobs <dayjobs.tsv>` and review the diff. The checked-in caps cover PR Linux and macOS runner minutes per day and internal time-to-signal. The weekly audit samples completed PR runs with `GITHUB_TOKEN`, publishes a report artifact, and updates one tracking issue on overrun or insufficient samples.
+
+  </Accordion>
+  <Accordion title="Mobile capture and BLE changes">
 
 The [capture ownership contract](https://github.com/BasedHardware/Omi/blob/main/app/lib/services/capture/OWNERSHIP.md)
 defines constructor seams, session generations and staged recovery/foreground
@@ -105,6 +128,9 @@ For native BLE changes, distinguish a connected radio from device audio setup.
 The [device lifecycle architecture](https://github.com/BasedHardware/omi/blob/main/app/lib/services/devices/ARCHITECTURE.md)
 describes late readiness after a launch timeout and the Limitless regression path.
 
+  </Accordion>
+  <Accordion title="Released-client compatibility">
+
 Backend compatibility checks cover adopted released-client shapes in
 `contracts/client-compat/`. Preserve fields and request forms those clients use;
 new unused endpoints stay unrestricted. A failure identifies the release and
@@ -112,12 +138,18 @@ field: restore compatibility or version the endpoint, rather than editing a
 historical fixture. Replay uses synthetic records in the existing backend E2E
 suite; a successful build tag alone is not proof of store distribution.
 
+  </Accordion>
+  <Accordion title="Typed mobile analytics">
+
 For typed mobile analytics, add events and executable consumer references to
 `contracts/analytics/events.json`, then run
 `python3 scripts/check_event_registry.py --write` and commit the generated Dart
 API and tracking plan. Preserve emitted names and properties during migration.
 The raw-call check covers adopted files; new and existing unadopted files stay
 unrestricted. See `app/lib/utils/analytics/registry/REGISTRY.md` for batch tests.
+
+  </Accordion>
+</AccordionGroup>
 
 ### Contributing with an AI agent
 

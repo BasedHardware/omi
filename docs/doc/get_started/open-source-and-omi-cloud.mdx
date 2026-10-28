@@ -12,29 +12,29 @@ Everything needed to run and build on Omi lives in [BasedHardware/omi](https://g
 |-----------|-------------|
 | Mobile apps | `app/` — Flutter app for iOS and Android |
 | Backend | `backend/` — the API, processing, and MCP server |
-| Desktop app | `desktop/` — the macOS app |
+| Desktop apps | `desktop/` — the macOS app, plus community-maintained ports |
 | Firmware | `omi/firmware/` — DevKit and consumer (CV1) firmware |
 | Hardware files | schematics, Gerbers, KiCad sources, and mechanical files — see [Open Hardware Files](/doc/hardware/consumer/index) |
 | Apps platform | `plugins/` — open-source community apps |
 
 ## What Omi Cloud adds
 
-Omi operates a hosted service — the backend at `api.omi.me`, the app store, OTA firmware updates, and the infrastructure that processes conversations end to end. Free accounts include the core capture and transcription loop; paid plans add higher usage limits and features. See [omi.me pricing](https://www.omi.me/#pricing) for current plans and limits (prices stay there, not in these docs).
+Omi Cloud is the hosted service the apps use: the backend at `api.omi.me`, the app store, firmware updates, and the processing that turns audio into conversations and memories. A free account covers the core loop; paid plans add more usage and features. Current plans are on [omi.me](https://www.omi.me/#pricing).
 
-You do not need Omi Cloud to build on the platform: the Developer API, MCP server, CLI, and SDKs all work against the hosted service with your own account, and the open components above can be inspected, forked, and modified freely.
+The Developer API, MCP server, CLI, and SDKs all run against Omi Cloud with your own account. You can read, fork, and modify everything in the repository.
 
 ## Can I run it myself? Can I control my data?
 
-The repository gives you the source, and contributors run the backend and app locally every day — the [Backend Setup](/doc/developer/backend/Backend_Setup) page documents that contributor workflow. Omi Cloud is the supported way to use the product end to end; self-hosting the full service is not something the team currently offers or documents.
+The source is all here, and contributors run the backend locally for development ([Backend Setup](/doc/developer/backend/Backend_Setup)). Running your own production copy of Omi is not supported or documented.
 
-You keep control of your data either way:
+If what you want is control over where your data goes, use these instead:
 
 <CardGroup cols={2}>
   <Card title="Bring Your Own Key" icon="key" href="/doc/get_started/byok_and_custom_transcription">
-    Use your own transcription and model keys, including fully local providers
+    Use your own model keys, or run transcription on your phone or your own server
   </Card>
   <Card title="Export & Deletion" icon="shield-check" href="https://help.omi.me">
-    Export everything or delete all data from the app — see the help center
+    Export your conversations or delete your account from the app
   </Card>
 </CardGroup>
 

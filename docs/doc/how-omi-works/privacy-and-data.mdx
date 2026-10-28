@@ -8,7 +8,7 @@ Omi records conversations. That is the product, and it makes the data model wort
 
 ## What exists, and who can see it
 
-Every account holds **conversations** (transcripts and, depending on settings, audio), **memories** (extracted facts), **action items**, **goals**, and **people** (recognized speakers). All API surfaces — the app, Developer API, MCP, CLI, and apps you install — are scoped to the signed-in account. There is no cross-account read path.
+Every account holds **conversations** (transcripts and, depending on settings, audio), **memories** (extracted facts), **action items**, **goals**, and **people** (recognized speakers). Every API surface (the app, Developer API, MCP, CLI, and installed apps) is scoped to the signed-in account.
 
 Apps you install can receive the data you grant them (for example conversation webhooks or chat tools); app authors see only what flows to their endpoints.
 
@@ -20,9 +20,9 @@ Apps you install can receive the data you grant them (for example conversation w
 
 ## Your controls
 
-- **Export everything** — the app downloads a full JSON copy of your account.
-- **Delete anything** — individual conversations, or all data, from the app; deletions propagate to downstream stores.
-- **Bring your own keys** — [BYOK and custom transcription](/doc/get_started/byok_and_custom_transcription) let you route transcription and models through providers you choose, including self-hosted ones.
+- **Export** — the app exports your conversations as JSON.
+- **Delete** — delete individual conversations, or your whole account, from the app.
+- **Bring your own keys** — [BYOK and custom transcription](/doc/get_started/byok_and_custom_transcription) let you route transcription and models through providers you choose, including on-device and self-hosted transcription.
 - **Scoped API keys** — developer keys and MCP grants can be read-only and per-scope, and can be revoked at any time.
 
 ## If you build on Omi

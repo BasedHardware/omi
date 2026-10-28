@@ -73,7 +73,6 @@
             "pages": [
               "doc/developer/mcp/introduction",
               "doc/developer/mcp/setup",
-              "doc/developer/mcp/tools",
               "doc/developer/mcp/examples",
               "doc/developer/mcp/troubleshooting"
             ]
@@ -84,7 +83,6 @@
               "doc/developer/cli/introduction",
               "doc/developer/cli/install",
               "doc/developer/cli/quickstart",
-              "doc/developer/cli/commands",
               "doc/developer/cli/agents",
               "doc/developer/cli/troubleshooting"
             ]
@@ -99,7 +97,7 @@
             ]
           },
           {
-            "group": "Devices",
+            "group": "Third-party wearables",
             "pages": [
               "doc/integrations"
             ]
@@ -156,7 +154,7 @@
         ]
       },
       {
-        "tab": "How Omi Works",
+        "tab": "How Omi works",
         "icon": "sitemap",
         "groups": [
           {
