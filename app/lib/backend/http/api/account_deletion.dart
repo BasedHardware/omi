@@ -75,6 +75,9 @@ class AccountDeletionApi {
           body: jsonEncode({'erase_now': true}),
         ),
         send: send,
-        decode: (body) => _object(body)['status'] == 'ok',
+        decode: (body) {
+          final data = _object(body);
+          return data['status'] == 'ok' && data['pending_deletion'] != true;
+        },
       );
 }

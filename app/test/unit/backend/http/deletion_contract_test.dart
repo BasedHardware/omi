@@ -115,5 +115,8 @@ void main() {
     final older = AccountDeletionApi(baseUrl: 'http://fixture/', send: (_) async => http.Response('{}', 404));
     expect(await older.status(), isA<ApiFailure<AccountDeletionStatus>>());
     expect(await older.restore(), isA<ApiFailure<bool>>());
+    final stillPending = AccountDeletionApi(
+        baseUrl: 'http://fixture/', send: (_) async => http.Response('{"status":"ok","pending_deletion":true}', 200));
+    expect((await stillPending.finishDeleting() as ApiSuccess<bool>).data, isFalse);
   });
 }
