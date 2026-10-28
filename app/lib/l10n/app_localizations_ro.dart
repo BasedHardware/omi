@@ -430,6 +430,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get autoSync => 'Sincronizare automată';
 
   @override
+  String get syncHealthAlerts => 'Alerte de stare a sincronizării';
+
+  @override
+  String get syncHealthAlertsDescription => 'Avertizează-mă dacă Omi nu a sincronizat înregistrări de peste o zi';
+
+  @override
   String get autoSyncDescription => 'Sincronizează automat înregistrările offline când dispozitivul tău se conectează';
 
   @override
@@ -9088,6 +9094,14 @@ class AppLocalizationsRo extends AppLocalizations {
   String get syncCardWaitingInternet => 'Se așteaptă internetul';
 
   @override
+  String get syncStallAlertTitle => 'Omi nu se sincronizează';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Nicio înregistrare de pe Omi-ul tău nu a fost sincronizată de peste $hours ore. Deschide Omi pentru a verifica conexiunea dispozitivului.';
+  }
+
+  @override
   String syncCardNeedsAttention(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13730,6 +13744,14 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'Înregistrările sunt pauzate';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi nu se sincronizează';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Nicio înregistrare sincronizată de peste $hours ore';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'Încărcarea s-a oprit';

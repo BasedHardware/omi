@@ -20,6 +20,7 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
+import 'package:omi/services/sync_health_watchdog.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/widgets/bluetooth_guidance_listener.dart';
@@ -325,6 +326,10 @@ Future _init() async {
   );
   OnboardingSyncRuntime.initialize();
   SiriIntegration.instance.installEvents();
+  // The sync health watchdog's periodic loop: app bootstrap owns the timer
+  // (DeviceProvider only wires its evaluation callback, so tests that
+  // construct the provider directly never see a pending timer).
+  SyncHealthWatchdog.instance.startWatchdog();
 
   // TestFlight remains a distribution/telemetry signal; production-family
   // builds always use the established production backend.

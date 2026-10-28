@@ -196,6 +196,12 @@ void main() {
     expect(provider.conversations, isEmpty);
     expect(_indicator, findsNothing);
     expect(find.text('moved-to-processing'), findsOneWidget);
+
+    // A live processing row keeps the provider's periodic reconcile timer
+    // armed, and the binding rejects pending timers before addTearDown runs.
+    // End the row so the timer cancels within the test body.
+    provider.removeProcessingConversation(provider.processingConversations.single.id);
+    await tester.pump();
   });
 
   testWidgets('a successful Retry refreshes the row and clears the chip', (tester) async {

@@ -428,6 +428,12 @@ class AppLocalizationsHr extends AppLocalizations {
   String get autoSync => 'Automatska sinkronizacija';
 
   @override
+  String get syncHealthAlerts => 'Upozorenja o stanju sinkronizacije';
+
+  @override
+  String get syncHealthAlertsDescription => 'Upozori me ako Omi nije sinkronizirao snimke dulje od jednog dana';
+
+  @override
   String get autoSyncDescription => 'Automatski sinkroniziraj izvanmrežne snimke kada se uređaj poveže';
 
   @override
@@ -9075,6 +9081,14 @@ class AppLocalizationsHr extends AppLocalizations {
   String get syncCardWaitingInternet => 'Čekanje interneta';
 
   @override
+  String get syncStallAlertTitle => 'Omi se ne sinkronizira';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Snimke se nisu sinkronizirale s vašeg Omija dulje od $hours sati. Otvorite Omi da biste provjerili vezu uređaja.';
+  }
+
+  @override
   String syncCardNeedsAttention(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13708,6 +13722,14 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get activityAttentionStorageSubtitle => 'Snimke su pauzirane';
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi se ne sinkronizira';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Nijedna snimka nije sinkronizirana dulje od $hours sati';
+  }
 
   @override
   String get activityAttentionUploadStalledTitle => 'Prijenos je zastao';
