@@ -516,6 +516,22 @@ def test_sim_store_oldest_and_capacity_parity():
     }
     assert store.oldest(1, ready_only=False) is None
 
+    # Sentinel path: prefix saturated by exactly LIMIT+1 holds fails forward to oldest hold
+    store.rows.clear()
+    for n in range(OLDEST_POLICY_HOLD_SCAN_LIMIT + 1):
+        store.rows[('jobs', f'held_{n:04d}')] = {
+            'id': f'held_{n:04d}',
+            'priority': 1,
+            'merge_pending': True,
+            'last_policy_hold': {'reason': 'allowance_exhausted'},
+            'enqueued_at': float(n),
+        }
+    assert store.oldest(1, ready_only=False) == 0.0
+
+    # Exactly LIMIT holds without sentinel saturation returns None
+    del store.rows[('jobs', f'held_{OLDEST_POLICY_HOLD_SCAN_LIMIT:04d}')]
+    assert store.oldest(1, ready_only=False) is None
+
 
 def test_postgres_store_oldest_and_capacity_query_contract():
     from unittest.mock import MagicMock

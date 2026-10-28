@@ -218,7 +218,7 @@ class SimStore:
         candidates = [
             row
             for (table, _), row in self.rows.items()
-            if table == 'jobs' and row.get('priority') == priority and row.get('merge_pending')
+            if table == 'jobs' and row.get('priority') == priority and row.get('merge_pending') is True
         ]
         candidates.sort(key=lambda r: (r.get('enqueued_at', float('inf')), str(r.get('id', ''))))
         oldest_hold: float | None = None
