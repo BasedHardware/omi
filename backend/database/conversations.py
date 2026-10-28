@@ -68,7 +68,7 @@ from .firestore_read_origin import read_origin
 from .conversation_revisions import ensure_timezone_aware, firestore_revision_datetime
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from .people_stats_cache import invalidate_people_stats_cache
-from .read_boundary import parse_payload_strict
+from .read_boundary import parse_payload_strict, parse_snapshots
 from utils.other.list_budget import (
     ListReadBudget,
     ListReadBudgetExhausted,
@@ -4188,23 +4188,19 @@ def get_conversation_transcripts_by_model(uid: str, conversation_id: str):
     whisperx_ref = conversation_ref.collection('fal_whisperx')
     prerecorded_ref = conversation_ref.collection('prerecorded')
 
-    # Sort each provider's segments by start time, tolerating a legacy/partial doc missing 'start'
-    # (a bare x['start'] would KeyError and 500 the whole transcripts response).
+    # Parse each provider's segments at the read boundary so a legacy/partial doc (e.g. missing 'start' or
+    # 'is_user') is skipped instead of 500ing the whole transcripts response, then sort by start time.
     results = {
-        'deepgram': list(sorted([doc.to_dict() for doc in deepgram_ref.stream()], key=lambda x: x.get('start', 0))),
-        'soniox': list(sorted([doc.to_dict() for doc in soniox_ref.stream()], key=lambda x: x.get('start', 0))),
-        'speechmatics': list(
-            sorted([doc.to_dict() for doc in speechmatics_ref.stream()], key=lambda x: x.get('start', 0))
-        ),
-        'whisperx': list(sorted([doc.to_dict() for doc in whisperx_ref.stream()], key=lambda x: x.get('start', 0))),
-        'prerecorded': list(
-            sorted([doc.to_dict() for doc in prerecorded_ref.stream()], key=lambda x: x.get('start', 0))
-        ),
+        'deepgram': sorted(parse_snapshots(TranscriptSegment, deepgram_ref.stream()), key=lambda s: s.start),
+        'soniox': sorted(parse_snapshots(TranscriptSegment, soniox_ref.stream()), key=lambda s: s.start),
+        'speechmatics': sorted(parse_snapshots(TranscriptSegment, speechmatics_ref.stream()), key=lambda s: s.start),
+        'whisperx': sorted(parse_snapshots(TranscriptSegment, whisperx_ref.stream()), key=lambda s: s.start),
+        'prerecorded': sorted(parse_snapshots(TranscriptSegment, prerecorded_ref.stream()), key=lambda s: s.start),
     }
     # These are separate diagnostic provider records, with no primary-capture
     # overlay anchors. Their identity projection still exposes captured text.
     return {
-        provider: [{**segment, 'original_text': segment.get('text', '')} for segment in segments]
+        provider: [segment.model_copy(update={'original_text': segment.text}) for segment in segments]
         for provider, segments in results.items()
     }
 
