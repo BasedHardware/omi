@@ -425,6 +425,7 @@ class BtDevice {
     var manufacturerName = 'Based Hardware';
     String? serialNumber;
     var t = DeviceType.omi;
+    var devName = name;
 
     try {
       Map<String, dynamic>? deviceInfo;
@@ -449,6 +450,9 @@ class BtDevice {
         hardwareRevision = deviceInfo['hardwareRevision'] ?? hardwareRevision;
         manufacturerName = deviceInfo['manufacturerName'] ?? manufacturerName;
         serialNumber = deviceInfo['serialNumber'];
+        if (deviceInfo['deviceName'] != null && deviceInfo['deviceName']!.isNotEmpty) {
+          devName = deviceInfo['deviceName']!;
+        }
       }
     } on PlatformException catch (e) {
       Logger.error('Device Disconnected while getting device info: $e');
@@ -457,6 +461,7 @@ class BtDevice {
     }
 
     return copyWith(
+      name: devName,
       modelNumber: modelNumber,
       firmwareRevision: firmwareRevision,
       hardwareRevision: hardwareRevision,
