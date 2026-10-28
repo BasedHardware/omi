@@ -8,6 +8,7 @@ import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/experiments/paywall_reask.dart';
 import 'package:omi/ui/prompts/prompt_queue.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -33,6 +34,9 @@ Future<void> queuePaywallReask(BuildContext context) async {
       canShowNow: () => context.mounted && _isFree(context.read<UsageProvider>()),
       show: _openPaywall,
     );
+  } catch (e) {
+    // A plan lookup that fails (offline, server error) just skips this re-ask; the next open retries.
+    Logger.debug('queuePaywallReask: skipped: $e');
   } finally {
     _checking = false;
   }
@@ -45,7 +49,8 @@ Future<void> _openPaywall(BuildContext context) async {
   if (!context.mounted) return;
   final plan = context.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown';
   PlatformManager.instance.analytics.paywallOpened(_source, currentPlan: plan);
-  await routeToPage(context, const UsagePage(showUpgradeDialog: true, paywallSource: _source, forceNativePaywall: true));
+  await routeToPage(
+      context, const UsagePage(showUpgradeDialog: true, paywallSource: _source, forceNativePaywall: true));
 }
 
 const _source = 'app_open_reask';
