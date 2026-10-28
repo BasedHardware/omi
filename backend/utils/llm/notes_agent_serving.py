@@ -15,7 +15,7 @@ from typing import Any, Mapping, Optional, Sequence
 from prometheus_client import Counter as PromCounter
 
 from utils.byok import has_byok_keys
-from utils.conversations.notes_agent_tools import NotesToolbox, build_packet, owner_profile
+from utils.conversations.notes_agent_tools import NotesToolbox, build_packet, owner_profile, prefetched_results
 from utils.llm.meeting_notes_rich_prompts import NotesFrameImage
 from utils.llm.notes_agent import langchain_complete, record_decision, record_run, run_notes_agent
 from config.refactor_modes import serving_for
@@ -24,7 +24,7 @@ from utils.llm.notes_identity import notes_identity
 from utils.llm.notes_agent_policy import plan_notes_agent
 from utils.llm.notes_lengths import length_guide
 from utils.llm.notes_agent_prompt import (
-    PROMPT_VERSION,
+    version_for_run,
     cache_key_material,
     conversation_seed,
     owner_message,
@@ -133,6 +133,7 @@ def agentic_notes_payload(
             owner_profile=owner_profile(uid),
             explicit_cache=explicit_cache,
         )
+        people_cache: dict[str, Any] = {}
         packet, seen = build_packet(
             uid=uid,
             conversation_id=prefix.conversation_id,
@@ -150,6 +151,8 @@ def agentic_notes_payload(
             background=kwargs.get('meeting_context'),
             frames=frames,
             capture_sources=tuple(kwargs.get('capture_sources') or ()),
+            capture_evidence=capture_evidence,
+            people_cache=people_cache,
         )
         packet = select_notes_packet(
             packet, prefix=prefix, uid=uid, capture_evidence=capture_evidence, words=words, inputs=kwargs
@@ -165,10 +168,11 @@ def agentic_notes_payload(
             frames=tuple(frames),
             seen_conversations=set(seen),
             identity=identity,
+            _people=people_cache.get('people'),
         )
         # Per-user routing key over the stable bytes only; the gateway scopes it to the owner again.
         cache_key = (
-            prefix_cache_key(PROMPT_VERSION, cache_key_material(owner), owner_uid=uid) if explicit_cache else None
+            prefix_cache_key(version_for_run(), cache_key_material(owner), owner_uid=uid) if explicit_cache else None
         )
 
         async def invoke():
@@ -186,6 +190,8 @@ def agentic_notes_payload(
                     toolbox=toolbox,
                     budget=budget,
                     transcript_words=words,
+                    prefetched_evidence=packet.get('prefetched_evidence', 0),
+                    prefetched_lookups=prefetched_results(packet),
                     open_tasks=open_tasks,
                     owner_names=owner_names,
                     naming_leads=() if serving_for('NOTES_PACKET_V2_MODE', uid) else naming_leads(packet),

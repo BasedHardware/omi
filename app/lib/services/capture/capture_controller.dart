@@ -3833,10 +3833,11 @@ class CaptureController extends ChangeNotifier
 
     if (event is CaptureCommittedEvent) {
       final phone = _wal.getSyncs().phone;
-      if (phone is LocalWalSyncImpl)
+      if (phone is LocalWalSyncImpl) {
         unawaited(phone.recordCaptureCommitted(event).catchError((Object _) {
           Logger.debug('event=refactor_shadow lane=L5 check=custody_commit outcome=error');
         }));
+      }
       return;
     }
     if (event is SpeakerLabelSuggestionEvent) {
@@ -3938,7 +3939,9 @@ class CaptureController extends ChangeNotifier
     // finalizeCurrentSession first is the 30–60s dead window users hit today.
     // Add the placeholder before reset so a concurrent rebuild cannot drop it.
     final placeholderOwner = ++_processingPlaceholderOwner;
-    externalActions.addProcessingConversation(OptimisticProcessingPlaceholder.conversation());
+    externalActions.addProcessingConversation(
+      OptimisticProcessingPlaceholder.conversation(targetConversationId: _conversation?.id),
+    );
     _finalizeGate.markFinalized();
     externalActions.onLiveFinalized(); // The live episode closes; the next counts from now.
 
@@ -3980,6 +3983,7 @@ class CaptureController extends ChangeNotifier
         actions: externalActions,
         onCreated: _processConversationCreated,
         onNoConversation: _onProcessProducedNoConversation,
+        removePlaceholder: placeholderOwner == _processingPlaceholderOwner,
       );
       if (sessionStart > 0 && conversationId != null) {
         if (phoneSync is LocalWalSyncImpl) {
@@ -3988,22 +3992,18 @@ class CaptureController extends ChangeNotifier
         await phoneSync.stampConversationId(sessionStart, conversationId);
         _autoSyncSessionWals();
       }
-    }).catchError((Object error, StackTrace stack) {
-      if (confirmedProcessing && placeholderOwner == _processingPlaceholderOwner) {
-        externalActions.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
-      }
-      Logger.debug('Process Now result handling failed: ${error.runtimeType}');
-      return _reportDetachedCaptureError('capture_process_now', error, stack);
-    });
+    }).catchError((Object error, StackTrace stack) => OptimisticProcessingPlaceholder.handleFailure(
+          actions: externalActions,
+          removePlaceholder: placeholderOwner == _processingPlaceholderOwner,
+          error: error,
+          stack: stack,
+          report: (message, trace) => PlatformManager.instance.crashReporter.reportCrash(message, trace),
+        ));
   }
 
-  Future<void> _reportDetachedCaptureError(String operation, Object error, StackTrace stack) async {
-    try {
-      await PlatformManager.instance.crashReporter.reportCrash('$operation: ${error.runtimeType}', stack);
-    } catch (reporterError) {
-      Logger.debug('Detached capture error report failed: ${reporterError.runtimeType}');
-    }
-  }
+  Future<void> _reportDetachedCaptureError(String operation, Object error, StackTrace stack) =>
+      OptimisticProcessingPlaceholder.reportDetachedFailure(operation, error, stack,
+          (message, trace) => PlatformManager.instance.crashReporter.reportCrash(message, trace));
 
   /// Force-drain tail buffer and stamp all session WALs with conversation ID.
   /// Called from synchronous onMessageEventReceived — fire-and-forget async.
