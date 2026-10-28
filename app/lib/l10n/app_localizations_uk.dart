@@ -14762,4 +14762,19 @@ class AppLocalizationsUk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'Одинарне натискання';
+
+  @override
+  String get triplePress => 'Потрійне натискання';
+
+  @override
+  String get longPress => 'Довге натискання';
+
+  @override
+  String get buttonActionNone => 'Нічого';
+
+  @override
+  String get buttonLongPressPower => 'Увімк./вимк. (фіксовано)';
 }

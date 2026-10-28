@@ -14744,4 +14744,19 @@ class AppLocalizationsUr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'ایک بار دبائیں';
+
+  @override
+  String get triplePress => 'تین بار دبائیں';
+
+  @override
+  String get longPress => 'دیر تک دبائیں';
+
+  @override
+  String get buttonActionNone => 'کچھ نہ کریں';
+
+  @override
+  String get buttonLongPressPower => 'آن/آف (مقررہ)';
 }

@@ -14764,4 +14764,19 @@ class AppLocalizationsLv extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'Viena nospiešana';
+
+  @override
+  String get triplePress => 'Trīskārša nospiešana';
+
+  @override
+  String get longPress => 'Ilga nospiešana';
+
+  @override
+  String get buttonActionNone => 'Neko nedarīt';
+
+  @override
+  String get buttonLongPressPower => 'Ieslēgt/izslēgt (fiksēts)';
 }

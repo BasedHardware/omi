@@ -4470,5 +4470,10 @@
     "onTheWayDetailsForSupport": "รายละเอียดสำหรับฝ่ายสนับสนุน",
     "homeNoiseFoldHidden": "{count, plural, =1{ซ่อนคลิปสั้นไว้ 1 รายการ} other{ซ่อนคลิปสั้นไว้ {count} รายการ}}",
     "homeNoiseFoldShow": "แสดง",
-    "homeNoiseFoldHide": "{count, plural, =1{ซ่อนคลิปสั้น 1 รายการ} other{ซ่อนคลิปสั้น {count} รายการ}}"
+    "homeNoiseFoldHide": "{count, plural, =1{ซ่อนคลิปสั้น 1 รายการ} other{ซ่อนคลิปสั้น {count} รายการ}}",
+    "singlePress": "กดหนึ่งครั้ง",
+    "triplePress": "กดสามครั้ง",
+    "longPress": "กดค้าง",
+    "buttonActionNone": "ไม่ทำอะไร",
+    "buttonLongPressPower": "เปิด/ปิด (คงที่)"
 }

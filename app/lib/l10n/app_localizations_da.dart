@@ -14723,4 +14723,19 @@ class AppLocalizationsDa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'Enkelt tryk';
+
+  @override
+  String get triplePress => 'Tredobbelt tryk';
+
+  @override
+  String get longPress => 'Langt tryk';
+
+  @override
+  String get buttonActionNone => 'Ingenting';
+
+  @override
+  String get buttonLongPressPower => 'Tænd/sluk (fast)';
 }

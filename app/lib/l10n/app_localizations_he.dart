@@ -14625,4 +14625,19 @@ class AppLocalizationsHe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'לחיצה אחת';
+
+  @override
+  String get triplePress => 'שלוש לחיצות';
+
+  @override
+  String get longPress => 'לחיצה ארוכה';
+
+  @override
+  String get buttonActionNone => 'ללא פעולה';
+
+  @override
+  String get buttonLongPressPower => 'הפעלה/כיבוי (קבוע)';
 }

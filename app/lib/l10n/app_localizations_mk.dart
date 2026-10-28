@@ -14795,4 +14795,19 @@ class AppLocalizationsMk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'Еднократно притискање';
+
+  @override
+  String get triplePress => 'Трократно притискање';
+
+  @override
+  String get longPress => 'Долго притискање';
+
+  @override
+  String get buttonActionNone => 'Ништо';
+
+  @override
+  String get buttonLongPressPower => 'Вклучи/исклучи (фиксно)';
 }

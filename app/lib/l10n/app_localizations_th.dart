@@ -14659,4 +14659,19 @@ class AppLocalizationsTh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'กดหนึ่งครั้ง';
+
+  @override
+  String get triplePress => 'กดสามครั้ง';
+
+  @override
+  String get longPress => 'กดค้าง';
+
+  @override
+  String get buttonActionNone => 'ไม่ทำอะไร';
+
+  @override
+  String get buttonLongPressPower => 'เปิด/ปิด (คงที่)';
 }

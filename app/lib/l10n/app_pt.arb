@@ -4505,5 +4505,10 @@
     "onTheWayDetailsForSupport": "Detalhes para o suporte",
     "homeNoiseFoldHidden": "{count, plural, =1{1 clipe curto ocultado} other{{count} clipes curtos ocultados}}",
     "homeNoiseFoldShow": "Mostrar",
-    "homeNoiseFoldHide": "{count, plural, =1{Ocultar 1 clipe curto} other{Ocultar {count} clipes curtos}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Ocultar 1 clipe curto} other{Ocultar {count} clipes curtos}}",
+    "singlePress": "Pressão simples",
+    "triplePress": "Pressão tripla",
+    "longPress": "Pressão longa",
+    "buttonActionNone": "Não fazer nada",
+    "buttonLongPressPower": "Ligar/desligar (fixo)"
 }

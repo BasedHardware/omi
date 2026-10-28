@@ -14793,4 +14793,19 @@ class AppLocalizationsRo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'Apăsare simplă';
+
+  @override
+  String get triplePress => 'Apăsare triplă';
+
+  @override
+  String get longPress => 'Apăsare lungă';
+
+  @override
+  String get buttonActionNone => 'Nicio acțiune';
+
+  @override
+  String get buttonLongPressPower => 'Pornire/oprire (fix)';
 }

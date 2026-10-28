@@ -14504,4 +14504,19 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => '单击';
+
+  @override
+  String get triplePress => '三击';
+
+  @override
+  String get longPress => '长按';
+
+  @override
+  String get buttonActionNone => '无操作';
+
+  @override
+  String get buttonLongPressPower => '开/关机（固定）';
 }

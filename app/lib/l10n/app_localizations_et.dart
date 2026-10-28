@@ -14724,4 +14724,19 @@ class AppLocalizationsEt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'Üks vajutus';
+
+  @override
+  String get triplePress => 'Kolm vajutust';
+
+  @override
+  String get longPress => 'Pikk vajutus';
+
+  @override
+  String get buttonActionNone => 'Mitte midagi';
+
+  @override
+  String get buttonLongPressPower => 'Sisse/välja (fikseeritud)';
 }

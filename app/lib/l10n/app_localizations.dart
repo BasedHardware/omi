@@ -26012,6 +26012,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}'**
   String homeNoiseFoldHide(int count);
+
+  /// Hardware button settings row/action label
+  ///
+  /// In en, this message translates to:
+  /// **'Single Press'**
+  String get singlePress;
+
+  /// Hardware button settings row/action label
+  ///
+  /// In en, this message translates to:
+  /// **'Triple Press'**
+  String get triplePress;
+
+  /// Hardware button settings row/action label
+  ///
+  /// In en, this message translates to:
+  /// **'Long Press'**
+  String get longPress;
+
+  /// Hardware button settings row/action label
+  ///
+  /// In en, this message translates to:
+  /// **'Do Nothing'**
+  String get buttonActionNone;
+
+  /// Hardware button settings row/action label
+  ///
+  /// In en, this message translates to:
+  /// **'Turn On/Off (fixed)'**
+  String get buttonLongPressPower;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

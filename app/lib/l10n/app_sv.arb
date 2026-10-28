@@ -4470,5 +4470,10 @@
     "onTheWayDetailsForSupport": "Detaljer för support",
     "homeNoiseFoldHidden": "{count, plural, =1{1 kort klipp dolt} other{{count} korta klipp dolda}}",
     "homeNoiseFoldShow": "Visa",
-    "homeNoiseFoldHide": "{count, plural, =1{Dölj 1 kort klipp} other{Dölj {count} korta klipp}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Dölj 1 kort klipp} other{Dölj {count} korta klipp}}",
+    "singlePress": "Enkeltryck",
+    "triplePress": "Trippeltryck",
+    "longPress": "Långt tryck",
+    "buttonActionNone": "Gör ingenting",
+    "buttonLongPressPower": "Av/på (fast)"
 }

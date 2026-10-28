@@ -14735,4 +14735,19 @@ class AppLocalizationsNo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'Enkelt trykk';
+
+  @override
+  String get triplePress => 'Trippelt trykk';
+
+  @override
+  String get longPress => 'Langt trykk';
+
+  @override
+  String get buttonActionNone => 'Ingenting';
+
+  @override
+  String get buttonLongPressPower => 'Av/på (fast)';
 }

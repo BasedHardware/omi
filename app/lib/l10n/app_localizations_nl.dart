@@ -14770,4 +14770,19 @@ class AppLocalizationsNl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'Enkele druk';
+
+  @override
+  String get triplePress => 'Driedubbele druk';
+
+  @override
+  String get longPress => 'Lang drukken';
+
+  @override
+  String get buttonActionNone => 'Niets doen';
+
+  @override
+  String get buttonLongPressPower => 'Aan/uit (vast)';
 }

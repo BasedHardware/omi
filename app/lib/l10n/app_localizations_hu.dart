@@ -14790,4 +14790,19 @@ class AppLocalizationsHu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'Egyszeri lenyomás';
+
+  @override
+  String get triplePress => 'Háromszori lenyomás';
+
+  @override
+  String get longPress => 'Hosszú lenyomás';
+
+  @override
+  String get buttonActionNone => 'Semmi';
+
+  @override
+  String get buttonLongPressPower => 'Be/ki (rögzített)';
 }

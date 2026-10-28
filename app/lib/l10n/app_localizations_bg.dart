@@ -14782,4 +14782,19 @@ class AppLocalizationsBg extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'Единично натискане';
+
+  @override
+  String get triplePress => 'Тройно натискане';
+
+  @override
+  String get longPress => 'Продължително натискане';
+
+  @override
+  String get buttonActionNone => 'Нищо';
+
+  @override
+  String get buttonLongPressPower => 'Вкл./изкл. (фиксирано)';
 }

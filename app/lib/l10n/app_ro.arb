@@ -4470,5 +4470,10 @@
     "onTheWayDetailsForSupport": "Detalii pentru suport",
     "homeNoiseFoldHidden": "{count, plural, =1{1 clip scurt ascuns} other{{count} clipuri scurte ascunse}}",
     "homeNoiseFoldShow": "Afișează",
-    "homeNoiseFoldHide": "{count, plural, =1{Ascunde 1 clip scurt} other{Ascunde {count} clipuri scurte}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Ascunde 1 clip scurt} other{Ascunde {count} clipuri scurte}}",
+    "singlePress": "Apăsare simplă",
+    "triplePress": "Apăsare triplă",
+    "longPress": "Apăsare lungă",
+    "buttonActionNone": "Nicio acțiune",
+    "buttonLongPressPower": "Pornire/oprire (fix)"
 }

@@ -14727,4 +14727,19 @@ class AppLocalizationsBn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'একবার চাপ';
+
+  @override
+  String get triplePress => 'তিনবার চাপ';
+
+  @override
+  String get longPress => 'দীর্ঘ চাপ';
+
+  @override
+  String get buttonActionNone => 'কিছু না';
+
+  @override
+  String get buttonLongPressPower => 'চালু/বন্ধ (নির্দিষ্ট)';
 }

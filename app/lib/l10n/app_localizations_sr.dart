@@ -14738,4 +14738,19 @@ class AppLocalizationsSr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'Једноструки притисак';
+
+  @override
+  String get triplePress => 'Троструки притисак';
+
+  @override
+  String get longPress => 'Дуги притисак';
+
+  @override
+  String get buttonActionNone => 'Ништа';
+
+  @override
+  String get buttonLongPressPower => 'Укљ./искљ. (фиксно)';
 }

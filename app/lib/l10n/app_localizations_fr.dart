@@ -14850,4 +14850,19 @@ class AppLocalizationsFr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'Appui simple';
+
+  @override
+  String get triplePress => 'Appui triple';
+
+  @override
+  String get longPress => 'Appui long';
+
+  @override
+  String get buttonActionNone => 'Ne rien faire';
+
+  @override
+  String get buttonLongPressPower => 'Allumer/éteindre (fixe)';
 }

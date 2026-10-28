@@ -14832,4 +14832,19 @@ class AppLocalizationsTa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'ஒரு முறை அழுத்துதல்';
+
+  @override
+  String get triplePress => 'மூன்று முறை அழுத்துதல்';
+
+  @override
+  String get longPress => 'நீண்ட அழுத்தம்';
+
+  @override
+  String get buttonActionNone => 'எதுவும் செய்ய வேண்டாம்';
+
+  @override
+  String get buttonLongPressPower => 'ஆன்/ஆஃப் (நிலையானது)';
 }

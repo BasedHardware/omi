@@ -4470,5 +4470,10 @@
     "onTheWayDetailsForSupport": "Подробности за поддръжката",
     "homeNoiseFoldHidden": "{count, plural, =1{Скрит е 1 кратък запис} other{Скрити кратки записи: {count}}}",
     "homeNoiseFoldShow": "Показвай",
-    "homeNoiseFoldHide": "{count, plural, =1{Скрий 1 кратък запис} other{Скрий кратки записи: {count}}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Скрий 1 кратък запис} other{Скрий кратки записи: {count}}}",
+    "singlePress": "Единично натискане",
+    "triplePress": "Тройно натискане",
+    "longPress": "Продължително натискане",
+    "buttonActionNone": "Нищо",
+    "buttonLongPressPower": "Вкл./изкл. (фиксирано)"
 }

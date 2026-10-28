@@ -14793,4 +14793,19 @@ class AppLocalizationsTe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'ఒకసారి నొక్కడం';
+
+  @override
+  String get triplePress => 'మూడుసార్లు నొక్కడం';
+
+  @override
+  String get longPress => 'ఎక్కువసేపు నొక్కడం';
+
+  @override
+  String get buttonActionNone => 'ఏమీ చేయవద్దు';
+
+  @override
+  String get buttonLongPressPower => 'ఆన్/ఆఫ్ (స్థిరం)';
 }

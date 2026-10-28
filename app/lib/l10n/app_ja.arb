@@ -4470,5 +4470,10 @@
     "onTheWayDetailsForSupport": "サポート用の詳細",
     "homeNoiseFoldHidden": "{count, plural, =1{短いクリップ1件を非表示にしました} other{{count}件の短いクリップを非表示にしました}}",
     "homeNoiseFoldShow": "表示",
-    "homeNoiseFoldHide": "{count, plural, =1{短いクリップ1件を非表示にする} other{{count}件の短いクリップを非表示にする}}"
+    "homeNoiseFoldHide": "{count, plural, =1{短いクリップ1件を非表示にする} other{{count}件の短いクリップを非表示にする}}",
+    "singlePress": "1回押し",
+    "triplePress": "3回押し",
+    "longPress": "長押し",
+    "buttonActionNone": "何もしない",
+    "buttonLongPressPower": "電源オン/オフ（固定）"
 }

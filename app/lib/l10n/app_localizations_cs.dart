@@ -14730,4 +14730,19 @@ class AppLocalizationsCs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'Jedno stisknutí';
+
+  @override
+  String get triplePress => 'Trojité stisknutí';
+
+  @override
+  String get longPress => 'Dlouhé stisknutí';
+
+  @override
+  String get buttonActionNone => 'Nic';
+
+  @override
+  String get buttonLongPressPower => 'Zap./vyp. (pevné)';
 }

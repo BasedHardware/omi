@@ -14744,4 +14744,19 @@ class AppLocalizationsTr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'Tek basış';
+
+  @override
+  String get triplePress => 'Üç kez basış';
+
+  @override
+  String get longPress => 'Uzun basış';
+
+  @override
+  String get buttonActionNone => 'Hiçbir şey yapma';
+
+  @override
+  String get buttonLongPressPower => 'Aç/kapat (sabit)';
 }

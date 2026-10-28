@@ -14523,4 +14523,19 @@ class AppLocalizationsJa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => '1回押し';
+
+  @override
+  String get triplePress => '3回押し';
+
+  @override
+  String get longPress => '長押し';
+
+  @override
+  String get buttonActionNone => '何もしない';
+
+  @override
+  String get buttonLongPressPower => '電源オン/オフ（固定）';
 }

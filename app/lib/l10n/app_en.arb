@@ -18010,5 +18010,25 @@
                 "type": "int"
             }
         }
+    },
+    "singlePress": "Single Press",
+    "@singlePress": {
+        "description": "Hardware button settings row/action label"
+    },
+    "triplePress": "Triple Press",
+    "@triplePress": {
+        "description": "Hardware button settings row/action label"
+    },
+    "longPress": "Long Press",
+    "@longPress": {
+        "description": "Hardware button settings row/action label"
+    },
+    "buttonActionNone": "Do Nothing",
+    "@buttonActionNone": {
+        "description": "Hardware button settings row/action label"
+    },
+    "buttonLongPressPower": "Turn On/Off (fixed)",
+    "@buttonLongPressPower": {
+        "description": "Hardware button settings row/action label"
     }
 }

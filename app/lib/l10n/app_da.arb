@@ -4512,5 +4512,10 @@
     "onTheWayDetailsForSupport": "Detaljer til support",
     "homeNoiseFoldHidden": "{count, plural, =1{1 kort klip skjult} other{{count} korte klip skjult}}",
     "homeNoiseFoldShow": "Vis",
-    "homeNoiseFoldHide": "{count, plural, =1{Skjul 1 kort klip} other{Skjul {count} korte klip}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Skjul 1 kort klip} other{Skjul {count} korte klip}}",
+    "singlePress": "Enkelt tryk",
+    "triplePress": "Tredobbelt tryk",
+    "longPress": "Langt tryk",
+    "buttonActionNone": "Ingenting",
+    "buttonLongPressPower": "Tænd/sluk (fast)"
 }

@@ -11896,5 +11896,10 @@
     "onTheWayDetailsForSupport": "समर्थनासाठी तपशील",
     "homeNoiseFoldHidden": "{count, plural, =1{1 लहान क्लिप लपवले आहे} other{{count} लहान क्लिप्स लपवली आहेत}}",
     "homeNoiseFoldShow": "दाखवा",
-    "homeNoiseFoldHide": "{count, plural, =1{1 लहान क्लिप लपवा} other{{count} लहान क्लिप्स लपवा}}"
+    "homeNoiseFoldHide": "{count, plural, =1{1 लहान क्लिप लपवा} other{{count} लहान क्लिप्स लपवा}}",
+    "singlePress": "एकदा दाबा",
+    "triplePress": "तीनदा दाबा",
+    "longPress": "दीर्घ दाब",
+    "buttonActionNone": "काहीही करू नका",
+    "buttonLongPressPower": "चालू/बंद (निश्चित)"
 }

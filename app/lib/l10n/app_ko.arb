@@ -4470,5 +4470,10 @@
     "onTheWayDetailsForSupport": "고객지원용 세부 정보",
     "homeNoiseFoldHidden": "{count, plural, =1{짧은 클립 1개 숨겨짐} other{짧은 클립 {count}개 숨겨짐}}",
     "homeNoiseFoldShow": "표시",
-    "homeNoiseFoldHide": "{count, plural, =1{짧은 클립 1개 숨기기} other{짧은 클립 {count}개 숨기기}}"
+    "homeNoiseFoldHide": "{count, plural, =1{짧은 클립 1개 숨기기} other{짧은 클립 {count}개 숨기기}}",
+    "singlePress": "한 번 누르기",
+    "triplePress": "세 번 누르기",
+    "longPress": "길게 누르기",
+    "buttonActionNone": "동작 안 함",
+    "buttonLongPressPower": "전원 켜기/끄기(고정)"
 }

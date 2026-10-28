@@ -14716,4 +14716,19 @@ class AppLocalizationsHi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'एक बार दबाएं';
+
+  @override
+  String get triplePress => 'तीन बार दबाएं';
+
+  @override
+  String get longPress => 'देर तक दबाएं';
+
+  @override
+  String get buttonActionNone => 'कुछ न करें';
+
+  @override
+  String get buttonLongPressPower => 'चालू/बंद (निश्चित)';
 }

@@ -14759,4 +14759,19 @@ class AppLocalizationsSl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'Enojni pritisk';
+
+  @override
+  String get triplePress => 'Trojni pritisk';
+
+  @override
+  String get longPress => 'Dolg pritisk';
+
+  @override
+  String get buttonActionNone => 'Nič';
+
+  @override
+  String get buttonLongPressPower => 'Vklop/izklop (fiksno)';
 }

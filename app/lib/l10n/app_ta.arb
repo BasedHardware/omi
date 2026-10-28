@@ -11896,5 +11896,10 @@
     "onTheWayDetailsForSupport": "ஆதரவுக்கான விவரங்கள்",
     "homeNoiseFoldHidden": "{count, plural, =1{1 குறுகிய பதிவு மறைக்கப்பட்டது} other{{count} குறுகிய பதிவுகள் மறைக்கப்பட்டன}}",
     "homeNoiseFoldShow": "காட்டவும்",
-    "homeNoiseFoldHide": "{count, plural, =1{1 குறுகிய பதிவை மறைக்கவும்} other{{count} குறுகிய பதிவுகளை மறைக்கவும்}}"
+    "homeNoiseFoldHide": "{count, plural, =1{1 குறுகிய பதிவை மறைக்கவும்} other{{count} குறுகிய பதிவுகளை மறைக்கவும்}}",
+    "singlePress": "ஒரு முறை அழுத்துதல்",
+    "triplePress": "மூன்று முறை அழுத்துதல்",
+    "longPress": "நீண்ட அழுத்தம்",
+    "buttonActionNone": "எதுவும் செய்ய வேண்டாம்",
+    "buttonLongPressPower": "ஆன்/ஆஃப் (நிலையானது)"
 }

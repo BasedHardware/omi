@@ -4470,5 +4470,10 @@
     "onTheWayDetailsForSupport": "Dettagli per l'assistenza",
     "homeNoiseFoldHidden": "{count, plural, =1{1 clip breve nascosto} other{{count} clip brevi nascosti}}",
     "homeNoiseFoldShow": "Mostra",
-    "homeNoiseFoldHide": "{count, plural, =1{Nascondi 1 clip breve} other{Nascondi {count} clip brevi}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Nascondi 1 clip breve} other{Nascondi {count} clip brevi}}",
+    "singlePress": "Pressione singola",
+    "triplePress": "Pressione tripla",
+    "longPress": "Pressione prolungata",
+    "buttonActionNone": "Nessuna azione",
+    "buttonLongPressPower": "Accendi/spegni (fisso)"
 }

@@ -14754,4 +14754,19 @@ class AppLocalizationsLt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'Vienas paspaudimas';
+
+  @override
+  String get triplePress => 'Trigubas paspaudimas';
+
+  @override
+  String get longPress => 'Ilgas paspaudimas';
+
+  @override
+  String get buttonActionNone => 'Nieko nedaryti';
+
+  @override
+  String get buttonLongPressPower => 'Įjungti/išjungti (fiksuota)';
 }

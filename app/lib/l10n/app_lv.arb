@@ -4470,5 +4470,10 @@
     "onTheWayDetailsForSupport": "Informācija atbalsta komandai",
     "homeNoiseFoldHidden": "{count, plural, =1{Paslēpts 1 īss ieraksts} other{Paslēpti {count} īsi ieraksti}}",
     "homeNoiseFoldShow": "Rādīt",
-    "homeNoiseFoldHide": "{count, plural, =1{Slēpt 1 īsu ierakstu} other{Slēpt {count} īsus ierakstus}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Slēpt 1 īsu ierakstu} other{Slēpt {count} īsus ierakstus}}",
+    "singlePress": "Viena nospiešana",
+    "triplePress": "Trīskārša nospiešana",
+    "longPress": "Ilga nospiešana",
+    "buttonActionNone": "Neko nedarīt",
+    "buttonLongPressPower": "Ieslēgt/izslēgt (fiksēts)"
 }

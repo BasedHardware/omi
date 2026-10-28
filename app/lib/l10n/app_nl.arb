@@ -4470,5 +4470,10 @@
     "onTheWayDetailsForSupport": "Details voor support",
     "homeNoiseFoldHidden": "{count, plural, =1{1 korte clip verborgen} other{{count} korte clips verborgen}}",
     "homeNoiseFoldShow": "Tonen",
-    "homeNoiseFoldHide": "{count, plural, =1{Verberg 1 korte clip} other{Verberg {count} korte clips}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Verberg 1 korte clip} other{Verberg {count} korte clips}}",
+    "singlePress": "Enkele druk",
+    "triplePress": "Driedubbele druk",
+    "longPress": "Lang drukken",
+    "buttonActionNone": "Niets doen",
+    "buttonLongPressPower": "Aan/uit (vast)"
 }

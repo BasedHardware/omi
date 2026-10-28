@@ -14849,4 +14849,19 @@ class AppLocalizationsTl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'Isang Pindot';
+
+  @override
+  String get triplePress => 'Tatlong Pindot';
+
+  @override
+  String get longPress => 'Matagal na Pindot';
+
+  @override
+  String get buttonActionNone => 'Walang Gagawin';
+
+  @override
+  String get buttonLongPressPower => 'I-on/I-off (nakapirmi)';
 }

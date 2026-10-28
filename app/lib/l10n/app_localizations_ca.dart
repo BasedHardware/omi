@@ -14806,4 +14806,19 @@ class AppLocalizationsCa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'Pulsació simple';
+
+  @override
+  String get triplePress => 'Pulsació triple';
+
+  @override
+  String get longPress => 'Pulsació llarga';
+
+  @override
+  String get buttonActionNone => 'Res';
+
+  @override
+  String get buttonLongPressPower => 'Encendre/apagar (fix)';
 }

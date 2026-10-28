@@ -14828,4 +14828,19 @@ class AppLocalizationsEl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'Μονό πάτημα';
+
+  @override
+  String get triplePress => 'Τριπλό πάτημα';
+
+  @override
+  String get longPress => 'Παρατεταμένο πάτημα';
+
+  @override
+  String get buttonActionNone => 'Τίποτα';
+
+  @override
+  String get buttonLongPressPower => 'Ενεργ./απενεργ. (σταθερό)';
 }

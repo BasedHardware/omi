@@ -14741,4 +14741,19 @@ class AppLocalizationsMr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'एकदा दाबा';
+
+  @override
+  String get triplePress => 'तीनदा दाबा';
+
+  @override
+  String get longPress => 'दीर्घ दाब';
+
+  @override
+  String get buttonActionNone => 'काहीही करू नका';
+
+  @override
+  String get buttonLongPressPower => 'चालू/बंद (निश्चित)';
 }

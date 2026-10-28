@@ -4566,5 +4566,10 @@
     "onTheWayDetailsForSupport": "Részletek az ügyfélszolgálatnak",
     "homeNoiseFoldHidden": "{count, plural, =1{1 rövid felvétel elrejtve} other{{count} rövid felvétel elrejtve}}",
     "homeNoiseFoldShow": "Megjelenítés",
-    "homeNoiseFoldHide": "{count, plural, =1{1 rövid felvétel elrejtése} other{{count} rövid felvétel elrejtése}}"
+    "homeNoiseFoldHide": "{count, plural, =1{1 rövid felvétel elrejtése} other{{count} rövid felvétel elrejtése}}",
+    "singlePress": "Egyszeri lenyomás",
+    "triplePress": "Háromszori lenyomás",
+    "longPress": "Hosszú lenyomás",
+    "buttonActionNone": "Semmi",
+    "buttonLongPressPower": "Be/ki (rögzített)"
 }

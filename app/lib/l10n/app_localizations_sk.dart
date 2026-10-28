@@ -14726,4 +14726,19 @@ class AppLocalizationsSk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'Jedno stlačenie';
+
+  @override
+  String get triplePress => 'Trojité stlačenie';
+
+  @override
+  String get longPress => 'Dlhé stlačenie';
+
+  @override
+  String get buttonActionNone => 'Nič';
+
+  @override
+  String get buttonLongPressPower => 'Zap./vyp. (pevné)';
 }

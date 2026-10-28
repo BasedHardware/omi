@@ -4470,5 +4470,10 @@
     "onTheWayDetailsForSupport": "Išsami informacija palaikymo komandai",
     "homeNoiseFoldHidden": "{count, plural, =1{Paslėptas 1 trumpas įrašas} other{Paslėpta {count} trumpų įrašų}}",
     "homeNoiseFoldShow": "Rodyti",
-    "homeNoiseFoldHide": "{count, plural, =1{Slėpti 1 trumpą įrašą} other{Slėpti {count} trumpus įrašus}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Slėpti 1 trumpą įrašą} other{Slėpti {count} trumpus įrašus}}",
+    "singlePress": "Vienas paspaudimas",
+    "triplePress": "Trigubas paspaudimas",
+    "longPress": "Ilgas paspaudimas",
+    "buttonActionNone": "Nieko nedaryti",
+    "buttonLongPressPower": "Įjungti/išjungti (fiksuota)"
 }

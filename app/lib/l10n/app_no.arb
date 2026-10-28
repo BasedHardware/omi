@@ -4470,5 +4470,10 @@
     "onTheWayDetailsForSupport": "Detaljer for kundestøtte",
     "homeNoiseFoldHidden": "{count, plural, =1{1 kort klipp skjult} other{{count} korte klipp skjult}}",
     "homeNoiseFoldShow": "Vis",
-    "homeNoiseFoldHide": "{count, plural, =1{Skjul 1 kort klipp} other{Skjul {count} korte klipp}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Skjul 1 kort klipp} other{Skjul {count} korte klipp}}",
+    "singlePress": "Enkelt trykk",
+    "triplePress": "Trippelt trykk",
+    "longPress": "Langt trykk",
+    "buttonActionNone": "Ingenting",
+    "buttonLongPressPower": "Av/på (fast)"
 }

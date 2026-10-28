@@ -1046,6 +1046,8 @@ class CaptureController extends ChangeNotifier
   final LiveFinalizeGate _finalizeGate = LiveFinalizeGate();
   Timer? _voiceCommandTimeoutTimer; // 15s auto-end timer for voice questions
   static const Duration _voiceCommandAutoSubmitGrace = Duration(seconds: 2);
+  DateTime? _lastButtonActionTime; // Debounce timestamp for button operations
+  static const _buttonActionDebounce = Duration(milliseconds: 400);
 
   RecordingState recordingState = RecordingState.stop;
 
@@ -2100,94 +2102,26 @@ class CaptureController extends ChangeNotifier
       return;
     }
 
-    // double tap
-    if (buttonState == 2) {
-      Logger.debug("Double tap detected");
-
-      // Guard: ignore if already processing a button event
-      if (_isProcessingButtonEvent) {
-        Logger.debug("Double tap: already processing, ignoring");
-        return;
-      }
-
-      int doubleTapAction = SharedPreferencesUtil().doubleTapAction;
-
-      if (doubleTapAction == 1) {
-        // Pause/resume recording
-        Logger.debug("Double tap: toggling pause/mute");
-        _isProcessingButtonEvent = true;
-        if (isPaused) {
-          PlatformManager.instance.analytics.omiDoubleTap(feature: 'unmute');
-          resumeDeviceRecording().then((_) {
-            _isProcessingButtonEvent = false;
-          }).catchError((e) {
-            Logger.debug("Error resuming device recording: $e");
-            _isProcessingButtonEvent = false;
-          });
-        } else {
-          PlatformManager.instance.analytics.omiDoubleTap(feature: 'mute');
-          pauseDeviceRecording().then((_) {
-            _isProcessingButtonEvent = false;
-          }).catchError((e) {
-            Logger.debug("Error pausing device recording: $e");
-            _isProcessingButtonEvent = false;
-          });
-        }
-      } else if (doubleTapAction == 2) {
-        // Star ongoing conversation (doesn't end it)
-        Logger.debug("Double tap: marking conversation for starring");
-        if (!_starOngoingConversation) {
-          markConversationForStarring();
-          PlatformManager.instance.analytics.omiDoubleTap(feature: 'star_conversation');
-          HapticFeedback.mediumImpact();
-        } else {
-          // Toggle off if already marked
-          unmarkConversationForStarring();
-          PlatformManager.instance.analytics.omiDoubleTap(feature: 'unstar_conversation');
-          HapticFeedback.lightImpact();
-        }
-      } else {
-        // End conversation and process (default)
-        if (!_finalizeGate.allowsDoubleTap) return;
-        Logger.debug("Double tap: processing conversation");
-        PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
-        HapticFeedback.lightImpact(); // The tap's only feedback on the phone until the processing row.
-        forceProcessingCurrentConversation();
-      }
+    // Single press (buttonState == 1). During the ask-question onboarding step the
+    // tutorial needs a voice question, so force Ask Question regardless of the saved mapping.
+    if (buttonState == 1) {
+      debugPrint("Single tap detected");
+      final action = tutorial?.isOnboardingActive == true ? 3 : SharedPreferencesUtil().singlePressAction;
+      _executeButtonAction(action, deviceId, eventType: 'single_press');
       return;
     }
 
-    // Single tap (buttonState == 1) - toggle voice question mode
-    // Tap once to start, tap again to end
-    if (buttonState == 1) {
-      debugPrint("Single tap detected");
-      if (_voiceCommandSession == null) {
-        final autoSubmittedAt = _lastVoiceCommandAutoSubmitAt;
-        if (autoSubmittedAt != null && _now().difference(autoSubmittedAt) <= _voiceCommandAutoSubmitGrace) {
-          _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.autoEndGrace);
-          return;
-        }
-        // Start voice question session (new toggle mode)
-        debugPrint("Starting voice question session (toggle mode)");
-        // Cut off any in-flight voice playback from a prior reply so the
-        // new recording starts clean.
-        if (OmiVoicePlaybackService.instance.isSpeaking) {
-          OmiVoicePlaybackService.instance.interrupt(source: VoiceReplyPlaybackInterruptSource.newVoiceQuery);
-        }
-        _lastVoiceCommandAutoSubmitAt = null;
-        _voiceCommandSession = _now();
-        _voiceCommandTrigger = _VoiceCommandTrigger.toggle;
-        _commandBytes = [];
-        _voiceCommandStartedDuringOnboarding = deviceOnboardingProvider?.isOnboardingActive == true;
-        if (_voiceCommandStartedDuringOnboarding) deviceOnboardingProvider!.onVoiceQuestionStarted();
+    // Double press (buttonState == 2)
+    if (buttonState == 2) {
+      Logger.debug("Double tap detected");
+      _executeButtonAction(SharedPreferencesUtil().doublePressAction, deviceId, eventType: 'double_press');
+      return;
+    }
 
-        _startVoiceCommandTimeout(deviceId);
-        _playSpeakerHaptic(deviceId, 1);
-        unawaited(DebugLogManager.logEvent('pendant_voice_question', {'phase': 'started'}));
-      } else {
-        debugPrint("Ending voice question session (toggle mode)");
-        _endVoiceCommandSession(deviceId);
-      }
+    // Triple press (buttonState == 6, sent by firmware with this change)
+    if (buttonState == 6) {
+      Logger.debug("Triple tap detected");
+      _executeButtonAction(SharedPreferencesUtil().triplePressAction, deviceId, eventType: 'triple_press');
       return;
     }
 
@@ -2208,7 +2142,111 @@ class CaptureController extends ChangeNotifier
     if (buttonState == 5 &&
         _voiceCommandSession != null &&
         _voiceCommandTrigger == _VoiceCommandTrigger.legacyLongPress) {
+      debugPrint("Legacy: Release detected - ending voice command");
       _endVoiceCommandSession(deviceId);
+    }
+  }
+
+  void _startVoiceCommandSession(String deviceId) {
+    final autoSubmittedAt = _lastVoiceCommandAutoSubmitAt;
+    if (autoSubmittedAt != null && _now().difference(autoSubmittedAt) <= _voiceCommandAutoSubmitGrace) {
+      _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.autoEndGrace);
+      return;
+    }
+    debugPrint("Starting voice question session (toggle mode)");
+    if (OmiVoicePlaybackService.instance.isSpeaking) {
+      OmiVoicePlaybackService.instance.interrupt(
+        source: VoiceReplyPlaybackInterruptSource.newVoiceQuery,
+      );
+    }
+    _lastVoiceCommandAutoSubmitAt = null;
+    _voiceCommandSession = _now();
+    _voiceCommandTrigger = _VoiceCommandTrigger.toggle;
+    _commandBytes = [];
+    _voiceCommandStartedDuringOnboarding = deviceOnboardingProvider?.isOnboardingActive == true;
+    if (_voiceCommandStartedDuringOnboarding) deviceOnboardingProvider!.onVoiceQuestionStarted();
+    _startVoiceCommandTimeout(deviceId);
+    _playSpeakerHaptic(deviceId, 1);
+    unawaited(DebugLogManager.logEvent('pendant_voice_question', {'phase': 'started'}));
+  }
+
+  Future<void> _executeButtonAction(int action, String deviceId, {required String eventType}) async {
+    final now = _now();
+    final isEndingVoiceSession = action == 3 && _voiceCommandSession != null;
+    if (!isEndingVoiceSession &&
+        _lastButtonActionTime != null &&
+        now.difference(_lastButtonActionTime!) < _buttonActionDebounce) {
+      Logger.debug("Button action debounce active ($eventType), ignoring event");
+      return;
+    }
+    _lastButtonActionTime = now;
+
+    if (_isProcessingButtonEvent) {
+      Logger.debug("Button action: already processing another action, ignoring $eventType");
+      return;
+    }
+
+    _isProcessingButtonEvent = true;
+    Logger.debug("Executing button action $action for event: $eventType");
+
+    try {
+      switch (action) {
+        case 0:
+          // End conversation and process
+          if (!_finalizeGate.allowsDoubleTap) break;
+          Logger.debug("Button action: processing conversation");
+          HapticFeedback.lightImpact(); // The tap's only feedback on the phone until the processing row.
+          PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
+          await forceProcessingCurrentConversation().timeout(
+            const Duration(seconds: 5),
+            onTimeout: () => Logger.debug("forceProcessingCurrentConversation timed out"),
+          );
+          break;
+        case 1:
+          // Pause/resume recording (Mute/Unmute)
+          Logger.debug("Button action: toggling pause/mute");
+          final isMuting = !isPaused;
+          PlatformManager.instance.analytics.omiDoubleTap(feature: isMuting ? 'mute' : 'unmute');
+          final toggleFuture = isMuting ? pauseDeviceRecording() : resumeDeviceRecording();
+          await toggleFuture.timeout(
+            const Duration(seconds: 3),
+            onTimeout: () => Logger.debug("recording toggle timed out"),
+          );
+          break;
+        case 2:
+          // Star ongoing conversation (doesn't end it)
+          Logger.debug("Button action: marking conversation for starring");
+          if (!_starOngoingConversation) {
+            markConversationForStarring();
+            PlatformManager.instance.analytics.omiDoubleTap(feature: 'star_conversation');
+            HapticFeedback.lightImpact();
+          } else {
+            unmarkConversationForStarring();
+            PlatformManager.instance.analytics.omiDoubleTap(feature: 'unstar_conversation');
+            HapticFeedback.lightImpact();
+          }
+          break;
+        case 3:
+          // Ask Question (Toggle voice question mode)
+          Logger.debug("Button action: toggle voice question session");
+          if (_voiceCommandSession == null) {
+            _startVoiceCommandSession(deviceId);
+          } else {
+            _endVoiceCommandSession(deviceId);
+          }
+          break;
+        case 4:
+          // None (Do nothing)
+          Logger.debug("Button action: none / disabled");
+          break;
+        default:
+          Logger.debug("Button action: unknown action $action, doing nothing");
+          break;
+      }
+    } catch (e, stack) {
+      Logger.debug("Error executing button action $action: $e\n$stack");
+    } finally {
+      _isProcessingButtonEvent = false;
     }
   }
 

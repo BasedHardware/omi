@@ -14726,4 +14726,19 @@ class AppLocalizationsFa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'یک‌بار فشار';
+
+  @override
+  String get triplePress => 'سه‌بار فشار';
+
+  @override
+  String get longPress => 'فشار طولانی';
+
+  @override
+  String get buttonActionNone => 'هیچ کاری';
+
+  @override
+  String get buttonLongPressPower => 'روشن/خاموش (ثابت)';
 }

@@ -4470,5 +4470,10 @@
     "onTheWayDetailsForSupport": "Butiran untuk sokongan",
     "homeNoiseFoldHidden": "{count, plural, =1{1 klip pendek disembunyikan} other{{count} klip pendek disembunyikan}}",
     "homeNoiseFoldShow": "Tunjukkan",
-    "homeNoiseFoldHide": "{count, plural, =1{Sembunyikan 1 klip pendek} other{Sembunyikan {count} klip pendek}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Sembunyikan 1 klip pendek} other{Sembunyikan {count} klip pendek}}",
+    "singlePress": "Tekan Sekali",
+    "triplePress": "Tekan Tiga Kali",
+    "longPress": "Tekan Lama",
+    "buttonActionNone": "Tiada Tindakan",
+    "buttonLongPressPower": "Hidup/Mati (tetap)"
 }

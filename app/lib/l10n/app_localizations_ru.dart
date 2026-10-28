@@ -14779,4 +14779,19 @@ class AppLocalizationsRu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'Одиночное нажатие';
+
+  @override
+  String get triplePress => 'Тройное нажатие';
+
+  @override
+  String get longPress => 'Долгое нажатие';
+
+  @override
+  String get buttonActionNone => 'Ничего';
+
+  @override
+  String get buttonLongPressPower => 'Вкл./выкл. (фиксировано)';
 }

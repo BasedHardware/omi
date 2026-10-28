@@ -14740,4 +14740,19 @@ class AppLocalizationsSv extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'Enkeltryck';
+
+  @override
+  String get triplePress => 'Trippeltryck';
+
+  @override
+  String get longPress => 'Långt tryck';
+
+  @override
+  String get buttonActionNone => 'Gör ingenting';
+
+  @override
+  String get buttonLongPressPower => 'Av/på (fast)';
 }

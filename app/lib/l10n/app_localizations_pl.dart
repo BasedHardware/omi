@@ -14774,4 +14774,19 @@ class AppLocalizationsPl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'Pojedyncze naciśnięcie';
+
+  @override
+  String get triplePress => 'Potrójne naciśnięcie';
+
+  @override
+  String get longPress => 'Długie naciśnięcie';
+
+  @override
+  String get buttonActionNone => 'Nic nie rób';
+
+  @override
+  String get buttonLongPressPower => 'Wł./wył. (stałe)';
 }

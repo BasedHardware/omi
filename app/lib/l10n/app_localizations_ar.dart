@@ -14648,4 +14648,19 @@ class AppLocalizationsAr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'ضغطة واحدة';
+
+  @override
+  String get triplePress => 'ثلاث ضغطات';
+
+  @override
+  String get longPress => 'ضغطة مطولة';
+
+  @override
+  String get buttonActionNone => 'لا شيء';
+
+  @override
+  String get buttonLongPressPower => 'تشغيل/إيقاف (ثابت)';
 }

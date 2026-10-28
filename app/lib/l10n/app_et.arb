@@ -4470,5 +4470,10 @@
     "onTheWayDetailsForSupport": "Üksikasjad toe jaoks",
     "homeNoiseFoldHidden": "{count, plural, =1{1 lühike klipp on peidetud} other{{count} lühikest klippi on peidetud}}",
     "homeNoiseFoldShow": "Kuva",
-    "homeNoiseFoldHide": "{count, plural, =1{Peida 1 lühike klipp} other{Peida {count} lühikest klippi}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Peida 1 lühike klipp} other{Peida {count} lühikest klippi}}",
+    "singlePress": "Üks vajutus",
+    "triplePress": "Kolm vajutust",
+    "longPress": "Pikk vajutus",
+    "buttonActionNone": "Mitte midagi",
+    "buttonLongPressPower": "Sisse/välja (fikseeritud)"
 }

@@ -14780,4 +14780,19 @@ class AppLocalizationsKn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'ಒಂದು ಬಾರಿ ಒತ್ತುವಿಕೆ';
+
+  @override
+  String get triplePress => 'ಮೂರು ಬಾರಿ ಒತ್ತುವಿಕೆ';
+
+  @override
+  String get longPress => 'ದೀರ್ಘ ಒತ್ತುವಿಕೆ';
+
+  @override
+  String get buttonActionNone => 'ಏನೂ ಮಾಡಬೇಡಿ';
+
+  @override
+  String get buttonLongPressPower => 'ಆನ್/ಆಫ್ (ಸ್ಥಿರ)';
 }

@@ -4470,5 +4470,10 @@
     "onTheWayDetailsForSupport": "Details für den Support",
     "homeNoiseFoldHidden": "{count, plural, =1{1 kurzer Clip ausgeblendet} other{{count} kurze Clips ausgeblendet}}",
     "homeNoiseFoldShow": "Anzeigen",
-    "homeNoiseFoldHide": "{count, plural, =1{1 kurzen Clip ausblenden} other{{count} kurze Clips ausblenden}}"
+    "homeNoiseFoldHide": "{count, plural, =1{1 kurzen Clip ausblenden} other{{count} kurze Clips ausblenden}}",
+    "singlePress": "Einfaches Drücken",
+    "triplePress": "Dreifaches Drücken",
+    "longPress": "Langes Drücken",
+    "buttonActionNone": "Nichts",
+    "buttonLongPressPower": "Ein/Aus (fest)"
 }

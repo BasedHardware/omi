@@ -14529,4 +14529,19 @@ class AppLocalizationsKo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => '한 번 누르기';
+
+  @override
+  String get triplePress => '세 번 누르기';
+
+  @override
+  String get longPress => '길게 누르기';
+
+  @override
+  String get buttonActionNone => '동작 안 함';
+
+  @override
+  String get buttonLongPressPower => '전원 켜기/끄기(고정)';
 }

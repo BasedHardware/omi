@@ -4470,5 +4470,10 @@
     "onTheWayDetailsForSupport": "Tiedot tukea varten",
     "homeNoiseFoldHidden": "{count, plural, =1{1 lyhyt leike piilotettu} other{{count} lyhyttä leikettä piilotettu}}",
     "homeNoiseFoldShow": "Näytä",
-    "homeNoiseFoldHide": "{count, plural, =1{Piilota 1 lyhyt leike} other{Piilota {count} lyhyttä leikettä}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Piilota 1 lyhyt leike} other{Piilota {count} lyhyttä leikettä}}",
+    "singlePress": "Yksi painallus",
+    "triplePress": "Kolme painallusta",
+    "longPress": "Pitkä painallus",
+    "buttonActionNone": "Ei mitään",
+    "buttonLongPressPower": "Päälle/pois (kiinteä)"
 }

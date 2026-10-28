@@ -14765,4 +14765,19 @@ class AppLocalizationsBe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'Адзіночнае націсканне';
+
+  @override
+  String get triplePress => 'Трайное націсканне';
+
+  @override
+  String get longPress => 'Доўгае націсканне';
+
+  @override
+  String get buttonActionNone => 'Нічога';
+
+  @override
+  String get buttonLongPressPower => 'Укл./выкл. (фіксавана)';
 }

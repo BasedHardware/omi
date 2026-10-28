@@ -14736,4 +14736,19 @@ class AppLocalizationsFi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'Yksi painallus';
+
+  @override
+  String get triplePress => 'Kolme painallusta';
+
+  @override
+  String get longPress => 'Pitkä painallus';
+
+  @override
+  String get buttonActionNone => 'Ei mitään';
+
+  @override
+  String get buttonLongPressPower => 'Päälle/pois (kiinteä)';
 }

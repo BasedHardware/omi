@@ -14732,4 +14732,19 @@ class AppLocalizationsVi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'Nhấn một lần';
+
+  @override
+  String get triplePress => 'Nhấn ba lần';
+
+  @override
+  String get longPress => 'Nhấn giữ';
+
+  @override
+  String get buttonActionNone => 'Không làm gì';
+
+  @override
+  String get buttonLongPressPower => 'Bật/tắt (cố định)';
 }

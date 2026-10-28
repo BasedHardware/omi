@@ -11896,5 +11896,10 @@
     "onTheWayDetailsForSupport": "ಬೆಂಬಲಕ್ಕಾಗಿ ವಿವರಗಳು",
     "homeNoiseFoldHidden": "{count, plural, =1{1 ಸಣ್ಣ ಕ್ಲಿಪ್ ಮರೆಮಾಡಲಾಗಿದೆ} other{{count} ಸಣ್ಣ ಕ್ಲಿಪ್‌ಗಳನ್ನು ಮರೆಮಾಡಲಾಗಿದೆ}}",
     "homeNoiseFoldShow": "ತೋರಿಸಿ",
-    "homeNoiseFoldHide": "{count, plural, =1{1 ಸಣ್ಣ ಕ್ಲಿಪ್ ಮರೆಮಾಡಿ} other{{count} ಸಣ್ಣ ಕ್ಲಿಪ್‌ಗಳನ್ನು ಮರೆಮಾಡಿ}}"
+    "homeNoiseFoldHide": "{count, plural, =1{1 ಸಣ್ಣ ಕ್ಲಿಪ್ ಮರೆಮಾಡಿ} other{{count} ಸಣ್ಣ ಕ್ಲಿಪ್‌ಗಳನ್ನು ಮರೆಮಾಡಿ}}",
+    "singlePress": "ಒಂದು ಬಾರಿ ಒತ್ತುವಿಕೆ",
+    "triplePress": "ಮೂರು ಬಾರಿ ಒತ್ತುವಿಕೆ",
+    "longPress": "ದೀರ್ಘ ಒತ್ತುವಿಕೆ",
+    "buttonActionNone": "ಏನೂ ಮಾಡಬೇಡಿ",
+    "buttonLongPressPower": "ಆನ್/ಆಫ್ (ಸ್ಥಿರ)"
 }

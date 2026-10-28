@@ -14841,4 +14841,19 @@ class AppLocalizationsDe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'Einfaches Drücken';
+
+  @override
+  String get triplePress => 'Dreifaches Drücken';
+
+  @override
+  String get longPress => 'Langes Drücken';
+
+  @override
+  String get buttonActionNone => 'Nichts';
+
+  @override
+  String get buttonLongPressPower => 'Ein/Aus (fest)';
 }

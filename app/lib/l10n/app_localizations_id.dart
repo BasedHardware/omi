@@ -14745,4 +14745,19 @@ class AppLocalizationsId extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get singlePress => 'Tekan Sekali';
+
+  @override
+  String get triplePress => 'Tekan Tiga Kali';
+
+  @override
+  String get longPress => 'Tekan Lama';
+
+  @override
+  String get buttonActionNone => 'Tidak Ada';
+
+  @override
+  String get buttonLongPressPower => 'Nyala/Mati (tetap)';
 }
