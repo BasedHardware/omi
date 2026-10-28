@@ -5286,11 +5286,14 @@ export interface StorefrontCapChoice {
 }
 
 export interface StorefrontCurrent {
+  amount_minor?: number | null;
   cancel_at_period_end?: boolean;
+  currency?: string | null;
   interval?: "month" | "year" | null;
   legacy: boolean;
   legacy_note?: string | null;
   line: string;
+  line_template?: string | null;
   name: string;
   plan_id: string;
   price_id?: string | null;
@@ -5298,14 +5301,17 @@ export interface StorefrontCurrent {
 
 export interface StorefrontPrice {
   amount_minor: number;
+  confirm_line_templates?: Array<string> | null;
   confirm_lines?: Array<string> | null;
   cta_label?: string | null;
+  cta_label_template?: string | null;
   currency: string;
   headline: string;
   interval: "month" | "year";
   months_free?: number | null;
   price_id?: string | null;
   renewal_line?: string | null;
+  saving_minor?: number | null;
   subline?: string | null;
 }
 
