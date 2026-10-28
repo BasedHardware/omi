@@ -5,11 +5,14 @@ This app provides Linear integration through OAuth authentication
 and chat tools for managing issues, projects, and workflows.
 """
 import os
+import logging
 import base64
 import re
 import urllib.parse
 from datetime import datetime
 from typing import Optional, Dict, Any, List, Tuple
+
+logger = logging.getLogger(__name__)
 
 import requests
 from dotenv import load_dotenv
@@ -164,7 +167,11 @@ def linear_graphql_request(
         
         return result.get("data", {})
     except requests.RequestException as e:
-        return {"error": f"Request failed: {str(e)}"}
+        logger.exception("Linear API request transport failure: %s", e)
+        # Transport failures (DNS, sockets, timeouts) can embed host-internal
+        # details (errno strings, resolver output); return a fixed message so
+        # nothing reflects into chat tool responses or downstream error text.
+        return {"error": "Linear API request failed: could not reach the API. Please try again later."}
 
 
 def get_issue_by_identifier(uid: str, issue_identifier: str) -> Dict[str, Any]:
@@ -687,7 +694,10 @@ async def tool_create_issue(request: Request):
         )
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to create issue: {str(e)}")
+        logger.exception("tool_create_issue failed: %s", e)
+        # Never interpolate exception text into chat tool responses: unexpected
+        # errors can carry host-internal details. Fixed messages only.
+        return ChatToolResponse(error="Failed to create issue. Please try again later.")
 
 
 def coerce_limit(value: Any, default: int = 10, min_val: int = 1, max_val: int = 50) -> int:
@@ -790,7 +800,8 @@ async def tool_list_my_issues(request: Request):
         )
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to list issues: {str(e)}")
+        logger.exception("tool_list_my_issues failed: %s", e)
+        return ChatToolResponse(error="Failed to list issues. Please try again later.")
 
 
 @app.post("/tools/list_recent_issues", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -890,7 +901,8 @@ async def tool_list_recent_issues(request: Request):
         )
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to list issues: {str(e)}")
+        logger.exception("tool_list_recent_issues failed: %s", e)
+        return ChatToolResponse(error="Failed to list issues. Please try again later.")
 
 
 @app.post("/tools/update_issue_status", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -988,7 +1000,8 @@ async def tool_update_issue_status(request: Request):
         )
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to update issue: {str(e)}")
+        logger.exception("tool_update_issue_status failed: %s", e)
+        return ChatToolResponse(error="Failed to update issue. Please try again later.")
 
 
 @app.post("/tools/search_issues", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -1092,7 +1105,8 @@ async def tool_search_issues(request: Request):
         )
     
     except Exception as e:
-        return ChatToolResponse(error=f"Search failed: {str(e)}")
+        logger.exception("tool_search_issues failed: %s", e)
+        return ChatToolResponse(error="Search failed. Please try again later.")
 
 
 @app.post("/tools/get_issue", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -1169,7 +1183,8 @@ async def tool_get_issue(request: Request):
         return ChatToolResponse(result="\n".join(details))
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to get issue: {str(e)}")
+        logger.exception("tool_get_issue failed: %s", e)
+        return ChatToolResponse(error="Failed to get issue. Please try again later.")
 
 
 @app.post("/tools/add_comment", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -1240,7 +1255,8 @@ async def tool_add_comment(request: Request):
         )
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to add comment: {str(e)}")
+        logger.exception("tool_add_comment failed: %s", e)
+        return ChatToolResponse(error="Failed to add comment. Please try again later.")
 
 
 # ============================================
