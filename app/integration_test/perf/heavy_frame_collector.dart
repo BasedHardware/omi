@@ -73,23 +73,31 @@ class HeavyFrameCollector {
           {
             'build_us': frame.buildDuration.inMicroseconds,
             'raster_us': frame.rasterDuration.inMicroseconds,
-            'total_us': frame.totalSpan.inMicroseconds,
+            'total_us': frameTotalUs(frame),
             'vsync_start_us': frame.timestampInMicroseconds(FramePhase.vsyncStart),
             'build_start_us': frame.timestampInMicroseconds(FramePhase.buildStart),
           }
       ],
       'slow_frames': [
-        for (final frame in frames.where((f) => f.totalSpan.inMicroseconds > 100000).take(20))
+        for (final frame in frames.where((f) => frameTotalUs(f) > 100000).take(20))
           {
             'build_us': frame.buildDuration.inMicroseconds,
             'raster_us': frame.rasterDuration.inMicroseconds,
-            'total_us': frame.totalSpan.inMicroseconds,
+            'total_us': frameTotalUs(frame),
             'vsync_start_us': frame.timestampInMicroseconds(FramePhase.vsyncStart),
             'build_start_us': frame.timestampInMicroseconds(FramePhase.buildStart),
           }
       ],
     };
   }
+
+  /// Raster finish minus the earlier of vsync and build start. On iOS 27 (iPhone 15 Pro Max) a
+  /// frame the framework schedules outside the vsync callback can start building ~1 ms before its
+  /// recorded vsync, and [FrameTiming.totalSpan] (raster finish - vsync) then goes negative.
+  static int frameTotalUs(FrameTiming frame) =>
+      frame.timestampInMicroseconds(FramePhase.rasterFinish) -
+      math.min(
+          frame.timestampInMicroseconds(FramePhase.vsyncStart), frame.timestampInMicroseconds(FramePhase.buildStart));
 
   List<String> get windowOrder => List.unmodifiable(_openOrder);
 
@@ -107,7 +115,7 @@ class HeavyFrameCollector {
 
     final buildUs = frames.map((f) => f.buildDuration.inMicroseconds).toList()..sort();
     final rasterUs = frames.map((f) => f.rasterDuration.inMicroseconds).toList()..sort();
-    final totalUs = frames.map((f) => f.totalSpan.inMicroseconds).toList()..sort();
+    final totalUs = frames.map((f) => frameTotalUs(f)).toList()..sort();
     return {
       'scenario': name,
       'percentile_method': 'nearest-rank/v1',

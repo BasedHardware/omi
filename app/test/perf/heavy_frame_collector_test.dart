@@ -34,4 +34,21 @@ void main() {
     expect(result['worst_build_us'], 100000);
     expect(result['frame_count'], 100);
   });
+
+  test('total spans from the earlier of vsync and build start, never negative', () {
+    // iOS 27 on device: build starts ~850 us before the recorded vsync.
+    final early = FrameTiming(
+      vsyncStart: 10850,
+      buildStart: 10000,
+      buildFinish: 10394,
+      rasterStart: 10400,
+      rasterFinish: 10546,
+      rasterFinishWallTime: 10546,
+    );
+    expect(early.totalSpan.inMicroseconds, -304);
+    expect(HeavyFrameCollector.frameTotalUs(early), 546);
+    final result = HeavyFrameCollector.summarize('cold_start', [early, frame(1000)], const Duration(seconds: 1));
+    expect(result['total_p50_us'], 546);
+    expect(HeavyFrameCollector.frameTotalUs(frame(1000)), frame(1000).totalSpan.inMicroseconds);
+  });
 }
