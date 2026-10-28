@@ -48690,7 +48690,7 @@
     },
     "/v1/conversations/hidden-noise-counts": {
       "get": {
-        "description": "Count hidden noise/media without gating on MEDIA_NOISE_MODE for this uid.\n\nZero-count days are omitted. A 1000-row scan cap sets truncated=true when\nhit; days and total then represent lower bounds. Locked rows are eligible;\ndeletion/merge tombstones and duplicate links never count. No hidden rows\nreturns empty days and total=0, even when the media/noise mode is disabled.",
+        "description": "Count hidden noise/media without gating on MEDIA_NOISE_MODE for this uid.\n\nZero-count days are omitted. A 1000-row scan cap sets truncated=true when\nhit; days and total then represent lower bounds. Locked rows are eligible;\ndeletion/merge tombstones never count; Dream duplicates count because the\ninclude_discarded reveal list shows them. No hidden rows\nreturns empty days and total=0, even when the media/noise mode is disabled.",
         "operationId": "get_hidden_noise_counts_v1_conversations_hidden_noise_counts_get",
         "parameters": [
           {

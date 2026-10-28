@@ -51,7 +51,7 @@ class FakeFirestore:
         self.streams += 1
         assert self.path == ['users', 'test-uid', 'conversations']
         assert self.projection == counts_db.HIDDEN_NOISE_FIELDS
-        assert self.row_limit == 1000
+        assert self.row_limit == 1001
         matches = []
         for row in self.rows:
             for field, op, value in self.filters:
@@ -96,14 +96,14 @@ def test_home_visibility_and_hidden_noise_criteria():
         row(discarded=False),
         row(deleted=True),
         row(sync_merged_into='survivor'),
-        row(dream_duplicate_of='canonical'),
+        row(dream_duplicate_of='canonical'),  # The reveal list shows Dream duplicates.
         row(status='in_progress'),
         row(status='failed'),
         row(status=None),
         row(created_at=START - timedelta(microseconds=1)),
         row(created_at=END + timedelta(microseconds=1)),
     ]
-    assert count(rows) == {'days': [{'date': '2026-10-27', 'count': 4}], 'total': 4, 'truncated': False}
+    assert count(rows) == {'days': [{'date': '2026-10-27', 'count': 5}], 'total': 5, 'truncated': False}
 
 
 def test_timezone_midnight_and_inclusive_bounds():
@@ -119,7 +119,7 @@ def test_empty_omits_zero_days():
     assert count([]) == {'days': [], 'total': 0, 'truncated': False}
 
 
-@pytest.mark.parametrize('size,truncated', [(999, False), (1000, True), (1001, True)])
+@pytest.mark.parametrize('size,truncated', [(999, False), (1000, False), (1001, True)])
 def test_scan_cap(size, truncated):
     assert count([row()] * size) == {
         'days': [{'date': '2026-10-27', 'count': min(size, 1000)}],

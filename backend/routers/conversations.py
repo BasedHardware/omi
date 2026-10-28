@@ -1056,7 +1056,8 @@ def get_hidden_noise_counts(
 
     Zero-count days are omitted. A 1000-row scan cap sets truncated=true when
     hit; days and total then represent lower bounds. Locked rows are eligible;
-    deletion/merge tombstones and duplicate links never count. No hidden rows
+    deletion/merge tombstones never count; Dream duplicates count because the
+    include_discarded reveal list shows them. No hidden rows
     returns empty days and total=0, even when the media/noise mode is disabled.
     """
     start_date = _ensure_aware(start_date).astimezone(timezone.utc)
