@@ -199,10 +199,11 @@ def _legacy_generate_and_store_daily_summary(
     pressed on — press it at 21:30 on a quiet day and the 22:00 cron tick lost the lock and
     the day never got a recap at all.
     """
-    from utils.other.daily_recap import delivery_allowed, finish_legacy_stub
-
     if not generated_compute_allowed(uid, 'daily_summary'):
         return None, False, 'usage_budget_exhausted'
+
+    from utils.other.daily_recap import delivery_allowed, finish_legacy_stub
+
     if not try_acquire_daily_summary_lock(uid, date_str):
         return None, False, _DECLINE_LOCKED
 

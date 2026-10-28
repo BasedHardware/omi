@@ -540,7 +540,7 @@ def _process_proactive_notification(uid: str, app: App, data):
     ERROR level, which is the exact signature this guard used to emit for
     every no-notification webhook response in production.
     """
-    if not generated_compute_allowed(uid, 'app_integration') or account_deletion_blocks_user_work(uid):
+    if account_deletion_blocks_user_work(uid) or not generated_compute_allowed(uid, 'app_integration'):
         return None
     if not app.has_capability("proactive_notification"):
         logger.error(f"App {app.id} lacks proactive_notification capability {uid}")

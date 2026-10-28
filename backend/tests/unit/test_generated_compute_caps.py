@@ -263,7 +263,13 @@ def test_background_denial_skips_before_any_other_dependency(gate, monkeypatch, 
     module, _, _ = gate
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     # No database, lock, progress writer, app mutation or provider exists in this namespace.
-    function = _entrypoint(path, name, {'generated_compute_allowed': module.generated_compute_allowed})
+    namespace = {'generated_compute_allowed': module.generated_compute_allowed}
+    if path == 'utils/app_integrations.py':
+        # The deletion fence is the first admission guard in production; keep
+        # this isolated cap-denial test hermetic while allowing the cap check
+        # itself to prove it stops all later dependencies.
+        namespace['account_deletion_blocks_user_work'] = lambda _uid: False
+    function = _entrypoint(path, name, namespace)
     assert function(*args) == expected
 
 
