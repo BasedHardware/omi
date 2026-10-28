@@ -13,6 +13,28 @@ not clearance to re-ramp live traffic or the dedicated batch pipeline.
 
 ## Apply (operator only)
 
+Before **every Parakeet Helm apply**, including restoration below, inspect the
+exact live HPA's external metric names:
+
+```bash
+kubectl --context=gke_based-hardware_us-central1_prod-omi-gke \
+  -n prod-omi-backend get hpa prod-omi-parakeet \
+  -o jsonpath='{.spec.metrics[*].external.metric.name}{"\n"}'
+```
+
+If `parakeet_request_latency_p99` is present, the guard has an active rollback:
+**defer the Parakeet workflow/chart apply** until the guard's own consecutive
+clean-window recovery removes that metric. Keep its 12-replica floor and full
+rollback metrics intact; neither the four-replica apply nor eight-replica
+restoration may overwrite them. Do not clear the marker manually. Recheck at
+the Helm apply boundary, not only before the image build; if a rollback appears
+while the workflow is building, stop that run before its Helm step. If the
+operator cannot ensure this precondition, hold the apply. A floor of 12 alone
+is not the marker: the normal time-of-day schedule can also request 12.
+
+If #23863 is already deployed, skip the four-replica reduction and follow the
+restoration instructions instead, under the same active-rollback precondition.
+
 1. Deploy `backend/charts/incluster-guards/prod_omi_incluster_guards_values.yaml`
    through `gcp_incluster_guards.yml` first. Confirm the installed script
    ConfigMap's `floors.json` contains 24 fours and the guard still observes
@@ -65,6 +87,9 @@ their maxima 4 and 3 and v2 total min/max 0/10. Confirm the current UTC hour's
 scheduled floor and readiness; the schedule, rather than the static eight,
 becomes the normal floor writer again. Preserve any active safety rollback
 until its existing clean-window recovery permits the schedule to resume.
+In particular, defer the Parakeet chart restoration while
+`parakeet_request_latency_p99` is present; reapplying a minimum of eight is also
+a reduction from the guard's twelve and is not a way to clear the incident.
 
 Prior UTC-hour schedule (indexes 0–23):
 
