@@ -1469,6 +1469,7 @@ def test_background_wipe_user_data_preserves_order(monkeypatch):
             'recordings_deleted': 0,
         },
     )
+    monkeypatch.setattr(account_deletion, 'purge_user_conversation_index', lambda uid: calls.append(('typesense', uid)))
     monkeypatch.setattr(
         account_deletion.users_db,
         'delete_user_data',
@@ -1493,6 +1494,7 @@ def test_background_wipe_user_data_preserves_order(monkeypatch):
         ('twilio', 'uid1'),
         ('purge', 'uid1'),
         ('firestore', 'uid1'),
+        ('typesense', 'uid1'),
         ('memory_registry', 'uid1'),
         ('wipe_done', 'uid1'),
     ]
@@ -1538,6 +1540,7 @@ def _stub_wipe_steps_after_billing(monkeypatch):
         ),
     )
     monkeypatch.setattr(account_deletion.users_db, 'delete_user_data', MagicMock(return_value={'status': 'ok'}))
+    monkeypatch.setattr(account_deletion, 'purge_user_conversation_index', MagicMock())
     monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_completed', MagicMock(return_value=True))
     monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_failed', MagicMock())
     monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_billing_failed', MagicMock(return_value=True))
@@ -1571,9 +1574,7 @@ def test_background_wipe_proceeds_when_subscription_is_already_canceled(monkeypa
 
 
 def test_background_wipe_purges_conversation_typesense_index_after_firestore_wipe(monkeypatch):
-    """The post-wipe Typesense conversation purge is best-effort: it runs after
-    delete_user_data and can never change the wipe outcome while the Firebase
-    extension still owns production indexing."""
+    """Typesense owner purge runs after Firestore deletion and gates completion."""
     _stub_wipe_steps_after_billing(monkeypatch)
     monkeypatch.setattr(
         account_deletion.users_db,
@@ -1584,19 +1585,21 @@ def test_background_wipe_purges_conversation_typesense_index_after_firestore_wip
         account_deletion.stripe_utils, 'cancel_subscription_for_account_deletion', MagicMock(return_value=None)
     )
     monkeypatch.setattr(account_deletion.stripe_utils, 'is_subscription_terminal', MagicMock(return_value=True))
-
-    from utils.conversations import typesense_index
 
     purge = MagicMock(return_value=7)
-    with patch.object(typesense_index, 'purge_user_conversation_index', purge):
-        assert account_deletion.background_wipe_user_data('uid1') is True
+    calls = []
+    account_deletion.users_db.delete_user_data.side_effect = lambda uid: calls.append('firestore') or {'status': 'ok'}
+    purge.side_effect = lambda uid: calls.append('typesense') or 7
+    monkeypatch.setattr(account_deletion, 'purge_user_conversation_index', purge)
+    assert account_deletion.background_wipe_user_data('uid1') is True
 
     purge.assert_called_once_with('uid1')
+    assert calls == ['firestore', 'typesense']
     account_deletion.users_db.delete_user_data.assert_called_once_with('uid1')
     account_deletion.users_db.mark_user_deletion_wipe_failed.assert_not_called()
 
 
-def test_background_wipe_survives_conversation_typesense_purge_failure(monkeypatch):
+def test_background_wipe_retries_after_conversation_typesense_purge_failure(monkeypatch):
     _stub_wipe_steps_after_billing(monkeypatch)
     monkeypatch.setattr(
         account_deletion.users_db,
@@ -1608,13 +1611,14 @@ def test_background_wipe_survives_conversation_typesense_purge_failure(monkeypat
     )
     monkeypatch.setattr(account_deletion.stripe_utils, 'is_subscription_terminal', MagicMock(return_value=True))
 
-    from utils.conversations import typesense_index
-
-    with patch.object(typesense_index, 'purge_user_conversation_index', MagicMock(side_effect=Exception('down'))):
-        assert account_deletion.background_wipe_user_data('uid1') is True
+    purge = MagicMock(side_effect=Exception('down'))
+    monkeypatch.setattr(account_deletion, 'purge_user_conversation_index', purge)
+    assert account_deletion.background_wipe_user_data('uid1') is False
 
     account_deletion.users_db.delete_user_data.assert_called_once_with('uid1')
-    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_not_called()
+    purge.assert_called_once_with('uid1')
+    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
+    account_deletion.users_db.mark_user_deletion_wipe_completed.assert_not_called()
 
 
 def test_background_wipe_parks_transient_billing_failure_before_auth(monkeypatch):
@@ -2060,6 +2064,7 @@ def test_background_wipe_emits_bounded_completion_telemetry(monkeypatch):
         ),
     )
     monkeypatch.setattr(account_deletion.users_db, 'delete_user_data', MagicMock(return_value={'status': 'ok'}))
+    monkeypatch.setattr(account_deletion, 'purge_user_conversation_index', MagicMock())
     monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_completed', MagicMock())
 
     assert account_deletion.background_wipe_user_data('uid1') is True
@@ -2097,6 +2102,7 @@ def test_deletion_telemetry_never_uses_deleted_uid_as_distinct_id(monkeypatch):
         MagicMock(return_value={'required_failures': [], 'best_effort_failures': []}),
     )
     monkeypatch.setattr(account_deletion.users_db, 'delete_user_data', MagicMock(return_value={'status': 'ok'}))
+    monkeypatch.setattr(account_deletion, 'purge_user_conversation_index', MagicMock())
     monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_completed', MagicMock())
 
     deleted_uid = 'firebase-user-to-wipe'
