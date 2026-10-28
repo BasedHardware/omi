@@ -125,6 +125,9 @@ class PgSimStore(SimStore):
     def acquire_pull_claim(self, shard: str, token: str, now: float, ttl: float) -> bool:
         return self.pg.acquire_pull_claim(shard, token, now, ttl)
 
+    def ready_for_capacity(self, priority: int, now: float) -> int:
+        return self.pg.ready_for_capacity(priority, now)
+
     def control_candidate(self, priority: int, pool: str, now: float, *, worker_id: str = '', exclude=()) -> str | None:
         return self.pg.control_candidate(priority, pool, now, worker_id=worker_id, exclude=exclude)
 

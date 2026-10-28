@@ -206,14 +206,54 @@ class SimStore:
         return [segment_id for _, segment_id in candidates[: max(1, min(limit, 100))]]
 
     def oldest(self, priority: int, *, ready_only: bool = False) -> float | None:
-        values = [
-            row['enqueued_at']
+        if ready_only:
+            values = [
+                row['enqueued_at']
+                for (table, _), row in self.rows.items()
+                if table == 'jobs'
+                and row.get('priority') == priority
+                and row.get('state') == 'ready'
+            ]
+            return min(values) if values else None
+        from database.batch_pipeline_store import OLDEST_POLICY_HOLD_SCAN_LIMIT, is_allowance_policy_hold
+
+        candidates = [
+            row
             for (table, _), row in self.rows.items()
             if table == 'jobs'
             and row.get('priority') == priority
-            and (row.get('state') == 'ready' if ready_only else row.get('merge_pending'))
+            and row.get('merge_pending')
         ]
-        return min(values) if values else None
+        candidates.sort(key=lambda r: (r.get('enqueued_at', float('inf')), str(r.get('id', ''))))
+        oldest_hold: float | None = None
+        scanned = 0
+        for job in candidates:
+            scanned += 1
+            if scanned > OLDEST_POLICY_HOLD_SCAN_LIMIT:
+                break
+            if is_allowance_policy_hold(job):
+                oldest_hold = oldest_hold if oldest_hold is not None else job.get('enqueued_at')
+                continue
+            return job.get('enqueued_at')
+        if scanned > OLDEST_POLICY_HOLD_SCAN_LIMIT and oldest_hold is not None:
+            return oldest_hold
+        return None
+
+    def ready_for_capacity(self, priority: int, now: float) -> int:
+        """Count work awaiting a first/re-authorized attempt, never held legacy debt."""
+        count = 0
+        for (table, _), row in self.rows.items():
+            if (
+                table == 'jobs'
+                and row.get('priority') == priority
+                and row.get('state') == 'ready'
+                and row.get('merge_pending') is True
+                and (row.get('compute_decision') or {}).get('outcome') in ('unattempted', 'allowed')
+                and row.get('available_at') is not None
+                and row.get('available_at') <= now
+            ):
+                count += 1
+        return count
 
     def oldest_retry(self, priority: int) -> float | None:
         values = [

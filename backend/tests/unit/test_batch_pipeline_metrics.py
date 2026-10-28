@@ -447,3 +447,104 @@ def test_firestore_oldest_skips_a_decisionless_job_with_a_last_allowance_hold():
     assert oldest(Client(truncated), 'omi', 1) == 0.0
     exact = [Doc({**parked, 'enqueued_at': float(n)}) for n in range(OLDEST_POLICY_HOLD_SCAN_LIMIT)]
     assert oldest(Client(exact), 'omi', 1) is None
+
+
+def test_sim_store_oldest_and_capacity_parity():
+    from testing.pipeline_sim.store import CustomerData, SimStore
+    from database.batch_pipeline_store import OLDEST_POLICY_HOLD_SCAN_LIMIT
+
+    customer = CustomerData()
+    store = SimStore(customer)
+
+    # 1. Capacity: only unattempted or allowed merge-pending ready jobs due by now
+    store.rows[('jobs', 'j_ready_unattempted')] = {
+        'id': 'j_ready_unattempted',
+        'priority': 1,
+        'state': 'ready',
+        'merge_pending': True,
+        'compute_decision': {'outcome': 'unattempted'},
+        'available_at': 100.0,
+        'enqueued_at': 90.0,
+    }
+    store.rows[('jobs', 'j_ready_allowed')] = {
+        'id': 'j_ready_allowed',
+        'priority': 1,
+        'state': 'ready',
+        'merge_pending': True,
+        'compute_decision': {'outcome': 'allowed'},
+        'available_at': 105.0,
+        'enqueued_at': 95.0,
+    }
+    store.rows[('jobs', 'j_ready_held')] = {
+        'id': 'j_ready_held',
+        'priority': 1,
+        'state': 'ready',
+        'merge_pending': True,
+        'compute_decision': {'outcome': 'held', 'reason': 'allowance_exhausted'},
+        'available_at': 100.0,
+        'enqueued_at': 80.0,
+    }
+    store.rows[('jobs', 'j_future')] = {
+        'id': 'j_future',
+        'priority': 1,
+        'state': 'ready',
+        'merge_pending': True,
+        'compute_decision': {'outcome': 'unattempted'},
+        'available_at': 120.0,
+        'enqueued_at': 100.0,
+    }
+
+    assert store.ready_for_capacity(1, now=110.0) == 2
+    assert store.ready_for_capacity(1, now=102.0) == 1
+    assert store.ready_for_capacity(1, now=80.0) == 0
+    assert store.ready_for_capacity(0, now=110.0) == 0
+
+    # 2. Oldest: ready_only=True returns diagnostic minimum ready enqueued_at (even if held)
+    assert store.oldest(1, ready_only=True) == 80.0
+
+    # 3. Oldest: ready_only=False skips allowance holds and measures the real commitment
+    assert store.oldest(1, ready_only=False) == 90.0
+
+    # When all merge_pending jobs are allowance holds, returns None
+    store.rows.clear()
+    store.rows[('jobs', 'held1')] = {
+        'id': 'held1',
+        'priority': 1,
+        'merge_pending': True,
+        'last_policy_hold': {'reason': 'allowance_exhausted'},
+        'enqueued_at': 50.0,
+    }
+    assert store.oldest(1, ready_only=False) is None
+
+
+def test_postgres_store_oldest_and_capacity_query_contract():
+    from unittest.mock import MagicMock
+    from database.jobstore.postgres_store import PostgresStore
+    from database.batch_pipeline_store import OLDEST_POLICY_HOLD_SCAN_LIMIT
+
+    pool = MagicMock()
+    store = PostgresStore('batch_pipeline_dev', pool=pool, customer_client=MagicMock())
+
+    # Mock connection execution for ready_for_capacity
+    conn = MagicMock()
+    conn.execute.return_value.fetchone.return_value = (7,)
+    store._read_conn = MagicMock()
+    store._read_conn.return_value.__enter__.return_value = conn
+
+    count = store.ready_for_capacity(1, now=100.0)
+    assert count == 7
+    call_sql = conn.execute.call_args[0][0]
+    assert "SELECT count(*) FROM jobs" in call_sql
+    assert "AND (doc->'compute_decision'->>'outcome') IN ('unattempted', 'allowed')" in call_sql
+
+    # Mock connection execution for oldest ready_only=True
+    conn.execute.return_value.fetchone.return_value = (55.0,)
+    assert store.oldest(1, ready_only=True) == 55.0
+
+    # Mock connection execution for oldest ready_only=False (skipping hold)
+    conn.execute.return_value.fetchall.return_value = [
+        (40.0, {'compute_decision': {'outcome': 'held', 'reason': 'allowance_exhausted'}}),
+        (60.0, {'compute_decision': {'outcome': 'allowed'}}),
+    ]
+    assert store.oldest(1, ready_only=False) == 60.0
+
