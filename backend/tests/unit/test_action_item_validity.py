@@ -63,9 +63,7 @@ def test_off_cohort_and_missing_capture_context(monkeypatch):
 
 
 def test_role_map_is_not_a_blanket_object_resolution():
-    assert validity.unresolved_reference(
-        'Send it', speaker_labels=[{'speaker_role': 'primary_user', 'speaker_label': 'You'}]
-    )
-    assert validity.unresolved_reference(
-        'Call Speaker 2', speaker_labels=[{'speaker_role': 'unknown', 'speaker_label': 'Speaker 2'}]
-    )
+    # Role projection belongs to the extraction/capture prompt. Knowing who
+    # speaks does not resolve who a placeholder task is asking to call.
+    assert validity.unresolved_reference('Send it')
+    assert validity.unresolved_reference('Call Speaker 2')

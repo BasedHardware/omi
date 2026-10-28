@@ -7752,7 +7752,9 @@ The final narrow reference policy runs after `action_item_v2.select_items`.
 It considers extraction context and exact cited transcript rows; it preserves
 context-resolved references and abstains when the earlier desktop prefilter lacks
 the cited capture context. The conversation capture adapter repeats the final
-check with the existing shared role-label context before proposing Candidates.
+check with cited transcript context before proposing Candidates. Extraction and
+wake-word capture continue to consume P2's existing shared role-label context;
+the validity heuristic never infers a task's subject from the speaking voice.
 
 `ACTION_ITEM_VALIDITY_MODE` defaults to `shadow` with zero serving percent and
 empty digest allowlist. Text-free aggregate `event=action_item_validity` receipts

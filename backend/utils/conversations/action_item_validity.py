@@ -34,12 +34,12 @@ def unresolved_reference(
     *,
     context: str = '',
     source_texts: Sequence[str] = (),
-    speaker_labels: Sequence[Mapping[str, str]] = (),
 ) -> str | None:
     """Abstain when context may resolve the reference; names are never identity proof.
 
     This is a recall-protecting heuristic, not an assertion of semantic accuracy.
-    A grounded role comes from the shared capture projection, never capitalization.
+    Speaker identity stays with the shared capture projection; this policy does
+    not infer a task's subject or counterpart from the speaking voice.
     """
     text = (description or '').strip()
     placeholder = bool(_PLACEHOLDER.search(text))
@@ -49,23 +49,10 @@ def unresolved_reference(
     meaningful = {word.casefold() for word in re.findall(r'\w+', evidence)} - _GENERIC
     if meaningful:
         return None
-    # Shared role labels can corroborate a counterpart, but never supply an
-    # absent object or turn the speaking owner into the task's subject.
-    if (
-        placeholder
-        and not _DEICTIC_ONLY.fullmatch(text)
-        and any(
-            row.get('speaker_role') in {'primary_user', 'other'}
-            and row.get('speaker_label', '').casefold() not in {'you', 'user', 'unknown', ''}
-            and not _PLACEHOLDER.search(row.get('speaker_label', ''))
-            for row in speaker_labels
-        )
-    ):
-        return None
     return 'unresolved_reference'
 
 
-def select_valid_items(uid: str, items: Sequence[Any], *, transcript_segments: Sequence[Any] = (), speaker_labels=()):
+def select_valid_items(uid: str, items: Sequence[Any], *, transcript_segments: Sequence[Any] = ()) -> list[Any]:
     """Run after V2 selection. Shadow never mutates candidates or serving output."""
     if not shadow_or_serve(VALIDITY_MODE_ENV):
         return list(items)
@@ -83,7 +70,6 @@ def select_valid_items(uid: str, items: Sequence[Any], *, transcript_segments: S
             field(item, 'description'),
             context=field(item, 'context') or '',
             source_texts=[field(segments[sid], 'text') or '' for sid in ids if sid in segments],
-            speaker_labels=[row for row in speaker_labels if row.get('segment_id') in ids],
         )
         if reason:
             unresolved += 1

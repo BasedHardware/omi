@@ -41,24 +41,10 @@ def filter_extracted_items(uid: str, items: Sequence[Any], *, conversation: Any 
             logger.info('event=action_item_extraction_dropped reason=%s count=%d', reason, count)
     from utils.llm.action_item_v2 import select_items
 
-    from config.refactor_modes import shadow_or_serve
-    from utils.conversations.action_item_validity import VALIDITY_MODE_ENV, select_valid_items, unresolved_reference
+    from utils.conversations.action_item_validity import select_valid_items
 
     segments = getattr(conversation, 'transcript_segments', ()) or ()
-    labels = []
-    if (
-        segments
-        and shadow_or_serve(VALIDITY_MODE_ENV)
-        and any(
-            unresolved_reference(_field(item, 'description'), context=_field(item, 'context') or '') for item in items
-        )
-    ):
-        from utils.conversations.transcript_for_llm import conversation_action_item_speaker_labels
-
-        labels = conversation_action_item_speaker_labels(uid, conversation)
-    return select_valid_items(
-        uid, select_items(uid, items, kept, profile_name), transcript_segments=segments, speaker_labels=labels
-    )
+    return select_valid_items(uid, select_items(uid, items, kept, profile_name), transcript_segments=segments)
 
 
 def action_items_for_write(
