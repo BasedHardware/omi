@@ -182,12 +182,11 @@ def grace_wipe_is_due(data: dict, now: datetime) -> bool:
     return data.get('grace_actions_complete') is True and due_at is not None and due_at <= now
 
 
-def pending_grace_wipes(collection, limit: int, now: datetime) -> list[dict]:
+def pending_grace_wipes(docs, limit: int, now: datetime) -> list[dict]:
     """Select incomplete admission receipts and deadline-expired grace wipes."""
     results: list[dict] = []
     if limit <= 0:
         return results
-    docs = collection.where('wipe_status', '==', ACCOUNT_DELETION_GRACE_STATUS).stream()
     for doc in docs:
         if len(results) >= limit:
             break

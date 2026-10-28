@@ -757,9 +757,8 @@ def get_pending_deletion_wipes(
                 result.append(data | {'uid': doc.id})
 
     if len(result) < limit:
-        result.extend(
-            account_deletion_grace_db.pending_grace_wipes(account_deletion_collection(), limit - len(result), now)
-        )
+        grace_docs = account_deletion_collection().where('wipe_status', '==', ACCOUNT_DELETION_GRACE_STATUS).stream()
+        result.extend(account_deletion_grace_db.pending_grace_wipes(grace_docs, limit - len(result), now))
 
     if len(result) < limit:
         # Over-fetch *all* pending docs and age-filter in Python. A tight
