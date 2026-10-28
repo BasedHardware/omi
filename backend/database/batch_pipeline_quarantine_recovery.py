@@ -431,24 +431,28 @@ def held_candidates(client, namespace: str, limit: int = 32, *, after_id: str | 
     return [(doc.id, doc.to_dict() or {}) for doc in query.limit(max(1, min(limit, 64))).stream()]
 
 
-def cancel_fenced_recovery(store, segment_id):
+def cancel_fenced_recovery_firestore(client: Any, namespace: str, segment_id: str) -> bool:
     """Revocation-only write, allowed after privacy rejects ordinary job writes."""
     from google.cloud import firestore
     from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
+    from utils.batch_pipeline.contracts import ProjectionBinding
 
-    ref = store.client.collection(f'{store.namespace}_jobs').document(segment_id)
+    ref = client.collection(f'{namespace}_jobs').document(segment_id)
 
     @firestore.transactional
     def cancel(transaction):
         job = ref.get(transaction=transaction).to_dict() or {}
         if not job or not job.get('recovery'):
             return False
-        binding = normalized_binding(job['projection_binding'])
+        raw_binding = job.get('projection_binding')
+        if not raw_binding:
+            return False
+        binding = raw_binding if isinstance(raw_binding, ProjectionBinding) else normalized_binding(raw_binding)
         ids = [value for value in (job.get('conversation_id'), binding.target_conversation_id) if value]
         ids.extend(job.get('conversation_ids') or [])
         try:
             assert_batch_write_allowed(
-                store.client,
+                client,
                 transaction,
                 binding.owner_id,
                 conversation_ids=ids,
@@ -459,12 +463,19 @@ def cancel_fenced_recovery(store, segment_id):
             return True
         return False
 
-    cancelled = cancel(store.client.transaction())
+    cancelled = cancel(client.transaction())
     if cancelled:
         from database.batch_pipeline_shadow_hook import mirror_refresh
 
-        mirror_refresh(store.namespace, [('jobs', segment_id)])  # A2 shadow: no-op unless shadow mode
+        mirror_refresh(namespace, [('jobs', segment_id)])  # A2 shadow: no-op unless shadow mode
     return cancelled
+
+
+def cancel_fenced_recovery(store, segment_id: str) -> bool:
+    """Revocation-only write, allowed after privacy rejects ordinary job writes."""
+    if hasattr(store, 'cancel_fenced_recovery'):
+        return store.cancel_fenced_recovery(segment_id)
+    return cancel_fenced_recovery_firestore(store.client, store.namespace, segment_id)
 
 
 class SilenceDispositionStore(RecoveryStore):

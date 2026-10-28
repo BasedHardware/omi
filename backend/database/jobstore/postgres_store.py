@@ -245,6 +245,35 @@ class PostgresStore:
 
         return self.run(revoke)
 
+    def cancel_fenced_recovery(self, segment_id: str) -> bool:
+        """Revocation-only cancellation write, allowed after privacy rejects ordinary job writes."""
+        from database.batch_pipeline_projection_protocol import normalized_binding
+        from utils.batch_pipeline.contracts import ProjectionBinding
+
+        def cancel(tx: PostgresTransaction) -> bool:
+            job = tx.get('jobs', segment_id)
+            if not job or not job.get('recovery'):
+                return False
+            raw_binding = job.get('projection_binding')
+            if not raw_binding:
+                return False
+            binding = raw_binding if isinstance(raw_binding, ProjectionBinding) else normalized_binding(raw_binding)
+            ids = [value for value in (job.get('conversation_id'), binding.target_conversation_id) if value]
+            ids.extend(job.get('conversation_ids') or [])
+            try:
+                tx.check_privacy(
+                    binding.owner_id,
+                    tuple(ids),
+                    binding.privacy_generation,
+                )
+            except BatchPrivacyBlocked:
+                revoked = {**job, 'recovery_state': 'cancelled'}
+                tx.store.write_doc(tx.conn, 'jobs', segment_id, revoked)
+                return True
+            return False
+
+        return self.run(cancel)
+
     def projection_pending(self, limit: int = 100) -> list[str]:
         return self.projection_page(limit)[0]
 
