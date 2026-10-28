@@ -16,6 +16,8 @@ class MeetingParticipantSources(BaseModel):
 
     expected_calendar: Optional[List[MeetingParticipant]] = None
     observed_screen_listing: Optional[List[MeetingParticipant]] = None
+    # Filtered call tiles, distinct from legacy screen OCR listings.
+    observed_call_tiles: Optional[List[MeetingParticipant]] = None
 
 
 class CalendarMeetingContext(BaseModel):
@@ -63,7 +65,7 @@ class CalendarMeetingContext(BaseModel):
         sources = self.participant_sources
         if sources is None:
             return None
-        return {
+        result = {
             'expected_calendar': (
                 [{'name': participant.name, 'email': participant.email} for participant in sources.expected_calendar]
                 if sources.expected_calendar is not None
@@ -78,6 +80,12 @@ class CalendarMeetingContext(BaseModel):
                 else None
             ),
         }
+
+        if sources.observed_call_tiles is not None:
+            result['observed_call_tiles'] = [
+                {'name': participant.name, 'email': participant.email} for participant in sources.observed_call_tiles
+            ]
+        return result
 
     def participants_by_source(self) -> MeetingParticipantSources:
         if self.participant_sources is not None:

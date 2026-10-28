@@ -1,11 +1,16 @@
 """10-23 RCA: an empty identity packet must not turn a People spelling into a speaker."""
 
 from datetime import datetime, timezone
+import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from models.structured import Structured
+from models.calendar_context import CalendarMeetingContext
+from utils.conversations.meeting_context import call_tile_names, context_from_screen_activity, merge_meeting_contexts
+from utils.conversations.transcript_for_llm import SpeakerMap, SpeakerCluster
 from utils.conversations.meeting_participants import MeetingRoster, RosterEntry
 from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
 from utils.llm.notes_identity import NotesIdentity, notes_identity, repair_identity
@@ -315,3 +320,163 @@ def test_identity_kill_switch_restores_unrepaired_notes_on_all_paths(monkeypatch
     assert output.title == payload['title']
     assert output.overview == payload['overview']
     assert output.participants[0].name == NAME
+
+
+# Exact incident participant lists, synthesized as UI metadata in the shared
+# extractor vectors. No production transcript or screenshot content is used.
+def incident_prefix(*, owner=True, extra_voice=False, desktop=True, scope=None, calendar_context=None):
+    speakers = SpeakerMap({'c0': 'David Zhang' if owner else None, 'c1': None}, owner_name='David Zhang')
+    speakers.clusters = (
+        SpeakerCluster(0, None, owner, (), 10, 10),
+        SpeakerCluster(1, scope, False, (), 10, 10),
+    )
+    if extra_voice:
+        speakers['c2'] = None
+        speakers.clusters += (SpeakerCluster(2, None, False, (), 10, 10),)
+    return build_conversation_prompt_prefix(
+        conversation_id='synthetic-call',
+        transcript='',
+        started_at=datetime(2026, 10, 28, tzinfo=timezone.utc),
+        timezone_name='UTC',
+        language_code='en',
+        speaker_map=speakers,
+        desktop_meeting_capture=desktop,
+        calendar_context=calendar_context,
+    )
+
+
+def remote_notes():
+    return {
+        'title': 'Robert Ream: planning',
+        'overview': 'Robert Ream discussed planning.',
+        'participants': [
+            {
+                'name': 'Robert Ream',
+                'source': 'roster',
+                'speaker': 'c1',
+                'evidence_kind': 'screen',
+                'evidence': 'The remote Meet tile names Robert Ream.',
+            }
+        ],
+        'sections': [{'heading': 'Planning', 'body_markdown': '- Robert Ream discussed planning.'}],
+    }
+
+
+@pytest.mark.parametrize('vector_id', ['incident_10_28_1', 'incident_10_28_2'])
+def test_one_remote_voice_and_one_credible_meeting_name_is_supported_not_repaired(vector_id):
+    vectors = json.loads((Path(__file__).parents[1] / 'fixtures/meeting_identity/call_tile_vectors.json').read_text())
+    vector = next(v for v in vectors['vectors'] if v['id'] == vector_id)
+    tiles = call_tile_names(vector['rows'], owner_names=['David Zhang'])
+    packet = {
+        'call_tile_names': tiles,
+        'listed_participants': [{'name': name, 'kind': 'human'} for name in vector['expected_participant_names']],
+    }
+    identity = notes_identity(incident_prefix(), {}, packet)
+    assert identity.screen_bindings == (('c1', 'Robert Ream'),)
+    assert identity.supported('Robert Ream', 'c1')
+    assert not identity.supported('Robert Ream', 'c0')
+    assert repair_identity(remote_notes(), identity) == (remote_notes(), [])
+    assert not any(
+        f.kind == 'evidence' for f in check_notes(remote_notes(), transcript_words=10, identity=identity).findings
+    )
+
+
+@pytest.mark.parametrize(
+    'changes',
+    [
+        {'owner': False},
+        {'extra_voice': True},
+        {'desktop': False},
+        {'scope': 'other-capture'},
+    ],
+)
+def test_meeting_name_never_fills_an_unanchored_or_multi_voice_call(changes):
+    identity = notes_identity(incident_prefix(**changes), {}, {'call_tile_names': ['Robert Ream']})
+    assert not identity.supported('Robert Ream', 'c1')
+    assert repair_identity(remote_notes(), identity)[1] == ['unsupported_speaker_identity']
+
+
+def test_multiple_credible_candidates_keep_the_cautious_path():
+    identity = notes_identity(incident_prefix(), {}, {'call_tile_names': ['Robert Ream', 'Priya Natarajan']})
+    assert identity.screen_bindings == ()
+    assert repair_identity(remote_notes(), identity)[0]['participants'] == []
+    # The model can still hedge with no asserted participant binding.
+    hedged = {'title': 'Planning', 'overview': 'Someone said planning could help.', 'participants': []}
+    assert repair_identity(hedged, identity) == (hedged, [])
+
+
+def test_junk_only_list_never_authorizes_a_name():
+    rows = [
+        dict(
+            appName='Google Chrome',
+            windowTitle='Meet - abc-defg-hij',
+            ocrText='Decision Mill\nBest Trending Abliterated Mod\nDavid Zhang',
+        )
+        for _ in range(4)
+    ]
+    rows += [
+        dict(appName='Decision Mill', windowTitle='Decision Mill'),
+        dict(appName='Google Chrome', windowTitle='Best Trending Abliterated Mod - Google Chrome'),
+    ]
+    packet = {'call_tile_names': call_tile_names(rows, owner_names=['David Zhang'])}
+    assert packet['call_tile_names'] == []
+    identity = notes_identity(incident_prefix(), {}, packet)
+    assert identity.screen_bindings == ()
+    assert repair_identity(remote_notes(), identity)[0]['participants'] == []
+
+
+def test_an_agent_tile_or_unverified_listing_prevents_elimination():
+    packet = {'call_tile_names': ['Robert Ream'], 'call_tile_agent_names': ['Otter Bot']}
+    assert notes_identity(incident_prefix(), {}, packet).screen_bindings == ()
+    for packet in [
+        {'listed_participants': [{'name': 'Robert Ream', 'kind': 'human'}]},
+        {'calendar_overlap': [{'participants': ['Robert Ream']}]},
+        {'people_on_screen': [{'name': 'Robert Ream', 'call_seen_during_conversation': True}]},
+    ]:
+        assert notes_identity(incident_prefix(), {}, packet).screen_bindings == ()
+
+
+@pytest.mark.parametrize('vector_id', ['incident_10_28_1', 'incident_10_28_2'])
+def test_filtered_meeting_metadata_survives_storage_merge_and_names_without_another_ocr_read(vector_id):
+    vectors = json.loads((Path(__file__).parents[1] / 'fixtures/meeting_identity/call_tile_vectors.json').read_text())
+    vector = next(v for v in vectors['vectors'] if v['id'] == vector_id)
+    at = datetime(2026, 10, 28, tzinfo=timezone.utc)
+    context = context_from_screen_activity(vector['rows'], started_at=at, finished_at=at, owner_names=['David'])
+    assert [p.name for p in context.participants] == ['Robert Ream']
+    context = CalendarMeetingContext(**context.to_storage_dict())
+    calendar = CalendarMeetingContext(calendar_event_id='invite', title='Planning', start_time=at, duration_minutes=30)
+    context = merge_meeting_contexts(calendar, context)
+    assert [p.name for p in context.participant_sources.observed_call_tiles] == ['Robert Ream']
+    prefix = incident_prefix(calendar_context=context)
+    identity = notes_identity(prefix, {})
+    assert identity.screen_bindings == (('c1', 'Robert Ream'),)
+    assert repair_identity(remote_notes(), identity) == (remote_notes(), [])
+    output = finish_notes_contract(
+        Structured.model_validate(remote_notes()),
+        prefix=prefix,
+        uid=None,
+        words=10,
+        rich_mode=True,
+        inputs={'notes_identity': identity},
+    )
+    assert output.participants[0].name == 'Robert Ream'
+    assert output.overview == remote_notes()['overview']
+
+
+def test_legacy_listing_does_not_claim_filtered_call_tile_provenance():
+    at = datetime(2026, 10, 28, tzinfo=timezone.utc)
+    for names in [['Decision Mill'], ['Robert Ream', 'Decision Mill', 'Best Trending Abliterated Mod', 'David Zhang']]:
+        context = CalendarMeetingContext(
+            calendar_event_id='legacy',
+            title='Meet - abc-defg-hij',
+            start_time=at,
+            duration_minutes=30,
+            calendar_source='screen_activity',
+            participants=[{'name': name} for name in names],
+        )
+        assert notes_identity(incident_prefix(calendar_context=context), {}).screen_bindings == ()
+
+
+@pytest.mark.parametrize('names', [['David Zhang'], ['David'], ['Otter Bot'], ['Robert Ream', 'Otter Bot']])
+def test_owner_and_agent_names_never_count_as_the_credible_remote_human(names):
+    assert notes_identity(incident_prefix(), {}, {'call_tile_names': names}).screen_bindings == ()

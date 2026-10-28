@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, ValidationError
 
 import database.calendar_meetings as calendar_db
-from models.calendar_context import CalendarMeetingContext, MeetingParticipant
+from models.calendar_context import CalendarMeetingContext, MeetingParticipant, MeetingParticipantSources
 from utils.other import endpoints as auth
 from utils.request_validation import CalendarMeetingsLimit
 
@@ -31,6 +31,7 @@ class StoreMeetingRequest(BaseModel):
     meeting_link: Optional[str] = Field(default=None, description="URL to join the meeting")
     participants: List[MeetingParticipant] = Field(default_factory=list, description="Meeting participants")
     notes: Optional[str] = Field(default=None, description="Meeting notes/description")
+    participant_sources: Optional[MeetingParticipantSources] = None
 
 
 class StoreMeetingResponse(BaseModel):
@@ -64,6 +65,7 @@ def store_calendar_meeting(
         duration_minutes=duration_minutes,
         notes=request.notes,
         calendar_source=request.calendar_source,
+        participant_sources=request.participant_sources,
     )
     meeting_dict = meeting_context.model_dump()
     meeting_dict['end_time'] = end_utc

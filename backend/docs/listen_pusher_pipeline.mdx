@@ -7372,7 +7372,21 @@ Explicit restore and its persisted user-kept marker reach classification before
 the media minimum, so later reprocessing cannot hide a restored card again.
 
 Notes do not bind a likely speaker suggestion to a name: likely and unknown
-voices remain anonymous, with statements attributed as "someone said".
+voices remain anonymous, with statements attributed as "someone said". A narrow
+notes-only exception supports the one remote voice on a desktop call when capture
+already identifies the owner, there are exactly two same-scope speaker clusters,
+and in-call screen rows contain exactly one credible human remote tile name and
+no agent tiles. The packet supplies `screen_speaker_bindings` with the speaker key,
+name and screen evidence for the notes participant citation. This does not change
+People records, stored speaker labels, or voice identity. Calendar invitees,
+profile pages and legacy screen listings alone cannot authorize this exception.
+Filtered tiles travel in `participant_sources.observed_call_tiles` through the
+calendar upload, source merge and prompt prefix, so the exception does not require
+backend screen-activity sync. Old clients omit it and retain cautious attribution
+unless current in-call OCR independently corroborates a tile.
+Both screen extractors exclude all observed app/window titles and browser-tab OCR
+above a Meet address; owner filtering also runs after roster/email extraction.
+The shared call-tile vectors pin the 10-28 incident lists in Python and Swift.
 
 Speaker refinement uses the same evidence record: count hints cannot merge
 confident distinct identities, and desktop-channel/near-field anchors remain

@@ -72,9 +72,24 @@ enum OnDeviceMeetingIdentityExtractor {
     let tiles =
       callTileNames(in: snapshots, ownerNames: ownerNames, ownerEmails: ownerEmails)
       + callTileAgentNames(in: snapshots, ownerNames: ownerNames, ownerEmails: ownerEmails)
-    var participants = participants(from: selected.map(\.combinedText), tileNames: tiles)
+    var participants = participants(from: selected.map(callContent), tileNames: tiles)
     if participants.isEmpty {
       participants = messagingCallParticipants(from: snapshots)
+    }
+    let owners = Set(ownerNames.map { cleanLine($0).casefolded }).union(
+      snapshots.flatMap { ($0.ocrText ?? "").components(separatedBy: .newlines) }
+        .filter { firstMatch(ownerTileMarker, in: cleanLine($0)) != nil }
+        .map { cleanLine(replacingMatches(nameDecoration, in: cleanLine($0), with: "")).casefolded })
+    let emails = Set(ownerEmails.map { $0.casefolded })
+    let locals = Set(emails.map { String($0.split(separator: "@", maxSplits: 1).first ?? "") })
+    let chrome = screenChromeNames(snapshots)
+    participants = participants.filter { participant in
+      if let name = participant.name,
+        chrome.contains(name.casefolded) || isOwnerName(name, owners: owners, ownerLocals: locals)
+      {
+        return false
+      }
+      return participant.email.map { !emails.contains($0.casefolded) } ?? true
     }
     guard !participants.isEmpty else { return nil }
 
@@ -97,7 +112,8 @@ enum OnDeviceMeetingIdentityExtractor {
       endTime: end,
       participants: participants,
       platform: platform,
-      meetingLink: nil)
+      meetingLink: nil,
+      observedCallTiles: participants.filter { $0.name.map(tiles.contains) ?? false })
   }
 
   static func participants(from texts: [String], tileNames: [String] = []) -> [DesktopMeetingParticipant] {
@@ -321,18 +337,13 @@ enum OnDeviceMeetingIdentityExtractor {
         guard folded.contains("@") else { return nil }
         return folded.split(separator: "@", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init)
       })
-    var titleParts = Set<String>()
+    let titleParts = screenChromeNames(snapshots)
     var counts: [String: Int] = [:]
     var spelling: [String: String] = [:]
     var order: [String] = []
     for row in callRows {
-      let title = cleanLine(row.windowTitle ?? "")
-      for part in split(titleSeparator, text: title)
-      where !part.trimmingCharacters(in: .whitespaces).isEmpty {
-        titleParts.insert(titlePart(part))
-      }
       var seen = Set<String>()
-      for rawLine in (row.ocrText ?? "").components(separatedBy: .newlines) {
+      for rawLine in callContent(row).components(separatedBy: .newlines) {
         let line = cleanLine(rawLine)
         guard let name = tileName(line) else { continue }
         let key = name.casefolded
@@ -434,6 +445,33 @@ enum OnDeviceMeetingIdentityExtractor {
       .trimmingCharacters(in: .whitespaces).casefolded
   }
 
+  /// Tab-strip OCR precedes the address bar; it cannot label a participant tile.
+  private static func callContent(_ row: MeetingScreenActivitySnapshot) -> String {
+    let text = row.ocrText ?? ""
+    let lines = text.components(separatedBy: .newlines)
+    if let index = lines.firstIndex(where: {
+      $0.range(
+        of: "^\\s*(?:https?://)?meet\\.google\\.com/[a-z]{3}-[a-z]{4}-[a-z]{3}",
+        options: [.regularExpression, .caseInsensitive]) != nil
+    }) {
+      return lines.dropFirst(index + 1).joined(separator: "\n")
+    }
+    return text
+  }
+
+  private static func screenChromeNames(_ snapshots: [MeetingScreenActivitySnapshot]) -> Set<String> {
+    var excluded = Set<String>()
+    for row in snapshots {
+      excluded.insert(titlePart(row.appName))
+      if !ConferencingApps.isMessagingCallApp(appName: row.appName) {
+        for part in split(titleSeparator, text: row.windowTitle ?? "") {
+          excluded.insert(titlePart(part))
+        }
+      }
+    }
+    return excluded
+  }
+
   static func isAIAgentTileName(_ name: String) -> Bool {
     name.split(separator: " ").contains { word in
       let token = String(word).casefolded.trimmingCharacters(in: CharacterSet(charactersIn: ".'’-"))
@@ -477,7 +515,8 @@ enum OnDeviceMeetingIdentityExtractor {
     for owner in owners {
       let ownerTokens = owner.split(separator: " ").map(String.init)
       if folded == owner
-        || (ownerTokens.count >= 2 && tokens.first == ownerTokens.first && tokens.last == ownerTokens.last)
+        || (!ownerTokens.isEmpty && tokens.first == ownerTokens.first
+          && (ownerTokens.count == 1 || tokens.last == ownerTokens.last))
       {
         return true
       }

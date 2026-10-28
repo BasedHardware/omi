@@ -147,3 +147,27 @@ def test_query_helpers_emit_no_positional_filter_userwarning(monkeypatch):
             datetime(2026, 9, 24, 9, 45, 0, tzinfo=timezone.utc),
         )
         assert [item['id'] for item in overlapping] == ['m-1']
+
+
+def test_meeting_upload_retains_filtered_tile_provenance(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(calendar_db, 'get_meeting_id_by_calendar_event', lambda *args: None)
+    monkeypatch.setattr(calendar_db, 'create_meeting', lambda uid, data: captured.update(data) or 'meeting-1')
+    request = calendar_router.StoreMeetingRequest(
+        calendar_event_id='screen-call',
+        calendar_source='screen_activity',
+        title='Meet - abc-defg-hij',
+        start_time=datetime(2026, 10, 28, 12, tzinfo=timezone.utc),
+        end_time=datetime(2026, 10, 28, 12, 30, tzinfo=timezone.utc),
+        participants=[{'name': 'Robert Ream'}],
+        participant_sources={
+            'observed_screen_listing': [{'name': 'Robert Ream'}],
+            'observed_call_tiles': [{'name': 'Robert Ream'}],
+        },
+    )
+    calendar_router.store_calendar_meeting(request, uid='synthetic-owner')
+    context = calendar_router.CalendarMeetingContext(**captured)
+    assert [p.name for p in context.participant_sources.observed_call_tiles] == ['Robert Ream']
+    assert context.to_storage_dict()['participant_sources']['observed_call_tiles'] == [
+        {'name': 'Robert Ream', 'email': None}
+    ]

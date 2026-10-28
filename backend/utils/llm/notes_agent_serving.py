@@ -156,6 +156,16 @@ def agentic_notes_payload(
         )
         identity = notes_identity(prefix, kwargs, packet)
         kwargs['notes_identity'] = identity
+        packet['screen_speaker_bindings'] = [
+            {
+                'speaker': speaker,
+                'name': name,
+                'evidence_kind': 'screen',
+                'evidence': f'Meeting UI call tile: {name}; filtered call_tile_names / participant_sources.observed_call_tiles. '
+                'Two captured speakers; the other is the owner.',
+            }
+            for speaker, name in identity.screen_bindings
+        ]
         seed = conversation_seed(packet, capture_evidence, explicit_cache=explicit_cache)
         toolbox = NotesToolbox(
             uid=uid,

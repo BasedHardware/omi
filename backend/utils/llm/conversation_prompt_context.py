@@ -12,7 +12,12 @@ from typing import Any, Iterable, List, Optional
 
 from models.calendar_context import CalendarMeetingContext
 from models.conversation_photo import ConversationPhoto
-from utils.conversations.meeting_participants import MeetingRoster, is_silent_recorder, bind_speakers_with_roster
+from utils.conversations.meeting_participants import (
+    MeetingRoster,
+    is_silent_recorder,
+    bind_speakers_with_roster,
+    looks_like_ai_agent_name,
+)
 from utils.llm.meeting_notes_validation import strip_speaker_placeholders
 from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT, has_cacheable_prefix
 from utils.llm.shaped_agent import route_for_uid
@@ -55,6 +60,10 @@ class ConversationPromptPrefix:
     speaker_names: tuple[tuple[str, Optional[str]], ...] = ()
     meeting_names: tuple[str, ...] = ()
     transcript_body: str = ''
+    # Notes-only elimination needs an actually captured owner, never a profile guess.
+    owner_call_speaker: Optional[str] = None
+    call_tile_names: tuple[str, ...] = ()
+    call_tile_agent_names: tuple[str, ...] = ()
 
     @property
     def cache_key(self) -> str:
@@ -348,6 +357,25 @@ def build_conversation_prompt_prefix(
         source_ids = source_ids & rendered_ids
     # Rich meeting notes name people through their roster rules instead.
     title_people, owner_names = _title_people(speaker_map) if roster is None else ((), ())
+    owner_call_speaker = None
+    clusters = getattr(speaker_map, 'clusters', ())
+    if (
+        desktop_meeting_capture
+        and len(clusters) == 2
+        and len({cluster.scope for cluster in clusters}) == 1
+        and len({cluster.speaker_id for cluster in clusters}) == 2
+        and sum(cluster.owner for cluster in clusters) == 1
+        and len(source_speaker_names) == 2
+        and 'others' not in source_speaker_names
+    ):
+        owner_keys = [
+            key
+            for key, name in source_speaker_names.items()
+            if name and name.casefold() == (account_owner_name or 'You').casefold()
+        ]
+        if len(owner_keys) == 1:
+            owner_call_speaker = owner_keys[0]
+    observed_tiles = calendar_context.participants_by_source().observed_call_tiles if calendar_context else None
     return ConversationPromptPrefix(
         conversation_id=conversation_id,
         context='\n\n'.join(context_parts),
@@ -366,4 +394,9 @@ def build_conversation_prompt_prefix(
             else ()
         ),
         transcript_body=transcript,
+        owner_call_speaker=owner_call_speaker,
+        call_tile_names=tuple(p.name for p in observed_tiles or () if p.name and not looks_like_ai_agent_name(p.name)),
+        call_tile_agent_names=tuple(
+            p.name for p in observed_tiles or () if p.name and looks_like_ai_agent_name(p.name)
+        ),
     )
