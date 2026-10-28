@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from config.stt_provider_policy import SONIOX_PROVIDER
+from tests.unit.fixtures.live_stt_registry import enabled_live_targets
 from utils.stt import streaming as st
 from utils.stt.language_policy import (
     MAX_DETECTION_CHARS,
@@ -221,6 +222,7 @@ def test_explicit_parakeet_preference_keeps_existing_fallback_order(monkeypatch)
 @pytest.mark.parametrize('configured_order', [True, False])
 @pytest.mark.asyncio
 async def test_failed_preferred_soniox_falls_into_normal_chain(monkeypatch, configured_order):
+    enabled_live_targets(monkeypatch)
     monkeypatch.setattr('utils.stt.provider_resilience.STT_FALLBACK_LIVENESS_GRACE_SECONDS', 0)
     monkeypatch.setattr(st, 'stt_service_models', ['modulate-velma-2', 'soniox'])
     monkeypatch.setattr(st, '_soniox_circuit', ProviderCircuitBreaker(failure_threshold=2, cooldown_seconds=30))
