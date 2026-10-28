@@ -1189,11 +1189,7 @@ export type OmiBridgeApi = {
   /** Raise a best-effort OS notification reminding the user that audio recording
    *  has remained muted/paused for an extended period (#20215). Clicking the
    *  notification surfaces the main window. */
-  notifyMutedRecordingReminder: (payload: {
-    title: string
-    body: string
-    silent?: boolean
-  }) => void
+  notifyMutedRecordingReminder: (payload: { title: string; body: string; silent?: boolean }) => void
   /** Tray Pause/Resume clicked — flip the continuousRecording pref, then report
    *  the new state via trayReportState. Returns an unsubscribe fn. */
   onTrayToggleListening: (cb: () => void) => () => void

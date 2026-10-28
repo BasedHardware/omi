@@ -1,20 +1,62 @@
 import { useEffect, useRef } from 'react'
 import { auth, onAuthStateChanged } from '../../lib/firebase'
-import {
-  getPreferences,
-  isOnboardingComplete,
-  onPreferencesChange
-} from '../../lib/preferences'
+import { getPreferences, isOnboardingComplete, onPreferencesChange } from '../../lib/preferences'
 import {
   createMuteReminderController,
   type MuteReminderNotificationPayload
 } from '../../lib/capture/muteReminder'
 import { toast } from '../../lib/toast'
 
+const CHIME_RESUME_TIMEOUT_MS = 500
+const CHIME_CLOSE_FALLBACK_MS = 1500
+
+async function resumeAudioContext(ctx: AudioContext, timeoutMs: number): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  try {
+    const didResume = await Promise.race([
+      Promise.resolve()
+        .then(() => ctx.resume())
+        .then(
+          () => true,
+          () => false
+        ),
+      new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => resolve(false), timeoutMs)
+      })
+    ])
+    return didResume && ctx.state === 'running'
+  } finally {
+    if (timer !== null) {
+      clearTimeout(timer)
+    }
+  }
+}
+
 // Plays a soft, non-intrusive two-note Web Audio sine cue when high-urgency
-// mute reminders fire. Best-effort: never throws if AudioContext is unavailable
-// or blocked by autoplay policy.
-function playSoftMuteReminderChime(): void {
+// mute reminders fire. Explicitly resumes the AudioContext (for Chromium's
+// autoplay policy) and closes it on every exit path so contexts never leak.
+async function playSoftMuteReminderChime(): Promise<void> {
+  let ctx: AudioContext | null = null
+  let fallbackCloseTimer: ReturnType<typeof setTimeout> | null = null
+  let closed = false
+
+  const closeContext = (): void => {
+    if (closed) return
+    closed = true
+    if (fallbackCloseTimer !== null) {
+      clearTimeout(fallbackCloseTimer)
+      fallbackCloseTimer = null
+    }
+    const currentCtx = ctx
+    if (currentCtx && currentCtx.state !== 'closed') {
+      try {
+        void Promise.resolve(currentCtx.close()).catch(() => {})
+      } catch {
+        /* best-effort audio cleanup */
+      }
+    }
+  }
+
   try {
     const AudioCtx =
       typeof window !== 'undefined'
@@ -22,7 +64,15 @@ function playSoftMuteReminderChime(): void {
           (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
         : undefined
     if (!AudioCtx) return
-    const ctx = new AudioCtx()
+
+    ctx = new AudioCtx()
+    const running = await resumeAudioContext(ctx, CHIME_RESUME_TIMEOUT_MS)
+    if (!running) {
+      closeContext()
+      return
+    }
+
+    fallbackCloseTimer = setTimeout(closeContext, CHIME_CLOSE_FALLBACK_MS)
     const now = ctx.currentTime
     const osc = ctx.createOscillator()
     const gain = ctx.createGain()
@@ -34,13 +84,13 @@ function playSoftMuteReminderChime(): void {
     gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.28)
     osc.connect(gain)
     gain.connect(ctx.destination)
+    osc.onended = () => {
+      closeContext()
+    }
     osc.start(now)
     osc.stop(now + 0.3)
-    osc.onended = () => {
-      void ctx.close().catch(() => {})
-    }
   } catch {
-    /* best-effort audio cue */
+    closeContext()
   }
 }
 
@@ -56,7 +106,7 @@ function handleMuteReminder(payload: MuteReminderNotificationPayload): void {
     duration: 8000
   })
   if (payload.playAttentionCue) {
-    playSoftMuteReminderChime()
+    void playSoftMuteReminderChime()
   }
 }
 

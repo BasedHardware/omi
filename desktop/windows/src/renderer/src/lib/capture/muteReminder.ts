@@ -9,7 +9,7 @@
 export type MuteReminderUrgency = 'off' | 'subtle' | 'standard' | 'high'
 
 export const MUTE_REMINDER_URGENCY_DEFAULT: MuteReminderUrgency = 'standard'
-export const MUTE_REMINDER_INTERVAL_MINUTES_DEFAULT = 30
+export const MUTE_REMINDER_INTERVAL_MINUTES_DEFAULT = 60
 export const MUTE_REMINDER_INTERVAL_MINUTES_MIN = 5
 export const MUTE_REMINDER_INTERVAL_MINUTES_MAX = 240
 

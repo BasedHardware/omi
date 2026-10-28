@@ -149,7 +149,7 @@ export type Preferences = {
   // 'off' = disabled.
   muteReminderUrgency?: 'off' | 'subtle' | 'standard' | 'high'
   // Reminder interval in minutes while recording remains muted (#20215).
-  // Defaults to 30 minutes; clamped to [5, 240].
+  // Defaults to 60 minutes; clamped to [5, 240].
   muteReminderIntervalMinutes?: number
 }
 
@@ -170,7 +170,7 @@ const defaults: Preferences = {
   // recorded to the one chat timeline. Users can opt out in Settings (sets false).
   pttHubEnabled: true,
   muteReminderUrgency: 'standard',
-  muteReminderIntervalMinutes: 30
+  muteReminderIntervalMinutes: 60
 }
 
 function load(): Preferences {

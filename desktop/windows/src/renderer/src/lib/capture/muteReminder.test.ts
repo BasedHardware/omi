@@ -24,11 +24,36 @@ describe('muteReminder (#20215)', () => {
     expect(normalizeMuteReminderUrgency('high')).toBe('high')
     expect(normalizeMuteReminderUrgency('off')).toBe('off')
 
-    expect(normalizeMuteReminderIntervalMinutes(undefined)).toBe(30)
-    expect(normalizeMuteReminderIntervalMinutes(NaN)).toBe(30)
+    expect(normalizeMuteReminderIntervalMinutes(undefined)).toBe(60)
+    expect(normalizeMuteReminderIntervalMinutes(NaN)).toBe(60)
     expect(normalizeMuteReminderIntervalMinutes(1)).toBe(5)
     expect(normalizeMuteReminderIntervalMinutes(999)).toBe(240)
     expect(normalizeMuteReminderIntervalMinutes(15)).toBe(15)
+  })
+
+  it('defaults to a 60-minute reminder cadence when intervalMinutes is omitted', () => {
+    const reminders: MuteReminderNotificationPayload[] = []
+    const controller = createMuteReminderController({
+      onRemind: (payload) => reminders.push(payload)
+    })
+
+    controller.update({ signedIn: true, onboarded: true, continuousRecording: true })
+    controller.update({ signedIn: true, onboarded: true, continuousRecording: false })
+
+    vi.advanceTimersByTime(30 * 60_000)
+    expect(reminders).toHaveLength(0)
+
+    vi.advanceTimersByTime(29 * 60_000)
+    expect(reminders).toHaveLength(0)
+
+    vi.advanceTimersByTime(1 * 60_000)
+    expect(reminders).toHaveLength(1)
+    expect(reminders[0]).toMatchObject({
+      urgency: 'standard',
+      mutedMinutes: 60,
+      reminderCount: 1
+    })
+    controller.dispose()
   })
 
   it('never reminds users who start or restore auth with recording disabled', () => {
