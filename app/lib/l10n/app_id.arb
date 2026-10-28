@@ -2882,8 +2882,8 @@
     "currentPlan": "Saat ini",
     "neoSubtitle": "{count} pertanyaan per bulan",
     "operatorSubtitle": "{count} pertanyaan per bulan",
-    "chatUsageCost": "Obrolan: ${used} / ${limit} digunakan bulan ini",
-    "chatUsageCostNoLimit": "Obrolan: ${used} digunakan bulan ini",
+    "chatUsageCost": "Obrolan: {used} / {limit} digunakan bulan ini",
+    "chatUsageCostNoLimit": "Obrolan: {used} digunakan bulan ini",
     "chatUsageMessages": "Obrolan: {used} / {limit} pesan bulan ini",
     "chatUsageMessagesNoLimit": "Obrolan: {used} pesan bulan ini",
     "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
@@ -4113,6 +4113,8 @@
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
     "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
     "paywallOutlineHeadline": "Jangan pernah melewatkan satu kata pun lagi.",
+    "billingRecurringPrice": "{price}{interval, select, year{/tahun} other{/bulan}}",
+    "billingTrialPrice": "Gratis {days} hari, lalu {price}{interval, select, year{/tahun} other{/bulan}}",
     "paywallTrialBrand": "Omi Pro",
     "paywallTrialHeadline": "Begini cara kerja uji coba gratis Anda.",
     "paywallTrialSlideSummariesTitle": "Unlimited ringkasan, disimpan selamanya",
@@ -4494,5 +4496,8 @@
     "onTheWayDayQueued": "Dalam antrean",
     "onTheWayNoDate": "Tanpa tanggal",
     "onTheWayFootnote": "Rekaman yang gagal terus dicoba ulang di latar belakang. Apa pun yang tidak bisa kami transkripsikan akan otomatis dilaporkan ke kami.",
-    "onTheWayDetailsForSupport": "Detail untuk dukungan"
+    "onTheWayDetailsForSupport": "Detail untuk dukungan",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 klip pendek disembunyikan} other{{count} klip pendek disembunyikan}}",
+    "homeNoiseFoldShow": "Tampilkan",
+    "homeNoiseFoldHide": "{count, plural, =1{Sembunyikan 1 klip pendek} other{Sembunyikan {count} klip pendek}}"
 }

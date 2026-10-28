@@ -2847,8 +2847,8 @@
     "currentPlan": "Dabartinis",
     "neoSubtitle": "{count} klausimų per mėnesį",
     "operatorSubtitle": "{count} klausimų per mėnesį",
-    "chatUsageCost": "Pokalbis: ${used} / ${limit} panaudota šį mėnesį",
-    "chatUsageCostNoLimit": "Pokalbis: ${used} panaudota šį mėnesį",
+    "chatUsageCost": "Pokalbis: {used} / {limit} panaudota šį mėnesį",
+    "chatUsageCostNoLimit": "Pokalbis: {used} panaudota šį mėnesį",
     "chatUsageMessages": "Pokalbis: {used} / {limit} žinučių šį mėnesį",
     "chatUsageMessagesNoLimit": "Pokalbis: {used} žinučių šį mėnesį",
     "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
@@ -4078,6 +4078,8 @@
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
     "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
     "paywallOutlineHeadline": "Daugiau nepraleiskite nė žodžio.",
+    "billingRecurringPrice": "{price}{interval, select, year{/metus} other{/mėn.}}",
+    "billingTrialPrice": "{days} dienų nemokamai, tada {price}{interval, select, year{/metus} other{/mėn.}}",
     "paywallTrialBrand": "Omi Pro",
     "paywallTrialHeadline": "Štai kaip veikia jūsų nemokama bandomoji versija.",
     "paywallTrialSlideSummariesTitle": "Neribotos santraukos, saugomos amžinai",
@@ -4459,5 +4461,8 @@
     "onTheWayDayQueued": "Laukia eilėje",
     "onTheWayNoDate": "Be datos",
     "onTheWayFootnote": "Nepavykę įrašai toliau bandomi fone. Viskas, ko nepavyksta transkribuoti, mums automatiškai pranešama.",
-    "onTheWayDetailsForSupport": "Išsami informacija palaikymo komandai"
+    "onTheWayDetailsForSupport": "Išsami informacija palaikymo komandai",
+    "homeNoiseFoldHidden": "{count, plural, =1{Paslėptas 1 trumpas įrašas} other{Paslėpta {count} trumpų įrašų}}",
+    "homeNoiseFoldShow": "Rodyti",
+    "homeNoiseFoldHide": "{count, plural, =1{Slėpti 1 trumpą įrašą} other{Slėpti {count} trumpus įrašus}}"
 }

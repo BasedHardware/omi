@@ -8709,12 +8709,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return '聊天：\$$used / \$$limit 本月已使用';
+    return '聊天：$used / $limit 本月已使用';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return '聊天：\$$used 本月已使用';
+    return '聊天：$used 本月已使用';
   }
 
   @override
@@ -13096,6 +13096,30 @@ class AppLocalizationsZh extends AppLocalizations {
   String get paywallOutlineHeadline => '再也不错过任何一句话。';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/年',
+        'other': '/月',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/年',
+        'other': '/月',
+      },
+    );
+    return '免费$days天，之后$price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -14433,4 +14457,29 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => '支持详情';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已隐藏 $count 段短录音',
+      one: '已隐藏 1 段短录音',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => '显示';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '隐藏 $count 段短录音',
+      one: '隐藏 1 段短录音',
+    );
+    return '$_temp0';
+  }
 }

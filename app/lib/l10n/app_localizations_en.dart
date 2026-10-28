@@ -8771,7 +8771,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String chatUsedOfLimitCompute(String used, String limit) {
-    return '\$$used of \$$limit compute budget used';
+    return '$used of $limit compute budget used';
   }
 
   @override
@@ -8840,12 +8840,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit used this month';
+    return 'Chat: $used / $limit used this month';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used used this month';
+    return 'Chat: $used used this month';
   }
 
   @override
@@ -13286,6 +13286,30 @@ class AppLocalizationsEn extends AppLocalizations {
   String get paywallOutlineHeadline => 'Never miss a word again.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/year',
+        'other': '/month',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/year',
+        'other': '/month',
+      },
+    );
+    return '$days days free, then $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -14646,4 +14670,29 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'Details for support';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count short clips hidden',
+      one: '1 short clip hidden',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Show';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Hide $count short clips',
+      one: 'Hide 1 short clip',
+    );
+    return '$_temp0';
+  }
 }

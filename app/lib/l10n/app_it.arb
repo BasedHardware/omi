@@ -2847,8 +2847,8 @@
     "currentPlan": "Attuale",
     "neoSubtitle": "{count} domande al mese",
     "operatorSubtitle": "{count} domande al mese",
-    "chatUsageCost": "Chat: ${used} / ${limit} utilizzato questo mese",
-    "chatUsageCostNoLimit": "Chat: ${used} utilizzato questo mese",
+    "chatUsageCost": "Chat: {used} / {limit} utilizzato questo mese",
+    "chatUsageCostNoLimit": "Chat: {used} utilizzato questo mese",
     "chatUsageMessages": "Chat: {used} / {limit} messaggi questo mese",
     "chatUsageMessagesNoLimit": "Chat: {used} messaggi questo mese",
     "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
@@ -4078,6 +4078,8 @@
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
     "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
     "paywallOutlineHeadline": "Non perdere mai più una parola.",
+    "billingRecurringPrice": "{price}{interval, select, year{/anno} other{/mese}}",
+    "billingTrialPrice": "{days} giorni gratis, poi {price}{interval, select, year{/anno} other{/mese}}",
     "paywallTrialBrand": "Omi Pro",
     "paywallTrialHeadline": "Ecco come funziona la tua prova gratuita.",
     "paywallTrialSlideSummariesTitle": "Riepiloghi Unlimited, conservati per sempre",
@@ -4459,5 +4461,8 @@
     "onTheWayDayQueued": "In coda",
     "onTheWayNoDate": "Nessuna data",
     "onTheWayFootnote": "Le registrazioni che falliscono continuano a riprovare in background. Tutto ciò che non riusciamo a trascrivere ci viene segnalato automaticamente.",
-    "onTheWayDetailsForSupport": "Dettagli per l'assistenza"
+    "onTheWayDetailsForSupport": "Dettagli per l'assistenza",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 clip breve nascosto} other{{count} clip brevi nascosti}}",
+    "homeNoiseFoldShow": "Mostra",
+    "homeNoiseFoldHide": "{count, plural, =1{Nascondi 1 clip breve} other{Nascondi {count} clip brevi}}"
 }

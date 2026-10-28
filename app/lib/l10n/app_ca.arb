@@ -2838,8 +2838,8 @@
     "currentPlan": "Actual",
     "neoSubtitle": "{count} preguntes al mes",
     "operatorSubtitle": "{count} preguntes al mes",
-    "chatUsageCost": "Xat: ${used} / ${limit} utilitzat aquest mes",
-    "chatUsageCostNoLimit": "Xat: ${used} utilitzat aquest mes",
+    "chatUsageCost": "Xat: {used} / {limit} utilitzat aquest mes",
+    "chatUsageCostNoLimit": "Xat: {used} utilitzat aquest mes",
     "chatUsageMessages": "Xat: {used} / {limit} missatges aquest mes",
     "chatUsageMessagesNoLimit": "Xat: {used} missatges aquest mes",
     "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
@@ -4078,6 +4078,8 @@
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
     "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
     "paywallOutlineHeadline": "No et perdis mai més ni una paraula.",
+    "billingRecurringPrice": "{price}{interval, select, year{/any} other{/mes}}",
+    "billingTrialPrice": "{days} dies gratis, després {price}{interval, select, year{/any} other{/mes}}",
     "paywallTrialBrand": "Omi Pro",
     "paywallTrialHeadline": "Així funciona la teva prova gratuïta.",
     "paywallTrialSlideSummariesTitle": "Resums Unlimited, guardats per sempre",
@@ -4459,5 +4461,8 @@
     "onTheWayDayQueued": "A la cua",
     "onTheWayNoDate": "Sense data",
     "onTheWayFootnote": "Els enregistraments que fallin es tornen a provar en segon pla. Tot allò que no puguem transcriure se'ns notifica automàticament.",
-    "onTheWayDetailsForSupport": "Detalls per al suport"
+    "onTheWayDetailsForSupport": "Detalls per al suport",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 clip curt amagat} other{{count} clips curts amagats}}",
+    "homeNoiseFoldShow": "Mostrar",
+    "homeNoiseFoldHide": "{count, plural, =1{Amagar 1 clip curt} other{Amagar {count} clips curts}}"
 }

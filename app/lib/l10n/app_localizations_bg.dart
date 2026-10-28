@@ -8878,12 +8878,12 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Чат: \$$used / \$$limit използвани този месец';
+    return 'Чат: $used / $limit използвани този месец';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Чат: \$$used използвани този месец';
+    return 'Чат: $used използвани този месец';
   }
 
   @override
@@ -13349,6 +13349,30 @@ class AppLocalizationsBg extends AppLocalizations {
   String get paywallOutlineHeadline => 'Никога повече не пропускайте дума.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/година',
+        'other': '/месец',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/година',
+        'other': '/месец',
+      },
+    );
+    return '$days дни безплатно, след това $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -14711,4 +14735,29 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'Подробности за поддръжката';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Скрити кратки записи: $count',
+      one: 'Скрит е 1 кратък запис',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Показвай';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Скрий кратки записи: $count',
+      one: 'Скрий 1 кратък запис',
+    );
+    return '$_temp0';
+  }
 }

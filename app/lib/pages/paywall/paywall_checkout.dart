@@ -6,6 +6,7 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_display_name.dart';
 import 'package:omi/utils/cancel_pending_purchase.dart';
+import 'package:omi/utils/billing_price.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -207,6 +208,14 @@ class PaywallPrice {
   final String interval;
   final int amountMinor;
   final String currency;
+
+  String get formatted => formatBillingPrice(amountMinor, currency);
+
+  String get formattedPerMonth => formatBillingPrice(perMonthMinor, currency);
+
+  String recurringLabel(BuildContext context) => context.l10n.billingRecurringPrice(formatted, interval);
+
+  String trialLabel(BuildContext context, int days) => context.l10n.billingTrialPrice(days, formatted, interval);
 
   /// Per-month equivalent in minor units (a yearly price divided by twelve).
   int get perMonthMinor => interval == 'year' ? (amountMinor / 12).round() : amountMinor;

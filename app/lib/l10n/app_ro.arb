@@ -2847,8 +2847,8 @@
     "currentPlan": "Curent",
     "neoSubtitle": "{count} întrebări pe lună",
     "operatorSubtitle": "{count} întrebări pe lună",
-    "chatUsageCost": "Chat: ${used} / ${limit} utilizat luna aceasta",
-    "chatUsageCostNoLimit": "Chat: ${used} utilizat luna aceasta",
+    "chatUsageCost": "Chat: {used} / {limit} utilizat luna aceasta",
+    "chatUsageCostNoLimit": "Chat: {used} utilizat luna aceasta",
     "chatUsageMessages": "Chat: {used} / {limit} mesaje luna aceasta",
     "chatUsageMessagesNoLimit": "Chat: {used} mesaje luna aceasta",
     "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
@@ -4078,6 +4078,8 @@
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
     "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
     "paywallOutlineHeadline": "Nu mai rata niciun cuvânt.",
+    "billingRecurringPrice": "{price}{interval, select, year{/an} other{/lună}}",
+    "billingTrialPrice": "{days} zile gratuite, apoi {price}{interval, select, year{/an} other{/lună}}",
     "paywallTrialBrand": "Omi Pro",
     "paywallTrialHeadline": "Iată cum funcționează perioada ta de probă gratuită.",
     "paywallTrialSlideSummariesTitle": "Rezumat nelimitat, salvat permanent",
@@ -4459,5 +4461,8 @@
     "onTheWayDayQueued": "În coadă",
     "onTheWayNoDate": "Fără dată",
     "onTheWayFootnote": "Înregistrările care eșuează continuă să fie reîncercate în fundal. Orice nu putem transcrie ni se raportează automat.",
-    "onTheWayDetailsForSupport": "Detalii pentru suport"
+    "onTheWayDetailsForSupport": "Detalii pentru suport",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 clip scurt ascuns} other{{count} clipuri scurte ascunse}}",
+    "homeNoiseFoldShow": "Afișează",
+    "homeNoiseFoldHide": "{count, plural, =1{Ascunde 1 clip scurt} other{Ascunde {count} clipuri scurte}}"
 }
