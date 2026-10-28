@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.554",
+      "date": "2026-10-28",
+      "changes": [
+        "Improved meeting-note attribution from call participant names while excluding app titles, browser tabs, and your own name."
+      ]
+    },
+    {
       "version": "0.12.553",
       "date": "2026-10-28",
       "changes": [
