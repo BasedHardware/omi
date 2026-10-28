@@ -13,6 +13,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:omi/ui/ui.dart';
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/http/api/conversations.dart' show parseHiddenNoiseCounts;
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -249,7 +250,10 @@ TranscriptSegment _segment(int i) => TranscriptSegment(
 
 ServerConversation _conversation(int i, {int segmentCount = 0, String? salience}) => _day[i % _day.length].build(i);
 
-ServerConversation _titled(String id, String title, String emoji, DateTime at, Duration length) => ServerConversation(
+ServerConversation _titled(String id, String title, String emoji, DateTime at, Duration length, {bool noise = false}) =>
+    ServerConversation(
+      discarded: noise,
+      contentKind: noise ? 'noise' : 'conversation',
       id: id,
       speakerResolution: const ConversationSpeakers(status: 'resolved', participantSpeakerIds: [0]),
       createdAt: at,
@@ -279,10 +283,11 @@ const _day = [
 ];
 
 final _folded = [
-  _titled('noise-1', 'Are any of these learnings applicable for…', '💬', _today(15, 7), const Duration(seconds: 2)),
-  _titled('noise-2', 'ừ', '💬', _today(15, 3), const Duration(minutes: 1, seconds: 49)),
-  _titled('noise-3', 'Mm-', '💬', _today(14, 59), const Duration(minutes: 1, seconds: 8)),
-  _titled('noise-4', 'I only listen to That part.', '💬', _today(11, 48), const Duration(seconds: 61)),
+  _titled('noise-1', 'Are any of these learnings applicable for…', '💬', _today(15, 7), const Duration(seconds: 2),
+      noise: true),
+  _titled('noise-2', 'ừ', '💬', _today(15, 3), const Duration(minutes: 1, seconds: 49), noise: true),
+  _titled('noise-3', 'Mm-', '💬', _today(14, 59), const Duration(minutes: 1, seconds: 8), noise: true),
+  _titled('noise-4', 'I only listen to That part.', '💬', _today(11, 48), const Duration(seconds: 61), noise: true),
 ];
 
 Episode _liveEpisode() => Episode(
@@ -322,7 +327,12 @@ class _Home {
         _conversation(i, segmentCount: 2, salience: background.contains(i) ? 'background' : null),
     ]
     ..groupConversationsByDate()
-    ..foldedNoiseByDate = {_today(0, 0): _folded}
+    ..foldedNoiseCounts = {_today(0, 0): _folded.length}
+    // The list endpoint returns every discarded row; only noise/media fold.
+    ..foldedNoiseRowsFetcherOverride = ((start, end) async => [
+          ..._folded,
+          _titled('manual', 'Discarded by hand', '💬', _today(9, 0), const Duration(minutes: 3))..discarded = true,
+        ])
     ..conversationDetailsFetcherOverride = (id) async => hydrated(int.parse(id.substring('conv-'.length)));
 
   /// The detail endpoint's copy: the same conversation with every line.
@@ -470,7 +480,10 @@ Future<void> _shoot(WidgetTester tester, String name, {required bool reveal, req
   addTearDown(tester.view.resetDevicePixelRatio);
   await tester.runAsync(_loadFonts);
   final home = _Home();
-  if (reveal) home.conversations.revealedNoiseDates.add(_today(0, 0));
+  if (reveal) {
+    home.conversations.foldedNoiseByDate[_today(0, 0)] = _folded;
+    home.conversations.revealedNoiseDates.add(_today(0, 0));
+  }
   const boundary = Key('render');
   await tester.pumpWidget(RepaintBoundary(key: boundary, child: _app(home)));
   await tester.pump();
@@ -503,6 +516,38 @@ void main() {
     AnalyticsManager.resetForTesting();
     VisibilityDetectorController.instance.updateInterval = const Duration(milliseconds: 500);
   });
+  test('counts parse into local days; zero and malformed days drop', () {
+    expect(
+        parseHiddenNoiseCounts({
+          'days': [
+            {'date': '2026-10-26', 'count': 2},
+            {'date': '2026-10-27', 'count': 5},
+            {'date': '2026-10-25', 'count': 0},
+            {'date': 7, 'count': 1},
+          ],
+        }),
+        {DateTime(2026, 10, 26): 2, DateTime(2026, 10, 27): 5});
+    expect(parseHiddenNoiseCounts(null), isEmpty);
+  });
+
+  test('a failed count read keeps the shown counts; show-discarded folds nothing', () async {
+    final provider = ConversationProvider(isSignedIn: () => false)
+      ..conversations = [_day.first.build(0)]
+      ..groupConversationsByDate()
+      ..foldedNoiseCounts = {_today(0, 0): 3};
+    DateTime? asked;
+    provider.hiddenNoiseCountsFetcherOverride = (start, end) async {
+      asked = start;
+      return null;
+    };
+    await provider.refreshFoldedNoiseCounts();
+    expect(asked, _today(0, 0));
+    expect(provider.foldedNoiseCounts, {_today(0, 0): 3});
+    provider.showDiscardedConversations = true;
+    await provider.refreshFoldedNoiseCounts();
+    expect(provider.foldedNoiseCounts, isEmpty);
+  });
+
   testWidgets('folded', (tester) => _shoot(tester, '1-folded', reveal: false, height: 844));
   testWidgets('revealed', (tester) => _shoot(tester, '2-revealed', reveal: true, height: 1120));
 
@@ -522,7 +567,9 @@ void main() {
 
     await tester.tap(fold);
     await tester.pump();
+    await tester.pump();
     expect(find.text('Mm-'), findsOneWidget);
+    expect(find.text('Discarded by hand'), findsNothing, reason: 'only noise/media clips fold');
     expect(find.text('Hide 4 short clips'), findsOneWidget);
     // A revealed clip takes its place in the day: 2:59 PM sits between 3:20 PM and 10:37 AM.
     final mm = tester.getTopLeft(find.text('Mm-')).dy;

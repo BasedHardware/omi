@@ -152,7 +152,9 @@ _ConversationPageSnapshot _conversationPageSnapshot(
     processingIdentitySignature: _identitySignature(conversations.processingConversations),
     recordingIdentitySignature: _identitySignature(recordings.recordings),
     noiseFoldSignature: Object.hash(
-        identityHashCode(conversations.foldedNoiseByDate), Object.hashAllUnordered(conversations.revealedNoiseDates)),
+        identityHashCode(conversations.foldedNoiseCounts),
+        Object.hashAll(conversations.foldedNoiseByDate.keys),
+        Object.hashAllUnordered(conversations.revealedNoiseDates)),
     pendingDeleteCount: conversations.memoriesToDelete.length,
     homeEmptyExplanation: conversations.homeEmptyExplanation,
   );
@@ -162,6 +164,7 @@ List<_ConversationListRow> _buildConversationListRows({
   required List<DateTime> dates,
   required Map<DateTime, List<ServerConversation>> conversationsByDate,
   required Map<DateTime, List<LocalRecording>> recordingsByDate,
+  Map<DateTime, int> foldedNoiseCounts = const {},
   Map<DateTime, List<ServerConversation>> foldedNoiseByDate = const {},
   Set<DateTime> revealedNoiseDates = const {},
 }) {
@@ -226,14 +229,15 @@ List<_ConversationListRow> _buildConversationListRows({
       }
     }
 
-    if (folded.isNotEmpty) {
+    final foldedCount = foldedNoiseCounts[date] ?? folded.length;
+    if (foldedCount > 0) {
       rows.add((
         kind: _ConversationListRowKind.noiseFold,
         date: date,
         isFirst: false,
         conversation: null,
         recording: null,
-        conversationIndex: folded.length,
+        conversationIndex: foldedCount,
       ));
     }
 
@@ -652,8 +656,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           dates: mergedDates,
           conversationsByDate: hidingBackground ? _withoutBackground(conversationsByDate) : conversationsByDate,
           recordingsByDate: recordingsByDate,
-          foldedNoiseByDate:
-              showRecordings && !convoProvider.isSelectionModeActive ? convoProvider.foldedNoiseByDate : const {},
+          foldedNoiseCounts:
+              showRecordings && !convoProvider.isSelectionModeActive ? convoProvider.foldedNoiseCounts : const {},
+          foldedNoiseByDate: convoProvider.foldedNoiseByDate,
           revealedNoiseDates: convoProvider.revealedNoiseDates,
         );
         final withLive =
