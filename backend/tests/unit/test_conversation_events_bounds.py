@@ -144,6 +144,7 @@ def router():
         "database.legal_holds": _pkg("database.legal_holds"),
         "database.conversations": _pkg("database.conversations"),
         "database.conversation_scan": _pkg("database.conversation_scan"),
+        "database.hidden_noise_counts": _pkg("database.hidden_noise_counts"),
         "database.screen_frames": _pkg("database.screen_frames"),
         "database.action_items": _pkg("database.action_items"),
         "database.memories": _pkg("database.memories"),

@@ -15,6 +15,7 @@ from itertools import cycle
 
 from config.rollout_cohorts import legacy_membership
 from datetime import timedelta, timezone
+from zoneinfo import ZoneInfo
 from types import SimpleNamespace
 from typing import Any
 
@@ -225,6 +226,14 @@ _add(
     )
 )
 _add(DriverEntry('database._client.get_users_uid'))
+_add(
+    DriverEntry(
+        'database.hidden_noise_counts.count_hidden_noise_by_day',
+        base={'uid': UID, 'start_date': T0, 'end_date': T1},
+        profiles=(CallerProfile('home-hidden-noise-counts', {}),),
+        neutrals={'tz': (ZoneInfo('UTC'), 'in-memory day bucketing only; query shape is fixed')},
+    )
+)
 _add(
     DriverEntry(
         'database.quiet_check_retirement.stop_quiet_checks_for_account',

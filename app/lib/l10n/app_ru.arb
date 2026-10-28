@@ -2882,8 +2882,8 @@
     "currentPlan": "Текущий",
     "neoSubtitle": "{count} вопросов в месяц",
     "operatorSubtitle": "{count} вопросов в месяц",
-    "chatUsageCost": "Чат: ${used} / ${limit} использовано в этом месяце",
-    "chatUsageCostNoLimit": "Чат: ${used} использовано в этом месяце",
+    "chatUsageCost": "Чат: {used} / {limit} использовано в этом месяце",
+    "chatUsageCostNoLimit": "Чат: {used} использовано в этом месяце",
     "chatUsageMessages": "Чат: {used} / {limit} сообщений в этом месяце",
     "chatUsageMessagesNoLimit": "Чат: {used} сообщений в этом месяце",
     "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
@@ -4113,6 +4113,8 @@
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
     "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
     "paywallOutlineHeadline": "Больше не упускайте ни слова.",
+    "billingRecurringPrice": "{price}{interval, select, year{/год} other{/месяц}}",
+    "billingTrialPrice": "{days} дней бесплатно, затем {price}{interval, select, year{/год} other{/месяц}}",
     "paywallTrialBrand": "Omi Pro",
     "paywallTrialHeadline": "Вот как работает ваша бесплатная пробная версия.",
     "paywallTrialSlideSummariesTitle": "Безлимитные сводки, хранятся вечно",
@@ -4494,5 +4496,8 @@
     "onTheWayDayQueued": "В очереди",
     "onTheWayNoDate": "Без даты",
     "onTheWayFootnote": "Если загрузка записи завершится сбоем, попытки продолжатся в фоновом режиме. Всё, что мы не сможем расшифровать, будет автоматически отправляться нам.",
-    "onTheWayDetailsForSupport": "Подробности для поддержки"
+    "onTheWayDetailsForSupport": "Подробности для поддержки",
+    "homeNoiseFoldHidden": "{count, plural, =1{Скрыта 1 короткая запись} other{Скрыто {count} коротких записей}}",
+    "homeNoiseFoldShow": "Показать",
+    "homeNoiseFoldHide": "{count, plural, =1{Скрыть 1 короткую запись} other{Скрыть {count} коротких записей}}"
 }

@@ -1,9 +1,9 @@
 import 'package:collection/collection.dart';
+import 'package:omi/utils/billing_price.dart';
 
-/// The backend formats Stripe minor units using the actual currency. Older
-/// backends only offered USD and omit this additive field.
+/// Render the exact catalog amount. Never trust legacy server-formatted copy.
 String planBillingTotal(Map<String, dynamic> plan) =>
-    plan['billing_total'] as String? ?? '\$${(plan['unit_amount'] as num) / 100}';
+    formatBillingPrice((plan['unit_amount'] as num).toInt(), plan['currency'] as String? ?? 'usd');
 
 /// Months saved by a tier's annual price, derived from the tier's own prices.
 ///

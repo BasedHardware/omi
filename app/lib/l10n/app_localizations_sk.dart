@@ -8833,12 +8833,12 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit využité tento mesiac';
+    return 'Chat: $used / $limit využité tento mesiac';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used využité tento mesiac';
+    return 'Chat: $used využité tento mesiac';
   }
 
   @override
@@ -13297,6 +13297,30 @@ class AppLocalizationsSk extends AppLocalizations {
   String get paywallOutlineHeadline => 'Už vám neunikne ani slovo.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/rok',
+        'other': '/mesiac',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/rok',
+        'other': '/mesiac',
+      },
+    );
+    return '$days dní zadarmo, potom $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -14655,4 +14679,29 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'Detaily pre podporu';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Skrytých krátkych nahrávok: $count',
+      one: '1 skrytá krátka nahrávka',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Zobraziť';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Skryť $count krátkych nahrávok',
+      one: 'Skryť 1 krátku nahrávku',
+    );
+    return '$_temp0';
+  }
 }

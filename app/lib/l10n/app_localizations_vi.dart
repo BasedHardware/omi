@@ -8848,12 +8848,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Trò chuyện: \$$used / \$$limit đã dùng tháng này';
+    return 'Trò chuyện: $used / $limit đã dùng tháng này';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Trò chuyện: \$$used đã dùng tháng này';
+    return 'Trò chuyện: $used đã dùng tháng này';
   }
 
   @override
@@ -13299,6 +13299,30 @@ class AppLocalizationsVi extends AppLocalizations {
   String get paywallOutlineHeadline => 'Không bao giờ bỏ lỡ một lời nào nữa.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/năm',
+        'other': '/tháng',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/năm',
+        'other': '/tháng',
+      },
+    );
+    return 'Miễn phí $days ngày, sau đó $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -14661,4 +14685,29 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'Chi tiết cho bộ phận hỗ trợ';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Đã ẩn $count clip ngắn',
+      one: 'Đã ẩn 1 clip ngắn',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Hiển thị';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ẩn $count clip ngắn',
+      one: 'Ẩn 1 clip ngắn',
+    );
+    return '$_temp0';
+  }
 }

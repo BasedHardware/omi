@@ -101,9 +101,18 @@
     if (channel && channel.postMessage) channel.postMessage(JSON.stringify(msg));
     else console.log('[OmiPaywall]', JSON.stringify(msg));
   }
-  function money(minor, currency) {
-    try { return new Intl.NumberFormat(q.get('locale') || 'en-US', { style: 'currency', currency: (currency || 'usd').toUpperCase() }).format(minor / 100); }
-    catch (e) { return '$' + (minor / 100).toFixed(2); }
+  // Current hosts supply strings from Flutter's shared minor-unit formatter.
+  // Keep old released hosts safe while the static page rolls out independently.
+  function money(interval, perMonth) {
+    var supplied = q.get(interval + (perMonth ? '_per_month_price' : '_price'));
+    if (supplied) return supplied;
+    var code = (q.get(interval + '_currency') || 'usd').toUpperCase();
+    var minor = Number(q.get(interval + '_amount'));
+    if (perMonth && interval === 'year') minor = Math.round(minor / 12);
+    var zero = ['BIF','CLP','DJF','GNF','JPY','KMF','KRW','MGA','PYG','RWF','VND','VUV','XAF','XOF','XPF'];
+    var digits = zero.includes(code) ? 0 : (['BHD','JOD','KWD','OMR','TND'].includes(code) ? 3 : 2);
+    var amount = (minor / Math.pow(10, digits)).toLocaleString('en-US', {minimumFractionDigits: digits, maximumFractionDigits: digits});
+    return (code === 'USD' ? 'US$' : (code === 'JPY' ? '¥' : code + ' ')) + amount;
   }
   function $(id) { return document.getElementById(id); }
 
@@ -112,10 +121,10 @@
   var month = q.get('month_amount') ? parseInt(q.get('month_amount'), 10) : null;
   if (year != null) {
     var yc = q.get('year_currency');
-    $('yearly-price').textContent = money(year, yc) + '/yr';
-    $('yearly-sub').textContent = 'Just ' + money(Math.round(year / 12), yc) + '/mo, billed yearly';
+    $('yearly-price').textContent = money('year', false) + '/yr';
+    $('yearly-sub').textContent = 'Just ' + money('year', true) + '/mo, billed yearly';
   } else { $('yearly').classList.add('hidden'); selected = 'month'; }
-  if (month != null) $('monthly-price').textContent = money(month, q.get('month_currency')) + '/mo';
+  if (month != null) $('monthly-price').textContent = money('month', false) + '/mo';
   else $('monthly').classList.add('hidden');
   if (year == null && month == null) { $('cta').disabled = true; $('caption').textContent = 'Unable to load plans'; }
 

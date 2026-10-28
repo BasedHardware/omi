@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/pages/paywall/paywall_checkout.dart';
@@ -128,9 +127,6 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> with TickerProv
     }
   }
 
-  static String _money(int minor, String currency) =>
-      NumberFormat.simpleCurrency(name: currency.toUpperCase(), decimalDigits: 2).format(minor / 100);
-
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
@@ -238,9 +234,9 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> with TickerProv
                               key: const Key('outline_paywall_yearly'),
                               title: l10n.billingYearly,
                               badge: saving == null ? null : l10n.savePercent(saving),
-                              subtitle: _money(yearly.amountMinor, yearly.currency),
-                              price: _money(yearly.perMonthMinor, yearly.currency),
-                              per: l10n.perMonthLabel,
+                              subtitle: yearly.formattedPerMonth + l10n.perMonthLabel,
+                              price: yearly.formatted,
+                              per: l10n.billingYearly,
                               selected: _yearly || monthly == null,
                               onTap: () => setState(() => _yearly = true),
                             ),
@@ -249,8 +245,8 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> with TickerProv
                             _PlanOption(
                               key: const Key('outline_paywall_monthly'),
                               title: l10n.billingMonthly,
-                              subtitle: _money(monthly.amountMinor, monthly.currency),
-                              price: _money(monthly.amountMinor, monthly.currency),
+                              subtitle: monthly.formatted,
+                              price: monthly.formatted,
                               per: l10n.perMonthLabel,
                               selected: !_yearly || yearly == null,
                               onTap: () => setState(() => _yearly = false),

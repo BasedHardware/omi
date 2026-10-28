@@ -245,9 +245,18 @@
     if (channel && channel.postMessage) channel.postMessage(JSON.stringify(msg));
     else console.log('[OmiPaywall]', JSON.stringify(msg));
   }
-  function money(minor, currency) {
-    try { return new Intl.NumberFormat(q.get('locale') || 'en-US', { style: 'currency', currency: (currency || 'usd').toUpperCase() }).format(minor / 100); }
-    catch (e) { return '$' + (minor / 100).toFixed(2); }
+  // Current hosts supply strings from Flutter's shared minor-unit formatter.
+  // Keep old released hosts safe while the static page rolls out independently.
+  function money(interval, perMonth) {
+    var supplied = q.get(interval + (perMonth ? '_per_month_price' : '_price'));
+    if (supplied) return supplied;
+    var code = (q.get(interval + '_currency') || 'usd').toUpperCase();
+    var minor = Number(q.get(interval + '_amount'));
+    if (perMonth && interval === 'year') minor = Math.round(minor / 12);
+    var zero = ['BIF','CLP','DJF','GNF','JPY','KMF','KRW','MGA','PYG','RWF','VND','VUV','XAF','XOF','XPF'];
+    var digits = zero.includes(code) ? 0 : (['BHD','JOD','KWD','OMR','TND'].includes(code) ? 3 : 2);
+    var amount = (minor / Math.pow(10, digits)).toLocaleString('en-US', {minimumFractionDigits: digits, maximumFractionDigits: digits});
+    return (code === 'USD' ? 'US$' : (code === 'JPY' ? '¥' : code + ' ')) + amount;
   }
 
   var star = '<svg viewBox="0 0 17 16"><path d="M8.5 1.33l2.06 4.18 4.6.67-3.33 3.25.79 4.58L8.5 11.85l-4.12 2.16.79-4.58L1.83 6.18l4.61-.67L8.5 1.33z" fill="#f5a623" stroke="#f5a623" stroke-width="1.3" stroke-linejoin="round"/></svg>';
@@ -268,16 +277,16 @@
   var month = q.get('month_amount') ? parseInt(q.get('month_amount'), 10) : null;
   var yc = q.get('year_currency'), mc = q.get('month_currency');
   if (year != null) {
-    $('yearly-sub').textContent = money(year, yc) + '/year';
-    $('yearly-per').textContent = money(Math.round(year / 12), yc) + '/mo';
+    $('yearly-sub').textContent = money('year', false) + '/year';
+    $('yearly-per').textContent = money('year', true) + '/mo';
     if (month) {
       var pct = Math.round((1 - year / (month * 12)) * 100);
       if (pct > 0) { $('yearly-badge').textContent = 'SAVE ' + pct + '%'; $('yearly-badge').classList.remove('hidden'); }
     }
   } else { $('yearly').classList.add('hidden'); selected = 'month'; }
   if (month != null) {
-    $('monthly-sub').textContent = money(month, mc) + '/month';
-    $('monthly-per').textContent = money(month, mc) + '/mo';
+    $('monthly-sub').textContent = money('month', false) + '/month';
+    $('monthly-per').textContent = money('month', false) + '/mo';
   } else $('monthly').classList.add('hidden');
   var noPlans = year == null && month == null;
 

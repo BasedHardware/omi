@@ -2838,8 +2838,8 @@
     "currentPlan": "الحالي",
     "neoSubtitle": "{count} سؤال شهرياً",
     "operatorSubtitle": "{count} سؤال شهرياً",
-    "chatUsageCost": "الدردشة: ${used} / ${limit} مُستخدم هذا الشهر",
-    "chatUsageCostNoLimit": "الدردشة: ${used} مُستخدم هذا الشهر",
+    "chatUsageCost": "الدردشة: {used} / {limit} مُستخدم هذا الشهر",
+    "chatUsageCostNoLimit": "الدردشة: {used} مُستخدم هذا الشهر",
     "chatUsageMessages": "الدردشة: {used} / {limit} رسالة هذا الشهر",
     "chatUsageMessagesNoLimit": "الدردشة: {used} رسالة هذا الشهر",
     "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
@@ -4078,6 +4078,8 @@
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
     "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
     "paywallOutlineHeadline": "لا تفوّت كلمة واحدة بعد الآن.",
+    "billingRecurringPrice": "{price}{interval, select, year{/سنة} other{/شهر}}",
+    "billingTrialPrice": "{days} أيام مجانًا، ثم {price}{interval, select, year{/سنة} other{/شهر}}",
     "paywallTrialBrand": "Omi Pro",
     "paywallTrialHeadline": "إليك كيفية عمل تجربتك المجانية.",
     "paywallTrialSlideSummariesTitle": "ملخصات Unlimited، محفوظة للأبد",
@@ -4459,5 +4461,8 @@
     "onTheWayDayQueued": "في قائمة الانتظار",
     "onTheWayNoDate": "بدون تاريخ",
     "onTheWayFootnote": "تستمر التسجيلات التي تفشل في إعادة المحاولة في الخلفية. ويُبلَّغنا تلقائيًا عن أي شيء يتعذر علينا تحويله إلى نص.",
-    "onTheWayDetailsForSupport": "تفاصيل لفريق الدعم"
+    "onTheWayDetailsForSupport": "تفاصيل لفريق الدعم",
+    "homeNoiseFoldHidden": "{count, plural, =1{تم إخفاء مقطع صوتي قصير واحد} other{تم إخفاء {count} من المقاطع الصوتية القصيرة}}",
+    "homeNoiseFoldShow": "إظهار",
+    "homeNoiseFoldHide": "{count, plural, =1{إخفاء مقطع صوتي قصير واحد} other{إخفاء {count} من المقاطع الصوتية القصيرة}}"
 }

@@ -10269,8 +10269,8 @@
     "currentPlan": "सध्याचा",
     "neoSubtitle": "दरमहा {count} प्रश्न",
     "operatorSubtitle": "दरमहा {count} प्रश्न",
-    "chatUsageCost": "चॅट: ${used} / ${limit} या महिन्यात वापरले",
-    "chatUsageCostNoLimit": "चॅट: ${used} या महिन्यात वापरले",
+    "chatUsageCost": "चॅट: {used} / {limit} या महिन्यात वापरले",
+    "chatUsageCostNoLimit": "चॅट: {used} या महिन्यात वापरले",
     "chatUsageMessages": "चॅट: {used} / {limit} संदेश या महिन्यात",
     "chatUsageMessagesNoLimit": "चॅट: {used} संदेश या महिन्यात",
     "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
@@ -11501,6 +11501,8 @@
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
     "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
     "paywallOutlineHeadline": "आता एकही शब्द चुकवू नका.",
+    "billingRecurringPrice": "{price}{interval, select, year{/वर्ष} other{/महिना}}",
+    "billingTrialPrice": "{days} दिवस मोफत, नंतर {price}{interval, select, year{/वर्ष} other{/महिना}}",
     "paywallTrialBrand": "Omi Pro",
     "paywallTrialHeadline": "तुमची मोफत चाचणी कशी काम करते ते येथे आहे.",
     "paywallTrialSlideSummariesTitle": "अमर्यादित सारांश, कायमस्वरूपी जतन केलेले",
@@ -11885,5 +11887,8 @@
     "onTheWayDayQueued": "रांगेत आहे",
     "onTheWayNoDate": "तारीख नाही",
     "onTheWayFootnote": "अपयशी ठरलेली रेकॉर्डिंग पार्श्वभूमीमध्ये पुन्हा प्रयत्न करत राहतात. आम्ही लिप्यंतरित करू न शकणारे मजकूर आपोआप आम्हाला नोंदवला जातो.",
-    "onTheWayDetailsForSupport": "समर्थनासाठी तपशील"
+    "onTheWayDetailsForSupport": "समर्थनासाठी तपशील",
+    "homeNoiseFoldHidden": "{count, plural, =1{1 लहान क्लिप लपवले आहे} other{{count} लहान क्लिप्स लपवली आहेत}}",
+    "homeNoiseFoldShow": "दाखवा",
+    "homeNoiseFoldHide": "{count, plural, =1{1 लहान क्लिप लपवा} other{{count} लहान क्लिप्स लपवा}}"
 }
