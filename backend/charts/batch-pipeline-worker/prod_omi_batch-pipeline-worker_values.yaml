@@ -21,7 +21,7 @@ replicaCount: 3
 # -> 16) in the same reviewed qualification window that enables it, using a
 # real scale-up during the 25% soak as the scheduling proof.
 autoscaling:
-  enabled: false
+  enabled: true
   minReplicas: 3
   maxReplicas: 16
   balancedPools:
