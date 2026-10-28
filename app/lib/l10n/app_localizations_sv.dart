@@ -13307,6 +13307,30 @@ class AppLocalizationsSv extends AppLocalizations {
   String get paywallOutlineHeadline => 'Missa aldrig ett ord igen.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/år',
+        'other': '/månad',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/år',
+        'other': '/månad',
+      },
+    );
+    return '$days dagar gratis, sedan $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override

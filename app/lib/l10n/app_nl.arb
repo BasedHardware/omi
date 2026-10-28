@@ -4078,6 +4078,8 @@
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
     "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
     "paywallOutlineHeadline": "Mis nooit meer een woord.",
+    "billingRecurringPrice": "{price}{interval, select, year{/jaar} other{/maand}}",
+    "billingTrialPrice": "{days} dagen gratis, daarna {price}{interval, select, year{/jaar} other{/maand}}",
     "paywallTrialBrand": "Omi Pro",
     "paywallTrialHeadline": "Zo werkt je gratis proefperiode.",
     "paywallTrialSlideSummariesTitle": "Unlimited samenvattingen, voor altijd bewaard",

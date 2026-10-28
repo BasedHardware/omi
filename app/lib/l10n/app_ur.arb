@@ -11501,6 +11501,8 @@
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
     "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
     "paywallOutlineHeadline": "اب ایک لفظ بھی نہ چھوڑیں۔",
+    "billingRecurringPrice": "{price}{interval, select, year{/سال} other{/مہینہ}}",
+    "billingTrialPrice": "{days} دن مفت، پھر {price}{interval, select, year{/سال} other{/مہینہ}}",
     "paywallTrialBrand": "Omi Pro",
     "paywallTrialHeadline": "آپ کا مفت ٹرائل کیسے کام کرتا ہے یہ یہاں ہے۔",
     "paywallTrialSlideSummariesTitle": "Unlimited خلاصے، ہمیشہ کے لیے محفوظ",

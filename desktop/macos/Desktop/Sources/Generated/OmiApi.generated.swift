@@ -5148,21 +5148,27 @@ public enum OmiAPI {
 
 
   public struct StorefrontCurrent: Codable {
+    public let amountMinor: Int?
     public let cancelAtPeriodEnd: Bool?
+    public let currency: String?
     public let interval: String?
     public let legacy: Bool
     public let legacyNote: String?
     public let line: String
+    public let lineTemplate: String?
     public let name: String
     public let planId: String
     public let priceId: String?
 
     private enum CodingKeys: String, CodingKey {
+      case amountMinor = "amount_minor"
       case cancelAtPeriodEnd = "cancel_at_period_end"
+      case currency
       case interval
       case legacy
       case legacyNote = "legacy_note"
       case line
+      case lineTemplate = "line_template"
       case name
       case planId = "plan_id"
       case priceId = "price_id"
@@ -5170,22 +5176,28 @@ public enum OmiAPI {
 
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
+      amountMinor = try c.decodeIfPresent(Int.self, forKey: .amountMinor)
       cancelAtPeriodEnd = try c.decodeIfPresent(Bool.self, forKey: .cancelAtPeriodEnd)
+      currency = try c.decodeIfPresent(String.self, forKey: .currency)
       interval = try c.decodeIfPresent(String.self, forKey: .interval)
       legacy = try c.decode(Bool.self, forKey: .legacy)
       legacyNote = try c.decodeIfPresent(String.self, forKey: .legacyNote)
       line = try c.decode(String.self, forKey: .line)
+      lineTemplate = try c.decodeIfPresent(String.self, forKey: .lineTemplate)
       name = try c.decode(String.self, forKey: .name)
       planId = try c.decode(String.self, forKey: .planId)
       priceId = try c.decodeIfPresent(String.self, forKey: .priceId)
     }
 
-    public init(cancelAtPeriodEnd: Bool? = nil, interval: String? = nil, legacy: Bool, legacyNote: String? = nil, line: String, name: String, planId: String, priceId: String? = nil) {
+    public init(amountMinor: Int? = nil, cancelAtPeriodEnd: Bool? = nil, currency: String? = nil, interval: String? = nil, legacy: Bool, legacyNote: String? = nil, line: String, lineTemplate: String? = nil, name: String, planId: String, priceId: String? = nil) {
+      self.amountMinor = amountMinor
       self.cancelAtPeriodEnd = cancelAtPeriodEnd
+      self.currency = currency
       self.interval = interval
       self.legacy = legacy
       self.legacyNote = legacyNote
       self.line = line
+      self.lineTemplate = lineTemplate
       self.name = name
       self.planId = planId
       self.priceId = priceId
@@ -5195,53 +5207,65 @@ public enum OmiAPI {
 
   public struct StorefrontPrice: Codable {
     public let amountMinor: Int
+    public let confirmLineTemplates: [String]?
     public let confirmLines: [String]?
     public let ctaLabel: String?
+    public let ctaLabelTemplate: String?
     public let currency: String
     public let headline: String
     public let interval: String
     public let monthsFree: Int?
     public let priceId: String?
     public let renewalLine: String?
+    public let savingMinor: Int?
     public let subline: String?
 
     private enum CodingKeys: String, CodingKey {
       case amountMinor = "amount_minor"
+      case confirmLineTemplates = "confirm_line_templates"
       case confirmLines = "confirm_lines"
       case ctaLabel = "cta_label"
+      case ctaLabelTemplate = "cta_label_template"
       case currency
       case headline
       case interval
       case monthsFree = "months_free"
       case priceId = "price_id"
       case renewalLine = "renewal_line"
+      case savingMinor = "saving_minor"
       case subline
     }
 
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       amountMinor = try c.decode(Int.self, forKey: .amountMinor)
+      confirmLineTemplates = try c.decodeIfPresent([String].self, forKey: .confirmLineTemplates)
       confirmLines = try c.decodeIfPresent([String].self, forKey: .confirmLines)
       ctaLabel = try c.decodeIfPresent(String.self, forKey: .ctaLabel)
+      ctaLabelTemplate = try c.decodeIfPresent(String.self, forKey: .ctaLabelTemplate)
       currency = try c.decode(String.self, forKey: .currency)
       headline = try c.decode(String.self, forKey: .headline)
       interval = try c.decode(String.self, forKey: .interval)
       monthsFree = try c.decodeIfPresent(Int.self, forKey: .monthsFree)
       priceId = try c.decodeIfPresent(String.self, forKey: .priceId)
       renewalLine = try c.decodeIfPresent(String.self, forKey: .renewalLine)
+      savingMinor = try c.decodeIfPresent(Int.self, forKey: .savingMinor)
       subline = try c.decodeIfPresent(String.self, forKey: .subline)
     }
 
-    public init(amountMinor: Int, confirmLines: [String]? = nil, ctaLabel: String? = nil, currency: String, headline: String, interval: String, monthsFree: Int? = nil, priceId: String? = nil, renewalLine: String? = nil, subline: String? = nil) {
+    public init(amountMinor: Int, confirmLineTemplates: [String]? = nil, confirmLines: [String]? = nil, ctaLabel: String? = nil, ctaLabelTemplate: String? = nil, currency: String, headline: String, interval: String, monthsFree: Int? = nil, priceId: String? = nil, renewalLine: String? = nil, savingMinor: Int? = nil, subline: String? = nil) {
       self.amountMinor = amountMinor
+      self.confirmLineTemplates = confirmLineTemplates
       self.confirmLines = confirmLines
       self.ctaLabel = ctaLabel
+      self.ctaLabelTemplate = ctaLabelTemplate
       self.currency = currency
       self.headline = headline
       self.interval = interval
       self.monthsFree = monthsFree
       self.priceId = priceId
       self.renewalLine = renewalLine
+      self.savingMinor = savingMinor
       self.subline = subline
     }
   }

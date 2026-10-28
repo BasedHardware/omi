@@ -15984,6 +15984,33 @@
     "@paywallOutlineHeadline": {
         "description": "Headline of the Outline paywall variant (mobile paywall A/B test)"
     },
+    "billingRecurringPrice": "{price}{interval, select, year{/year} other{/month}}",
+    "@billingRecurringPrice": {
+        "description": "Recurring catalog total with an unambiguous formatted currency amount; interval is month or year",
+        "placeholders": {
+            "price": {
+                "type": "String"
+            },
+            "interval": {
+                "type": "String"
+            }
+        }
+    },
+    "billingTrialPrice": "{days} days free, then {price}{interval, select, year{/year} other{/month}}",
+    "@billingTrialPrice": {
+        "description": "Trial disclosure showing the exact recurring catalog total and billing interval after the trial",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            },
+            "price": {
+                "type": "String"
+            },
+            "interval": {
+                "type": "String"
+            }
+        }
+    },
     "paywallTrialBrand": "Omi Pro",
     "@paywallTrialBrand": {
         "description": "Paywall header: plan name"
@@ -16114,7 +16141,7 @@
     },
     "paywallTrialCta": "Try for {price}",
     "@paywallTrialCta": {
-        "description": "Paywall primary button; price is a formatted zero price like $0.00",
+        "description": "Paywall primary button; price is a currency-safe formatted zero amount supplied by the catalog formatter",
         "placeholders": {
             "price": {
                 "type": "String"

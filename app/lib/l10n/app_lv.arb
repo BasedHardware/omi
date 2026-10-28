@@ -4078,6 +4078,8 @@
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
     "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
     "paywallOutlineHeadline": "Nekad vairs nepalaidiet garām nevienu vārdu.",
+    "billingRecurringPrice": "{price}{interval, select, year{/gadā} other{/mēnesī}}",
+    "billingTrialPrice": "{days} dienas bez maksas, pēc tam {price}{interval, select, year{/gadā} other{/mēnesī}}",
     "paywallTrialBrand": "Omi Pro",
     "paywallTrialHeadline": "Lūk, kā darbojas jūsu bezmaksas izmēģinājums.",
     "paywallTrialSlideSummariesTitle": "Unlimited kopsavilkumi, saglabāti uz visiem laikiem",

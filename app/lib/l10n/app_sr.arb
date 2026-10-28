@@ -11501,6 +11501,8 @@
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
     "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
     "paywallOutlineHeadline": "Никада више не пропустите ни реч.",
+    "billingRecurringPrice": "{price}{interval, select, year{/година} other{/месец}}",
+    "billingTrialPrice": "{days} дана бесплатно, затим {price}{interval, select, year{/година} other{/месец}}",
     "paywallTrialBrand": "Omi Pro",
     "paywallTrialHeadline": "Evo kako funkcioniše vaša besplatna proba.",
     "paywallTrialSlideSummariesTitle": "Unlimited rezimea, zauvek sačuvani",

@@ -13353,6 +13353,30 @@ class AppLocalizationsHu extends AppLocalizations {
   String get paywallOutlineHeadline => 'Soha többé ne maradj le egyetlen szóról sem.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/év',
+        'other': '/hónap',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/év',
+        'other': '/hónap',
+      },
+    );
+    return '$days nap ingyen, utána $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override

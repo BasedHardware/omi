@@ -4078,6 +4078,8 @@
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
     "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
     "paywallOutlineHeadline": "もう一言も聞き逃さない。",
+    "billingRecurringPrice": "{price}{interval, select, year{/年} other{/月}}",
+    "billingTrialPrice": "{days}日間無料、その後は{price}{interval, select, year{/年} other{/月}}",
     "paywallTrialBrand": "Omi Pro",
     "paywallTrialHeadline": "無料トライアルの仕組みはこちら。",
     "paywallTrialSlideSummariesTitle": "無制限の要約、永久保存",

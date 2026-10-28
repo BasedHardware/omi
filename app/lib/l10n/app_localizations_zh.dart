@@ -13096,6 +13096,30 @@ class AppLocalizationsZh extends AppLocalizations {
   String get paywallOutlineHeadline => '再也不错过任何一句话。';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/年',
+        'other': '/月',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/年',
+        'other': '/月',
+      },
+    );
+    return '免费$days天，之后$price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override

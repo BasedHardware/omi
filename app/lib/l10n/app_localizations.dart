@@ -23655,6 +23655,18 @@ abstract class AppLocalizations {
   /// **'Never miss a word again.'**
   String get paywallOutlineHeadline;
 
+  /// Recurring catalog total with an unambiguous formatted currency amount; interval is month or year
+  ///
+  /// In en, this message translates to:
+  /// **'{price}{interval, select, year{/year} other{/month}}'**
+  String billingRecurringPrice(String price, String interval);
+
+  /// Trial disclosure showing the exact recurring catalog total and billing interval after the trial
+  ///
+  /// In en, this message translates to:
+  /// **'{days} days free, then {price}{interval, select, year{/year} other{/month}}'**
+  String billingTrialPrice(int days, String price, String interval);
+
   /// Paywall header: plan name
   ///
   /// In en, this message translates to:
@@ -23817,7 +23829,7 @@ abstract class AppLocalizations {
   /// **'Save {amount}'**
   String paywallTrialSaveAmount(String amount);
 
-  /// Paywall primary button; price is a formatted zero price like $0.00
+  /// Paywall primary button; price is a currency-safe formatted zero amount supplied by the catalog formatter
   ///
   /// In en, this message translates to:
   /// **'Try for {price}'**

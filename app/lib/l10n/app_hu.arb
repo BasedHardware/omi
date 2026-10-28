@@ -4174,6 +4174,8 @@
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
     "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
     "paywallOutlineHeadline": "Soha többé ne maradj le egyetlen szóról sem.",
+    "billingRecurringPrice": "{price}{interval, select, year{/év} other{/hónap}}",
+    "billingTrialPrice": "{days} nap ingyen, utána {price}{interval, select, year{/év} other{/hónap}}",
     "paywallTrialBrand": "Omi Pro",
     "paywallTrialHeadline": "Így működik az ingyenes próbaidőszakod.",
     "paywallTrialSlideSummariesTitle": "Unlimited összefoglalók, örökre megőrizve",

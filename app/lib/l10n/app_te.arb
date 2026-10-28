@@ -11501,6 +11501,8 @@
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
     "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
     "paywallOutlineHeadline": "ఇకపై ఒక్క మాట కూడా మిస్ అవ్వకండి.",
+    "billingRecurringPrice": "{price}{interval, select, year{/సంవత్సరం} other{/నెల}}",
+    "billingTrialPrice": "{days} రోజులు ఉచితం, ఆపై {price}{interval, select, year{/సంవత్సరం} other{/నెల}}",
     "paywallTrialBrand": "Omi Pro",
     "paywallTrialHeadline": "మీ ఉచిత ట్రయల్ ఎలా పనిచేస్తుందో ఇక్కడ ఉంది.",
     "paywallTrialSlideSummariesTitle": "Unlimited సారాంశాలు, శాశ్వతంగా భద్రపరచబడతాయి",

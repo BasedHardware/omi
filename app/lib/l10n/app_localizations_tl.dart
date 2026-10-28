@@ -13407,6 +13407,30 @@ class AppLocalizationsTl extends AppLocalizations {
   String get paywallOutlineHeadline => 'Huwag nang palampasin ang kahit isang salita.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/taon',
+        'other': '/buwan',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/taon',
+        'other': '/buwan',
+      },
+    );
+    return '$days araw na libre, pagkatapos ay $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override

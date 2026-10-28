@@ -49,6 +49,7 @@ from database.redis_db import (
     remove_daily_summary_to_uid,
 )
 
+from utils.storefront_copy import format_money
 from utils.chat_rating_triage import extract_rating_triage_fields, normalize_rating_reason
 from database.users import (
     claim_deletion_wipe_for_task,
@@ -1514,7 +1515,7 @@ def _user_subscription_response(
                     PricingOption(
                         id=price_data['id'],
                         title="Monthly",
-                        price_string=f"${price_data['unit_amount'] / 100:.2f}/{price_data['recurring']['interval']}",
+                        price_string=f"{format_money(price_data['unit_amount'], price_data['currency'])}/{price_data['recurring']['interval']}",
                         description="Billed monthly. Cancel anytime.",
                     )
                 )
@@ -1536,7 +1537,7 @@ def _user_subscription_response(
                     PricingOption(
                         id=price_data['id'],
                         title="Annual",
-                        price_string=f"${price_data['unit_amount'] / 100:.2f}/{price_data['recurring']['interval']}",
+                        price_string=f"{format_money(price_data['unit_amount'], price_data['currency'])}/{price_data['recurring']['interval']}",
                         description=definition["annual_description"],
                     )
                 )
