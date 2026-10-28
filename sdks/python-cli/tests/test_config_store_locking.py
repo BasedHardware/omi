@@ -10,6 +10,7 @@ from __future__ import annotations
 import threading
 import unittest
 import json
+import os
 from pathlib import Path
 
 from omi_cli.auth.store import store_api_key
