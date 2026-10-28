@@ -254,11 +254,12 @@ an unqualified capacity target. The qualified cutover shape (lead f05065,
 10-28) is a single OD-pinned HPA at min3/max16: every replica pins to
 `batch-pipeline-pool`, so the guaranteed floor and scale-out never depend on
 Spot (persistent L4 Spot stockout; Spot L4 bills above on-demand). The latent
-balanced-pool machinery stays available but is NOT the cutover: the template
-still refuses it for odd or undersized totals, and the production 3/16 budget
-refuses it by design. Going above 16 replicas is a second, separately
-qualified step; never pre-provision nodes. When the scaler is enabled, op1
-raises `batch-pipeline-pool`'s node maximum (3 -> 16) in the same reviewed
+balanced-pool machinery stays available for non-production explicit-budget
+tests. The chart rejects it when the stage, values namespace, or Helm release
+namespace marks a production install, including even replica overrides. Going
+above 16 replicas is a second, separately qualified step; never pre-provision
+nodes. When the scaler is enabled, op1 raises `batch-pipeline-pool`'s node
+maximum (3 -> 16) in the same reviewed
 qualification window, using a real scale-up during the 25% soak as the
 scheduling proof.
 
@@ -272,14 +273,12 @@ scaler PR (lead f05065), bramp3 does the bounded review, op1 installs and
 qualifies; MERGE READY by 10Z on 2026-10-28.
 
 For cutover/rollback, op1 captures the current release values/manifest privately,
-keeps the image pinned, preserves all runtime bindings and the1500s SIGTERM
-drain, and verifies **both** deployments/images plus all count classes. The OD
-deployment declares its required Spot companion; `deploy_status_report.py`
-fails for a missing/unready/zero-sized or wrong-image companion. Do not treat
-the original deployment's rollout alone as product acceptance. Restore the
-captured pre-scaler release and four Ready workers if qualification fails.
-CPU is not the scale signal; queue latency, useful throughput, GPU duty and
-the cost ledger still gate cohort expansion.
+keeps the image pinned, preserves all runtime bindings and the 1500s SIGTERM
+drain, and verifies the single OD deployment/image, the HPA budget when enabled,
+and all count classes. Production has no Spot companion. If qualification
+fails, restore the prior release with autoscaling off and three Ready OD
+workers. CPU is not the scale signal; queue latency,
+useful throughput, GPU duty and the cost ledger still gate cohort expansion.
 
 ## Stage profiling (metrics-only)
 

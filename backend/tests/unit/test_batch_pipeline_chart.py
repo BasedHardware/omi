@@ -11,12 +11,12 @@ import yaml
 CHART = Path(__file__).resolve().parents[2] / 'charts' / 'batch-pipeline-worker'
 
 
-def render(*arguments):
+def render(*arguments, namespace='synthetic'):
     helm = shutil.which('helm')
     if helm is None:
         pytest.skip('Helm unavailable; render check runs on the packaging host')
     return subprocess.run(
-        [helm, 'template', 'synthetic-worker', str(CHART), '--namespace', 'synthetic', *arguments],
+        [helm, 'template', 'synthetic-worker', str(CHART), '--namespace', namespace, *arguments],
         capture_output=True,
         text=True,
     )
@@ -227,16 +227,9 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
 
 def test_balanced_pools_have_distinct_ownership_and_shared_fresh_queue_scope():
     result = render(
-        '-f',
-        str(CHART / 'prod_omi_batch-pipeline-worker_values.yaml'),
-        '--set-string',
-        'image.digest=sha256:' + 'b' * 64,
+        *enabled_arguments(),
         '--set',
-        'autoscaling.enabled=true,autoscaling.balancedPools.enabled=true',
-        # balanced is machinery-only (f05065 cutover is the single OD HPA);
-        # exercise it with an explicit even budget, not the prod 3/16.
-        '--set',
-        'autoscaling.minReplicas=2,autoscaling.maxReplicas=24',
+        'autoscaling.enabled=true,autoscaling.balancedPools.enabled=true,autoscaling.minReplicas=2,autoscaling.maxReplicas=24,worker.stageProfilingEnabled=true',
     )
     assert result.returncode == 0, result.stderr
     docs = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
@@ -279,6 +272,7 @@ def test_balanced_pools_have_distinct_ownership_and_shared_fresh_queue_scope():
     [
         'autoscaling.enabled=false',
         'autoscaling.minReplicas=1',
+        'autoscaling.minReplicas=3',
         'autoscaling.maxReplicas=23',
         'autoscaling.maxReplicas=0',
         'autoscaling.balancedPools.spotNodePool=batch-pipeline-pool',
@@ -287,10 +281,7 @@ def test_balanced_pools_have_distinct_ownership_and_shared_fresh_queue_scope():
 )
 def test_balanced_pools_refuse_unsafe_or_ambiguous_budgets(setting):
     result = render(
-        '-f',
-        str(CHART / 'prod_omi_batch-pipeline-worker_values.yaml'),
-        '--set-string',
-        'image.digest=sha256:' + 'b' * 64,
+        *enabled_arguments(),
         '--set',
         'autoscaling.enabled=true,autoscaling.balancedPools.enabled=true',
         '--set',
@@ -299,18 +290,34 @@ def test_balanced_pools_refuse_unsafe_or_ambiguous_budgets(setting):
     assert result.returncode != 0
 
 
-def test_production_budget_refuses_balanced_pools_odd_floor():
-    # Lead f05065 (10-28): the qualified cutover is a single OD-pinned HPA at the
-    # production 3/16 budget. balancedPools over that odd floor must refuse.
+@pytest.mark.parametrize('min_replicas', [3, 4])
+def test_production_values_refuse_balanced_pools_even_with_replica_override(min_replicas):
+    # Lead f05065 (10-28): production only uses one OD-pinned HPA. The explicit
+    # production guard must also reject an even min override that would split
+    # the OD floor below three when Spot is unavailable.
     result = render(
         '-f',
         str(CHART / 'prod_omi_batch-pipeline-worker_values.yaml'),
         '--set-string',
         'image.digest=sha256:' + 'b' * 64,
         '--set',
-        'autoscaling.enabled=true,autoscaling.balancedPools.enabled=true',
+        f'autoscaling.enabled=true,autoscaling.balancedPools.enabled=true,autoscaling.minReplicas={min_replicas}',
     )
     assert result.returncode != 0
+    assert 'production requires a single OD-pinned HPA' in result.stderr
+
+
+def test_production_release_namespace_refuses_balanced_pools_with_dev_values():
+    # The deploy workflow installs production releases into prod-omi-backend;
+    # changing both chart values to dev must not bypass the release namespace guard.
+    result = render(
+        *enabled_arguments(),
+        '--set',
+        'autoscaling.enabled=true,autoscaling.balancedPools.enabled=true,autoscaling.minReplicas=4',
+        namespace='prod-omi-backend',
+    )
+    assert result.returncode != 0
+    assert 'production requires a single OD-pinned HPA' in result.stderr
 
 
 def test_production_cutover_is_single_od_hpa_min3_max16():
