@@ -74,6 +74,13 @@ class _AppShellState extends State<AppShell> {
   static const Set<String> _appLinkRoutes = {'action-items', 'capture', 'conversation', 'conversations', 'settings'};
 
   void openAppLink(Uri uri) async {
+    final auth = context.read<AuthenticationProvider>();
+    if (auth.isSignedIn()) {
+      final owner = SharedPreferencesUtil().uid;
+      final deletion = await auth.checkAccountDeletion();
+      if (!mounted || SharedPreferencesUtil().uid != owner) return;
+      if (deletion is! ApiSuccess<AccountDeletionStatus> || deletion.data.pendingDeletion) return;
+    }
     final externalHapticResult = await runExternalHapticTrigger(
       uri,
       deviceId: SharedPreferencesUtil().btDevice.id,
