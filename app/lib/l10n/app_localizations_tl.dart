@@ -8926,12 +8926,12 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit nagamit ngayong buwan';
+    return 'Chat: $used / $limit nagamit ngayong buwan';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used nagamit ngayong buwan';
+    return 'Chat: $used nagamit ngayong buwan';
   }
 
   @override
@@ -13407,6 +13407,30 @@ class AppLocalizationsTl extends AppLocalizations {
   String get paywallOutlineHeadline => 'Huwag nang palampasin ang kahit isang salita.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/taon',
+        'other': '/buwan',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/taon',
+        'other': '/buwan',
+      },
+    );
+    return '$days araw na libre, pagkatapos ay $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -14777,6 +14801,31 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'Mga detalye para sa support';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nakatago ang $count maikling clip',
+      one: 'Nakatago ang 1 maikling clip',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Ipakita';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Itago ang $count maikling clip',
+      one: 'Itago ang 1 maikling clip',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get consentShortMessage =>

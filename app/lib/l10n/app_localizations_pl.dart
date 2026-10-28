@@ -8865,12 +8865,12 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Czat: \$$used / \$$limit wykorzystane w tym miesiącu';
+    return 'Czat: $used / $limit wykorzystane w tym miesiącu';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Czat: \$$used wykorzystane w tym miesiącu';
+    return 'Czat: $used wykorzystane w tym miesiącu';
   }
 
   @override
@@ -13341,6 +13341,30 @@ class AppLocalizationsPl extends AppLocalizations {
   String get paywallOutlineHeadline => 'Nigdy więcej nie przegap ani słowa.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/rok',
+        'other': '/miesiąc',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/rok',
+        'other': '/miesiąc',
+      },
+    );
+    return '$days dni za darmo, potem $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -14703,6 +14727,31 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'Szczegóły dla działu wsparcia';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ukryto $count krótkich klipów',
+      one: 'Ukryto 1 krótki klip',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Pokaż';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ukryj $count krótkich klipów',
+      one: 'Ukryj 1 krótki klip',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get consentShortMessage =>

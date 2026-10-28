@@ -224,7 +224,7 @@ void main() {
         subscription:
             Subscription(plan: PlanType.plus, status: SubscriptionStatus.active, stripeSubscriptionId: 'sub_fixture'),
         plans: [yearly, monthly]);
-    expect(find.textContaining('43,200 JPY'), findsOneWidget);
+    expect(find.textContaining('¥43,200'), findsWidgets);
     expect(find.textContaining('\$432'), findsNothing);
     expect(_selected(tester, 'Omi Pro · Yearly'), isTrue);
     await _tapVisible(tester, find.widgetWithText(PlanOptionCard, 'Omi Pro · Monthly'));
@@ -236,6 +236,6 @@ void main() {
     final l10n = AppLocalizations.of(tester.element(find.byType(PlansSheet)));
     expect(find.text(l10n.confirmPlanChange), findsOneWidget,
         reason: 'fresh JPY offer must not require a matching USD ID in the usage catalog');
-    expect(find.textContaining('4,800 JPY'), findsWidgets);
+    expect(find.textContaining('¥4,800'), findsWidgets);
   });
 }

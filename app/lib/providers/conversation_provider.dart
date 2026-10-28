@@ -12,6 +12,7 @@ import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/providers/conversation_noise_fold.dart';
 import 'package:omi/backend/http/api_fallback.dart';
 import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/http/api_result.dart';
@@ -79,15 +80,18 @@ Map<DateTime, List<ServerConversation>> groupSearchResultsPreservingRank(Iterabl
   return grouped;
 }
 
-class ConversationProvider extends ChangeNotifier {
+class ConversationProvider extends ChangeNotifier with ConversationNoiseFold {
   List<ServerConversation> conversations = [];
   List<ServerConversation> searchedConversations = [];
+  @override
   Map<DateTime, List<ServerConversation>> groupedConversations = {};
 
   bool isLoadingConversations = false;
   bool _isLoadingConversationList = false;
   bool _isLoadingConversationSearch = false;
+  @override
   bool showDiscardedConversations = false;
+
   HomeEmptyExplanation homeEmptyExplanation = HomeEmptyExplanation.none;
   bool showShortConversations = false;
   int shortConversationThreshold = 0; // in seconds
@@ -335,6 +339,7 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void clearUserData() {
+    resetFoldedNoise();
     for (final watcher in _mergeWatchers.values) {
       watcher.cancel();
     }
@@ -617,6 +622,7 @@ class ConversationProvider extends ChangeNotifier {
   void toggleDiscardConversations() {
     showDiscardedConversations = !showDiscardedConversations;
     SharedPreferencesUtil().showDiscardedMemories = showDiscardedConversations;
+    resetFoldedNoise();
 
     // Clear grouped conversations to show shimmer effect while loading
     groupedConversations = {};
@@ -625,7 +631,7 @@ class ConversationProvider extends ChangeNotifier {
     if (hasActiveSearch) {
       searchConversations(previousQuery, showShimmer: true);
     } else {
-      fetchConversations();
+      fetchConversations().then((_) => refreshFoldedNoiseCounts());
     }
 
     PlatformManager.instance.analytics.showDiscardedMemoriesToggled(showDiscardedConversations);
@@ -1119,6 +1125,7 @@ class ConversationProvider extends ChangeNotifier {
     _cancelInitialFetchRetry();
     final fetched = await fetchConversations();
     if (!fetched || !_isSignedIn()) return;
+    unawaited(refreshFoldedNoiseCounts());
     await checkHasDailySummaries();
   }
 
@@ -1550,6 +1557,7 @@ class ConversationProvider extends ChangeNotifier {
     }
     setLoadingConversations(false);
     notifyListeners();
+    unawaited(refreshFoldedNoiseCounts());
     return true;
   }
 
@@ -1742,6 +1750,7 @@ class ConversationProvider extends ChangeNotifier {
     _pendingDeleteTimers.remove(conversation.id)?.cancel();
     _pendingDeleteTimers[conversation.id] = Timer(pendingDeleteWindow, () => commitPendingDelete(conversation.id));
     conversations.removeWhere((element) => element.id == conversation.id);
+    dropFromFoldedNoise(conversation.id);
     for (final group in groupedConversations.values) {
       group.removeWhere((e) => e.id == conversation.id);
     }

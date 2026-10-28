@@ -8860,12 +8860,12 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Чат: \$$used / \$$limit використано цього місяця';
+    return 'Чат: $used / $limit використано цього місяця';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Чат: \$$used використано цього місяця';
+    return 'Чат: $used використано цього місяця';
   }
 
   @override
@@ -13332,6 +13332,30 @@ class AppLocalizationsUk extends AppLocalizations {
   String get paywallOutlineHeadline => 'Більше не пропускайте жодного слова.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/рік',
+        'other': '/місяць',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/рік',
+        'other': '/місяць',
+      },
+    );
+    return '$days днів безкоштовно, потім $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -14691,6 +14715,31 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'Подробиці для підтримки';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Приховано $count коротких записів',
+      one: 'Приховано 1 короткий запис',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Показати';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Приховати $count коротких записів',
+      one: 'Приховати 1 короткий запис',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get consentShortMessage =>

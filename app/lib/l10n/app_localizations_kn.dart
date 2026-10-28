@@ -8876,12 +8876,12 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'ಚಾಟ್: \$$used / \$$limit ಈ ತಿಂಗಳು ಬಳಸಲಾಗಿದೆ';
+    return 'ಚಾಟ್: $used / $limit ಈ ತಿಂಗಳು ಬಳಸಲಾಗಿದೆ';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'ಚಾಟ್: \$$used ಈ ತಿಂಗಳು ಬಳಸಲಾಗಿದೆ';
+    return 'ಚಾಟ್: $used ಈ ತಿಂಗಳು ಬಳಸಲಾಗಿದೆ';
   }
 
   @override
@@ -13341,6 +13341,30 @@ class AppLocalizationsKn extends AppLocalizations {
   String get paywallOutlineHeadline => 'ಇನ್ನು ಮುಂದೆ ಒಂದು ಪದವನ್ನೂ ತಪ್ಪಿಸಿಕೊಳ್ಳಬೇಡಿ.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/ವರ್ಷ',
+        'other': '/ತಿಂಗಳು',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/ವರ್ಷ',
+        'other': '/ತಿಂಗಳು',
+      },
+    );
+    return '$days ದಿನಗಳು ಉಚಿತ, ನಂತರ $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -14708,6 +14732,31 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'ಬೆಂಬಲಕ್ಕಾಗಿ ವಿವರಗಳು';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ಸಣ್ಣ ಕ್ಲಿಪ್‌ಗಳನ್ನು ಮರೆಮಾಡಲಾಗಿದೆ',
+      one: '1 ಸಣ್ಣ ಕ್ಲಿಪ್ ಮರೆಮಾಡಲಾಗಿದೆ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'ತೋರಿಸಿ';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ಸಣ್ಣ ಕ್ಲಿಪ್‌ಗಳನ್ನು ಮರೆಮಾಡಿ',
+      one: '1 ಸಣ್ಣ ಕ್ಲಿಪ್ ಮರೆಮಾಡಿ',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get consentShortMessage => 'Omi AI ಬಳಸಿ ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳನ್ನು ಟಿಪ್ಪಣಿಗಳಾಗಿ ಮಾಡುತ್ತದೆ. ಯಾವಾಗ ಬೇಕಾದರೂ ಅಳಿಸಬಹುದು.';

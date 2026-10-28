@@ -8852,12 +8852,12 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Pokalbis: \$$used / \$$limit panaudota šį mėnesį';
+    return 'Pokalbis: $used / $limit panaudota šį mėnesį';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Pokalbis: \$$used panaudota šį mėnesį';
+    return 'Pokalbis: $used panaudota šį mėnesį';
   }
 
   @override
@@ -13325,6 +13325,30 @@ class AppLocalizationsLt extends AppLocalizations {
   String get paywallOutlineHeadline => 'Daugiau nepraleiskite nė žodžio.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/metus',
+        'other': '/mėn.',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/metus',
+        'other': '/mėn.',
+      },
+    );
+    return '$days dienų nemokamai, tada $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -14683,6 +14707,31 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'Išsami informacija palaikymo komandai';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Paslėpta $count trumpų įrašų',
+      one: 'Paslėptas 1 trumpas įrašas',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Rodyti';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Slėpti $count trumpus įrašus',
+      one: 'Slėpti 1 trumpą įrašą',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get consentShortMessage =>

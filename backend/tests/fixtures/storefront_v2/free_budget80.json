@@ -50,7 +50,7 @@
           "interval": "month",
           "amount_minor": 1999,
           "currency": "usd",
-          "headline": "$19.99/month",
+          "headline": "US$19.99/month",
           "subline": null,
           "renewal_line": "Renews monthly until you cancel. Cancel anytime in settings."
         },
@@ -59,8 +59,8 @@
           "interval": "year",
           "amount_minor": 19990,
           "currency": "usd",
-          "headline": "$16.66/month",
-          "subline": "$199.90 billed yearly · 2 months free",
+          "headline": "US$16.66/month",
+          "subline": "US$199.90 billed yearly · 2 months free",
           "renewal_line": "Renews yearly until you cancel. Cancel anytime in settings.",
           "months_free": 2
         }
@@ -84,7 +84,7 @@
           "interval": "month",
           "amount_minor": 0,
           "currency": "usd",
-          "headline": "$0",
+          "headline": "US$0",
           "subline": null,
           "renewal_line": null
         }
@@ -112,7 +112,7 @@
           "interval": "month",
           "amount_minor": 4999,
           "currency": "usd",
-          "headline": "$49.99/month",
+          "headline": "US$49.99/month",
           "subline": null,
           "renewal_line": "Renews monthly until you cancel. Cancel anytime in settings."
         },
@@ -121,8 +121,8 @@
           "interval": "year",
           "amount_minor": 49990,
           "currency": "usd",
-          "headline": "$41.66/month",
-          "subline": "$499.90 billed yearly · 2 months free",
+          "headline": "US$41.66/month",
+          "subline": "US$499.90 billed yearly · 2 months free",
           "renewal_line": "Renews yearly until you cancel. Cancel anytime in settings.",
           "months_free": 2
         }
@@ -149,7 +149,7 @@
           "interval": "month",
           "amount_minor": 19900,
           "currency": "usd",
-          "headline": "$199/month",
+          "headline": "US$199/month",
           "subline": null,
           "renewal_line": "Renews monthly until you cancel. Cancel anytime in settings."
         },
@@ -158,8 +158,8 @@
           "interval": "year",
           "amount_minor": 199000,
           "currency": "usd",
-          "headline": "$165.83/month",
-          "subline": "$1,990 billed yearly · 2 months free",
+          "headline": "US$165.83/month",
+          "subline": "US$1,990 billed yearly · 2 months free",
           "renewal_line": "Renews yearly until you cancel. Cancel anytime in settings.",
           "months_free": 2
         }

@@ -402,6 +402,41 @@ Future<({ServerConversation? item, bool ok})> getConversationByIdResult(String c
   return (item: null, ok: false);
 }
 
+/// Per local day in [tz], how many noise/media clips the server folded away from Home
+/// (`GET /v1/conversations/hidden-noise-counts`). Null when the request failed: the caller keeps
+/// what it showed, never reading a failure as "nothing hidden".
+Future<Map<DateTime, int>?> getHiddenNoiseCounts({required DateTime start, required DateTime end, String? tz}) async {
+  final base = Env.apiBaseUrl ?? '';
+  final root = base.endsWith('/') ? base : '$base/';
+  var url = '${root}v1/conversations/hidden-noise-counts'
+      '?start_date=${Uri.encodeQueryComponent(start.toUtc().toIso8601String())}'
+      '&end_date=${Uri.encodeQueryComponent(end.toUtc().toIso8601String())}';
+  if (tz != null && tz.isNotEmpty) url += '&tz=${Uri.encodeQueryComponent(tz)}';
+  final response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
+  if (response == null || response.statusCode != 200) return null;
+  try {
+    // omi-perf-allow: history-json-on-ui -- at most 31 day rows, independent of history size
+    return parseHiddenNoiseCounts(jsonDecode(response.body));
+  } catch (_) {
+    return null;
+  }
+}
+
+/// `{"days": [{"date": "2026-10-27", "count": 5}, ...]}` → local day keys.
+Map<DateTime, int> parseHiddenNoiseCounts(Object? body) {
+  final days = body is Map ? body['days'] : null;
+  return {
+    if (days is List)
+      for (final day in days)
+        if (day is Map && day['date'] is String && day['count'] is int && (day['count'] as int) > 0)
+          DateTime.parse(day['date'] as String).let((d) => DateTime(d.year, d.month, d.day)): day['count'] as int,
+  };
+}
+
+extension _Let<T> on T {
+  R let<R>(R Function(T) f) => f(this);
+}
+
 Future<ServerConversation?> getConversationById(String conversationId) async {
   return (await getConversationByIdResult(conversationId)).item;
 }

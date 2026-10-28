@@ -8918,12 +8918,12 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit diesen Monat verbraucht';
+    return 'Chat: $used / $limit diesen Monat verbraucht';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used diesen Monat verbraucht';
+    return 'Chat: $used diesen Monat verbraucht';
   }
 
   @override
@@ -13401,6 +13401,30 @@ class AppLocalizationsDe extends AppLocalizations {
   String get paywallOutlineHeadline => 'Verpasse nie wieder ein Wort.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/Jahr',
+        'other': '/Monat',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/Jahr',
+        'other': '/Monat',
+      },
+    );
+    return '$days Tage kostenlos, danach $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -14770,6 +14794,31 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'Details für den Support';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kurze Clips ausgeblendet',
+      one: '1 kurzer Clip ausgeblendet',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Anzeigen';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kurze Clips ausblenden',
+      one: '1 kurzen Clip ausblenden',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get consentShortMessage => 'Omi macht mit KI aus deinen Gesprächen Notizen. Du kannst sie jederzeit löschen.';

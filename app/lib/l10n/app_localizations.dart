@@ -16413,10 +16413,10 @@ abstract class AppLocalizations {
   /// **'Unlimited chat messages this month'**
   String get unlimitedChatThisMonth;
 
-  /// No description provided for @chatUsedOfLimitCompute.
+  /// Compute budget usage; used and limit are already formatted unambiguous USD amounts.
   ///
   /// In en, this message translates to:
-  /// **'\${used} of \${limit} compute budget used'**
+  /// **'{used} of {limit} compute budget used'**
   String chatUsedOfLimitCompute(String used, String limit);
 
   /// No description provided for @chatUsedOfLimitMessages.
@@ -16515,16 +16515,16 @@ abstract class AppLocalizations {
   /// **'{count} questions per month'**
   String operatorSubtitle(int count);
 
-  /// No description provided for @chatUsageCost.
+  /// Chat compute usage; used and limit are already formatted unambiguous USD amounts.
   ///
   /// In en, this message translates to:
-  /// **'Chat: \${used} / \${limit} used this month'**
+  /// **'Chat: {used} / {limit} used this month'**
   String chatUsageCost(String used, String limit);
 
-  /// No description provided for @chatUsageCostNoLimit.
+  /// Chat compute usage; used is an already formatted unambiguous USD amount.
   ///
   /// In en, this message translates to:
-  /// **'Chat: \${used} used this month'**
+  /// **'Chat: {used} used this month'**
   String chatUsageCostNoLimit(String used);
 
   /// No description provided for @chatUsageMessages.
@@ -23655,6 +23655,18 @@ abstract class AppLocalizations {
   /// **'Never miss a word again.'**
   String get paywallOutlineHeadline;
 
+  /// Recurring catalog total with an unambiguous formatted currency amount; interval is month or year
+  ///
+  /// In en, this message translates to:
+  /// **'{price}{interval, select, year{/year} other{/month}}'**
+  String billingRecurringPrice(String price, String interval);
+
+  /// Trial disclosure showing the exact recurring catalog total and billing interval after the trial
+  ///
+  /// In en, this message translates to:
+  /// **'{days} days free, then {price}{interval, select, year{/year} other{/month}}'**
+  String billingTrialPrice(int days, String price, String interval);
+
   /// Paywall header: plan name
   ///
   /// In en, this message translates to:
@@ -23817,7 +23829,7 @@ abstract class AppLocalizations {
   /// **'Save {amount}'**
   String paywallTrialSaveAmount(String amount);
 
-  /// Paywall primary button; price is a formatted zero price like $0.00
+  /// Paywall primary button; price is a currency-safe formatted zero amount supplied by the catalog formatter
   ///
   /// In en, this message translates to:
   /// **'Try for {price}'**
@@ -25946,6 +25958,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Details for support'**
   String get onTheWayDetailsForSupport;
+
+  /// Quiet line at the end of a day on the Home list: how many very short or noise-only recordings Omi folded away from that day. {count} is a whole number.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 short clip hidden} other{{count} short clips hidden}}'**
+  String homeNoiseFoldHidden(int count);
+
+  /// Tappable word after the hidden-clips count on Home; reveals the folded short recordings in place.
+  ///
+  /// In en, this message translates to:
+  /// **'Show'**
+  String get homeNoiseFoldShow;
+
+  /// Tappable line at the end of a day on Home after the user revealed the short recordings; folds them away again. {count} is a whole number.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}'**
+  String homeNoiseFoldHide(int count);
 
   /// Onboarding data & privacy consent: one-line summary of storage and AI processing
   ///

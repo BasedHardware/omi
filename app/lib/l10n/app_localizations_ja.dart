@@ -8719,12 +8719,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'チャット: \$$used / \$$limit 今月の使用量';
+    return 'チャット: $used / $limit 今月の使用量';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'チャット: \$$used 今月の使用量';
+    return 'チャット: $used 今月の使用量';
   }
 
   @override
@@ -13114,6 +13114,30 @@ class AppLocalizationsJa extends AppLocalizations {
   String get paywallOutlineHeadline => 'もう一言も聞き逃さない。';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/年',
+        'other': '/月',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/年',
+        'other': '/月',
+      },
+    );
+    return '$days日間無料、その後は$price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -14452,6 +14476,31 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'サポート用の詳細';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件の短いクリップを非表示にしました',
+      one: '短いクリップ1件を非表示にしました',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => '表示';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件の短いクリップを非表示にする',
+      one: '短いクリップ1件を非表示にする',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get consentShortMessage => 'OmiはAIで会話をメモにまとめます。メモはいつでも削除できます。';

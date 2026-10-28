@@ -8886,12 +8886,12 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'Chat: \$$used / \$$limit utilizat luna aceasta';
+    return 'Chat: $used / $limit utilizat luna aceasta';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'Chat: \$$used utilizat luna aceasta';
+    return 'Chat: $used utilizat luna aceasta';
   }
 
   @override
@@ -13357,6 +13357,30 @@ class AppLocalizationsRo extends AppLocalizations {
   String get paywallOutlineHeadline => 'Nu mai rata niciun cuvânt.';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/an',
+        'other': '/lună',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/an',
+        'other': '/lună',
+      },
+    );
+    return '$days zile gratuite, apoi $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -14722,6 +14746,31 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'Detalii pentru suport';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count clipuri scurte ascunse',
+      one: '1 clip scurt ascuns',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'Afișează';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ascunde $count clipuri scurte',
+      one: 'Ascunde 1 clip scurt',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get consentShortMessage =>

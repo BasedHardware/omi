@@ -8852,12 +8852,12 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String chatUsageCost(String used, String limit) {
-    return 'চ্যাট: \$$used / \$$limit এই মাসে ব্যবহৃত';
+    return 'চ্যাট: $used / $limit এই মাসে ব্যবহৃত';
   }
 
   @override
   String chatUsageCostNoLimit(String used) {
-    return 'চ্যাট: \$$used এই মাসে ব্যবহৃত';
+    return 'চ্যাট: $used এই মাসে ব্যবহৃত';
   }
 
   @override
@@ -13299,6 +13299,30 @@ class AppLocalizationsBn extends AppLocalizations {
   String get paywallOutlineHeadline => 'আর কখনো একটি শব্দও মিস করবেন না।';
 
   @override
+  String billingRecurringPrice(String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/বছর',
+        'other': '/মাস',
+      },
+    );
+    return '$price$_temp0';
+  }
+
+  @override
+  String billingTrialPrice(int days, String price, String interval) {
+    String _temp0 = intl.Intl.selectLogic(
+      interval,
+      {
+        'year': '/বছর',
+        'other': '/মাস',
+      },
+    );
+    return '$days দিন বিনামূল্যে, তারপর $price$_temp0';
+  }
+
+  @override
   String get paywallTrialBrand => 'Omi Pro';
 
   @override
@@ -14656,6 +14680,31 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get onTheWayDetailsForSupport => 'সাপোর্টের জন্য বিস্তারিত';
+
+  @override
+  String homeNoiseFoldHidden(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countটি ছোট ক্লিপ লুকানো হয়েছে',
+      one: '1টি ছোট ক্লিপ লুকানো হয়েছে',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get homeNoiseFoldShow => 'দেখান';
+
+  @override
+  String homeNoiseFoldHide(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countটি ছোট ক্লিপ লুকান',
+      one: '1টি ছোট ক্লিপ লুকান',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get consentShortMessage => 'Omi AI ব্যবহার করে আপনার কথোপকথনকে নোটে পরিণত করে। যেকোনো সময় মুছে ফেলতে পারেন।';
