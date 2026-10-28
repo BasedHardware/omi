@@ -107,6 +107,8 @@ from utils.conversations.fragment_visibility import is_user_curated
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.process_conversation import process_conversation
+from utils.sync import processing_hold
+from utils.conversations.smart_merge import refresh_survivor
 from utils.conversations.relevance import sync_intake_decision
 from utils.episodes.finalize import schedule_after_finalization, schedule_synced_intake_attach
 from utils.executors import (
@@ -1090,6 +1092,22 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
             context['defer_reason'] = 'open_live_target'
         return
 
+    if processing_hold.enabled() and context is not None and context.get('sync_hold'):
+        context['sync_hold'] = True
+        outcome, due = processing_hold.admission(conversation_data, context, now=time.time())
+        processing_hold.OUTCOMES.labels(outcome=outcome).inc()
+        if due is not None:
+            context.update(defer_reason=outcome, defer_until=due)
+            return
+        if outcome in {'unchanged', 'late_cap', 'immaterial'}:
+            if not conversations_db.complete_sync_processing_hold(
+                uid, conversation_id, conversation_data.get('sync_content_revision'), None
+            ):
+                raise SyncConversationPersistenceFenced('hold completion snapshot changed')
+            context['hold_skipped'] = True
+            return
+        context['hold_snapshot'] = processing_hold.content_snapshot(conversation_data)
+
     # Intake already discarded a rule-settled fragment; skip the processing
     # spend. Everything else goes through the relevance step (SYNC_UPDATE),
     # which reassesses the whole merged transcript, so later speech promotes it.
@@ -1123,6 +1141,20 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     ):
         raise SyncConversationPersistenceFenced('summary processing snapshot changed')
 
+    if (
+        context is not None
+        and context.get('sync_hold')
+        and (conversation_data.get('smart_merge') or {}).get('role') == 'survivor'
+    ):
+        # Preserve the smart-merge refresh lease/checkpoints and its vector work.
+        refresh_survivor(uid, conversation_id, owner=context['owner'], settled=True)
+        if context.get('hold_snapshot') is not None and not conversations_db.complete_sync_processing_hold(
+            uid, conversation_id, conversation_data.get('sync_content_revision'), context['hold_snapshot']
+        ):
+            raise SyncConversationPersistenceFenced('hold completion snapshot changed')
+        refreshed = conversations_db.get_conversation(uid, conversation_id)
+        return deserialize_conversation(refreshed) if refreshed else None
+
     # Convert to Conversation object
     conversation = deserialize_conversation(conversation_data)
     if language == _LINEAGE_RETRY_LANGUAGE:
@@ -1153,6 +1185,14 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         # sync_update means a previous enrichment, sync_intake or absence does not.
         prior_relevance_decision=prior_decision if isinstance(prior_decision, dict) else None,
     )
+    if (
+        context is not None
+        and context.get('hold_snapshot') is not None
+        and not conversations_db.complete_sync_processing_hold(
+            uid, conversation_id, conversation_data.get('sync_content_revision'), context['hold_snapshot']
+        )
+    ):
+        raise SyncConversationPersistenceFenced('hold completion snapshot changed')
     elapsed = time.monotonic() - started
     # Persistence is guaranteed here: a fenced write raises before return.
     # client_platform is the Conversation field set at sync intake; None -> unknown.
@@ -2028,7 +2068,7 @@ def _reprocess_merged_conversations(
 
     from config.demand_processing import enabled as demand_enabled
 
-    coalescing = (coalesce_enabled() or demand_enabled(uid)) and not user_selected
+    coalescing = (processing_hold.enabled() or coalesce_enabled() or demand_enabled(uid)) and not user_selected
     merged = response.pop('_merged', {})
     if coalescing:
         # Partial-result IDs survive a crash after append/checkpoint but before
@@ -2054,7 +2094,7 @@ def _reprocess_merged_conversations(
             if coalescing:
                 from utils.sync.reprocess import mark
 
-                mark(uid, conversation_id, language)
+                mark(uid, conversation_id, language, sync_hold=processing_hold.enabled())
             else:
                 _reprocess_conversation_after_update(uid, conversation_id, language)
                 if user_selected:

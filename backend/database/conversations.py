@@ -1,5 +1,6 @@
 from database import conversation_visibility_counts, processing_backlog, speaker_auto_enroll, capture_group_notes
 from utils.conversations import summary_delivery, lifecycle_clocks
+from utils.sync import processing_hold
 from config.refactor_modes import serving_for, shadow_or_serve
 import copy
 import hashlib
@@ -4587,3 +4588,35 @@ def promote_final_pass_if_current(
     if written:
         invalidate_people_stats_cache(uid)
     return bool(written)
+
+
+def complete_sync_processing_hold(
+    uid: str,
+    conversation_id: str,
+    expected_revision: int | None,
+    snapshot: dict | None,
+    *,
+    firestore_client: Any = None,
+) -> bool:
+    """Finish a hold epoch only after processing and its existing effects succeeded.
+
+    A failure before this receipt leaves normal worker retries owed. A newer
+    append wins; completing an older run cannot clear its quiet/max-hold clock.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
+
+    @firestore.transactional
+    def finish(transaction):
+        existing = ref.get(transaction=transaction).to_dict() or {}
+        if not existing or existing.get('deleted') or existing.get('sync_content_revision') != expected_revision:
+            return False
+        state = dict(existing.get(processing_hold.FIELD) or {})
+        if snapshot is not None:
+            state = processing_hold.completion_patch(existing, snapshot)
+        else:
+            state.update(pending_since=None, held=False)
+        transaction.update(ref, {processing_hold.FIELD: state})
+        return True
+
+    return run_transactional(client, finish)

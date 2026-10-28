@@ -7814,3 +7814,56 @@ regardless of V2 mode, preserving prior tasks and retryability. Conversion keeps
 existing valid cited IDs; staged provenance is not invented. No source-less history
 or old descriptions are rewritten. The reported null-row writer and staged source
 lineage remain evidence work under ANX step `fbreview-p4-task-integrity-1028`.
+
+### Sync full-processing settle window (occasion architecture step 1)
+
+`SYNC_PROCESSING_HOLD_ENABLED` is a default-on kill switch. WAL assignment stamps
+`sync_processing_hold.pending_since` and `last_content_at` in the existing
+content-revision transaction. Sync enrichment enrolls the durable enrichment
+outbox, waits 600 seconds after the last content append or smart merge, and
+rechecks the current row before any full notes/title/memory/task work. The
+first pending instant bounds the wait to 3600 seconds even with continuous
+uploads. The existing rule-discard, live-in-progress, deletion, lease, account
+and revision fences still apply. Cheap server-minimum titles and episode
+attachment stay at intake.
+
+A held donor's worker transfers custody to its canonical parent before
+acknowledging; it never processes the donor. Smart-merge survivor refreshes
+for sync-touched rows hand off to this same outbox, then persist a
+`smart_merge.delegated_revision` receipt. Only that committed handoff permits
+another absorb while a refresh is owed. The settled worker still uses the
+smart-merge refresh lease, processing checkpoint and vector completion. Ordinary
+live-only refreshes retain their existing path. This step does not move the
+smart-merge decision before the donor's first processing; that is step 2.
+
+Successful automatic processing stores a content digest, word count and union
+speech duration in `sync_processing_hold.full_snapshot`, after processing and its existing effects return, through a
+revision-fenced completion transaction. Failures retain the normal retry debt. Unchanged content buys no further run. Late content
+must add at least 30 seconds of speech or 80 words; it receives the same quiet
+window and at most one automatic re-finalization per canonical conversation.
+Small changes accumulate against the last processed snapshot. Explicit Process
+Now, client finalize, first-open and user reprocess retain their immediate
+paths. A full snapshot receipt survives lost outbox acknowledgements and
+subsequent appends. Content is always retained even after the automatic cap.
+
+No current WAL producer provides a contiguous device upload watermark. A
+future `sync_processing_hold.upload_watermark_at`, if supplied, must pass
+`finished_at + 600 seconds`; a lagging value waits up to the same maximum hold.
+Until that producer exists, quiet time plus the hard ceiling are the available
+settling evidence; one uploaded file is never treated as a watermark.
+
+Rollback: set `SYNC_PROCESSING_HOLD_ENABLED=false`. New intake resumes legacy
+coalescing configuration; queued held obligations drain on their next wake
+without the hold admission. Smart-merge refresh returns to its immediate path.
+No backfill, historical-data mutation or production change is required.
+
+`omi_sync_processing_hold_total{outcome}` reports bounded admission outcomes
+(`quiet_wait`, `watermark_wait`, `ready`, `max_hold`, `unchanged`, `immaterial`,
+`late_cap`). Existing notes-agent metrics lack a source/conversation dimension
+and Cloud Run sync does not export their run counter to this Prometheus scrape;
+they cannot reconstruct a historical sync/live runs-per-final multiplier.
+
+Home acceptance remains occasion architecture step 3b: intake still stores its
+legacy completed minimum, so released clients can show a held piece as a
+finished row. This backend change does not claim to fix that UI or to prevent
+smart merges after a row has been seen. No UI is changed here.

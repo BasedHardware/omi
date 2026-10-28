@@ -106,9 +106,11 @@ class EnrichmentConsumer:
         summary_policy = rows.summary_policy_for(row)
         context = (
             {'owner': claim.lease_token, 'lease_until': claim.lease_until}
-            if summary_policy and not row.get('summary_seen')
+            if (summary_policy and not row.get('summary_seen')) or row.get('sync_hold')
             else None
         )
+        if context is not None:
+            context.update(sync_hold=bool(row.get('sync_hold')), first_pending_at=row['first_pending_at'])
         summary_seen = superseded = empty_blocked = False
         retry_revision = None
         lost = threading.Event()
@@ -131,6 +133,8 @@ class EnrichmentConsumer:
                     )
                     blocked = bool(context and context.get('blocked_reason'))
                     custody = bool(context and (context.get('redirect_to') or context.get('defer_reason')))
+                    if context and context.get('hold_skipped'):
+                        discarded = True
                     if output is None and preserves_admitted(row) and not discarded and not blocked and not custody:
                         return Result(Outcome.RETRY, RetryReason.CALLBACK_PENDING, available_at=now)
                     if output is not None and not summary_seen and not discarded and not blocked:
@@ -179,7 +183,11 @@ class EnrichmentConsumer:
                 rows.wake_row(pending)  # Transactional custody survives a lost enqueue acknowledgement.
             return Result(Outcome.STALE, ConsumerReason.REDIRECTED)
         if context and context.get('defer_reason'):
-            return Result(Outcome.DEFERRED, ConsumerReason.NOT_DUE, available_at=now + rows.LIVE_DEFER_SECONDS)
+            return Result(
+                Outcome.DEFERRED,
+                ConsumerReason.NOT_DUE,
+                available_at=context.get('defer_until', now + rows.LIVE_DEFER_SECONDS),
+            )
         if superseded:
             if retry_revision is not None:
                 self.outbox.repair(claim, retry_revision, now=now)

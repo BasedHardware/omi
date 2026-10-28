@@ -88,6 +88,7 @@ def _build_pipeline_fakes() -> dict:
         'utils.conversations.lifecycle',
         'utils.conversations.location',
         'utils.conversations.process_conversation',
+        'utils.conversations.smart_merge',
         'utils.dream_vocabulary',
         'utils.sync.bridge',
         'utils.executors',

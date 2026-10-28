@@ -20,8 +20,9 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 169,
-  "count": 183,
+  "count": 184,
   "names": {
+    "SYNC_PROCESSING_HOLD_ENABLED": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28"},
     "BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED": {"owner": "langexcl / batch rollout lead", "review_by": "2026-11-15"},
     "BATCH_PIPELINE_API_URL": {"seeded": "2026-10-25"},
     "BATCH_PIPELINE_ASR_LEFT_CONTEXT_SECONDS": {"seeded": "2026-10-25"},

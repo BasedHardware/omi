@@ -35,6 +35,7 @@ from config.summary_guarantee import (
 )
 from config.policy import FirstSummaryPolicy, resolve_stage_policy
 from config.sync_reprocess import settle_seconds
+from utils.sync import processing_hold
 from config.repeat_work import revision_reuse
 from database._client import get_firestore_client
 from database.summary_processing import record_empty_failure, EMPTY_BLOCKED_REASON
@@ -278,6 +279,7 @@ def mark(
     mutate: Callable | None = None,
     effects_only: bool = False,
     snapshot_summary: bool = False,
+    sync_hold: bool = False,
 ) -> None:
     """Record one enrichment obligation.
 
@@ -300,6 +302,7 @@ def mark(
         batch=mutate is not None,
         snapshot_summary=snapshot_summary,
         stamps=stamps,
+        sync_hold=sync_hold,
     )
     document_id = key(uid, conversation_id + ('\0effects' if effects_only else ''))
     row, coalesced = (mutate or _mutate)(document_id, update)
@@ -326,6 +329,7 @@ def mark_update(
     new_dispatch: Callable[[], dict[str, str] | None] | None = None,
     snapshot_summary: bool = False,
     stamps: list[tuple[str, str]] | None = None,
+    sync_hold: bool = False,
 ) -> Callable[[Row | None], tuple[Row, tuple[Row, bool]]]:
     """The CAS operation behind ``mark`` and ``Outbox.enqueue``: one obligation per key, coalesced.
 
@@ -391,6 +395,13 @@ def mark_update(
             row['first_pending_at'] = row.get('first_pending_at', current)
             ceiling = 3540 if demand_enabled else 3600
             row['due_at'] = min(row['due_at'], row['first_pending_at'] + ceiling)
+
+        if sync_hold:
+            row['sync_hold'] = True
+            row['due_at'] = min(
+                max(row.get('due_at') or 0, current + processing_hold.QUIET_SECONDS),
+                row['first_pending_at'] + processing_hold.MAX_HOLD_SECONDS,
+            )
 
         row.setdefault('summary_lane', 'batch' if batch else summary_delivery.lane({}))
         if old is None:
@@ -507,6 +518,8 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
             return old, ('busy', None)
         row = dict(old)
         stamp_claim_policy(row, cache, stamps)
+        if row.get('sync_hold') and not processing_hold.enabled():
+            row['due_at'] = current
         if row['due_at'] > current and (not row.get('effects_only') or not enabled(row['uid'])):
             row.update(task_token=uuid.uuid4().hex, task_due_at=row['due_at'])
             return row, ('deferred', row)
@@ -552,9 +565,11 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
         )
         process_context = (
             {'owner': owner, 'lease_until': row['lease_until']}
-            if summary_policy and not row.get('summary_seen')
+            if (summary_policy and not row.get('summary_seen')) or row.get('sync_hold')
             else None
         )
+        if process_context is not None:
+            process_context.update(sync_hold=bool(row.get('sync_hold')), first_pending_at=row['first_pending_at'])
         process_token = summary_delivery.PROCESS_CONTEXT.set(process_context)
         accept_token = summary_delivery.ACCEPT_CONTEXT.set(row.get('first_pending_at'))
         context_token = summary_delivery.REPAIR_CONTEXT.set(row if row.get('summary_repair') else None)
@@ -573,6 +588,8 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
                     custody = bool(
                         process_context and (process_context.get('redirect_to') or process_context.get('defer_reason'))
                     )
+                    if process_context and process_context.get('hold_skipped'):
+                        discarded = True  # No new paid obligation: prior receipt or late-content cap.
                     if output is None and preserves_admitted(row) and not discarded and not blocked and not custody:
                         raise FirstSummaryCallbackPending('first-summary callback has no output yet')
                     if output is not None and not summary_seen and not discarded and not blocked:
@@ -646,8 +663,8 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
             pending = dict(old)
             pending.update(
                 deferred_reason=process_context['defer_reason'],
-                due_at=current + LIVE_DEFER_SECONDS,
-                task_due_at=current + LIVE_DEFER_SECONDS,
+                due_at=process_context.get('defer_until', current + LIVE_DEFER_SECONDS),
+                task_due_at=process_context.get('defer_until', current + LIVE_DEFER_SECONDS),
                 task_token=uuid.uuid4().hex,
                 lease_until=0,
                 owner=None,
