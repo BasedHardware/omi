@@ -551,6 +551,8 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
 
         try:
             enrich_settled(row['uid'], row['conversation_id'], row['language'])
+        except processing_hold.ProcessingDeferred as error:
+            process_context = {'defer_reason': error.reason, 'defer_until': error.available_at}
         except InvalidArgument as error:
             if not _is_document_size_limit(error):
                 raise
@@ -594,6 +596,8 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
                         raise FirstSummaryCallbackPending('first-summary callback has no output yet')
                     if output is not None and not summary_seen and not discarded and not blocked:
                         raise summary_delivery.SummaryOutputUnavailable('first-summary output is empty')
+        except processing_hold.ProcessingDeferred as error:
+            process_context = {'defer_reason': error.reason, 'defer_until': error.available_at}
         except summary_delivery.SummaryRepairSuperseded as error:
             output = None
             superseded = True
@@ -774,9 +778,10 @@ def sweep(
     injected = wake is not None
     # One range/order field uses the automatic single-field index.
     previous, start = enrichment_scan.begin(client, COLLECTION) if cursor else (None, None)
+    rollback = not processing_hold.enabled()
     query = (
         client.collection(COLLECTION)
-        .where('due_at', '<=', current)
+        .where('due_at', '<=', current + processing_hold.MAX_HOLD_SECONDS if rollback else current)
         .order_by('due_at')
         .order_by('__name__')
         .limit(limit)
@@ -808,6 +813,15 @@ def sweep(
             if old is None or old.get('dormant') or old.get('lease_until', 0) > current:
                 return old, ('skipped', None)
             row = dict(old)
+            release_hold = (
+                rollback and row.get('sync_hold') and (row['due_at'] > current or row.get('task_due_at', 0) > current)
+            )
+            if row['due_at'] > current and not release_hold:
+                return old, ('skipped', None)
+            if release_hold:
+                # Rotate the scheduled task name: its existing future delivery
+                # must not prevent an immediate rollback wake.
+                row.update(due_at=current, task_due_at=current, task_token=uuid.uuid4().hex, wake_check_after=0)
             # A lease that ran out is new information, so the wake-check throttle does not apply to it.
             expired = bool(row.get('owner')) and row.get('lease_until', 0) > 0
             if not expired and row.get('wake_check_after', 0) > current:

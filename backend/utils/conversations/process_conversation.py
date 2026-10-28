@@ -1,6 +1,9 @@
 from utils import funded_processing
+from utils.sync import processing_hold
+from utils.conversations.summary_delivery import PROCESS_CONTEXT
 from utils.processing_backlog import defer_estimate
 import os
+import time
 import json
 import random
 import re
@@ -2514,6 +2517,14 @@ def _is_funded_budget_denial(error):
     )
 
 
+def _defer_held_budget_denial() -> None:
+    context = PROCESS_CONTEXT.get()
+    if context and context.get('sync_hold'):
+        # A prior summary is not a receipt for this revision. Keep the outbox
+        # wake through resets/upgrades, including a denial at a later dispatch.
+        raise processing_hold.ProcessingDeferred('processing_budget', time.time() + processing_hold.QUIET_SECONDS)
+
+
 def _preserve_capture_on_budget_denial(function):
     @wraps(function)
     def preserve_capture(uid, language_code, conversation, *args, **kwargs):
@@ -2527,6 +2538,7 @@ def _preserve_capture_on_budget_denial(function):
         except HTTPException as error:
             if not _is_funded_budget_denial(error):
                 raise
+            _defer_held_budget_denial()
             raw = (
                 _is_ingress_create(captured)
                 or captured.processing_deferred
@@ -2649,6 +2661,7 @@ def process_conversation(
     if funded_processing.enabled(uid, 'batch'):
         waiting = bool(getattr(conversation, 'processing_deferred', False))
         if (waiting and not backlog_authorized) or not funded_processing.processing_allowed(uid):
+            _defer_held_budget_denial()
             if silent_backfill:
                 raise RecoveryStructureUnavailableError('silent backfill processing budget unavailable')
             raw_capture = (

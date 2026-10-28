@@ -316,3 +316,182 @@ def test_relevance_discard_never_spends_the_first_full_summary_budget(monkeypatc
     # A later small fragment can promote the row and still receive its first notes.
     promoted = {**current, hold.FIELD: hold.activity_patch({hold.FIELD: state}, 1000)}
     assert hold.admission(promoted, {'first_pending_at': 1000}, now=1600) == ('ready', None)
+
+
+@pytest.mark.parametrize('snapshot_present', [True, False])
+@pytest.mark.parametrize('marker', [{'wipe_status': 'pending'}, {'wipe_status': 'completed'}, {}])
+def test_completion_receipt_rechecks_deletion_after_worker_claim(monkeypatch, snapshot_present, marker):
+    from copy import deepcopy
+    from database import conversations as conversations_db
+
+    world = World(monkeypatch)
+    world.add('parent', 0, 5, sync_content_revision=2, **{hold.FIELD: {'pending_since': 100, 'held': True}})
+    snapshot = hold.content_snapshot(world.get('user-1', 'parent')) if snapshot_present else None
+    before = deepcopy(world.raw('parent'))
+    # The worker already read/claimed the revision before deletion began.
+    world.store.rows[('account_deletions', 'user-1')] = marker
+    assert not conversations_db.complete_sync_processing_hold(
+        'user-1', 'parent', 2, snapshot, firestore_client=world.store
+    )
+    assert world.raw('parent') == before
+    assert not world.store.transactions[-1].updates
+
+
+@pytest.mark.parametrize('runner', ['consumer', 'legacy'])
+def test_budget_deferral_retains_late_revision_until_funding_returns(state, monkeypatch, runner):
+    from utils.conversations import process_conversation as processor
+
+    rows, tasks = state
+    monkeypatch.setattr(custody, 'discard_blocked', lambda _: False)
+    monkeypatch.setattr(processor.funded_processing, 'enabled', lambda *_: True)
+    allowed = False
+    monkeypatch.setattr(processor.funded_processing, 'processing_allowed', lambda *_: allowed)
+    world = World(monkeypatch)
+    world.add('c', 0, 5, sync_content_revision=2)
+    current = world.get('user-1', 'c')
+    current['transcript_segments'][0].update(text='synthetic ' * 100, end=100)
+    previous = hold.content_snapshot(current)
+    previous.update(digest='previous', words=0, speech_seconds=0, revision=1)
+    current[hold.FIELD] = dict(pending_since=100, last_content_at=100, held=True, full_snapshot=previous)
+    monkeypatch.setattr(callback.conversations_db, 'get_conversation', lambda *_: current)
+    monkeypatch.setattr(callback, 'claim_from_snapshot', lambda *_: True)
+    monkeypatch.setattr(callback, 'repair_fenced', lambda _: False)
+    monkeypatch.setattr(callback, 'get_firestore_client', lambda: world.store)
+    monkeypatch.setattr(callback, 'schedule_after_finalization', lambda *_: None)
+    monkeypatch.setattr(callback.time, 'time', lambda: 700)
+    monkeypatch.setattr(processor.time, 'time', lambda: 700)
+    complete = Mock(return_value=True)
+    monkeypatch.setattr(callback.conversations_db, 'complete_sync_processing_hold', complete)
+    monkeypatch.setattr(callback, 'process_conversation', processor.process_conversation)
+    outbox.mark('user-1', 'c', 'en', now=100, sync_hold=True)
+    key = outbox.key('user-1', 'c')
+
+    def deliver(now):
+        if runner == 'consumer':
+            return run_push(
+                EnrichmentConsumer(ENRICHMENT_OUTBOX), ENRICHMENT_OUTBOX, key, tasks[-1]['task_token'], now=now
+            ).outcome
+        return outbox.run(key, tasks[-1]['task_token'], callback.enrich_conversation, now=now)
+
+    assert deliver(700) == 'deferred'
+    assert key in rows and rows[key]['due_at'] == 1300 and rows[key]['lease_until'] == 0
+    assert current[hold.FIELD]['held'] and current[hold.FIELD].get('late_runs', 0) == 0
+    complete.assert_not_called()
+    # Funding returns without a new WAL append: the retained wake processes it.
+    allowed = True
+    full = Mock(return_value=callback.deserialize_conversation(current))
+    monkeypatch.setattr(callback, 'process_conversation', full)
+    assert deliver(1300) in {'done', 'processed'}
+    full.assert_called_once()
+    complete.assert_called_once()
+    assert key not in rows or rows[key].get('dormant')
+
+
+@pytest.mark.parametrize('runner', ['consumer', 'legacy'])
+def test_lazy_effects_near_deadline_wait_for_late_hold_receipt(state, monkeypatch, runner):
+    from utils.conversations import lazy_enrichment, process_conversation as processor
+
+    rows, tasks = state
+    monkeypatch.setattr(custody, 'discard_blocked', lambda _: False)
+    world = World(monkeypatch)
+    world.add('c', 0, 5, sync_content_revision=2)
+    current = world.get('user-1', 'c')
+    # Prior effects are due at 3540; late content arrived ten seconds before it.
+    current[hold.FIELD] = dict(pending_since=3530, last_content_at=3530, held=True)
+    monkeypatch.setattr(lazy_enrichment.conversations_db, 'get_conversation', lambda *_: current)
+    apply = Mock()
+    checkpoint = Mock()
+    monkeypatch.setattr(processor, 'apply_settled_enrichment', apply)
+    monkeypatch.setattr(lazy_enrichment.conversations_db, 'record_demand_enrichment_checkpoint', checkpoint)
+    clock = [3540]
+    monkeypatch.setattr(lazy_enrichment.time, 'time', lambda: clock[0])
+    outbox.mark('user-1', 'c', 'en', now=2940, effects_only=True)
+    key = outbox.key('user-1', 'c' + chr(0) + 'effects')
+
+    def deliver():
+        if runner == 'consumer':
+            return run_push(
+                EnrichmentConsumer(ENRICHMENT_OUTBOX), ENRICHMENT_OUTBOX, key, tasks[-1]['task_token'], now=clock[0]
+            ).outcome
+        return outbox.run(key, tasks[-1]['task_token'], Mock(), now=clock[0])
+
+    assert deliver() == 'deferred'
+    apply.assert_not_called()
+    checkpoint.assert_not_called()
+    assert rows[key]['lease_until'] == 0 and rows[key]['due_at'] == 3660
+    # Passing the quiet deadline alone is insufficient: a cap/worker can delay notes.
+    clock[0] = 4200
+    assert deliver() == 'deferred'
+    apply.assert_not_called()
+    current['structured']['overview'] = 'Settled late revision'
+    current[hold.FIELD] = hold.completion_patch(current, hold.content_snapshot(current))
+    clock[0] = 4320
+    assert deliver() in {'done', 'processed'}
+    apply.assert_called_once()
+    assert apply.call_args.args[1].structured.overview == 'Settled late revision'
+    checkpoint.assert_called_once()
+
+
+def test_rollback_sweep_releases_future_holds_and_fences_old_delivery(state, monkeypatch):
+    from types import SimpleNamespace
+
+    rows, tasks = state
+    for cid in ('held', 'leased', 'ordinary'):
+        outbox.mark('u', cid, 'en', now=100, sync_hold=cid != 'ordinary')
+    key = outbox.key('u', 'held')
+    old_token = rows[key]['task_token']
+    rows[key]['wake_check_after'] = 700
+    leased = rows[outbox.key('u', 'leased')]
+    leased.update(owner='active', lease_until=500)
+    monkeypatch.setenv('SYNC_PROCESSING_HOLD_ENABLED', 'false')
+    query = Mock()
+    query.where.return_value = query
+    query.order_by.return_value = query
+    query.limit.return_value = query
+    query.stream.return_value = [SimpleNamespace(id=key) for key in rows]
+    monkeypatch.setattr(outbox, 'get_firestore_client', lambda: SimpleNamespace(collection=lambda _: query))
+    assert outbox.sweep(now=101) == {'repaired': 1, 'error': 0}
+    assert rows[key]['due_at'] == 101 and rows[key]['task_token'] != old_token
+    assert leased['lease_until'] == 500
+    assert rows[outbox.key('u', 'ordinary')]['due_at'] == 700
+    process = Mock()
+    assert outbox.run(key, old_token, process, now=101) == 'stale'
+    assert outbox.run(key, rows[key]['task_token'], process, now=101) == 'processed'
+    process.assert_called_once()
+
+
+@pytest.mark.parametrize('status', ['cancelled', 'billing_failed'])
+def test_completion_receipt_respects_restored_account_access(monkeypatch, status):
+    from database import conversations as conversations_db
+
+    world = World(monkeypatch)
+    world.add('parent', 0, 5, sync_content_revision=2, **{hold.FIELD: {'pending_since': 100, 'held': True}})
+    world.store.rows[('account_deletions', 'user-1')] = {'wipe_status': status}
+    assert conversations_db.complete_sync_processing_hold('user-1', 'parent', 2, None, firestore_client=world.store)
+    assert not world.raw('parent')[hold.FIELD]['held']
+
+
+def test_rollback_processing_settles_hold_before_lazy_effects(monkeypatch):
+    from utils.conversations import lazy_enrichment, process_conversation as processor
+
+    world = World(monkeypatch)
+    world.add('parent', 0, 5, sync_content_revision=2, **{hold.FIELD: {'pending_since': 100, 'held': True}})
+    monkeypatch.setenv('SYNC_PROCESSING_HOLD_ENABLED', 'false')
+    monkeypatch.setattr(callback, 'repair_fenced', lambda _: False)
+    monkeypatch.setattr(callback, 'claim_from_snapshot', lambda *_: True)
+    monkeypatch.setattr(callback, 'get_firestore_client', lambda: world.store)
+    monkeypatch.setattr(callback, 'schedule_after_finalization', lambda *_: None)
+    full = Mock(return_value=callback.deserialize_conversation(world.get('user-1', 'parent')))
+    monkeypatch.setattr(callback, 'process_conversation', full)
+    token = PROCESS_CONTEXT.set({'owner': 'worker', 'lease_until': 1000, 'first_pending_at': 100, 'sync_hold': True})
+    try:
+        callback.enrich_conversation('user-1', 'parent', 'en')
+    finally:
+        PROCESS_CONTEXT.reset(token)
+    full.assert_called_once()
+    assert not world.raw('parent')[hold.FIELD]['held']
+    apply = Mock()
+    monkeypatch.setattr(processor, 'apply_settled_enrichment', apply)
+    monkeypatch.setattr(lazy_enrichment.conversations_db, 'record_demand_enrichment_checkpoint', Mock())
+    lazy_enrichment.enrich_settled('user-1', 'parent', 'en')
+    apply.assert_called_once()

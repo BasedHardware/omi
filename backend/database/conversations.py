@@ -70,6 +70,7 @@ from .conversation_revisions import ensure_timezone_aware, firestore_revision_da
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from .people_stats_cache import invalidate_people_stats_cache
 from .read_boundary import parse_payload_strict
+from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from utils.other.list_budget import (
     ListReadBudget,
     ListReadBudgetExhausted,
@@ -4607,10 +4608,21 @@ def complete_sync_processing_hold(
     client = firestore_client if firestore_client is not None else get_firestore_client()
     ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
 
+    deletion = client.collection('account_deletions').document(uid)
+
     @firestore.transactional
     def finish(transaction):
         existing = ref.get(transaction=transaction).to_dict() or {}
-        if not existing or existing.get('deleted') or existing.get('sync_content_revision') != expected_revision:
+        deleting = deletion.get(transaction=transaction)
+        deletion_status = normalize_account_deletion_status(
+            marker_exists=deleting.exists, raw_status=(deleting.to_dict() or {}).get('wipe_status')
+        )
+        if (
+            account_deletion_blocks_access(deletion_status)
+            or not existing
+            or existing.get('deleted')
+            or existing.get('sync_content_revision') != expected_revision
+        ):
             return False
         state = dict(existing.get(processing_hold.FIELD) or {})
         if snapshot is not None:

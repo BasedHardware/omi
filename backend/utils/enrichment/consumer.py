@@ -30,6 +30,7 @@ from fastapi import HTTPException
 from database.outbox import Claim, OutboxKind, Outcome
 from utils.observability.reasons import ConsumerReason, RetryReason
 from utils.workers.consumer import Result, Role
+from utils.sync import processing_hold
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +99,10 @@ class EnrichmentConsumer:
             from utils.conversations.lazy_enrichment import enrich_settled
 
             with _beating(heartbeat, self.heartbeat_seconds, None) as lost:
-                enrich_settled(uid, conversation_id, language)
+                try:
+                    enrich_settled(uid, conversation_id, language)
+                except processing_hold.ProcessingDeferred as error:
+                    return Result(Outcome.DEFERRED, ConsumerReason.NOT_DUE, available_at=error.available_at)
             if lost.is_set():
                 return Result(Outcome.STALE, ConsumerReason.STALE_TOKEN)
             return Result(Outcome.DONE, ConsumerReason.PROCESSED)
@@ -139,6 +143,8 @@ class EnrichmentConsumer:
                         return Result(Outcome.RETRY, RetryReason.CALLBACK_PENDING, available_at=now)
                     if output is not None and not summary_seen and not discarded and not blocked:
                         raise summary_delivery.SummaryOutputUnavailable('first-summary output is empty')
+        except processing_hold.ProcessingDeferred as error:
+            return Result(Outcome.DEFERRED, ConsumerReason.NOT_DUE, available_at=error.available_at)
         except rows.FirstSummaryCallbackPending:
             return Result(Outcome.RETRY, RetryReason.CALLBACK_PENDING, available_at=now)
         except HTTPException as error:

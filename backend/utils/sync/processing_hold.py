@@ -22,6 +22,15 @@ MAX_LATE_RUNS = 1
 FIELD = 'sync_processing_hold'
 
 
+class ProcessingDeferred(RuntimeError):
+    """Keep durable custody while a processing prerequisite is unavailable."""
+
+    def __init__(self, reason: str, available_at: float):
+        super().__init__(reason)
+        self.reason = reason
+        self.available_at = available_at
+
+
 @cache
 def _outcomes() -> Counter:
     # Pure assignment/archive imports need no collector registration. Reuse the

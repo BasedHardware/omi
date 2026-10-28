@@ -109,13 +109,15 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
             context['defer_reason'] = 'open_live_target'
         return
 
-    if (
-        processing_hold.enabled()
-        and context is not None
-        and (context.get('sync_hold') or processing_hold.FIELD in conversation_data)
-    ):
+    if context is not None and (context.get('sync_hold') or processing_hold.FIELD in conversation_data):
         context['sync_hold'] = True
-        outcome, due = processing_hold.admission(conversation_data, context, now=time.time())
+        # Rollback bypasses admission, but still settles stored hold metadata
+        # after success so lazy effects do not remain fenced indefinitely.
+        outcome, due = (
+            processing_hold.admission(conversation_data, context, now=time.time())
+            if processing_hold.enabled()
+            else ('ready', None)
+        )
         processing_hold.record(outcome)
         if due is not None:
             context.update(defer_reason=outcome, defer_until=due)
