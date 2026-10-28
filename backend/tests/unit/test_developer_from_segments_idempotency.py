@@ -241,12 +241,15 @@ def test_from_segments_keeps_transcript_shape_for_integration_sources(
 
 @pytest.mark.parametrize('alias', ['client_session_id', 'client_conversation_id', 'session_id', 'client_id'])
 @pytest.mark.parametrize('blank', ['', ' ', '   ', ' \t\n '])
-def test_blank_client_session_id_is_treated_as_absent(monkeypatch, alias, blank, segment_api_client):
+def test_blank_client_session_id_gets_server_derived_retry_identity(monkeypatch, alias, blank, segment_api_client):
     # A blank id under any accepted alias must not 422 the upload. Clients that
     # persisted a blank id resend identical bytes on every retry, so a 422 here
     # strands the only copy of the transcript (BasedHardware/omi#15500;
-    # ~16k 422s/day against this validator measured 2026-10). Absent id is the
-    # plain create path — the same one a request without the field takes.
+    # ~16k 422s/day against this validator measured 2026-10). And it must not
+    # take the unkeyed create path either: a lost 200 followed by the retry
+    # would fork a duplicate conversation (Luna review of #23886). The server
+    # derives a stable id from the recording's own facts, so retries dedupe
+    # like any keyed upload.
     captured = []
     monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
@@ -259,13 +262,8 @@ def test_blank_client_session_id_is_treated_as_absent(monkeypatch, alias, blank,
 
     def process(_uid, _language, conversation, *, trigger):
         captured.append(conversation)
-        return Conversation(
-            **conversation.model_dump(exclude={'id', 'created_at', 'structured', 'status'}),
-            id='blank-id-result',
-            created_at=NOW,
-            structured={'title': 'Synthetic summary'},
-            status=ConversationStatus.completed,
-        )
+        conversation.status = ConversationStatus.completed
+        return conversation
 
     monkeypatch.setattr(developer, 'process_conversation', process)
     body = _request().model_dump(mode='json')
@@ -275,8 +273,89 @@ def test_blank_client_session_id_is_treated_as_absent(monkeypatch, alias, blank,
 
     assert response.status_code == 200, response.text
     assert len(captured) == 1
-    # No id means no idempotency claim: the conversation takes the create path.
-    assert isinstance(captured[0], CreateConversation)
+    # The derived id puts the upload on the keyed idempotency path.
+    assert isinstance(captured[0], Conversation)
+    derived = captured[0].external_data['from_segments_client_session_id']
+    assert derived.startswith('derived:')
+    assert response.json()['id'] == developer._from_segments_conversation_id('uid1', derived)
+
+
+def test_sent_blank_flag_distinguishes_sent_blank_from_absent():
+    # Only a blank string that was actually sent derives an identity; an omitted
+    # field (or an explicit null) keeps the public create path unchanged.
+    blank = developer.CreateConversationFromTranscriptRequest.model_validate(
+        {**_request_data(), 'client_session_id': ' '}
+    )
+    assert blank.client_session_id is None
+    assert blank.sent_blank_client_session_id is True
+
+    absent = developer.CreateConversationFromTranscriptRequest.model_validate(_request_data())
+    assert absent.client_session_id is None
+    assert absent.sent_blank_client_session_id is False
+
+    nulled = developer.CreateConversationFromTranscriptRequest.model_validate(
+        {**_request_data(), 'client_session_id': None}
+    )
+    assert nulled.client_session_id is None
+    assert nulled.sent_blank_client_session_id is False
+
+
+def test_byte_identical_blank_id_retry_returns_first_conversation(monkeypatch):
+    # The stuck cohort's retry shape: identical bytes, the first attempt's 200
+    # lost while its row landed. The derived id makes the retry an idempotency
+    # hit instead of a duplicate conversation.
+    rows = {}
+    processed = []
+
+    def get(_uid, conversation_id, **_kwargs):
+        return rows.get(conversation_id)
+
+    def process(_uid, _language, conversation, **kwargs):
+        processed.append(conversation)
+        conversation.status = ConversationStatus.completed
+        return conversation
+
+    monkeypatch.setattr(conversations_db, 'get_conversation', get)
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
+    monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', MagicMock())
+    monkeypatch.setattr(developer, 'process_conversation', process)
+
+    first = developer._create_conversation_from_segments('uid1', _request(client_session_id=''))
+    rows[first.id] = {'id': first.id, 'status': 'completed', 'discarded': False}
+    second = developer._create_conversation_from_segments('uid1', _request(client_session_id=''))
+
+    assert second.id == first.id
+    assert second.status == 'completed'
+    assert len(processed) == 1
+
+
+def test_blank_id_different_recordings_stay_separate(monkeypatch):
+    # Different recording facts derive different ids, so two distinct blank-id
+    # uploads still create two conversations.
+    processed = []
+
+    def process(_uid, _language, conversation, **kwargs):
+        processed.append(conversation)
+        conversation.status = ConversationStatus.completed
+        return conversation
+
+    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
+    monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', MagicMock())
+    monkeypatch.setattr(developer, 'process_conversation', process)
+
+    first = developer._create_conversation_from_segments('uid1', _request(client_session_id=''))
+    second = developer._create_conversation_from_segments(
+        'uid1',
+        _request(
+            client_session_id=' ',
+            started_at=NOW + timedelta(hours=1),
+            finished_at=NOW + timedelta(hours=1, seconds=2),
+        ),
+    )
+
+    assert first.id != second.id
+    assert len(processed) == 2
 
 
 def test_client_session_id_with_content_still_strips_and_dedupes(monkeypatch):
