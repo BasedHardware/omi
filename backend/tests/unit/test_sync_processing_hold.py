@@ -221,6 +221,7 @@ def test_late_wal_after_smart_refresh_still_processes_new_content(monkeypatch):
     monkeypatch.setattr(callback.conversations_db, 'complete_sync_processing_hold', lambda *_: True)
     monkeypatch.setattr(callback, 'repair_fenced', lambda _: False)
     monkeypatch.setattr(callback, 'claim_from_snapshot', lambda *_: True)
+    monkeypatch.setattr(callback, 'get_firestore_client', lambda: world.store)
     monkeypatch.setattr(callback, 'schedule_after_finalization', lambda *_: None)
     monkeypatch.setattr(callback.time, 'time', lambda: 700)
     full = Mock(return_value=callback.deserialize_conversation(current))
