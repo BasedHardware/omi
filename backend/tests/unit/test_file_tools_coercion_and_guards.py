@@ -1,10 +1,9 @@
 """Unit tests for file_tools input validation, timestamp parsing, and configuration fallbacks."""
 
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
-import pytest
 
 import utils.retrieval.tools.file_tools as file_tools
-from models.chat import ChatSession
 
 
 class TestFileToolsCoercionAndGuards:
@@ -30,7 +29,8 @@ class TestFileToolsCoercionAndGuards:
 
     def test_no_active_chat_session(self):
         cfg = {"configurable": {"user_id": "u1"}}
-        assert self.mod.search_files_tool.func("what is this?", config=cfg) == "No active chat session. Files are not available."
+        result = self.mod.search_files_tool.func("what is this?", config=cfg)
+        assert result == "No active chat session. Files are not available."
 
     def test_top_level_config_resolution(self):
         cfg = {"user_id": "top_u1", "chat_session_id": "top_s1"}
@@ -136,3 +136,28 @@ class TestFileToolsCoercionAndGuards:
             assert res == "Target file content"
             called_files = mock_fc.process_chat_with_file.call_args.args[1]
             assert called_files == ["target_file_id"]
+
+    def test_created_at_fallback_injected_for_legacy_session(self):
+        cfg = {"configurable": {"user_id": "u1", "chat_session_id": "s1"}}
+        mock_session = {"id": "s1", "file_ids": ["f1"]}  # no created_at
+
+        with (
+            patch.object(self.mod.chat_db, "get_chat_session_by_id", return_value=mock_session),
+            patch.object(self.mod, "ChatSession") as mock_cs_class,
+            patch.object(self.mod, "FileChatTool") as mock_fc_class,
+        ):
+            mock_cs = MagicMock()
+            mock_cs.file_ids = ["f1"]
+            mock_cs_class.return_value = mock_cs
+
+            mock_fc = MagicMock()
+            mock_fc.process_chat_with_file.return_value = "Answer"
+            mock_fc_class.return_value = mock_fc
+
+            res = self.mod.search_files_tool.func("summarize", config=cfg)
+            assert res == "Answer"
+            call_kwargs = mock_cs_class.call_args.kwargs
+            assert "created_at" in call_kwargs
+            assert call_kwargs["created_at"] is not None
+            assert isinstance(call_kwargs["created_at"], datetime)
+            assert call_kwargs["created_at"].tzinfo is not None
