@@ -1316,7 +1316,9 @@ def _l1_candidate_subject(
         # Aboutness and utterance source are separate. Even the owner's own
         # voice can be reporting another person's circumstances. No fallback
         # from a model's about=user or speaker label may create an owner fact.
-        if not explicitly_self_referential(evidence_quotes) or not owner_spoken_for_quotes(evidence_quotes, segments):
+        if not explicitly_self_referential(evidence_quotes, segments) or not owner_spoken_for_quotes(
+            evidence_quotes, segments
+        ):
             return None, SubjectAttribution.unknown, 'unknown'
     return subject
 

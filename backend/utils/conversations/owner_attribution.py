@@ -124,7 +124,8 @@ class SpeakerRole:
     display_name: Optional[str] = None
 
     def name(self, owner_name: str, names: Mapping[str, str]) -> Optional[str]:
-        return owner_name if self.role == 'primary_user' else names.get(self.person_id or '') or self.display_name
+        value = owner_name if self.role == 'primary_user' else names.get(self.person_id or '') or self.display_name
+        return ' '.join(value.split()) if value else None
 
 
 UNKNOWN_ROLE = SpeakerRole()
@@ -220,7 +221,7 @@ def speaker_role_map(
     roles = []
     for row in rows:
         key = speaker_cluster_key(row)
-        role = clusters.get(key, UNKNOWN_ROLE)
+        role = clusters.get(key, UNKNOWN_ROLE) if key is not None else UNKNOWN_ROLE
         if key is not None and _field(row, 'speaker_label_source') == 'manual':
             role = claim(row)
         roles.append(role)
@@ -283,13 +284,21 @@ def quote_source_attribution(
     return 'third_party' if sources == {'other'} else 'unknown'
 
 
-def explicitly_self_referential(quotes: Sequence[str]) -> bool:
+def explicitly_self_referential(quotes: Sequence[str], segments: Sequence[Any]) -> bool:
     """A conservative sufficient signal, never a language-based rejection rule.
 
     Other languages stay retained with unknown aboutness unless a later semantic
     authority resolves them. A speaker identity alone cannot establish a subject.
     """
-    return bool(quotes) and all(
+    matched = grounded_quote_segments(quotes, segments)
+    if not matched or any(
+        normalized_evidence_quote(quote) != normalized_evidence_quote(_field(row, 'text', ''))
+        for quote, row in zip(quotes, matched)
+    ):
+        # A first-person fragment inside the owner's report of another person's
+        # words is not an explicit self-reference by the owner.
+        return False
+    return all(
         re.match(
             r"\s*i(?:['’]m\b|\s+(?:am|was|have|own|live|prefer|want|need|will|plan|work|feel)\b)", quote, re.IGNORECASE
         )

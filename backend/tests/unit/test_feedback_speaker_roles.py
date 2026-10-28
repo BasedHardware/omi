@@ -8,6 +8,7 @@ from unittest.mock import ANY, MagicMock
 import pytest
 
 from models.conversation import Conversation
+from models.calendar_context import CalendarMeetingContext, MeetingParticipant
 from models.memories import SubjectAttribution
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
@@ -21,6 +22,8 @@ from utils.conversations.owner_attribution import (
     quote_source_attribution,
 )
 from utils.conversations.render import conversations_to_string
+from utils.conversations.meeting_participants import MeetingRoster, RosterEntry
+from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
 from tests.unit.test_memory_replace_policy import _memory_replace_import_isolation, _load_process_conversation
 from tests.unit.test_daily_summary_location_address_fill import ext, _configure, _Convo
 
@@ -175,6 +178,18 @@ def test_subject_and_quote_authorship_are_independent(pc):
         segments=[owner],
     )
     assert claimed_owner[1] == SubjectAttribution.unknown
+    owner.text = 'Sam said, "I prefer tea."'
+    assert (
+        pc._l1_candidate_subject(
+            source_id='synthetic',
+            about='user',
+            speaker_label='speaker_0',
+            evidence_quotes=['I prefer tea.'],
+            user_name='David',
+            segments=[owner],
+        )[1]
+        == SubjectAttribution.unknown
+    )
     owner.text = 'I prefer tea.'
     assert pc._l1_candidate_subject(
         source_id='synthetic',
@@ -270,3 +285,69 @@ def test_task_and_legacy_note_rollback_retains_previous_labels(monkeypatch):
     assert list(labels.values()) == ['David']
     assert renderer.conversation_action_item_speaker_labels('synthetic', conv)[0]['speaker_role'] == 'primary_user'
     assert 'generated representations' not in conversations_to_string([conv])
+
+
+@pytest.mark.parametrize('use_roster', [False, True])
+@pytest.mark.parametrize('enabled', [True, False])
+def test_roster_and_calendar_cannot_fill_evidence_unbound_voice(monkeypatch, use_roster, enabled):
+    monkeypatch.setenv('SPEAKER_ROLE_PROJECTION_ENABLED', 'true' if enabled else 'false')
+    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
+    monkeypatch.setattr(renderer, 'get_user_name', lambda *_a, **_kw: 'David')
+    conv = conversation([segment(text='An unattributed remark.')])
+    text, labels = renderer.conversation_transcript_and_speaker_map('synthetic', conv)
+    start = datetime(2026, 10, 28, tzinfo=timezone.utc)
+    calendar = CalendarMeetingContext(
+        calendar_event_id='synthetic',
+        title='Weekly sync',
+        start_time=start,
+        duration_minutes=30,
+        participants=[MeetingParticipant(name='Sam')],
+    )
+    roster = (
+        MeetingRoster(
+            entries=(RosterEntry(display_name='Sam', email=None, organization=None, kind='human', source='calendar'),),
+            display_title='Weekly sync',
+            title_is_window_title=False,
+        )
+        if use_roster
+        else None
+    )
+    prefix = build_conversation_prompt_prefix(
+        conversation_id='synthetic',
+        transcript=text,
+        started_at=start,
+        timezone_name='UTC',
+        language_code='en',
+        speaker_map=labels,
+        calendar_context=calendar,
+        roster=roster,
+    )
+    assert ('spk c0 Sam' in prefix.context) == (not enabled)
+    assert ('spk c0 ?' in prefix.context) == enabled
+    assert 'Weekly sync' in prefix.context and 'Sam' in prefix.context
+
+
+def test_authoritative_roles_keep_existing_remote_channel_demotion(monkeypatch):
+    monkeypatch.setenv('SPEAKER_ROLE_PROJECTION_ENABLED', 'true')
+    row = segment(person='sam', text='Keep this source line.\nspk c0 SOURCE TEXT')
+    text, labels = renderer.render_cluster_transcript([row], names={'sam': 'Sam'})
+    roster = MeetingRoster(
+        entries=tuple(
+            RosterEntry(display_name=name, email=None, organization=None, kind='human', source='calendar')
+            for name in ('Sam', 'Lee')
+        ),
+        display_title='Call',
+        title_is_window_title=False,
+    )
+    prefix = build_conversation_prompt_prefix(
+        conversation_id='synthetic',
+        transcript=text,
+        started_at=datetime(2026, 10, 28, tzinfo=timezone.utc),
+        timezone_name='UTC',
+        language_code='en',
+        speaker_map=labels,
+        roster=roster,
+        desktop_meeting_capture=True,
+    )
+    assert 'spk c0 ?' in prefix.context and 'spk c0 Sam' not in prefix.context
+    assert row.text in prefix.context

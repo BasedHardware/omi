@@ -7436,6 +7436,10 @@ Contradictory/mixed clusters stay unbound, regardless of row order. A manual
 segment correction applies to that segment only; it cannot label unconfirmed
 siblings. Multiple positive owner clusters remain unresolved. All source text,
 stored speaker keys, UI labels and manual corrections are retained.
+An evidence-authoritative `SpeakerMap` also prevents downstream calendar/roster
+elimination from filling an unresolved voice. Calendar context is retained and
+the existing mixed remote-channel demotion still applies; switch-off keeps the
+previous prefix behavior.
 
 `SPEAKER_ROLE_PROJECTION_ENABLED` is the one default-on kill switch at the role
 projection boundary (`false` restores the previous consumer behavior). There is

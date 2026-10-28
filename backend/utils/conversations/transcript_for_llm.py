@@ -34,7 +34,7 @@ from utils.conversations.owner_attribution import (
     SpeakerRoleMap,
 )
 from utils.conversations.wake_word import WAKE_WORD_MARKER, escape_spoken_wake_word_marker, find_wake_word_segment_ids
-from utils.speakers.display import DisplayParticipants, display_participants
+from utils.speakers.display import DisplayParticipants, display_participants, _clean_name
 
 
 class _TranscriptSource(Protocol):
@@ -85,6 +85,7 @@ class SpeakerMap(dict[str, Optional[str]]):
         super().__init__(*args, **kwargs)
         self.owner_name = owner_name
         self.source_segment_ids: Optional[frozenset[str]] = None
+        self.role_evidence_authoritative = False
         self.clusters: tuple[SpeakerCluster, ...] = tuple(clusters)
 
 
@@ -113,6 +114,7 @@ def _speaker_map(
     speaker_map = SpeakerMap(owner_name=owner_name)
     display = display or display_participants(segments, names=people_map, owner_name=user_name)
     roles = roles if roles is not None else speaker_role_projection(segments)
+    speaker_map.role_evidence_authoritative = roles is not None
     tallies: dict[tuple[Optional[str], int], tuple[bool, list[str], float, int]] = {}
     for segment in segments:
         speaker_id = getattr(segment, 'speaker_id', None)
@@ -135,8 +137,9 @@ def _speaker_map(
         )
         name = display.for_segment(segment).name
         if roles is not None:
-            role = roles.clusters.get(speaker_cluster_key(segment), UNKNOWN_ROLE)
-            name = role.name(user_name, people_map)
+            cluster_key = speaker_cluster_key(segment)
+            role = roles.clusters.get(cluster_key, UNKNOWN_ROLE) if cluster_key is not None else UNKNOWN_ROLE
+            name = _clean_name(role.name(user_name, people_map))
         if prompt_key not in speaker_map:
             speaker_map[prompt_key] = name
         elif roles is not None and speaker_map[prompt_key] != name:
@@ -146,7 +149,7 @@ def _speaker_map(
         if roles is not None:
             role = roles.clusters.get((scope, speaker_id), UNKNOWN_ROLE)
             owner = role.role == 'primary_user'
-            name = people_map.get(role.person_id or '')
+            name = _clean_name(role.name(user_name, people_map)) if role.person_id else None
             names = [name] if name else []
         clusters.append(
             SpeakerCluster(
@@ -458,6 +461,7 @@ def render_cluster_transcript(
     )
     labels = SpeakerMap(owner_name=owner_name)
     bindings = _speaker_map(rows, owner_name or 'You', dict(names), display=display, roles=roles)
+    labels.role_evidence_authoritative = bindings.role_evidence_authoritative
     labels.clusters = bindings.clusters
     labels.source_segment_ids = frozenset(str(row.id) for row in rows if getattr(row, 'id', None))
     turns = []
