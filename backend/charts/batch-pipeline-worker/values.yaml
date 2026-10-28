@@ -83,6 +83,8 @@ autoscaling:
   # Total min/max above are divided equally between pool-pinned HPAs when on.
   # The original deployment name stays on OD; a -spot deployment shares its
   # queue metric scope but has a distinct pod selector and PodMonitoring.
+  # Superseded as the cutover shape 10-28 (lead f05065): the qualified path is
+  # a single OD-pinned HPA (prod 3/16); balanced stays machinery-only.
   balancedPools:
     enabled: false
     onDemandNodePool: batch-pipeline-pool

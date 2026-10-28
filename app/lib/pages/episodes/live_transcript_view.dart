@@ -82,6 +82,23 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
   List<ConversationPhoto>? _timelinePhotos;
   List<List<ConversationPhoto>>? _timelinePhotoGroups;
 
+  Object? _previewCoverageKey;
+  LivePreviewCoverage? _previewCoverage;
+
+  LivePreviewCoverage _coverageFor(CaptureProvider provider) {
+    final key = (
+      provider.segmentsPhotosVersion,
+      provider.segments.length,
+      identityHashCode(provider.segments),
+      provider.liveTranscriptStartedAt
+    );
+    if (_previewCoverageKey != key) {
+      _previewCoverageKey = key;
+      _previewCoverage = LivePreviewCoverage.forFinals(provider.segments, provider.liveTranscriptStartedAt);
+    }
+    return _previewCoverage!;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer2<CaptureProvider, DeviceProvider>(
@@ -178,16 +195,7 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
     if (provider.segments.isEmpty) {
       return LivePreviewTranscript(preview: preview, bottomInset: widget.jumpToLatestBottom);
     }
-    return ListenableBuilder(
-      listenable: preview,
-      builder: (context, _) => _buildChronologicalTimeline(
-        provider,
-        sessionId,
-        scrollState,
-        conversationId,
-        preview: preview,
-      ),
-    );
+    return _buildChronologicalTimeline(provider, sessionId, scrollState, conversationId, preview: preview);
   }
 
   /// Builds a chronological timeline interleaving photo groups and transcript segments, with the
@@ -265,11 +273,7 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
       followLatest: true,
       scrollState: scrollState,
       jumpToLatestButtonBottom: MediaQuery.paddingOf(context).bottom + widget.jumpToLatestBottom,
-      contentVersion: provider.segmentsPhotosVersion ^
-          decorations.signature ^
-          (preview == null
-              ? 0
-              : Object.hash(preview.lines.length, preview.lines.lastOrNull?.id, preview.lines.lastOrNull?.text.length)),
+      contentVersion: provider.segmentsPhotosVersion ^ decorations.signature,
       layoutIdentity: widget.episode == null ? 'photo-timeline' : 'episode-timeline',
       leadingItems: leadingItems,
       leadingItemIds: photoGroups.map((group) => group.first.id).toList(),
@@ -278,7 +282,7 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
         final divider = decorations.dividerBefore[segment.id];
         final items = decorations.itemsAfter[segment.id] ?? const <EpisodeItem>[];
         final tail = index == segments.length - 1 && preview != null
-            ? LivePreviewTail(preview: preview, finalSegments: segments, finalOrigin: provider.liveTranscriptStartedAt)
+            ? LivePreviewTail(preview: preview, coverage: _coverageFor(provider))
             : null;
         if (divider == null && items.isEmpty && tail == null) return line;
         return Column(
@@ -681,12 +685,8 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
     final totalSeconds = unsyncedWals.fold<int>(0, (sum, w) => sum + w.seconds) + provider.inFlightAudioSeconds;
     // Uploaded audio has no pending-upload duration, but the server may still
     // be transcribing it. Only uncovered preview text proves we are waiting.
-    final waitingWithoutDuration = totalSeconds == 0 &&
-        LivePreviewCoverage.uncovered(
-          provider.livePreview!.lines,
-          provider.segments,
-          provider.liveTranscriptStartedAt,
-        ).isNotEmpty;
+    final waitingWithoutDuration =
+        totalSeconds == 0 && _coverageFor(provider).excludeCovered(provider.livePreview!.lines).isNotEmpty;
     if (totalSeconds <= 5 && !waitingWithoutDuration) return null;
     final worst = worstSessionSyncState(unsyncedWals);
     if ((worst != null && _isTerminalWalState(worst)) || worst == WalSyncDisplayState.retrying) return null;
@@ -902,37 +902,62 @@ class LivePreviewDivider extends StatelessWidget {
 /// Under the divider: the preview lines the final transcript does not already
 /// cover — the recognizer's still-volatile newest words in lighter text. The
 /// preview carries audio timestamps; only full interval coverage replaces a line.
-class LivePreviewTail extends StatelessWidget {
-  const LivePreviewTail({super.key, required this.preview, required this.finalSegments, required this.finalOrigin});
+class LivePreviewTail extends StatefulWidget {
+  const LivePreviewTail({super.key, required this.preview, required this.coverage});
 
   final LivePreviewController preview;
-  final List<TranscriptSegment> finalSegments;
+  final LivePreviewCoverage coverage;
 
-  final DateTime? finalOrigin;
+  @override
+  State<LivePreviewTail> createState() => _LivePreviewTailState();
+}
+
+class _LivePreviewTailState extends State<LivePreviewTail> {
+  final _rows = <String, ({String text, bool isFinal, bool first, Widget widget})>{};
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Register the theme dependency so cached line colours follow palette changes.
+    Theme.of(context);
+    _rows.clear();
+  }
+
+  Widget _line(LivePreviewLine line, bool first) {
+    final cached = _rows[line.id];
+    if (cached != null && cached.text == line.text && cached.isFinal == line.isFinal && cached.first == first) {
+      return cached.widget;
+    }
+    final row = Padding(
+      key: ValueKey('live_preview_tail_${line.id}'),
+      padding: EdgeInsets.fromLTRB(OmiSpacing.md, first ? OmiSpacing.xs : 0, OmiSpacing.md, OmiSpacing.sm),
+      child: Text(line.text,
+          style: OmiType.body
+              .copyWith(height: 1.4, color: line.isFinal ? OmiColors.textPrimary : OmiColors.textSecondary)),
+    );
+    _rows[line.id] = (text: line.text, isFinal: line.isFinal, first: first, widget: row);
+    return row;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final lines = LivePreviewCoverage.uncovered(preview.lines, finalSegments, finalOrigin);
-    if (lines.isEmpty) return const SizedBox.shrink();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const LivePreviewDivider(),
-        for (var i = 0; i < lines.length; i++)
-          Padding(
-            key: ValueKey('live_preview_tail_${lines[i].id}'),
-            padding: EdgeInsets.fromLTRB(OmiSpacing.md, i == 0 ? OmiSpacing.xs : 0, OmiSpacing.md, OmiSpacing.sm),
-            child: Text(
-              lines[i].text,
-              style: OmiType.body.copyWith(
-                height: 1.4,
-                color: lines[i].isFinal ? OmiColors.textPrimary : OmiColors.textSecondary,
-              ),
-            ),
-          ),
-        SizedBox(height: MediaQuery.paddingOf(context).bottom + 84),
-      ],
+    return ListenableBuilder(
+      listenable: widget.preview,
+      builder: (context, _) {
+        final lines = widget.coverage.excludeCovered(widget.preview.lines);
+        final ids = lines.map((line) => line.id).toSet();
+        _rows.removeWhere((id, _) => !ids.contains(id));
+        if (lines.isEmpty) return const SizedBox.shrink();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const LivePreviewDivider(),
+            for (var i = 0; i < lines.length; i++) _line(lines[i], i == 0),
+            SizedBox(height: MediaQuery.paddingOf(context).bottom + 84),
+          ],
+        );
+      },
     );
   }
 }

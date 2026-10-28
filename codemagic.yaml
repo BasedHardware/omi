@@ -387,10 +387,12 @@ workflows:
         credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
         track: "internal"
         submit_as_draft: false
-        # Play auto-sends changes for review again (2026-10-27) and rejects
-        # any commit that sets changesNotSentForReview ("The query parameter
-        # changesNotSentForReview must not be set"), so the parameter must
-        # not be set.
+        # Codemagic android-internal-auto builds on 2026-10-28 at 03:18Z,
+        # 05:55Z and 06:24Z uploaded bundles but failed at Publishing:
+        # "Changes cannot be sent for review automatically. Please set the
+        # query parameter changesNotSentForReview to true." Hold for the
+        # required Play Console Send changes for review press.
+        changes_not_sent_for_review: true
 
   # ============================================
   # PRODUCTION RELEASE WORKFLOWS (Triggered by tags)
@@ -966,9 +968,10 @@ workflows:
         # These built-in values bind the release to its tag and Codemagic run.
         release_name: "$CM_TAG [$CM_BUILD_ID]"
         submit_as_draft: false
-        # Same Play constraint as the internal auto track: Play auto-sends
-        # changes for review again (2026-10-27) and rejects any commit that
-        # sets changesNotSentForReview, so the parameter must not be set.
+        # Keep tag releases held too: on 2026-10-28 Play said "Changes cannot
+        # be sent for review automatically" and required
+        # changesNotSentForReview=true. Submit these changes from Play Console.
+        changes_not_sent_for_review: true
       scripts:
         - name: Promote the exact internal build to alpha
           script: |

@@ -12,6 +12,7 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart' show RateLimitReason;
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/services/wals/wal_derived_views.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -50,14 +51,14 @@ abstract final class SyncPendingWork {
       s == WalSyncDisplayState.waiting || s == WalSyncDisplayState.retrying || s == WalSyncDisplayState.syncing;
 
   /// Allocation-free on purpose: every SyncProvider notify rebuilds the row.
-  static bool hasUploadedJobs(SyncProvider p) => p.allWals.any((w) => w.status == WalStatus.uploaded);
+  static bool hasUploadedJobs(SyncProvider p) => p.uploadedWals.isNotEmpty;
 
   static bool hasServerJobs(SyncProvider p) => hasUploadedJobs(p) || p.syncState.isProcessing;
 
   static bool isPendingWal(Wal w) =>
       w.status == WalStatus.miss && !w.onDeviceOnly && isForwardMoving(w.syncDisplayState);
 
-  static bool shouldShow(SyncProvider p) => hasServerJobs(p) || p.allWals.any(isPendingWal);
+  static bool shouldShow(SyncProvider p) => hasServerJobs(p) || p.derivedWals.hasForwardMoving;
 
   /// Ids of device recordings whose phone copy already moved on: lagging
   /// bookkeeping, not audio still on the device.
@@ -67,71 +68,21 @@ abstract final class SyncPendingWork {
       .toSet();
 
   /// Recordings uploaded and being transcribed on the server.
-  static List<Wal> uploaded(SyncProvider p) =>
-      p.displaySortedWals.where((w) => w.status == WalStatus.uploaded).toList(growable: false);
+  static List<Wal> uploaded(SyncProvider p) => p.uploadedWals;
 
   /// Recordings still on the device or the phone, waiting for or in a sync.
-  static List<Wal> syncing(SyncProvider p) => syncingOf(p.displaySortedWals);
+  static List<Wal> syncing(SyncProvider p) => p.pendingSyncWals;
 
   /// The rows [syncing] lists, from any ordering of the inventory: the device
   /// card reads the unsorted index and must show exactly what On the Way shows.
-  static List<Wal> syncingOf(List<Wal> wals) {
-    final hidden = hiddenDeviceTwinIds(wals);
-    final pending =
-        wals.where((w) => isPendingWal(w) && !(walIsOnDevice(w) && hidden.contains(w.id))).toList(growable: false);
-    final sources = pending.where(walIsOnDevice).toList(growable: false);
-    if (sources.isEmpty) return pending;
-    // A device drain copies a recording to the phone piece by piece and keeps the source until the
-    // final clear. The source already stands for the whole recording, so its copied pieces would
-    // list the same audio twice.
-    return pending.where((w) => !_isPieceOfSource(w, sources)).toList(growable: false);
-  }
-
-  static bool _isPieceOfSource(Wal w, List<Wal> sources) {
-    if (walIsOnDevice(w) || w.originalStorage == null || w.originalStorage == WalStorage.disk) return false;
-    for (final src in sources) {
-      if (src.device != w.device) continue;
-      final end = src.timerStart + (src.seconds > 0 ? src.seconds : 0);
-      if (w.timerStart >= src.timerStart && w.timerStart <= end) return true;
-    }
-    return false;
-  }
+  static List<Wal> syncingOf(List<Wal> wals) => pendingSyncRows(wals);
 
   static bool needsAttention(WalSyncDisplayState s) => isAttentionSyncState(s);
 
   /// Recordings the server refused or that ran out of retries; the Offline Sync page owns them.
-  static List<Wal> attention(SyncProvider p) =>
-      p.displaySortedWals.where((w) => needsAttention(w.syncDisplayState)).toList(growable: false);
+  static List<Wal> attention(SyncProvider p) => p.attentionWals;
 
-  /// One pass over the unsorted index, stopping at the threshold: Home's row asks this on every
-  /// SyncProvider notify, which streams progress during a sync.
-  /// Per WAL list: SyncProvider replaces the list whenever a status changes (see its partition
-  /// caches), and progress notifications reuse it, so a sync's ticks do not redo the scan.
-  static final Expando<(int, bool)> _backlogMemo = Expando('largeSyncBacklog');
-
-  static bool isLargeBacklog(SyncProvider p) {
-    final wals = p.allWals;
-    final memo = _backlogMemo[wals];
-    if (memo != null && memo.$1 == wals.length) return memo.$2;
-    final large = _computeLargeBacklog(p);
-    _backlogMemo[wals] = (wals.length, large);
-    return large;
-  }
-
-  static bool _computeLargeBacklog(SyncProvider p) {
-    var seconds = 0;
-    for (final w in p.allWals) {
-      if (w.status != WalStatus.uploaded) continue;
-      seconds += w.seconds > 0 ? w.seconds : 0;
-      if (seconds >= largeSyncBacklogSeconds) return true;
-    }
-    // Same set On the Way lists: a device drain's copied pieces are not counted on top of their source.
-    for (final w in syncing(p)) {
-      seconds += w.seconds > 0 ? w.seconds : 0;
-      if (seconds >= largeSyncBacklogSeconds) return true;
-    }
-    return false;
-  }
+  static bool isLargeBacklog(SyncProvider p) => p.derivedWals.pendingSeconds >= largeSyncBacklogSeconds;
 
   /// Where the pending work is right now, in one short line.
   static String stageLabel(SyncProvider p, AppLocalizations l) => stageLabelFor(

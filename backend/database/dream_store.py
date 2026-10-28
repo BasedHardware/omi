@@ -218,8 +218,16 @@ def acquire(
     now=None,
     firestore_client=None,
     reclaim_sink: dict[str, Any] | None = None,
+    denial_sink: dict[str, Any] | None = None,
+    skip_idle=False,
 ):
-    """Return admission and publish count-only reclaim details after commit, even on denial."""
+    """Return admission and publish count-only reclaim details after commit, even on denial.
+
+    ``denial_sink['reason']`` names why a scheduled owner was not admitted.
+    ``skip_idle`` (the idle-skip lever) denies a scheduled hunt with no dirty
+    work and parks the owner: the due row is deleted, and the next product
+    write re-enqueues it through ``mark_dirty``.
+    """
     database = client(firestore_client)
     now = now or datetime.now(timezone.utc)
     now = now.astimezone(timezone.utc)
@@ -228,8 +236,11 @@ def acquire(
     spend = spend_ref(database, uid, day)
     owner = database.collection('users').document(uid)
     run_id = str(uuid4())
+    denial_reason = None
 
     def admit(tx, data, budget, user):
+        nonlocal denial_reason
+        denial_reason = None
         passes = int(data.get('passes', 0)) if data.get('day') == day else 0
         manual_runs = int(data.get('manual_runs', 0)) if data.get('day') == day else 0
         if trigger == 'manual' and data.get('lease'):
@@ -242,10 +253,15 @@ def acquire(
         has_dirty = dirty_count(uid, transaction=tx, firestore_client=database) > 0
         tomorrow = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
         if trigger != 'manual' and passes >= caps.passes:
+            denial_reason = 'daily_pass_cap'
             return None, {'next_due_at': tomorrow}
         if data.get('lease'):
+            denial_reason = 'run_in_progress'
             started = data['lease'].get('started_at') or now
             return None, {'next_due_at': started + timedelta(seconds=1741)}
+        if skip_idle and not canary and trigger != 'manual' and not has_dirty:
+            denial_reason = 'idle_no_material'
+            return None, {'park': True}
         if (
             mode() == 'off'
             or (not canary and os.getenv('REVIEW_SURFACE_MODE', 'off') != 'on')
@@ -260,6 +276,19 @@ def acquire(
         ):
             if trigger == 'manual':
                 raise AdmissionDenied('dream_budget_unavailable')
+            denial_reason = (
+                'disabled'
+                if mode() == 'off'
+                else (
+                    'review_surface_off'
+                    if not canary and os.getenv('REVIEW_SURFACE_MODE', 'off') != 'on'
+                    else (
+                        'ineligible'
+                        if not (canary_eligible(uid, user) if canary else eligible(uid, user))
+                        else 'not_due' if not has_dirty and not hunt_due else 'budget'
+                    )
+                )
+            )
             from database.dream_scheduler import due_time
 
             return None, {'next_due_at': max(now + timedelta(minutes=5), due_time(data, now))}
@@ -337,6 +366,7 @@ def acquire(
         except AdmissionDenied as exc:
             # A denial must not roll back reclamation (including manual caps).
             lease, patch, denial = None, {}, exc.reason
+        park = bool(patch.pop('park', False))
         # All reads, including admission's dirty count, precede settlement writes.
         if old_spend is not None and isinstance(started, datetime):
             usage = _abandoned_usage(abandoned)
@@ -379,7 +409,9 @@ def acquire(
             tx.set(spend, {**budget, 'reserved_usd': float(budget.get('reserved_usd', 0))})
         elif reclaimed or patch:
             tx.set(state, {**data, **patch})
-        if patch.get('next_due_at'):
+        if park:
+            tx.delete(database.collection('dream_due').document(uid))
+        elif patch.get('next_due_at'):
             tx.set(database.collection('dream_due').document(uid), {'due_at': patch['next_due_at']})
         return lease, reclaimed, denial
 
@@ -388,9 +420,34 @@ def acquire(
     )
     if reclaimed and reclaim_sink is not None:
         reclaim_sink.update(age_s=reclaimed[0], size_bucket=reclaimed[1])
+    if denial_sink is not None and lease is None:
+        denial_sink['reason'] = denial or denial_reason or 'unknown'
     if denial:
         raise AdmissionDenied(denial)
     return lease
+
+
+def park_if_idle(uid, *, firestore_client=None):
+    """Idle-skip lever: drop the due row when no dirty work is queued; True when parked.
+
+    The state read is the conflict fence: every mark_dirty batch writes the
+    state doc (score increment), so a concurrent write aborts and retries this
+    transaction; an aggregation count alone carries no document identity.
+    A positive score also keeps the owner queued, matching discovery's rule.
+    """
+    database = client(firestore_client)
+
+    @firestore.transactional
+    def park(tx):
+        state = state_ref(database, uid).get(transaction=tx).to_dict() or {}
+        if state.get('score', 0) or dirty_count(uid, transaction=tx, firestore_client=database) > 0:
+            return False
+        tx.delete(database.collection('dream_due').document(uid))
+        return True
+
+    return firestore_transaction_retry.run_with_transaction_contention_retry(
+        database.transaction, park, operation_name='dream_park_idle'
+    )
 
 
 def assert_lease(uid, run_id, *, firestore_client=None):
@@ -416,6 +473,7 @@ def finish(
     cleanup_cursor=None,
     now=None,
     firestore_client=None,
+    park_when_idle=False,
 ):
     database = client(firestore_client)
     state = state_ref(database, uid)
@@ -623,6 +681,11 @@ def finish(
                 },
             )
         patch['size_bucket'] = report.get('size_bucket', data.get('size_bucket', 'light'))
+        if success:
+            # Payoff ordering reads the last pass's applied count; no extra write.
+            patch['last_yield'] = sum(
+                1 for row in report.get('outcomes') or [] if isinstance(row, dict) and row.get('status') == 'applied'
+            )
         if poisoned:
             patch['poisoned'] = int(data.get('poisoned', 0)) + len(poisoned)
         for ref in sorted(deferred if release else ())[:8]:
@@ -650,7 +713,11 @@ def finish(
             next_due = deferred_until
         if not release:
             next_due = now + timedelta(seconds=1740)
-        tx.set(database.collection('dream_due').document(uid), {'due_at': next_due})
+        if park_when_idle and release and queued_after == 0 and patch['score'] == 0:
+            # Idle-skip lever: nothing left to do, so wait for mark_dirty instead of a timed hunt.
+            tx.delete(database.collection('dream_due').document(uid))
+        else:
+            tx.set(database.collection('dream_due').document(uid), {'due_at': next_due})
         return settled
 
     report.update(complete(database.transaction()))

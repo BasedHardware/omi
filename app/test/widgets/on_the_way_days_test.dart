@@ -1,3 +1,4 @@
+import 'package:omi/services/wals/wal_derived_sync_views.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,7 +15,7 @@ import 'package:omi/services/wals/wal.dart';
 /// On the Way, option B: a headline with how much is catching up and a thin bar, one row per
 /// local day with its totals and a quiet status, a footnote, and a plain support list.
 
-class _FakeSync extends ChangeNotifier implements SyncProvider {
+class _FakeSync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvider {
   _FakeSync(this.wals, {this.state = const SyncState()});
 
   final List<Wal> wals;

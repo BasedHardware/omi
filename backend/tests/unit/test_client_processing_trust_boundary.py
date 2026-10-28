@@ -503,6 +503,9 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite('utils/memory/developer_memory_list.py', '_validated_memories', 'model_dump'),
         DumpSite('utils/goals_response.py', 'list_developer_goals', 'model_dump'),
         DumpSite('routers/developer.py', '_ingest_conversation_from_segments', 'model_dump'),
+        # Retry identity hashes only the explicit recording-facts include set;
+        # client_processing and the other display projections are excluded.
+        DumpSite('routers/developer.py', '_derived_client_session_id', 'model_dump'),
         # Request serialization goes only to encrypted staging, never intelligence.
         DumpSite('routers/developer_segments.py', 'stage_chunk', 'model_dump'),
         DumpSite('routers/developer.py', 'update_goal', 'model_dump'),
@@ -528,6 +531,9 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite('utils/conversations/process_conversation.py', '_store_budget_waiting', 'model_dump'),
         DumpSite('utils/conversations/process_conversation.py', '_normal_persist_payload', 'dict'),
         DumpSite('utils/conversations/meeting_context.py', 'store_meeting_context', 'model_dump'),
+        # CalendarMeetingContext only; derived member context is
+        # persisted separately from Conversation.external_data.calendar_meeting_context.
+        DumpSite('utils/conversations/process_conversation.py', '_enrich_meeting_context', 'model_dump'),
         DumpSite('utils/conversations/process_conversation.py', '_emit_derived_effects', 'dict'),
         DumpSite('utils/conversations/process_conversation.py', 'process_user_emotion', 'dict'),
         DumpSite(

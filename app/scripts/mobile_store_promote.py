@@ -24,19 +24,16 @@ BUILD_TAG_RE = re.compile(
     r"^v(?P<version>(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))"
     r"\+(?P<build>[1-9][0-9]{0,9})-(?:mobile|android)-cm$"
 )
-# Play auto-sends this app's automated commits for review again (since
-# 2026-10-27) and rejects changesNotSentForReview whenever the parameter is
-# present at all ("The query parameter changesNotSentForReview must not be
-# set"), so commits pass no such parameter. Play's requirement has flipped
-# both ways within a day (2026-10-26 it required the parameter; each
-# direction has broken publishing), which is why every commit site passes
-# the parameter only while this flag is True. Flip to True only when Play
-# refuses automated review submission again ("Changes cannot be sent for
-# review automatically"): every commit then holds its changes for the Play
-# Console -> Publishing overview -> Send for review press, and the daily
-# train reads this flag to park the exposure ladder (a held hop is
-# invisible to the API).
-CHANGES_NOT_SENT_FOR_REVIEW = False
+# Codemagic android-internal-auto runs on 2026-10-28 at 03:18Z, 05:55Z and
+# 06:24Z uploaded their bundles, then failed at Publishing with "Setting
+# release for Google Play track internal failed. Changes cannot be sent for
+# review automatically. Please set the query parameter changesNotSentForReview
+# to true." Hold every Play commit for the Play Console -> Publishing overview
+# -> Send changes for review press. The daily train reads this flag to park the
+# exposure ladder because held hops are invisible to the Play API. Play's
+# 2026-10-27 error said this parameter must not be set; keep this switch aligned
+# with the current Play response and both Codemagic publishing blocks.
+CHANGES_NOT_SENT_FOR_REVIEW = True
 
 
 # A version in any of these states is in Apple's hands or approved and waiting.

@@ -1486,13 +1486,49 @@ removes it from its group first. `POST
 /v1/conversations/{id}/capture-group/separate` leaves the group stickily; a
 pair dissolves when one member leaves.
 
-Grouping is presentation metadata only. Transcripts, summaries, discard state
-and derived effects stay per capture. Clients render one row per group from
+Grouping is presentation metadata only. Transcripts, discard state
+and membership stay per capture. Clients render one row per group from
 the members they have loaded and keep every member reachable.
 `omi_product_event_total{event="capture_group_joined"}` counts the outcomes:
 `applied`, `none` (window match without shared speech) and `conflict`. A
 failure records `duplicate_capture_check → separate_captures` and never blocks
 finalization.
+
+**Primary notes can include shareable meeting evidence from a confirmed shared
+speech group** (owner meeting 2026-10-28). The primary is usually finalized
+before its group exists, while a desktop meeting member's
+`calendar_meeting_context` and approved screen frames describe the event the
+rendered row must summarize. Both enrichment seams are on unless
+`CAPTURE_GROUP_PRIMARY_NOTES_REFRESH_ENABLED` is set off. They fail closed for
+legacy call groups and groups without shared-speech evidence. Members contribute
+only while their visibility is `shared` or `public` and the row is not deleted.
+
+- Summarization-time context resolution merges eligible members' stored meeting
+  context below the conversation's own stored/direct context and above a Google
+  Calendar overlap read. The merged member context is kept in the server-only
+  `capture_group_member_context` field; it never overwrites the conversation's
+  own `external_data.calendar_meeting_context`. Reprocessing after separation or
+  exclusion recomputes the group evidence and clears that separate field when it
+  no longer applies. `load_capture_group_frame_evidence` joins up to three
+  desktop members' approved frames into roster names, screen moments and frame
+  images. Each member must have meeting role, shareable visibility, and
+  screenshot sharing enabled (including the existing enabled default for older
+  rows that lack the setting); frame bytes are fetched from that member's path.
+- `capture_group_notes_refresh.refresh_primary_notes` runs after the
+  duplicate-capture step in the durable finalizer and after inline sync/REST
+  completion. A refresh requires a new evidence fingerprint from an eligible
+  desktop meeting member with calendar context or approved frames. Evidence
+  fingerprints deduplicate repeated calls, and durable per-group state caps
+  refresh attempts at three. The conversation's processing claim coordinates
+  refresh against user reprocessing and live writers. The notes persistence
+  transaction rechecks the exact current group id and revision, then commits its
+  refresh receipt with the notes. A newer revision that arrives during an older
+  attempt is re-queued after the old write is fenced. Derived fanout is deferred:
+  the refresh does not rerun apps, rewrite task records or re-extract memories.
+  A user reprocess or live writer can make the refresh skip. The entry read is
+  field-projected, and the full document loads only after a candidate is found.
+  Membership, transcripts, discard state and audio are untouched, and the step
+  never fails finalization.
 
 The candidate read is bounded to 100 rows ordered by finish time; dense histories
 or delayed finalization may exceed it. Saturation and lookup/write/config failures
@@ -7393,6 +7429,34 @@ the media minimum, so later reprocessing cannot hide a restored card again.
 Notes do not bind a likely speaker suggestion to a name: likely and unknown
 voices remain anonymous, with statements attributed as "someone said".
 
+Shared prompt roles (`utils/conversations/owner_attribution.speaker_role_map`)
+now require positive owner/manual evidence and scope-qualified cluster IDs in
+both current and legacy notes, memory quote-source checks, and task role labels.
+Contradictory/mixed clusters stay unbound, regardless of row order. A manual
+segment correction applies to that segment only; it cannot label unconfirmed
+siblings. Multiple positive owner clusters remain unresolved. All source text,
+stored speaker keys, UI labels and manual corrections are retained.
+An evidence-authoritative `SpeakerMap` also prevents downstream calendar/roster
+elimination from filling an unresolved voice. Calendar context is retained and
+the existing mixed remote-channel demotion still applies; switch-off keeps the
+previous prefix behavior.
+
+`SPEAKER_ROLE_PROJECTION_ENABLED` is the one default-on kill switch at the role
+projection boundary (`false` restores the previous consumer behavior). There is
+no per-consumer rollout mode, confidence-prior change, new model or paid pass.
+Both memory paths share unique quote grounding and owner-spoken checks. Subject
+aboutness remains independent of utterance authorship: the owner saying "Sam is
+my teammate" has an owner-spoken source and a third-party subject. Only a uniquely
+grounded explicit first-person assertion can become an owner fact; model labels
+and the owner's presence alone cannot establish this. Unresolved aboutness stays
+unknown rather than dropping the source.
+
+Daily summaries still consume generated titles, notes, tasks and events through
+`conversations_to_string` by default. The renderer and daily prompt explicitly
+preserve subjects and uncertainty; they do not switch to full transcripts or
+repair historical incorrect notes. Synthetic fixture gates prove deterministic
+contracts only, not a population role-inversion rate or real-audio acceptance.
+
 Speaker refinement uses the same evidence record: count hints cannot merge
 confident distinct identities, and desktop-channel/near-field anchors remain
 explicit candidates. Live text-only introductions cannot create or link people
@@ -7406,6 +7470,53 @@ Memory/task entrypoints and daily/simple/comprehensive recaps use the same
 eligibility helper. Restoring a recording protects it, reclassification clears
 its exclusion, and successful reprocessing clears the terminal marker. Shadow
 preserves transcripts, labels and derived output; it never writes media edges.
+Required-memory normalization consults this same persisted media policy even
+when `SPEAKER_EVIDENCE_MODE` is off. Automatic sources read at most four
+conversation documents, reusing each document within the admission call;
+explicit user assertions retain their separate authority. The read bound counts
+distinct readable source documents, so repeated evidence for one source reads
+it once. Stored keep/restore and `has_photos` markers, inline photos and user
+titles outrank an older
+media label at every derived gate. Current manual owner anchors use P2's scoped
+roles and the existing owner-duration floor; ambiguous/unscoped manual owner
+anchors abstain from media exclusion without granting owner attribution. These
+read-time protections never rewrite the stored classification.
+The photo marker protects without fetching the photos subcollection; both the
+classification adapter and required-memory read path honor it.
+Media admission does
+not confer owner attribution: the independent speaker policy still consumes
+P2's shared `owner_attribution` role projection when serving. Outside serving,
+bounded media-only reads use the existing 5% uid shadow sample, return the
+legacy revision mapping and cannot defer normalization on a read error.
+All derived wrappers now reach the shared gate in shadow. Aggregate/text-free
+`media_classification`, `media_derived_admission` and `batch_media_admission`
+logs expose bounded reasons and serving status; they contain no transcript,
+account or speaker identifiers. Existing `omi_media_noise_shadow_total`
+consumer/classification counters remain the parity/error surface.
+
+Batch `projection.build_incoming` uses the same narrow transcript admission as
+legacy sync after grouping and stable ID/clock assignment. Off and shadow at
+zero serving preserve the complete incoming row. Serving filters only existing
+marker/credit/repetition rules; an all-filtered part takes the existing empty
+projection receipt, without an empty conversation, re-transcription or a new
+paid call. Original results keep the existing artifact retention policy and
+measured VAD accounting is retained.
+There is no language-profile rejection or music classifier. Missing/partial/
+stale speaker evidence remains unknown; plausible owner speech, attended calls
+and explicit keep/restore protections still precede media suppression.
+
+P3 ships observationally: `MEDIA_NOISE_MODE=shadow`,
+`MEDIA_NOISE_MODE_SERVE_PERCENT=0`, digest cohort empty (the existing defaults).
+Only the rollout lead may expand after protected synthetic/authorized fixture
+review and a full 24-hour shadow window where available by Oct 29 12:00Z.
+With consumer parity green, understood reason/error rates and no validated
+false suppression, target 5% by Oct 30 12:00Z, 25% after six clean hours, and
+100% by Oct 31 12:00Z. Insufficient evidence blocks expansion and requires a
+renewed dated promise. Any false owner promotion or lost good speech/task
+stops the ramp; rollback is percent 0 plus empty digests in shadow, or mode
+off to stop observations too. Arbitrary music hallucination and instrument-only
+or Android media without reliable evidence remain lead-owned follow-ups;
+this gate does not repair historical derived output.
 On clients with the existing Show discarded/restore capability (currently
 iOS/Android), both media and noise minima are hidden from the default feed.
 Bystander classification uses noise. Explicit keep/restore overrides automatic

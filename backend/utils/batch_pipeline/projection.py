@@ -46,6 +46,7 @@ from utils.batch_pipeline.voice_evidence import prepare as prepare_voice_evidenc
 from utils.batch_pipeline.projection_parts import align_projection_words, bounded_projection_words
 from utils.sync.assignment_errors import SyncAssignmentSuperseded
 from utils.sync.intake_completion import log_sync_lineage_stamp_gap_refused
+from utils.stt.transcript_admission import filter_admission
 
 if TYPE_CHECKING:
     from utils.batch_pipeline.projection_prefetch import Prefetched
@@ -251,9 +252,20 @@ def build_incoming(
             segment.speaker_identity_status = 'ambiguous' if abstained else 'no_match'
             segment.speaker_match_source = 'batch_abstention' if abstained else 'batch_pyannote'
     started = datetime.fromtimestamp(item.capture_at, timezone.utc)
+    finished = datetime.fromtimestamp(item.capture_at + max(s.end for s in segments), timezone.utc)
+    # Projected sync must use the same narrow admission rules as legacy sync.
+    # Keep original clocks/accounting; shadow retains the identical segments.
+    segments, admission_receipts = filter_admission(item.owner_id, segments, origin='sync')
+    for reason in sorted({receipt.rule for receipt in admission_receipts}):
+        logger.info(
+            'event=batch_media_admission reason=%s count=%d serving=%s',
+            reason,
+            sum(receipt.rule == reason for receipt in admission_receipts),
+            str(any(receipt.dropped for receipt in admission_receipts)).lower(),
+        )
     create = CreateConversation(
         started_at=started,
-        finished_at=datetime.fromtimestamp(item.capture_at + max(s.end for s in segments), timezone.utc),
+        finished_at=finished,
         transcript_segments=segments,
         source=ConversationSource(binding.source),
         language=binding.language or payload.get('language'),
@@ -841,7 +853,8 @@ class Projector:
                             batch_segment_id=item.segment_id,
                             policy=policy,
                         )
-                    session.speaker_scope = incoming['transcript_segments'][0]['speaker_id_scope']
+                    if incoming['transcript_segments']:
+                        session.speaker_scope = incoming['transcript_segments'][0]['speaker_id_scope']
                     if binding.record_origin:
                         incoming['_batch_replace_live'] = {
                             'start': item.capture_at,
@@ -863,7 +876,7 @@ class Projector:
                         receipt_box[:] = [session.persist(transaction, planned)]
 
                     candidate = None
-                    if context.target_id is None:
+                    if context.target_id is None and incoming['transcript_segments']:
                         with projection_phase('candidate', policy):
                             span = (int(incoming['started_at'].timestamp()), int(incoming['finished_at'].timestamp()))
                             deadline = hint.deadline if hint is not None else None
