@@ -6,6 +6,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
+import 'package:omi/pages/home/widgets/home_daily_recaps_setting.dart';
 import 'package:omi/providers/conversation_provider.dart';
 
 import '../../support/typed_conversation_screen.dart';
@@ -45,12 +46,12 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 1));
     provider.dispose();
-    SharedPreferencesUtil().homeDailyRecapsEnabled = false;
+    HomeDailyRecapsSetting.enabled = false;
   }
 
   testWidgets('Home hides Daily Recaps by default and never fetches them', (tester) async {
     final provider = await pumpHome(tester);
-    expect(SharedPreferencesUtil().homeDailyRecapsEnabled, isFalse);
+    expect(HomeDailyRecapsSetting.enabled, isFalse);
     expect(find.byType(HomeDailyRecaps), findsNothing);
     expect(find.text('Daily Recaps'), findsNothing);
     expect(reads, 0);
@@ -61,7 +62,7 @@ void main() {
     final provider = await pumpHome(tester);
     expect(find.text('Daily Recaps'), findsNothing);
 
-    SharedPreferencesUtil().homeDailyRecapsEnabled = true;
+    HomeDailyRecapsSetting.enabled = true;
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Daily Recaps'), findsOneWidget);
@@ -69,7 +70,7 @@ void main() {
     expect(reads, 1);
     expect(SharedPreferencesUtil().getBool('homeDailyRecapsEnabled'), isTrue);
 
-    SharedPreferencesUtil().homeDailyRecapsEnabled = false;
+    HomeDailyRecapsSetting.enabled = false;
     await tester.pump();
     expect(find.byType(HomeDailyRecaps), findsNothing);
     expect(reads, 1);
