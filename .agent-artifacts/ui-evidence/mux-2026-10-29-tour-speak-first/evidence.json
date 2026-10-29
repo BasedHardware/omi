@@ -25,7 +25,7 @@
     {
       "file": "004-mobile-ios-tour-first-screen-large-text.png",
       "platform": "mobile-ios",
-      "description": "Largest accessibility text size (about 312%): main's intro overflows by 598 px and pushes Get Started and Skip off screen; this change's first step overflows by 120 px and keeps the close X. Right: this change at 200% text fits. iPhone 17 Pro simulator, iOS 26.2. The Omi CV1 connection is simulated (no Bluetooth on a simulator).",
+      "description": "Largest accessibility text size (about 312%). Left: main's intro overflows by 598 px and pushes Get Started and Skip off screen. Middle: this change's first step scrolls instead, with nothing cut off. Right: after the words (injected through the step's own transcript seam), Good job! wraps and the transcript and Continue are reachable by scrolling. iPhone 17 Pro simulator, iOS 26.2. The Omi CV1 connection is simulated (no Bluetooth on a simulator).",
       "captured_by": "agent",
       "source": "screencapture"
     },
@@ -33,6 +33,13 @@
       "file": "005-mobile-ios-tour-first-screen-locales.png",
       "platform": "mobile-ios",
       "description": "This change's first screen in German, Japanese and Spanish (app language set as in Settings > Language). iPhone 17 Pro simulator, iOS 26.2. The Omi CV1 connection is simulated (no Bluetooth on a simulator).",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "006-mobile-ios-tour-speak-japanese-completes.png",
+      "platform": "mobile-ios",
+      "description": "Japanese. Left: the first step with its Japanese example. Middle: the example as the transcript (injected through the step's own transcript seam) finishes the step. Right: Continue opens the question step. iPhone 17 Pro simulator, iOS 26.2. The Omi CV1 connection is simulated (no Bluetooth on a simulator).",
       "captured_by": "agent",
       "source": "screencapture"
     }
