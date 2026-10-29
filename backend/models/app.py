@@ -10,18 +10,18 @@ logger = logging.getLogger(__name__)
 
 # Fields to exclude when reducing App data for list views and cache
 APP_REDUCE_EXCLUDE_FIELDS = {
-    "reviews",
-    "user_review",
-    "persona_prompt",
-    "chat_prompt",
-    "memory_prompt",
-    "payment_product_id",
-    "payment_price_id",
-    "payment_link_id",
-    "twitter",
-    "email",
-    "money_made",
-    "usage_count",
+    'reviews',
+    'user_review',
+    'persona_prompt',
+    'chat_prompt',
+    'memory_prompt',
+    'payment_product_id',
+    'payment_price_id',
+    'payment_link_id',
+    'twitter',
+    'email',
+    'money_made',
+    'usage_count',
 }
 
 
@@ -36,17 +36,15 @@ class AppReview(BaseModel):
 
     @classmethod
     def from_json(cls, json_data: Mapping[str, Any]) -> "AppReview":
-        responded_at = json_data.get("responded_at")
+        responded_at = json_data.get('responded_at')
         return cls(
-            uid=json_data["uid"],
-            rated_at=datetime.fromisoformat(json_data["rated_at"]),
-            score=json_data["score"],
-            review=json_data["review"],
-            username=json_data.get("username"),
-            response=json_data.get("response"),
-            responded_at=datetime.fromisoformat(responded_at)
-            if isinstance(responded_at, str)
-            else None,
+            uid=json_data['uid'],
+            rated_at=datetime.fromisoformat(json_data['rated_at']),
+            score=json_data['score'],
+            review=json_data['review'],
+            username=json_data.get('username'),
+            response=json_data.get('response'),
+            responded_at=datetime.fromisoformat(responded_at) if isinstance(responded_at, str) else None,
         )
 
 
@@ -80,7 +78,7 @@ class ExternalIntegration(BaseModel):
     chat_tools_manifest_url: Optional[str] = None
     # Chat messages configuration from manifest (enabled, target, notify)
     chat_messages_enabled: bool = False
-    chat_messages_target: Literal["main", "app"] = "app"
+    chat_messages_target: Literal['main', 'app'] = 'app'
     chat_messages_notify: bool = False
     # MCP server URL (e.g., https://mcp.example.com/mcp)
     mcp_server_url: Optional[str] = None
@@ -107,7 +105,7 @@ class ChatTool(BaseModel):
     is_mcp: bool = False  # Whether this tool comes from an MCP server
     transport: str = "streamable_http"  # MCP transport: "streamable_http" or "sse"
 
-    @field_validator("parameters", mode="before")
+    @field_validator('parameters', mode='before')
     @classmethod
     def deserialize_parameters(cls, v: Any) -> Any:
         """Deserialize parameters from JSON string (stored that way in Firestore to avoid nesting limits)."""
@@ -115,9 +113,7 @@ class ChatTool(BaseModel):
             try:
                 return json.loads(v)
             except (json.JSONDecodeError, ValueError):
-                logger.warning(
-                    "ChatTool.parameters is not valid JSON; dropping malformed parameters"
-                )
+                logger.warning('ChatTool.parameters is not valid JSON; dropping malformed parameters')
                 return None
         return v
 
@@ -137,7 +133,7 @@ class AppBaseModel(BaseModel):
     uid: Optional[str] = None
     private: bool = False
     approved: bool = False
-    status: str = "approved"
+    status: str = 'approved'
     category: str
     author: str
     description: str
@@ -178,14 +174,14 @@ class AppCatalogItem(BaseModel):
     """Desktop app catalog response item for list/search views."""
 
     id: str
-    name: str = ""
-    description: str = ""
-    image: str = ""
-    category: str = "other"
-    author: str = ""
+    name: str = ''
+    description: str = ''
+    image: str = ''
+    category: str = 'other'
+    author: str = ''
     capabilities: List[str] = Field(default_factory=list)
     approved: bool = False
-    status: str = "approved"
+    status: str = 'approved'
     private: bool = False
     installs: int = 0
     rating_avg: Optional[float] = None
@@ -214,53 +210,51 @@ class App(AppBaseModel):
     payment_link_id: Optional[str] = None
 
     def get_rating_avg(self) -> Optional[str]:
-        return f"{self.rating_avg:.1f}" if self.rating_avg is not None else None
+        return f'{self.rating_avg:.1f}' if self.rating_avg is not None else None
 
     def has_capability(self, capability: str) -> bool:
         return capability in self.capabilities
 
     def works_with_memories(self) -> bool:
-        return self.has_capability("memories")
+        return self.has_capability('memories')
 
     def works_with_chat(self) -> bool:
-        return self.has_capability("chat") or self.has_capability("persona")
+        return self.has_capability('chat') or self.has_capability('persona')
 
     def is_a_persona(self) -> bool:
-        return self.has_capability("persona")
+        return self.has_capability('persona')
 
     def works_externally(self) -> bool:
-        return self.has_capability("external_integration")
+        return self.has_capability('external_integration')
 
     def triggers_on_conversation_creation(self) -> bool:
         return bool(
             self.works_externally()
             and self.external_integration
-            and self.external_integration.triggers_on == "memory_creation"
+            and self.external_integration.triggers_on == 'memory_creation'
         )
 
     def triggers_realtime(self) -> bool:
         return bool(
             self.works_externally()
             and self.external_integration
-            and self.external_integration.triggers_on == "transcript_processed"
+            and self.external_integration.triggers_on == 'transcript_processed'
         )
 
     def triggers_realtime_audio_bytes(self) -> bool:
         return bool(
             self.works_externally()
             and self.external_integration
-            and self.external_integration.triggers_on == "audio_bytes"
+            and self.external_integration.triggers_on == 'audio_bytes'
         )
 
     def filter_proactive_notification_scopes(self, params: List[str]) -> List[str]:
         if not self.proactive_notification:
             return []
-        return [
-            param for param in params if param in self.proactive_notification.scopes
-        ]
+        return [param for param in params if param in self.proactive_notification.scopes]
 
     def get_image_url(self) -> str:
-        return f"https://raw.githubusercontent.com/BasedHardware/Omi/main{self.image}"
+        return f'https://raw.githubusercontent.com/BasedHardware/Omi/main{self.image}'
 
     def has_chat_tools(self) -> bool:
         """Check if app provides chat tools"""
@@ -272,7 +266,7 @@ class App(AppBaseModel):
         Excludes large/redundant fields that are not needed in app list displays.
         Uses APP_REDUCE_EXCLUDE_FIELDS constant for consistency with cache reduction.
         """
-        return self.model_dump(mode="json", exclude=APP_REDUCE_EXCLUDE_FIELDS)
+        return self.model_dump(mode='json', exclude=APP_REDUCE_EXCLUDE_FIELDS)
 
     @staticmethod
     def reduce_dict(app_dict: Mapping[str, Any]) -> dict[str, Any]:
@@ -283,7 +277,7 @@ class App(AppBaseModel):
         return {k: v for k, v in app_dict.items() if k not in APP_REDUCE_EXCLUDE_FIELDS}
 
     @classmethod
-    def deserialize_safe(cls, data: Any) -> Optional["App"]:
+    def deserialize_safe(cls, data: Any) -> Optional['App']:
         """Build an App from a raw stored record, returning None if validation fails so one
         malformed or legacy document cannot crash detail views with HTTP 500."""
         if not data or not isinstance(data, dict):
@@ -291,9 +285,7 @@ class App(AppBaseModel):
         try:
             return cls(**data)
         except ValidationError:
-            logger.warning(
-                "Skipping malformed app doc %s: ValidationError", data.get("id")
-            )
+            logger.warning('Skipping malformed app doc %s: ValidationError', data.get('id'))
             return None
 
 
@@ -303,7 +295,7 @@ class AppCreate(BaseModel):
     uid: Optional[str] = None
     private: bool = False
     approved: bool = False
-    status: str = "approved"
+    status: str = 'approved'
     category: str
     email: Optional[str] = None
     author: str
@@ -322,9 +314,7 @@ class AppCreate(BaseModel):
     is_paid: Optional[bool] = False
     price: Optional[float] = 0.0  # cents/100
     payment_plan: Optional[str] = None
-    thumbnails: Optional[List[str]] = Field(
-        default_factory=list
-    )  # List of thumbnail IDs
+    thumbnails: Optional[List[str]] = Field(default_factory=list)  # List of thumbnail IDs
     chat_tools: Optional[List[ChatTool]] = Field(default_factory=list)
     source_code_url: Optional[str] = None
 
@@ -361,12 +351,10 @@ class AppUpdate(BaseModel):
 
 
 class UsageHistoryType(str, Enum):
-    memory_created_external_integration = "memory_created_external_integration"
-    transcript_processed_external_integration = (
-        "transcript_processed_external_integration"
-    )
-    memory_created_prompt = "memory_created_prompt"
-    chat_message_sent = "chat_message_sent"
+    memory_created_external_integration = 'memory_created_external_integration'
+    transcript_processed_external_integration = 'transcript_processed_external_integration'
+    memory_created_prompt = 'memory_created_prompt'
+    chat_message_sent = 'chat_message_sent'
 
 
 class UsageHistoryItem(BaseModel):
