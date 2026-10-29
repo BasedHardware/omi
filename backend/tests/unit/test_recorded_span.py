@@ -361,3 +361,26 @@ def test_new_import_stamps_real_arrival_instead_of_its_historical_created_date(m
     conversation_recorded_time.stamp_for_write(unknown)
     assert unknown['recorded_start'] is None and unknown['recorded_end'] is None
     assert unknown['arrival_at'] == arrived and unknown['clock'] == 'imported'
+
+
+def test_timing_projection_never_serializes_display_fields():
+    class Recording:
+        started_at = T0
+        transcript_segments = [SimpleNamespace(start=3, end=15)]
+        status = 'in_progress'
+
+        def model_dump(self):
+            raise AssertionError('unrelated display serialization')
+
+    span = conversation_span(Recording())
+    assert (span.recorded_start, span.recorded_end) == (T0 + timedelta(seconds=3), T0 + timedelta(seconds=15))
+
+
+@pytest.mark.parametrize('start,end', [(T0, None), (None, T0), (T0, T0 - timedelta(seconds=1))])
+def test_invalid_explicit_span_does_not_fall_back_to_legacy_wall(start, end):
+    assert (
+        conversation_span(
+            dict(recorded_start=start, recorded_end=end, started_at=T0, finished_at=T0 + timedelta(hours=3))
+        )
+        is None
+    )

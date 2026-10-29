@@ -85,7 +85,22 @@ def segment_activity_updates(uid, current, at, live_segments, started_at):
 def overlap_snapshot(uid, conversation, persisted):
     """Carry recording evidence across the Conversation DTO seam."""
     return {
-        **conversation.model_dump(),
+        **persisted,
+        **{
+            key: getattr(conversation, key, persisted.get(key))
+            for key in (
+                'id',
+                'source',
+                'status',
+                'discarded',
+                'started_at',
+                'finished_at',
+                'created_at',
+                'transcript_segments',
+                'external_data',
+                'client_device_id',
+            )
+        },
         **{
             key: persisted.get(key)
             for key in ('recorded_start', 'recorded_end', 'arrival_at', 'clock', 'last_speech_at')

@@ -51,7 +51,29 @@ def sync_recorded_end(row: dict, span: tuple[datetime, datetime] | None) -> date
 SPAN_FIELDS = ('recorded_start', 'recorded_end', 'arrival_at', 'clock')
 
 
-def conversation_span(row: Mapping[str, Any]):
+def _timing_row(value: Any) -> Mapping[str, Any]:
+    """Read recording evidence without serializing unrelated display content."""
+    if isinstance(value, Mapping):
+        return value
+    fields = (
+        *SPAN_FIELDS,
+        'processing_admitted_at',
+        'created_at',
+        'started_at',
+        'finished_at',
+        'transcript_segments',
+        'sync_live_target',
+        'audio_timeline',
+        'capture_evidence',
+        'status',
+        'sync_recorded_end_at',
+        'sync_content_revision',
+        'last_speech_at',
+    )
+    return {field: getattr(value, field, None) for field in fields}
+
+
+def conversation_span(row: Any):
     """Typed read, with lazy legacy derivation and no write/backfill side effect.
 
     A live processing end never proves speech. Pure sync receipts include VAD
@@ -62,15 +84,25 @@ def conversation_span(row: Mapping[str, Any]):
     from models.recorded_span import RecordedClock, RecordedSpan
     from utils.conversations.lifecycle_clocks import utc
 
+    row = _timing_row(row)
     start, end = utc(row.get('recorded_start')), utc(row.get('recorded_end'))
     arrival = utc(row.get('arrival_at')) or utc(row.get('processing_admitted_at')) or utc(row.get('created_at'))
     if start is not None and end is not None and end >= start:
         return RecordedSpan(
             recorded_start=start, recorded_end=end, arrival_at=arrival, clock=row.get('clock') or RecordedClock.legacy
         )
+    if row.get('recorded_start') is not None or row.get('recorded_end') is not None:
+        return None
     origin = utc(row.get('started_at'))
     segments = row.get('transcript_segments')
-    segments = [s if isinstance(s, Mapping) else s.model_dump() for s in segments] if isinstance(segments, list) else []
+    segments = (
+        [
+            s if isinstance(s, Mapping) else {key: getattr(s, key, None) for key in ('start', 'end', 'audio_alignment')}
+            for s in segments
+        ]
+        if isinstance(segments, list)
+        else []
+    )
     placed = recorded_span(origin, segments)
     if origin is None:
         return None

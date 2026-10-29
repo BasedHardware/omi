@@ -37,8 +37,7 @@ def adjacent_conversation(
     """A kept conversation this one would have joined had capture not split it (fail-open)."""
     from utils.conversations.recorded_time import conversation_span
 
-    row = conversation.model_dump() if hasattr(conversation, 'model_dump') else vars(conversation)
-    span = conversation_span(row)
+    span = conversation_span(conversation)
     started_at, finished_at = (span.recorded_start, span.recorded_end) if span else (None, None)
     if started_at is None or finished_at is None:
         return None
@@ -86,8 +85,7 @@ def occasion_retention(uid: str, conversation: Any, conversation_id: Optional[st
     cid = conversation_id or getattr(conversation, 'id', None)
     from utils.conversations.recorded_time import conversation_span
 
-    row = conversation.model_dump() if hasattr(conversation, 'model_dump') else vars(conversation)
-    span = conversation_span(row)
+    span = conversation_span(conversation)
     start, end = (span.recorded_start, span.recorded_end) if span else (None, None)
     if start is None or end is None:
         return None
