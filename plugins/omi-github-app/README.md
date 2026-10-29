@@ -124,6 +124,9 @@ OPENAI_API_KEY=your_openai_key
 # Shared secret guarding the chat-tool endpoints (see below)
 GITHUB_TOOLS_SECRET=change-me
 
+# Secret used to sign per-uid session cookies on settings routes
+GITHUB_SETTINGS_SECRET=change-me
+
 # App Settings
 APP_HOST=0.0.0.0
 APP_PORT=8000
@@ -188,6 +191,7 @@ GITHUB_CLIENT_ID
 GITHUB_CLIENT_SECRET
 OPENAI_API_KEY
 GITHUB_TOOLS_SECRET
+GITHUB_SETTINGS_SECRET
 OAUTH_REDIRECT_URL=https://your-app.up.railway.app/auth/callback
 APP_HOST=0.0.0.0
 APP_PORT=8000
@@ -345,7 +349,10 @@ github/
 
 ## Chat Tool and Settings Authentication
 
-All chat-tool endpoints (`/tools/*`) and user configuration settings endpoints (`/update-repo`, `/refresh-repos`, `/check-repo-access`, `/save-agent-provider`, `/save-agent-key`, `/delete-agent-key`, `/test-agent`) require a shared secret so only the trusted OMI backend or authenticated caller can invoke them. The caller presents `GITHUB_TOOLS_SECRET` or `GITHUB_SETTINGS_SECRET` either as an `Authorization: Bearer <secret>` header or a `github_tools_token` / `github_settings_token` query parameter. Requests without a valid secret are rejected with `401` (or `503` when the secret is not configured). Public browser setup endpoints (`/`, `/auth`, `/auth/callback`, `/setup-completed`) remain open.
+The app uses strict two-tier security isolation across chat-tool and browser settings surfaces:
+
+1. **Chat Tools (`/tools/*`)**: All server-to-server endpoints require `GITHUB_TOOLS_SECRET` presented either as an `Authorization: Bearer <secret>` header or a `github_tools_token` query parameter. Requests without a valid tools secret return `401` (or `503` when unset).
+2. **Settings Routes (`/update-repo`, `/refresh-repos`, `/check-repo-access`, `/save-agent-provider`, `/save-agent-key`, `/delete-agent-key`, `/test-agent`)**: Authenticated via an HMAC-signed session cookie (`omi_github_settings`) bound to that specific `uid`. The session cookie is issued upon successful OAuth callback at `/auth/callback` using `GITHUB_SETTINGS_SECRET`. Mutating settings calls verify the cookie signature matches the target `uid`. `/auth/callback` also refuses to rebind an already-linked account unless a matching session is present. Public browser entry routes (`/`, `/auth`, `/auth/callback`, `/setup-completed`, `/health`) remain open with bare `/?uid=` URLs.
 
 ## 🤝 Contributing
 

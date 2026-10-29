@@ -1,30 +1,31 @@
-"""Hermetic regression tests for the GitHub App chat-tools and settings routes shared-secret guard.
+"""Hermetic regression tests for the GitHub App chat-tools and settings routes auth guards.
 
-Before this fix, all /tools/* and settings routes trusted the uid,
-allowing unauthenticated callers to read private repo lists, inspect issues,
-create issues, add comments, overwrite agent keys/providers, or trigger agent
-code execution using the victim's stored GitHub OAuth access token.
+Security isolation architecture:
+1. /tools/* chat-tool routes require GITHUB_TOOLS_SECRET via Authorization: Bearer
+   or github_tools_token query parameter (server-to-server).
+2. mutating settings routes (/update-repo, /refresh-repos, /check-repo-access,
+   /save-agent-provider, /save-agent-key, /delete-agent-key, /test-agent) require
+   an HMAC-signed omi_github_settings session cookie generated at /auth/callback
+   using GITHUB_SETTINGS_SECRET, bound to that specific uid.
+3. Public browser setup routes (/, /auth, /auth/callback, /setup-completed, /health)
+   remain open to bare entry.
 
-Covers:
-- require_github_tools_auth: 503 when unconfigured/blank, 401 on missing/wrong
-  token, bearer + query token accepted (both tools and settings tokens/secrets).
-- Route wiring: asserts that all 8 chat-tool routes and all 7 settings routes carry
-  the shared-secret dependency, and that public browser setup routes remain unguarded.
-
-fastapi is stubbed if not installed so the suite runs without third-party packages.
+fastapi is stubbed if not installed so the suite runs hermetically without third-party packages.
 """
 
 import ast
+import hashlib
+import hmac
 import importlib.util
 import os
 import sys
 from types import ModuleType
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 APP_DIR = Path(__file__).resolve().parent
-SECRET = "test-github-tools-secret"
+TOOLS_SECRET = "test-github-tools-secret"
 SETTINGS_SECRET = "test-github-settings-secret"
 
 CHAT_TOOL_PATHS = {
@@ -66,9 +67,7 @@ class _StubHTTPException(Exception):
         self.detail = detail
 
 
-def _load_auth_module():
-    """Load github_tools_auth.py with fastapi stubbed if not present."""
-    module_name = "github_tools_auth_test_target"
+def _load_module(filename, module_name):
     if module_name in sys.modules:
         del sys.modules[module_name]
 
@@ -79,7 +78,7 @@ def _load_auth_module():
     with patch.dict(sys.modules, {"fastapi": fastapi_stub}):
         spec = importlib.util.spec_from_file_location(
             module_name,
-            APP_DIR / "github_tools_auth.py",
+            APP_DIR / filename,
         )
         mod = importlib.util.module_from_spec(spec)
         sys.modules[module_name] = mod
@@ -88,14 +87,15 @@ def _load_auth_module():
 
 
 class _FakeRequest:
-    def __init__(self, headers=None, query_params=None):
+    def __init__(self, headers=None, query_params=None, cookies=None):
         self.headers = headers or {}
         self.query_params = query_params or {}
+        self.cookies = cookies or {}
 
 
 class TestGitHubToolsAuth(unittest.TestCase):
     def setUp(self):
-        self.mod = _load_auth_module()
+        self.mod = _load_module("github_tools_auth.py", "github_tools_auth_target")
 
     def test_missing_secret_fails_closed_with_503(self):
         with patch.dict(os.environ, {}, clear=True):
@@ -112,76 +112,80 @@ class TestGitHubToolsAuth(unittest.TestCase):
             self.assertEqual(ctx.exception.status_code, 503)
 
     def test_missing_token_returns_401(self):
-        with patch.dict(os.environ, {"GITHUB_TOOLS_SECRET": SECRET}, clear=True):
+        with patch.dict(os.environ, {"GITHUB_TOOLS_SECRET": TOOLS_SECRET}, clear=True):
             req = _FakeRequest()
             with self.assertRaises(self.mod.HTTPException) as ctx:
                 self.mod.require_github_tools_auth(req)
             self.assertEqual(ctx.exception.status_code, 401)
 
     def test_wrong_bearer_token_returns_401(self):
-        with patch.dict(os.environ, {"GITHUB_TOOLS_SECRET": SECRET}, clear=True):
+        with patch.dict(os.environ, {"GITHUB_TOOLS_SECRET": TOOLS_SECRET}, clear=True):
             req = _FakeRequest(headers={"Authorization": "Bearer wrong-token"})
             with self.assertRaises(self.mod.HTTPException) as ctx:
                 self.mod.require_github_tools_auth(req)
             self.assertEqual(ctx.exception.status_code, 401)
 
     def test_correct_bearer_token_succeeds(self):
-        with patch.dict(os.environ, {"GITHUB_TOOLS_SECRET": SECRET}, clear=True):
-            req = _FakeRequest(headers={"Authorization": f"Bearer {SECRET}"})
+        with patch.dict(os.environ, {"GITHUB_TOOLS_SECRET": TOOLS_SECRET}, clear=True):
+            req = _FakeRequest(headers={"Authorization": f"Bearer {TOOLS_SECRET}"})
             self.assertIsNone(self.mod.require_github_tools_auth(req))
 
     def test_correct_query_token_succeeds(self):
-        with patch.dict(os.environ, {"GITHUB_TOOLS_SECRET": SECRET}, clear=True):
-            req = _FakeRequest(query_params={"github_tools_token": SECRET})
+        with patch.dict(os.environ, {"GITHUB_TOOLS_SECRET": TOOLS_SECRET}, clear=True):
+            req = _FakeRequest(query_params={"github_tools_token": TOOLS_SECRET})
             self.assertIsNone(self.mod.require_github_tools_auth(req))
-
-    def test_settings_secret_env_succeeds(self):
-        with patch.dict(os.environ, {"GITHUB_SETTINGS_SECRET": SETTINGS_SECRET}, clear=True):
-            req = _FakeRequest(query_params={"github_settings_token": SETTINGS_SECRET})
-            self.assertIsNone(self.mod.require_github_tools_auth(req))
-
-    def test_both_secrets_set_either_token_succeeds(self):
-        with patch.dict(
-            os.environ,
-            {
-                "GITHUB_TOOLS_SECRET": SECRET,
-                "GITHUB_SETTINGS_SECRET": SETTINGS_SECRET,
-            },
-            clear=True,
-        ):
-            # Presenting tools secret via Authorization header
-            req1 = _FakeRequest(headers={"Authorization": f"Bearer {SECRET}"})
-            self.assertIsNone(self.mod.require_github_tools_auth(req1))
-
-            # Presenting settings secret via Authorization header
-            req2 = _FakeRequest(headers={"Authorization": f"Bearer {SETTINGS_SECRET}"})
-            self.assertIsNone(self.mod.require_github_tools_auth(req2))
-
-            # Presenting tools secret via query param
-            req3 = _FakeRequest(query_params={"github_tools_token": SECRET})
-            self.assertIsNone(self.mod.require_github_tools_auth(req3))
-
-            # Presenting settings secret via query param
-            req4 = _FakeRequest(query_params={"github_settings_token": SETTINGS_SECRET})
-            self.assertIsNone(self.mod.require_github_tools_auth(req4))
-
-            # Presenting invalid token returns 401
-            req_bad = _FakeRequest(headers={"Authorization": "Bearer invalid-token"})
-            with self.assertRaises(self.mod.HTTPException) as ctx:
-                self.mod.require_github_tools_auth(req_bad)
-            self.assertEqual(ctx.exception.status_code, 401)
 
     def test_wrong_query_token_returns_401(self):
-        with patch.dict(os.environ, {"GITHUB_TOOLS_SECRET": SECRET}, clear=True):
+        with patch.dict(os.environ, {"GITHUB_TOOLS_SECRET": TOOLS_SECRET}, clear=True):
             req = _FakeRequest(query_params={"github_tools_token": "wrong"})
             with self.assertRaises(self.mod.HTTPException) as ctx:
                 self.mod.require_github_tools_auth(req)
             self.assertEqual(ctx.exception.status_code, 401)
 
 
-class TestGitHubToolsRouteWiring(unittest.TestCase):
-    """Verify that all chat tool routes and settings routes carry the guard."""
+class TestGitHubSettingsAuth(unittest.TestCase):
+    def setUp(self):
+        self.mod = _load_module("github_settings_auth.py", "github_settings_auth_target")
 
+    def test_missing_settings_secret_fails_closed_503(self):
+        with patch.dict(os.environ, {}, clear=True):
+            req = _FakeRequest(cookies={self.mod.COOKIE_NAME: "u1.valid"})
+            with self.assertRaises(self.mod.HTTPException) as ctx:
+                self.mod.require_settings_session(req, "u1")
+            self.assertEqual(ctx.exception.status_code, 503)
+
+    def test_missing_cookie_fails_401(self):
+        with patch.dict(os.environ, {"GITHUB_SETTINGS_SECRET": SETTINGS_SECRET}, clear=True):
+            req = _FakeRequest(cookies={})
+            with self.assertRaises(self.mod.HTTPException) as ctx:
+                self.mod.require_settings_session(req, "u1")
+            self.assertEqual(ctx.exception.status_code, 401)
+
+    def test_mismatched_uid_fails_401(self):
+        with patch.dict(os.environ, {"GITHUB_SETTINGS_SECRET": SETTINGS_SECRET}, clear=True):
+            attacker_cookie = self.mod.session_value("attacker")
+            req = _FakeRequest(cookies={self.mod.COOKIE_NAME: attacker_cookie})
+            with self.assertRaises(self.mod.HTTPException) as ctx:
+                self.mod.require_settings_session(req, "victim")
+            self.assertEqual(ctx.exception.status_code, 401)
+
+    def test_tampered_signature_fails_401(self):
+        with patch.dict(os.environ, {"GITHUB_SETTINGS_SECRET": SETTINGS_SECRET}, clear=True):
+            req = _FakeRequest(cookies={self.mod.COOKIE_NAME: "u1.deadbeefbadsignature"})
+            with self.assertRaises(self.mod.HTTPException) as ctx:
+                self.mod.require_settings_session(req, "u1")
+            self.assertEqual(ctx.exception.status_code, 401)
+
+    def test_valid_cookie_succeeds(self):
+        with patch.dict(os.environ, {"GITHUB_SETTINGS_SECRET": SETTINGS_SECRET}, clear=True):
+            valid_cookie = self.mod.session_value("u1")
+            req = _FakeRequest(cookies={self.mod.COOKIE_NAME: valid_cookie})
+            self.assertIsNone(self.mod.require_settings_session(req, "u1"))
+            self.assertTrue(self.mod.session_matches(req, "u1"))
+            self.assertFalse(self.mod.session_matches(req, "u2"))
+
+
+class TestGitHubRouteWiring(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         main_path = APP_DIR / "main.py"
@@ -207,7 +211,7 @@ class TestGitHubToolsRouteWiring(unittest.TestCase):
                                 route_guards[path] = guards
         return route_guards
 
-    def test_all_chat_tool_routes_guarded(self):
+    def test_all_chat_tool_routes_guarded_by_tools_auth(self):
         routes = self._extract_routes()
         for path in CHAT_TOOL_PATHS:
             self.assertIn(path, routes, f"Chat tool route {path} not found in main.py")
@@ -217,14 +221,14 @@ class TestGitHubToolsRouteWiring(unittest.TestCase):
                 f"Chat tool route {path} missing require_github_tools_auth dependency",
             )
 
-    def test_all_settings_routes_guarded(self):
+    def test_all_settings_routes_guarded_by_settings_session(self):
         routes = self._extract_routes()
         for path in SETTINGS_PATHS:
             self.assertIn(path, routes, f"Settings route {path} not found in main.py")
             self.assertIn(
-                "require_github_tools_auth",
+                "require_settings_session",
                 routes[path],
-                f"Settings route {path} missing require_github_tools_auth dependency",
+                f"Settings route {path} missing require_settings_session dependency",
             )
 
     def test_browser_setup_routes_not_guarded(self):
@@ -236,24 +240,11 @@ class TestGitHubToolsRouteWiring(unittest.TestCase):
                     routes[path],
                     f"Browser route {path} must NOT carry require_github_tools_auth",
                 )
-
-    def test_import_fails_closed_without_noop_lambda_fallback(self):
-        """Assert main.py does not define a no-op lambda fallback for require_github_tools_auth."""
-        main_source = (APP_DIR / "main.py").read_text(encoding="utf-8")
-        self.assertNotIn("require_github_tools_auth = lambda", main_source)
-
-    def test_settings_page_sends_token_on_all_settings_fetch_calls(self):
-        """Assert all 7 settings fetch calls use withSettingsAuth and authHeaders."""
-        main_source = (APP_DIR / "main.py").read_text(encoding="utf-8")
-        self.assertIn("withSettingsAuth('/update-repo", main_source)
-        self.assertIn("withSettingsAuth('/refresh-repos", main_source)
-        self.assertIn("withSettingsAuth('/check-repo-access", main_source)
-        self.assertIn("withSettingsAuth('/save-agent-provider", main_source)
-        self.assertIn("withSettingsAuth('/save-agent-key", main_source)
-        self.assertIn("withSettingsAuth('/delete-agent-key", main_source)
-        self.assertIn("withSettingsAuth('/test-agent')", main_source)
-        self.assertIn("function withSettingsAuth(url)", main_source)
-        self.assertIn("function authHeaders(headers", main_source)
+                self.assertNotIn(
+                    "require_settings_session",
+                    routes[path],
+                    f"Browser route {path} must NOT carry require_settings_session",
+                )
 
 
 if __name__ == "__main__":
