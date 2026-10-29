@@ -43,7 +43,9 @@ def test_simultaneous_late_devices_converge_on_one_closed_episode(store):
 
     with ThreadPoolExecutor(max_workers=4) as pool:
         rows = list(pool.map(attach, range(8)))
-    assert len({row['id'] for row in rows}) == 1
+    # An earlier prefix may replace a committed historical ID. Every returned
+    # ID must resolve to the same persisted owner after all writers finish.
+    assert len({episodes.get_episode(uid, row['id'], firestore_client=client)['id'] for row in rows}) == 1
     owner = episode_owning_recorded_time(uid, T0 + timedelta(seconds=35), firestore_client=client)
     assert owner['status'] == 'closed'
     assert len(owner['conversation_ids']) == 8
