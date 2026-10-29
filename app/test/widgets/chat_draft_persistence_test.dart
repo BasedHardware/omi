@@ -221,4 +221,24 @@ void main() {
     expect(SharedPreferencesUtil().chatMessageDraft, 'second draft',
         reason: 'the accepted first send must not erase the newer draft');
   });
+
+  testWidgets('a send fired inside the debounce window still flushes its own draft', (tester) async {
+    SharedPreferencesUtil().chatMessageDraft = 'old draft';
+    final provider = _QuietMessages()
+      ..replyStreamOverride = (text, {appId, filesId, context, chatSessionId}) async* {
+        throw const ChatStreamException(ChatStreamFailureClass.offline);
+      };
+    addTearDown(provider.dispose);
+
+    await mountChat(tester, provider);
+    // Type and send inside the 300ms debounce window, so the periodic save
+    // never fires before the send does.
+    await tester.enterText(find.byType(TextField), 'new draft');
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(find.byKey(const ValueKey('omi.chat.send')));
+    await tester.pump(const Duration(seconds: 2));
+
+    expect(SharedPreferencesUtil().chatMessageDraft, 'new draft',
+        reason: 'the send flushes its own draft synchronously; a failed send restores it, never the stale one');
+  });
 }

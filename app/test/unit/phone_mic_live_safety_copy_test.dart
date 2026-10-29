@@ -77,7 +77,7 @@ void main() {
       // The socket-send path marks the frame synced without any server receipt.
       sync.markFrameSynced(frame.syncKey);
     }
-    await Future<void>.delayed(const Duration(milliseconds: 30));
+    await Future<void>.delayed(const Duration(milliseconds: 150));
   }
 
   test('fully transport-synced phone-mic chunks are stored as safety copies, not dropped', () async {
@@ -87,7 +87,7 @@ void main() {
     expect(sync.testWals, isEmpty, reason: 'nothing stored before a drain runs');
 
     scheduler.elapse(const Duration(seconds: 10));
-    await Future<void>.delayed(const Duration(milliseconds: 30));
+    await Future<void>.delayed(const Duration(milliseconds: 150));
 
     expect(sync.testWals, isNotEmpty);
     final wal = sync.testWals.first;
@@ -118,7 +118,7 @@ void main() {
     await captureTransportSynced(6000);
     // One 10-second drain produces exactly one durable safety copy.
     scheduler.elapse(const Duration(seconds: 10));
-    await Future<void>.delayed(const Duration(milliseconds: 30));
+    await Future<void>.delayed(const Duration(milliseconds: 150));
     final wal = sync.testWals.single;
     expect(wal.syncedAt, 0);
     expect(wal.storage, WalStorage.disk);

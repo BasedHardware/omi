@@ -796,6 +796,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     });
     // Remove focus from text field
     FocusManager.instance.primaryFocus?.unfocus();
+    // Flush the composer draft synchronously: a pending debounce save must not
+    // race the send. The persisted copy now provably holds this send's text,
+    // so the post-send decision below can compare against it exactly.
+    final draftText = textController.text;
+    _draftSaveTimer?.cancel();
+    prefs.chatMessageDraft = draftText;
     if (currentContext != null) {
       text = 'Context: "$currentContext"\n\n$text';
     }
@@ -826,12 +832,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     _draftSaveTimer?.cancel();
     // Never clobber a newer draft the user typed while this reply streamed:
     // the persisted copy is only replaced when it still holds this send's
-    // text (accepted: clear it; failed: keep it restorable).
+    // composer text (accepted: clear it; failed: keep it restorable).
     final persisted = prefs.chatMessageDraft;
-    if (persisted == text) {
-      prefs.chatMessageDraft = accepted ? '' : persisted;
+    if (persisted == draftText) {
+      if (accepted) prefs.chatMessageDraft = '';
     } else if (persisted.isEmpty && !accepted) {
-      prefs.chatMessageDraft = text;
+      prefs.chatMessageDraft = draftText;
     }
   }
 
