@@ -1,8 +1,9 @@
 """Client read projection with only retained, extant episode members."""
 
-from typing import Any
+from typing import Any, get_args
 
 from database import conversations
+from models.episode import EpisodeCloseReason
 from utils.episodes import service
 
 
@@ -12,6 +13,10 @@ def wire_episode(episode: dict[str, Any] | None) -> dict[str, Any] | None:
         return None
     wire = service.to_wire(episode)
     assert wire is not None  # Non-null input always has a wire projection.
+    # Storage may gain internal boundary reasons before released clients can decode them.
+    # Absence is already part of the released wire contract; never widen that enum.
+    if wire.get('close_reason') not in get_args(EpisodeCloseReason):
+        wire['close_reason'] = None
     return {**wire, 'emoji': episode.get('emoji') or '', 'members': []}
 
 

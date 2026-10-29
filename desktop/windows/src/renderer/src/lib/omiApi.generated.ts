@@ -2512,7 +2512,7 @@ export interface EntitySummary {
 
 export interface Episode {
   bullets?: Array<string>;
-  close_reason?: "user" | "gap" | "idle" | "hard_cap" | "source_change" | "calendar_boundary" | "moved_on" | "boundary" | null;
+  close_reason?: "user" | "gap" | "idle" | "hard_cap" | "source_change" | "calendar_boundary" | "moved_on" | null;
   closed_at?: string | null;
   conversation_ids?: Array<string>;
   emoji?: string;

@@ -15,9 +15,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 EpisodeStatus = Literal['live', 'closed']
-EpisodeCloseReason = Literal[
-    'user', 'gap', 'idle', 'hard_cap', 'source_change', 'calendar_boundary', 'moved_on', 'boundary'
-]
+EpisodeCloseReason = Literal['user', 'gap', 'idle', 'hard_cap', 'source_change', 'calendar_boundary', 'moved_on']
 ProvisionalItemKind = Literal['task', 'reminder']
 ProvisionalItemStatus = Literal['provisional', 'kept', 'dropped', 'dismissed']
 

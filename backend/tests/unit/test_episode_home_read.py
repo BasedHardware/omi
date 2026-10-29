@@ -94,3 +94,13 @@ def test_projection_removes_discarded_deleted_missing_members_and_their_content(
     assert [i['conversation_id'] for i in projected['provisional_items']] == ['a']
     members['a']['discarded'] = True
     assert home_read.project_episode('u', episode) is None
+
+
+def test_internal_close_reasons_preserve_the_released_nullable_enum_without_mutating_storage():
+    from models.episode import Episode
+
+    stored = {'id': 'e', 'status': 'closed', 'started_at': START, 'last_activity_at': START, 'close_reason': 'boundary'}
+    wire = home_read.wire_episode(stored)
+    assert wire['close_reason'] is None
+    assert stored['close_reason'] == 'boundary'
+    assert Episode.model_validate(wire).close_reason is None

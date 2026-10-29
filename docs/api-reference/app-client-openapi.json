@@ -15836,8 +15836,7 @@
                   "hard_cap",
                   "source_change",
                   "calendar_boundary",
-                  "moved_on",
-                  "boundary"
+                  "moved_on"
                 ],
                 "type": "string"
               },
