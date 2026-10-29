@@ -4,6 +4,7 @@ Main file with API endpoints only. Helper functions are in app.py
 """
 
 import os
+import aiofiles
 import tempfile
 from datetime import datetime
 from typing import Optional
@@ -135,14 +136,15 @@ async def handle_audio_stream(
         audio_dir.mkdir(exist_ok=True)
 
         timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S_%f")
-        filename = f"{uid}_{timestamp}.wav"
+        uid_safe = "".join(c for c in uid if c.isalnum() or c in ('-', '_'))
+        filename = f"{uid_safe}_{timestamp}.wav"
         local_file_path = audio_dir / filename
 
         # Write WAV file with header
         wav_header = create_wav_header(sample_rate, len(audio_data))
-        with open(local_file_path, 'wb') as f:
-            f.write(wav_header)
-            f.write(audio_data)
+        async with aiofiles.open(local_file_path, 'wb') as f:
+            await f.write(wav_header)
+            await f.write(audio_data)
 
         print(f"Saved audio file: {local_file_path}")
 
