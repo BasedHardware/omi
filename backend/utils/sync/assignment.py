@@ -389,6 +389,12 @@ def assign_in_transaction(
     target_hint = target_id
     if target_id and own_anchor and own_id != target_id and own_anchor.get('manual_speaker_assignments'):
         raise SyncAssignmentSuperseded('sync anchor has manual speaker assignments')
+    target_recorded_span = (
+        recorded_span(target['started_at'], decode(target).get('transcript_segments') or [])
+        if late_audio_intake_enabled() and target
+        else None
+    )
+    target_recorded_start = target_recorded_span[0] if target_recorded_span else (target or incoming)['started_at']
     stale_empty_target = bool(
         late_audio_intake_enabled()
         and target
@@ -396,14 +402,14 @@ def assign_in_transaction(
         and not is_user_curated(target)
         and target.get('created_at')
         and (target['created_at'] - incoming['finished_at']).total_seconds() > DEFAULT_GAP_SECONDS
-        and recorded_span(target['started_at'], decode(target).get('transcript_segments') or []) is None
+        and target_recorded_span is None
     )
     if (
         late_audio_intake_enabled()
         and target
         and (
             stale_empty_target
-            or incoming['finished_at'] < target['started_at'] - timedelta(seconds=DEFAULT_GAP_SECONDS)
+            or incoming['finished_at'] < target_recorded_start - timedelta(seconds=DEFAULT_GAP_SECONDS)
         )
     ):
         # A phone's current socket/WAL stamp cannot own audio recorded before

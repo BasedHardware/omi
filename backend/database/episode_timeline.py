@@ -1,7 +1,7 @@
 """Metadata-only recorded-time lookup and serialized historical attachment."""
 
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable
+from typing import Callable
 from uuid import NAMESPACE_URL, uuid5
 
 from google.cloud import firestore

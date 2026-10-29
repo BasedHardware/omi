@@ -1,7 +1,7 @@
 """One ownership question for every device: which episode owns recorded time T?"""
 
 from datetime import datetime
-from typing import Mapping, Any
+from typing import Any
 
 from config.episodes import CLOSE_GAP_SECONDS, MAX_EPISODE_SECONDS
 from database import episode_timeline, episodes

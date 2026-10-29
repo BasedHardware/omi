@@ -511,3 +511,15 @@ def test_wal_for_empty_upload_socket_joins_already_transcribed_recording():
     assert len(row['transcript_segments']) == 2
     assert row['finished_at'] == T0 + timedelta(seconds=39.5)
     assert store.rows[('users', 'u', 'conversations', 'socket')]['transcript_segments'] == []
+
+
+def test_stale_capture_origin_cannot_bind_old_wal_to_new_live_speech():
+    store = StrictFirestore()
+    target = chunk('live', T0.timestamp())
+    target.update(status='in_progress', created_at=NOW, finished_at=NOW + timedelta(seconds=10))
+    target['transcript_segments'][0].update(start=4 * 3600, end=4 * 3600 + 10)
+    store.rows[('users', 'u', 'conversations', 'live')] = target
+    result, _, _ = intake(store, chunk('old', T0.timestamp() + 30), target_id='live')
+    assert result['id'] == 'old'
+    assert result['finished_at'] == T0 + timedelta(seconds=39.5)
+    assert store.rows[('users', 'u', 'conversations', 'live')]['transcript_segments'] == target['transcript_segments']
