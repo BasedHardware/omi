@@ -23597,5 +23597,313 @@
       ]
     },
     "record": null
+  },
+  {
+    "uid": "omi-error-class-firing",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Error Classes",
+    "title": "Error classes - a new or surging error class is firing",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(omi_error_class_alert_firing) > 0",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-10-29T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "A prod error class is new (>=20/h) or surging (>=50/h and >=5x its 7-day baseline) across the transcription fleet",
+      "threshold": "sum(omi_error_class_alert_firing) > 0 for 5m; new >=20/h, surge >=50/h and >=5x baseline mean; warning-level classes at doubled thresholds",
+      "user_impact": "An error family is accumulating unwatched; left alone it can grow into the next ramp-blocking batch failure or user-visible processing gap.",
+      "scope": "backend, backend-sync, backend-sync-backfill, backend-integration, backend-listen, and prod-omi-gke batch-pipeline-worker / pusher / backend-listen pods.",
+      "verification": "Open the backend-sync logs for the firing service and filter severity>=ERROR; the matching error_class_alert line names the class fingerprint, hourly count, baseline mean, and first-seen epoch. Compare against the 7-day baseline in Redis key errclass:baseline.",
+      "safe_next_action": "Read the firing class fingerprint (exception type + file:line + logger) and inspect that code path before changing retry budgets or scaling. Suppress a known class by pausing the error-class-alerts-sweep scheduler job, not by muting the rule.",
+      "runbook": "backend/docs/runbooks/error-class-alerts.md"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "api",
+      "alert_identity": "omi-error-class-firing",
+      "component": "api",
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-error-class-sweep-silent",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Error Classes",
+    "title": "Error classes - sentinel sweep is silent or failing",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_error_class_sweep_total{outcome!=\"ok\"}[1h])) > 0 or sum(increase(omi_error_class_sweep_total[1h])) < 4 or absent(omi_error_class_sweep_total)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-10-29T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "Error",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "The error-class sentinel stopped completing ok sweeps: fewer than 4 ticks in the last hour, any non-ok outcome, or the metric is absent",
+      "threshold": "non-ok sweep outcomes > 0 in 1h, or fewer than 4 ok ticks in 1h, or metric absent, for 10m",
+      "user_impact": "New or surging error classes go undetected while the sentinel is down, which is how batch failures previously ran unwatched for a day or more.",
+      "scope": "The error-class-alerts-sweep Cloud Scheduler job POSTing the backend-sync sweep route every 15 minutes.",
+      "verification": "Check the omi_error_class_sweep_total outcome label: permission_denied means backend-runtime lacks logging.read; error means the Cloud Logging read failed; truncated means one pass hit its entry cap. Then inspect backend-sync logs for the sweep POST and the scheduler job history.",
+      "safe_next_action": "Grant the missing logging.read role or fix the read error, then confirm omi_error_class_sweep_total{outcome=\"ok\"} resumes incrementing four times an hour. Do not unpause extra capacity or change alert thresholds while the sentinel is blind.",
+      "runbook": "backend/docs/runbooks/error-class-alerts.md"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "api",
+      "alert_identity": "omi-error-class-sweep-silent",
+      "component": "api",
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
   }
 ]

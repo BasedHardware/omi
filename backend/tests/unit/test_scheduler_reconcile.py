@@ -90,6 +90,7 @@ def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retire
         "dream-agent-canary-half-hourly",
         "day3-reengagement-email-daily",
         "enrichment-maintenance",
+        "error-class-alerts-sweep",
         "frame-request-retention-hourly",
         "sync-backfill-uid-sequencer",
     }
@@ -100,6 +101,7 @@ def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retire
         "dream-agent-sweep-hourly",
         "day3-reengagement-email-daily",
         "enrichment-maintenance",
+        "error-class-alerts-sweep",
         "finops-unit-cost-daily",
         "frame-request-retention-hourly",
         "messaging-maintenance-hourly",
@@ -112,6 +114,7 @@ def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retire
     for jobs in (dev_jobs, prod_jobs):  # C4: planned until /v2/enrichment/sweep serves on backend-integration
         assert jobs["enrichment-maintenance"]["lifecycle"] == "planned"
     assert dev_jobs["enrichment-maintenance"]["state"] == "PAUSED"  # dev shares prod Firestore
+    assert dev_jobs["error-class-alerts-sweep"]["state"] == "PAUSED"  # logging.read not granted in dev
     rollup = prod_jobs["omi-tv-rollup-daily"]
     assert rollup["lifecycle"] == "planned"
     assert rollup["state"] == "PAUSED"
