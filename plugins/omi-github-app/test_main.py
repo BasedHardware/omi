@@ -1,3 +1,4 @@
+import asyncio
 """Hermetic regression tests for issue #13911.
 
 Drives the real chat-tool handlers in main.py and the real GitHubClient in
@@ -483,7 +484,7 @@ class ClientContractTests(unittest.TestCase):
             "get",
             return_value=FakeResponse({"message": "Not Found"}, status_code=404),
         ):
-            result = client.list_issues("tok", "owner/repo")
+            result = asyncio.run(client.list_issues("tok", "owner/repo"))
 
         self.assertEqual(result["status"], 404)
         self.assertIn("Not Found", result["error"])
@@ -896,7 +897,7 @@ class NullDataResilienceTests(unittest.TestCase):
             "created_at": "2026-01-01T00:00:00Z"
         }]
         with patch.object(github_client.requests, "get", return_value=FakeResponse(raw_issues)):
-            res = main.github_client.list_issues("tok", "BasedHardware/omi")
+            res = asyncio.run(main.github_client.list_issues("tok", "BasedHardware/omi"))
             self.assertNotIn("error", res)
             self.assertEqual(len(res["issues"]), 1)
             self.assertEqual(res["issues"][0]["labels"], [])

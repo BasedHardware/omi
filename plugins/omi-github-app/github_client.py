@@ -1,5 +1,6 @@
 import os
 import requests
+import asyncio
 from typing import Optional, List, Dict, Callable, Any
 from dotenv import load_dotenv
 
@@ -229,7 +230,7 @@ class GitHubClient:
             message = None
         return message or getattr(response, "text", "") or "Unknown error"
 
-    def list_issues(
+    async def list_issues(
         self,
         access_token: str,
         repo_full_name: str,
@@ -256,7 +257,8 @@ class GitHubClient:
 
         try:
             while len(issues) < per_page and page <= max_pages:
-                response = requests.get(
+                response = await asyncio.to_thread(
+                    requests.get,
                     f"{self.api_base}/repos/{repo_full_name}/issues",
                     headers={
                         "Authorization": f"Bearer {access_token}",
