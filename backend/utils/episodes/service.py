@@ -74,6 +74,7 @@ from database.auth import get_user_name
 from utils.episodes import moment_render, boundary_runtime
 from utils.episodes import output_language as episode_language
 from utils.episodes import client_gate, incremental, metrics, policy, recovery
+from utils.episodes import capture_groups as episode_groups
 from utils.episodes.recovery import segment_end as _segment_end, segment_start as _segment_start
 from utils.episodes.moment import MomentInput
 from utils.episodes.state import apply_update, clean_text, provisional_items, render_state
@@ -1427,48 +1428,16 @@ def _record_recovered(uid: str, episode_id: str, conversation_id: str, row: Mapp
     return outcome
 
 
-def _group_primary(row: Mapping[str, Any]) -> Optional[str]:
-    group = row.get('capture_group') or row.get('capture_group_member_context') or {}
-    return group.get('primary_id') if isinstance(group, Mapping) else None
-
-
-def _join_group_duplicates(
-    uid: str, owner: Mapping[str, Any], cid: str, row: Mapping[str, Any], c: Collaborators
-) -> None:
-    group = row.get('capture_group') or {}
-    ids = [m['id'] for m in group.get('members') or [] if isinstance(m, Mapping) and m.get('id') and m['id'] != cid]
-    if not ids:
-        return
-    duplicates = sorted(set(owner.get('duplicate_conversation_ids') or []) | set(ids))
-    content_removed = any(m.get('conversation_id') in duplicates for m in owner.get('moments') or [])
-    updates = {
-        'conversation_ids': list(dict.fromkeys([*(owner.get('conversation_ids') or []), *ids])),
-        'duplicate_conversation_ids': duplicates,
-    }
-    if content_removed:
-        updates.update(title='', bullets=[], people=[], open_questions=[], summary_needs_regeneration=True)
-    episodes_db.update_episode(
-        uid,
-        str(owner['id']),
-        expected_version=int(owner.get('state_version') or 0),
-        updates=updates,
-        link_conversation_ids=ids,
-        firestore_client=c.firestore_client,
-    )
-
-
 def _attach_synced(
     uid: str, conversation_id: str, row: Mapping[str, Any], c: Collaborators, *, absorbed_from: Optional[str] = None
 ) -> str:
-    primary = _group_primary(row)
-    if primary and primary != conversation_id:
-        canonical = conversations_db.get_conversation(uid, primary, firestore_client=c.firestore_client)
-        if canonical and not any(canonical.get(k) for k in ('discarded', 'deleted', 'sync_merged_into')):
-            owner = episodes_db.get_episode_for_conversation(uid, primary, firestore_client=c.firestore_client)
-            if owner and primary in (owner.get('recovered_conversation_ids') or []):
-                _join_group_duplicates(uid, owner, primary, canonical, c)
-                return 'attached'
-            return _attach_synced(uid, primary, canonical, c)
+    primary = episode_groups.primary_id(row)
+    if canonical := episode_groups.canonical_row(uid, conversation_id, row, firestore_client=c.firestore_client):
+        owner = episodes_db.get_episode_for_conversation(uid, primary, firestore_client=c.firestore_client)
+        if owner and primary in (owner.get('recovered_conversation_ids') or []):
+            episode_groups.join_duplicates(uid, owner, primary, canonical, firestore_client=c.firestore_client)
+            return 'attached'
+        return _attach_synced(uid, primary, canonical, c)
     # Re-read both membership and the boundary on every lost CAS. A last WAL
     # append cannot rely on another append arriving to repair a lost attachment.
     for attempt in range(3):
@@ -1497,7 +1466,7 @@ def _attach_synced(
                         updates={'recovered_conversation_ids': list(dict.fromkeys(recovered_ids))},
                         firestore_client=c.firestore_client,
                     )
-                _join_group_duplicates(uid, owner, conversation_id, row, c)
+                episode_groups.join_duplicates(uid, owner, conversation_id, row, firestore_client=c.firestore_client)
                 _record_recovered(uid, str(owner['id']), conversation_id, row, c)
             return outcome
         except episodes_db.EpisodeConflict:
@@ -1578,10 +1547,8 @@ def _on_finalized(
     if row.get('deleted') or row.get('discarded'):
         _end_discarded(uid, conversation_id, row, trigger, c)
         return 'skipped_discarded'
-    if _group_primary(row) not in {None, conversation_id}:
-        primary = conversations_db.get_conversation(uid, _group_primary(row), firestore_client=c.firestore_client)
-        if primary:
-            return _attach_synced(uid, conversation_id, row, c)
+    if episode_groups.canonical_row(uid, conversation_id, row, firestore_client=c.firestore_client):
+        return _attach_synced(uid, conversation_id, row, c)
     started = policy.utc(row.get('started_at')) or policy.utc(row.get('created_at'))
     segments = [s for s in row.get('transcript_segments') or [] if isinstance(s, Mapping)]
     episode = episodes_db.get_episode_for_conversation(

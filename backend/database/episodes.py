@@ -143,6 +143,7 @@ def _merge_state(raw: Mapping[str, Any], updates: Mapping[str, Any]) -> dict[str
     """A notes CAS must not overwrite speech retained while its model call ran."""
     merged = {**raw, **updates}
     hidden = set(raw.get('discarded_conversation_ids') or []) | set(updates.get('discarded_conversation_ids') or [])
+    duplicates = set(merged.get('duplicate_conversation_ids') or [])
     activity = dict(raw.get('member_activity') or {})
     if not activity and isinstance(raw.get('last_activity_at'), datetime) and raw.get('primary_conversation_id'):
         activity[raw['primary_conversation_id']] = raw['last_activity_at']
@@ -150,7 +151,7 @@ def _merge_state(raw: Mapping[str, Any], updates: Mapping[str, Any]) -> dict[str
         if isinstance(at, datetime):
             activity[cid] = max(activity.get(cid, at), at)
     if activity or hidden:
-        activity = {cid: at for cid, at in activity.items() if cid not in hidden}
+        activity = {cid: at for cid, at in activity.items() if cid not in hidden | duplicates}
         merged['member_activity'] = activity
         merged['discarded_conversation_ids'] = sorted(hidden)
         merged['last_activity_at'] = max(activity.values(), default=merged['started_at'])

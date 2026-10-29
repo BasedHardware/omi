@@ -307,7 +307,7 @@ def test_delayed_finalize_after_late_capture_never_overlaps_recorded_successor(l
     start = datetime(2026, 10, 29, 11, 57, tzinfo=timezone.utc)
     speech_end = start + timedelta(minutes=3)  # 12:00, last recorded speech in A.
     c.now = lambda: start
-    capture = row('A', start, seconds=180, recorded_start=start, recorded_end=speech_end, clock='live_capture')
+    capture = row('A', start, seconds=30, recorded_start=start, recorded_end=speech_end, clock='live_capture')
     store.rows[('users', 'u', 'conversations', 'A')] = capture
     service.attach_conversation('u', 'A', 'omi', started_at=start, ended_at=speech_end, collaborators=c)
     owner = episodes.get_current_episode('u', firestore_client=store)
@@ -413,9 +413,13 @@ def test_paired_desktop_pendant_group_recovers_once_without_duplicate_moments(la
     monkeypatch.setattr(service.conversations_db, 'get_conversation', lambda uid, cid, **kw: captures.get(cid))
     finalize._after_group_join('u', ['desktop', 'pendant'])
     assert recovered == ['pendant']
+    # A secondary's separate finalizer must not recover its copy or rerun the canonical recovery.
+    finalized('u', 'desktop', captures['desktop'], trigger='capture_group', collaborators=c)
+    assert recovered == ['pendant']
     owner = episodes.get_episode_for_conversation('u', 'pendant', firestore_client=store)
     assert owner['conversation_ids'] == ['pendant', 'desktop']
     assert owner['duplicate_conversation_ids'] == ['desktop']
     assert episodes.get_episode_for_conversation('u', 'desktop', firestore_client=store)['id'] == owner['id']
     assert owner['moments'] and {m['conversation_id'] for m in owner['moments']} == {'pendant'}
+    assert service.to_wire(owner)['conversation_ids'] == ['pendant']
     assert len(calls) == 1
