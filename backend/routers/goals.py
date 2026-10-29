@@ -5,6 +5,7 @@ Handles user goals with AI-powered suggestions and advice.
 
 from utils.generated_compute import require_generated_compute
 
+import logging
 import uuid
 from typing import Annotated, Optional, List
 
@@ -39,6 +40,7 @@ import database.workstreams as workstreams_db
 from routers.canonical_task_access import require_canonical_task_user
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 IdempotencyHeader = Annotated[str, Header(alias='Idempotency-Key', min_length=1, max_length=256)]
 AccountGenerationHeader = Annotated[int, Header(alias='X-Account-Generation', ge=0)]
 
@@ -71,6 +73,27 @@ def get_canonical_goals(
     return [normalize_goal_response(goal) for goal in goals]
 
 
+_KNOWN_GOAL_CONFLICTS = {
+    "focus full",
+    "account generation mismatch",
+    "ended goals cannot be focused",
+    "idempotency key was reused with different content",
+    "focus set is full; replacement_goal_id is required",
+    "replacement_goal_id must name a focused goal",
+    "focus_rank is already occupied",
+    "use explicit focus management after creating a goal",
+    "progress event idempotency key was reused with different content",
+}
+
+
+def _sanitize_goal_conflict_error(exc: Exception) -> str:
+    logger.warning(f"Goal mutation conflict: {type(exc).__name__}: {exc}")
+    detail = str(exc)
+    if detail in _KNOWN_GOAL_CONFLICTS:
+        return detail
+    return "Goal conflict encountered. Please verify goal state and retry."
+
+
 @router.post('/v1/goals', tags=['goals'], response_model=GoalResponse)
 def create_goal(goal: GoalCreate, uid: str = Depends(auth.get_current_user_uid)) -> dict:
     """Create a durable goal without changing any other goal's focus or lifecycle."""
@@ -80,7 +103,7 @@ def create_goal(goal: GoalCreate, uid: str = Depends(auth.get_current_user_uid))
     try:
         created_goal = goals_db.create_goal(uid, goal_data)
     except goals_db.GoalConflictError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail=_sanitize_goal_conflict_error(exc)) from exc
 
     return normalize_goal_response(created_goal)
 
@@ -113,8 +136,9 @@ def _raise_goal_store_error(exc: Exception) -> None:
     if isinstance(exc, goals_db.GoalValidationError):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     if isinstance(exc, goals_db.GoalConflictError):
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    raise exc
+        raise HTTPException(status_code=409, detail=_sanitize_goal_conflict_error(exc)) from exc
+    logger.error(f"Unexpected goal store error: {type(exc).__name__}: {exc}")
+    raise HTTPException(status_code=500, detail="Failed to process goal operation") from exc
 
 
 @router.post('/v1/goals/{goal_id}/focus', tags=['goals'], response_model=GoalResponse)
