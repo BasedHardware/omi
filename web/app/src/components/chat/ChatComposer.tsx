@@ -3,9 +3,11 @@
 import { ChatBudgetPause, useChatBudgetPause } from './ChatBudgetPause';
 import {
   chatDraftKeys,
+  chatDraftRevision,
   chatDraftOwner,
   clearChatDraft,
   readChatDraft,
+  restoreChatDraft,
   writeChatDraft,
 } from './chatDraft';
 import { useRef, useState, useEffect, useImperativeHandle } from 'react';
@@ -87,6 +89,20 @@ export function ChatComposer({
   const pendingUploadCountRef = useRef(0);
   const isUploading = pendingUploadCount > 0;
 
+  useEffect(() => {
+    let active = true;
+    const revision = chatDraftRevision(chatDraftKeys.home);
+    void restoreChatDraft(chatDraftKeys.home).then((draft) => {
+      if (!active) return;
+      if (chatDraftRevision(chatDraftKeys.home) === revision && draft) {
+        setInput((current) => current || draft);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   useImperativeHandle(ref, () => ({ focus: () => inputRef.current?.focus() }), []);
 
   // Auto-resize textarea
@@ -97,15 +113,14 @@ export function ChatComposer({
     }
   }, [input]);
 
-  // Persist the composer draft as it changes; the persisted copy is cleared
-  // only after a send is accepted (see handleSend).
-  useEffect(() => {
-    if (input) {
-      writeChatDraft(chatDraftKeys.home, input);
+  const updateDraftInput = (value: string) => {
+    setInput(value);
+    if (value) {
+      void writeChatDraft(chatDraftKeys.home, value);
     } else {
       clearChatDraft(chatDraftKeys.home);
     }
-  }, [input]);
+  };
 
   // Handle file selection
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -178,7 +193,7 @@ export function ChatComposer({
 
   // Handle voice transcript - append to input and focus
   const handleVoiceTranscript = (transcript: string) => {
-    setInput((prev) => (prev ? `${prev} ${transcript}` : transcript));
+    updateDraftInput(input ? `${input} ${transcript}` : transcript);
     inputRef.current?.focus();
   };
 
@@ -264,7 +279,7 @@ export function ChatComposer({
       <textarea
         ref={inputRef}
         value={input}
-        onChange={(e) => setInput(e.target.value)}
+        onChange={(e) => updateDraftInput(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         disabled={chatDisabled || isStreaming}

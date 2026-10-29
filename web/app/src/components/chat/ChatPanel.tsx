@@ -3,9 +3,11 @@
 import { ChatBudgetPause, useChatBudgetPause } from './ChatBudgetPause';
 import {
   chatDraftKeys,
+  chatDraftRevision,
   chatDraftOwner,
   clearChatDraft,
   readChatDraft,
+  restoreChatDraft,
   writeChatDraft,
 } from './chatDraft';
 import { useRef, useEffect, useState } from 'react';
@@ -85,15 +87,36 @@ export function ChatPanel() {
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Persist the composer draft as it changes; the persisted copy is cleared
-  // only after a send is accepted (see handleSend).
+  // Hydrate before enabling persistence so an empty initial render cannot
+  // clear a durable encrypted draft before it has been decrypted.
   useEffect(() => {
-    if (input) {
-      writeChatDraft(chatDraftKeys.panel, input);
+    if (!isOpen) return;
+    const cachedDraft = readChatDraft(chatDraftKeys.panel);
+    if (cachedDraft) {
+      setInput((current) => current || cachedDraft);
+      return;
+    }
+    let active = true;
+    const revision = chatDraftRevision(chatDraftKeys.panel);
+    void restoreChatDraft(chatDraftKeys.panel).then((draft) => {
+      if (!active) return;
+      if (chatDraftRevision(chatDraftKeys.panel) === revision && draft) {
+        setInput((current) => current || draft);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [isOpen]);
+
+  const updateDraftInput = (value: string) => {
+    setInput(value);
+    if (value) {
+      void writeChatDraft(chatDraftKeys.panel, value);
     } else {
       clearChatDraft(chatDraftKeys.panel);
     }
-  }, [input]);
+  };
 
   // Fetch app info when selectedAppId changes
   useEffect(() => {
@@ -115,18 +138,6 @@ export function ChatPanel() {
       loadHistory();
     }
   }, [isOpen, loadHistory]);
-
-  // Restore a persisted draft when the panel opens. The panel stays mounted
-  // while closed, so the mount-time initializer alone never reruns; restoring
-  // here also brings back a failed send's draft without a page refresh.
-  useEffect(() => {
-    if (isOpen && !input) {
-      const draft = readChatDraft(chatDraftKeys.panel);
-      if (draft) setInput(draft);
-    }
-    // Restore only on open transitions, not on every keystroke.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
 
   // Scroll to bottom when messages change or streaming text updates
   useEffect(() => {
@@ -208,7 +219,7 @@ export function ChatPanel() {
 
   // Handle voice transcript - append to input and focus
   const handleVoiceTranscript = (transcript: string) => {
-    setInput((prev) => (prev ? `${prev} ${transcript}` : transcript));
+    updateDraftInput(input ? `${input} ${transcript}` : transcript);
     inputRef.current?.focus();
   };
 
@@ -553,7 +564,7 @@ export function ChatPanel() {
                       ref={inputRef}
                       type="text"
                       value={input}
-                      onChange={(e) => setInput(e.target.value)}
+                      onChange={(e) => updateDraftInput(e.target.value)}
                       onKeyDown={handleKeyDown}
                       placeholder="Ask anything..."
                       disabled={isLoading || isStreaming || budget.state !== null}

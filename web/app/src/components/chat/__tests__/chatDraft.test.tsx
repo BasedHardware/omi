@@ -1,8 +1,11 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatPanel } from '@/components/chat/ChatPanel';
 import {
   chatDraftKeys,
+  clearChatDraft,
+  decryptChatDraft,
+  encryptChatDraft,
   readChatDraft,
   setChatDraftOwner,
   writeChatDraft,
@@ -51,6 +54,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
   setChatDraftOwner(null);
+  clearChatDraft(chatDraftKeys.panel);
+  clearChatDraft(chatDraftKeys.home);
   panelOpen = true;
   Element.prototype.scrollIntoView = vi.fn();
 });
@@ -62,8 +67,8 @@ function typeDraft(text: string) {
 }
 
 describe('chat draft persistence', () => {
-  it('restores a persisted draft when the panel opens', () => {
-    localStorage.setItem(chatDraftKeys.panel, 'half-written question');
+  it('uses the current-tab draft when the panel opens', () => {
+    void writeChatDraft(chatDraftKeys.panel, 'half-written question');
     render(<ChatPanel />);
 
     expect(screen.getByPlaceholderText('Ask anything...')).toHaveValue(
@@ -74,7 +79,9 @@ describe('chat draft persistence', () => {
   it('persists the draft as it is typed and clears it on an accepted send', async () => {
     render(<ChatPanel />);
     typeDraft('delivered message');
-    expect(readChatDraft(chatDraftKeys.panel)).toBe('delivered message');
+    await waitFor(() =>
+      expect(readChatDraft(chatDraftKeys.panel)).toBe('delivered message'),
+    );
 
     fireEvent.click(screen.getByRole('button', { name: /send/i }));
 
@@ -109,7 +116,7 @@ describe('chat draft persistence', () => {
 
     // The user starts a second draft while the first send is still running.
     typeDraft('second draft');
-    expect(readChatDraft(chatDraftKeys.panel)).toBe('second draft');
+    await waitFor(() => expect(readChatDraft(chatDraftKeys.panel)).toBe('second draft'));
 
     resolveSend(true);
     await waitFor(() => expect(sendMessage).toHaveBeenCalled());
@@ -128,10 +135,14 @@ describe('chat draft persistence', () => {
     await waitFor(() => expect(readChatDraft(chatDraftKeys.panel)).toBe('reopen me'));
     // The composer is empty after the failed send; the panel closes and opens
     // again without unmounting.
-    panelOpen = false;
-    rerender(<ChatPanel />);
-    panelOpen = true;
-    rerender(<ChatPanel />);
+    await act(async () => {
+      panelOpen = false;
+      rerender(<ChatPanel />);
+    });
+    await act(async () => {
+      panelOpen = true;
+      rerender(<ChatPanel />);
+    });
 
     await waitFor(() =>
       expect(screen.getByPlaceholderText('Ask anything...')).toHaveValue('reopen me'),
@@ -172,5 +183,39 @@ describe('chat draft persistence', () => {
     expect(readChatDraft(chatDraftKeys.panel)).toBe('');
     expect(localStorage.getItem(`${chatDraftKeys.panel}:uid-b`)).toBeNull();
     expect(localStorage.getItem(`${chatDraftKeys.panel}:uid-a`)).toBeNull();
+  });
+});
+
+describe('encrypted chat draft storage', () => {
+  it('stores an authenticated ciphertext envelope instead of the draft text', async () => {
+    const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, [
+      'encrypt',
+      'decrypt',
+    ]);
+    const draft = 'my private unsent question';
+    const envelope = await encryptChatDraft(draft, key, `${chatDraftKeys.panel}:uid-a`);
+
+    expect(envelope).toMatch(/^v1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+    expect(envelope).not.toContain(draft);
+    await expect(
+      decryptChatDraft(envelope, key, `${chatDraftKeys.panel}:uid-a`),
+    ).resolves.toBe(draft);
+    await expect(
+      decryptChatDraft(envelope, key, `${chatDraftKeys.panel}:uid-b`),
+    ).rejects.toThrow();
+  });
+
+  it('rejects modified ciphertext', async () => {
+    const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, [
+      'encrypt',
+      'decrypt',
+    ]);
+    const envelope = await encryptChatDraft('draft text', key, chatDraftKeys.panel);
+    const [version, iv, ciphertext] = envelope.split('.');
+    const altered = `${version}.${iv}.${ciphertext.slice(0, -1)}${
+      ciphertext.endsWith('A') ? 'B' : 'A'
+    }`;
+
+    await expect(decryptChatDraft(altered, key, chatDraftKeys.panel)).rejects.toThrow();
   });
 });
