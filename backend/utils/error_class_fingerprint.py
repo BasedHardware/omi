@@ -4,11 +4,11 @@ A class is ``exception type + raising site + logger`` when the entry carries an
 exception, else ``app level + normalized message template + logger``. Ids,
 numbers, addresses, quoted values and digit-bearing slugs are normalized out so
 one code defect maps to one class regardless of the per-instance payload.
-Identifier-shaped tokens - Firebase-UID-shaped 28-char alnum, base62 ids,
-hex blobs, emails, UUIDs - are stripped before fingerprinting and again from
-the composed fingerprint/label (lead privacy rule 2026-10-29): fingerprints and
-labels become Redis keys, GMP label values and log lines, so they must never
-carry a user- or document-identifiable token.
+Identifier-shaped tokens - Firebase-UID-shaped 28-char alnum, base62 ids (20+
+chars, digits or not), hex blobs, emails, UUIDs - are stripped from every
+payload-derived component before fingerprinting (lead privacy rule 2026-10-29):
+fingerprints and labels become Redis keys, GMP label values and log lines, so
+they must never carry a user- or document-identifiable token.
 
 Container logs arrive one line per entry, so multi-line tracebacks are stitched
 back together per source before fingerprinting. Everything here operates on
@@ -29,11 +29,13 @@ EMAIL_RE = re.compile(r'[\w.+-]+@[\w-]+\.[\w.-]+')
 IP_RE = re.compile(r'\b\d{1,3}(?:\.\d{1,3}){3}\b')
 HEX_RE = re.compile(r'\b[0-9a-fA-F]{12,}\b')
 # Firebase UIDs are 28 mixed-case alnum chars with digits scattered (rarely a
-# 4+ run), and Firestore auto-ids / other base62 identifiers are 20+ chars -
-# both escape HEX_RE (non-hex letters) and SLUG_RE (no digit run), so they get
-# dedicated shape rules (lead privacy rule 2026-10-29).
+# 4+ run), and Firestore auto-ids / other base62 identifiers are 20+ chars
+# with or without digits - both escape HEX_RE (non-hex letters) and SLUG_RE
+# (no digit run), so they get dedicated shape rules (lead privacy rule
+# 2026-10-29). Scrubbing is shape-based, not statistical: a letters-only
+# 20-char auto-id is still an id.
 FIREBASE_UID_RE = re.compile(r'\b[A-Za-z0-9]{28}\b')
-B62_ID_RE = re.compile(r'\b(?=[A-Za-z0-9]*\d)[A-Za-z0-9]{20,}\b')
+B62_ID_RE = re.compile(r'\b[A-Za-z0-9]{20,}\b')
 # A slug carries a 4+ digit run AND at least one letter; pure numbers stay
 # numbers and pure hex falls through to HEX_RE above.
 SLUG_RE = re.compile(r'\b(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]*\d{4,}[A-Za-z0-9_-]*\b')
@@ -178,14 +180,18 @@ def fingerprint_entry(entry: Mapping[str, Any]) -> ErrorClassFingerprint:
         level, logger, rest = '?', None, text
     exc = extract_exception(text)
     site = extract_site(text, entry.get('jsonPayload') or {})
+    # Every payload-derived component is identifier-stripped before it reaches
+    # the composed strings (Redis keys, GMP label values, log lines). The one
+    # exemption is the exception name itself: EXC_RE admits only a controlled
+    # grammar (token ending in Error/Exception/... at line start), so payload
+    # cannot sneak in, while scrubbing it would collapse distinct long names
+    # (SSLCertVerificationError and friends) into one <id> class.
     if exc:
         source = strip_identifiers(logger or log_name)
         site = site if site is None else strip_identifiers(site)
-        # Final defense: the composed strings are what reach Redis records,
-        # GMP label values and log lines, so they are scrubbed whole.
         return ErrorClassFingerprint(
-            fingerprint=strip_identifiers('%s|%s|%s' % (exc, site or '-', source))[:FP_LABEL_MAX],
-            label=strip_identifiers('%s at %s [%s]' % (exc, site or '?', source)),
+            fingerprint=('%s|%s|%s' % (exc, site or '-', source))[:FP_LABEL_MAX],
+            label='%s at %s [%s]' % (exc, site or '?', source),
             # Keep the parsed app level so warning-threshold gating still
             # applies to exceptions logged at WARNING.
             level=level,

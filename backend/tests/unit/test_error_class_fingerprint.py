@@ -262,6 +262,27 @@ def test_base62_document_id_shape_is_stripped():
     assert '<id>' in out
 
 
+def test_letters_only_base62_id_is_stripped_anywhere():
+    # Review round 3 P1: a letters-only 20-char auto-id is still an id; the
+    # rule must be shape-based, not statistical (no digit requirement).
+    letters_only = 'ab' + 'cdefghij' + 'klmnopqrst'  # 20 letters, no digit
+    assert len(letters_only) == 20
+    out = normalize('doc %s locked at users/%s/x denied' % (letters_only, letters_only))
+    assert letters_only not in out
+    assert 'users/<id>/x' in out
+    fp = fingerprint_entry(k8s_entry('ERROR db.users: load failed for %s' % letters_only))
+    assert letters_only not in fp.fingerprint and letters_only not in fp.label
+
+
+def test_long_exception_names_survive_as_class_keys():
+    # The exception slot is grammar-controlled (EXC_RE suffix set), so its name
+    # is exempt from identifier scrubbing - scrubbing it would collapse
+    # distinct classes like this 24-char name into one <id> class.
+    text = 'ERROR ssl: handshake\nTraceback (most recent call last):\n  File "/app/ssl.py", line 9, in f\nSSLCertVerificationError: chain'
+    fp = fingerprint_entry({'textPayload': text, 'resource': {'labels': {}}, 'logName': 's'})
+    assert fp.fingerprint == 'SSLCertVerificationError|ssl.py:9|ssl'
+
+
 def test_email_shape_is_stripped_before_its_local_part_can_leak():
     out = normalize('mail to %s failed' % SYN_EMAIL)
     assert 'someone123' not in out and 'example.com' not in out
