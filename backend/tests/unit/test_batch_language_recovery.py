@@ -81,7 +81,9 @@ def test_hard_duration_refusal_retains_audio_without_repeating_inspection(
     job = row(client)
     job['duration_seconds'] = stored
     job['measured_held_vad_speech_seconds'] = census
-    job['worker_vad_receipt'] = original = vad_receipt(job['audio_uri'], round(stored * 16000), census)
+    # A retained scalar is not positive input-bound worker proof. Both cases
+    # must retain the no-evidence duration refusal without buying a provider.
+    job['worker_vad_receipt'] = original = vad_receipt(job['audio_uri'], round(stored * 16000), 0)
     audio = io.BytesIO()
     with wave.open(audio, 'wb') as handle:
         handle.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
@@ -607,7 +609,9 @@ def test_missing_soniox_key_does_not_burn_the_independent_attempt(setup, monkeyp
 def test_cpu_zero_never_erases_positive_worker_census(setup, monkeypatch, legacy_dependencies, case):
     from utils.batch_pipeline.contracts import vad_receipt
 
-    client, _, binding, artifacts, _, soniox, recovery, _ = guarded(setup, monkeypatch, legacy_dependencies, speech=0)
+    client, _, binding, artifacts, modulate, soniox, recovery, _ = guarded(
+        setup, monkeypatch, legacy_dependencies, speech=0
+    )
     job = row(client)
     job['measured_held_vad_speech_seconds'] = 2
     job['worker_vad_receipt'] = receipt = vad_receipt(job['audio_uri'], round(job['duration_seconds'] * 16000), 2)
@@ -622,15 +626,18 @@ def test_cpu_zero_never_erases_positive_worker_census(setup, monkeypatch, legacy
     elif case == 'worker_vad_words':
         soniox.return_value = (WORDS, 'vi')
     expected = (
-        'held'
-        if case in {'disabled', 'cap', 'allowance'}
-        else 'recovered' if case == 'worker_vad_words' else 'failed_held'
+        'held' if case in {'disabled', 'allowance'} else 'recovered' if case == 'worker_vad_words' else 'failed_held'
     )
     assert recovery.recover('bad', binding.owner_id) == expected
     final = row(client)
     assert final['measured_held_vad_speech_seconds'] == 2
     assert final['worker_vad_receipt'] == receipt
     assert artifacts.persist_recovery_result.called is (expected == 'recovered')
+    if case == 'cap':
+        # The configured cap still blocks Soniox; bound speech permits only
+        # the existing funded Modulate attempt before that independent choice.
+        modulate.assert_called_once()
+        soniox.assert_not_called()
     if expected == 'failed_held':
         assert all(r['vad_speech_seconds'] == 0 for r in final['recovery']['recognizers'].values())
 
@@ -711,6 +718,45 @@ def worker_receipt(client, seconds):
 
 # Acoustic worker measure placed at the [1, 2] word clock within the 5 s capture.
 PLACED = {0.032: [(1.0, 1.032)], 1.5: [(1.0, 2.5)], 4.384: [(0.616, 5.0)]}
+
+
+@pytest.mark.parametrize('proof', ['bound', 'missing', 'wrong_input', 'zero', 'disabled', 'funding'])
+def test_long_zero_cpu_vad_uses_only_enabled_funded_bound_worker_proof(setup, monkeypatch, legacy_dependencies, proof):
+    client, _, binding, artifacts, modulate, soniox, recovery, _ = guarded(
+        setup, monkeypatch, legacy_dependencies, speech=0
+    )
+    job = row(client)
+    job['duration_seconds'] = 61
+    worker_receipt(client, 2)
+    if proof == 'missing':
+        job.pop('worker_vad_receipt')
+    elif proof == 'wrong_input':
+        job['worker_vad_receipt']['input_uri_sha256'] = '0' * 64
+    elif proof == 'zero':
+        job['worker_vad_receipt'] = vad_receipt(job['audio_uri'], 61 * 16000, 0)
+    elif proof == 'disabled':
+        monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'false')
+    elif proof == 'funding':
+        monkeypatch.setattr('utils.batch_pipeline.quarantine_recovery.sync_allowed', lambda *args, **kwargs: False)
+    audio = io.BytesIO()
+    with wave.open(audio, 'wb') as handle:
+        handle.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
+        handle.writeframes(b'\0' * (61 * 16000 * 2))
+    artifacts.fetch_audio.return_value = audio.getvalue()
+    modulate.return_value = (WORDS, 'vi')
+    expected = 'recovered' if proof == 'bound' else 'held' if proof == 'funding' else 'failed_held'
+    assert recovery.recover('bad', binding.owner_id) == expected
+    soniox.assert_not_called()  # Its independent-call duration cap remains 60s.
+    if proof == 'bound':
+        modulate.assert_called_once()
+        payload = artifacts.persist_recovery_result.call_args.args[1]
+        assert payload['speech_seconds'] == 2 and payload['worker_vad_speech_seconds'] == 2
+        assert payload['speech_spans_source'] == 'worker_vad_word_clocks'
+        assert row(client)['recovery_state'] == 'recovered'
+    else:
+        modulate.assert_not_called()
+        artifacts.persist_recovery_result.assert_not_called()
+        assert row(client)['measured_held_vad_speech_seconds'] == 2
 
 
 def assert_worker_vad_result(client, payload, seconds):
