@@ -34,14 +34,14 @@ def test_oversized_duration_is_capped_at_four_hours(duration):
         row,
         source='omi',
         device_id='phone',
-        now=row['finished_at'] + timedelta(seconds=14399),
+        arrival_at=row['finished_at'] + timedelta(seconds=14399),
         timeout=120,
     )
     assert not resumable_continuation(
         row,
         source='omi',
         device_id='phone',
-        now=row['finished_at'] + timedelta(seconds=14400),
+        arrival_at=row['finished_at'] + timedelta(seconds=14400),
         timeout=120,
     )
 
@@ -55,7 +55,7 @@ def test_scheduled_end_wins_over_duration(duration):
         row,
         source='omi',
         device_id='phone',
-        now=row['finished_at'] + timedelta(seconds=3720),
+        arrival_at=row['finished_at'] + timedelta(seconds=3720),
         timeout=120,
     )
 
@@ -98,13 +98,25 @@ def test_reconnect_after_the_scheduled_end_keeps_the_ordinary_deadline():
         row,
         source='omi',
         device_id='phone',
-        now=row['finished_at'] + timedelta(seconds=119),
+        arrival_at=row['finished_at'] + timedelta(seconds=119),
         timeout=120,
     )
     assert not resumable_continuation(
         row,
         source='omi',
         device_id='phone',
-        now=row['finished_at'] + timedelta(seconds=120),
+        arrival_at=row['finished_at'] + timedelta(seconds=120),
         timeout=120,
     )
+
+
+def test_recorded_span_controls_calendar_remaining_time_despite_a_late_heartbeat():
+    row = meeting_row(duration_minutes=10)
+    start = row['finished_at']
+    row.update(
+        recorded_start=start,
+        recorded_end=start + timedelta(seconds=5),
+        clock='device',
+        finished_at=start + timedelta(hours=5),
+    )
+    assert continuation_timeout(row) == 10 * 60 - 5 + 120

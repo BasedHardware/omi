@@ -191,7 +191,8 @@ BODY_DIGEST = {
     # refresh a document read, while post-commit bridge logging adds no query.
     # Encoded-size preflight and the size backstop add no serving query; the
     # discarded-barrier scan is still covered by the same two driven callees.
-    'database.smart_merge.absorb_conversation': '447f59e9acea150e7fa53a927c7d1f6bf983c13a44723781d254d5d39392d7c5',
+    # Recorded-span recomputation is pure; barrier queries still run under the covered callees.
+    'database.smart_merge.absorb_conversation': '531806c3dc28aa6d728effd0a0ff8037b7621128037ed7350cf06beb3bd5674b',
     'database.client_telemetry.recent_owner_ids': '65fe8200d7ad9418b793ccb0fa53a172b2576a80bba644caa3b36cdb53b74510',
     'database.client_telemetry_ops.purge_expired_observations': '8526c30b11ad8548356a136220232a607937bc464628c0eb5326e0a2e928897f',
     # Open-loop store: whole-subcollection stream by document id, filtered in Python.
@@ -1041,6 +1042,7 @@ _add(
         neutrals={'diagnostics': (None, 'caller-owned diagnostic sink; no filter, order or projection effect')},
     )
 )
+_add(DriverEntry('database.episode_timeline.between', base={'uid': UID, 'start': T0, 'end': T1}))
 _add(
     DriverEntry(
         'database.episode_timeline.recorded_candidates',
