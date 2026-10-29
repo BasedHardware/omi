@@ -40,7 +40,7 @@ from utils.sync.size_telemetry import (
 from utils.manual_speaker_assignments import apply_manual_assignments
 from utils.capture_evidence import bounded_envelope, merge_track_receipts
 
-from config import merge_ancestry
+from config import merge_ancestry, merge_before_processing
 import config.speaker_match_scores as match_scores
 from utils.conversations.fragment_visibility import is_rule_discard_decision, is_user_curated
 from utils.conversations.relevance import sync_intake_decision
@@ -537,6 +537,27 @@ def assign_in_transaction(
             or (receipt_owner if receipt_owner in matched else None)
             or (min(matched, key=lambda cid: (matched[cid]['started_at'], cid)) if matched else incoming['id'])
         )
+        if merge_before_processing.enabled():
+            processed_ids = {cid for cid, raw in matched.items() if merge_before_processing.already_processed(raw)}
+            if not plan_target_id and not receipt_owner and processed_ids:
+                # Keep an enriched identity as the parent, preferring the retry
+                # anchor. Late bridges must never turn completed notes into a
+                # discarded donor after the maximum hold has elapsed.
+                canonical = (
+                    own_id
+                    if own_id is not None and own_id in processed_ids
+                    else min(processed_ids, key=lambda cid: (matched[cid]['started_at'], cid))
+                )
+            protected_donors = processed_ids - {canonical}
+            if protected_donors:
+                # Replan from the incoming interval, so excluded processed rows
+                # cannot bridge to otherwise disconnected raw candidates.
+                return plan(
+                    excluded | protected_donors,
+                    segment_indices,
+                    isolated_id=isolated_id,
+                    speech_interval=speech_interval,
+                )
         if canonical in privacy_excluded:
             # No safe alternative to the rejected retry owner. Do not overwrite
             # it as a "new" row after removing it from the match set.

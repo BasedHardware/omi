@@ -1430,6 +1430,24 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "gcp_firestore_indexes.yml/check_pr_prod_indexes": {
+      "budget_p50_minutes": 2,
+      "display_name": "check_pr_prod_indexes",
+      "expected_runs_class": "planned-index-prs",
+      "expected_runs_per_day": 2,
+      "if": "needs.plan_pr_indexes.outputs.eligible == 'true' && github.event.pull_request.head.repo.full_name == github.repository",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "plan_pr_indexes",
+      "owner": "CI maintainers",
+      "rationale": "2026-10-29 wifidx: replaces the two PR prebuild jobs (prebuild_pr_prod_indexes + prebuild_pr_development_indexes, 2+2 minutes at the same 2 runs/day class), which have failed at Google Auth on every eligible PR since the 10-22 WIF tightening restricted both deploy pools to refs/heads/main. Read-only dry-run against prod with a dedicated index-reader identity: same trusted-main steps as the writer, one gcloud index list instead of provisioning in two projects. Same frequency and a 2-minute ceiling under the old pair's combined budget.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "gcp_firestore_indexes.yml/plan_pr_indexes": {
       "budget_p50_minutes": 1,
       "display_name": "plan_pr_indexes",
@@ -1441,42 +1459,6 @@
       "needs": [],
       "owner": "Backend schema maintainers",
       "rationale": "Credential-free JSON diff on registry/manifest PR events; two index PR updates/day budget.",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "gcp_firestore_indexes.yml/prebuild_pr_development_indexes": {
-      "budget_p50_minutes": 2,
-      "display_name": "prebuild_pr_development_indexes",
-      "expected_runs_class": "planned-index-prs",
-      "expected_runs_per_day": 2,
-      "if": "needs.plan_pr_indexes.outputs.eligible == 'true'",
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": "plan_pr_indexes",
-      "owner": "Backend schema maintainers",
-      "rationale": "P65: start only additive PR index builds asynchronously, two updates/day; no runner polling for READY. Existing deploy readiness enforces READY after merge. Automatic development schema writer.",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "gcp_firestore_indexes.yml/prebuild_pr_prod_indexes": {
-      "budget_p50_minutes": 2,
-      "display_name": "prebuild_pr_prod_indexes",
-      "expected_runs_class": "planned-index-prs",
-      "expected_runs_per_day": 2,
-      "if": "needs.plan_pr_indexes.outputs.eligible == 'true'",
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": "plan_pr_indexes",
-      "owner": "Backend schema maintainers",
-      "rationale": "P65: start only additive PR index builds asynchronously, two updates/day; no runner polling for READY. Existing deploy readiness enforces READY after merge. Required prod Environment approval.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -4824,7 +4806,7 @@
     "gcp_firestore_indexes.yml": {
       "name": "Reconcile Firestore Indexes",
       "owner": "CI maintainers",
-      "rationale": "P65: prebuild additive same-repository index PRs during review; main/manual reconciliation and required prod approval remain. No new images or vendor calls.",
+      "rationale": "P65 planned additive index PRs during review; since the 10-22 WIF tightening the deploy pools admit only refs/heads/main, so 2026-10-29 wifidx converts the PR lane to a read-only dry-run plan under a dedicated index-reader identity (check_pr_prod_indexes) and drops the dev prebuild job. Main/manual reconciliation and required prod approval remain unchanged. No new images or vendor calls.",
       "triggers": {
         "pull_request": {
           "branches": [

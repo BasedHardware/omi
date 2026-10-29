@@ -557,11 +557,7 @@ def _retry_count(reason):
 async def test_expected_enrichment_retries_are_409_and_unexpected_stay_500(monkeypatch, caplog, kind):
     from utils.sync import reprocess
 
-    # Importing the real sync pipeline costs seconds; the identity check below
-    # pins its defining module and name instead.
-    SyncConversationPersistenceFenced = type(
-        'SyncConversationPersistenceFenced', (RuntimeError,), {'__module__': 'utils.sync.pipeline'}
-    )
+    from utils.enrichment.admission import SyncConversationPersistenceFenced
 
     class StaleSnapshot(SyncConversationPersistenceFenced):
         pass

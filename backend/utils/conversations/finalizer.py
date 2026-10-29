@@ -14,6 +14,8 @@ from enum import Enum
 
 from fastapi import HTTPException
 from config.batch_pipeline import RecordOwnerContention
+from config.merge_before_processing import enabled as merge_before_processing_enabled
+from utils.enrichment.admission import ConversationAbsorbed
 from config.server_batch import owned as server_batch_owned
 from config.server_batch import has_audio as server_batch_has_audio
 from config.episodes import episodes_enabled_for
@@ -389,6 +391,7 @@ async def finalize_persisted_conversation(
                 user_kept=bool(conversation_data.get('sync_relevance_user_kept')),
                 recovery_transcript_decoded=conversation_data.get('_recovery_transcript_decoded') is True,
                 defer_derived_effects=True,
+                finalization_fence=(finalization_job_id, dispatch_generation, lease_epoch),
                 persistence_observer=lambda owned: persistence.__setitem__('owned', owned),
                 derived_effects_observer=derived_effects.append,
                 derived_effects_disposition_observer=lambda d: derived_disposition.__setitem__(0, d),
@@ -448,7 +451,7 @@ async def finalize_persisted_conversation(
             ):
                 raise ConversationFinalizationError('fanout_completion_conflict')
             return ConversationFinalizationDisposition.completed
-        if fanout['status'] == 'claimed':
+        if fanout['status'] == 'claimed' and not merge_before_processing_enabled():
             # Folding into the preceding conversation happens behind the claim and
             # before any derived effect of this one; a donor skips all of them.
             stage = 'smart_merge'
@@ -636,6 +639,20 @@ async def finalize_persisted_conversation(
         schedule_person_voice_learning_retry(uid, conversation_id)
         await _episode_after_finalization(uid, conversation_id, episode_row, trigger)
         return ConversationFinalizationDisposition.completed
+    except ConversationAbsorbed:
+        # The absorb transaction fenced the job lease and replaced the donor
+        # with a redirect. Close via the normal transactional fanout fence.
+        fanout = await run_blocking(
+            db_executor,
+            lifecycle_service.claim_finalization_fanout,
+            finalization_job_id,
+            dispatch_generation,
+            lease_epoch,
+        )
+        if fanout['status'] not in {'fenced', 'completed'}:
+            raise ConversationFinalizationError('absorbed_fanout_conflict')
+        await _episode_after_absorb(uid, conversation_id, trigger)
+        return ConversationFinalizationDisposition(fanout['status'])
     except Exception as error:
         # Provider and validation exceptions can contain transcript excerpts.
         # Collapse them onto a closed operational vocabulary before emitting a
