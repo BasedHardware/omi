@@ -27,6 +27,13 @@ def load_dependencies():
     from utils.sync import assignment
 
 
+@pytest.fixture(autouse=True)
+def clear_coverage_probe_cache():
+    coverage._coverage_cache.clear()
+    yield
+    coverage._coverage_cache.clear()
+
+
 def pcm_envelope(seed, seconds=20):
     rng = np.random.default_rng(seed)
     amplitudes = rng.integers(100, 14000, seconds * 10).astype('<i2')
@@ -710,3 +717,77 @@ def test_anonymous_live_window_requires_a_shared_scoped_voice():
     assert len(_live_windows([first, other])) == 2
     same = dict(other, speaker_id=1)
     assert len(_live_windows([first, same])) == 3
+
+
+@pytest.fixture()
+def coverage_store(monkeypatch):
+    monkeypatch.setattr(coverage.storage, 'storage_client', MagicMock())
+    calls = {'list': 0, 'download': 0}
+
+    def fake_list(uid, conversation_id, **_kwargs):
+        calls['list'] += 1
+        return [
+            dict(timestamp=T, path=f'chunks/{uid}/{conversation_id}/1760000000.000.opus.enc', size=2048, is_batch=False)
+        ]
+
+    def fake_download(uid, path, rate):
+        calls['download'] += 1
+        return pcm_envelope(3)
+
+    monkeypatch.setattr(coverage.storage, 'list_audio_chunks', fake_list)
+    monkeypatch.setattr(coverage.storage, 'download_audio_chunk_pcm', fake_download)
+    coverage._coverage_cache.clear()
+    yield calls
+    coverage._coverage_cache.clear()
+
+
+def test_historical_batches_reuse_snapshot_across_jobs(coverage_store):
+    batch_start, batch_end = T, T + 20
+    first = coverage.load_live_coverage('uid', {'id': 'conv'}, batch_start, batch_end)
+    second = coverage.load_live_coverage('uid', {'id': 'conv'}, batch_start + 5, batch_end + 5)
+    assert coverage_store['list'] == 1
+    assert [p[0] for p in second.probes] == [p[0] for p in first.probes]
+    # A reused snapshot is a copy: assigning one job's clock offset must never
+    # leak into the next job's cut.
+    second.offset = 12.5
+    third = coverage.load_live_coverage('uid', {'id': 'conv'}, batch_start + 10, batch_end + 10)
+    assert coverage_store['list'] == 1
+    assert third.offset is None
+
+
+def test_fresh_batches_keep_exact_per_job_listings(coverage_store):
+    now = coverage.time.time()
+    coverage.load_live_coverage('uid', {'id': 'conv'}, now - 40, now - 30)
+    coverage.load_live_coverage('uid', {'id': 'conv'}, now - 35, now - 25)
+    assert coverage_store['list'] == 2
+    assert coverage._coverage_cache == {}
+
+
+def test_expired_or_distant_cache_entries_are_not_reused(coverage_store):
+    coverage.load_live_coverage('uid', {'id': 'conv'}, T, T + 20)
+    # Distant batch window: outside the reuse window, must re-list.
+    coverage.load_live_coverage('uid', {'id': 'conv'}, T + coverage._COVERAGE_REUSE_WINDOW_SECONDS + 5, T + 25)
+    assert coverage_store['list'] == 2
+    # Expired entry: must re-list.
+    with coverage._coverage_cache_lock:
+        key = next(iter(coverage._coverage_cache))
+        expires_at, cached_start, snapshot = coverage._coverage_cache[key]
+        coverage._coverage_cache[key] = (coverage.time.monotonic() - 1, cached_start, snapshot)
+    coverage.load_live_coverage('uid', {'id': 'conv'}, T + 5, T + 25)
+    assert coverage_store['list'] == 3
+
+
+def test_coverage_cache_is_bounded(coverage_store):
+    expires_at = coverage.time.monotonic() + coverage._COVERAGE_CACHE_TTL_SECONDS
+    with coverage._coverage_cache_lock:
+        for index in range(coverage._COVERAGE_CACHE_MAX_ENTRIES):
+            coverage._coverage_cache[(f'uid{index}', f'conv{index}')] = (
+                expires_at,
+                T,
+                coverage.LiveCoverage(),
+            )
+    coverage.load_live_coverage('uid_new', {'id': 'conv_new'}, T, T + 20)
+    assert coverage_store['list'] == 1
+    assert len(coverage._coverage_cache) == coverage._COVERAGE_CACHE_MAX_ENTRIES
+    assert ('uid0', 'conv0') not in coverage._coverage_cache
+    assert ('uid_new', 'conv_new') in coverage._coverage_cache

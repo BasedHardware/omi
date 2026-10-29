@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import math
 import os
+import threading
 import time
 import uuid
 import wave
@@ -155,8 +156,60 @@ class LiveCoverage:
     offset: float | None = None
 
 
+# Cross-job probe reuse for historical batches. The per-job snapshots dict in
+# apply_safety_wal_coverage dedupes listings inside one job only, so a backfill
+# wave pays the full chunk-prefix listing (up to 10k results) again for every
+# few-file batch of the same conversation, 24/7. A stale snapshot can only miss
+# newer live chunks: intervals then fail their envelope match and the WAL is
+# retained, the same fail-safe fallback as an unreliable clock, so reuse never
+# authorizes a cut that a fresh listing would refuse. Only batches at least
+# COVERAGE_CACHE_MIN_AGE_SECONDS old are cached: an open capture session keeps
+# exact per-job listings.
+_COVERAGE_CACHE_TTL_SECONDS = 120
+_COVERAGE_REUSE_WINDOW_SECONDS = 600
+_COVERAGE_CACHE_MIN_AGE_SECONDS = 600
+_COVERAGE_CACHE_MAX_ENTRIES = 128
+_coverage_cache_lock = threading.Lock()
+_coverage_cache: dict[tuple[str, str], tuple[float, float, LiveCoverage]] = {}
+
+
+def _coverage_cache_get(uid: str, conversation_id: str, batch_start: float) -> LiveCoverage | None:
+    with _coverage_cache_lock:
+        cached = _coverage_cache.get((uid, conversation_id))
+        if not cached:
+            return None
+        expires_at, cached_start, snapshot = cached
+        if time.monotonic() >= expires_at or abs(batch_start - cached_start) > _COVERAGE_REUSE_WINDOW_SECONDS:
+            _coverage_cache.pop((uid, conversation_id), None)
+            return None
+        # cut_live_coverage assigns snapshot.offset for its own WAL; a reused
+        # snapshot must not leak one job's offset into another. Probe arrays are
+        # read-only after build, so sharing them is safe.
+        return LiveCoverage(probes=list(snapshot.probes), offset=None)
+
+
+def _coverage_cache_put(uid: str, conversation_id: str, batch_start: float, snapshot: LiveCoverage) -> None:
+    with _coverage_cache_lock:
+        if len(_coverage_cache) >= _COVERAGE_CACHE_MAX_ENTRIES:
+            _coverage_cache.pop(next(iter(_coverage_cache)))
+        _coverage_cache[(uid, conversation_id)] = (
+            time.monotonic() + _COVERAGE_CACHE_TTL_SECONDS,
+            batch_start,
+            snapshot,
+        )
+
+
 def load_live_coverage(uid: str, row: dict, batch_start: float, batch_end: float) -> LiveCoverage:
-    """One bounded listing/decode pass per conversation per job."""
+    """One bounded listing/decode pass per conversation per job.
+
+    Historical batches may instead reuse a fresh probe snapshot for the same
+    conversation (see _coverage_cache_get); both paths build identical evidence
+    or retain the WAL.
+    """
+    if batch_end <= time.time() - _COVERAGE_CACHE_MIN_AGE_SECONDS:
+        cached = _coverage_cache_get(uid, row['id'], batch_start)
+        if cached is not None:
+            return cached
     snapshot = LiveCoverage()
     chunks = storage.list_audio_chunks(uid, row['id'], timeout=5, max_count=10000)
     budget, attempts, deadline = 0, 0, time.monotonic() + 15
@@ -186,6 +239,8 @@ def load_live_coverage(uid: str, row: dict, batch_start: float, batch_end: float
         budget += len(pcm)
         # Never extrapolate un-downloaded span bytes into suppression evidence.
         snapshot.probes.append((left, energy_envelope(pcm)))
+    if batch_end <= time.time() - _COVERAGE_CACHE_MIN_AGE_SECONDS:
+        _coverage_cache_put(uid, row['id'], batch_start, snapshot)
     return snapshot
 
 
