@@ -13515,15 +13515,7 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
-  String paywallMonthlyFallbackBody(String price) {
-    return 'ಬದಲಿಗೆ ಮಾಸಿಕದಿಂದ ಪ್ರಾರಂಭಿಸಿ. ತಿಂಗಳಿಗೆ $price. ಯಾವಾಗ ಬೇಕಾದರೂ ರದ್ದು ಮಾಡಿ.';
-  }
-
-  @override
   String get paywallMonthlyFallbackTrialCta => 'ಮಾಸಿಕವನ್ನು ಉಚಿತವಾಗಿ ಪ್ರಯತ್ನಿಸಿ';
-
-  @override
-  String get paywallMonthlyFallbackCta => 'ಮಾಸಿಕ ಆಯ್ಕೆಮಾಡಿ';
 
   @override
   String paywallTrialStarted(int days) {

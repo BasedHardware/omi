@@ -13511,15 +13511,7 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String paywallMonthlyFallbackBody(String price) {
-    return 'Begin dan maandelijks. $price per maand. Altijd opzegbaar.';
-  }
-
-  @override
   String get paywallMonthlyFallbackTrialCta => 'Probeer maandelijks gratis';
-
-  @override
-  String get paywallMonthlyFallbackCta => 'Kies maandelijks';
 
   @override
   String paywallTrialStarted(int days) {

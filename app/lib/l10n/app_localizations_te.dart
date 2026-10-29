@@ -13528,15 +13528,7 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String paywallMonthlyFallbackBody(String price) {
-    return 'బదులుగా నెలవారీతో ప్రారంభించండి. నెలకు $price. ఎప్పుడైనా రద్దు చేయండి.';
-  }
-
-  @override
   String get paywallMonthlyFallbackTrialCta => 'నెలవారీని ఉచితంగా ప్రయత్నించండి';
-
-  @override
-  String get paywallMonthlyFallbackCta => 'నెలవారీని ఎంచుకోండి';
 
   @override
   String paywallTrialStarted(int days) {

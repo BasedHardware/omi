@@ -13498,15 +13498,7 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String paywallMonthlyFallbackBody(String price) {
-    return 'Pradėkite nuo mėnesio plano. $price per mėnesį. Atšaukite bet kada.';
-  }
-
-  @override
   String get paywallMonthlyFallbackTrialCta => 'Išbandyti mėnesio planą nemokamai';
-
-  @override
-  String get paywallMonthlyFallbackCta => 'Rinktis mėnesio planą';
 
   @override
   String paywallTrialStarted(int days) {

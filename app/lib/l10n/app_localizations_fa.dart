@@ -13471,15 +13471,7 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String paywallMonthlyFallbackBody(String price) {
-    return 'به‌جای آن ماهانه شروع کنید. ماهی $price. هر زمان خواستید لغو کنید.';
-  }
-
-  @override
   String get paywallMonthlyFallbackTrialCta => 'ماهانه را رایگان امتحان کنید';
-
-  @override
-  String get paywallMonthlyFallbackCta => 'انتخاب ماهانه';
 
   @override
   String paywallTrialStarted(int days) {

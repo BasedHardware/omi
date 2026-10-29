@@ -13268,15 +13268,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String paywallMonthlyFallbackBody(String price) {
-    return '不如先从月付开始。每月$price。随时取消。';
-  }
-
-  @override
   String get paywallMonthlyFallbackTrialCta => '免费试用月付';
-
-  @override
-  String get paywallMonthlyFallbackCta => '选择月付';
 
   @override
   String paywallTrialStarted(int days) {

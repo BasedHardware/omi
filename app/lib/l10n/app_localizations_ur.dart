@@ -13489,15 +13489,7 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String paywallMonthlyFallbackBody(String price) {
-    return 'اس کے بجائے ماہانہ سے شروع کریں۔ $price ماہانہ۔ کسی بھی وقت منسوخ کریں۔';
-  }
-
-  @override
   String get paywallMonthlyFallbackTrialCta => 'ماہانہ مفت آزمائیں';
-
-  @override
-  String get paywallMonthlyFallbackCta => 'ماہانہ منتخب کریں';
 
   @override
   String paywallTrialStarted(int days) {

@@ -289,26 +289,25 @@ void main() {
     expect(await offerEvents(tester), isEmpty);
   });
 
-  testWidgets('without a trial the sheet promises none', (tester) async {
+  testWidgets('eligibility lost during the yearly checkout offers nothing', (tester) async {
     final usage = _Usage(_subscription());
+    // A saved Stripe customer can precede the subscription row after a completed trial checkout.
     usage.server = _subscription(trialEligible: false);
-    final checkout = _Checkout([PaywallCheckoutOutcome.cancelled, PaywallCheckoutOutcome.cancelled]);
+    final checkout = _Checkout([PaywallCheckoutOutcome.cancelled]);
     await _open(tester, usage, checkout);
 
     await _tapCta(tester);
-    expect(find.text(_title), findsOneWidget);
-    final terms = tester.widget<Text>(find.byKey(const Key('trial_paywall_monthly_offer_terms'))).data!;
-    expect(terms, 'Start monthly instead. US\$29.99 a month. Cancel anytime.');
-    expect(terms, isNot(contains('free')));
-    expect(find.text('Choose monthly'), findsOneWidget);
+    expect(usage.fetches, 1);
+    expect(find.text(_title), findsNothing);
     expect(find.text('Try monthly free'), findsNothing);
+    expect(checkout.opened, [_offer.yearly]);
+    expect(await offerEvents(tester), isEmpty);
 
-    await tester.tap(find.text('Choose monthly'));
-    await tester.pumpAndSettle();
-    expect(checkout.opened, [_offer.yearly, _offer.monthly]);
-    final events = await offerEvents(tester);
-    expect(events.first.$2, {'trial': false});
-    expect(events.last.$2, {'trial': false, 'outcome': 'cancelled'});
+    await _tapCta(tester);
+    await _tapCta(tester);
+    expect(checkout.opened, [_offer.yearly], reason: 'lost eligibility also blocks a second or third checkout');
+    expect(find.text(_title), findsNothing);
+    expect(await offerEvents(tester), isEmpty);
   });
 
   testWidgets('a reader without a trial cannot open checkout under the free-trial button', (tester) async {

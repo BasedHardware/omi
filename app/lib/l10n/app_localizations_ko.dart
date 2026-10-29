@@ -13291,15 +13291,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String paywallMonthlyFallbackBody(String price) {
-    return '대신 월간으로 시작하세요. 월 $price. 언제든 취소할 수 있어요.';
-  }
-
-  @override
   String get paywallMonthlyFallbackTrialCta => '월간 무료로 체험하기';
-
-  @override
-  String get paywallMonthlyFallbackCta => '월간 선택';
 
   @override
   String paywallTrialStarted(int days) {

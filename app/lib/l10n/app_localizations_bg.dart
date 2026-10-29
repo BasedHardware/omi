@@ -13523,15 +13523,7 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
-  String paywallMonthlyFallbackBody(String price) {
-    return 'Започнете с месечен план. $price на месец. Анулирайте по всяко време.';
-  }
-
-  @override
   String get paywallMonthlyFallbackTrialCta => 'Пробвайте месечния безплатно';
-
-  @override
-  String get paywallMonthlyFallbackCta => 'Изберете месечен';
 
   @override
   String paywallTrialStarted(int days) {

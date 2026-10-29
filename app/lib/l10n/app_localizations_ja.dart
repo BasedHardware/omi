@@ -13286,15 +13286,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String paywallMonthlyFallbackBody(String price) {
-    return '代わりに月額プランで始めましょう。月額$price。いつでもキャンセルできます。';
-  }
-
-  @override
   String get paywallMonthlyFallbackTrialCta => '月額プランを無料で試す';
-
-  @override
-  String get paywallMonthlyFallbackCta => '月額プランを選ぶ';
 
   @override
   String paywallTrialStarted(int days) {

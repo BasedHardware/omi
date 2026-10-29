@@ -13504,15 +13504,7 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String paywallMonthlyFallbackBody(String price) {
-    return 'Počnite s mjesečnim planom. $price mjesečno. Otkažite bilo kada.';
-  }
-
-  @override
   String get paywallMonthlyFallbackTrialCta => 'Isprobajte mjesečni besplatno';
-
-  @override
-  String get paywallMonthlyFallbackCta => 'Odaberite mjesečni';
 
   @override
   String paywallTrialStarted(int days) {

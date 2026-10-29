@@ -13476,15 +13476,7 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String paywallMonthlyFallbackBody(String price) {
-    return 'Start med månedlig i stedet. $price i måneden. Avbryt når som helst.';
-  }
-
-  @override
   String get paywallMonthlyFallbackTrialCta => 'Prøv månedlig gratis';
-
-  @override
-  String get paywallMonthlyFallbackCta => 'Velg månedlig';
 
   @override
   String paywallTrialStarted(int days) {

@@ -23907,23 +23907,11 @@ abstract class AppLocalizations {
   /// **'Start monthly instead. Same {days} days free, then {price} a month. Cancel anytime.'**
   String paywallMonthlyFallbackTrialBody(int days, String price);
 
-  /// Body of that sheet when the reader gets no free trial. price is the monthly price with currency, e.g. US$29.99.
-  ///
-  /// In en, this message translates to:
-  /// **'Start monthly instead. {price} a month. Cancel anytime.'**
-  String paywallMonthlyFallbackBody(String price);
-
   /// Button on that sheet: opens the monthly checkout with the free trial.
   ///
   /// In en, this message translates to:
   /// **'Try monthly free'**
   String get paywallMonthlyFallbackTrialCta;
-
-  /// Button on that sheet when there is no free trial: opens the monthly checkout.
-  ///
-  /// In en, this message translates to:
-  /// **'Choose monthly'**
-  String get paywallMonthlyFallbackCta;
 
   /// Toast after a trial checkout completes; days is the trial length
   ///

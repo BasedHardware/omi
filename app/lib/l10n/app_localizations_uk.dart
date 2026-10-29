@@ -13506,15 +13506,7 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String paywallMonthlyFallbackBody(String price) {
-    return 'Почніть із місячного плану. $price на місяць. Скасувати можна будь-коли.';
-  }
-
-  @override
   String get paywallMonthlyFallbackTrialCta => 'Спробувати місячний безкоштовно';
-
-  @override
-  String get paywallMonthlyFallbackCta => 'Обрати місячний';
 
   @override
   String paywallTrialStarted(int days) {

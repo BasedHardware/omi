@@ -13379,15 +13379,7 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String paywallMonthlyFallbackBody(String price) {
-    return 'אפשר להתחיל במנוי חודשי. $price לחודש. ביטול בכל עת.';
-  }
-
-  @override
   String get paywallMonthlyFallbackTrialCta => 'לנסות חודשי בחינם';
-
-  @override
-  String get paywallMonthlyFallbackCta => 'לבחור חודשי';
 
   @override
   String paywallTrialStarted(int days) {

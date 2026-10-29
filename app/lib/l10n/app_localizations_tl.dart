@@ -13581,15 +13581,7 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String paywallMonthlyFallbackBody(String price) {
-    return 'Magsimula muna sa buwanan. $price kada buwan. Magkansela anumang oras.';
-  }
-
-  @override
   String get paywallMonthlyFallbackTrialCta => 'Subukan ang buwanan nang libre';
-
-  @override
-  String get paywallMonthlyFallbackCta => 'Piliin ang buwanan';
 
   @override
   String paywallTrialStarted(int days) {

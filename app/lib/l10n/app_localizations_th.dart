@@ -13408,15 +13408,7 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String paywallMonthlyFallbackBody(String price) {
-    return 'เริ่มแบบรายเดือนแทน $price ต่อเดือน ยกเลิกได้ทุกเมื่อ';
-  }
-
-  @override
   String get paywallMonthlyFallbackTrialCta => 'ทดลองรายเดือนฟรี';
-
-  @override
-  String get paywallMonthlyFallbackCta => 'เลือกรายเดือน';
 
   @override
   String paywallTrialStarted(int days) {

@@ -13507,15 +13507,7 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String paywallMonthlyFallbackBody(String price) {
-    return 'Sāciet ar mēneša plānu. $price mēnesī. Atceliet jebkurā brīdī.';
-  }
-
-  @override
   String get paywallMonthlyFallbackTrialCta => 'Izmēģināt mēneša plānu bez maksas';
-
-  @override
-  String get paywallMonthlyFallbackCta => 'Izvēlēties mēneša plānu';
 
   @override
   String paywallTrialStarted(int days) {

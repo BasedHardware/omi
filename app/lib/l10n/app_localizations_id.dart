@@ -13485,15 +13485,7 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String paywallMonthlyFallbackBody(String price) {
-    return 'Mulai dengan paket bulanan saja. $price per bulan. Batalkan kapan saja.';
-  }
-
-  @override
   String get paywallMonthlyFallbackTrialCta => 'Coba bulanan gratis';
-
-  @override
-  String get paywallMonthlyFallbackCta => 'Pilih bulanan';
 
   @override
   String paywallTrialStarted(int days) {

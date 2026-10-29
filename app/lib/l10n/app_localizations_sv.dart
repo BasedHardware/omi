@@ -13481,15 +13481,7 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String paywallMonthlyFallbackBody(String price) {
-    return 'Börja med månadsvis i stället. $price i månaden. Avsluta när som helst.';
-  }
-
-  @override
   String get paywallMonthlyFallbackTrialCta => 'Prova månadsvis gratis';
-
-  @override
-  String get paywallMonthlyFallbackCta => 'Välj månadsvis';
 
   @override
   String paywallTrialStarted(int days) {

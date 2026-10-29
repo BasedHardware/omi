@@ -13469,15 +13469,7 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String paywallMonthlyFallbackBody(String price) {
-    return 'Alusta hoopis kuupaketiga. $price kuus. Tühista igal ajal.';
-  }
-
-  @override
   String get paywallMonthlyFallbackTrialCta => 'Proovi kuupaketti tasuta';
-
-  @override
-  String get paywallMonthlyFallbackCta => 'Vali kuupakett';
 
   @override
   String paywallTrialStarted(int days) {

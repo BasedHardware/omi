@@ -13560,15 +13560,7 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String paywallMonthlyFallbackBody(String price) {
-    return 'Ξεκίνα με το μηνιαίο. $price τον μήνα. Ακύρωση ανά πάσα στιγμή.';
-  }
-
-  @override
   String get paywallMonthlyFallbackTrialCta => 'Δοκίμασε το μηνιαίο δωρεάν';
-
-  @override
-  String get paywallMonthlyFallbackCta => 'Επίλεξε μηνιαίο';
 
   @override
   String paywallTrialStarted(int days) {

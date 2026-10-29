@@ -13532,15 +13532,7 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String paywallMonthlyFallbackBody(String price) {
-    return 'Începe cu planul lunar. $price pe lună. Anulezi oricând.';
-  }
-
-  @override
   String get paywallMonthlyFallbackTrialCta => 'Încearcă lunar gratuit';
-
-  @override
-  String get paywallMonthlyFallbackCta => 'Alege lunar';
 
   @override
   String paywallTrialStarted(int days) {

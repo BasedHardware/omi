@@ -13474,15 +13474,7 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String paywallMonthlyFallbackBody(String price) {
-    return 'Hãy bắt đầu với gói tháng. $price mỗi tháng. Hủy bất cứ lúc nào.';
-  }
-
-  @override
   String get paywallMonthlyFallbackTrialCta => 'Dùng thử gói tháng miễn phí';
-
-  @override
-  String get paywallMonthlyFallbackCta => 'Chọn gói tháng';
 
   @override
   String paywallTrialStarted(int days) {

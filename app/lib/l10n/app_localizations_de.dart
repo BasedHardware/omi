@@ -13576,15 +13576,7 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String paywallMonthlyFallbackBody(String price) {
-    return 'Starte stattdessen monatlich. $price pro Monat. Jederzeit kündbar.';
-  }
-
-  @override
   String get paywallMonthlyFallbackTrialCta => 'Monatlich kostenlos testen';
-
-  @override
-  String get paywallMonthlyFallbackCta => 'Monatlich wählen';
 
   @override
   String paywallTrialStarted(int days) {

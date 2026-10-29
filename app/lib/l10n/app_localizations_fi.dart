@@ -13479,15 +13479,7 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String paywallMonthlyFallbackBody(String price) {
-    return 'Aloita kuukausitilauksella. $price kuukaudessa. Peru milloin vain.';
-  }
-
-  @override
   String get paywallMonthlyFallbackTrialCta => 'Kokeile kuukausitilausta ilmaiseksi';
-
-  @override
-  String get paywallMonthlyFallbackCta => 'Valitse kuukausitilaus';
 
   @override
   String paywallTrialStarted(int days) {

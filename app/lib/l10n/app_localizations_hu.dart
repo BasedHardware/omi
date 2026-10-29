@@ -13527,15 +13527,7 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String paywallMonthlyFallbackBody(String price) {
-    return 'Kezdd inkább havi csomaggal. Havi $price. Bármikor lemondható.';
-  }
-
-  @override
   String get paywallMonthlyFallbackTrialCta => 'Havi csomag kipróbálása ingyen';
-
-  @override
-  String get paywallMonthlyFallbackCta => 'Havi csomag választása';
 
   @override
   String paywallTrialStarted(int days) {

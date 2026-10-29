@@ -16217,22 +16217,9 @@
             }
         }
     },
-    "paywallMonthlyFallbackBody": "Start monthly instead. {price} a month. Cancel anytime.",
-    "@paywallMonthlyFallbackBody": {
-        "description": "Body of that sheet when the reader gets no free trial. price is the monthly price with currency, e.g. US$29.99.",
-        "placeholders": {
-            "price": {
-                "type": "String"
-            }
-        }
-    },
     "paywallMonthlyFallbackTrialCta": "Try monthly free",
     "@paywallMonthlyFallbackTrialCta": {
         "description": "Button on that sheet: opens the monthly checkout with the free trial."
-    },
-    "paywallMonthlyFallbackCta": "Choose monthly",
-    "@paywallMonthlyFallbackCta": {
-        "description": "Button on that sheet when there is no free trial: opens the monthly checkout."
     },
     "paywallTrialStarted": "Your {days}-day free trial of Omi Pro has started.",
     "@paywallTrialStarted": {
