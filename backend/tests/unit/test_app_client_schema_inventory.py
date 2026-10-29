@@ -32,6 +32,8 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
         (item['method'], item['path'], item['operation_id']) for item in report['unmodeled_success_responses']
     }
 
+    assert 'app/lib/backend/http/api/account_deletion.dart' in generated_backed_paths
+    assert 'app/lib/backend/http/api/account_deletion.dart' not in remaining_manual_paths
     assert 'app/lib/backend/schema/conversation.dart' in generated_backed_paths
     # action_item.dart was fully migrated to typedefs (no fromJson/toJson), so it's
     # correctly absent from manual_files entirely — neither generated_backed nor remaining.

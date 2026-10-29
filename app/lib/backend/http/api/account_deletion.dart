@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/schema/gen/account_deletion_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 
 Map<String, dynamic> _object(String body) {
@@ -29,14 +30,28 @@ class AccountDeletionStatus {
 
   factory AccountDeletionStatus.fromJson(Map<String, dynamic> json) {
     final loss = json['loss_summary'];
-    return AccountDeletionStatus(
-      pendingDeletion: json['pending_deletion'] == true,
-      wipeAt: json['wipe_at'] is String ? DateTime.tryParse(json['wipe_at'] as String) : null,
-      gracePeriodDays: _count(json['grace_period_days'] ?? json['grace_days']),
-      heldCount: loss is Map ? _count(loss['held_recordings']) : 0,
-      processingCount: loss is Map ? _count(loss['backlog_conversations']) : 0,
-    );
+    final wipeAt = json['wipe_at'];
+    // Preserve the additive endpoint's conservative legacy defaults before
+    // decoding the canonical wire shape; malformed deadlines never grant grace.
+    return AccountDeletionStatus.fromGenerated(wire.GeneratedAccountDeletionStatusResponse.fromJson({
+      'pending_deletion': json['pending_deletion'] == true,
+      'wipe_at': wipeAt is String ? DateTime.tryParse(wipeAt)?.toIso8601String() : null,
+      'grace_period_days': _count(json['grace_period_days'] ?? json['grace_days']),
+      'loss_summary': {
+        'held_recordings': loss is Map ? _count(loss['held_recordings']) : 0,
+        'backlog_conversations': loss is Map ? _count(loss['backlog_conversations']) : 0,
+      },
+    }));
   }
+
+  factory AccountDeletionStatus.fromGenerated(wire.GeneratedAccountDeletionStatusResponse generated) =>
+      AccountDeletionStatus(
+        pendingDeletion: generated.pendingDeletion,
+        wipeAt: generated.wipeAt,
+        gracePeriodDays: generated.gracePeriodDays,
+        heldCount: generated.lossSummary.heldRecordings,
+        processingCount: generated.lossSummary.backlogConversations,
+      );
 
   /// Round down: never promise more time than the authoritative deadline allows.
   int graceDaysAt(DateTime now) {

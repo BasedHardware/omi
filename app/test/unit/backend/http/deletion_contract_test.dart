@@ -25,6 +25,21 @@ void main() {
         5);
   });
 
+  test('wire adapter preserves conservative malformed policy and count defaults', () {
+    final status = AccountDeletionStatus.fromJson({
+      'pending_deletion': 'true',
+      'wipe_at': 'invalid',
+      'grace_period_days': -2,
+      'loss_summary': {'held_recordings': double.infinity, 'backlog_conversations': 4.9},
+    });
+    expect(status.pendingDeletion, isFalse);
+    expect(status.wipeAt, isNull);
+    expect(status.gracePeriodDays, 0);
+    expect(status.heldCount, 0);
+    expect(status.processingCount, 4);
+    expect(AccountDeletionStatus.fromJson({'grace_days': 3}).gracePeriodDays, 3);
+  });
+
   test('counts exclude uploaded/synced, retired/unowned and non-phone recordings', () {
     Wal wal(WalStatus status, {String? uid = 'current', WalStorage storage = WalStorage.disk}) => Wal(
         timerStart: 1,
