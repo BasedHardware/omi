@@ -497,6 +497,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
   }
 
   static TextStyle get _metaStyle => TextStyle(color: OmiColors.textTertiary, fontSize: 14);
+  static const _metaSeparator = ' • ';
 
   Widget _buildCardContent(BuildContext context, Future<void> Function() onTap) {
     final content = Padding(
@@ -516,19 +517,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
   /// Time and length, with the New badge beside them (hub audit #16) and the star.
   Widget _buildMetaRow(BuildContext context) {
     final duration = _getConversationDuration(context);
-    if (widget.homeEpisode case final episode?) {
-      final parts = episode.members.length;
-      return Text(
-          [
-            OmiDateFormat.of(context).time(episode.startedAt),
-            OmiDuration.compact(
-                episode.lastActivityAt.difference(episode.startedAt).inSeconds.clamp(0, 2147483647), context.l10n),
-            if (parts >= 2) context.l10n.episodePartsCount(parts),
-          ].join(' · '),
-          style: _metaStyle,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis);
-    }
     return Row(
       children: [
         Text(
@@ -536,7 +524,14 @@ class _ConversationListItemState extends State<ConversationListItem> {
           style: _metaStyle,
           maxLines: 1,
         ),
-        if (duration.isNotEmpty) ...[Text(' • ', style: _metaStyle), Text(duration, style: _metaStyle, maxLines: 1)],
+        if (duration.isNotEmpty) ...[
+          Text(_metaSeparator, style: _metaStyle),
+          Text(duration, style: _metaStyle, maxLines: 1)
+        ],
+        if (widget.homeEpisode case final episode? when episode.members.length >= 2) ...[
+          Text(_metaSeparator, style: _metaStyle),
+          Text(context.l10n.episodePartsCount(episode.members.length), style: _metaStyle, maxLines: 1),
+        ],
         if (widget.fillingSeconds case final seconds?) ...[
           // The ring is the separator here: "34m  ◌ adding 12m from your Omi".
           const SizedBox(width: 6),
@@ -557,7 +552,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
         ],
         // One row stands for an event several devices recorded.
         if (_captureSources.length > 1) ...[
-          Text(' • ', style: _metaStyle),
+          Text(_metaSeparator, style: _metaStyle),
           CaptureSourceIcons(sources: _captureSources),
         ],
         if (isNew) ...[

@@ -1045,14 +1045,6 @@ _add(
 _add(DriverEntry('database.episode_timeline.between', base={'uid': UID, 'start': T0, 'end': T1}))
 _add(
     DriverEntry(
-        'database.episode_home.list_episode_window',
-        base={'uid': UID, 'start': T0, 'end': T1},
-        domains={'limit': [1, 50, 100], 'cursor': [None, 'episode-1']},
-        setup=_seed(f'users/{UID}/episodes/episode-1', {'started_at': T0}),
-    )
-)
-_add(
-    DriverEntry(
         'database.episode_timeline.check_window',
         base={
             'transaction': ref_transaction(),

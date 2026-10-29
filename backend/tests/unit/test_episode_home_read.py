@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from fake_firestore import FakeFirestoreClient
 
-from database import episode_home, episodes
+from database import episodes
 from utils.episodes import home_read
 
 START = datetime(2026, 10, 29, 22, tzinfo=timezone.utc)
@@ -21,6 +21,7 @@ def store(monkeypatch):
 def put(store, eid, start, end, status='closed'):
     store.collection('users').document('u').collection('episodes').document(eid).set(
         {
+            'id': eid,
             'started_at': start,
             'last_activity_at': end,
             'status': status,
@@ -33,20 +34,18 @@ def test_cross_midnight_overlap_and_live_use_the_same_started_at_window(store):
     put(store, 'before', START - timedelta(hours=1), START - timedelta(minutes=30))
     put(store, 'live', START + timedelta(hours=2), START + timedelta(hours=3), 'live')
     put(store, 'after', START + timedelta(hours=4), START + timedelta(hours=5))
-    rows, cursor = episode_home.list_episode_window(
+    rows, cursor = home_read.list_episode_window(
         'u', START + timedelta(hours=1), START + timedelta(hours=3), firestore_client=store
     )
     assert [row['id'] for row in rows] == ['live', 'cross-midnight']
     assert cursor is None
 
 
-def test_cursor_advances_even_if_scanned_page_has_no_overlap(store):
+def test_shared_helper_filters_nonoverlapping_windows_before_pagination(store):
     put(store, 'non-overlap', START + timedelta(minutes=1), START + timedelta(minutes=2))
     put(store, 'overlap', START, START + timedelta(hours=3))
     window = (START + timedelta(hours=1), START + timedelta(hours=3))
-    rows, cursor = episode_home.list_episode_window('u', *window, limit=1, firestore_client=store)
-    assert rows == [] and cursor == 'non-overlap'
-    rows, cursor = episode_home.list_episode_window('u', *window, limit=1, cursor=cursor, firestore_client=store)
+    rows, cursor = home_read.list_episode_window('u', *window, limit=1, firestore_client=store)
     assert [row['id'] for row in rows] == ['overlap'] and cursor is None
 
 
@@ -55,7 +54,7 @@ def test_equal_start_cursor_does_not_skip_or_repeat_members(store):
         put(store, eid, START, START + timedelta(hours=1))
     seen, cursor = [], None
     while True:
-        rows, cursor = episode_home.list_episode_window(
+        rows, cursor = home_read.list_episode_window(
             'u', START, START + timedelta(hours=2), limit=1, cursor=cursor, firestore_client=store
         )
         seen.extend(row['id'] for row in rows)
@@ -68,7 +67,36 @@ def test_equal_start_cursor_does_not_skip_or_repeat_members(store):
 def test_cursor_is_scoped_to_the_authenticated_user(store):
     put(store, 'private', START, START)
     with pytest.raises(ValueError):
-        episode_home.list_episode_window('other', START, START, cursor='private', firestore_client=store)
+        home_read.list_episode_window('other', START, START, cursor='private', firestore_client=store)
+
+
+def test_window_reuses_phase_a_ownership_and_ignores_merged_donors(store):
+    put(store, 'quiet', START, START + timedelta(minutes=10))
+    root = store.collection('users').document('u').collection('episodes')
+    root.document('quiet').update({'close_reason': 'gap'})
+    put(store, 'explicit', START, START + timedelta(minutes=10))
+    root.document('explicit').update({'close_reason': 'user', 'recorded_end': START + timedelta(hours=1)})
+    put(store, 'donor', START, START + timedelta(hours=1))
+    root.document('donor').update({'recorded_merged_into': 'explicit'})
+    rows, cursor = home_read.list_episode_window(
+        'u', START + timedelta(minutes=20), START + timedelta(minutes=30), firestore_client=store
+    )
+    assert {row['id'] for row in rows} == {'quiet', 'explicit'}
+    assert cursor is None
+
+
+def test_page_uses_shared_episodes_between_helper(monkeypatch):
+    calls = []
+
+    def between(uid, start, end, **kwargs):
+        calls.append((uid, start, end))
+        return [{'id': 'a', 'started_at': START}, {'id': 'b', 'started_at': START}]
+
+    monkeypatch.setattr(home_read.service, 'episodes_between', between)
+    rows, cursor = home_read.list_episode_window('u', START, START + timedelta(hours=1), limit=1)
+    assert calls == [('u', START, START + timedelta(hours=1))]
+    assert [row['id'] for row in rows] == ['b']
+    assert cursor == 'b'
 
 
 def test_projection_removes_discarded_deleted_missing_members_and_their_content(monkeypatch):

@@ -28,6 +28,13 @@
       "description": "Episode Dark; headless Flutter production widgets with fictional fixture data",
       "captured_by": "agent",
       "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-android-home-chrome-light.png",
+      "platform": "mobile-android",
+      "description": "Full Home Light; production Home widgets and existing HomeFrame chrome, Today live episode and Yesterday rows, fictional fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
     }
   ]
 }

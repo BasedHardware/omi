@@ -288,6 +288,9 @@ void main() {
         expect(find.text('Planning the garden'), findsOneWidget);
         expect(find.textContaining('2 parts'), findsOneWidget);
         expect(find.byType(ConversationListItem), findsOneWidget);
+        final row = find.byType(ConversationListItem);
+        expect(find.descendant(of: row, matching: find.text('10m')), findsOneWidget);
+        expect(find.descendant(of: row, matching: find.text(' • ')), findsNWidgets(2));
         await tester.tap(find.text('Planning the garden'));
       }
       await tester.pumpAndSettle();

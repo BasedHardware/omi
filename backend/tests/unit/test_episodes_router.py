@@ -143,7 +143,7 @@ def test_list_uses_admission_gate_and_returns_paginated_projection(client, monke
     _, http = client
     calls = []
     monkeypatch.setattr(
-        router_module.episode_home,
+        router_module.home_read,
         'list_episode_window',
         lambda uid, start, end, **kw: (calls.append((uid, start, end, kw)) or [EPISODE], 'next-id'),
     )
@@ -176,9 +176,7 @@ def test_list_rejects_invalid_window_and_page_arguments(client, params):
 
 def test_list_store_channel_never_reads(client, monkeypatch):
     _, http = client
-    monkeypatch.setattr(
-        router_module.episode_home, 'list_episode_window', lambda *a, **kw: pytest.fail('must not read')
-    )
+    monkeypatch.setattr(router_module.home_read, 'list_episode_window', lambda *a, **kw: pytest.fail('must not read'))
     assert (
         http.get(
             '/v1/episodes',

@@ -1,10 +1,41 @@
 """Client read projection with only retained, extant episode members."""
 
+from datetime import datetime
 from typing import Any, get_args
 
-from database import conversations
+from database import conversations, episodes
 from models.episode import EpisodeCloseReason
 from utils.episodes import service
+
+
+def list_episode_window(
+    uid: str,
+    start: datetime,
+    end: datetime,
+    *,
+    limit: int = 50,
+    cursor: str | None = None,
+    firestore_client: Any = None,
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Page Phase A's canonical ownership windows, newest recorded start first.
+
+    The shared helper owns overlap, recorded_end and merged-record filtering.
+    Its complete metadata scan uses the existing started_at index. A cursor's
+    (start, id) key keeps equal-start episodes stable and remains UID-scoped.
+    Retained-member filtering happens after pagination and can yield empty pages.
+    """
+    before = None
+    if cursor:
+        anchor = episodes.get_episode(uid, cursor, firestore_client=firestore_client)
+        if anchor is None or anchor['id'] != cursor:
+            raise ValueError('Episode cursor no longer exists')
+        before = (anchor['started_at'], cursor)
+    rows = service.episodes_between(uid, start, end, firestore_client=firestore_client)
+    rows.sort(key=lambda row: (row['started_at'], row['id']), reverse=True)
+    if before is not None:
+        rows = [row for row in rows if (row['started_at'], row['id']) < before]
+    page = rows[:limit]
+    return page, page[-1]['id'] if len(rows) > limit else None
 
 
 def wire_episode(episode: dict[str, Any] | None) -> dict[str, Any] | None:

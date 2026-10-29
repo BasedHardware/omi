@@ -22,7 +22,6 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
 from config.episodes import APP_CHANNEL_HEADER, app_channel, client_channel_admitted, episodes_enabled_for
-from database import episode_home
 from utils.episodes import home_read
 from models.episode import (
     EpisodeListResponse,
@@ -65,7 +64,7 @@ def list_episodes(
     if start.tzinfo is None or end.tzinfo is None or start > end:
         raise HTTPException(status_code=422, detail='Expected an ordered, timezone-aware window')
     try:
-        rows, next_cursor = episode_home.list_episode_window(uid, start, end, limit=limit, cursor=cursor)
+        rows, next_cursor = home_read.list_episode_window(uid, start, end, limit=limit, cursor=cursor)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     return {

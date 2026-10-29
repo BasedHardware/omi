@@ -12,7 +12,9 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
+import 'package:omi/providers/device_provider.dart';
 
+import '../fakes.dart';
 import '../harness.dart';
 import 'capture.dart';
 
@@ -45,6 +47,61 @@ class _EpisodeCapture extends AuditCaptureProvider {
 }
 
 final episodeScenarios = <AuditScenario>[
+  AuditScenario(
+    id: 'episodes-home-chrome',
+    title: 'Full Home with a live episode today and closed episodes yesterday',
+    page: 'lib/pages/home/home_content.dart (HomeContentPage with HomeFrame chrome)',
+    state: 'Production Home header and controls, a fictional live episode, and Yesterday episode/conversation rows',
+    run: (a) async {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final yesterday = today.subtract(const Duration(days: 1));
+      final closed = _closedFixture(day: yesterday);
+      final unrelated = ServerConversation(
+          id: 'garden',
+          createdAt: yesterday.add(const Duration(hours: 15, minutes: 20)),
+          startedAt: yesterday.add(const Duration(hours: 15, minutes: 20)),
+          finishedAt: yesterday.add(const Duration(hours: 15, minutes: 38)),
+          structured: Structured('A quick call about the garden', '', emoji: '🌱'));
+      final live = Episode(
+          id: 'live-today',
+          live: true,
+          startedAt: now.subtract(const Duration(minutes: 12)),
+          lastActivityAt: now,
+          title: 'Planning Saturday’s trail',
+          conversationIds: const ['episode-live-fixture']);
+      final items = [...closed.members, unrelated];
+      final history =
+          ConversationProvider(isSignedIn: () => true, conversationListFetcher: () async => (items: items, ok: true))
+            ..conversations = items
+            ..groupConversationsByDate();
+      final episodes = EpisodeProvider(
+        clock: () => now,
+        fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: live)),
+        fetchPage: (from, to, {cursor}) async => ApiSuccess(EpisodePageRead(enabled: true, episodes: [closed, live])),
+      )
+        ..debugSetLive(live)
+        ..debugSetHomeEpisodes([closed, live]);
+      final capture = _EpisodeCapture();
+      final device = AuditDeviceProvider(connected: true, battery: 72, device: auditPendant);
+      addTearDown(history.dispose);
+      addTearDown(episodes.dispose);
+      addTearDown(capture.dispose);
+      addTearDown(device.dispose);
+      await a.pump(const HomeFrame(), scaffold: false, providers: [
+        ChangeNotifierProvider<ConversationProvider>.value(value: history),
+        ChangeNotifierProvider<EpisodeProvider>.value(value: episodes),
+        ChangeNotifierProvider<CaptureProvider>.value(value: capture),
+        ChangeNotifierProvider<DeviceProvider>.value(value: device),
+      ]);
+      expect(find.text('Today'), findsOneWidget);
+      expect(find.text('Yesterday'), findsOneWidget);
+      expect(find.text('Planning Saturday’s trail'), findsOneWidget);
+      expect(find.text('Dinner and plans for the weekend'), findsOneWidget);
+      expect(find.text('A quick call about the garden'), findsOneWidget);
+      await a.shot('Open full Home with its header, Today live episode and Yesterday rows');
+    },
+  ),
   AuditScenario(
     id: 'episodes-home-closed',
     title: 'Home with closed episodes in the conversation row style',
@@ -137,9 +194,11 @@ final episodeScenarios = <AuditScenario>[
   ),
 ];
 
-Episode _closedFixture() {
-  final start = DateTime(2026, 10, 29, 18, 56);
-  final end = DateTime(2026, 10, 29, 21, 43);
+Episode _closedFixture({DateTime? day}) {
+  final date = day ?? DateTime(2026, 10, 29);
+  final start = DateTime(date.year, date.month, date.day, 18, 56);
+  final middle = DateTime(date.year, date.month, date.day, 20, 5);
+  final end = DateTime(date.year, date.month, date.day, 21, 43);
   return Episode(
     id: 'evening-episode',
     live: false,
@@ -153,12 +212,12 @@ Episode _closedFixture() {
           id: 'dinner',
           createdAt: start,
           startedAt: start,
-          finishedAt: DateTime(2026, 10, 29, 20, 5),
+          finishedAt: middle,
           structured: Structured('Dinner at the noodle house', '', emoji: '🍜')),
       ServerConversation(
           id: 'weekend',
-          createdAt: DateTime(2026, 10, 29, 20, 5),
-          startedAt: DateTime(2026, 10, 29, 20, 5),
+          createdAt: middle,
+          startedAt: middle,
           finishedAt: end,
           structured: Structured('A weekend in the mountains', '', emoji: '🏕️')),
     ],
