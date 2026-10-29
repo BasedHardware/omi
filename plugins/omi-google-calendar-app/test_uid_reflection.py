@@ -35,12 +35,21 @@ class _Captured:
 def _load_main():
     saved = {
         name: sys.modules.get(name)
-        for name in ("requests", "dotenv", "fastapi", "fastapi.responses", "db", "models", "main")
+        for name in ("requests", "httpx", "dotenv", "fastapi", "fastapi.responses", "db", "models", "main")
     }
 
     requests_mod = types.ModuleType("requests")
     requests_mod.post = lambda *a, **k: None
     sys.modules["requests"] = requests_mod
+
+    httpx_mod = types.ModuleType("httpx")
+    class AsyncClientStub:
+        def __init__(self, *args, **kwargs): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, exc_type, exc_val, exc_tb): pass
+        async def post(self, *a, **k): return None
+    httpx_mod.AsyncClient = AsyncClientStub
+    sys.modules["httpx"] = httpx_mod
 
     dotenv = types.ModuleType("dotenv")
     dotenv.load_dotenv = lambda *a, **k: None
