@@ -14940,4 +14940,57 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Afișează cele mai noi recapitulări în partea de sus a ecranului Acasă.';
+
+  @override
+  String get yearlySwitchTitle => 'Treci la anual';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Economisește $amount pe an';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Economisește $amount pe an cu plata anuală';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Același plan, plătit o dată pe an';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Plan';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price pe an';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'De plată azi';
+
+  @override
+  String get yearlySwitchRenews => 'Se reînnoiește';
+
+  @override
+  String get yearlySwitchCreditNote => 'Include credit pentru restul acestei luni.';
+
+  @override
+  String get yearlySwitchDeclined => 'Plată refuzată. Rămâi la plata lunară.';
+
+  @override
+  String get yearlySwitchFailed => 'Nu s-a putut schimba. Rămâi la plata lunară.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Prețul nu a putut fi încărcat.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Plata anuală nu este disponibilă acum pentru planul tău.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Acum plătești anual';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Azi s-au încasat $amount. Se reînnoiește pe $date.';
+  }
 }

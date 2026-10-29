@@ -14890,4 +14890,57 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'En son özetlerini Ana Sayfanın üstünde göster.';
+
+  @override
+  String get yearlySwitchTitle => 'Yıllığa geçin';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Yılda $amount tasarruf edin';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Yıllık ödemeyle yılda $amount tasarruf edin';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Aynı plan, yılda bir kez ödenir';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Plan';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, yıllık $price';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Bugün ödenecek';
+
+  @override
+  String get yearlySwitchRenews => 'Yenilenme';
+
+  @override
+  String get yearlySwitchCreditNote => 'Bu ayın kalan kısmı için kredi içerir.';
+
+  @override
+  String get yearlySwitchDeclined => 'Ödeme reddedildi. Aylık ödemeye devam ediyorsunuz.';
+
+  @override
+  String get yearlySwitchFailed => 'Geçiş yapılamadı. Aylık ödemeye devam ediyorsunuz.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Fiyatınız yüklenemedi.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Yıllık ödeme şu anda planınız için kullanılamıyor.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Artık yıllık ödüyorsunuz';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Bugün $amount tahsil edildi. Yenilenme: $date.';
+  }
 }

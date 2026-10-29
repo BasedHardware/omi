@@ -16,6 +16,14 @@ import json
 
 import pytest
 
+# build_incoming's function-level imports (pre_recorded pulls the deepgram SDK,
+# deterministic_minimum, models.conversation, sync.capture) land in whichever
+# test calls it first; import them at collection so the duration-guard call
+# phase stays clean.
+import models.conversation  # noqa: F401
+import utils.conversations.deterministic_minimum  # noqa: F401
+import utils.stt.pre_recorded  # noqa: F401
+import utils.sync.capture  # noqa: F401
 from tests.unit.test_batch_pipeline_owner_chain_projection import SUCCESS_PAYLOAD
 from utils.batch_pipeline.audio import audio_unit
 from utils.batch_pipeline.contracts import (

@@ -21,6 +21,7 @@ import 'package:omi/pages/settings/widgets/plans/plan_cards.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_display_name.dart';
 import 'package:omi/pages/settings/widgets/plans/plans_hero.dart';
 import 'package:omi/pages/settings/widgets/plans/training_data_option.dart';
+import 'package:omi/pages/settings/widgets/yearly_switch.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
@@ -878,6 +879,7 @@ class _PlansSheetState extends State<PlansSheet> {
                           textAlign: TextAlign.center,
                           style: secondary,
                         ),
+                        if (!hasScheduledUpgrade) const YearlySwitchPlansRow(),
                       ],
                       const SizedBox(height: OmiSpacing.xl),
                       // Features list - shown to all users

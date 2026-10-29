@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-yearly-switch-home-row.png",
+      "platform": "mobile-ios",
+      "description": "Home for an Omi Pro monthly subscriber in their second paid month: main (left) and the quiet Save US$89.97 a year with yearly row (right). iPhone 17 Pro simulator.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-yearly-switch-plans-row.png",
+      "platform": "mobile-ios",
+      "description": "Plans & Billing for the same subscriber: main (left) and the Switch to Yearly, Save US$89.97 a year row under the renewal line (right).",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-yearly-switch-confirm-switched.png",
+      "platform": "mobile-ios",
+      "description": "Confirm sheet with Stripe's preview (Omi Pro, US$269.91 a year; due today US$244.92 after credit for the unused month; renews Oct 28, 2027), then You're on yearly with the same amount, then Home without the row.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-mobile-ios-yearly-switch-declined.png",
+      "platform": "mobile-ios",
+      "description": "Plans & Billing path with a card that declines: the same preview, then Payment declined. You're still on monthly.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "005-mobile-ios-yearly-switch-dark.png",
+      "platform": "mobile-ios",
+      "description": "Dark appearance: Home row, confirm sheet and success.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

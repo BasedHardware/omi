@@ -4499,5 +4499,20 @@
     "activityAttentionSyncStalledTitle": "Omi ei sünkrooni",
     "activityAttentionSyncStalledSubtitle": "Üle {hours} tunni pole sünkroonitud ühtegi salvestust",
     "dailyRecapsOnHome": "Päevased kokkuvõtted avalehel",
-    "dailyRecapsOnHomeDescription": "Näita viimaseid kokkuvõtteid avalehe ülaosas."
+    "dailyRecapsOnHomeDescription": "Näita viimaseid kokkuvõtteid avalehe ülaosas.",
+    "yearlySwitchTitle": "Mine üle aastasele",
+    "yearlySwitchRowSavings": "Säästa {amount} aastas",
+    "yearlySwitchHomeTitle": "Säästa aastamaksega {amount} aastas",
+    "yearlySwitchHomeSubtitle": "Sama pakett, makse kord aastas",
+    "yearlySwitchPlanLabel": "Pakett",
+    "yearlySwitchPlanValue": "{plan}, {price} aastas",
+    "yearlySwitchDueToday": "Tasuda täna",
+    "yearlySwitchRenews": "Uueneb",
+    "yearlySwitchCreditNote": "Sisaldab krediiti selle kuu ülejäänud aja eest.",
+    "yearlySwitchDeclined": "Makse lükati tagasi. Maksad endiselt igakuiselt.",
+    "yearlySwitchFailed": "Üleminek ebaõnnestus. Maksad endiselt igakuiselt.",
+    "yearlySwitchPreviewFailed": "Hinda ei õnnestunud laadida.",
+    "yearlySwitchUnavailable": "Aastamaks pole sinu paketile praegu saadaval.",
+    "yearlySwitchDoneTitle": "Maksad nüüd kord aastas",
+    "yearlySwitchDoneBody": "Täna võeti {amount}. Uueneb {date}."
 }

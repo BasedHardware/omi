@@ -10,6 +10,12 @@ from unittest.mock import MagicMock
 import pytest
 
 from utils import rollout_cohorts as cohorts
+from utils.rollout import runtime_percent as rp
+
+
+@pytest.fixture(autouse=True)
+def no_remote_ramp_io(monkeypatch):
+    monkeypatch.setattr(rp, '_cache', rp._RampCache(lambda: None))
 
 
 @pytest.fixture(scope='module', autouse=True)
