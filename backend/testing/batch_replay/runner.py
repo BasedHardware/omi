@@ -66,7 +66,7 @@ def _replay(corpus):
         frames = []
         tb = error.__traceback__
         while tb:
-            frames.append(tb.tb_frame.f_code.co_name)
+            frames.append(f"{tb.tb_frame.f_globals.get('__name__', 'unknown')}.{tb.tb_frame.f_code.co_name}")
             tb = tb.tb_next
         site = frames[-1] if frames else stage
         key = f'{stage}:{type(error).__name__}:{site}'

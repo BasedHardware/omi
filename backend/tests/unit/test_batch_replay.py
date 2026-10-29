@@ -107,5 +107,5 @@ def test_invalid_source_slice_is_detected(backend_tree):
     corpus['units'] = [corpus['units'][0]]
     corpus['units'][0]['references'][0]['offset_frame'] = 1
     broken = replay(corpus, backend_tree)
-    assert broken['exceptions']['source_audio:ValueError:materialize'] == 1
+    assert broken['exceptions']['source_audio:ValueError:utils.batch_pipeline.source_audio.materialize'] == 1
     assert compare(broken, {'exceptions': {}, 'unit_issues': {}, 'chain_blocks': []})['regression']
