@@ -47,9 +47,7 @@ def _pages(client: Any, collection: str, page_size: int) -> Iterator[list[Any]]:
     """Firestore snapshots of ``collection`` in document-id order, one page at a time."""
     from google.cloud.firestore_v1.field_path import FieldPath
 
-    query = (
-        client.collection(collection).order_by(FieldPath.document_id()).limit(page_size)
-    )
+    query = client.collection(collection).order_by(FieldPath.document_id()).limit(page_size)
     last = None
     while True:
         page = list((query.start_after(last) if last is not None else query).stream())
@@ -65,20 +63,14 @@ def postgres_keys(conn: Any, namespace: str, table: str) -> set[str]:
     from psycopg import sql
 
     if table in _TYPED:
-        query = sql.SQL("SELECT key FROM {} WHERE namespace = %s").format(
-            sql.Identifier(table)
-        )
+        query = sql.SQL("SELECT key FROM {} WHERE namespace = %s").format(sql.Identifier(table))
         rows = conn.execute(query, (namespace,)).fetchall()
     else:
-        rows = conn.execute(
-            "SELECT key FROM docs WHERE namespace = %s AND tbl = %s", (namespace, table)
-        ).fetchall()
+        rows = conn.execute("SELECT key FROM docs WHERE namespace = %s AND tbl = %s", (namespace, table)).fetchall()
     return {row[0] for row in rows}
 
 
-def backfill_table(
-    dual: DualStore, client: Any, table: str, *, apply: bool, page_size: int = PAGE_SIZE
-) -> TableReport:
+def backfill_table(dual: DualStore, client: Any, table: str, *, apply: bool, page_size: int = PAGE_SIZE) -> TableReport:
     if table not in MIRRORED_TABLES:
         raise ValueError(f"{table} is not a mirrored batch table")
     shadow, namespace = dual.shadow, dual.shadow.namespace
@@ -91,9 +83,7 @@ def backfill_table(
                 key = snapshot.id
                 seen.add(key)
                 report.firestore += 1
-                outcome = compare(
-                    snapshot.to_dict() or {}, shadow.read_doc(conn, table, key)
-                )
+                outcome = compare(snapshot.to_dict() or {}, shadow.read_doc(conn, table, key))
                 if outcome is ShadowParityOutcome.MATCH:
                     report.match += 1
                     continue
@@ -109,9 +99,7 @@ def backfill_table(
                     with conn.transaction():
                         dual.copy_current(conn, sorted(stale), reader=read_current)
                 report.copied += len(stale)
-            except (
-                Exception
-            ) as exc:  # counted per page; the rerun picks the page up again
+            except Exception as exc:  # counted per page; the rerun picks the page up again
                 report.copy_errors += len(stale)
                 logger.warning(
                     "event=jobstore_backfill outcome=copy_error table=%s error=%s",
@@ -131,9 +119,4 @@ def backfill(
     apply: bool,
     page_size: int = PAGE_SIZE,
 ) -> dict[str, dict]:
-    return {
-        table: asdict(
-            backfill_table(dual, client, table, apply=apply, page_size=page_size)
-        )
-        for table in tables
-    }
+    return {table: asdict(backfill_table(dual, client, table, apply=apply, page_size=page_size)) for table in tables}
