@@ -171,8 +171,6 @@ exception is recorded for David.
 - `clients_from_segments_chunks` — review_by 2026-10-26 (dazheng)
 - `clients_refactor` — review_by 2026-10-26 (dazheng)
 - `custody_capture_committed_release` — review_by 2026-10-26 (dazheng)
-- `screen_activity_lossless_sync` — review_by 2026-10-22 (dazheng)
-- `screen_activity_lossless_sync_kill` — review_by 2026-10-22 (dazheng)
 
 ## Flags
 
@@ -430,8 +428,8 @@ and an explicit empty literal renders as `''`.
 | `mobile-session-replay` | Mobile PostHog session replay, unmasked (frames show the screen as the user sees it); client-evaluated, default off. Never records with product analytics off, in App Review (subscription UI hidden; sandbox-receipt installs wait for that answer) or in the background | mobile | posthog | closed | — | — | — | absent (enable) | pending | undecided | 2026-11-25 | nik |
 | `onboarding-setup-rating-prompt` | Mobile onboarding Setting up your Omi page with the store-rating pre-prompt before the completion screen; client-evaluated, default off so the flow is unchanged and store review never sees it | mobile | posthog | closed | — | — | — | expected (enable) | pending | undecided | 2026-11-05 | nik |
 | `proactivity_v2` | Server v2 proactivity admission; absent or unknown denies | backend, llm-gateway | posthog | closed | — | — | — | expected (enable) | pending | undecided | 2026-11-03 | dazheng |
-| `screen_activity_lossless_sync` | Enable lossless screen sync on stable | macos | posthog | closed | — | — | — | absent (enable) | pending | on | 2026-10-22 | dazheng |
-| `screen_activity_lossless_sync_kill` | Beta lossless screen sync stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | on | 2026-10-22 | dazheng |
+| `screen_activity_lossless_sync` | Enable lossless screen sync on stable | macos | posthog | closed | — | — | — | absent (enable) | pending | on | 2026-11-06 | dazheng |
+| `screen_activity_lossless_sync_kill` | Beta lossless screen sync stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | on | 2026-11-06 | dazheng |
 | `summary-generation-v2` | Mobile conversation-detail summary redesign: Not summarized yet card, Summarize with template sheet, summary source chips and inline failure cards; client-evaluated, default off; reliability fixes and the single in-tab progress state ship without it | mobile | posthog | closed | — | — | — | absent (enable) | pending | undecided | 2026-11-04 | dazheng |
 | `web-contextual-upsells` | Web 80% budget nudge and exhausted-budget entry to the plans sheet (trigger=usage_budget); default off; requires web-plan-storefront | web-app | posthog | closed | — | — | — | absent (enable) | pending | undecided | 2026-11-13 | dazheng |
 | `web-plan-storefront` | Web backend-driven ladder-v1 plans sheet in Settings > Plan; default off; existing checkout and upgrade rails unchanged | web-app | posthog | closed | — | — | — | absent (enable) | pending | undecided | 2026-11-13 | dazheng |
