@@ -1093,6 +1093,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
             else ('ready', None)
         )
         processing_hold.record(outcome)
+        context['hold_outcome'] = outcome
         if due is not None:
             context.update(defer_reason=outcome, defer_until=due)
             return
@@ -1150,6 +1151,13 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     ):
         # Preserve the smart-merge refresh lease/checkpoints and its vector work.
         settle_survivor(uid, conversation_id, owner=context['owner'])
+        if context.get('hold_budget_denied_at_max'):
+            if not conversations_db.complete_sync_processing_hold(
+                uid, conversation_id, conversation_data.get('sync_content_revision'), None
+            ):
+                raise SyncConversationPersistenceFenced('hold completion snapshot changed')
+            context['hold_skipped'] = True
+            return
         refreshed = conversations_db.get_conversation(uid, conversation_id)
         if (
             refreshed
@@ -1202,6 +1210,14 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
             return
         canonical = conversations_db.get_sync_redirected_conversation(uid, conversation_id)
         return deserialize_conversation(canonical) if canonical else None
+
+    if context is not None and context.get('hold_budget_denied_at_max'):
+        if not conversations_db.complete_sync_processing_hold(
+            uid, conversation_id, conversation_data.get('sync_content_revision'), None
+        ):
+            raise SyncConversationPersistenceFenced('hold completion snapshot changed')
+        context['hold_skipped'] = True
+        return None
 
     if (
         context is not None
