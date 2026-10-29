@@ -174,4 +174,51 @@ void main() {
     );
     expect(await adapter.reloadFeatureFlags(), isFalse);
   });
+
+  group('Omi flag store answers ahead of PostHog for the keys it owns', () {
+    PostHogAnalyticsAdapter omiAdapter(Future<Map<String, OmiFlag>?> Function() omiFlags) => PostHogAnalyticsAdapter(
+          apiKey: 'phc_test',
+          host: 'https://ph.test',
+          client: _answering({
+            'featureFlags': {'screen-kill': true, 'paywall-variant': 'outline', 'posthog-only': true},
+          }),
+          distinctIdReader: () async => 'u',
+          omiFlags: omiFlags,
+        );
+
+    test('owned keys use the Omi answer, unowned keys keep PostHog', () async {
+      final adapter = omiAdapter(() async => {
+            'screen-kill': (enabled: false, variant: null, payloadJson: null),
+            'chat-apps': (enabled: true, variant: null, payloadJson: '{"apps": ["a"]}'),
+          });
+      expect(await adapter.reloadFeatureFlags(), isTrue);
+      expect(await adapter.isBooleanFeatureEnabled('screen-kill'), isFalse);
+      expect(adapter.isBooleanFeatureEnabledCached('screen-kill'), isFalse);
+      expect(await adapter.resolvedFeatureEnabled('screen-kill'), isFalse);
+      expect(await adapter.getFeatureFlagPayload('chat-apps'), {
+        'apps': ['a']
+      });
+      expect(await adapter.isFeatureEnabled('posthog-only'), isTrue);
+      expect(await adapter.getFeatureFlagVariant('paywall-variant'), 'outline');
+    });
+
+    test('variants and payloads follow PostHog semantics', () async {
+      final adapter = omiAdapter(() async => {
+            'on': (enabled: true, variant: 'b', payloadJson: '1'),
+            'off': (enabled: false, variant: 'b', payloadJson: '1'),
+          });
+      await adapter.reloadFeatureFlags();
+      expect(await adapter.getFeatureFlagVariant('on'), 'b');
+      expect(await adapter.isBooleanFeatureEnabled('on'), isFalse);
+      expect(await adapter.isFeatureEnabled('on'), isTrue);
+      expect(await adapter.getFeatureFlagVariant('off'), isNull);
+      expect(await adapter.getFeatureFlagPayload('off'), isNull);
+    });
+
+    test('a failed Omi fetch leaves every key on PostHog', () async {
+      final adapter = omiAdapter(() async => null);
+      expect(await adapter.reloadFeatureFlags(), isTrue);
+      expect(await adapter.isBooleanFeatureEnabled('screen-kill'), isTrue);
+    });
+  });
 }

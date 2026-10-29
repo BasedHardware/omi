@@ -597,6 +597,10 @@ SCHEMA_GROUPS = {
             'MemoryRevertRequest',
         ),
     },
+    'flags': {
+        'output': DEFAULT_OUTPUT_DIR / 'flags_wire.g.dart',
+        'schemas': ('ClientFlag', 'ClientFlagsResponse'),
+    },
     'goals': {
         'output': DEFAULT_OUTPUT_DIR / 'goals_wire.g.dart',
         'schemas': (

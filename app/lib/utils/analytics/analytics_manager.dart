@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import 'package:omi/backend/http/api/flags.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -243,6 +244,13 @@ class AnalyticsManager {
       _adapter = PostHogAnalyticsAdapter(
         apiKey: Env.posthogApiKey!,
         personPropertiesForFlags: () => {'\$email': _preferences.email},
+        omiFlags: () async {
+          final flags = await getOmiClientFlags();
+          if (flags == null) return null;
+          return {
+            for (final f in flags) f.key: (enabled: f.enabled, variant: f.variant, payloadJson: f.payloadJson),
+          };
+        },
       );
     }
     final adapter = _adapter;
