@@ -64,7 +64,7 @@ def projection_claim(namespace: str, hashed_owner: str, *, monotonic: Callable[[
     finally:
         if acquired:
             try:
-                client.eval(_RELEASE_LUA, 1, key, token)
+                client.execute_command('EVAL', _RELEASE_LUA, 1, key, token)
             except Exception as error:
                 logger.warning(
                     'event=batch_projection action=release outcome=unavailable exception_type=%s', type(error).__name__
