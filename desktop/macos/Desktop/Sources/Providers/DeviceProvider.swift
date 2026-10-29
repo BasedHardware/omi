@@ -511,17 +511,26 @@ final class DeviceProvider: ObservableObject {
     guard sessionCoordinator.isReady(generation: generation) else { return }
     guard let device = connectedDevice else { return }
 
-    // TODO: Implement firmware update check via API
-    // For now, just log that we would check
-    logger.debug("Would check firmware updates for \(device.displayName)")
+    logger.debug("Checking firmware updates for \(device.displayName)")
 
-    // Example implementation:
-    // let (hasUpdate, version) = await APIClient.shared.checkFirmwareUpdate(
-    //     modelNumber: device.modelNumber,
-    //     currentFirmware: device.firmwareRevision
-    // )
-    // hasFirmwareUpdate = hasUpdate
-    // latestFirmwareVersion = version
+    do {
+      let response = try await APIClient.shared.checkFirmwareUpdate(
+        modelNumber: device.modelNumber ?? "unknown",
+        currentFirmware: device.firmwareRevision ?? "0.0.0",
+        hardwareRevision: device.hardwareRevision ?? "unknown",
+        manufacturerName: device.manufacturerName ?? "unknown"
+      )
+
+      if let version = response.version, !version.isEmpty, version != (device.firmwareRevision ?? "") {
+        hasFirmwareUpdate = true
+        latestFirmwareVersion = version
+      } else {
+        hasFirmwareUpdate = false
+        latestFirmwareVersion = ""
+      }
+    } catch {
+      logger.error("Failed to check firmware updates: \(error.localizedDescription)")
+    }
   }
 
   /// Set firmware update in progress state
