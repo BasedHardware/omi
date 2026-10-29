@@ -6271,8 +6271,12 @@ available for multilingual recovery, never permission for fixed-language STT.
 
 `BATCH_PIPELINE_LIVE_ADMISSION_ENABLED=false` is the sole new producer control.
 When true, retained server-STT captures use the existing
-`BATCH_PIPELINE_ENABLED` master switch, `BATCH_PIPELINE_PERCENT` hash ramp and
-private Firestore `batch-pipeline` cohort. New in-progress rows
+`BATCH_PIPELINE_ENABLED` master switch, runtime `rollout_cohorts/_ramp`
+`batch-pipeline` hash percentage and
+private Firestore `batch-pipeline` cohort. The env percentage remains a fallback;
+deploys omit it and admission warmup reads remote config before snapshotting.
+See [runtime ramp migration and rollback](runbooks/batch-runtime-ramp.md).
+New in-progress rows
 reserve `record_lane_owner=batch_live_v1` in their existing create write. Captures
 already in progress at enablement reserve the same owner from the finalizer's
 already-loaded revision using a conditional write, with zero extra reads on a

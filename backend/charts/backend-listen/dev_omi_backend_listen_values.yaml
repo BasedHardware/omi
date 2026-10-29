@@ -134,8 +134,6 @@ env:
     value: "false"
   - name: BATCH_LIVE_STT_RETIRE_PERCENT
     value: "0"
-  - name: BATCH_PIPELINE_PERCENT
-    value: "0"
   - name: BATCH_PIPELINE_SERVING_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_WORKER_ENABLED
