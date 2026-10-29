@@ -6,6 +6,7 @@ from contextlib import nullcontext
 from datetime import datetime, timezone
 import hashlib
 import json
+import logging
 from pathlib import Path
 import struct
 import threading
@@ -1069,7 +1070,15 @@ def test_persisted_fingerprinted_audio_file_survives_precise_source_aliases(remo
     accepted = b'\x09\x00' * 16000
     _legacy_chunk(remote, 1000.00025, accepted, is_batch=is_batch)
     invalidate_pack_index(remote, 'owner', 'conversation')
-    old_file = pusher.conversations_db.create_audio_files_from_chunks('owner', 'conversation')[0].model_dump()
+    # Explicitly construct the historical filename-clock stamp. New identity
+    # listings stay on the sample clock even before any raw fragment exists.
+    legacy_sources = [
+        {**chunk, 'timestamp': chunk.get('legacy_timestamp', chunk['timestamp'])}
+        for chunk in storage.list_audio_chunks('owner', 'conversation', source_identity=True)
+    ]
+    old_file = pusher.conversations_db._finalize_audio_file_group(
+        'owner', 'conversation', legacy_sources, []
+    ).model_dump()
     assert old_file['chunk_timestamps'] == [1000] and old_file['source_fingerprint']
     count = round((1000.00025 - raw_start) * 16000)
     prefix = b'\x01\x00' * count
@@ -1342,7 +1351,7 @@ async def test_conflict_projection_failure_never_retries_and_withholds_close(rem
 
 
 @pytest.mark.asyncio
-async def test_transient_projection_failure_drops_after_the_retry_budget(remote, monkeypatch):
+async def test_transient_projection_failure_drops_after_the_retry_budget(remote, monkeypatch, caplog):
     pcm = struct.pack('<160h', *range(160))
     attempts = {'upload': 0}
     release = asyncio.Event()
@@ -1368,21 +1377,30 @@ async def test_transient_projection_failure_drops_after_the_retry_budget(remote,
         return await real_receive()
 
     monkeypatch.setattr(sock, 'receive_bytes', hold_socket_open)
-    task = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
-    try:
-        for _ in range(4000):  # <= ~20 s at the 5 ms poll cadence
-            if attempts['upload'] >= 1 + pusher.PROJECTION_RETRY_BUDGET:
-                break
-            await asyncio.sleep(0.005)
-        assert (
-            attempts['upload'] == 1 + pusher.PROJECTION_RETRY_BUDGET
-        ), 'the budget must requeue exactly PROJECTION_RETRY_BUDGET times while the session is live'
-    finally:
-        release.set()
-    await task
+    with caplog.at_level(logging.WARNING, logger='routers.pusher'):
+        task = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
+        try:
+            for _ in range(4000):  # <= ~20 s at the 5 ms poll cadence
+                if attempts['upload'] >= 1 + pusher.PROJECTION_RETRY_BUDGET:
+                    break
+                await asyncio.sleep(0.005)
+            assert (
+                attempts['upload'] == 1 + pusher.PROJECTION_RETRY_BUDGET
+            ), 'the budget must requeue exactly PROJECTION_RETRY_BUDGET times while the session is live'
+        finally:
+            release.set()
+        await task
     assert failures == [('projection', 'transient')], 'exactly one drop after the bounded budget'
     assert seal.call_count == 0, 'an exhausted projection still withholds the record close'
     assert [read_pcm('owner', receipt) for receipt in _sent_receipts(sock)] == [pcm]
+    class_lines = [
+        record.getMessage()
+        for record in caplog.records
+        if record.getMessage().startswith('Durable audio projection failure class:')
+    ]
+    assert class_lines == ['Durable audio projection failure class: OSError'] * (
+        1 + pusher.PROJECTION_RETRY_BUDGET
+    ), 'every failed attempt logs the exception class name, never the message'
 
 
 def test_custody_failure_reason_label_is_a_bounded_vocabulary():

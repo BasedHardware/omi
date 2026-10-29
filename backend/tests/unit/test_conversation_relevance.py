@@ -76,12 +76,15 @@ def test_only_user_actions_skip_assessment():
     # would spend the finalization and drop the only recovered copy. SMART_MERGE
     # refreshes a survivor whose fragments were each already assessed and kept.
     # BACKLOG_CHOICE carries an explicit user/upgrade choice to process a
-    # retained recording.
+    # retained recording. CAPTURE_GROUP regenerates a primary whose transcript
+    # is unchanged — only confirmed same-event meeting context is new — so
+    # grouping must never re-judge (and possibly hide) the rendered row.
     assert keep == {
         ProcessingTrigger.FIRST_OPEN,
         ProcessingTrigger.USER_REPROCESS,
         ProcessingTrigger.MERGE,
         ProcessingTrigger.SMART_MERGE,
+        ProcessingTrigger.CAPTURE_GROUP,
         ProcessingTrigger.SERVER_RECOVERY,
         ProcessingTrigger.BACKLOG_CHOICE,
         ProcessingTrigger.SILENT_BACKFILL,

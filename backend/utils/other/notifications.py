@@ -14,6 +14,7 @@ from uuid import uuid4
 import pytz
 
 import database.conversations as conversations_db
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from database.durable_queue import ProcessOutcome, drain_isolated_async
 import database.notifications as notification_db
 import database.redis_db as redis_db
@@ -198,10 +199,11 @@ def _legacy_generate_and_store_daily_summary(
     pressed on — press it at 21:30 on a quiet day and the 22:00 cron tick lost the lock and
     the day never got a recap at all.
     """
-    from utils.other.daily_recap import delivery_allowed, finish_legacy_stub
-
     if not generated_compute_allowed(uid, 'daily_summary'):
         return None, False, 'usage_budget_exhausted'
+
+    from utils.other.daily_recap import delivery_allowed, finish_legacy_stub
+
     if not try_acquire_daily_summary_lock(uid, date_str):
         return None, False, _DECLINE_LOCKED
 
@@ -1115,6 +1117,9 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> Optional[Tuple[str
     ):
         return
     uid = user_data[0]
+    if account_deletion_blocks_user_work(str(uid)):
+        logger.info('daily_summary_skipped reason=account_deletion')
+        return None
     user_tz_name = user_data[2] if len(user_data) > 2 else None
 
     # NOTE: The daily recap is a cross-platform feature delivered by a

@@ -726,6 +726,24 @@ class SharedPreferencesUtil {
 
   set autoSyncOfflineRecordings(bool value) => saveBool('autoSyncOfflineRecordings', value);
 
+  // Whether the sync health watchdog may raise stall alerts (#15501).
+  // Defaults to true (kill switch): silent multi-day loss is the failure it exists for.
+  bool get syncAlertsEnabled => getBool('syncAlertsEnabled', defaultValue: true);
+
+  set syncAlertsEnabled(bool value) => saveBool('syncAlertsEnabled', value);
+
+  // Milliseconds epoch of the last observed sync activity (BLE audio, batch
+  // finalized, WAL accepted, pendant connect). 0 = never seen; the watchdog
+  // seeds it on first evaluation.
+  int get lastSyncTimestamp => getInt('lastSyncTimestamp', defaultValue: 0);
+
+  set lastSyncTimestamp(int value) => saveInt('lastSyncTimestamp', value);
+
+  // Milliseconds epoch of the last dispatched sync stall alert, for the daily cooldown.
+  int get lastSyncAlertTimestamp => getInt('lastSyncAlertTimestamp', defaultValue: 0);
+
+  set lastSyncAlertTimestamp(int value) => saveInt('lastSyncAlertTimestamp', value);
+
   // Per-provider config storage
   CustomSttConfig? getConfigForProvider(SttProvider provider) {
     final json = getString('sttConfig_${provider.name}');
@@ -1011,6 +1029,11 @@ class SharedPreferencesUtil {
 
   set discardedOnlyExplained(bool value) => saveBool('discardedOnlyExplained', value);
 
+  /// When Home last showed the switch-to-yearly row (ms since epoch); it shows at most every 30 days.
+  int get yearlySwitchHomeShownAt => getInt('yearlySwitchHomeShownAt');
+
+  set yearlySwitchHomeShownAt(int value) => saveInt('yearlySwitchHomeShownAt', value);
+
   // Show short conversations - default is false (hidden)
   bool get showShortConversations => getBool('showShortConversations', defaultValue: false);
 
@@ -1122,6 +1145,12 @@ class SharedPreferencesUtil {
   String get selectedChatAppId => getString('selectedChatAppId2', defaultValue: 'no_selected');
 
   set selectedChatAppId(String value) => saveString('selectedChatAppId2', value);
+
+  /// Composer text kept across app close/kill. Cleared only after a send is
+  /// accepted, so a failed or interrupted send still restores on reopen.
+  String get chatMessageDraft => getString('chatMessageDraft', defaultValue: '');
+
+  set chatMessageDraft(String value) => saveString('chatMessageDraft', value);
 
   String get lastUsedSummarizationAppId => getString('lastUsedSummarizationAppId');
 

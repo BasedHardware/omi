@@ -82,6 +82,18 @@ def test_entirely_covered_upload_reports_repeat_only():
     assert kept == [] and report['repeat_only'] is True
 
 
+@pytest.mark.parametrize('start,end', [(0, 0), (2, 1), (0, float('nan')), (0, float('inf')), (0, 86401)])
+def test_append_duration_does_not_certify_invalid_or_clamped_timing(start, end):
+    segment = dict(start=start, end=end, timestamp=1000)
+    assert live_speech_dedupe.measured_speech_seconds([segment]) is None
+
+
+def test_append_duration_sums_sources_without_clamping_or_unioning():
+    segments = [dict(start=0, end=3, timestamp=1000), dict(start=1, end=5, timestamp=1001)]
+    assert live_speech_dedupe.measured_speech_seconds(segments) == 7
+    assert live_speech_dedupe.measured_speech_seconds([]) == 0
+
+
 def test_unproven_identical_and_reworded_second_utterance_is_kept():
     """Without independent capture proof the same words are legitimate repetition."""
     incoming_segments = [incoming(LIVE[0], 40.0), incoming(reworded(LIVE[1]), 50.0)]

@@ -532,3 +532,8 @@ tests/unit/test_episodes_service.py::test_fifty_thousand_unplaced_segments_keep_
 tests/unit/test_payment_declined_proration.py::test_declined_proration_card_error_returns_402_and_preserves_paid_plan
 tests/unit/test_payment_declined_proration.py::test_declined_proration_past_due_snapshot_returns_402_and_never_projects_basic
 tests/unit/test_payment_declined_proration.py::test_cross_plan_upgrade_passes_error_if_incomplete_to_stripe_modify
+# Imports the owner-chain ResultLog harness (serving/scheduler graph) to mirror
+# ProjectionSession.persist's redriven-watermark guard; measured 1.65s CPU on a
+# loaded local shard (2026-10-29) against the 1.00s guard; import-amortized
+# boundary shape as the entries above, assertions all pass.
+tests/unit/test_batch_pipeline_projection_release.py::test_redriven_reassignment_does_not_regress_the_watermark

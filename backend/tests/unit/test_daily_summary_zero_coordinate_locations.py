@@ -30,6 +30,7 @@ import pytz  # noqa: F401  (real dependency used by the module under test)
 import pytest
 
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
+from utils.llm import output_language as output_language_module
 
 _BACKEND = Path(__file__).resolve().parents[2]
 
@@ -73,6 +74,7 @@ def ext():
     fakes = {
         "utils": _real_pkg("utils", "utils"),
         "utils.llm": _real_pkg("utils", "llm"),
+        "utils.llm.output_language": output_language_module,
         "utils.llms": _real_pkg("utils", "llms"),
         "utils.observability": _real_pkg("utils.observability", "utils", "observability"),
         "utils.conversations": _real_pkg("utils.conversations", "utils", "conversations"),

@@ -16,6 +16,7 @@ def _segment(segment_id: str, text: str, start: float, end: float) -> Transcript
         text=text,
         speaker='SPEAKER_00',
         is_user=True,
+        speaker_match_source='conversation_voice',
         start=start,
         end=end,
     )

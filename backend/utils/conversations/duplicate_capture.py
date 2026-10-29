@@ -6,9 +6,11 @@ windows are primary; equal windows use the document ID for stable ordering.
 
 A window match is only a proposal. When both captures also share speech
 (``shared_speech``), they join one capture group (``database.capture_groups``),
-which records their shared event identity. Grouping is metadata only.
-The default-off desktop-call path accepts complementary speech under its
-meeting-role and window contract, and pins the desktop primary.
+which records their shared event identity. Grouping is metadata only. The
+former default-off desktop-call link that pinned the desktop primary was
+removed with the 2026-10-18 flag rulings (#22209); meeting identity now reaches
+the primary's notes through the members' calendar context and screen frames
+(``utils/conversations/capture_group_notes_refresh.py``).
 """
 
 from __future__ import annotations

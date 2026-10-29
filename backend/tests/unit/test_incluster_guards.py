@@ -751,7 +751,9 @@ def test_floor_schedule_renders_into_script_configmap_only_when_enabled():
         for obj in render_docs('prod')
         if obj['kind'] == 'ConfigMap' and obj['metadata']['name'] == 'prod-omi-incluster-guards-script'
     )
-    assert json.loads(prod['data']['floors.json']) == guard_yaml_hours()
+    # The production override must survive rendering: the hourly writer would
+    # otherwise restore the inherited 8..12 floor after a floor-only HPA apply.
+    assert json.loads(prod['data']['floors.json']) == [4] * 24
     default = next(
         obj
         for obj in render_docs('prod', overlay=False)
@@ -762,10 +764,6 @@ def test_floor_schedule_renders_into_script_configmap_only_when_enabled():
         render_docs('prod', '--set', 'floorSchedule.hours={1,2}')
     kinds = {(doc['kind'], doc['metadata']['name']) for doc in render_docs('prod')}
     assert not any(name.endswith('-floor') for _, name in kinds)
-
-
-def guard_yaml_hours():
-    return yaml.safe_load((CHART / 'values.yaml').read_text())['floorSchedule']['hours']
 
 
 def render(environment='prod', *extra):
@@ -1326,12 +1324,10 @@ def test_invalid_percent_refuses(bad):
     [
         'proven_terminal_loss_speech_seconds',
         'proven_failed_held_speech_seconds',
-        'since_t0_projection_obligations_over_15m',
-        'since_t0_stuck_jobs_over_30m',
         'custody',
     ],
 )
-def test_p90_three_trip_classes_only_after_full_new_window(field):
+def test_only_custody_and_proven_lost_speech_trip_after_full_new_window(field):
     data = sample()
     if field == 'custody':
         data['custody']['missing'] = 1
@@ -1341,6 +1337,47 @@ def test_p90_three_trip_classes_only_after_full_new_window(field):
     data['observed_at'] = data['read_completed_at'] = 1799
     assert batch.decision(data, 'id', 0, 1799)[0] == 'WARMUP'
     assert batch.decision(data, 'id', 0, 1800)[0] == 'TRIP'
+
+
+@pytest.mark.parametrize(
+    'field,reason',
+    [
+        ('since_t0_projection_obligations_over_15m', 'projection_wedge'),
+        ('since_t0_stuck_jobs_over_30m', 'stuck_jobs'),
+    ],
+)
+@pytest.mark.parametrize('value', [1, None, float('nan'), -1, True])
+def test_wedge_and_stuck_age_are_alert_only(field, reason, value):
+    data = sample()
+    data[field] = value
+    assert batch.decision(data, 'id', 0, 1800) == ('CLEAN', [])
+    assert any(alert.startswith(reason) for alert in batch.soft_alerts(data))
+    data['custody']['missing'] = 1
+    assert batch.decision(data, 'id', 0, 1800) == ('TRIP', ['custody_missing'])
+
+
+def test_soft_only_signal_never_creates_rollback_intent_or_cloud_write(tmp_path, monkeypatch):
+    cloud, kube, path = prepare(tmp_path, monkeypatch)
+    data = sample(kube.state['identity'])
+    data['since_t0_projection_obligations_over_15m'] = 10
+    data['since_t0_stuck_jobs_over_30m'] = 10
+    path.write_text(json.dumps(data))
+    assert batch.run(kube, cloud, path, now=1800) == 0
+    assert not cloud.writes
+    assert 'pending' not in kube.state
+
+
+@pytest.mark.parametrize('old_reasons', [None, ['projection_wedge'], ['stuck_jobs']])
+def test_pre_policy_pending_intent_cannot_resume_a_soft_rollback(tmp_path, monkeypatch, old_reasons):
+    cloud, kube, path = prepare(tmp_path, monkeypatch)
+    state = kube.state
+    state['pending'] = {key: dict(pin, candidate=key + '-old-intent') for key, pin in batch.snapshot(cloud).items()}
+    if old_reasons is not None:
+        state['pending_reasons'] = old_reasons
+    kube.cm['data']['state'] = json.dumps(state)
+    assert batch.run(kube, cloud, path, now=1800) == 1
+    assert not cloud.writes
+    assert kube.state == state  # Preserve the intent for lead reconciliation.
 
 
 @pytest.mark.parametrize('bad', [None, float('nan'), -1, True])

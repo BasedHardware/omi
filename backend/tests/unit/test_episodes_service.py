@@ -11,9 +11,11 @@ from config import episodes as config
 from database import episode_receipts
 from database import conversations as conversations_db
 from database import episodes as episodes_db
+from database import users as users_db
 from models.episode import Episode
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
-from utils.episodes import service
+from utils.episodes import incremental, service
+from utils.episodes.moment import MomentFragment
 from utils.episodes.service import Collaborators, MomentInput
 
 UID = 'uid-episodes'
@@ -24,6 +26,10 @@ T0 = datetime(2026, 10, 20, 10, 0, tzinfo=timezone.utc)
 def _enabled(monkeypatch):
     monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
     monkeypatch.delenv(config.EPISODES_PERCENT_ENV, raising=False)
+    monkeypatch.delenv(config.EPISODE_HARD_CAP_ACROSS_CONVERSATIONS_ENV, raising=False)
+    monkeypatch.delenv(config.EPISODE_CARRY_ON_SESSION_END_ENV, raising=False)
+    monkeypatch.delenv(config.EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV, raising=False)
+    monkeypatch.setenv(config.EPISODE_OUTPUT_LANGUAGE_PIN_ENV, 'on')
     monkeypatch.setenv('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
     # These tests exercise a user whose app shows episodes (test_episodes_client_gate covers the marker).
     monkeypatch.setattr(service.client_gate, 'client_seen', lambda uid: True)
@@ -736,6 +742,33 @@ def test_a_client_finalize_closes_the_live_episode_at_once_and_is_idempotent():
     assert [i['status'] for i in final['provisional_items']] == ['dropped']
 
 
+@pytest.mark.parametrize('close_via', ['client_finalize', 'wrap_up'])
+def test_explicit_finalize_and_wrap_up_flush_the_pending_live_moment(monkeypatch, close_via):
+    from utils.episodes.live import tracker
+
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Final group decision', 'bullets': ['They set a new review time']})
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    assert service.attach_conversation(UID, 'c1', 'omi', started_at=T0, collaborators=c) == 'opened'
+    pending = _moment('c1', minutes=1, trigger='finalize')
+    monkeypatch.setattr(tracker, 'flush', lambda _uid, *_a, **_kw: pending)
+
+    if close_via == 'client_finalize':
+        outcome = service.close_on_finalize(UID, 'c1', trigger='client_finalize', collaborators=c)
+        assert outcome == 'closed'
+        episode = episodes_db.get_episode_for_conversation(UID, 'c1', firestore_client=store)
+    else:
+        episode = episodes_db.get_current_episode(UID, firestore_client=store)
+        closed = service.wrap_up(UID, episode['id'], conversation_id='c1', collaborators=c)
+        assert closed['status'] == 'closed'
+        episode = closed
+
+    assert episode['status'] == 'closed'
+    assert episode['title'] == 'Final group decision'
+    assert episode['bullets'] == ['They set a new review time']
+    assert len(model.calls) == 1
+
+
 def test_an_ended_conversation_never_reopens_its_episode_and_the_next_words_open_a_new_one():
     store = StrictFirestore()
     model = FakeModel({'title': 'Lunch', 'bullets': ['A']}, {'title': 'Standup', 'bullets': ['S']})
@@ -934,6 +967,233 @@ def _attach(store, conversation_id, *, minutes, source='omi', now_minutes=None):
     return service.attach_conversation(
         UID, conversation_id, source, started_at=T0 + timedelta(minutes=minutes), collaborators=c
     )
+
+
+def test_hard_cap_rotates_a_multi_conversation_episode_when_a_member_keeps_talking():
+    store = StrictFirestore()
+    model = FakeModel(
+        {'title': 'First stretch', 'bullets': ['Notes before the cap']},
+        {'title': 'Next stretch', 'bullets': ['New speech after the cap']},
+    )
+    c = _collaborators(model, now=T0 + timedelta(minutes=1), store=store)
+    assert service.record_moment(UID, _moment('c1'), c) == 'applied'
+    c.now = lambda: T0 + timedelta(minutes=1, seconds=30)
+    assert (
+        service.attach_conversation(UID, 'c2', 'omi', started_at=T0 + timedelta(minutes=1, seconds=30), collaborators=c)
+        == 'joined'
+    )
+    old = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert old['conversation_ids'] == ['c1', 'c2']
+
+    after_cap = T0 + timedelta(seconds=config.MAX_EPISODE_SECONDS)
+    c.now = lambda: after_cap + timedelta(minutes=1)
+    post_cap = _moment(
+        'c2',
+        minutes=180,
+        trigger='interval',
+        text=(
+            'After the cap, everyone discussed the revised schedule, assigned preparation tasks, '
+            'and agreed to meet again next Wednesday for a quick status review before wrapping up the topic'
+        ),
+    )
+    assert service.record_moment(UID, post_cap, c) == 'applied'
+    closed = episodes_db.get_episode(UID, old['id'], firestore_client=store)
+    current = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert closed['status'] == 'closed' and closed['close_reason'] == 'hard_cap'
+    assert closed['conversation_ids'] == ['c1', 'c2'] and closed['bullets'] == ['Notes before the cap']
+    assert current['id'] != old['id'] and current['conversation_ids'] == ['c2']
+    assert current['started_at'] == after_cap
+    assert current['title'] == 'Next stretch' and current['usage']['calls'] == 1
+
+
+def test_hard_cap_carries_same_member_provisional_items_until_finalization_reconciles_them():
+    store = StrictFirestore()
+    model = FakeModel(
+        {
+            'title': 'Planning',
+            'bullets': ['Before the cap'],
+            'items': [{'text': 'Book the room for the planning session'}],
+        },
+        {'bullets': ['The group assigned the schedule'], 'items': [{'text': 'Send the revised schedule to the team'}]},
+    )
+    c = _collaborators(model, now=T0 + timedelta(minutes=1), store=store)
+    assert service.record_moment(UID, _moment('c1'), c) == 'applied'
+    c.now = lambda: T0 + timedelta(minutes=2)
+    assert (
+        service.attach_conversation(UID, 'c2', 'omi', started_at=T0 + timedelta(minutes=2), collaborators=c) == 'joined'
+    )
+    c.now = lambda: T0 + timedelta(minutes=3)
+    assert (
+        service.record_moment(
+            UID,
+            _moment(
+                'c2',
+                minutes=2,
+                text=LONG + '. Please send the revised schedule to the team.',
+            ),
+            c,
+        )
+        == 'applied'
+    )
+    original = episodes_db.get_current_episode(UID, firestore_client=store)
+    original_item = next(item for item in original['provisional_items'] if item['conversation_id'] == 'c2')
+    earlier_item = next(item for item in original['provisional_items'] if item['conversation_id'] == 'c1')
+
+    cap_at = T0 + timedelta(seconds=config.MAX_EPISODE_SECONDS)
+    c.now = lambda: cap_at + timedelta(minutes=1)
+    post_cap = _moment('c2', minutes=180, start=360, text='After the cap the team confirmed the revised schedule')
+    assert service.record_moment(UID, post_cap, c) == 'skipped_short'
+    closed = episodes_db.get_episode(UID, original['id'], firestore_client=store)
+    successor = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert closed['close_reason'] == 'hard_cap'
+    assert closed['provisional_items'][0]['id'] == earlier_item['id']
+    assert closed['provisional_items'][0]['status'] == 'provisional'
+    assert successor['started_at'] == cap_at
+    assert successor['bullets'] == ['The group assigned the schedule']
+    assert successor['provisional_items'][0]['id'] == original_item['id']
+    assert successor['provisional_items'][0]['status'] == 'provisional'
+
+    saved = {
+        'c1': [{'id': 'task-c1', 'description': 'Book the room for the planning session'}],
+        'c2': [{'id': 'task-c2', 'description': 'Send the revised schedule to the team'}],
+    }
+    c = _collaborators(model, now=cap_at + timedelta(minutes=2), saved=saved, store=store)
+    finalized = {'id': 'c2', 'source': 'omi', 'started_at': cap_at, 'finished_at': cap_at + timedelta(minutes=1)}
+    assert (
+        service.on_conversation_finalized(UID, 'c2', finalized, trigger='client_finalize', collaborators=c)
+        == 'reconciled'
+    )
+    reconciled = episodes_db.get_episode(UID, successor['id'], firestore_client=store)
+    assert [(item['status'], item['action_item_id']) for item in reconciled['provisional_items']] == [
+        ('kept', 'task-c2')
+    ]
+
+    c = _collaborators(model, now=cap_at + timedelta(minutes=3), saved=saved, store=store)
+    finalized = {'id': 'c1', 'source': 'omi', 'started_at': T0, 'finished_at': cap_at - timedelta(minutes=1)}
+    assert (
+        service.on_conversation_finalized(UID, 'c1', finalized, trigger='client_finalize', collaborators=c)
+        == 'reconciled'
+    )
+    reconciled_old = episodes_db.get_episode(UID, original['id'], firestore_client=store)
+    assert [(item['status'], item['action_item_id']) for item in reconciled_old['provisional_items']] == [
+        ('kept', 'task-c1')
+    ]
+
+
+def test_quality_error_keeps_previous_live_episode_notes():
+    transcript = 'No, do not send us again. Okay, where should I send?'
+    model = FakeModel(
+        {'title': 'Invitation', 'bullets': ['The group reviewed the invitation destination.']},
+        {'title': 'Invitation', 'bullets': [transcript]},
+        {'title': 'Invitation', 'bullets': [transcript]},
+    )
+    store = StrictFirestore()
+    c = _collaborators(model, now=T0 + timedelta(minutes=1), store=store)
+    assert service.record_moment(UID, _moment('c1'), c) == 'applied'
+    before = episodes_db.get_current_episode(UID, firestore_client=store)
+    c.now = lambda: T0 + timedelta(minutes=10)
+    rejected = _moment('c1', minutes=9, trigger='session_end', text=transcript, start=100)
+    assert service.record_moment(UID, rejected, c) == 'quality_error'
+    after = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert after['id'] == before['id']
+    assert after['bullets'] == ['The group reviewed the invitation destination.']
+
+
+def test_quality_error_at_hard_cap_keeps_previous_so_far_in_the_successor():
+    transcript = LONG + '. The group also confirmed the venue and sent an update to everyone.'
+    model = FakeModel(
+        {'title': 'Planning', 'bullets': ['The group reviewed the invitation destination.']},
+        {'title': 'Planning', 'bullets': [transcript]},
+        {'title': 'Planning', 'bullets': [transcript]},
+    )
+    store = StrictFirestore()
+    c = _collaborators(model, now=T0 + timedelta(minutes=1), store=store)
+    assert service.record_moment(UID, _moment('c1'), c) == 'applied'
+    before = episodes_db.get_current_episode(UID, firestore_client=store)
+
+    cap_at = T0 + timedelta(seconds=config.MAX_EPISODE_SECONDS)
+    c.now = lambda: cap_at + timedelta(minutes=1)
+    post_cap = _moment('c1', minutes=180, trigger='interval', start=100, text=transcript)
+    assert service.record_moment(UID, post_cap, c) == 'quality_error'
+    successor = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert successor['id'] != before['id'] and successor['started_at'] == cap_at
+    assert successor['bullets'] == ['The group reviewed the invitation destination.']
+
+
+def test_short_terminal_session_tail_is_written_below_the_live_word_floor():
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Call Maya', 'bullets': ['They will call Maya tomorrow.']})
+    moment = _moment('c-short', trigger='session_end', text='Please call Maya tomorrow')
+    c = _collaborators(model, now=T0 + timedelta(minutes=1), store=store)
+    assert service.record_moment(UID, moment, c) == 'applied'
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['bullets'] == ['They will call Maya tomorrow.']
+    assert len(model.calls) == 1
+
+
+def test_same_episode_moment_applies_carried_speech_with_separate_cursors():
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Follow up', 'bullets': ['The group set a follow up for next week']})
+    c = _collaborators(model, now=T0, store=store)
+    assert service.attach_conversation(UID, 'c1', 'omi', started_at=T0, collaborators=c) == 'opened'
+    joined_at = T0 + timedelta(seconds=30)
+    c.now = lambda: joined_at
+    assert service.attach_conversation(UID, 'c2', 'omi', started_at=joined_at, collaborators=c) == 'joined'
+
+    carried_text = 'Earlier the group asked engineering to draft a migration plan for the next release.'
+    carried = MomentFragment(
+        conversation_id='c1',
+        source='omi',
+        segments=[{'id': 'carried-c1', 'text': carried_text, 'start': 0.0, 'end': 30.0}],
+        started_at=joined_at,
+        ended_at=T0 + timedelta(minutes=1),
+    )
+    current = MomentInput(
+        conversation_id='c2',
+        source='omi',
+        segments=[{'id': 'current-c2', 'text': LONG, 'start': 0.0, 'end': 30.0}],
+        started_at=T0 + timedelta(minutes=1),
+        ended_at=T0 + timedelta(minutes=2),
+        trigger='interval',
+        carried=(carried,),
+        current_started_at=T0 + timedelta(minutes=1),
+        current_ended_at=T0 + timedelta(minutes=2),
+    )
+    c.now = lambda: current.ended_at
+
+    assert service.record_moment(UID, current, c) == 'applied'
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['conversation_ids'] == ['c1', 'c2']
+    assert episode['applied']['c1'] == 30.0 and episode['applied']['c2'] == 30.0
+    prompt = str(model.calls[0])
+    assert carried_text in prompt and LONG in prompt
+    assert service.record_moment(UID, current, c) == 'skipped_applied'
+    assert len(model.calls) == 1
+
+
+def test_quality_retry_is_included_in_episode_model_call_usage():
+    store = StrictFirestore()
+    transcript = (
+        'The team decided to send the migration draft to engineering before Friday morning. '
+        'They will ask legal to review the updated timeline and confirm whether the launch can proceed next month '
+        'without delaying the customer training sessions.'
+    )
+    model = FakeModel(
+        {'title': 'Migration review', 'bullets': [transcript]},
+        {
+            'title': 'Migration review',
+            'bullets': [
+                'Engineering will review the draft while legal checks the timeline before next month customer training.'
+            ],
+        },
+    )
+    c = _collaborators(model, now=T0 + timedelta(minutes=1), store=store)
+
+    assert service.record_moment(UID, _moment(text=transcript), c) == 'applied'
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert len(model.calls) == 2
+    assert 'Quality correction required' in str(model.calls[1])
+    assert episode['usage'] == {'calls': 2, 'input_tokens': 800, 'output_tokens': 240}
 
 
 def test_first_words_open_the_episode_without_a_model_call():
@@ -1751,3 +2011,190 @@ def test_sync_absorb_finalization_applies_only_the_survivors_novel_speech(monkey
     assert len(model.calls) == 2
     newest = model.calls[-1][-1][1].split('Newest moment:\n')[-1]
     assert novel['text'] in newest and LONG not in newest
+
+
+# --------------------------------------------------------------------------- output language
+
+
+def test_english_preference_keeps_english_notes_through_a_vietnamese_moment(monkeypatch):
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Team lunch', 'bullets': ['Lunch at 12:30']})
+    monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_a: 'en')
+    moment = replace(_moment(), language='vi')
+    assert (
+        service.record_moment(UID, moment, _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+        == 'applied'
+    )
+    system, _user = model.calls[0]
+    assert 'in en.' in system[1] and 'language the people speak' not in system[1]
+    assert episodes_db.get_current_episode(UID, firestore_client=store)['output_language'] == 'en'
+
+
+def test_vietnamese_preference_writes_vietnamese_notes(monkeypatch):
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Bữa trưa', 'bullets': ['Ăn trưa lúc 12:30']})
+    monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_a: 'vi')
+    assert (
+        service.record_moment(UID, _moment(), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+        == 'applied'
+    )
+    assert 'in vi.' in model.calls[0][0][1]
+    assert episodes_db.get_current_episode(UID, firestore_client=store)['output_language'] == 'vi'
+
+
+def test_without_a_preference_the_dominant_language_beats_the_moment_language(monkeypatch):
+    store = StrictFirestore()
+    store.rows[('users', UID, 'conversations', 'c1')] = {'language': 'en'}
+    model = FakeModel({'title': 'Team lunch', 'bullets': ['Lunch at 12:30']}, {'bullets': ['The team picked a cafe']})
+    monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_a: '')
+    first = replace(_moment(), language='vi')
+    assert (
+        service.record_moment(UID, first, _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+        == 'applied'
+    )
+    assert 'Write all output in en.' in model.calls[0][0][1]
+    # Each moment can carry a different speech tag; the conversation's dominant
+    # language remains the output authority.
+    later = replace(_moment(minutes=3, start=30.0, text=LONG.upper()), language='vi')
+    assert (
+        service.record_moment(UID, later, _collaborators(model, now=T0 + timedelta(minutes=4), store=store))
+        == 'applied'
+    )
+    assert 'Write all output in en.' in model.calls[1][0][1]
+    assert episodes_db.get_current_episode(UID, firestore_client=store)['output_language'] == 'en'
+
+
+def test_a_multi_capture_uses_the_dominant_language_from_buffered_segments(monkeypatch):
+    store = StrictFirestore()
+    store.rows[('users', UID, 'conversations', 'c1')] = {'language': 'multi'}
+    model = FakeModel({'title': 'Bữa trưa của cả nhóm', 'bullets': ['Đặt bàn ăn trưa cho ngày mai']})
+    monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_a: '')
+    moment = replace(
+        _moment(text='Đây là cuộc trò chuyện dài bằng tiếng Việt về bữa trưa và kế hoạch ngày mai.'),
+        language='multi',
+        segments=[
+            {
+                'id': 'vi-segment',
+                'text': 'Đây là cuộc trò chuyện dài bằng tiếng Việt về bữa trưa và kế hoạch ngày mai.',
+                'language': 'vi',
+                'start': 0,
+                'end': 20,
+            },
+            {
+                'id': 'vi-segment-2',
+                'text': 'Cả nhóm thống nhất địa điểm, thời gian gặp nhau và những việc cần chuẩn bị trước.',
+                'language': 'vi',
+                'start': 20,
+                'end': 40,
+            },
+        ],
+    )
+    assert (
+        service.record_moment(UID, moment, _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+        == 'applied'
+    )
+    assert 'Write all output in vi.' in model.calls[0][0][1]
+    assert episodes_db.get_current_episode(UID, firestore_client=store)['output_language'] == 'vi'
+
+
+def test_wrong_language_output_is_left_unstamped_then_repaired_on_the_next_update(monkeypatch):
+    store = StrictFirestore()
+    model = FakeModel(
+        {'title': 'Trao đổi công việc', 'bullets': ['Hẹn ăn trưa lúc 12:30 và đặt bàn cho nhóm']},
+        {'title': 'Team lunch', 'bullets': ['Book a table for lunch at 12:30']},
+    )
+    monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_a: 'en')
+    assert (
+        service.record_moment(UID, _moment(), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+        == 'applied'
+    )
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode.get('output_language') is None
+
+    second = _moment(minutes=3, start=30.0, text=LONG.upper())
+    assert (
+        service.record_moment(UID, second, _collaborators(model, now=T0 + timedelta(minutes=4), store=store))
+        == 'applied'
+    )
+    assert 'written in vi, not en' in model.calls[1][1][1]
+    assert episodes_db.get_episode(UID, episode['id'], firestore_client=store)['output_language'] == 'en'
+
+
+def test_output_language_firestore_and_preference_reads_are_cached_per_session(monkeypatch):
+    store = StrictFirestore()
+    store.rows[('users', UID, 'conversations', 'c1')] = {'language': 'en'}
+    model = FakeModel(
+        {'title': 'Team lunch', 'bullets': ['Lunch at 12:30 near the office']},
+        {'title': 'Team lunch', 'bullets': ['Book a table for the team lunch']},
+    )
+    language_reads = []
+    preference_reads = []
+    raw_snapshot = conversations_db.get_conversation_raw_snapshot
+    monkeypatch.setattr(
+        conversations_db,
+        'get_conversation_raw_snapshot',
+        lambda *args, **kwargs: (language_reads.append(args[1]), raw_snapshot(*args, **kwargs))[1],
+    )
+    monkeypatch.setattr(
+        users_db,
+        'get_user_language_preference',
+        lambda *_a: (preference_reads.append(UID), 'en')[1],
+    )
+    assert (
+        service.record_moment(UID, _moment(), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+        == 'applied'
+    )
+    assert (
+        service.record_moment(
+            UID,
+            _moment(minutes=3, start=30.0, text=LONG.upper()),
+            _collaborators(model, now=T0 + timedelta(minutes=4), store=store),
+        )
+        == 'applied'
+    )
+    assert language_reads == ['c1']
+    assert preference_reads == [UID]
+
+
+def test_a_legacy_unstamped_vietnamese_state_is_detected_and_repaired(monkeypatch):
+    store = StrictFirestore()
+    model = FakeModel(
+        {'title': 'Bữa trưa', 'bullets': ['Ăn trưa']}, {'title': 'Team lunch', 'bullets': ['Lunch at 12:30']}
+    )
+    monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_a: '')
+    assert (
+        service.record_moment(UID, _moment(), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+        == 'applied'
+    )
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    # The incident's shape: a stored state in Vietnamese that predates the language stamp.
+    episodes_db.update_episode(
+        UID,
+        episode['id'],
+        expected_version=episode['state_version'],
+        updates={
+            'title': 'Trao đổi công việc',
+            'bullets': ['Hẹn ăn trưa lúc 12:30', 'Đặt bàn cho nhóm'],
+            'output_language': None,
+        },
+        firestore_client=store,
+    )
+    monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_a: 'en')
+    second = _moment(minutes=3, start=30.0, text=LONG.upper())
+    assert (
+        service.record_moment(UID, second, _collaborators(model, now=T0 + timedelta(minutes=4), store=store))
+        == 'applied'
+    )
+    assert 'written in vi' in model.calls[1][1][1]
+
+
+def test_the_language_pin_kill_switch_restores_the_legacy_prompt(monkeypatch):
+    store = StrictFirestore()
+    model = FakeModel({'bullets': ['A']})
+    monkeypatch.setenv(config.EPISODE_OUTPUT_LANGUAGE_PIN_ENV, 'off')
+    assert (
+        service.record_moment(UID, _moment(), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+        == 'applied'
+    )
+    assert model.calls[0][0] == ('system', incremental.PROMPT_PREFIX)
+    assert 'output_language' not in episodes_db.get_current_episode(UID, firestore_client=store)

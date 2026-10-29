@@ -249,6 +249,7 @@ def _build_fakes() -> dict[str, ModuleType]:
     add('utils.other.storage', AutoMockModule('utils.other.storage'))
     cloud_tasks = add('utils.cloud_tasks', AutoMockModule('utils.cloud_tasks'))
     cloud_tasks.is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
+    cloud_tasks.is_listen_finalization_dispatch_enabled = MagicMock(return_value=False)
     add('utils.observability.fallback', AutoMockModule('utils.observability.fallback'))
     add('utils.observability.finalization', AutoMockModule('utils.observability.finalization'))
     add('utils.metrics', AutoMockModule('utils.metrics'))

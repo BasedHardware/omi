@@ -26,7 +26,13 @@ def pc(_memory_replace_import_isolation):
 def _segments(owners):
     return [
         TranscriptSegment(
-            text=text, speaker=f'SPEAKER_{index:02}', speaker_id=index, is_user=owner, start=index, end=index + 1
+            text=text,
+            speaker=f'SPEAKER_{index:02}',
+            speaker_id=index,
+            is_user=owner,
+            start=index,
+            end=index + 1,
+            speaker_match_source='conversation_voice' if owner else None,
         )
         for index, (owner, text) in enumerate(zip(owners, ['I will move to Boston.', 'I prefer tea.']))
     ]
@@ -51,7 +57,7 @@ def test_evidence_and_l1_subject_use_full_conversation_clusters(owners, trust, p
             user_name='David',
             segments=segments,
         )
-        expected_user = trust == 'unique_owner' and label != 'speaker_1'
+        expected_user = trust == 'unique_owner' and label == 'speaker_0' and bool(quotes)
         assert (attribution == SubjectAttribution.user) == expected_user
         assert (subject == 'user') == expected_user
     assert infer_subject_from_segments(segments)[1] != SubjectAttribution.user
@@ -78,6 +84,7 @@ def test_all_user_subject_requires_unique_cluster_and_legacy_missing_ids_fail_cl
 def test_untrusted_quote_can_bind_known_contact_but_not_owner(pc):
     segments = _segments((True, True))
     segments[1].person_id = 'sarah'
+    segments[1].is_user = False
     assert pc._l1_candidate_subject(
         source_id='conversation',
         about='user',

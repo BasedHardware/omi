@@ -81,6 +81,19 @@ def test_language_preference_precedes_noisy_conversation_language(monkeypatch, p
     assert output_language.resolve_output_language('synthetic-account', conversation) == expected
 
 
+def test_notes_packet_normalizes_sentinel_output_language(monkeypatch):
+    monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_args: '')
+    packet_data = packet.build_notes_packet(
+        prefix=prefix(),
+        uid='synthetic-account',
+        capture_evidence='synthetic',
+        words=30,
+        inputs=inputs(output_language_code='multi', language_code='vi'),
+    )
+    assert packet_data['output_language'] == 'vi'
+    assert packet_data['response_language'] == 'vi'
+
+
 @pytest.mark.parametrize('mode', ['off', 'shadow', 'typo'])
 def test_nonserving_packet_is_identical_and_shadow_logs_only_counts(monkeypatch, caplog, mode):
     monkeypatch.setenv(packet.FLAG, mode)
@@ -257,7 +270,8 @@ def test_episode_moments_drop_classified_noise_and_use_the_notes_owner_gate(monk
     moment = incremental.render_moment(language['segments'], uid='synthetic-account')
     assert language['segments'][1]['text'] not in moment.text
     messages = incremental.build_messages('{}', moment.text, now=START, tz_name='UTC', output_language='en')
-    assert 'including title and moment_heading, in en' in messages[0][1]
+    assert 'Write all output in en.' in messages[0][1]
+    assert 'Keep names and quoted words verbatim.' in messages[0][1]
     assert 'language the people speak' not in messages[0][1]
 
 
@@ -283,7 +297,7 @@ def test_topic_title_has_resolved_english_instruction_and_no_chinese_noise(monke
         segments=fixture['segments'],
     )
     assert result.title == 'Workshop volunteer schedule'
-    assert prompts[0].startswith('Write the title in en.')
+    assert prompts[0].startswith('Write all output in en.')
     assert fixture['segments'][1]['text'] not in prompts[0]
 
 

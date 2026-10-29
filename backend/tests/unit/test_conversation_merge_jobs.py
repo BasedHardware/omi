@@ -59,6 +59,16 @@ def test_account_or_conversation_deletion_fences_admission(store, account):
     assert row(store, 'a')['status'] == 'completed'
 
 
+def test_restored_account_can_admit_and_claim_conversation_merge(store):
+    client, owner = store
+    client.rows[('account_deletions', owner)] = {'wipe_status': 'cancelled'}
+
+    job = admit(store)
+
+    assert job is not None
+    assert jobs.claim(job['job_id'], firestore_client=client) is not None
+
+
 def test_claim_renew_and_finish_require_current_unexpired_epoch(store, monkeypatch):
     job = admit(store)
     claimed = jobs.claim(job['job_id'], firestore_client=store[0])

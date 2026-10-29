@@ -302,10 +302,14 @@ TranscriptSegment? _topVisibleSegment(WidgetTester tester, List<TranscriptSegmen
 }
 
 /// Platform-channel replies and event-channel emissions settle on the real
-/// async queue, not the fake clock — flush both before asserting.
+/// async queue, not the fake clock — flush both before asserting. The number
+/// of event-loop turns is what flushes the queues; each turn's wait only needs
+/// to yield, since mock channel replies complete on the microtask queue. This
+/// runs ~70 times per suite run, so the per-round delay was most of the wall
+/// time at 30 ms x 6.
 Future<void> _flushPlatform(WidgetTester tester, [int rounds = 6]) async {
   for (var i = 0; i < rounds; i++) {
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 30)));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
     await tester.pump();
   }
 }

@@ -31,7 +31,7 @@ preconditions:
 steps:
   - id: S1
     name: Default-on flag read admits the Jev gate
-    do: "Use an isolated named bundle and synthetic local backend fixtures only. With screen_task_jev_gate absent, unknown, quota-limited or returning an error, analyze a synthetic request screenshot and verify the screen-task gate runs. Set the flag explicitly false and verify the existing 2.5 Flash tool loop runs without a screen-task gate request."
+    do: "Use an isolated named bundle and synthetic local backend fixtures only. With screen_task_jev_gate absent, unknown, quota-limited or returning an error, analyze a synthetic request screenshot and verify the screen-task gate runs. Set the flag explicitly false, relaunch the app (a running client keeps its cached value until the SDK's 30-minute flag reload) and verify the existing 2.5 Flash tool loop runs without a screen-task gate request. Opt out of analytics and verify the gate stops within 55 seconds."
 
   - id: S2
     name: Content admission avoids duplicate requests and rejected pixel uploads

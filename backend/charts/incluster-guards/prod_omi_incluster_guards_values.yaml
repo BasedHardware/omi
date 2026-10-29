@@ -9,3 +9,7 @@ batch:
   gcpServiceAccount: omi-batch-rollback-guard@based-hardware.iam.gserviceaccount.com
 floorSchedule:
   enabled: true
+  # Keep the hourly writer aligned with the benched-live HPA floor until
+  # pkwin2 (#23863) ships; the safety guard can still restore 12 on a trip.
+  # Prior schedule and pool-min rollback: docs/operational/parakeet-benched-floor.md.
+  hours: [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4]

@@ -18,9 +18,13 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from prometheus_client import REGISTRY, Counter, Histogram
+from prometheus_client import REGISTRY, Counter, Histogram, disable_created_metrics
 
 from config.episodes import EST_INPUT_USD_PER_MTOK, EST_OUTPUT_USD_PER_MTOK
+
+# Episode collectors may be imported before the shared backend metrics module
+# in listen/pusher worker startup; keep their exposition contract consistent.
+disable_created_metrics()
 
 
 def _reuse_or_create(factory, name: str, documentation: str, labelnames: list[str], **kwargs):
@@ -43,11 +47,12 @@ MOMENT_OUTCOMES = frozenset(
         'rate_limited',
         'llm_error',
         'parse_error',
+        'quality_error',
         'conflict',
         'error',
     }
 )
-MOMENT_TRIGGERS = frozenset({'pause', 'rollover', 'interval', 'session_end', 'finalize', 'sync_recovery'})
+MOMENT_TRIGGERS = frozenset({'pause', 'rollover', 'interval', 'finalize', 'sync_recovery', 'session_end'})
 # Gated work that never ran: ended moments by trigger, plus conversation attaches.
 SKIP_TRIGGERS = MOMENT_TRIGGERS | {'attach'}
 CLOSE_REASON_LABELS = frozenset(

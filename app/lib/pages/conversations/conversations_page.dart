@@ -37,10 +37,14 @@ import 'package:omi/pages/conversations/widgets/noise_fold_line.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
 import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
+import 'package:omi/pages/home/widgets/home_daily_recaps_setting.dart';
+import 'package:omi/pages/settings/widgets/yearly_switch.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 import 'package:omi/widgets/home_bottom_bar.dart';
+
+part 'conversations_processing_rows.dart';
 
 String _conversationDateRangeLabel(BuildContext context, DateTime start, DateTime? end) {
   final dates = OmiDateFormat.of(context);
@@ -262,67 +266,6 @@ List<_ConversationListRow> _buildConversationListRows({
 
 /// [rows] with the live episode right under today's header. With no today in the list,
 /// the episode opens Today itself, carrying its own header.
-List<_ConversationListRow> _withTodayRow(List<_ConversationListRow> rows, DateTime now, _ConversationListRowKind kind) {
-  if (rows.isEmpty) return rows;
-  final today = DateTime(now.year, now.month, now.day);
-  final header = rows.indexWhere((r) => r.kind == _ConversationListRowKind.dateHeader && r.date == today);
-  _ConversationListRow todayRow(_ConversationListRowKind kind, {bool isFirst = false}) =>
-      (kind: kind, date: today, isFirst: isFirst, conversation: null, recording: null, conversationIndex: -1);
-  if (header >= 0) {
-    var at = header + 1;
-    while (at < rows.length && rows[at].kind == _ConversationListRowKind.liveEpisode) {
-      at++;
-    }
-    return [...rows.take(at), todayRow(kind), ...rows.skip(at)];
-  }
-  final opened = rows.indexWhere((r) => r.kind == kind);
-  if (opened >= 0) return rows;
-  // A row that already opened Today (the live episode) carries the header; sit right under it.
-  final todayOpener = rows.indexWhere(
-    (r) => r.date == today && r.isFirst && r.kind != _ConversationListRowKind.topSpacer,
-  );
-  if (todayOpener >= 0) {
-    return [...rows.take(todayOpener + 1), todayRow(kind), ...rows.skip(todayOpener + 1)];
-  }
-  // rows.first is the list's top spacer.
-  return [
-    rows.first,
-    todayRow(kind, isFirst: true),
-    todayRow(_ConversationListRowKind.groupSpacer),
-    for (final r in rows.skip(1))
-      r.kind == _ConversationListRowKind.dateHeader && r.isFirst
-          ? (kind: r.kind, date: r.date, isFirst: false, conversation: null, recording: null, conversationIndex: -1)
-          : r,
-  ];
-}
-
-/// One row per conversation still processing, right under Today's live row: the conversation the
-/// person just ended (Wrap up, a pendant double-tap) shows at once, then turns into its own row.
-List<_ConversationListRow> _withProcessingRows(
-  List<_ConversationListRow> rows,
-  List<ServerConversation> processing,
-  DateTime now,
-) {
-  if (processing.isEmpty) return rows;
-  final marked = _withTodayRow(rows, now, _ConversationListRowKind.processing);
-  final at = marked.indexWhere((r) => r.kind == _ConversationListRowKind.processing);
-  if (at < 0) return rows;
-  final slot = marked[at];
-  return [
-    ...marked.take(at),
-    for (var i = 0; i < processing.length; i++)
-      (
-        kind: _ConversationListRowKind.processing,
-        date: slot.date,
-        isFirst: slot.isFirst && i == 0,
-        conversation: processing[i],
-        recording: null,
-        conversationIndex: -1,
-      ),
-    ...marked.skip(at + 1),
-  ];
-}
-
 /// [byDate] without the conversations Home leaves to the daily recap (background notes,
 /// David 2026-10-23). Days left empty drop out when the rows are built.
 Map<DateTime, List<ServerConversation>> _withoutBackground(Map<DateTime, List<ServerConversation>> byDate) => {
@@ -353,7 +296,7 @@ List<ServerConversation>? _lockedRunAt(List<_ConversationListRow> rows, int inde
   return [for (var i = index; i < end; i++) rows[i].conversation!];
 }
 
-/// Home: the live capture row, the Daily Recaps row, then every conversation, newest first, loading
+/// Home: the live capture row, the Daily Recaps row (when on), then every conversation, newest first, loading
 /// more as it scrolls. Search, folders, starred and places live in the search overlay the header's
 /// search button opens, so this list is never filtered in place.
 class ConversationsPage extends StatefulWidget {
@@ -407,6 +350,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   @override
   void initState() {
     super.initState();
+    HomeDailyRecapsSetting.reload();
     _scheduleDayRollover();
     _pendingWork.addListener(_onPendingWorkChanged);
     unawaited(_pendingWork.refresh());
@@ -709,14 +653,21 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
               // Review absorbs the voice prompts; the old card shows only while Review is off.
               const SliverToBoxAdapter(child: ReviewEntryCard()),
+              // Opt-in from Developer Settings. Hidden, the row is not mounted, so nothing is fetched.
               SliverToBoxAdapter(
-                child: widget.loadRecaps == null
-                    ? HomeDailyRecaps(key: _recapsKey)
-                    : HomeDailyRecaps(key: _recapsKey, load: widget.loadRecaps!),
+                child: ValueListenableBuilder<bool>(
+                  valueListenable: HomeDailyRecapsSetting.listenable,
+                  builder: (context, shown, _) => !shown
+                      ? const SizedBox.shrink()
+                      : widget.loadRecaps == null
+                          ? HomeDailyRecaps(key: _recapsKey)
+                          : HomeDailyRecaps(key: _recapsKey, load: widget.loadRecaps!),
+                ),
               ),
               // Phone-local recordings stay with their conversations. Device catch-up lives on Device.
               const SliverToBoxAdapter(child: OnDeviceQueueBanner()),
               const SliverToBoxAdapter(child: HeldAudioHomeSection()),
+              const SliverToBoxAdapter(child: YearlySwitchHomeRow()),
               // With no list yet, the live episode opens Today itself.
               if (episodeLive && builtRows.isEmpty)
                 SliverToBoxAdapter(

@@ -33,6 +33,7 @@ from utils.executors import db_executor, run_blocking
 from utils.github_releases import get_omi_github_releases, extract_key_value_pairs
 from utils.beta_candidate_evidence import BetaCandidateAdmissionError
 from utils.beta_breakglass_evidence import build_emergency_beta_manifest, build_signed_beta_manifest
+from utils.log_sanitizer import sanitize
 from utils.metrics import (
     DESKTOP_UPDATE_FEED_VALID,
     DESKTOP_UPDATE_POINTER_MISMATCH_TOTAL,
@@ -903,7 +904,10 @@ async def get_desktop_appcast_xml(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generating appcast: {str(e)}")
+        # CWE-209: never reflect internal exception text to desktop clients.
+        # Full diagnostic stays server-side, token/PII-scrubbed per logging policy.
+        logger.error("Error generating appcast: %s", sanitize(str(e)), exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to generate desktop appcast.")
 
 
 @router.get("/v2/desktop/download/latest")

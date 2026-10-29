@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/pages/home/widgets/home_daily_recaps_setting.dart';
 import 'package:omi/pages/settings/developer_firmware_flash_page.dart';
 import 'package:omi/pages/settings/developer_mcp_section.dart';
 import 'package:omi/pages/settings/settings_destinations.dart';
@@ -304,6 +305,14 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
           subtitle: l10n.vadGateDescription,
           value: provider.vadGateEnabled,
           onChanged: provider.onVadGateChanged,
+        ),
+        OmiSettingsRow.toggle(
+          key: const Key('developer_home_daily_recaps_toggle'),
+          leading: const FaIcon(FontAwesomeIcons.calendarDay),
+          title: l10n.dailyRecapsOnHome,
+          subtitle: l10n.dailyRecapsOnHomeDescription,
+          value: HomeDailyRecapsSetting.enabled,
+          onChanged: (v) => setState(() => HomeDailyRecapsSetting.enabled = v),
         ),
       ],
     );

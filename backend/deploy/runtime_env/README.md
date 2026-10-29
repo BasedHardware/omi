@@ -3,6 +3,13 @@
 Edit `_base.yaml` and the environment overlays, then regenerate
 `backend/deploy/runtime_env.yaml` with `backend/deploy/compose_runtime_env.py`.
 
+Batch admission percentage is runtime-owned in `rollout_cohorts/_ramp`; these
+deploy inputs and listen charts deliberately omit `BATCH_PIPELINE_PERCENT`.
+Keep it out of deployment defaults and use the
+[runtime ramp migration](../../docs/runbooks/batch-runtime-ramp.md) for the
+one-time zero seed, controller/guard cutover and rollback. Existing env values
+are fallback only, never evidence of effective admission after that seed.
+
 Version 2 requires the backend voice route's staging bucket as an explicit
 literal: `syncing-local-development` in dev and `syncing-local` in prod. Normal
 admission and the existing prebuild preflight reject missing, blank, implicit,
