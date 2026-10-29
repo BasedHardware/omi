@@ -69,6 +69,7 @@ def test_deploy_and_cold_process_preserve_effective_ramp(monkeypatch, runtime, s
     env = {entry['name']: entry.get('value', '') for entry in renderer._render_env_entries(config['env'])}
     assert 'BATCH_PIPELINE_PERCENT' not in env
     assert 'BATCH_PIPELINE_PERCENT' not in renderer._remove_env_extra(service, config).split(',')
+    assert 'BATCH_PIPELINE_PERCENT' not in renderer._action_removed_env_names(service)
     assert 'BATCH_PIPELINE_PERCENT' not in config.get('forbidden_env', [])
 
     for name, value in env.items():
