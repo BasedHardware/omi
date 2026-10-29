@@ -14899,4 +14899,12 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Rodyti naujausias apžvalgas pradžios ekrano viršuje.';
+
+  @override
+  String get paymentDeclinedTitle => 'Jūsų kortelė atmesta';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return 'Atnaujinkite ją, kad išsaugotumėte $plan';
+  }
 }

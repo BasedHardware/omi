@@ -4499,5 +4499,7 @@
     "activityAttentionSyncStalledTitle": "Omi ei sünkrooni",
     "activityAttentionSyncStalledSubtitle": "Üle {hours} tunni pole sünkroonitud ühtegi salvestust",
     "dailyRecapsOnHome": "Päevased kokkuvõtted avalehel",
-    "dailyRecapsOnHomeDescription": "Näita viimaseid kokkuvõtteid avalehe ülaosas."
+    "dailyRecapsOnHomeDescription": "Näita viimaseid kokkuvõtteid avalehe ülaosas.",
+    "paymentDeclinedTitle": "Sinu kaart lükati tagasi",
+    "paymentDeclinedMessage": "Uuenda seda, et {plan} alles jääks"
 }

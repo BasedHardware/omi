@@ -4499,5 +4499,7 @@
     "activityAttentionSyncStalledTitle": "Omi не синхронізується",
     "activityAttentionSyncStalledSubtitle": "Записи не синхронізувалися понад {hours} годин",
     "dailyRecapsOnHome": "Щоденні підсумки на головній",
-    "dailyRecapsOnHomeDescription": "Показувати останні підсумки вгорі головної."
+    "dailyRecapsOnHomeDescription": "Показувати останні підсумки вгорі головної.",
+    "paymentDeclinedTitle": "Вашу картку відхилено",
+    "paymentDeclinedMessage": "Оновіть її, щоб зберегти {plan}"
 }

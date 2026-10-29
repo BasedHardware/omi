@@ -4534,5 +4534,7 @@
     "activityAttentionSyncStalledTitle": "Omi ne se synchronise pas",
     "activityAttentionSyncStalledSubtitle": "Aucun enregistrement synchronisé depuis plus de {hours} heures",
     "dailyRecapsOnHome": "Récapitulatifs quotidiens sur l'Accueil",
-    "dailyRecapsOnHomeDescription": "Affiche vos derniers récapitulatifs en haut de l'Accueil."
+    "dailyRecapsOnHomeDescription": "Affiche vos derniers récapitulatifs en haut de l'Accueil.",
+    "paymentDeclinedTitle": "Votre carte a été refusée",
+    "paymentDeclinedMessage": "Mettez-la à jour pour garder {plan}"
 }

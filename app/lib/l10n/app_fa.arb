@@ -11925,5 +11925,7 @@
     "activityAttentionSyncStalledTitle": "Omi همگام‌سازی نمی‌شود",
     "activityAttentionSyncStalledSubtitle": "بیش از {hours} ساعت هیچ ضبطی همگام‌سازی نشده است",
     "dailyRecapsOnHome": "خلاصه‌های روزانه در خانه",
-    "dailyRecapsOnHomeDescription": "نمایش جدیدترین خلاصه‌ها در بالای صفحه خانه."
+    "dailyRecapsOnHomeDescription": "نمایش جدیدترین خلاصه‌ها در بالای صفحه خانه.",
+    "paymentDeclinedTitle": "کارت شما رد شد",
+    "paymentDeclinedMessage": "برای حفظ {plan} آن را به‌روزرسانی کنید"
 }

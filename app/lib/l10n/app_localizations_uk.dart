@@ -14908,4 +14908,12 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Показувати останні підсумки вгорі головної.';
+
+  @override
+  String get paymentDeclinedTitle => 'Вашу картку відхилено';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return 'Оновіть її, щоб зберегти $plan';
+  }
 }

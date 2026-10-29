@@ -4534,5 +4534,7 @@
     "activityAttentionSyncStalledTitle": "Omi nie synchronizuje się",
     "activityAttentionSyncStalledSubtitle": "Od ponad {hours} godzin nie zsynchronizowano żadnego nagrania",
     "dailyRecapsOnHome": "Podsumowania dnia na Głównej",
-    "dailyRecapsOnHomeDescription": "Pokazuj najnowsze podsumowania na górze Głównej."
+    "dailyRecapsOnHomeDescription": "Pokazuj najnowsze podsumowania na górze Głównej.",
+    "paymentDeclinedTitle": "Twoja karta została odrzucona",
+    "paymentDeclinedMessage": "Zaktualizuj ją, aby zachować {plan}"
 }

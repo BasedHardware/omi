@@ -4499,5 +4499,7 @@
     "activityAttentionSyncStalledTitle": "Omi nesinhronizējas",
     "activityAttentionSyncStalledSubtitle": "Vairāk nekā {hours} stundas nav sinhronizēts neviens ieraksts",
     "dailyRecapsOnHome": "Dienas kopsavilkumi sākumā",
-    "dailyRecapsOnHomeDescription": "Rādīt jaunākos kopsavilkumus sākuma augšdaļā."
+    "dailyRecapsOnHomeDescription": "Rādīt jaunākos kopsavilkumus sākuma augšdaļā.",
+    "paymentDeclinedTitle": "Jūsu karte tika noraidīta",
+    "paymentDeclinedMessage": "Atjauniniet to, lai saglabātu {plan}"
 }

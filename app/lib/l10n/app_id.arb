@@ -4534,5 +4534,7 @@
     "activityAttentionSyncStalledTitle": "Omi tidak tersinkronisasi",
     "activityAttentionSyncStalledSubtitle": "Tidak ada rekaman yang tersinkronisasi selama lebih dari {hours} jam",
     "dailyRecapsOnHome": "Ringkasan Harian di Beranda",
-    "dailyRecapsOnHomeDescription": "Tampilkan ringkasan terbaru di bagian atas Beranda."
+    "dailyRecapsOnHomeDescription": "Tampilkan ringkasan terbaru di bagian atas Beranda.",
+    "paymentDeclinedTitle": "Kartu Anda ditolak",
+    "paymentDeclinedMessage": "Perbarui agar tetap memakai {plan}"
 }

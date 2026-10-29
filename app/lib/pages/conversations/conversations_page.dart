@@ -38,6 +38,7 @@ import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
 import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps_setting.dart';
+import 'package:omi/pages/home/widgets/payment_issue_row.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -647,6 +648,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               SliverToBoxAdapter(
                 child: ConversationCaptureWidget(showsCall: true, deferStreamingToEpisode: episodeLive),
               ),
+              // A declined renewal the user can still pay: one row, Update opens Stripe's billing portal.
+              const SliverToBoxAdapter(child: PaymentIssueRow()),
               const SliverToBoxAdapter(child: CaptureContinuityDogfoodBanner()),
               const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
               const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),

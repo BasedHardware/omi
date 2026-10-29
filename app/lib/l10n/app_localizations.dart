@@ -26186,6 +26186,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Show your latest recaps at the top of Home.'**
   String get dailyRecapsOnHomeDescription;
+
+  /// Home row title when the renewal charge for the user's plan failed
+  ///
+  /// In en, this message translates to:
+  /// **'Your card was declined'**
+  String get paymentDeclinedTitle;
+
+  /// Home row line under 'Your card was declined'. it = the card; plan = a product name such as Omi Pro
+  ///
+  /// In en, this message translates to:
+  /// **'Update it to keep {plan}'**
+  String paymentDeclinedMessage(String plan);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -14767,4 +14767,12 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'הצג את הסיכומים האחרונים שלך בראש מסך הבית.';
+
+  @override
+  String get paymentDeclinedTitle => 'הכרטיס שלך נדחה';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return 'עדכן אותו כדי לשמור על $plan';
+  }
 }

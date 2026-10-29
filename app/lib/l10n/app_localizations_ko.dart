@@ -14670,4 +14670,12 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => '홈 상단에 최근 요약을 표시합니다.';
+
+  @override
+  String get paymentDeclinedTitle => '카드가 거절되었습니다';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return '$plan 이용을 유지하려면 카드를 업데이트하세요';
+  }
 }

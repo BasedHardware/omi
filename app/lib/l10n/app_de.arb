@@ -4499,5 +4499,7 @@
     "activityAttentionSyncStalledTitle": "Omi synchronisiert nicht",
     "activityAttentionSyncStalledSubtitle": "Seit über {hours} Stunden keine synchronisierten Aufnahmen",
     "dailyRecapsOnHome": "Tägliche Zusammenfassungen auf Start",
-    "dailyRecapsOnHomeDescription": "Zeige deine neuesten Zusammenfassungen oben auf Start."
+    "dailyRecapsOnHomeDescription": "Zeige deine neuesten Zusammenfassungen oben auf Start.",
+    "paymentDeclinedTitle": "Ihre Karte wurde abgelehnt",
+    "paymentDeclinedMessage": "Aktualisieren Sie sie, um {plan} zu behalten"
 }

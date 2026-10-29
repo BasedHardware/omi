@@ -14928,4 +14928,12 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Показвай последните резюмета в горната част на Начало.';
+
+  @override
+  String get paymentDeclinedTitle => 'Картата ви беше отхвърлена';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return 'Обновете я, за да запазите $plan';
+  }
 }

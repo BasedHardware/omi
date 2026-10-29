@@ -4499,5 +4499,7 @@
     "activityAttentionSyncStalledTitle": "Omi synchroniseert niet",
     "activityAttentionSyncStalledSubtitle": "Al meer dan {hours} uur geen gesynchroniseerde opnames",
     "dailyRecapsOnHome": "Dagelijkse samenvattingen op Home",
-    "dailyRecapsOnHomeDescription": "Toon je nieuwste samenvattingen bovenaan Home."
+    "dailyRecapsOnHomeDescription": "Toon je nieuwste samenvattingen bovenaan Home.",
+    "paymentDeclinedTitle": "Uw kaart is geweigerd",
+    "paymentDeclinedMessage": "Werk deze bij om {plan} te behouden"
 }

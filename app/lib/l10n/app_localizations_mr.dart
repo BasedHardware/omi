@@ -14885,4 +14885,12 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'मुख्यपृष्ठाच्या वर तुमचे नवीनतम रीकॅप्स दाखवा.';
+
+  @override
+  String get paymentDeclinedTitle => 'तुमचे कार्ड नाकारले गेले';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return '$plan कायम ठेवण्यासाठी ते अपडेट करा';
+  }
 }

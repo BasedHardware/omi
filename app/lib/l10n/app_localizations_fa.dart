@@ -14872,4 +14872,12 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'نمایش جدیدترین خلاصه‌ها در بالای صفحه خانه.';
+
+  @override
+  String get paymentDeclinedTitle => 'کارت شما رد شد';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return 'برای حفظ $plan آن را به‌روزرسانی کنید';
+  }
 }

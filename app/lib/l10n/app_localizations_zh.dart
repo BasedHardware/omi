@@ -14645,4 +14645,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => '在首页顶部显示最新的回顾。';
+
+  @override
+  String get paymentDeclinedTitle => '您的银行卡被拒绝';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return '请更新银行卡以继续使用 $plan';
+  }
 }

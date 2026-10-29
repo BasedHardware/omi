@@ -11925,5 +11925,7 @@
     "activityAttentionSyncStalledTitle": "Omi سنک نہیں ہو رہا",
     "activityAttentionSyncStalledSubtitle": "{hours} گھنٹوں سے زیادہ کوئی ریکارڈنگ سنک نہیں ہوئی",
     "dailyRecapsOnHome": "ہوم پر روزانہ خلاصے",
-    "dailyRecapsOnHomeDescription": "ہوم کے اوپر اپنے تازہ ترین خلاصے دکھائیں۔"
+    "dailyRecapsOnHomeDescription": "ہوم کے اوپر اپنے تازہ ترین خلاصے دکھائیں۔",
+    "paymentDeclinedTitle": "آپ کا کارڈ مسترد ہو گیا",
+    "paymentDeclinedMessage": "{plan} برقرار رکھنے کے لیے اسے اپ ڈیٹ کریں"
 }

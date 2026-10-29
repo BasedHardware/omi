@@ -14664,4 +14664,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => '最新の要約をホームの上部に表示します。';
+
+  @override
+  String get paymentDeclinedTitle => 'カードが拒否されました';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return '$planを続けるにはカードを更新してください';
+  }
 }

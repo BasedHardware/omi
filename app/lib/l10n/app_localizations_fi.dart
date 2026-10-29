@@ -14881,4 +14881,12 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Näytä uusimmat yhteenvedot Koti-näkymän yläosassa.';
+
+  @override
+  String get paymentDeclinedTitle => 'Korttisi hylättiin';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return 'Päivitä se, niin $plan säilyy';
+  }
 }

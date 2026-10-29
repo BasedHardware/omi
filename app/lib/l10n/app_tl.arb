@@ -11925,5 +11925,7 @@
     "activityAttentionSyncStalledTitle": "Hindi nagri-sync ang Omi",
     "activityAttentionSyncStalledSubtitle": "Walang naka-sync na recording nang mahigit {hours} oras",
     "dailyRecapsOnHome": "Daily Recaps sa Home",
-    "dailyRecapsOnHomeDescription": "Ipakita ang pinakabagong recaps sa itaas ng Home."
+    "dailyRecapsOnHomeDescription": "Ipakita ang pinakabagong recaps sa itaas ng Home.",
+    "paymentDeclinedTitle": "Tinanggihan ang iyong card",
+    "paymentDeclinedMessage": "I-update ito para manatili sa {plan}"
 }

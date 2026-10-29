@@ -11925,5 +11925,7 @@
     "activityAttentionSyncStalledTitle": "Omi לא מסתנכרן",
     "activityAttentionSyncStalledSubtitle": "לא סונכרנו הקלטות במשך יותר מ-{hours} שעות",
     "dailyRecapsOnHome": "סיכומים יומיים במסך הבית",
-    "dailyRecapsOnHomeDescription": "הצג את הסיכומים האחרונים שלך בראש מסך הבית."
+    "dailyRecapsOnHomeDescription": "הצג את הסיכומים האחרונים שלך בראש מסך הבית.",
+    "paymentDeclinedTitle": "הכרטיס שלך נדחה",
+    "paymentDeclinedMessage": "עדכן אותו כדי לשמור על {plan}"
 }

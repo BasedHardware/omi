@@ -4499,5 +4499,7 @@
     "activityAttentionSyncStalledTitle": "Omi tidak disegerakkan",
     "activityAttentionSyncStalledSubtitle": "Tiada rakaman disegerakkan selama lebih {hours} jam",
     "dailyRecapsOnHome": "Ringkasan Harian di Utama",
-    "dailyRecapsOnHomeDescription": "Tunjukkan ringkasan terkini anda di bahagian atas Utama."
+    "dailyRecapsOnHomeDescription": "Tunjukkan ringkasan terkini anda di bahagian atas Utama.",
+    "paymentDeclinedTitle": "Kad anda ditolak",
+    "paymentDeclinedMessage": "Kemas kini untuk terus menggunakan {plan}"
 }

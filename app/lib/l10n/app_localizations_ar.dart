@@ -14789,4 +14789,12 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'اعرض أحدث ملخصاتك أعلى الشاشة الرئيسية.';
+
+  @override
+  String get paymentDeclinedTitle => 'تم رفض بطاقتك';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return 'حدّث بطاقتك للاحتفاظ بـ $plan';
+  }
 }

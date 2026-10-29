@@ -4499,5 +4499,7 @@
     "activityAttentionSyncStalledTitle": "Omi не се синхронизира",
     "activityAttentionSyncStalledSubtitle": "Няма синхронизирани записи от повече от {hours} часа",
     "dailyRecapsOnHome": "Дневни резюмета в Начало",
-    "dailyRecapsOnHomeDescription": "Показвай последните резюмета в горната част на Начало."
+    "dailyRecapsOnHomeDescription": "Показвай последните резюмета в горната част на Начало.",
+    "paymentDeclinedTitle": "Картата ви беше отхвърлена",
+    "paymentDeclinedMessage": "Обновете я, за да запазите {plan}"
 }

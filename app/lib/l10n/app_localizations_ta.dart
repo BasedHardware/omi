@@ -14980,4 +14980,12 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'முகப்பின் மேலே உங்கள் சமீபத்திய சுருக்கங்களைக் காட்டு.';
+
+  @override
+  String get paymentDeclinedTitle => 'உங்கள் கார்டு நிராகரிக்கப்பட்டது';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return '$plan தொடர இதைப் புதுப்பிக்கவும்';
+  }
 }

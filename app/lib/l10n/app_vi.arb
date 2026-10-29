@@ -4499,5 +4499,7 @@
     "activityAttentionSyncStalledTitle": "Omi không đồng bộ",
     "activityAttentionSyncStalledSubtitle": "Không có bản ghi nào được đồng bộ hơn {hours} giờ",
     "dailyRecapsOnHome": "Tóm tắt hàng ngày trên Trang chủ",
-    "dailyRecapsOnHomeDescription": "Hiển thị các tóm tắt mới nhất ở đầu Trang chủ."
+    "dailyRecapsOnHomeDescription": "Hiển thị các tóm tắt mới nhất ở đầu Trang chủ.",
+    "paymentDeclinedTitle": "Thẻ của bạn đã bị từ chối",
+    "paymentDeclinedMessage": "Cập nhật thẻ để tiếp tục dùng {plan}"
 }

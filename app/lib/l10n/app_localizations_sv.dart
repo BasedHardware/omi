@@ -14886,4 +14886,12 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Visa dina senaste sammanfattningar högst upp på Hem.';
+
+  @override
+  String get paymentDeclinedTitle => 'Ditt kort nekades';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return 'Uppdatera det för att behålla $plan';
+  }
 }

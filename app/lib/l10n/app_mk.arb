@@ -11925,5 +11925,7 @@
     "activityAttentionSyncStalledTitle": "Omi не се синхронизира",
     "activityAttentionSyncStalledSubtitle": "Повеќе од {hours} часа нема синхронизирано снимки",
     "dailyRecapsOnHome": "Дневни резимеа на Почетна",
-    "dailyRecapsOnHomeDescription": "Прикажи ги најновите резимеа на врвот на Почетна."
+    "dailyRecapsOnHomeDescription": "Прикажи ги најновите резимеа на врвот на Почетна.",
+    "paymentDeclinedTitle": "Вашата картичка е одбиена",
+    "paymentDeclinedMessage": "Ажурирајте ја за да го задржите {plan}"
 }

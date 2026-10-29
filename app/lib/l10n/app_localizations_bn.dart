@@ -14872,4 +14872,12 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'হোমের উপরে আপনার সাম্প্রতিক সংক্ষেপ দেখান।';
+
+  @override
+  String get paymentDeclinedTitle => 'আপনার কার্ড প্রত্যাখ্যাত হয়েছে';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return '$plan রাখতে কার্ডটি আপডেট করুন';
+  }
 }

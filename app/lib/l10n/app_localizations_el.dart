@@ -14976,4 +14976,12 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Εμφάνιση των πιο πρόσφατων περιλήψεων στην κορυφή της Αρχικής.';
+
+  @override
+  String get paymentDeclinedTitle => 'Η κάρτα σας απορρίφθηκε';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return 'Ενημερώστε την για να κρατήσετε το $plan';
+  }
 }

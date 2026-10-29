@@ -14914,4 +14914,12 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Tunjukkan ringkasan terkini anda di bahagian atas Utama.';
+
+  @override
+  String get paymentDeclinedTitle => 'Kad anda ditolak';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return 'Kemas kini untuk terus menggunakan $plan';
+  }
 }

@@ -11925,5 +11925,7 @@
     "activityAttentionSyncStalledTitle": "Omi se ne sinhronizira",
     "activityAttentionSyncStalledSubtitle": "Več kot {hours} ur ni bilo sinhroniziranih posnetkov",
     "dailyRecapsOnHome": "Dnevni povzetki na začetnem zaslonu",
-    "dailyRecapsOnHomeDescription": "Prikaži najnovejše povzetke na vrhu začetnega zaslona."
+    "dailyRecapsOnHomeDescription": "Prikaži najnovejše povzetke na vrhu začetnega zaslona.",
+    "paymentDeclinedTitle": "Vaša kartica je bila zavrnjena",
+    "paymentDeclinedMessage": "Posodobite jo, da obdržite {plan}"
 }

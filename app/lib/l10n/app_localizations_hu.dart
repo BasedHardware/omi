@@ -14936,4 +14936,12 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'A legújabb összefoglalók megjelenítése a Kezdőlap tetején.';
+
+  @override
+  String get paymentDeclinedTitle => 'A kártyáját elutasították';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return 'Frissítse, hogy megtarthassa: $plan';
+  }
 }

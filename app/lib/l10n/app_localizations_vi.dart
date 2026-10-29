@@ -14879,4 +14879,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Hiển thị các tóm tắt mới nhất ở đầu Trang chủ.';
+
+  @override
+  String get paymentDeclinedTitle => 'Thẻ của bạn đã bị từ chối';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return 'Cập nhật thẻ để tiếp tục dùng $plan';
+  }
 }

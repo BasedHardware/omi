@@ -11925,5 +11925,7 @@
     "activityAttentionSyncStalledTitle": "Omi се не синхронизује",
     "activityAttentionSyncStalledSubtitle": "Ниједан снимак није синхронизован дуже од {hours} сати",
     "dailyRecapsOnHome": "Дневни резимеи на почетној",
-    "dailyRecapsOnHomeDescription": "Прикажи најновије резимее на врху почетне."
+    "dailyRecapsOnHomeDescription": "Прикажи најновије резимее на врху почетне.",
+    "paymentDeclinedTitle": "Ваша картица је одбијена",
+    "paymentDeclinedMessage": "Ажурирајте је да бисте задржали {plan}"
 }

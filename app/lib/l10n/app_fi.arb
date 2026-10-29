@@ -4499,5 +4499,7 @@
     "activityAttentionSyncStalledTitle": "Omi ei synkronoi",
     "activityAttentionSyncStalledSubtitle": "Tallenteita ei synkronoitu yli {hours} tuntiin",
     "dailyRecapsOnHome": "Päivittäiset yhteenvedot Koti-näkymässä",
-    "dailyRecapsOnHomeDescription": "Näytä uusimmat yhteenvedot Koti-näkymän yläosassa."
+    "dailyRecapsOnHomeDescription": "Näytä uusimmat yhteenvedot Koti-näkymän yläosassa.",
+    "paymentDeclinedTitle": "Korttisi hylättiin",
+    "paymentDeclinedMessage": "Päivitä se, niin {plan} säilyy"
 }

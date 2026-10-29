@@ -14890,4 +14890,12 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'En son özetlerini Ana Sayfanın üstünde göster.';
+
+  @override
+  String get paymentDeclinedTitle => 'Kartınız reddedildi';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return '$plan planınızı korumak için kartınızı güncelleyin';
+  }
 }

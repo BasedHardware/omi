@@ -14999,4 +14999,12 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Affiche vos derniers récapitulatifs en haut de l\'Accueil.';
+
+  @override
+  String get paymentDeclinedTitle => 'Votre carte a été refusée';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return 'Mettez-la à jour pour garder $plan';
+  }
 }

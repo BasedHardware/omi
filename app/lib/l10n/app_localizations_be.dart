@@ -14911,4 +14911,12 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Паказваць апошнія рэзюмэ ўверсе галоўнай.';
+
+  @override
+  String get paymentDeclinedTitle => 'Вашу картку адхілілі';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return 'Абнавіце яе, каб захаваць $plan';
+  }
 }

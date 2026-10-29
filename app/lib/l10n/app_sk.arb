@@ -4499,5 +4499,7 @@
     "activityAttentionSyncStalledTitle": "Omi sa nesynchronizuje",
     "activityAttentionSyncStalledSubtitle": "Viac než {hours} hodín bez synchronizovaných nahrávok",
     "dailyRecapsOnHome": "Denné súhrny na domovskej obrazovke",
-    "dailyRecapsOnHomeDescription": "Zobraziť najnovšie súhrny v hornej časti domovskej obrazovky."
+    "dailyRecapsOnHomeDescription": "Zobraziť najnovšie súhrny v hornej časti domovskej obrazovky.",
+    "paymentDeclinedTitle": "Vaša karta bola zamietnutá",
+    "paymentDeclinedMessage": "Aktualizujte ju, aby ste si ponechali {plan}"
 }

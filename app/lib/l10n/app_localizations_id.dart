@@ -14892,4 +14892,12 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Tampilkan ringkasan terbaru di bagian atas Beranda.';
+
+  @override
+  String get paymentDeclinedTitle => 'Kartu Anda ditolak';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return 'Perbarui agar tetap memakai $plan';
+  }
 }

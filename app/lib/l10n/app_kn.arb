@@ -11925,5 +11925,7 @@
     "activityAttentionSyncStalledTitle": "Omi ಸಿಂಕ್ ಆಗುತ್ತಿಲ್ಲ",
     "activityAttentionSyncStalledSubtitle": "{hours} ಗಂಟೆಗಳಿಗಿಂತ ಹೆಚ್ಚು ಕಾಲ ಯಾವುದೇ ರೆಕಾರ್ಡಿಂಗ್ ಸಿಂಕ್ ಆಗಿಲ್ಲ",
     "dailyRecapsOnHome": "ಮುಖಪುಟದಲ್ಲಿ ದೈನಿಕ ಸಾರಾಂಶಗಳು",
-    "dailyRecapsOnHomeDescription": "ಮುಖಪುಟದ ಮೇಲ್ಭಾಗದಲ್ಲಿ ನಿಮ್ಮ ಇತ್ತೀಚಿನ ಸಾರಾಂಶಗಳನ್ನು ತೋರಿಸಿ."
+    "dailyRecapsOnHomeDescription": "ಮುಖಪುಟದ ಮೇಲ್ಭಾಗದಲ್ಲಿ ನಿಮ್ಮ ಇತ್ತೀಚಿನ ಸಾರಾಂಶಗಳನ್ನು ತೋರಿಸಿ.",
+    "paymentDeclinedTitle": "ನಿಮ್ಮ ಕಾರ್ಡ್ ನಿರಾಕರಿಸಲಾಗಿದೆ",
+    "paymentDeclinedMessage": "{plan} ಉಳಿಸಿಕೊಳ್ಳಲು ಇದನ್ನು ನವೀಕರಿಸಿ"
 }

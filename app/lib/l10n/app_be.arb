@@ -11925,5 +11925,7 @@
     "activityAttentionSyncStalledTitle": "Omi не сінхранізуецца",
     "activityAttentionSyncStalledSubtitle": "Запісы не сінхранізаваліся больш за {hours} гадзін",
     "dailyRecapsOnHome": "Штодзённыя рэзюмэ на галоўнай",
-    "dailyRecapsOnHomeDescription": "Паказваць апошнія рэзюмэ ўверсе галоўнай."
+    "dailyRecapsOnHomeDescription": "Паказваць апошнія рэзюмэ ўверсе галоўнай.",
+    "paymentDeclinedTitle": "Вашу картку адхілілі",
+    "paymentDeclinedMessage": "Абнавіце яе, каб захаваць {plan}"
 }

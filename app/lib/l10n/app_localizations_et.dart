@@ -14870,4 +14870,12 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Näita viimaseid kokkuvõtteid avalehe ülaosas.';
+
+  @override
+  String get paymentDeclinedTitle => 'Sinu kaart lükati tagasi';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return 'Uuenda seda, et $plan alles jääks';
+  }
 }

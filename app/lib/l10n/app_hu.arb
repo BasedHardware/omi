@@ -4595,5 +4595,7 @@
     "activityAttentionSyncStalledTitle": "Az Omi nem szinkronizál",
     "activityAttentionSyncStalledSubtitle": "Több mint {hours} órája nem szinkronizálódott felvétel",
     "dailyRecapsOnHome": "Napi összefoglalók a Kezdőlapon",
-    "dailyRecapsOnHomeDescription": "A legújabb összefoglalók megjelenítése a Kezdőlap tetején."
+    "dailyRecapsOnHomeDescription": "A legújabb összefoglalók megjelenítése a Kezdőlap tetején.",
+    "paymentDeclinedTitle": "A kártyáját elutasították",
+    "paymentDeclinedMessage": "Frissítse, hogy megtarthassa: {plan}"
 }

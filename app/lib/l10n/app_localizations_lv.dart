@@ -14911,4 +14911,12 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Rādīt jaunākos kopsavilkumus sākuma augšdaļā.';
+
+  @override
+  String get paymentDeclinedTitle => 'Jūsu karte tika noraidīta';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return 'Atjauniniet to, lai saglabātu $plan';
+  }
 }

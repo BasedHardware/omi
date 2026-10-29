@@ -14996,4 +14996,12 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Ipakita ang pinakabagong recaps sa itaas ng Home.';
+
+  @override
+  String get paymentDeclinedTitle => 'Tinanggihan ang iyong card';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return 'I-update ito para manatili sa $plan';
+  }
 }

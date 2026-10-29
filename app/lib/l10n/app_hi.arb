@@ -4499,5 +4499,7 @@
     "activityAttentionSyncStalledTitle": "Omi सिंक नहीं हो रहा है",
     "activityAttentionSyncStalledSubtitle": "{hours} घंटे से ज़्यादा समय से कोई रिकॉर्डिंग सिंक नहीं हुई",
     "dailyRecapsOnHome": "होम पर दैनिक सारांश",
-    "dailyRecapsOnHomeDescription": "होम के ऊपर अपने नवीनतम सारांश दिखाएं।"
+    "dailyRecapsOnHomeDescription": "होम के ऊपर अपने नवीनतम सारांश दिखाएं।",
+    "paymentDeclinedTitle": "आपका कार्ड अस्वीकार हो गया",
+    "paymentDeclinedMessage": "{plan} बनाए रखने के लिए इसे अपडेट करें"
 }

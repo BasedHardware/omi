@@ -14875,4 +14875,12 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Zobrazit nejnovější souhrny v horní části domovské obrazovky.';
+
+  @override
+  String get paymentDeclinedTitle => 'Vaše karta byla zamítnuta';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return 'Aktualizujte ji, abyste si ponechali $plan';
+  }
 }

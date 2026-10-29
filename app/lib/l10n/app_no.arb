@@ -4499,5 +4499,7 @@
     "activityAttentionSyncStalledTitle": "Omi synkroniserer ikke",
     "activityAttentionSyncStalledSubtitle": "Ingen opptak synkronisert på over {hours} timer",
     "dailyRecapsOnHome": "Daglige oppsummeringer på Hjem",
-    "dailyRecapsOnHomeDescription": "Vis de nyeste oppsummeringene øverst på Hjem."
+    "dailyRecapsOnHomeDescription": "Vis de nyeste oppsummeringene øverst på Hjem.",
+    "paymentDeclinedTitle": "Kortet ditt ble avvist",
+    "paymentDeclinedMessage": "Oppdater det for å beholde {plan}"
 }

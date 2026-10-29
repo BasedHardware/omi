@@ -11925,5 +11925,7 @@
     "activityAttentionSyncStalledTitle": "Omi सिंक होत नाहीये",
     "activityAttentionSyncStalledSubtitle": "{hours} तासांपेक्षा जास्त काळ कोणतीही रेकॉर्डिंग सिंक झाली नाही",
     "dailyRecapsOnHome": "मुख्यपृष्ठावर दैनिक रीकॅप्स",
-    "dailyRecapsOnHomeDescription": "मुख्यपृष्ठाच्या वर तुमचे नवीनतम रीकॅप्स दाखवा."
+    "dailyRecapsOnHomeDescription": "मुख्यपृष्ठाच्या वर तुमचे नवीनतम रीकॅप्स दाखवा.",
+    "paymentDeclinedTitle": "तुमचे कार्ड नाकारले गेले",
+    "paymentDeclinedMessage": "{plan} कायम ठेवण्यासाठी ते अपडेट करा"
 }

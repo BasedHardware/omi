@@ -4534,5 +4534,7 @@
     "activityAttentionSyncStalledTitle": "Omi eşitlemiyor",
     "activityAttentionSyncStalledSubtitle": "{hours} saatten uzun süredir eşitlenmiş kayıt yok",
     "dailyRecapsOnHome": "Ana Sayfada Günlük Özetler",
-    "dailyRecapsOnHomeDescription": "En son özetlerini Ana Sayfanın üstünde göster."
+    "dailyRecapsOnHomeDescription": "En son özetlerini Ana Sayfanın üstünde göster.",
+    "paymentDeclinedTitle": "Kartınız reddedildi",
+    "paymentDeclinedMessage": "{plan} planınızı korumak için kartınızı güncelleyin"
 }

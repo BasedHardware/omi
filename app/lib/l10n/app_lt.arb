@@ -4499,5 +4499,7 @@
     "activityAttentionSyncStalledTitle": "Omi nesinchronizuojama",
     "activityAttentionSyncStalledSubtitle": "Dažiau nei {hours} val. nesinchronizuotas nė vienas įrašas",
     "dailyRecapsOnHome": "Dienos apžvalgos pradžios ekrane",
-    "dailyRecapsOnHomeDescription": "Rodyti naujausias apžvalgas pradžios ekrano viršuje."
+    "dailyRecapsOnHomeDescription": "Rodyti naujausias apžvalgas pradžios ekrano viršuje.",
+    "paymentDeclinedTitle": "Jūsų kortelė atmesta",
+    "paymentDeclinedMessage": "Atnaujinkite ją, kad išsaugotumėte {plan}"
 }

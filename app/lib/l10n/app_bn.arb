@@ -11925,5 +11925,7 @@
     "activityAttentionSyncStalledTitle": "Omi সিঙ্ক হচ্ছে না",
     "activityAttentionSyncStalledSubtitle": "{hours} ঘণ্টার বেশি কোনো রেকর্ডিং সিঙ্ক হয়নি",
     "dailyRecapsOnHome": "হোমে দৈনিক সংক্ষেপ",
-    "dailyRecapsOnHomeDescription": "হোমের উপরে আপনার সাম্প্রতিক সংক্ষেপ দেখান।"
+    "dailyRecapsOnHomeDescription": "হোমের উপরে আপনার সাম্প্রতিক সংক্ষেপ দেখান।",
+    "paymentDeclinedTitle": "আপনার কার্ড প্রত্যাখ্যাত হয়েছে",
+    "paymentDeclinedMessage": "{plan} রাখতে কার্ডটি আপডেট করুন"
 }

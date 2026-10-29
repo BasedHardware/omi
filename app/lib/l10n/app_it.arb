@@ -4499,5 +4499,7 @@
     "activityAttentionSyncStalledTitle": "Omi non si sta sincronizzando",
     "activityAttentionSyncStalledSubtitle": "Nessuna registrazione sincronizzata da più di {hours} ore",
     "dailyRecapsOnHome": "Riepiloghi giornalieri nella Home",
-    "dailyRecapsOnHomeDescription": "Mostra i riepiloghi più recenti in cima alla Home."
+    "dailyRecapsOnHomeDescription": "Mostra i riepiloghi più recenti in cima alla Home.",
+    "paymentDeclinedTitle": "La tua carta è stata rifiutata",
+    "paymentDeclinedMessage": "Aggiornala per mantenere {plan}"
 }

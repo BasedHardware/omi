@@ -14952,4 +14952,12 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Mostra els teus resums més recents a dalt de l\'Inici.';
+
+  @override
+  String get paymentDeclinedTitle => 'La teva targeta ha estat rebutjada';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return 'Actualitza-la per mantenir $plan';
+  }
 }

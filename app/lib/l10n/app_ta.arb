@@ -11925,5 +11925,7 @@
     "activityAttentionSyncStalledTitle": "Omi ஒத்திசைக்கவில்லை",
     "activityAttentionSyncStalledSubtitle": "{hours} மணி நேரத்திற்கு மேல் எந்தப் பதிவும் ஒத்திசைக்கப்படவில்லை",
     "dailyRecapsOnHome": "முகப்பில் தினசரி சுருக்கங்கள்",
-    "dailyRecapsOnHomeDescription": "முகப்பின் மேலே உங்கள் சமீபத்திய சுருக்கங்களைக் காட்டு."
+    "dailyRecapsOnHomeDescription": "முகப்பின் மேலே உங்கள் சமீபத்திய சுருக்கங்களைக் காட்டு.",
+    "paymentDeclinedTitle": "உங்கள் கார்டு நிராகரிக்கப்பட்டது",
+    "paymentDeclinedMessage": "{plan} தொடர இதைப் புதுப்பிக்கவும்"
 }

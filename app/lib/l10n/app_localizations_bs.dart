@@ -14905,4 +14905,12 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Prikaži najnovije rezimee na vrhu početne.';
+
+  @override
+  String get paymentDeclinedTitle => 'Tvoja kartica je odbijena';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return 'Ažuriraj je da zadržiš $plan';
+  }
 }

@@ -455,6 +455,27 @@ class ProcessingBacklog {
       };
 }
 
+/// A declined renewal the user can still pay (backend `payment_issue`). Present only while the
+/// plan's Stripe subscription is past_due or unpaid with an open invoice; the entitlement itself
+/// already reads as Free.
+class PaymentIssue {
+  final String status;
+  final PlanType plan;
+
+  const PaymentIssue({required this.status, required this.plan});
+
+  factory PaymentIssue.fromGenerated(wire.GeneratedPaymentIssue generated) =>
+      PaymentIssue(status: generated.status, plan: PlanType.fromWire(generated.plan));
+
+  wire.GeneratedPaymentIssue toGenerated() => wire.GeneratedPaymentIssue(status: status, plan: plan.wireName);
+
+  @override
+  bool operator ==(Object other) => other is PaymentIssue && other.status == status && other.plan == plan;
+
+  @override
+  int get hashCode => Object.hash(status, plan);
+}
+
 class UserSubscriptionResponse {
   final Subscription subscription;
   final int transcriptionSecondsUsed;
@@ -478,6 +499,7 @@ class UserSubscriptionResponse {
   final TranscriptionAllowanceSnapshot? transcriptionAllowance;
   final HeldAudioSummary? heldAudio;
   final ProcessingBacklog? processingBacklog;
+  final PaymentIssue? paymentIssue;
 
   UserSubscriptionResponse({
     required this.subscription,
@@ -499,6 +521,7 @@ class UserSubscriptionResponse {
     this.transcriptionAllowance,
     this.heldAudio,
     this.processingBacklog,
+    this.paymentIssue,
   });
 
   factory UserSubscriptionResponse.fromJson(Map<String, dynamic> json) =>
@@ -528,6 +551,7 @@ class UserSubscriptionResponse {
           ? null
           : TranscriptionAllowanceSnapshot.fromGenerated(generated.transcriptionAllowance!),
       heldAudio: generated.heldAudio == null ? null : HeldAudioSummary.fromGenerated(generated.heldAudio!),
+      paymentIssue: generated.paymentIssue == null ? null : PaymentIssue.fromGenerated(generated.paymentIssue!),
     );
   }
 
@@ -550,6 +574,7 @@ class UserSubscriptionResponse {
       chatQuotaResetAt: chatQuotaResetAt,
       phoneCallQuota: phoneCallQuota?.toGenerated(),
       transcriptionAllowance: transcriptionAllowance?.toGenerated(),
+      paymentIssue: paymentIssue?.toGenerated(),
       heldAudio: heldAudio == null
           ? null
           : wire.GeneratedHeldAudioSummary(

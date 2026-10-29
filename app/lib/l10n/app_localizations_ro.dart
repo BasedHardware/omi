@@ -14940,4 +14940,12 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Afișează cele mai noi recapitulări în partea de sus a ecranului Acasă.';
+
+  @override
+  String get paymentDeclinedTitle => 'Cardul dvs. a fost refuzat';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return 'Actualizați-l pentru a păstra $plan';
+  }
 }

@@ -14940,4 +14940,12 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'హోమ్ పైభాగంలో మీ తాజా రీక్యాప్‌లను చూపించు.';
+
+  @override
+  String get paymentDeclinedTitle => 'మీ కార్డ్ తిరస్కరించబడింది';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return '$plan కొనసాగించడానికి దీన్ని అప్‌డేట్ చేయండి';
+  }
 }

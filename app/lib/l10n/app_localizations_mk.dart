@@ -14941,4 +14941,12 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Прикажи ги најновите резимеа на врвот на Почетна.';
+
+  @override
+  String get paymentDeclinedTitle => 'Вашата картичка е одбиена';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return 'Ажурирајте ја за да го задржите $plan';
+  }
 }

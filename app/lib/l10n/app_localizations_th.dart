@@ -14804,4 +14804,12 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'แสดงสรุปล่าสุดของคุณที่ด้านบนของหน้าหลัก';
+
+  @override
+  String get paymentDeclinedTitle => 'บัตรของคุณถูกปฏิเสธ';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return 'อัปเดตบัตรเพื่อใช้ $plan ต่อ';
+  }
 }

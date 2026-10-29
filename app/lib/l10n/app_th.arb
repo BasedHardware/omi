@@ -4499,5 +4499,7 @@
     "activityAttentionSyncStalledTitle": "Omi ไม่ได้ซิงค์",
     "activityAttentionSyncStalledSubtitle": "ไม่มีการบันทึกที่ซิงค์เป็นเวลาเกิน {hours} ชั่วโมง",
     "dailyRecapsOnHome": "สรุปรายวันในหน้าหลัก",
-    "dailyRecapsOnHomeDescription": "แสดงสรุปล่าสุดของคุณที่ด้านบนของหน้าหลัก"
+    "dailyRecapsOnHomeDescription": "แสดงสรุปล่าสุดของคุณที่ด้านบนของหน้าหลัก",
+    "paymentDeclinedTitle": "บัตรของคุณถูกปฏิเสธ",
+    "paymentDeclinedMessage": "อัปเดตบัตรเพื่อใช้ {plan} ต่อ"
 }

@@ -14926,4 +14926,12 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'ಮುಖಪುಟದ ಮೇಲ್ಭಾಗದಲ್ಲಿ ನಿಮ್ಮ ಇತ್ತೀಚಿನ ಸಾರಾಂಶಗಳನ್ನು ತೋರಿಸಿ.';
+
+  @override
+  String get paymentDeclinedTitle => 'ನಿಮ್ಮ ಕಾರ್ಡ್ ನಿರಾಕರಿಸಲಾಗಿದೆ';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return '$plan ಉಳಿಸಿಕೊಳ್ಳಲು ಇದನ್ನು ನವೀಕರಿಸಿ';
+  }
 }

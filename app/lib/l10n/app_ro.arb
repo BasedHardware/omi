@@ -4499,5 +4499,7 @@
     "activityAttentionSyncStalledTitle": "Omi nu se sincronizează",
     "activityAttentionSyncStalledSubtitle": "Nicio înregistrare sincronizată de peste {hours} ore",
     "dailyRecapsOnHome": "Recapitulări zilnice pe Acasă",
-    "dailyRecapsOnHomeDescription": "Afișează cele mai noi recapitulări în partea de sus a ecranului Acasă."
+    "dailyRecapsOnHomeDescription": "Afișează cele mai noi recapitulări în partea de sus a ecranului Acasă.",
+    "paymentDeclinedTitle": "Cardul dvs. a fost refuzat",
+    "paymentDeclinedMessage": "Actualizați-l pentru a păstra {plan}"
 }

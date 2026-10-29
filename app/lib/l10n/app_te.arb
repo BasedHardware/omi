@@ -11925,5 +11925,7 @@
     "activityAttentionSyncStalledTitle": "Omi సింక్ కావడం లేదు",
     "activityAttentionSyncStalledSubtitle": "{hours} గంటల కంటే ఎక్కువ ఏ రికార్డింగ్ సింక్ కాలేదు",
     "dailyRecapsOnHome": "హోమ్‌లో రోజువారీ రీక్యాప్‌లు",
-    "dailyRecapsOnHomeDescription": "హోమ్ పైభాగంలో మీ తాజా రీక్యాప్‌లను చూపించు."
+    "dailyRecapsOnHomeDescription": "హోమ్ పైభాగంలో మీ తాజా రీక్యాప్‌లను చూపించు.",
+    "paymentDeclinedTitle": "మీ కార్డ్ తిరస్కరించబడింది",
+    "paymentDeclinedMessage": "{plan} కొనసాగించడానికి దీన్ని అప్‌డేట్ చేయండి"
 }

@@ -4499,5 +4499,7 @@
     "activityAttentionSyncStalledTitle": "Το Omi δεν συγχρονίζεται",
     "activityAttentionSyncStalledSubtitle": "Καμία ηχογράφηση δεν συγχρονίστηκε για πάνω από {hours} ώρες",
     "dailyRecapsOnHome": "Ημερήσιες περιλήψεις στην Αρχική",
-    "dailyRecapsOnHomeDescription": "Εμφάνιση των πιο πρόσφατων περιλήψεων στην κορυφή της Αρχικής."
+    "dailyRecapsOnHomeDescription": "Εμφάνιση των πιο πρόσφατων περιλήψεων στην κορυφή της Αρχικής.",
+    "paymentDeclinedTitle": "Η κάρτα σας απορρίφθηκε",
+    "paymentDeclinedMessage": "Ενημερώστε την για να κρατήσετε το {plan}"
 }

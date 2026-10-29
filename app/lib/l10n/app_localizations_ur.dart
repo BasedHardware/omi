@@ -14889,4 +14889,12 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'ہوم کے اوپر اپنے تازہ ترین خلاصے دکھائیں۔';
+
+  @override
+  String get paymentDeclinedTitle => 'آپ کا کارڈ مسترد ہو گیا';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return '$plan برقرار رکھنے کے لیے اسے اپ ڈیٹ کریں';
+  }
 }

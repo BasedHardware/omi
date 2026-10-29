@@ -4499,5 +4499,7 @@
     "activityAttentionSyncStalledTitle": "Omi가 동기화되지 않습니다",
     "activityAttentionSyncStalledSubtitle": "{hours}시간 이상 녹음이 동기화되지 않았습니다",
     "dailyRecapsOnHome": "홈의 일일 요약",
-    "dailyRecapsOnHomeDescription": "홈 상단에 최근 요약을 표시합니다."
+    "dailyRecapsOnHomeDescription": "홈 상단에 최근 요약을 표시합니다.",
+    "paymentDeclinedTitle": "카드가 거절되었습니다",
+    "paymentDeclinedMessage": "{plan} 이용을 유지하려면 카드를 업데이트하세요"
 }

@@ -14860,4 +14860,12 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'होम के ऊपर अपने नवीनतम सारांश दिखाएं।';
+
+  @override
+  String get paymentDeclinedTitle => 'आपका कार्ड अस्वीकार हो गया';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return '$plan बनाए रखने के लिए इसे अपडेट करें';
+  }
 }

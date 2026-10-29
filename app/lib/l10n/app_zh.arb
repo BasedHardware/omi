@@ -4499,5 +4499,7 @@
     "activityAttentionSyncStalledTitle": "Omi 未同步",
     "activityAttentionSyncStalledSubtitle": "超过 {hours} 小时未同步任何录音",
     "dailyRecapsOnHome": "首页每日回顾",
-    "dailyRecapsOnHomeDescription": "在首页顶部显示最新的回顾。"
+    "dailyRecapsOnHomeDescription": "在首页顶部显示最新的回顾。",
+    "paymentDeclinedTitle": "您的银行卡被拒绝",
+    "paymentDeclinedMessage": "请更新银行卡以继续使用 {plan}"
 }

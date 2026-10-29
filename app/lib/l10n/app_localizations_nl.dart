@@ -14916,4 +14916,12 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Toon je nieuwste samenvattingen bovenaan Home.';
+
+  @override
+  String get paymentDeclinedTitle => 'Uw kaart is geweigerd';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return 'Werk deze bij om $plan te behouden';
+  }
 }

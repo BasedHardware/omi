@@ -14881,4 +14881,12 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Vis de nyeste oppsummeringene øverst på Hjem.';
+
+  @override
+  String get paymentDeclinedTitle => 'Kortet ditt ble avvist';
+
+  @override
+  String paymentDeclinedMessage(String plan) {
+    return 'Oppdater det for å beholde $plan';
+  }
 }
