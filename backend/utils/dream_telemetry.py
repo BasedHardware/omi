@@ -49,7 +49,10 @@ def _timestamp(value: Any) -> str | None:
     from datetime import datetime
 
     try:
-        return datetime.fromisoformat(str(value).replace('Z', '+00:00')).isoformat()
+        from datetime import timezone
+
+        instant = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+        return (instant.astimezone(timezone.utc) if instant.tzinfo else instant).isoformat()
     except (TypeError, ValueError):
         return None
 
@@ -117,6 +120,9 @@ def pass_payload(report: dict[str, Any]) -> dict[str, Any]:
         ),
         'wait_ms': _int(timing.get('wait_ms')),
         'waits': _int(timing.get('waits')),
+        'wait_gateway_ms': _int(timing.get('wait_gateway_ms')),
+        'wait_headroom_ms': _int(timing.get('wait_headroom_ms')),
+        'wait_cause': _label(report.get('wait_cause')),
         'seed_ms': _int(timing.get('seed_ms')),
         'model_ms': _int(timing.get('model_ms')),
         'verify_ms': _int(timing.get('verify_ms')),
@@ -162,6 +168,9 @@ def sweep_payload(sweep: dict[str, Any], reports: list[dict[str, Any]]) -> dict[
         'final_status': _counts(report.get('status') for report in finals),
         'not_admitted': _counts(report.get('reason') for report in finals if report.get('status') == 'not_admitted'),
         'waiting_attempts': _counts(report.get('reason') for report in reports if report.get('status') == 'waiting'),
+        'waiting_causes': _counts(
+            report.get('wait_cause') or 'drain' for report in reports if report.get('status') == 'waiting'
+        ),
         'failure_types': _counts(report.get('error_type') for report in finals if report.get('status') == 'failed'),
         'applied': sum(
             1
