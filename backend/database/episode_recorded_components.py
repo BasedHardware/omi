@@ -42,40 +42,26 @@ def partition(uid, facts):
             groups[-1][1] = max(groups[-1][1], fact['end'])
             groups[-1][2].append(cid)
     windows = []
-    for start, end, ids in groups:
-        cursor = start
-        while True:
-            stop = min(end, cursor + timedelta(seconds=MAX_EPISODE_SECONDS))
-            members = [
-                cid
-                for cid in ids
-                if (facts[cid]['start'] < stop and facts[cid]['end'] > cursor)
-                or (
-                    facts[cid]['start'] == facts[cid]['end']
-                    and cursor <= facts[cid]['start']
-                    and (
-                        facts[cid]['start'] < stop
-                        or (
-                            facts[cid]['start'] == stop == end and (stop - cursor).total_seconds() < MAX_EPISODE_SECONDS
-                        )
-                    )
-                )
-            ]
+    for _, _, ids in groups:
+        remaining = list(ids)
+        while remaining:
+            # The crossing capture remains in its starting window. Its tail
+            # cannot open a successor or supply a successor member's clock.
+            cursor = min(facts[cid]['start'] for cid in remaining)
+            cap = cursor + timedelta(seconds=MAX_EPISODE_SECONDS)
+            members = [cid for cid in remaining if facts[cid]['start'] < cap]
+            remaining = [cid for cid in remaining if cid not in members]
+            member_end = max(facts[cid]['end'] for cid in members)
+            stop = min(member_end, cap)
             windows.append(
                 {
                     'id': str(uuid5(NAMESPACE_URL, f'recorded-window:{uid}:{cursor.isoformat()}')),
                     'started_at': cursor,
                     'last_activity_at': stop,
                     'conversation_ids': sorted(members),
-                    'close_reason': 'hard_cap' if stop < end else 'gap',
+                    'close_reason': 'hard_cap' if member_end > stop or remaining else 'gap',
                 }
             )
-            capped_point = (stop - cursor).total_seconds() == MAX_EPISODE_SECONDS and any(
-                facts[cid]['start'] == facts[cid]['end'] == stop for cid in ids
-            )
-            if stop >= end and not capped_point:
-                break
-            cursor = stop
     return windows
 
 
@@ -92,6 +78,10 @@ def _state(template, window, previous, facts):
         **window,
         'status': 'closed',
         'closed_at': window['last_activity_at'],
+        'recorded_end': window['last_activity_at'],
+        'member_activity': {
+            cid: min(facts[cid]['end'], window['last_activity_at']) for cid in window['conversation_ids']
+        },
         'state_version': int((exact or {}).get('state_version') or 0) + 1,
     }
     members = window['conversation_ids']
@@ -153,6 +143,11 @@ def attach(uid, cid, source, start, end, *, candidates, template, choose, firest
     @firestore.transactional
     def commit(transaction):
         fence_row = fence.get(transaction=transaction).to_dict() or {}
+        linked = root.collection('episode_links').document(cid).get(transaction=transaction).to_dict() or {}
+        if linked.get('episode_id'):
+            owner = collection.document(linked['episode_id']).get(transaction=transaction).to_dict() or {}
+            if not _automatic(owner):
+                return None
         facts = {cid: {'start': start, 'end': end, 'source': source}}
         previous = {}
         lo, hi = start, end

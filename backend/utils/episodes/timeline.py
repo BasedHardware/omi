@@ -17,7 +17,7 @@ def choose_recorded_episode(rows: list[dict], started: datetime, finished: datet
     """
     candidates = []
     for row in rows:
-        lo, hi = utc(row.get('started_at')), utc(row.get('last_activity_at'))
+        lo, hi = utc(row.get('started_at')), utc(episode_timeline.recorded_end(row))
         if lo is None or hi is None or hi < lo:
             continue
         gap = max(0.0, (started - hi).total_seconds(), (lo - finished).total_seconds())
@@ -50,7 +50,7 @@ def ownership_end(row: dict) -> datetime | None:
     """Half-open recorded ownership window; scheduling/arrival is not an edge."""
     from datetime import timedelta
 
-    lo, hi = utc(row.get('started_at')), utc(row.get('last_activity_at'))
+    lo, hi = utc(row.get('started_at')), utc(episode_timeline.recorded_end(row))
     if lo is None or hi is None:
         return None
     if row.get('status') == 'live' or row.get('close_reason') in {'gap', 'idle'}:

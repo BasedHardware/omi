@@ -44,6 +44,7 @@ from utils.conversations.overlap_shared_speech import (
 )
 from utils.observability.fallback import record_fallback
 from utils.product_metrics import record_product_event
+from utils.episodes.finalize import schedule_group_attachments
 
 logger = logging.getLogger(__name__)
 MIN_OVERLAP_SECONDS = 60.0
@@ -310,6 +311,8 @@ def _group_with_overlap_speech(
                     expected_group_revision=expected_revision,
                     join_guard=shared_speech_group_guard,
                 )
+                if group_id:
+                    schedule_group_attachments(uid, list(windows))
                 outcome = 'applied' if group_id else 'conflict'
                 record_product_event('capture_group_joined', outcome=outcome)
             logger.info(
@@ -396,6 +399,8 @@ def _group_confirmed_captures(uid: str, conversation: Any, candidate: CaptureRec
                     other.conversation_id: other_fingerprint,
                 },
             )
+            if group_id:
+                schedule_group_attachments(uid, [candidate.conversation_id, other.conversation_id])
             record_product_event('capture_group_joined', outcome='applied' if group_id else 'conflict')
             if group_id and isinstance(own_row, dict):
                 primary = min((candidate, other), key=lambda row: row.primary_rank)

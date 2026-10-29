@@ -1045,6 +1045,17 @@ _add(
 _add(DriverEntry('database.episode_timeline.between', base={'uid': UID, 'start': T0, 'end': T1}))
 _add(
     DriverEntry(
+        'database.episode_timeline.check_window',
+        base={
+            'transaction': ref_transaction(),
+            'uid': UID,
+            'episode': {'id': 'recorded-1', 'started_at': T0, 'last_activity_at': T1},
+        },
+        neutrals={'rows': (None, 'preloaded rows reuse the recorded_candidates query shape')},
+    )
+)
+_add(
+    DriverEntry(
         'database.episode_timeline.recorded_candidates',
         base={'uid': UID, 'started': T0, 'finished': T1},
         neutrals={'transaction': (None, 'same query shape inside or outside a transaction')},

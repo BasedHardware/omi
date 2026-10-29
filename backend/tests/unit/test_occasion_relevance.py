@@ -137,7 +137,7 @@ def test_attachment_order_cannot_supply_its_own_retention(monkeypatch, timeline_
         store.rows[('users', 'u', 'conversations', 'real')]['discarded'] = True
         assert service.last_closed_episode('u', collaborators=c) is None
     monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')
-    assert service.episode_by_id('u', stored['id'], collaborators=c) is not None
+    assert service.episode_by_id('u', stored['id'], collaborators=c) is None
 
 
 def test_missing_ownership_read_is_not_proof_of_isolation(monkeypatch):

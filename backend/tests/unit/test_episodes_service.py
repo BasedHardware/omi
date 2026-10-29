@@ -289,17 +289,14 @@ def test_unplaced_consumption_survives_episode_boundary_and_failed_open():
     assert service.live_episode(UID, collaborators=c) is None
     second = _unplaced('s2', minutes=35, text='second-only-marker ' + LONG)
     c.now = lambda: T0 + timedelta(minutes=36)
-    assert service.record_moment(UID, second, c) == 'llm_error'
-    assert service.record_moment(UID, second, c) == 'applied'
-    third = _unplaced('s3', minutes=37, text='tail-only-marker ' + LONG, trigger='finalize')
-    tail = replace(third, segments=[*first.segments, *second.segments, *third.segments])
+    assert service.record_moment(UID, second, c) == 'skipped_closed'
+    tail = replace(second, segments=[*first.segments, *second.segments], trigger='finalize')
+    assert service.record_moment(UID, tail, c) == 'llm_error'
     assert service.record_moment(UID, tail, c) == 'applied'
     assert 'original-only-marker' not in model.calls[-1][1][1]
-    assert 'second-only-marker' not in model.calls[-1][1][1]
-    assert 'tail-only-marker' in model.calls[-1][1][1]
-    episode = episodes_db.get_current_episode(UID, firestore_client=store)
-    assert _consumed(store) == ({'s1', 's2', 's3'}, True)
-    assert 'applied_segment_ids' not in episode
+    assert 'second-only-marker' in model.calls[-1][1][1]
+    assert _consumed(store) == ({'s1', 's2'}, True)
+    assert episodes_db.get_current_episode(UID, firestore_client=store) is None
 
 
 def test_fifty_thousand_unplaced_segments_keep_every_document_small_and_never_reprocess():
@@ -859,7 +856,7 @@ def test_a_wrap_up_left_live_by_an_older_server_is_never_served_as_live():
     assert [i['status'] for i in closed['provisional_items']] == ['provisional']
 
 
-def test_a_discarded_conversation_still_ends_its_episode_and_drops_its_items():
+def test_a_discarded_conversation_does_not_close_or_extend_its_episode_and_drops_its_items():
     store = StrictFirestore()
     model = FakeModel({'title': 'Lunch', 'bullets': ['A'], 'items': [{'text': 'Book lunch table'}]})
     service.record_moment(UID, _moment(), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
@@ -871,8 +868,10 @@ def test_a_discarded_conversation_still_ends_its_episode_and_drops_its_items():
         == 'skipped_discarded'
     )
     closed = episodes_db.get_episode(UID, episode['id'], firestore_client=store)
-    assert closed['status'] == 'closed' and closed['close_reason'] == 'user'
-    assert [i['status'] for i in closed['provisional_items']] == ['dropped']
+    assert closed['status'] == 'live' and closed['last_activity_at'] == T0
+    assert closed['provisional_items'] == []
+    assert closed['moments'] == []
+    assert closed['title'] == '' and closed['summary_needs_regeneration']
 
 
 def test_wrap_up_without_a_conversation_closes_now_and_dismiss_marks_an_item():
@@ -972,7 +971,7 @@ def _attach(store, conversation_id, *, minutes, source='omi', now_minutes=None):
     )
 
 
-def test_hard_cap_rotates_a_multi_conversation_episode_when_a_member_keeps_talking():
+def test_hard_cap_closes_without_duplicating_the_continuing_member():
     store = StrictFirestore()
     model = FakeModel(
         {'title': 'First stretch', 'bullets': ['Notes before the cap']},
@@ -999,17 +998,16 @@ def test_hard_cap_rotates_a_multi_conversation_episode_when_a_member_keeps_talki
             'and agreed to meet again next Wednesday for a quick status review before wrapping up the topic'
         ),
     )
-    assert service.record_moment(UID, post_cap, c) == 'applied'
+    assert service.record_moment(UID, post_cap, c) == 'skipped_closed'
     closed = episodes_db.get_episode(UID, old['id'], firestore_client=store)
-    current = episodes_db.get_current_episode(UID, firestore_client=store)
     assert closed['status'] == 'closed' and closed['close_reason'] == 'hard_cap'
     assert closed['conversation_ids'] == ['c1', 'c2'] and closed['bullets'] == ['Notes before the cap']
-    assert current['id'] != old['id'] and current['conversation_ids'] == ['c2']
-    assert current['started_at'] == after_cap
-    assert current['title'] == 'Next stretch' and current['usage']['calls'] == 1
+    assert closed['closed_at'] == after_cap
+    assert episodes_db.get_current_episode(UID, firestore_client=store) is None
+    assert episodes_db.get_episode_for_conversation(UID, 'c2', firestore_client=store)['id'] == old['id']
 
 
-def test_hard_cap_carries_same_member_provisional_items_until_finalization_reconciles_them():
+def test_hard_cap_preserves_member_items_on_original_owner_until_finalization():
     store = StrictFirestore()
     model = FakeModel(
         {
@@ -1045,16 +1043,12 @@ def test_hard_cap_carries_same_member_provisional_items_until_finalization_recon
     cap_at = T0 + timedelta(seconds=config.MAX_EPISODE_SECONDS)
     c.now = lambda: cap_at + timedelta(minutes=1)
     post_cap = _moment('c2', minutes=240, start=360, text='After the cap the team confirmed the revised schedule')
-    assert service.record_moment(UID, post_cap, c) == 'skipped_short'
+    assert service.record_moment(UID, post_cap, c) == 'skipped_closed'
     closed = episodes_db.get_episode(UID, original['id'], firestore_client=store)
-    successor = episodes_db.get_current_episode(UID, firestore_client=store)
     assert closed['close_reason'] == 'hard_cap'
-    assert closed['provisional_items'][0]['id'] == earlier_item['id']
-    assert closed['provisional_items'][0]['status'] == 'provisional'
-    assert successor['started_at'] == cap_at
-    assert successor['bullets'] == ['The group assigned the schedule']
-    assert successor['provisional_items'][0]['id'] == original_item['id']
-    assert successor['provisional_items'][0]['status'] == 'provisional'
+    assert {i['id'] for i in closed['provisional_items']} == {earlier_item['id'], original_item['id']}
+    assert all(i['status'] == 'provisional' for i in closed['provisional_items'])
+    assert episodes_db.get_current_episode(UID, firestore_client=store) is None
 
     saved = {
         'c1': [{'id': 'task-c1', 'description': 'Book the room for the planning session'}],
@@ -1066,10 +1060,10 @@ def test_hard_cap_carries_same_member_provisional_items_until_finalization_recon
         service.on_conversation_finalized(UID, 'c2', finalized, trigger='client_finalize', collaborators=c)
         == 'reconciled'
     )
-    reconciled = episodes_db.get_episode(UID, successor['id'], firestore_client=store)
-    assert [(item['status'], item['action_item_id']) for item in reconciled['provisional_items']] == [
-        ('kept', 'task-c2')
-    ]
+    reconciled = episodes_db.get_episode(UID, original['id'], firestore_client=store)
+    assert [
+        (i['status'], i['action_item_id']) for i in reconciled['provisional_items'] if i['conversation_id'] == 'c2'
+    ] == [('kept', 'task-c2')]
 
     c = _collaborators(model, now=cap_at + timedelta(minutes=3), saved=saved, store=store)
     finalized = {'id': 'c1', 'source': 'omi', 'started_at': T0, 'finished_at': cap_at - timedelta(minutes=1)}
@@ -1078,9 +1072,9 @@ def test_hard_cap_carries_same_member_provisional_items_until_finalization_recon
         == 'reconciled'
     )
     reconciled_old = episodes_db.get_episode(UID, original['id'], firestore_client=store)
-    assert [(item['status'], item['action_item_id']) for item in reconciled_old['provisional_items']] == [
-        ('kept', 'task-c1')
-    ]
+    assert [
+        (i['status'], i['action_item_id']) for i in reconciled_old['provisional_items'] if i['conversation_id'] == 'c1'
+    ] == [('kept', 'task-c1')]
 
 
 def test_quality_error_keeps_previous_live_episode_notes():
@@ -1102,7 +1096,7 @@ def test_quality_error_keeps_previous_live_episode_notes():
     assert after['bullets'] == ['The group reviewed the invitation destination.']
 
 
-def test_quality_error_at_hard_cap_keeps_previous_so_far_in_the_successor():
+def test_hard_cap_keeps_previous_notes_without_a_successor_model_call():
     transcript = LONG + '. The group also confirmed the venue and sent an update to everyone.'
     model = FakeModel(
         {'title': 'Planning', 'bullets': ['The group reviewed the invitation destination.']},
@@ -1117,10 +1111,11 @@ def test_quality_error_at_hard_cap_keeps_previous_so_far_in_the_successor():
     cap_at = T0 + timedelta(seconds=config.MAX_EPISODE_SECONDS)
     c.now = lambda: cap_at + timedelta(minutes=1)
     post_cap = _moment('c1', minutes=240, trigger='interval', start=100, text=transcript)
-    assert service.record_moment(UID, post_cap, c) == 'quality_error'
-    successor = episodes_db.get_current_episode(UID, firestore_client=store)
-    assert successor['id'] != before['id'] and successor['started_at'] == cap_at
-    assert successor['bullets'] == ['The group reviewed the invitation destination.']
+    assert service.record_moment(UID, post_cap, c) == 'skipped_closed'
+    closed = episodes_db.get_episode(UID, before['id'], firestore_client=store)
+    assert closed['bullets'] == ['The group reviewed the invitation destination.']
+    assert episodes_db.get_current_episode(UID, firestore_client=store) is None
+    assert len(model.calls) == 1
 
 
 def test_short_terminal_session_tail_is_written_below_the_live_word_floor():
@@ -2136,7 +2131,10 @@ def test_output_language_firestore_and_preference_reads_are_cached_per_session(m
     monkeypatch.setattr(
         conversations_db,
         'get_conversation_raw_snapshot',
-        lambda *args, **kwargs: (language_reads.append(args[1]), raw_snapshot(*args, **kwargs))[1],
+        lambda *args, **kwargs: (
+            language_reads.append(args[1]) if kwargs.get('field_paths') == ['language'] else None,
+            raw_snapshot(*args, **kwargs),
+        )[1],
     )
     monkeypatch.setattr(
         users_db,

@@ -8007,6 +8007,20 @@ ownership within the episode gap/cap rules, or a kept conversation is adjacent.
 A clip's self-created singleton never proves relevance. Episode API projections
 hide episodes whose members are all discarded, deleted or absorbed, including
 when a relevance decision arrives after the episode poll cache was populated.
+This visibility rule also applies with occasion relevance disabled. Episode
+activity tracks retained members separately; a later discard removes its clock
+contribution, and known discarded rows never open or refresh an episode.
+
+A confirmed capture-group join schedules episode membership for every member
+(`capture_group` trigger), including desktop captures. The finalizer's completed
+replay repeats the episode hook; metadata attachment precedes short-tail and
+model checks. Membership links are claimed transactionally and cannot move a
+still-bound conversation to another episode. A four-hour cap closes the recorded
+window without duplicating the continuing conversation; the next conversation
+starts the successor. Moment count is a bounded presentation budget, not a close
+clock. Recovery retains the original owner's full evidence and clamps activity
+to recorded time even when a fragment's `finished_at` is an upload timestamp.
+
 
 ### Occasion step 2 merge-path audit
 
@@ -8041,3 +8055,9 @@ conversations or confirmed full-note runs. Sum increases across serving jobs;
 Cloud Run coverage can differ from GKE scrapes. `omi_sync_intake_total{outcome="merged"}`
 counts appends/absorbs, not already-processed donors. Missing series are unknown,
 never zero. No account ids or transcript data are exported by these counters.
+
+Episode group completion recovers the canonical capture once and links the other
+capture surfaces as hidden duplicate members without repeating episode notes.
+An explicit episode close derives its recorded end from retained member spans,
+bounded by the next episode, rather than using delayed finalize arrival. A late
+discard removes its derived moments/items and invalidates the mixed summary.
