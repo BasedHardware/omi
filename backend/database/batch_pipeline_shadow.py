@@ -24,7 +24,6 @@ from utils.batch_pipeline.contracts import (
 from utils.batch_pipeline.shadow_metrics import OUTCOMES, PAID, PAID_AUDIO, record
 
 MAX_OFFERS = 4
-BUSY_RETRY_SCAN_LIMIT = 100
 RECORD_PENDING_BUSY_SECONDS = 120.0
 OFFER_SECONDS = 6
 STAGING_SECONDS = 120
@@ -48,24 +47,11 @@ def pool_busy(client, namespace, *, now=None):
         return True
     if list(jobs.where('state', '==', 'leased').where('lease_until', '>', now).limit(1).stream()):
         return True
-    retries = (
-        jobs.where('state', '==', 'retry')
-        .where('available_at', '<=', now)
-        .order_by('available_at')
-        .select(('attempt', 'policy_parts.scheduler.max_attempts'))
-        .limit(BUSY_RETRY_SCAN_LIMIT + 1)
-        .stream()
-    )
-    for index, document in enumerate(retries):
-        if index >= BUSY_RETRY_SCAN_LIMIT:
-            return True  # An unmeasured tail cannot certify an idle pool.
-        row = document.to_dict()
-        attempt = row.get('attempt')
-        maximum = ((row.get('policy_parts') or {}).get('scheduler') or {}).get('max_attempts')
-        if type(attempt) is not int or attempt < 0 or type(maximum) is not int or not 1 <= maximum <= 20:
-            return True  # Missing pinned authority is not permission to use capacity.
-        if attempt < maximum:
-            return True
+    # Scheduler.recover promotes every due retry, including one whose attempt
+    # counter reached the cap outside the serving retry-cap cohort. Only the
+    # authoritative terminal state releases its ordinary-work priority.
+    if list(jobs.where('state', '==', 'retry').where('available_at', '<=', now).limit(1).stream()):
+        return True
     return bool(
         list(
             jobs.where('state', '==', 'record_pending')
@@ -86,7 +72,7 @@ class ShadowStore:
         self.busy = busy or self._busy
 
     def _busy(self):
-        # Existing scheduler indexes; bounded retry-authority reads. Runnable
+        # Existing scheduler indexes; at most four document reads. Runnable
         # ordinary GPU work wins, including a flight prefetched by another lane.
         return pool_busy(self.store.client, self.store.namespace, now=self.clock())
 

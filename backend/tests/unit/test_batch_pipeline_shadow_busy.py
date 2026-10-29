@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from database.batch_pipeline_shadow import BUSY_RETRY_SCAN_LIMIT, RECORD_PENDING_BUSY_SECONDS, pool_busy
+from database.batch_pipeline_shadow import RECORD_PENDING_BUSY_SECONDS, pool_busy
 
 
 class MetadataQuery:
@@ -64,8 +64,6 @@ def retry(*, available=9999.0, attempt=1, maximum=5, **values):
         {'state': 'leased', 'lease_until': 9999.0},
         {'state': 'leased', 'lease_until': 10000.0},
         retry(available=10001.0),
-        retry(attempt=5),
-        retry(attempt=9),
         {'state': 'record_pending', 'enqueued_at': 0.0},
         {'state': 'record_pending', 'enqueued_at': 10000.0 - RECORD_PENDING_BUSY_SECONDS},
     ],
@@ -81,6 +79,8 @@ def test_parked_or_expired_work_does_not_block_shadow(row):
         {'state': 'leased', 'lease_until': 10001.0},
         retry(available=10000.0),
         retry(enqueued_at=0.0),  # Old age never excludes a due retry with attempts left.
+        retry(attempt=5),  # The scheduler may still promote it outside the serving retry-cap cohort.
+        retry(attempt=9),
         {'state': 'record_pending', 'enqueued_at': 9999.0},
     ],
 )
@@ -96,14 +96,13 @@ def test_old_parked_population_does_not_hide_live_work():
 
 
 @pytest.mark.parametrize('attempt,maximum', [(None, 5), (True, 5), (-1, 5), (1, None), (1, 0), (1, 21)])
-def test_uncertain_retry_authority_blocks_shadow(attempt, maximum):
+def test_attempt_metadata_cannot_release_a_due_retry(attempt, maximum):
     assert busy([retry(attempt=attempt, maximum=maximum)])
 
 
-def test_due_retry_scan_cannot_ignore_an_unmeasured_tail():
-    exhausted = [retry(attempt=5) for _ in range(BUSY_RETRY_SCAN_LIMIT)]
-    assert not busy(exhausted)
-    assert busy([*exhausted, retry(attempt=5)])
+def test_due_retry_at_attempt_cap_behind_parked_population_retains_priority():
+    parked = [retry(available=20000.0) for _ in range(175)]
+    assert busy([*parked, retry(attempt=5)])
 
 
 def test_empty_pool_is_idle():

@@ -225,6 +225,28 @@ def test_lease_expiry_backoff_and_stale_result_fencing():
     assert not queue.complete(WorkResult('a', 'gs://results/changed'), second.token, 999)
 
 
+@pytest.mark.parametrize('mode', ['off', 'shadow'])
+def test_due_retry_at_attempt_cap_can_still_be_dispatched(mode, monkeypatch):
+    # Shadow idle admission must follow this actual scheduler behavior, rather
+    # than treating an attempt count as an authoritative terminal state.
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', mode)
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('at-cap'), 0)
+    lease = queue.pull(0)[0]
+    job = store.rows['jobs', 'at-cap']
+    job['attempt'] = job['policy_parts']['scheduler']['max_attempts']
+    cap = job['attempt']
+    assert queue.recover(LEASE_SECONDS + 1) == 1
+    retry = store.rows['jobs', 'at-cap']
+    assert retry['state'] == 'retry' and retry['attempt'] == cap
+    due = retry['available_at']
+    assert queue.recover(due) == 1
+    next_lease = queue.pull(due)[0]
+    assert next_lease.attempt == cap + 1
+    assert next_lease.token != lease.token
+
+
 def test_failures_stop_at_default_ceiling_without_fabricating_result():
     store = MemoryStore()
     queue = Scheduler(store)

@@ -27,11 +27,12 @@ changes a conversation; normal projection continues to reject shadow jobs.
 This observes assignment planning rather than owner-chain scheduling or a
 durable transaction. See [shadow isolation and the proposed 25% window](batch-pipeline-shadow.md)
 for runtime bounds, cost assumptions, rollback and the lead-owned activation.
-Idle offers yield to ready work, live leases, due retries with attempts remaining,
-and recording placeholders younger than 120 seconds. Future retries, exhausted
-attempts and expired leases do not occupy shadow capacity. The bounded retry
-probe refuses idle admission when pinned attempt authority or scan coverage is
-unknown; each worker still rechecks its GPU lock and ordinary in-flight work.
+Idle offers yield to ready work, live leases, every due retry,
+and recording placeholders younger than 120 seconds. Future retries and expired
+leases do not occupy shadow capacity. An attempt counter at its cap does not
+terminalize a due retry; only its authoritative state releases ordinary-work
+priority. Four existing indexed probes read at most four documents; each worker
+still rechecks its GPU lock and ordinary in-flight work.
 
 Dedicated batch GPU capacity follows fresh admissible queued-unit counts, not
 raw queue age. Allowance-held work remains in durable custody while parked;
