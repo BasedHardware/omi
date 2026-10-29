@@ -10,6 +10,7 @@ import threading
 import time
 import json
 import logging
+from typing import Any, Callable
 
 from utils.batch_pipeline.shadow_transaction import ShadowBoundaryError, ShadowTransaction
 from config.policy import ProjectionPolicy
@@ -64,7 +65,10 @@ def plan(item, payload, context, reader, *, decode, builder=None, assign=None):
         )
         projection_speech_spans(payload, item.duration_seconds)
         parts = [(item, payload)] if record_origin else split_result(item, payload)
-        builder, assign = builder or build_incoming, assign or assign_in_transaction
+        builder = builder or build_incoming
+        # The serving body is SDK-annotated; this intentional duck-typed seam
+        # supplies narrower read/discard capabilities, never an SDK transaction.
+        assign_body: Callable[..., Any] = assign or assign_in_transaction
         policy = ProjectionPolicy(authoritative_labels=True)
         # Each part gets its own discarded transaction, as the serving path does.
         # No SDK client/ref/commit escapes through the planner's capabilities.
@@ -78,7 +82,7 @@ def plan(item, payload, context, reader, *, decode, builder=None, assign=None):
                     'start': item.capture_at,
                     'end': item.capture_at + item.duration_seconds,
                 }
-            assign(
+            assign_body(
                 transaction,
                 transaction.user(),
                 incoming,
@@ -122,7 +126,7 @@ def run(store, segment_id, payload):
 
         def decode(raw):
             result = deepcopy(raw)
-            result['transcript_segments'] = conversations._decode_transcript_segments_strict(
+            result['transcript_segments'] = conversations.decode_transcript_segments_verified(
                 item.owner_id, raw.get('transcript_segments', []), bool(raw.get('transcript_segments_compressed'))
             )
             if raw.get('manual_speaker_assignments') is not None:

@@ -36,6 +36,13 @@ class Reference:
         return '/'.join(self._path)
 
     @property
+    def document_path(self):
+        return self._path
+
+    def belongs_to(self, transaction):
+        return self._transaction is transaction
+
+    @property
     def parent(self):
         return Collection(self._transaction, self._path[:-1])
 
@@ -100,9 +107,9 @@ class ShadowTransaction:
         return deepcopy(self._cache[key])
 
     def _discard_write(self, reference, payload, **kwargs):
-        if not isinstance(reference, Reference) or reference._transaction is not self:
+        if not isinstance(reference, Reference) or not reference.belongs_to(self):
             raise ShadowBoundaryError('foreign_write_reference')
-        self._check(reference._path)
+        self._check(reference.document_path)
         if not isinstance(payload, dict) or self.writes >= 256:
             raise ShadowBoundaryError('write_plan_budget')
         self._writing = True
