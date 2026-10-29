@@ -156,6 +156,9 @@ class ResultLog:
                     projection_state='quarantine_held' if quarantined else 'persisted',
                 )
                 log.owners.setdefault(owner_key(binding.owner_id), {})['projection_watermark'] = sid
+                if quarantined:
+                    # Same transaction as the receipt: recovery owns the unit.
+                    log.jobs[sid]['recovery_state'] = 'held'
                 log.persist_order.append(sid)
                 return receipt
 
@@ -343,11 +346,15 @@ def test_discarded_record_target_cannot_wedge_the_owner_chain(monkeypatch):
     assert log.persist_order == ids
     assert log.results[ids[0]]['projection_state'] == 'quarantine_held'
     assert log.results[ids[0]]['projection']['state'] == 'quarantined'
+    # The job lands in the held scan in the same transaction, so the upload
+    # can complete as a client partial and the redrive queue owns the unit.
+    assert log.jobs[ids[0]]['recovery_state'] == 'held'
     assert log.projection_watermark(owner_key(BURST)) == ids[-1]
     # A later pass neither reassigns nor drops the held receipt: recovery owns it.
     projector.project_owner(BURST)
     assert log.persist_order == ids
     assert log.results[ids[0]]['projection_state'] == 'quarantine_held'
+    assert log.jobs[ids[0]]['recovery_state'] == 'held'
 
 
 def test_discarded_record_silence_head_quarantines_and_advances(monkeypatch):
