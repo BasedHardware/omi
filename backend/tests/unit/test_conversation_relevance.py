@@ -322,3 +322,64 @@ def test_neighbor_is_never_looked_up_when_the_rules_settle():
     )
     assert decision.reason == 'filler_only'
     lookup.assert_not_called()
+
+
+def test_find_neighbor_normalizes_mixed_naive_aware_and_iso_timestamps():
+    """Mixed offset-naive and offset-aware datetimes or ISO-8601 strings across
+    started_at/finished_at and candidate rows used to raise TypeError: can't
+    compare offset-naive and offset-aware datetimes (or silently drop ISO rows).
+    """
+    naive_t0 = T0.replace(tzinfo=None)
+    rows = [
+        {
+            'id': 'naive-row-before',
+            'started_at': (T0 - timedelta(seconds=300)).replace(tzinfo=None),
+            'finished_at': (T0 - timedelta(seconds=50)).replace(tzinfo=None),
+        },
+        {
+            'id': 'iso-row-closer',
+            'started_at': (T0 - timedelta(seconds=200)).isoformat().replace('+00:00', 'Z'),
+            'finished_at': (T0 - timedelta(seconds=25)).isoformat().replace('+00:00', 'Z'),
+        },
+        {
+            'id': 'aware-row-after',
+            'started_at': T0 + timedelta(seconds=45),
+            'finished_at': T0 + timedelta(seconds=180),
+        },
+    ]
+
+    neighbor = find_neighbor(
+        rows,
+        conversation_id='me',
+        started_at=naive_t0,
+        finished_at=T0 + timedelta(seconds=3),
+        gap_seconds=120,
+    )
+    assert neighbor == Neighbor('iso-row-closer', 25.0, 'before')
+
+
+def test_neighbor_lookup_exception_degrades_to_no_neighbor_without_aborting_model_tier():
+    seen = []
+
+    def model(_on_error, neighbor):
+        seen.append(neighbor)
+        return True
+
+    def broken_neighbor():
+        raise RuntimeError('neighbor store lookup failed')
+
+    decision = decide_relevance(
+        trigger=ProcessingTrigger.CAPTURE_END,
+        texts=['Coming over there in a second.'],
+        speech_seconds=2.0,
+        has_photos=False,
+        user_kept=False,
+        exempt=False,
+        trusted_wake_word=False,
+        model_discards=model,
+        calendar_retains=MagicMock(return_value=False),
+        neighbor=broken_neighbor,
+    )
+    assert seen == [None]
+    assert decision == RelevanceDecision('discard', 'model', 'model_discard', ProcessingTrigger.CAPTURE_END)
+

@@ -21,7 +21,7 @@ from __future__ import annotations
 import math
 import os
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable, Iterable, Literal, Mapping, Optional, Sequence
 
 from config.jev_decisions import JEV_MODEL, RelevanceArm
@@ -200,6 +200,21 @@ def _decision_chain(arms: Sequence[DecisionArm]) -> RelevanceDecision:
     raise AssertionError('Relevance chain must end in a total deterministic arm')
 
 
+def _coerce_utc_datetime(value: Any) -> Optional[datetime]:
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+    if isinstance(value, str):
+        cleaned = value.strip()
+        if not cleaned:
+            return None
+        try:
+            parsed = datetime.fromisoformat(cleaned.replace('Z', '+00:00'))
+        except ValueError:
+            return None
+        return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
+    return None
+
+
 def find_neighbor(
     rows: Iterable[Mapping[str, Any]],
     *,
@@ -214,20 +229,25 @@ def find_neighbor(
     conversations, so a neighbor is exactly a conversation this one would have
     joined had capture not split it.
     """
-    if started_at is None or finished_at is None:
+    start = _coerce_utc_datetime(started_at)
+    finish = _coerce_utc_datetime(finished_at)
+    if start is None or finish is None:
         return None
     best: Optional[Neighbor] = None
     for row in rows:
+        if not isinstance(row, Mapping):
+            continue
         other_id = row.get('id')
-        other_start, other_end = row.get('started_at'), row.get('finished_at')
         if not other_id or other_id == conversation_id or row.get('discarded') or row.get('deleted'):
             continue
-        if not isinstance(other_start, datetime) or not isinstance(other_end, datetime):
+        other_start = _coerce_utc_datetime(row.get('started_at'))
+        other_end = _coerce_utc_datetime(row.get('finished_at'))
+        if other_start is None or other_end is None:
             continue
-        if other_end <= started_at:
-            gap, position = (started_at - other_end).total_seconds(), 'before'
-        elif other_start >= finished_at:
-            gap, position = (other_start - finished_at).total_seconds(), 'after'
+        if other_end <= start:
+            gap, position = (start - other_end).total_seconds(), 'before'
+        elif other_start >= finish:
+            gap, position = (other_start - finish).total_seconds(), 'after'
         else:
             gap, position = 0.0, 'before'  # overlapping capture of the same moment
         if gap < gap_seconds and (best is None or gap < best.gap_seconds):
@@ -365,7 +385,10 @@ def decide_relevance(
             report_scorer_outcome(scorer_error_outcome(_error))
 
         assert model_discards is not None
-        adjacent = neighbor()
+        try:
+            adjacent = neighbor()
+        except Exception:
+            adjacent = None
         try:
             discards = model_discards(on_error, adjacent)
         except Exception as error:
