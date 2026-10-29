@@ -19,7 +19,6 @@ import math
 import os
 import secrets
 import sys
-import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -335,22 +334,70 @@ def _ensure_config_parent(path: Path) -> None:
             pass
 
 
+def _windows_config_lock(fd: int, *, unlock: bool) -> None:
+    """Lock or unlock byte zero on a synchronous Windows file descriptor.
+
+    LockFileEx without LOCKFILE_FAIL_IMMEDIATELY waits in the kernel rather
+    than polling. The existing msvcrt implementation uses the same one-byte
+    range, so a running older CLI and a newer CLI still coordinate. Because
+    the Windows call is synchronous, Ctrl-C may not be observed until the
+    waiting call returns; closing the descriptor releases any acquired lock.
+    """
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+
+    # OVERLAPPED's internal fields are ULONG_PTR (pointer-sized), and its
+    # offset is two DWORDs even on 64-bit Windows. Zero initialization gives
+    # the same byte-zero lock range used by the earlier msvcrt implementation.
+    class _Overlapped(ctypes.Structure):
+        _fields_ = [
+            ("Internal", ctypes.c_size_t),
+            ("InternalHigh", ctypes.c_size_t),
+            ("Offset", wintypes.DWORD),
+            ("OffsetHigh", wintypes.DWORD),
+            ("hEvent", wintypes.HANDLE),
+        ]
+
+    # These attributes exist only on Windows; keep platform-independent type
+    # checking of the rest of the CLI possible on non-Windows hosts.
+    windows_ctypes: Any = ctypes
+    windows_crt: Any = msvcrt
+    kernel32 = windows_ctypes.WinDLL("kernel32", use_last_error=True)
+    overlapped = _Overlapped()
+    handle = windows_crt.get_osfhandle(fd)
+    if unlock:
+        operation = kernel32.UnlockFileEx
+        operation.argtypes = [
+            wintypes.HANDLE,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            ctypes.POINTER(_Overlapped),
+        ]
+        operation.restype = wintypes.BOOL
+        succeeded = operation(handle, 0, 1, 0, ctypes.byref(overlapped))
+    else:
+        operation = kernel32.LockFileEx
+        operation.argtypes = [
+            wintypes.HANDLE,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            ctypes.POINTER(_Overlapped),
+        ]
+        operation.restype = wintypes.BOOL
+        # LOCKFILE_EXCLUSIVE_LOCK only: a synchronous handle waits in the
+        # kernel when this byte is held by another process.
+        succeeded = operation(handle, 0x00000002, 0, 1, 0, ctypes.byref(overlapped))
+    if not succeeded:
+        raise windows_ctypes.WinError(windows_ctypes.get_last_error())
+
+
 def _acquire_config_lock(fd: int) -> None:
     if sys.platform == "win32":
-        import msvcrt
-
-        # Lock one byte at a fixed offset, including on a newly empty file.
-        # LK_LOCK stops retrying after ten seconds; keep waiting for this short
-        # local transaction instead, while leaving Ctrl-C interruptible.
-        while True:
-            os.lseek(fd, 0, os.SEEK_SET)
-            try:
-                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
-                return
-            except OSError as exc:
-                if exc.errno not in {errno.EACCES, errno.EAGAIN, errno.EDEADLK}:
-                    raise
-                time.sleep(0.05)
+        _windows_config_lock(fd, unlock=False)
     else:
         import fcntl
 
@@ -359,10 +406,7 @@ def _acquire_config_lock(fd: int) -> None:
 
 def _release_config_lock(fd: int) -> None:
     if sys.platform == "win32":
-        import msvcrt
-
-        os.lseek(fd, 0, os.SEEK_SET)
-        msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+        _windows_config_lock(fd, unlock=True)
     else:
         import fcntl
 
