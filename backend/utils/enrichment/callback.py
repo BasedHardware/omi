@@ -18,7 +18,6 @@ import time
 from database import conversations as conversations_db
 from database._client import get_firestore_client
 from database.summary_processing import claim_from_snapshot
-from models.conversation import Conversation
 from models.conversation_enums import ConversationSource
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.factory import deserialize_conversation
