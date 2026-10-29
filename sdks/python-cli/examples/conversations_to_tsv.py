@@ -69,13 +69,19 @@ def extract_transcript(item: Dict[str, Any]) -> str:
     if isinstance(transcript_val, str) and transcript_val.strip():
         return transcript_val
 
-    # Support segment/transcripts arrays
-    segments = item.get("segments") or item.get("transcripts")
+    # Support transcript_segments (Omi API default), segments, or transcripts arrays
+    segments = item.get("transcript_segments") or item.get("segments") or item.get("transcripts")
     if isinstance(segments, list):
         parts: List[str] = []
         for seg in segments:
             if isinstance(seg, dict):
-                speaker = seg.get("speaker") or seg.get("speaker_label")
+                raw_speaker = seg.get("speaker") if seg.get("speaker") is not None else seg.get("speaker_label")
+                if isinstance(raw_speaker, int) and not isinstance(raw_speaker, bool):
+                    speaker = f"Speaker {raw_speaker}"
+                elif raw_speaker is not None:
+                    speaker = str(raw_speaker).strip()
+                else:
+                    speaker = ""
                 text = seg.get("text") or seg.get("content") or ""
                 if text:
                     if speaker:
@@ -107,7 +113,9 @@ def unwrap_conversations(data: Any, source_name: str = "input") -> List[Dict[str
     conversations: List[Dict[str, Any]] = []
     for idx, item in enumerate(data):
         if not isinstance(item, dict):
-            raise ValueError(f"{source_name}: conversation at index {idx} must be a JSON object, got {type(item).__name__}")
+            raise ValueError(
+                f"{source_name}: conversation at index {idx} must be a JSON object, got {type(item).__name__}"
+            )
         conversations.append(item)
 
     return conversations
