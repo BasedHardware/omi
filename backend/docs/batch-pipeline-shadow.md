@@ -60,6 +60,37 @@ normal queue latency, shadow outcome/speech/GPU counters and node count.
 No identifiers are metric labels. Fresh hard-three and errclass/replay entry
 checks remain owned by the batch rollout owner; shadow does not prove them.
 
+Lead41be4b requires T2 qualification from at least3,600 measured shadow speech
+seconds while serving remains0%. The read-only collector
+`backend/scripts/rollout/batch_shadow_t2.py` uses masked numeric/state fields
+from the shadow control table, complete bounded pagination and one server
+readTime across settled and overdue reads. It emits aggregate counts only,
+never owner/job IDs, audio or transcript. Dropped offers do not enter the
+denominator. Unknown VAD, malformed receipts or unfinished attempts older than
+15 minutes make T2UNKNOWN; a page/read failure makes the sample BLIND.
+Speech lost to the cap0 paid-recovery refusal remains loss, never clean.
+
+After actual25% activation, run every two minutes with a new output directory
+and that activation's timestamp, under ro-prod:
+
+```bash
+python3 -I backend/scripts/rollout/batch_shadow_t2.py \
+  --source-observer "$SERVING_OBSERVER_OUT/watch-latest.json" \
+  --since "$ACTUAL_SHADOW_START" --out "$SHADOW_ENTRY_OBSERVER_OUT"
+```
+
+This composes **serving T1/T4 plus shadow T2** explicitly; it does not claim
+shadow custody/language or full owner-chain qualification. Any known serving
+T2 harm remains hard. Both source clocks must be fresh; the earlier readTime
+bounds continuity. Lead44cf37 confirms that the30m clock is actual serving
+T1/T4 continuity with no serving T2 harm. The collector reconstructs it from
+`watch-samples.jsonl`; a supplied timestamp or current row cannot fill history.
+Shadow T2 needs its complete measured census, without an additional30m wait
+after reaching the speech floor. Use the combined `watch-latest.json` for the single entry packet;
+retain exact CPU/worker artifact/config identity
+as separate provenance. There are no pins/markers or production writes in the
+collector. It must never write into the serving observer's output directory.
+
 ### Conditional list-price budget, checked 2026-10-29
 
 Read-only infrastructure inspection found the existing recovery role in
