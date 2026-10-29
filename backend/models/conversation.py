@@ -605,7 +605,7 @@ class Conversation(BaseModel):
     apps_results: List[AppResult] = []
     suggested_summarization_apps: List[str] = []
 
-    # TODO: plugins_results for backward compatibility with the old memories routes and app
+    # plugins_results for backward compatibility with the old memories routes and app
     plugins_results: List[PluginResult] = []
 
     user_corrections: List[Dict] = Field(default_factory=list)
