@@ -12,7 +12,7 @@ from utils.batch_pipeline.retention import batch_artifact_authorize, batch_artif
 from utils.other.local_storage import create_storage_client
 from database.batch_pipeline_shadow import ShadowStore
 from config.batch_pipeline_shadow import shadow_percent
-from utils.batch_pipeline.compute_client import ComputeClient
+from utils.batch_pipeline.compute_client import shadow_from_env
 
 
 def artifacts_for(store: Any) -> ArtifactStore:
@@ -45,9 +45,10 @@ def create_artifact_store(store: Any, storage_client: Any, bucket: str, master_s
     )
 
 
-@lru_cache(maxsize=2)
-def _shadow_projection_client(base, stage):
-    return ComputeClient(base, base, stage)
+@lru_cache(maxsize=1)
+def _shadow_projection_client():
+    """Reuse the existing process-config adapter and its cached OIDC client."""
+    return shadow_from_env()
 
 
 def shadow_result(store, item, payload, *, projection=None):
@@ -56,10 +57,7 @@ def shadow_result(store, item, payload, *, projection=None):
     if shadow_percent():
         try:
             if projection is None:
-                client = _shadow_projection_client(
-                    os.getenv('BATCH_PIPELINE_SHADOW_RECOVERY_API_URL', '').strip(),
-                    os.getenv('OMI_ENV_STAGE', '').strip().lower(),
-                )
+                client = _shadow_projection_client()
                 projection = client.shadow_project
             receipt = projection(item.segment_id, payload)
         except Exception:
