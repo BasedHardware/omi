@@ -5,12 +5,7 @@ import {
   fetchAllMemoriesPaged,
   type MemoriesResponse
 } from '../lib/memoriesBulk'
-import {
-  cache,
-  hydrateFromDisk,
-  publish,
-  subscribers,
-} from '../lib/memoriesCache'
+import { cache, hydrateFromDisk, publish, subscribers } from '../lib/memoriesCache'
 import { getCacheUid } from '../lib/persistentCache'
 import {
   parseKnowledgeLedgerMemory,
@@ -52,12 +47,22 @@ async function patchMemoryOptimistic(
   urlPath: string,
   value: string,
   apply: (m: Memory) => Memory
-): Promise<void> {
+): Promise<Memory | null> {
   const originUid = getCacheUid()
   const prev = cache.list ?? []
   publish(prev.map((m) => (m.id === id ? apply(m) : m)))
   try {
-    await omiApi.patch(urlPath, null, { params: { value } })
+    const res = await omiApi.patch(urlPath, { value }, { params: { value } })
+    const rawReplacement = (res as { data?: { memory?: unknown } } | undefined)?.data?.memory
+    const parsedReplacement = rawReplacement ? parseKnowledgeLedgerMemory(rawReplacement) : null
+    if (parsedReplacement && getCacheUid() === originUid) {
+      const current = cache.list ?? []
+      const next = current
+        .map((m) => (m.id === id || m.id === parsedReplacement.id ? parsedReplacement : m))
+        .filter((m, idx, arr) => arr.findIndex((x) => x.id === m.id) === idx)
+      publish(next)
+    }
+    return parsedReplacement
   } catch (e) {
     // Revert only if still the same account — a switch mid-request already reset
     // A's cache, so re-publishing A's `prev` list would stamp it under B.
@@ -74,7 +79,7 @@ export function useMemories(): {
   // Gates the layer filter, including for empty accounts.
   canonicalLifecycleExposed: boolean
   createMemory: (content: string, extra?: CreateMemoryExtra) => Promise<void>
-  editMemory: (id: string, content: string) => Promise<void>
+  editMemory: (id: string, content: string) => Promise<Memory | null>
   setMemoryVisibility: (id: string, visibility: 'public' | 'private') => Promise<void>
   deleteMemory: (id: string) => Promise<void>
   refresh: () => Promise<void>
@@ -149,11 +154,14 @@ export function useMemories(): {
     if (getCacheUid() === originUid) publish(list)
   }
 
-  // Edit a memory's content.
-  const editMemory = async (id: string, content: string): Promise<void> => {
+  // Edit a memory's content and return any canonical replacement record.
+  const editMemory = async (id: string, content: string): Promise<Memory | null> => {
     const text = content.trim()
-    if (!text) return
-    await patchMemoryOptimistic(id, `/v3/memories/${id}`, text, (m) => ({ ...m, content: text }))
+    if (!text) return null
+    return await patchMemoryOptimistic(id, `/v3/memories/${id}`, text, (m) => ({
+      ...m,
+      content: text
+    }))
   }
 
   // Same query-param contract as editMemory, for PATCH /v3/memories/{id}/visibility.
@@ -175,9 +183,7 @@ export function useMemories(): {
   const deleteMemory = async (id: string): Promise<void> => {
     const originUid = getCacheUid()
     const prev = cache.list ?? []
-    publish(
-      prev.filter((m) => m.id !== id),
-      )
+    publish(prev.filter((m) => m.id !== id))
     try {
       await omiApi.delete(`/v3/memories/${id}`)
     } catch (e) {
