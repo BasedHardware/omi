@@ -51,6 +51,7 @@ class Episode(BaseModel):
     id: str
     status: EpisodeStatus
     started_at: datetime
+    timer_started_at: Optional[datetime] = None
     last_activity_at: datetime
     closed_at: Optional[datetime] = None
     close_reason: Optional[EpisodeCloseReason] = None

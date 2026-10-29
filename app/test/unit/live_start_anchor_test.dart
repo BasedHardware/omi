@@ -15,6 +15,22 @@ Episode _episode(DateTime startedAt, {String id = 'ep1'}) => Episode(
 
 void main() {
   group('LiveStartAnchor', () {
+    test('server timer start replaces yesterday restart and follows same-id corrections', () {
+      final anchor = LiveStartAnchor();
+      final previousEnd = DateTime.utc(2026, 10, 28, 18, 32);
+      final started = DateTime.utc(2026, 10, 29, 5, 46);
+      final now = DateTime.utc(2026, 10, 29, 7, 11);
+      anchor.restart(previousEnd);
+      Episode current(DateTime at) =>
+          Episode(id: 'current', live: true, startedAt: at, timerStartedAt: at, lastActivityAt: now);
+      final start = anchor.resolve(episode: current(started), captureStart: previousEnd, streaming: true, now: now);
+      expect(start, started);
+      expect(now.difference(start!), const Duration(hours: 1, minutes: 25));
+      final corrected = started.subtract(const Duration(minutes: 2));
+      expect(
+          anchor.resolve(episode: current(corrected), captureStart: previousEnd, streaming: true, now: now), corrected);
+    });
+
     test('a pendant lease lapsing for a tick keeps the running start', () {
       final anchor = LiveStartAnchor();
       DateTime? at(int s, DateTime? capture) =>

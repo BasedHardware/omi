@@ -254,6 +254,8 @@ def test_the_capability_read_is_cached_briefly(fake_redis, monkeypatch):
 
 
 def test_realtime_batches_reach_the_gate_only_when_admitted(fake_redis, monkeypatch):
+    # Exercise rollback fan-out; recorded-time input is covered by the replay suite.
+    monkeypatch.setenv('EPISODE_RECORDED_TIME_ENABLED', 'false')
     client_gate.note_client_seen('u', now=0)
     tracker = MomentTracker()
     monkeypatch.setattr(live, 'tracker', tracker)

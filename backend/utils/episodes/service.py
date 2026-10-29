@@ -15,9 +15,9 @@ Entry points (all synchronous, fail-open, run on a worker thread by callers):
   persisted it. It joins the live episode covering its span right away, so
   Home folds it under the live row from its first appearance instead of only
   after enrichment finishes. Retained speech merges into its notes with content
-  receipts. Never opens an episode on its own — but a clip whose covering
-  episode closed on silence (``gap``/``idle``) rejoins it, reopening the
-  episode when nothing newer exists.
+  receipts. Recorded-time ownership selects a covering live or closed episode;
+  without an owner it creates a closed historical episode and leaves live
+  navigation alone. The rollback path retains the former last-closed rejoin.
 - ``on_conversation_finalized``: the conversation's normal processing has
   completed. Apply any trailing text the live stream did not deliver, then
   reconcile the provisional items heard in it against the tasks that
@@ -46,6 +46,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Mapping, Optional, Sequence
 from uuid import uuid4
+from config.recorded_time import recorded_episodes_enabled, live_timer_start_enabled
+from utils.conversations.recorded_time import recorded_span
+from utils.episodes.timeline import episode_owning_recorded_time, choose_recorded_episode
+from database import episode_timeline
 
 from config.episodes import (
     CLOSE_GAP_SECONDS,
@@ -377,11 +381,17 @@ def _close(
     if detach:
         extra['conversation_ids'] = [cid for cid in episode.get('conversation_ids') or [] if cid != detach]
         extra['provisional_items'] = [item for item in items if item.get('conversation_id') != detach]
+    closed_at = _idle_closed_at(episode, now) if reason == 'idle' else now
+    if recorded_episodes_enabled():
+        if reason == 'gap':
+            closed_at = _idle_closed_at(episode, now)
+        elif reason == 'hard_cap' and (start := policy.utc(episode.get('started_at'))) is not None:
+            closed_at = start + timedelta(seconds=MAX_EPISODE_SECONDS)
     closed = episodes_db.close_episode(
         uid,
         str(episode['id']),
         reason,
-        closed_at=_idle_closed_at(episode, now) if reason == 'idle' else now,
+        closed_at=closed_at,
         extra=extra,
         expected_activity_at=expected_activity_at,
         firestore_client=c.firestore_client,
@@ -525,6 +535,11 @@ def attach_conversation(
 
 def _attach_once(uid: str, conversation_id: str, source: Optional[str], started_at: datetime, c: Collaborators) -> str:
     now = _now(c)
+    if recorded_episodes_enabled():
+        owner = episode_owning_recorded_time(uid, started_at, firestore_client=c.firestore_client)
+        if owner or (now - started_at).total_seconds() >= CLOSE_GAP_SECONDS:
+            _attach_recorded(uid, conversation_id, {'source': source}, started_at, started_at, c)
+            return 'joined' if owner and policy.is_live(owner) else 'recorded'
     episode = episodes_db.get_current_episode(uid, firestore_client=c.firestore_client)
     hard_cap_reopened = False
     hard_cap_previous: Optional[dict[str, Any]] = None
@@ -710,7 +725,7 @@ def _settle_boundary(
             episode,
             decision.reason or 'gap',
             c,
-            now=now,
+            now=facts.started_at if recorded_episodes_enabled() else now,
             detach=detach,
             closing=moment.conversation_id if carry_previous_state else None,
             carry_to_successor=moment.conversation_id if carry_previous_state else None,
@@ -1180,6 +1195,10 @@ def _close_for_finalize(
     if trigger != CLIENT_FINALIZE and ids[-1] != conversation_id:
         # A conversation joined after this one (a rollover, a second device): the occasion goes on.
         return 'continued'
+    if recorded_episodes_enabled() and trigger != CLIENT_FINALIZE and not policy.idle_close_due(episode, now):
+        # A live conversation can finalize sooner than the episode's quiet
+        # window. Processing that row is not a recorded occasion boundary.
+        return 'continued'
     _close(uid, episode, 'user' if trigger == CLIENT_FINALIZE else 'gap', c, now=now, closing=conversation_id)
     return 'closed'
 
@@ -1321,7 +1340,9 @@ def _rejoin_closed_synced(
 
 
 def _attach_synced_once(uid: str, conversation_id: str, row: Mapping[str, Any], c: Collaborators) -> str:
-    """A sync-finalized conversation joins the episode covering it, live or silence-closed.
+    """A sync-finalized conversation joins its recorded-time owner (or forms a closed one).
+
+    The branch below the recorded-time switch is the legacy rollback path.
 
     Offline-sync (WAL) conversations never attach at first words: no realtime
     stream carries them. When one lands inside the live episode's span it joins
@@ -1334,6 +1355,14 @@ def _attach_synced_once(uid: str, conversation_id: str, row: Mapping[str, Any], 
     closed.
     """
     started = policy.utc(row.get('started_at')) or policy.utc(row.get('created_at'))
+    if recorded_episodes_enabled() and started is not None:
+        segments = [s for s in row.get('transcript_segments') or [] if isinstance(s, Mapping)]
+        span = recorded_span(started, segments)
+        finished = span[1] if span else policy.utc(row.get('last_speech_at')) or policy.utc(row.get('finished_at'))
+        if finished is None or finished < started:
+            return 'no_episode'
+        _attach_recorded(uid, conversation_id, row, span[0] if span else started, finished, c)
+        return 'recorded'
     if started is None:
         return 'no_episode'
     finished = policy.utc(row.get('finished_at'))
@@ -1350,6 +1379,28 @@ def _attach_synced_once(uid: str, conversation_id: str, row: Mapping[str, Any], 
         # gap): it may belong to the closed occasion before it.
         return _rejoin_closed_synced(uid, conversation_id, row, started, finished, c, allow_reopen=False)
     return _rejoin_closed_synced(uid, conversation_id, row, started, finished, c, allow_reopen=True)
+
+
+def _attach_recorded(uid, conversation_id, row, started, finished, c):
+    template = new_episode(
+        conversation_id=conversation_id,
+        started_at=started,
+        last_activity_at=finished,
+        calendar_identity=_calendar_identity(row),
+        now=_now(c),
+    )
+    source = getattr(row.get('source'), 'value', row.get('source'))
+    template['sources'] = [source] if source else []
+    return episode_timeline.attach_recorded(
+        uid,
+        conversation_id,
+        source,
+        started,
+        finished,
+        choose=choose_recorded_episode,
+        new_episode=template,
+        firestore_client=c.firestore_client,
+    )
 
 
 def _record_recovered(uid: str, episode_id: str, conversation_id: str, row: Mapping[str, Any], c: Collaborators) -> str:
@@ -1376,7 +1427,11 @@ def _attach_synced(
                     _repoint_absorbed(uid, donor, absorbed_from, conversation_id, c)
             _repoint_sync_donors(uid, conversation_id, row, c)
             owner = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
-            outcome = 'attached' if owner else _attach_synced_once(uid, conversation_id, row, c)
+            outcome = (
+                _attach_synced_once(uid, conversation_id, row, c)
+                if recorded_episodes_enabled() or not owner
+                else 'attached'
+            )
             owner = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
             if owner is not None:
                 if conversation_id not in (owner.get('recovered_conversation_ids') or []):
@@ -1771,6 +1826,9 @@ def to_wire(episode: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
         'id': episode['id'],
         'status': episode.get('status') or 'closed',
         'started_at': episode.get('started_at'),
+        'timer_started_at': (
+            episode.get('started_at') if live_timer_start_enabled() and policy.is_live(episode) else None
+        ),
         'last_activity_at': episode.get('last_activity_at') or episode.get('started_at'),
         'closed_at': episode.get('closed_at'),
         'close_reason': episode.get('close_reason'),

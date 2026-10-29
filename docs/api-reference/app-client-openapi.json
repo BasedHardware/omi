@@ -15813,6 +15813,18 @@
             "title": "Status",
             "type": "string"
           },
+          "timer_started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timer Started At"
+          },
           "title": {
             "default": "",
             "title": "Title",

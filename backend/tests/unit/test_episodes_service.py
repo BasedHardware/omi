@@ -24,6 +24,8 @@ T0 = datetime(2026, 10, 20, 10, 0, tzinfo=timezone.utc)
 
 @pytest.fixture(autouse=True)
 def _enabled(monkeypatch):
+    # Legacy rollback path; recorded-time ownership has its own suite.
+    monkeypatch.setenv('EPISODE_RECORDED_TIME_ENABLED', 'false')
     monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
     monkeypatch.delenv(config.EPISODES_PERCENT_ENV, raising=False)
     monkeypatch.delenv(config.EPISODE_HARD_CAP_ACROSS_CONVERSATIONS_ENV, raising=False)
@@ -909,6 +911,7 @@ def test_reads_close_idle_episodes_lazily_and_wire_projection_hides_internals():
         'conversation_ids',
         'sources',
         'state_updated_at',
+        'timer_started_at',
     }
     assert Episode.model_validate(wire).provisional_items[0].text == 'Book lunch table'
     idle = _collaborators(model, now=T0 + timedelta(hours=2), store=store)
@@ -989,7 +992,7 @@ def test_hard_cap_rotates_a_multi_conversation_episode_when_a_member_keeps_talki
     c.now = lambda: after_cap + timedelta(minutes=1)
     post_cap = _moment(
         'c2',
-        minutes=180,
+        minutes=240,
         trigger='interval',
         text=(
             'After the cap, everyone discussed the revised schedule, assigned preparation tasks, '
@@ -1041,7 +1044,7 @@ def test_hard_cap_carries_same_member_provisional_items_until_finalization_recon
 
     cap_at = T0 + timedelta(seconds=config.MAX_EPISODE_SECONDS)
     c.now = lambda: cap_at + timedelta(minutes=1)
-    post_cap = _moment('c2', minutes=180, start=360, text='After the cap the team confirmed the revised schedule')
+    post_cap = _moment('c2', minutes=240, start=360, text='After the cap the team confirmed the revised schedule')
     assert service.record_moment(UID, post_cap, c) == 'skipped_short'
     closed = episodes_db.get_episode(UID, original['id'], firestore_client=store)
     successor = episodes_db.get_current_episode(UID, firestore_client=store)
@@ -1113,7 +1116,7 @@ def test_quality_error_at_hard_cap_keeps_previous_so_far_in_the_successor():
 
     cap_at = T0 + timedelta(seconds=config.MAX_EPISODE_SECONDS)
     c.now = lambda: cap_at + timedelta(minutes=1)
-    post_cap = _moment('c1', minutes=180, trigger='interval', start=100, text=transcript)
+    post_cap = _moment('c1', minutes=240, trigger='interval', start=100, text=transcript)
     assert service.record_moment(UID, post_cap, c) == 'quality_error'
     successor = episodes_db.get_current_episode(UID, firestore_client=store)
     assert successor['id'] != before['id'] and successor['started_at'] == cap_at

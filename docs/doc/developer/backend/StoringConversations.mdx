@@ -46,6 +46,14 @@ more speech within its document budget, incoming speech continues in a separate
 conversation. Large inputs split at transcript-segment boundaries in order,
 without truncation. Each resulting conversation can have its own summary.
 
+Delayed audio keeps its recorded start and end; upload completion does not
+extend the recording's duration. Episode ownership uses recorded time across
+devices, including closed episodes from earlier in the day. With no covering
+episode, delayed audio forms a closed historical episode. Episodes close after
+30 minutes of recorded quiet and have a four-hour span cap. The live episode
+response's optional `timer_started_at` is the authoritative elapsed-time anchor;
+clients that do not understand it continue to decode the existing response.
+
 ## On-device summaries in desktop reads
 
 The app conversation response may carry a display-only `client_processing` projection.

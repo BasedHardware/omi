@@ -512,14 +512,17 @@ and an explicit empty literal renders as `''`.
 | `EPISODES_ENABLED` | Default on unless set to a non-on value; live episodes overlay (per-moment gpt-5-nano update, provisional items, /v1/episodes capability). Off reports enabled=false and apps keep today's per-conversation UI | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_CARRY_ON_SESSION_END` | Default on; wait one moment-pause window after a pusher session ends, then flush its carried transcript if no reconnect arrives | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_HARD_CAP_ACROSS_CONVERSATIONS` | Default on; enforce the strict episode-wide hard cap during attachment and moment rotation, carrying the running summary and unresolved items to the successor | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `EPISODE_LIVE_TIMER_START_ENABLED` | Default on; send the authoritative live episode timer start to current apps | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_MOMENT_OUTPUT_VALIDATOR` | Default on; retry once when live moment bullets are mostly verbatim transcript or contain speaker labels | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_OUTPUT_LANGUAGE_PIN` | Default on unless set off (0/false/off/no); pins generated output to a safe language for live episodes, provisional topics, daily recaps, and proactive notifications; multi/auto captures use dominant in-memory segment language | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `EPISODE_RECORDED_TIME_ENABLED` | Default on; resolve episode ownership by recorded timestamps for every device and late capture | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `FAIR_USE_ENABLED` | Enforce fair-use metering; set false to stop enforcement | backend | env | closed | — | true (backend-listen (chart)) | true (backend-listen (chart)) | — | keep | keep | — | unowned |
 | `FAIR_USE_KILL_SWITCH` | Emergency stop for fair-use enforcement | backend | env | inverted | — | false (backend-listen (chart)) | false (backend-listen (chart)) | — | keep | keep | — | unowned |
 | `FSR_KG_CITATION_INDEX` | Default on; query native reverse citations for KG node pruning; off restores the node scan | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `FSR_MAINTENANCE_COORDINATION_ENABLED` | Default on in prod independently of read-lever rollback; explicit false restores per-replica maintenance | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `FSR_SMART_MERGE_PARTITION` | Default on; partition the unbounded smart-merge discarded-barrier scan by explicit device; off restores the original scan | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `JOBSTORE_SHADOW_WRITES` | Default on unless 0/false/off/no; off stops the A2 Postgres shadow mirror (and its parity reads) while BATCH_JOBSTORE_MODE=shadow | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `LATE_AUDIO_SYNC_INTAKE_ENABLED` | Default on; route delayed listen transcripts through recorded-time sync assignment and reject stale live stamps | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED` | Abandon finalization after BYOK failure | backend | env | open | true | true (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | keep | keep | — | unowned |
 | `LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED` | Cap durable listen worker attempts while retaining transcript-only conversations | backend | env | open | — | — | true | — | keep | keep | — | dazheng |
 | `LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED` | End self-heal jobs after a minimal structure and skip obvious trivial content before paid notes | backend | env | open | — | — | true | — | keep | keep | — | dazheng |
@@ -969,8 +972,10 @@ their code default (`fail` tells you which way a missing value resolves).
 - `EPISODE_BOUNDARIES_MODE_SHADOW_PERCENT` — Boundary evidence database writes sampled in shadow; default 5 percent, serve cohort always writes (fail: closed)
 - `EPISODE_CARRY_ON_SESSION_END` — Default on; wait one moment-pause window after a pusher session ends, then flush its carried transcript if no reconnect arrives (fail: open)
 - `EPISODE_HARD_CAP_ACROSS_CONVERSATIONS` — Default on; enforce the strict episode-wide hard cap during attachment and moment rotation, carrying the running summary and unresolved items to the successor (fail: open)
+- `EPISODE_LIVE_TIMER_START_ENABLED` — Default on; send the authoritative live episode timer start to current apps (fail: open)
 - `EPISODE_MOMENT_OUTPUT_VALIDATOR` — Default on; retry once when live moment bullets are mostly verbatim transcript or contain speaker labels (fail: open)
 - `EPISODE_OUTPUT_LANGUAGE_PIN` — Default on unless set off (0/false/off/no); pins generated output to a safe language for live episodes, provisional topics, daily recaps, and proactive notifications; multi/auto captures use dominant in-memory segment language (fail: open)
+- `EPISODE_RECORDED_TIME_ENABLED` — Default on; resolve episode ownership by recorded timestamps for every device and late capture (fail: open)
 - `FIRESTORE_CACHE_ENABLED` — Enable Firestore response cache (fail: closed)
 - `FIRST_SUMMARY_DEADLINE_SECONDS` — First required summary dispatch budget; default 120 seconds, bounded 60 to 120 (fail: closed)
 - `FIRST_SUMMARY_UID_ALLOWLIST` — Optional summary canary owner allowlist; empty admits only the positive percentage cohort when global gate is on (fail: closed)
@@ -986,6 +991,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `LADDER_V1_PRO_GATES_ENABLED` — Default-off ladder proactive and screen Pro gates; legacy prices unchanged (fail: closed)
 - `LADDER_V1_RETIRE_PRO_ALIAS_ENABLED` — Default-off pro-as-Architect alias retirement; requires old-client and stored-record audit (fail: closed)
 - `LADDER_V1_WIRE_IDENTITY_ENABLED` — Default-off approved mobile/Windows decoder floors; old installed clients preserve remap (fail: closed)
+- `LATE_AUDIO_SYNC_INTAKE_ENABLED` — Default on; route delayed listen transcripts through recorded-time sync assignment and reject stale live stamps (fail: open)
 - `LIFECYCLE_V2_MODE` — Separate speech clocks, recovery head probes and bounded finalization executor lanes; off|shadow|serve, default shadow (fail: closed)
 - `LIFECYCLE_V2_MODE_SERVE_PERCENT` — Serve cohort percentage in shadow mode, default 0 (fail: closed)
 - `LIFECYCLE_V2_MODE_SERVE_UID_SHA256S` — Serve cohort account digests in shadow mode, default empty; never raw account identifiers (fail: closed)

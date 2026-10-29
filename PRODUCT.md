@@ -138,3 +138,15 @@ Realtime reconnects with the same durable origin now reuse a compatible in-progr
 continuation inside the window without rebinding a completed original. Expired empty
 continuations are reaped through content/lock/revision fences on reconnect. Historical
 distinct targets and anonymous cross-device discovery remain separate follow-ups.
+
+
+## Proposed recorded-time episode policy
+
+Every capture belongs on the user's timeline at its recorded time, regardless
+of device or upload delay (David, 2026-10-29). A late capture joins an episode
+covering that recorded interval, including a closed episode. If none covers it,
+it forms a closed historical episode. Episodes use a four-hour recorded span
+cap and a thirty-minute recorded quiet close. Processing timestamps never own
+episode boundaries, activity or live elapsed time. Ownership is exposed by
+`backend/utils/episodes/timeline.py`; behavior and rollback are documented in
+`backend/utils/episodes/ARCHITECTURE.md`.

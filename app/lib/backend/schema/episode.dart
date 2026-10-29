@@ -114,6 +114,7 @@ class Episode {
     this.conversationIds = const [],
     this.sources = const [],
     this.stateUpdatedAt,
+    this.timerStartedAt,
   });
 
   final String id;
@@ -130,6 +131,7 @@ class Episode {
   final List<String> conversationIds;
   final List<String> sources;
   final DateTime? stateUpdatedAt;
+  final DateTime? timerStartedAt;
 
   List<EpisodeItem> get visibleItems => [
         for (final item in items)
@@ -151,6 +153,7 @@ class Episode {
         conversationIds: conversationIds,
         sources: sources,
         stateUpdatedAt: stateUpdatedAt,
+        timerStartedAt: timerStartedAt,
       );
 
   factory Episode.fromGenerated(wire.GeneratedEpisode e) => Episode(
@@ -168,6 +171,7 @@ class Episode {
         conversationIds: e.conversationIds ?? const [],
         sources: e.sources ?? const [],
         stateUpdatedAt: e.stateUpdatedAt?.toLocal(),
+        timerStartedAt: e.timerStartedAt?.toLocal(),
       );
 }
 

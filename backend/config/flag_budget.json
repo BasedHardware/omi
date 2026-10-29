@@ -20,7 +20,7 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 169,
-  "count": 188,
+  "count": 191,
   "names": {
     "BATCH_SHARD_SPREAD_ENABLED": {"owner": "batch record lane / rollout lead", "review_by": "2026-11-28"},
     "SYNC_PROCESSING_HOLD_ENABLED": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28"},
@@ -100,6 +100,9 @@
     "EDGE_SHADOW_TOKEN": {"seeded": "2026-10-25"},
     "EDGE_SHADOW_URL": {"seeded": "2026-10-25"},
     "ENCRYPTION_SECRET": {"seeded": "2026-10-25"},
+    "LATE_AUDIO_SYNC_INTAKE_ENABLED": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28", "registry": "config/feature-flags.yaml"},
+    "EPISODE_RECORDED_TIME_ENABLED": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28", "registry": "config/feature-flags.yaml"},
+    "EPISODE_LIVE_TIMER_START_ENABLED": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28", "registry": "config/feature-flags.yaml"},
     "EPISODE_CARRY_ON_SESSION_END": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28", "registry": "config/feature-flags.yaml"},
     "EPISODE_HARD_CAP_ACROSS_CONVERSATIONS": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28", "registry": "config/feature-flags.yaml"},
     "EPISODE_MOMENT_OUTPUT_VALIDATOR": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28", "registry": "config/feature-flags.yaml"},

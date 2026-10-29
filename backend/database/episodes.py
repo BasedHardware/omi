@@ -28,6 +28,7 @@ from datetime import datetime, timezone
 from typing import Any, Mapping, Optional, Sequence
 
 from google.cloud import firestore
+from config.recorded_time import recorded_episodes_enabled
 
 from database import episode_receipts
 from database._client import get_firestore_client, run_transactional
@@ -221,6 +222,9 @@ def _commit(
 ) -> dict[str, Any]:
     pointer = _links(client, uid).document(CURRENT)
     current_id = _link_target(client, uid, CURRENT, transaction)
+    timeline_ref = _links(client, uid).document('recorded_timeline')
+    timeline_enabled = recorded_episodes_enabled()
+    timeline_row = (timeline_ref.get(transaction=transaction).to_dict() or {}) if timeline_enabled else {}
     current_ref = _episodes(client, uid).document(current_id) if current_id else None
     current_raw = None
     if current_ref is not None:
@@ -255,6 +259,8 @@ def _commit(
         episode_id = current_id
         result = merged
     _write_receipts(transaction, client, uid, segment_receipts, receipts_raw, now)
+    if timeline_enabled:
+        transaction.set(timeline_ref, {'version': int(timeline_row.get('version') or 0) + 1})
     for conversation_id in links:
         transaction.set(_links(client, uid).document(conversation_id), {'episode_id': episode_id, 'updated_at': now})
     return result

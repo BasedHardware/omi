@@ -37,6 +37,17 @@ class LiveStartAnchor {
     required bool streaming,
     required DateTime now,
   }) {
+    final authoritative = episode?.timerStartedAt;
+    if (authoritative != null) {
+      // A current server episode replaces any cached capture or Wrap Up
+      // anchor, including one retained since yesterday. Re-read on every poll
+      // because late recorded speech can correct this same episode's start.
+      _episodeId = episode!.id;
+      _restartedAt = null;
+      _start = authoritative;
+      _captureFloor = authoritative;
+      return authoritative;
+    }
     if (captureId != null && captureId != _captureId) {
       if (_captureId != null) {
         _start = null;

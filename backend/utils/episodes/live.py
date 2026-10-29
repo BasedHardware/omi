@@ -43,6 +43,10 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional, Sequence
+from config.recorded_time import recorded_episodes_enabled
+from database import conversations as conversations_db
+from utils.conversations.recorded_time import recorded_span, is_late
+from utils.episodes.finalize import schedule_synced_intake_attach
 
 from config.episodes import (
     FIRST_MOMENT_MIN_SECONDS,
@@ -392,15 +396,45 @@ async def on_realtime_segments(
     try:
         if not episodes_enabled_for(uid):
             return
+        recorded = None
+        if recorded_episodes_enabled() and conversation_id:
+            if not await executors.run_blocking(executors.db_executor, client_gate.client_seen_cached, uid):
+                return
+            row = await executors.run_blocking(
+                executors.db_executor,
+                conversations_db.get_conversation_raw_snapshot,
+                uid,
+                conversation_id,
+                field_paths=['started_at', 'finished_at', 'last_speech_at', 'source', 'discarded', 'deleted'],
+            )
+            if not row:
+                return
+            recorded = recorded_span(row.get('started_at'), segments)
+            if recorded is None:
+                return  # An unplaced transcript proves no timeline boundary.
+            if is_late(recorded, datetime.now(timezone.utc)):
+                # Pusher and listen share this guard, so transport cannot turn
+                # a delayed batch into an arrival-timed live occasion.
+                row = dict(row, transcript_segments=list(segments), finished_at=recorded[1])
+                schedule_synced_intake_attach(uid, conversation_id, row)
+                return
         spoken = any(str(s.get('text') or '').strip() for s in segments)
         if conversation_id and spoken:
             first = sessions.first_moment(uid, conversation_id)
             if sessions.activity_due(uid, conversation_id):
                 executors.start_background_task(
-                    _attach_if_client_seen(uid, conversation_id, source, datetime.now(timezone.utc), first=first),
+                    _attach_if_client_seen(
+                        uid,
+                        conversation_id,
+                        source,
+                        recorded[0] if recorded else datetime.now(timezone.utc),
+                        first=first,
+                    ),
                     name='episode_attach',
                 )
-        moments = tracker.observe(uid, segments, conversation_id, source)
+        moments = tracker.observe(
+            uid, segments, conversation_id, source, **({'now': recorded[1].timestamp()} if recorded else {})
+        )
         if not moments:
             return
         for moment in moments:

@@ -7919,3 +7919,20 @@ Home acceptance remains occasion architecture step 3b: intake still stores its
 legacy completed minimum, so released clients can show a held piece as a
 finished row. This backend change does not claim to fix that UI or to prevent
 smart merges after a row has been seen. No UI is changed here.
+
+
+### Recorded-time late audio (2026-10-29)
+
+`LATE_AUDIO_SYNC_INTAKE_ENABLED` defaults on. A placed listen batch whose
+recorded end is at least 120 seconds behind processing uses the same temporal
+sync assignment and durable enrichment hold as WAL speech. It keeps recorded
+start/end, ignores the carrying live generation as a target, and cannot feed
+arrival-timed realtime episodes. A WAL stamp whose generation began after the
+recorded audio's entire span is rejected by the same switch; ordinary temporal
+assignment then groups continuous speech using the shared 120-second boundary.
+Audio custody is not acknowledged against the empty live stub: existing WAL /
+pack receipt processing still owns release of original audio.
+
+Episodes use the recorded-time ownership function and four-hour / thirty-minute
+rules documented in `utils/episodes/ARCHITECTURE.md`. The additive
+`timer_started_at` field fixes Home's elapsed-time anchor without new UI.

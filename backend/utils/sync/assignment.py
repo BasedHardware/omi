@@ -9,6 +9,8 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import timedelta
 from utils.sync import processing_hold
+from config.recorded_time import late_audio_intake_enabled
+from models.conversation_continuity import DEFAULT_GAP_SECONDS
 import time
 
 import logging
@@ -383,6 +385,25 @@ def assign_in_transaction(
     if target_id and tombstoned(target_id):
         raise SyncAssignmentSuperseded('sync target survivor was deleted')
     target_hint = target_id
+    if target_id and own_anchor and own_id != target_id and own_anchor.get('manual_speaker_assignments'):
+        raise SyncAssignmentSuperseded('sync anchor has manual speaker assignments')
+    if (
+        late_audio_intake_enabled()
+        and target
+        and incoming['finished_at'] < target['started_at'] - timedelta(seconds=DEFAULT_GAP_SECONDS)
+    ):
+        # A phone's current socket/WAL stamp cannot own audio recorded before
+        # that generation existed. Let ordinary recorded-time assignment group
+        # the historical batch; never stretch the live row across upload delay.
+        target_id, target = None, None
+        record_fallback(
+            component='sync_dispatch',
+            from_mode='explicit_target',
+            to_mode='temporal_assignment',
+            reason='policy',
+            outcome='recovered',
+            log=logger,
+        )
     if target and not target.get('deleted'):
         # Explicit capture proof is authoritative even before live STT produced
         # words. Only timestamp hints must exclude live-owned rows.

@@ -116,6 +116,7 @@ class GeneratedEpisode {
   final DateTime startedAt;
   final DateTime? stateUpdatedAt;
   final String status;
+  final DateTime? timerStartedAt;
   final String title;
 
   const GeneratedEpisode({
@@ -132,6 +133,7 @@ class GeneratedEpisode {
     required this.startedAt,
     this.stateUpdatedAt,
     required this.status,
+    this.timerStartedAt,
     this.title = "",
   });
 
@@ -150,6 +152,7 @@ class GeneratedEpisode {
       startedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime, requiredField: true, nullable: false), "started_at"),
       stateUpdatedAt: _readFieldValue<DateTime>(_readField(json, const ["state_updated_at"]), "state_updated_at", _readDateTime, requiredField: false, nullable: true),
       status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+      timerStartedAt: _readFieldValue<DateTime>(_readField(json, const ["timer_started_at"]), "timer_started_at", _readDateTime, requiredField: false, nullable: true),
       title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: false, nullable: false, defaultValue: ""), "title"),
     );
   }
@@ -169,6 +172,7 @@ class GeneratedEpisode {
       'started_at': startedAt.toUtc().toIso8601String(),
       'state_updated_at': stateUpdatedAt?.toUtc().toIso8601String(),
       'status': status,
+      'timer_started_at': timerStartedAt?.toUtc().toIso8601String(),
       'title': title,
     };
   }

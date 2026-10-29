@@ -236,6 +236,8 @@ def test_tracker_evicts_stale_buffers():
 
 
 def test_on_realtime_segments_schedules_a_background_update(monkeypatch):
+    # Exercise rollback fan-out; recorded-time input is covered by the replay suite.
+    monkeypatch.setenv('EPISODE_RECORDED_TIME_ENABLED', 'false')
     scheduled = []
     monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
     monkeypatch.delenv(config.EPISODES_PERCENT_ENV, raising=False)
