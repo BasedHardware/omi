@@ -86,8 +86,8 @@ def test_registered_purchasable_ladder_is_ordered_and_computes_live_prices():
     plus = next(tier for tier in sheet.tiers if tier.plan_id == 'plus')
     assert plus.recommended and plus.cta_label == 'Get Plus'
     yearly = next(item for item in plus.prices if item.interval == 'year')
-    assert yearly.headline == '$16.66/month'
-    assert yearly.subline == '$199.90 billed yearly · 2 months free'
+    assert yearly.headline == 'US$16.66/month'
+    assert yearly.subline == 'US$199.90 billed yearly · 2 months free'
     assert yearly.months_free == 2
     pro = next(tier for tier in sheet.tiers if tier.plan_id == 'operator')
     assert pro.cta_label == 'Get Pro'
@@ -100,9 +100,9 @@ def test_registered_purchasable_ladder_is_ordered_and_computes_live_prices():
     operator = next(tier for tier in paid.tiers if tier.plan_id == 'operator')
     assert operator.cta_label is None and operator.bullets == []
     assert [item.interval for item in operator.prices] == ['year']
-    assert operator.prices[0].headline == '$49.99/month'
-    assert operator.prices[0].subline == '$499.90 billed yearly · 2 months free'
-    assert operator.prices[0].cta_label == 'Switch to yearly · save $99.98'
+    assert operator.prices[0].headline == 'US$49.99/month'
+    assert operator.prices[0].subline == 'US$499.90 billed yearly · 2 months free'
+    assert operator.prices[0].cta_label == 'Switch to yearly · save US$99.98'
     assert not any(tier.recommended for tier in paid.tiers)
 
 
@@ -135,8 +135,8 @@ def test_single_plan_storefront_builder_pins_golden(monkeypatch):
     assert tier.name == 'Unlimited' and tier.recommended and tier.is_current is False
     assert tier.action == 'checkout' and tier.cta_label == 'Get Unlimited'
     assert [item.price_id for item in tier.prices] == ['price_omi_pro_month', 'price_omi_pro_year']
-    assert tier.prices[0].headline == '$29.99/month'
-    assert tier.prices[1].months_free == 3 and tier.prices[1].subline == '$269.91 billed yearly · 3 months free'
+    assert tier.prices[0].headline == 'US$29.99/month'
+    assert tier.prices[1].months_free == 3 and tier.prices[1].subline == 'US$269.91 billed yearly · 3 months free'
     assert sheet.current.plan_id == 'basic' and sheet.current.line == "You're on Free"
     free_card = sheet.tiers[1]
     assert free_card.is_current and free_card.action == 'current' and free_card.bullets == []

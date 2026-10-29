@@ -21,8 +21,8 @@ void main() {
       'billing_total': '43,200 JPY',
       'price_string': '3,600 JPY/mo',
     }).toJson();
-    expect(planBillingTotal(decoded), '43,200 JPY');
-    expect(planBillingTotal({'unit_amount': 26991}), '\$269.91');
+    expect(planBillingTotal(decoded), '¥43,200');
+    expect(planBillingTotal({'unit_amount': 26991}), 'US\$269.91');
   });
 
   test('discounts never compare amounts in different currencies', () {
@@ -252,6 +252,24 @@ void main() {
         ),
         isFalse,
       );
+    });
+
+    test('shows desktop-plan Continue onto Omi Pro, which also grants desktop', () {
+      for (final current in ['operator', 'architect']) {
+        expect(
+          shouldShowPlanContinueButton(
+            isOnAnnualPlan: true,
+            hasScheduledUpgrade: false,
+            isCancelled: false,
+            plansLoaded: true,
+            selectedTierId: 'unlimited_v2',
+            currentTierId: current,
+            currentGrantsDesktop: true,
+          ),
+          isTrue,
+          reason: current,
+        );
+      }
     });
 
     test('still shows monthly→annual Continue on a desktop plan', () {

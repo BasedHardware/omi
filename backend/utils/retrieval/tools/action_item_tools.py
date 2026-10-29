@@ -25,6 +25,8 @@ from utils.model_text import count_header, format_date, format_instant, truncati
 from utils.user_clock import clock_for_config
 from utils.retrieval.chat_scope import apply_chat_scope_dates, chat_scope_from_config
 from utils.retrieval.turn_refs import register_record_ref, resolve_edit_ref
+from utils.retrieval.tool_services.action_items import create_action_item
+from utils.task_intelligence.task_source_validation import TaskSourceValidationError
 import logging
 
 logger = logging.getLogger(__name__)
@@ -503,7 +505,7 @@ def create_action_item_tool(
 
     # Create the action item
     try:
-        action_item_id = action_items_db.create_action_item(uid, action_item_data)
+        action_item_id = create_action_item(uid, action_item_data)
         if not action_item_id:
             return "Error: Failed to create action item."
 
@@ -557,6 +559,8 @@ def create_action_item_tool(
 
         return result
 
+    except TaskSourceValidationError as e:
+        return f'Error: {e} Ask the user to choose an available source; do not retry by dropping the source link.'
     except Exception as e:
         logger.error(f"❌ Error creating action item: {e}", exc_info=True)
         return "Error creating action item. Please try again."

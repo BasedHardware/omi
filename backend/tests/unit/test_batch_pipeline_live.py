@@ -218,7 +218,8 @@ def test_reference_scope_and_generation_are_fail_closed(change):
         )
 
 
-async def test_native_admission_stages_references_and_drains_after_rollback(monkeypatch):
+@pytest.mark.parametrize('server_only', [False, True])
+async def test_native_admission_stages_references_and_drains_after_rollback(monkeypatch, server_only):
     from types import SimpleNamespace
     from utils.batch_pipeline import live
     from database.batch_pipeline_staging import artifact_id
@@ -226,6 +227,11 @@ async def test_native_admission_stages_references_and_drains_after_rollback(monk
     store = MemoryStore()
     store.namespace = 'batch_pipeline_test_live'
     current = recording(record_audio_closed=True, finished_at=datetime.fromtimestamp(101, timezone.utc))
+    if server_only:
+        current['external_data'] = {**(current.get('external_data') or {}), 'server_batch_only': True}
+        current.update(
+            has_content=True, server_batch_audio_start=100, server_batch_audio_end=101, transcript_segments=[]
+        )
     register_recording('synthetic', current, store=store, now=0)
     content, segment = record_identity('synthetic', 'record')
     pending = store.rows['jobs', segment]
@@ -292,6 +298,7 @@ async def test_native_admission_stages_references_and_drains_after_rollback(monk
     assert store.rows['jobs', segment]['state'] == 'ready'
     assert manifests[0]['references'][0]['generation'] == 1
     assert store.rows['jobs', segment]['projection_binding']['native_record']
+    assert (store.rows['intakes', 'bp_' + content].get('server_batch_only') is True) is server_only
     # A slow raw-archive listing must raise and retry, never admit a short capture.
     assert listings == [{'max_count': 4096, 'require_archive': True}]
 

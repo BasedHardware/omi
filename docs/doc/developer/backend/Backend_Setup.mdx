@@ -8,6 +8,14 @@ description: "Set up the Omi backend infrastructure for local development. This 
 
 The Omi backend powers all AI capabilities including transcription, conversation processing, chat, and integrations. This guide will help you set up a local development environment.
 
+For chat retrieval development, topic search uses the configured search providers.
+Explicit transcript recall can also read saved text directly through the existing
+conversation-search tool's optional `transcript_query` and `transcript_cursor`
+arguments. This path needs Firestore and the backend encryption configuration,
+but does not need Pinecone or a transcript backfill. Its bounded pages return
+source-linked excerpts and indicate when more history remains. The implementation
+and local verification checklist are in `backend/docs/transcript-recall.md`.
+
 ```mermaid
 flowchart LR
     subgraph External["External Services"]

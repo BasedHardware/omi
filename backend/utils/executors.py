@@ -37,6 +37,7 @@ import functools
 import logging
 import queue
 import threading
+from collections import deque
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any, Callable, Coroutine, Dict, List, ParamSpec, TypeVar, cast
 
@@ -126,6 +127,9 @@ class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
         self._submission_slots = (
             threading.BoundedSemaphore(max_workers + max_queue_size) if max_queue_size is not None else None
         )
+        self._deferred_condition = threading.Condition(threading.RLock())
+        self._deferred: deque[tuple[Future[Any], Callable[..., Any], tuple, dict]] = deque()
+        self._deferred_shutdown = False
 
     @property
     def active_count(self) -> int:
@@ -174,8 +178,74 @@ class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
 
         future.add_done_callback(cancelled)
         if slots is not None:
-            future.add_done_callback(lambda _future: slots.release())
+            future.add_done_callback(self._release_slot)
         return future
+
+    def _release_slot(self, _future: Future[Any]) -> None:
+        if self._submission_slots is not None:
+            self._submission_slots.release()
+        with self._deferred_condition:
+            self._drain_deferred()
+
+    def submit_when_available(self, fn: Callable[..., T], /, *args: Any, **kwargs: Any) -> Future[T]:
+        """Queue a saturated sync submission, retried by capacity-release callbacks.
+
+        No retry thread or other feature pool is borrowed. At 64 deferred calls,
+        synchronous producers backpressure until an entry is admitted. Call only
+        from synchronous producers outside this executor, never the event loop.
+        Like the executor's ordinary queue this queue is process-local.
+        """
+        future: Future[T] = Future()
+        with self._deferred_condition:
+            while len(self._deferred) >= 64 and not self._deferred_shutdown:
+                self._deferred_condition.wait()
+            if self._deferred_shutdown:
+                raise RuntimeError('cannot schedule new futures after shutdown')
+            self._deferred.append((future, fn, args, kwargs))
+            self._drain_deferred()
+        return future
+
+    def _drain_deferred(self) -> None:
+        # Caller owns the reentrant condition: a very short task can finish before
+        # submit attaches its release callback, which then runs on this thread.
+        while self._deferred and not self._deferred_shutdown:
+            outer, fn, args, kwargs = self._deferred.popleft()
+            if outer.cancelled():
+                self._deferred_condition.notify_all()
+                continue
+            try:
+                inner = self.submit(fn, *args, **kwargs)
+            except ExecutorSaturatedError:
+                self._deferred.appendleft((outer, fn, args, kwargs))
+                return
+            except BaseException as error:
+                outer.set_exception(error)
+                self._deferred_condition.notify_all()
+                continue
+            self._deferred_condition.notify_all()
+
+            def completed(done: Future[Any], target: Future[Any] = outer) -> None:
+                if not target.set_running_or_notify_cancel():
+                    return
+                if done.cancelled():
+                    target.set_exception(RuntimeError('deferred executor work cancelled during shutdown'))
+                elif (error := done.exception()) is not None:
+                    target.set_exception(error)
+                else:
+                    target.set_result(done.result())
+
+            inner.add_done_callback(completed)
+
+    def shutdown(self, wait: bool = True, *, cancel_futures: bool = False) -> None:
+        with self._deferred_condition:
+            if wait and not cancel_futures:
+                while self._deferred:
+                    self._deferred_condition.wait()
+            self._deferred_shutdown = True
+            while self._deferred:
+                self._deferred.popleft()[0].cancel()
+            self._deferred_condition.notify_all()
+        super().shutdown(wait=wait, cancel_futures=cancel_futures)
 
     def _tracked(self, fn: Callable[..., T], task: str, started: threading.Event, *args: Any, **kwargs: Any) -> T:
         started.set()
@@ -410,6 +480,16 @@ def submit_with_context(
     """
     ctx = contextvars.copy_context()
     future = executor.submit(ctx.run, fn, *args, **kwargs)
+    future.add_done_callback(functools.partial(_log_background_failure, getattr(fn, '__name__', repr(fn))))
+    return future
+
+
+def submit_with_context_retry(
+    executor: MonitoredThreadPoolExecutor, fn: Callable[P, T], *args: P.args, **kwargs: P.kwargs
+) -> Future[T]:
+    """Sync fire-and-forget admission with a bounded retry queue on saturation."""
+    ctx = contextvars.copy_context()
+    future = cast(Future[T], executor.submit_when_available(ctx.run, fn, *args, **kwargs))
     future.add_done_callback(functools.partial(_log_background_failure, getattr(fn, '__name__', repr(fn))))
     return future
 

@@ -21,7 +21,10 @@ production release is written to production as a staged rollout at 1% (haltable 
 Console) and promoted one ladder hop per advancing run (1% -> 10% -> 50% -> full, one run
 every ~4 hours — a full ramp in about 12 hours). Every advancing action stamps a
 minute-precision gate receipt into the release name so a retry inside the observation
-window cannot hop twice.
+window cannot hop twice. While Play holds changes for manual review submission
+(held-changes mode) the ladder parks — except that a train-written held staged release
+is superseded by the gate-pinned newer build at the SAME fraction, so a stale held
+commit cannot wedge production off a fix (plan_held_supersede).
 
 The operator release gate audits the candidate before dispatching; its audited
 platform/version/build identifiers travel as TRAIN_PIN_IOS / TRAIN_PIN_ANDROID and the train
@@ -1000,6 +1003,85 @@ def existing_production_staged(production: object) -> dict[str, object] | None:
     return staged[0] if staged else None
 
 
+@dataclass(frozen=True)
+class HeldSupersedePlan:
+    action: str  # supersede | park | refuse
+    reason: str
+
+
+def plan_held_supersede(
+    *,
+    staged_name: object,
+    staged_version: str,
+    staged_code: object,
+    candidate: PlayCandidate | None,
+    pin: StorePin | None,
+    advance_only: bool,
+) -> HeldSupersedePlan:
+    """Whether held-changes mode may supersede the staged production release.
+
+    Parking the ladder in held mode has one wedge: the staged release is itself a
+    held, never-live commit (2026-10-28: 1.0.578/1522 was staged before the Play
+    currency-policy fix, the fixed 1.0.579/1527 sat on internal, and production
+    could never reach it — discarding the pending change in Play Console reverts
+    the track and the train parks again). When the staged release is
+    train-written and the operator gate's pin names a strictly newer build, one
+    held commit replaces it at the SAME userFraction — the completed base
+    release rides along unchanged, so exposure never rises — and the operator
+    still presses Send for review in Play Console.
+
+    The Play API cannot tell a held-pending commit from a live staged rollout —
+    both read `inProgress` at the same fraction — so the gate receipt in the
+    release name is the only proxy this repo controls. The limitation is real
+    and documented: if the operator already sent the held change and the
+    fraction went live, a supersede swaps that live cohort's binary at an
+    unchanged fraction. A name without a receipt may be human-edited
+    (renamed in Play Console, or in flight from before receipts) and is never
+    superseded.
+
+    Everything else keeps parking: an advance-only run (the rollout watch never
+    writes a candidate), no candidate, no pin (an unpinned dispatch stays
+    unpinned — an unaudited build must not replace the held rollout), or a
+    candidate that is not strictly newer in version AND version code. A set pin
+    that does not match the selected candidate refuses exactly like the
+    selection path: a build that appeared in the audit→dispatch gap is
+    unaudited.
+    """
+    if advance_only:
+        return HeldSupersedePlan("park", "advance-only run; the watch never writes a candidate")
+    if _gate_receipt_dt(str(staged_name or "")) is None:
+        return HeldSupersedePlan(
+            "park",
+            "the staged release carries no gate receipt — it may be human-edited, and the Play API "
+            "cannot tell a held commit from a live rollout",
+        )
+    if candidate is None:
+        return HeldSupersedePlan("park", "no internal/alpha build is newer than live production")
+    if pin is None:
+        return HeldSupersedePlan(
+            "park", "no TRAIN_PIN_ANDROID audit names this candidate; an unpinned build must not replace the rollout"
+        )
+    if pin.is_none or not pin.matches(candidate.version, candidate.version_code):
+        return HeldSupersedePlan(
+            "refuse",
+            f"TRAIN_PIN_ANDROID {'none' if pin.is_none else f'{pin.version}/{pin.build}'} does not match the selected "
+            f"candidate {candidate.version}/{candidate.version_code}; refusing to release an unaudited build",
+        )
+    if not promote.BUILD_RE.fullmatch(str(staged_code)):
+        return HeldSupersedePlan("park", f"the staged release has an unreadable version code ({staged_code!r})")
+    if promote.version_parts(candidate.version) <= promote.version_parts(staged_version):
+        return HeldSupersedePlan(
+            "park", f"candidate {candidate.version} ({candidate.version_code}) is not newer than staged {staged_version}"
+        )
+    if int(candidate.version_code) <= int(str(staged_code)):
+        return HeldSupersedePlan(
+            "park", f"candidate code {candidate.version_code} is not higher than the staged code {staged_code}"
+        )
+    return HeldSupersedePlan(
+        "supersede", f"pinned {candidate.version}/{candidate.version_code} replaces held {staged_version} {staged_code}"
+    )
+
+
 def _staged_release_notes(staged: dict[str, object]) -> str | None:
     """The exact en-US What's-New text Play already holds for this rollout.
 
@@ -1074,14 +1156,82 @@ def run_android(*, dry_run: bool, release_date: str, advance_only: bool = False)
             # Publishing overview, invisible to this API), so the train cannot
             # know the previous hop is live. Hopping blind stacks held hops and
             # a single Send-for-review press would then release full exposure
-            # with no observation windows. Park the ladder: the operator sends
+            # with no observation windows. The ladder parks: the operator sends
             # each held change for review and advances exposure in Play Console
             # until Play again accepts automated review submission (see
-            # .github/agent-docs/mobile-release-process.md).
+            # .github/agent-docs/mobile-release-process.md). One parked shape is
+            # a wedge, though — the staged release is itself a stale held
+            # commit — so a train-written staged release with a strictly newer
+            # gate-pinned candidate is superseded in place instead
+            # (plan_held_supersede; exposure never rises).
+            plan = plan_held_supersede(
+                staged_name=staged_name,
+                staged_version=staged_version,
+                staged_code=codes[0],
+                candidate=candidate,
+                pin=pin,
+                advance_only=advance_only,
+            )
+            if plan.action == "refuse":
+                raise TrainError(plan.reason)
+            if plan.action == "supersede":
+                log(
+                    f"Android production staged {staged_version} {codes[0]} @{current:.0%} is a held train commit; "
+                    f"{plan.reason}; writing the replacement at the same {current:.0%} fraction (exposure never rises)"
+                )
+                release_path = ensure_release_notes(candidate.version, release_date, write=not dry_run)
+                if dry_run:
+                    return (
+                        f"android=dry-run:staged-superseded {staged_version} {codes[0]} -> "
+                        f"{candidate.version} {candidate.version_code} @{current:.0%} (held; would supersede)"
+                    )
+                try:
+                    notes = promote.require_notes(release_path, candidate.version, "android")
+                except promote.PromotionError as exc:
+                    raise TrainError(f"candidate {candidate.version} has no usable What's-New text: {exc}") from exc
+                try:
+                    promote.select_play_release(
+                        tracks[candidate.track],
+                        production,
+                        candidate.version,
+                        candidate.version_code,
+                        source_track=candidate.track,
+                    )
+                    # tracks.update replaces the whole releases list, so every
+                    # other production release rides along unchanged — above all
+                    # the completed base release the users outside the staged
+                    # fraction keep serving from; exposure never changes. No
+                    # base_release for the written release: the old staged
+                    # release's metadata and What's-New belong to the old
+                    # version; the candidate ships its own collected notes and
+                    # a fresh gate receipt.
+                    retained = [dict(release) for release in _releases(production, "production") if release is not staged]
+                    promote.submit_android(
+                        client,
+                        edit_id,
+                        candidate.version,
+                        candidate.version_code,
+                        notes,
+                        status="inProgress",
+                        user_fraction=current,
+                        release_name=_staged_name_with_receipt(candidate.version),
+                        retained_releases=retained,
+                    )
+                except promote.PromotionError as exc:
+                    raise TrainError(str(exc)) from exc
+                log(
+                    f"Android production staged rollout superseded: {candidate.version} ({candidate.version_code}) "
+                    f"replaces held {staged_version} ({codes[0]}) at {current:.0%}; held for review submission — "
+                    f"send it from Play Console -> Publishing overview"
+                )
+                return (
+                    f"android=staged-superseded {staged_version} {codes[0]} -> {candidate.version} "
+                    f"{candidate.version_code} @{current:.0%} (held; send for review in Console)"
+                )
             log(
                 f"Android production staged {staged_version} {codes[0]} @{current:.0%} parked: Play holds "
                 f"committed changes for manual review submission; a human sends them and advances "
-                f"exposure in Play Console"
+                f"exposure in Play Console ({plan.reason})"
             )
             return (
                 f"android=staged {staged_version} {codes[0]} @{current:.0%} "

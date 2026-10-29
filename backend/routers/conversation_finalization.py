@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from config.summary_guarantee import enabled as summary_deadline_enabled
 
 from database import conversation_finalization_jobs as jobs_db
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
 from services.conversation_finalization import (
     final_attempt_failed,
@@ -155,10 +156,20 @@ async def run_listen_finalization_job(
     job_id, dispatch_generation = parsed
     if job_id.startswith('merge-'):
         status = await lifecycle_service.merge_jobs.run(job_id, dispatch_generation)
+        if status == 'account_pending_deletion':
+            return retry_response(RetryReason.PERSISTENCE_FENCED)
         return JSONResponse(status_code=200, content={'status': status})
     if job_id.startswith('quiet-'):
         status = await run_blocking(db_executor, quiet_finalization.run, job_id, dispatch_generation)
+        if status == 'account_pending_deletion':
+            return retry_response(RetryReason.PERSISTENCE_FENCED)
         return JSONResponse(status_code=200, content={'status': status})
+    # Read the owner and marker before admitting a lease. The transaction in
+    # claim_finalization_job repeats this fence to close the race with deletion.
+    pending_job = await run_blocking(db_executor, jobs_db.get_finalization_job, job_id)
+    if pending_job and isinstance(pending_job.get('uid'), str):
+        if await run_blocking(db_executor, account_deletion_blocks_user_work, pending_job['uid']):
+            return retry_response(RetryReason.PERSISTENCE_FENCED)
     from utils.conversations.demand_processing import admit
 
     if not await run_blocking(db_executor, admit, job_id, token=dispatch_generation):
@@ -185,6 +196,8 @@ async def run_listen_finalization_job(
             return JSONResponse(status_code=200, content={'status': 'acked', 'job_status': 'completed'})
         if claim_status == 'leased':
             return JSONResponse(status_code=409, content={'status': claim_status})
+        if claim_status == 'account_pending_deletion':
+            return retry_response(RetryReason.PERSISTENCE_FENCED)
         if claim_status == 'stale_generation':
             # The reconciler has already enqueued the newer generation. An old
             # named task is no longer actionable and must be acknowledged so

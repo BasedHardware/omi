@@ -58,28 +58,49 @@ independent of the durable total; Redis failure cannot turn a cache into authori
 
 ## Reader rollout and rollback
 
-`FIRESTORE_READ_LEVERS.usage_month_total` gates readers only. It is initially **0**
-because an old instance can write hourly usage without maintaining totals. A
-mixed-writer rollout would undercount paid/Free allowance. This accounting risk
-is why the reader has a ramp instead of shipping immediately at 100%.
+`FIRESTORE_READ_LEVERS.usage_month_total` gates readers only. It originally
+shipped at **0** because an old instance can write hourly usage without
+maintaining totals. A mixed-writer rollout would undercount paid/Free allowance.
+This accounting risk requires writer qualification before adding reader scope.
 
-The rollout lead and reads loop own this sequence:
+Current source declaration for the **2026-10-27 #23797 train**:
 
-1. Target T2 (2026-10-24 08:00Z, cutoff 07:30Z): deploy this writer contract to **every** source writer:
-   listen, pusher, backend, sync, backfill, integration, desktop backend Python
-   helpers and operator/migration tooling. Verify the actual serving artifacts,
-   traffic and drained old revisions/jobs before enabling any reader. Cached
-   totals must not be initialized against mixed-version writers.
-2. Choose one `FSR_USAGE_MONTH_TOTAL_EPOCH` on all reader services (default `v1`).
-   Enable `usage_month_total:5` after the writer gate; run the loopback/synthetic
-   equivalence scenarios on that artifact, require zero mismatches, no 5xx or
-   p95 regression and no contention errors for two hours. Check the new origin
-   series and fallback rate. The original full-ramp deadline of **2026-10-24
-   08:00Z** cannot follow an 08:00Z writer train and a two-hour hold. Report this
-   scheduling blocker to the lead; proposed replacement is **2026-10-24 12:00Z**,
-   subject to the lead's writer coverage and parity gate.
-3. The reads loop expands to 100%, measures matched full-day windows and D+2
-   billing, and includes added writes/initialization reads in net economics.
+| Reader surface | Enable percent | `FSR_USAGE_MONTH_TOTAL_EPOCH` |
+| --- | --- | --- |
+| Prod Cloud Run backend, backend-sync, backend-sync-backfill, backend-integration | 100 | `c2fs_20261026_r1` |
+| Base, listen/pusher in both environments, jobs, desktop backend, all dev services | 0 | `v1` (inactive) |
+
+The October 24 initial rollout schedule is superseded by this scope and sequence.
+The four Cloud Run declarations preserve the existing reader scope; this is a
+source contract, not fresh attestation of serving writer coverage. Other readers
+stay off and cannot seed/restamp totals. Do not enable a `v1` reader against the
+shared production totals. See [the runtime train](../deploy/runtime_env/README.md)
+for the complete replacement-literal policy and the independent people ramp.
+
+The Infra Rollout Coordinator owns the next qualification and expansion:
+
+1. Ship #23797's config in **listen → pusher → Cloud Run** order only after
+   the 10-27 batch entry/soak (~11:30Z) and lead admission. Verify each actual
+   serving artifact and complete literal/epoch before advancing. Preserve the
+   monthly reader split throughout; people starts at 5 independently.
+2. Before any additional monthly reader, attest the writer contract on **every**
+   source writer: listen, pusher, backend, sync, backfill, integration, desktop
+   backend Python helpers and operator/migration tooling. Verify actual serving
+   artifacts, traffic and drained old revisions/jobs. Cached totals must never
+   be initialized against mixed-version writers. By **2026-10-28 12:00Z**,
+   either establish this gate or record the blocker and leave new readers off.
+3. Align qualified new readers to the existing production epoch
+   **`c2fs_20261026_r1` while still at 0**, then enable 5. Default `v1` is not an
+   approved production reader epoch. If old writers have run since initialization,
+   keep all affected readers off, requalify all writers, and select a **new common
+   epoch** before enabling any scope instead of reusing potentially stale totals.
+4. Run synthetic/loopback equivalence on that artifact: require zero mismatches,
+   no accounting/Free allowance, 5xx or live-p95 regression, and no contention
+   errors for **two hours**; watch origin series and fallback rate. Only then may
+   the lead expand the qualified scope to 100, targeted by **2026-10-29 12:00Z**.
+   A failed gate is a blocker, not authorization to expand at the deadline.
+5. Measure matched full-day windows against 10-24/25 and confirm **D+1 billing**,
+   including added writes, initialization reads and fallbacks in net economics.
 
 Kill switch: set `usage_month_total:0` (preserve every other lever). This restores
 hourly reads and leaves maintenance on. If any old-writer code ran after a total

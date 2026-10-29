@@ -13,6 +13,8 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 
 /// Kept outside the history query: an idle-closed episode's member may still be in_progress.
+/// The small pill under the live header's duration line: link glyph +
+/// Continues "<title>". Tapping opens the previous episode's page.
 class PreviousEpisodeLink extends StatefulWidget {
   const PreviousEpisodeLink({super.key, this.onOpenConversation});
 
@@ -53,14 +55,41 @@ class _PreviousEpisodeLinkState extends State<PreviousEpisodeLink> {
     }
     final episode = episodes?.previous;
     if (episode == null) return const SizedBox.shrink();
+    final title = episode.title.trim().isEmpty ? context.l10n.conversationTab : episode.title;
+    // One quiet pill: the capture continues an episode the reader just left.
     return Padding(
-      padding: const EdgeInsets.all(OmiSpacing.md),
-      child: OmiButton.tertiary(
-        key: const Key('previous_episode_link'),
-        label:
-            '${context.l10n.episodeOpenPrevious}: ${episode.title.trim().isEmpty ? context.l10n.conversationTab : episode.title}',
-        onPressed: () =>
+      key: const Key('previous_episode_pill'),
+      padding: const EdgeInsets.only(top: OmiSpacing.xs),
+      child: InkWell(
+        onTap: () =>
             routeToPage(context, PreviousEpisodePage(episode: episode, onOpenConversation: widget.onOpenConversation)),
+        borderRadius: OmiRadius.pillAll,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44, minWidth: 44),
+          child: Center(
+            widthFactor: 1,
+            heightFactor: 1,
+            child: Container(
+              padding: const EdgeInsetsDirectional.fromSTEB(OmiSpacing.xs, 4, OmiSpacing.sm, 4),
+              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.pillAll),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.link_rounded, size: 14, color: OmiColors.textTertiary),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      context.l10n.episodeContinues(title),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

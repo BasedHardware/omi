@@ -326,11 +326,16 @@ def test_codemagic_workflow_contract_accepts_current_production_configuration():
     assert GUARDS.check_codemagic_release_publishers() == []
 
 
-def test_android_internal_alpha_promotion_uses_exact_build_and_held_api_commit():
+def test_android_internal_publishers_hold_changes_for_console_review():
     document = yaml.safe_load((REPO_ROOT / "codemagic.yaml").read_text(encoding="utf-8"))
+    auto_publisher = document["workflows"]["android-internal-auto"]["publishing"]["google_play"]
     workflow = document["workflows"]["android-prod-internal"]
     publisher = workflow["publishing"]
 
+    # The 2026-10-28 android-internal-auto uploads failed at Publishing:
+    # "Changes cannot be sent for review automatically." Keep both Play
+    # publishing blocks held until the Console review submission.
+    assert auto_publisher["changes_not_sent_for_review"] is True
     assert publisher["google_play"]["track"] == "internal"
     assert publisher["google_play"]["changes_not_sent_for_review"] is True
     assert publisher["google_play"]["release_name"] == "$CM_TAG [$CM_BUILD_ID]"

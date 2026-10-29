@@ -9,6 +9,9 @@
    "final_job": {
     "attempt": 5,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-1",
     "duration_seconds": 117.77,
     "failure": "worker_failed",
@@ -109,6 +112,9 @@
    "final_job": {
     "attempt": 5,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-2",
     "duration_seconds": 217.61,
     "failure": "worker_failed",
@@ -209,6 +215,9 @@
    "final_job": {
     "attempt": 5,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-3",
     "duration_seconds": 329.81,
     "failure": "worker_failed",
@@ -309,6 +318,9 @@
    "final_job": {
     "attempt": 5,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-4",
     "duration_seconds": 559.77,
     "failure": "worker_failed",
@@ -409,6 +421,9 @@
    "final_job": {
     "attempt": 5,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-5",
     "duration_seconds": 552.98,
     "failure": "worker_failed",
@@ -509,6 +524,9 @@
    "final_job": {
     "attempt": 5,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-6",
     "duration_seconds": 447.66,
     "failure": "worker_failed",
@@ -609,6 +627,9 @@
    "final_job": {
     "attempt": 5,
     "client_status": "completed",
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
     "conversation_id": "conv-7",
     "duration_seconds": 525.29,
     "failure": "worker_failed",

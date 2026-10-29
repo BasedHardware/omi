@@ -16,6 +16,7 @@ from prometheus_client import (
     generate_latest,
     start_http_server,
 )
+from utils.episodes import metrics as _episode_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
 
 # All backend, backend-listen, and pusher metrics endpoints import this module.
 # The pinned prometheus_client (0.21.1) otherwise exports a second _created
@@ -1258,8 +1259,8 @@ OMI_LISTEN_NO_AUDIO_TEARDOWN_TOTAL = Counter(
 # series use Cloud Logging of the matching omi_sync_intake line until scrape lands.
 OMI_SYNC_INTAKE_TOTAL = Counter(
     'omi_sync_intake_total',
-    'Sync conversation intake outcomes (created vs merged) by bounded outcome',
-    ['outcome'],
+    'Sync conversation intake outcomes (created vs merged) by bounded outcome and projected encoded-size bucket',
+    ['outcome', 'projected_size_bucket'],
 )
 
 # One decision per safety-WAL upload that carries a recording id and audio

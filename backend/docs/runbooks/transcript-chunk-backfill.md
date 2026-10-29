@@ -1,9 +1,15 @@
 # Transcript chunk backfill
 
-Chat and conversation search query transcript-chunk vectors (`ns_tchunks`), but
-no processing path writes them: the never-enabled indexing step was removed in
-#20959. Stored history has none, so a detail spoken only in a transcript is
-unfindable until that user is backfilled.
+For explicit transcript recall, prefer the direct paginated search described in
+`../transcript-recall.md`: it searches saved old/new transcripts without a
+backfill. This runbook remains the separately approved operator repair for the
+legacy semantic chunk index. Do not enable the retired
+`TRANSCRIPT_CHUNK_INDEXING_ENABLED` flag; it no longer selects a writer.
+
+Legacy semantic chat search can query transcript-chunk vectors (`ns_tchunks`),
+but normal processing does not maintain complete coverage after #20959.
+Unindexed history needs this repair only for that legacy semantic path;
+explicit direct transcript recall reads saved text without it.
 `backend/scripts/backfill_transcript_chunk_vectors.py` indexes one user's
 completed, visible conversations with the same chunking search readers rebuild.
 

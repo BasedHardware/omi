@@ -274,6 +274,135 @@
         "title": "AccountCutoverState",
         "type": "string"
       },
+      "AccountDeletionActionResponse": {
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "pending_deletion": {
+            "default": false,
+            "title": "Pending Deletion",
+            "type": "boolean"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "wipe_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wipe At"
+          }
+        },
+        "required": [
+          "status",
+          "message"
+        ],
+        "title": "AccountDeletionActionResponse",
+        "type": "object"
+      },
+      "AccountDeletionLossSummary": {
+        "properties": {
+          "backlog_conversations": {
+            "default": 0,
+            "title": "Backlog Conversations",
+            "type": "integer"
+          },
+          "backlog_seconds": {
+            "default": 0,
+            "title": "Backlog Seconds",
+            "type": "integer"
+          },
+          "held_audio_seconds": {
+            "default": 0,
+            "title": "Held Audio Seconds",
+            "type": "integer"
+          },
+          "held_recordings": {
+            "default": 0,
+            "title": "Held Recordings",
+            "type": "integer"
+          }
+        },
+        "title": "AccountDeletionLossSummary",
+        "type": "object"
+      },
+      "AccountDeletionRestoreResponse": {
+        "properties": {
+          "billing_cancelled": {
+            "default": false,
+            "title": "Billing Cancelled",
+            "type": "boolean"
+          },
+          "restored": {
+            "title": "Restored",
+            "type": "boolean"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "restored"
+        ],
+        "title": "AccountDeletionRestoreResponse",
+        "type": "object"
+      },
+      "AccountDeletionStatusResponse": {
+        "properties": {
+          "grace_period_days": {
+            "default": 0,
+            "title": "Grace Period Days",
+            "type": "integer"
+          },
+          "loss_summary": {
+            "$ref": "#/components/schemas/AccountDeletionLossSummary"
+          },
+          "pending_deletion": {
+            "default": false,
+            "title": "Pending Deletion",
+            "type": "boolean"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "wipe_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wipe At"
+          }
+        },
+        "required": [
+          "loss_summary"
+        ],
+        "title": "AccountDeletionStatusResponse",
+        "type": "object"
+      },
       "Action": {
         "properties": {
           "action": {
@@ -11196,6 +11325,18 @@
       "ConversationTopicRequest": {
         "additionalProperties": false,
         "properties": {
+          "conversation_language": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Language"
+          },
           "transcript": {
             "maxLength": 100000,
             "minLength": 1,
@@ -13469,6 +13610,11 @@
       },
       "DeleteAccountRequest": {
         "properties": {
+          "erase_now": {
+            "default": false,
+            "title": "Erase Now",
+            "type": "boolean"
+          },
           "reason": {
             "anyOf": [
               {
@@ -19435,6 +19581,67 @@
         "title": "HeldAudioSummary",
         "type": "object"
       },
+      "HiddenNoiseCountsResponse": {
+        "properties": {
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/HiddenNoiseDayCount"
+            },
+            "title": "Days",
+            "type": "array"
+          },
+          "end_date": {
+            "format": "date-time",
+            "title": "End Date",
+            "type": "string"
+          },
+          "start_date": {
+            "format": "date-time",
+            "title": "Start Date",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "tz": {
+            "title": "Tz",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tz",
+          "start_date",
+          "end_date",
+          "days",
+          "total",
+          "truncated"
+        ],
+        "title": "HiddenNoiseCountsResponse",
+        "type": "object"
+      },
+      "HiddenNoiseDayCount": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "count"
+        ],
+        "title": "HiddenNoiseDayCount",
+        "type": "object"
+      },
       "IgnoredVoice": {
         "description": "A voice the user marked Not a Person; Omi does not ask about it again.",
         "properties": {
@@ -21423,6 +21630,20 @@
               }
             ],
             "title": "Expected Calendar"
+          },
+          "observed_call_tiles": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/MeetingParticipant"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed Call Tiles"
           },
           "observed_screen_listing": {
             "anyOf": [
@@ -32185,6 +32406,16 @@
             "description": "Meeting notes/description",
             "title": "Notes"
           },
+          "participant_sources": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MeetingParticipantSources"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "participants": {
             "description": "Meeting participants",
             "items": {
@@ -32305,10 +32536,32 @@
       },
       "StorefrontCurrent": {
         "properties": {
+          "amount_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Minor"
+          },
           "cancel_at_period_end": {
             "default": false,
             "title": "Cancel At Period End",
             "type": "boolean"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
           },
           "interval": {
             "anyOf": [
@@ -32343,6 +32596,17 @@
           "line": {
             "title": "Line",
             "type": "string"
+          },
+          "line_template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line Template"
           },
           "name": {
             "title": "Name",
@@ -32379,6 +32643,20 @@
             "title": "Amount Minor",
             "type": "integer"
           },
+          "confirm_line_templates": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirm Line Templates"
+          },
           "confirm_lines": {
             "anyOf": [
               {
@@ -32403,6 +32681,17 @@
               }
             ],
             "title": "Cta Label"
+          },
+          "cta_label_template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cta Label Template"
           },
           "currency": {
             "title": "Currency",
@@ -32452,6 +32741,17 @@
               }
             ],
             "title": "Renewal Line"
+          },
+          "saving_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Saving Minor"
           },
           "subline": {
             "anyOf": [
@@ -36905,6 +37205,17 @@
       },
       "UpgradeSubscriptionRequest": {
         "properties": {
+          "expected_amount_due": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Amount Due"
+          },
           "price_id": {
             "maxLength": 255,
             "minLength": 1,
@@ -36921,6 +37232,22 @@
               }
             ],
             "title": "Promotion Code"
+          },
+          "proration_date": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proration Date"
+          },
+          "switch_now": {
+            "default": false,
+            "title": "Switch Now",
+            "type": "boolean"
           }
         },
         "required": [
@@ -38637,6 +38964,134 @@
           "status"
         ],
         "title": "WrappedStatusResponse",
+        "type": "object"
+      },
+      "YearlySwitchResponse": {
+        "properties": {
+          "amount_due_today": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Due Today"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "eligible": {
+            "title": "Eligible",
+            "type": "boolean"
+          },
+          "first_billing_period": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Billing Period"
+          },
+          "monthly_amount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Amount"
+          },
+          "plan_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Id"
+          },
+          "price_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Id"
+          },
+          "proration_date": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proration Date"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "renews_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Renews At"
+          },
+          "savings_amount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Savings Amount"
+          },
+          "yearly_amount": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Yearly Amount"
+          }
+        },
+        "required": [
+          "eligible",
+          "reason"
+        ],
+        "title": "YearlySwitchResponse",
         "type": "object"
       },
       "routers__desktop_tts_updates__TtsSynthesizeRequest": {
@@ -48622,6 +49077,120 @@
           }
         ],
         "summary": "Create Conversation From Segments User",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/hidden-noise-counts": {
+      "get": {
+        "description": "Count hidden noise/media without gating on MEDIA_NOISE_MODE for this uid.\n\nZero-count days are omitted. A 1000-row scan cap sets truncated=true when\nhit; days and total then represent lower bounds. Locked rows are eligible;\ndeletion/merge tombstones never count; Dream duplicates count because the\ninclude_discarded reveal list shows them. No hidden rows\nreturns empty days and total=0, even when the media/noise mode is disabled.",
+        "operationId": "get_hidden_noise_counts_v1_conversations_hidden_noise_counts_get",
+        "parameters": [
+          {
+            "description": "Inclusive start instant; naive timestamps use UTC",
+            "in": "query",
+            "name": "start_date",
+            "required": true,
+            "schema": {
+              "description": "Inclusive start instant; naive timestamps use UTC",
+              "format": "date-time",
+              "title": "Start Date",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Inclusive end instant; maximum window is 31 days",
+            "in": "query",
+            "name": "end_date",
+            "required": true,
+            "schema": {
+              "description": "Inclusive end instant; maximum window is 31 days",
+              "format": "date-time",
+              "title": "End Date",
+              "type": "string"
+            }
+          },
+          {
+            "description": "IANA timezone for local created_at day buckets",
+            "in": "query",
+            "name": "tz",
+            "required": false,
+            "schema": {
+              "default": "UTC",
+              "description": "IANA timezone for local created_at day buckets",
+              "title": "Tz",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HiddenNoiseCountsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Hidden Noise Counts",
         "tags": [
           "conversations"
         ]
@@ -66121,6 +66690,93 @@
         "summary": "Upgrade Subscription Endpoint"
       }
     },
+    "/v1/payments/yearly-switch": {
+      "get": {
+        "description": "Whether this monthly payer can switch to yearly now, and (with preview) exactly what it costs.",
+        "operationId": "get_yearly_switch_endpoint_v1_payments_yearly_switch_get",
+        "parameters": [
+          {
+            "description": "Include Stripe's invoice preview: the charge today and the renewal date.",
+            "in": "query",
+            "name": "preview",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Include Stripe's invoice preview: the charge today and the renewal date.",
+              "title": "Preview",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YearlySwitchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Yearly Switch Endpoint"
+      }
+    },
     "/v1/paypal/payment-details": {
       "get": {
         "description": "Get the PayPal payment details for the user",
@@ -73685,6 +74341,16 @@
         "operationId": "delete_account_v1_users_delete_account_delete",
         "parameters": [
           {
+            "in": "query",
+            "name": "grace",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Grace",
+              "type": "boolean"
+            }
+          },
+          {
             "in": "header",
             "name": "authorization",
             "required": false,
@@ -73726,7 +74392,9 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/DeleteAccountRequest",
-                "default": {}
+                "default": {
+                  "erase_now": false
+                }
               }
             }
           }
@@ -73736,7 +74404,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UserStatusResponse"
+                  "$ref": "#/components/schemas/AccountDeletionActionResponse"
                 }
               }
             },
@@ -73762,6 +74430,84 @@
           }
         ],
         "summary": "Delete Account",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/users/deletion-status": {
+      "get": {
+        "description": "Status plus metadata counts used by the account-deletion warning screen.",
+        "operationId": "get_account_deletion_status_endpoint_v1_users_deletion_status_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountDeletionStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Account Deletion Status Endpoint",
         "tags": [
           "v1"
         ]
@@ -78256,6 +79002,84 @@
           }
         ],
         "summary": "Record Channel"
+      }
+    },
+    "/v1/users/restore-account": {
+      "post": {
+        "description": "Cancel a pending grace wipe while the deadline remains in the future.",
+        "operationId": "restore_account_deletion_endpoint_v1_users_restore_account_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountDeletionRestoreResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Restore Account Deletion Endpoint",
+        "tags": [
+          "v1"
+        ]
       }
     },
     "/v1/users/stats/chat-messages": {

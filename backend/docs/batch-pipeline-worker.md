@@ -226,9 +226,59 @@ trough is an opportunity to measure slack, not permission to run.
 
 Export oldest pending/ready/retry age per class, freshness, admission-to-lease owner
 wait, transition rates/jobs per second, and GPU utilization/headroom. No owner
-labels. Autoscale on ready-age with fresh/recent/deep targets 30/300/3600 seconds;
-reject stale samples. B's dedicated chart documents the external-metric HPA.
-CPU is not the scale signal; non-preemptible batch latency still needs bounds.
+labels. Queue age is an SLO diagnostic, not a replica demand multiplier: a parked
+allowance hold can re-enter `ready` after its backoff while keeping a days-old
+enqueue time. One such row must not buy the entire GPU ceiling.
+
+Capacity uses `omi_batch_pipeline_admissible_ready_units`, an indexed aggregate
+over ready, merge-pending, currently available work whose compute status is
+`unattempted` or `allowed`. New admission records `unattempted`; it does not
+authorize a paid call. Existing workers already replace that status with
+allowed/held or clear it on an unevaluated refusal, so mixed worker versions
+cannot leave a separate eligibility bit true. Held/parked/unevaluated and
+unmarked legacy debt do not request new GPUs; warm workers still drain them
+under the existing funding/privacy checks. No historical backfill is required.
+
+The three priority counts publish atomically with a separate capacity freshness
+clock. Only the dedicated worker's supervised sampler runs these aggregates;
+serving requests keep their existing gauges without scanning GPU capacity.
+A capacity-query failure leaves its clock unchanged and cannot fail recovery
+or projection. The adapter requires all three classes younger than60seconds, takes the
+maximum per class across identical worker samplers, then sums the classes.
+Absent/stale/partial data stays unavailable; never replace it with zero or sum
+the same global queue once per replica.
+
+Production values preserve the ratified three-worker on-demand floor (lead
+114a22/724762, 10-28) with autoscaling off, so an image roll cannot activate
+an unqualified capacity target. The qualified cutover shape (lead f05065,
+10-28) is a single OD-pinned HPA at min3/max16: every replica pins to
+`batch-pipeline-pool`, so the guaranteed floor and scale-out never depend on
+Spot (persistent L4 Spot stockout; Spot L4 bills above on-demand). The latent
+balanced-pool machinery stays available for non-production explicit-budget
+tests. The chart rejects it when the stage, values namespace, or Helm release
+namespace marks a production install, including even replica overrides. Going
+above 16 replicas is a second, separately qualified step; never pre-provision
+nodes. When the scaler is enabled, op1 raises `batch-pipeline-pool`'s node
+maximum (3 -> 16) in the same reviewed
+qualification window, using a real scale-up during the 25% soak as the
+scheduling proof.
+
+`targetQueuedUnitsPerWorker=16` is **provisional slot arithmetic**, not a
+qualified throughput target. Before enabling the scaler, op1 must benchmark
+useful completions and queue latency on the exact qualified worker during the
+25% soak, pin the measured target, verify the new index READY and the fresh
+external metric, and get the lead's exact apply approval. This source change
+does not itself expand admission or authorize deployment. accel3g owns the
+scaler PR (lead f05065), bramp3 does the bounded review, op1 installs and
+qualifies; MERGE READY by 10Z on 2026-10-28.
+
+For cutover/rollback, op1 captures the current release values/manifest privately,
+keeps the image pinned, preserves all runtime bindings and the 1500s SIGTERM
+drain, and verifies the single OD deployment/image, the HPA budget when enabled,
+and all count classes. Production has no Spot companion. If qualification
+fails, restore the prior release with autoscaling off and three Ready OD
+workers. CPU is not the scale signal; queue latency,
+useful throughput, GPU duty and the cost ledger still gate cohort expansion.
 
 ## Stage profiling (metrics-only)
 

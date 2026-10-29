@@ -73,10 +73,10 @@ def test_shadow_and_off_keep_legacy_objects(monkeypatch, caplog, mode):
     assert incoming[0]['text'] not in caplog.text and 'synthetic-account' not in caplog.text
 
 
-def test_frame_proof_precedes_text_and_same_scope_retry_proof():
+def test_frame_proof_requires_lexical_checks_and_same_scope_retry_still_drops():
     existing = [segment(), segment(3, speaker_id_scope='sync:scope')]
     incoming = [segment(2, start=2000), segment(3, speaker_id_scope='sync:scope')]
-    assert dedupe(existing, incoming, proof=lambda *args: frozenset({0})) == []
+    assert dedupe(existing, incoming, proof=lambda *args: frozenset({0})) == incoming[:1]
 
 
 def test_text_fallback_uses_whole_conversation_offset():
@@ -252,7 +252,7 @@ def test_real_frame_proof_drops_even_with_fleet_dedupe_enabled(monkeypatch):
             )
         ],
     )
-    incoming = [segment(7, start=8000, id='synthetic-segment')]
+    incoming = [segment(1, id='synthetic-segment')]
     target['capture_evidence'].update(
         proof='committed_transcript_v1',
         lifetime=dict(
@@ -397,18 +397,19 @@ def test_positioned_uncovered_speech_never_uses_text_fallback(scope):
     )
 
 
-def test_same_audio_with_different_words_is_suppressed_by_receipt_proof():
+def test_same_audio_with_novel_words_is_kept_despite_receipt_proof():
     upload, target = positioned_row(10, 20, seed=2), positioned_row(10, 20)
     assert (
         dedupe_segments(
             target['transcript_segments'], upload['transcript_segments'], incoming_row=upload, reference_row=target
         )
-        == []
+        == upload['transcript_segments']
     )
 
 
 @pytest.mark.parametrize('session', [None, 'synthetic-session'])
-def test_transaction_replayed_frames_with_different_text_are_one_transcript(monkeypatch, session):
+@pytest.mark.parametrize('change', ['novel', 'number', 'negation', 'correction', 'exact'])
+def test_transaction_capture_proven_incoming_obeys_lexical_contract(monkeypatch, session, change):
     from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
     from utils.sync.assignment import assign_in_transaction
 
@@ -418,11 +419,21 @@ def test_transaction_replayed_frames_with_different_text_are_one_transcript(monk
     first['id'] = 'first'
     second = positioned_row(10, 20, seed=2)
     second['id'] = 'second'
-    second['transcript_segments'][0].update(timestamp=1003, start=3, end=9)
+    first['transcript_segments'][0]['text'] = lexical(1, 24)
+    second['transcript_segments'][0]['text'] = lexical(1, 24)
+    if change == 'novel':
+        second['transcript_segments'][0]['text'] += ' ' + lexical(99, 1)
+    elif change == 'number':
+        first['transcript_segments'][0]['text'] += ' 17'
+        second['transcript_segments'][0]['text'] += ' 18'
+    elif change == 'negation':
+        second['transcript_segments'][0]['text'] += " don't"
+    elif change == 'correction':
+        second['transcript_segments'][0]['text'] += ' actually'
     for item in (first, second):
         if session:
             item['capture_evidence']['recording_session_id'] = session
-        assigned, _, _ = assign_in_transaction(
+        assigned, _, kept = assign_in_transaction(
             store.transaction(),
             store.collection('users').document('synthetic-account'),
             item,
@@ -431,8 +442,12 @@ def test_transaction_replayed_frames_with_different_text_are_one_transcript(monk
             invalidate=lambda _: None,
         )
     assert assigned['id'] == 'first'
-    assert len(assigned['transcript_segments']) == 1
-    assert assigned['transcript_segments'][0]['text'] == first['transcript_segments'][0]['text']
+    assert kept == ([] if change == 'exact' else second['transcript_segments'])
+    assert len(assigned['transcript_segments']) == (1 if change == 'exact' else 2)
+    assert {s['text'] for s in assigned['transcript_segments']} == {
+        first['transcript_segments'][0]['text'],
+        second['transcript_segments'][0]['text'],
+    }
 
 
 @pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
@@ -446,3 +461,55 @@ def test_session_persistence_is_serve_only_and_preserves_external_data(monkeypat
     persist_identity('synthetic-account', result, incoming, None)
     assert result['external_data']['synthetic_field'] == 'retained'
     assert result['external_data'].get('recording_session_id') == ('synthetic-session' if mode == 'serve' else None)
+
+
+@pytest.mark.parametrize('change', ['novel', 'number', 'negation', 'correction', 'multiplicity', 'exact'])
+@pytest.mark.parametrize('mode', ['shadow', 'serve'])
+def test_capture_proven_incoming_lexical_contract_and_shadow_telemetry(monkeypatch, caplog, change, mode):
+    from utils.capture.frame_proof import covered_indices
+    from utils.capture.shadow import SHADOW
+
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', mode)
+    monkeypatch.delenv('CAPTURE_COVERAGE_MODE_SERVE_PERCENT', raising=False)
+    monkeypatch.delenv('CAPTURE_COVERAGE_MODE_SERVE_UID_SHA256S', raising=False)
+    upload, target = positioned_row(10, 20, seed=2), positioned_row(10, 20)
+    old = target['transcript_segments'][0]
+    new = upload['transcript_segments'][0]
+    old['text'] = lexical(1, 24)
+    new['text'] = old['text']
+    if change == 'novel':
+        new['text'] += ' ' + lexical(99, 1)
+    elif change == 'number':
+        old['text'] += ' 17'
+        new['text'] += ' 18'
+    elif change == 'negation':
+        new['text'] += " don't"
+    elif change == 'correction':
+        new['text'] += ' actually'
+    elif change == 'multiplicity':
+        new['text'] += ' ' + new['text'].split()[0]
+    incoming = [new]
+    snapshot = deepcopy((target, upload))
+    assert covered_indices(incoming, upload, [target]) == frozenset({0})
+    proposed = [] if change == 'exact' else incoming
+    assert dedupe_segments([old], incoming, incoming_row=upload, reference_row=target) == proposed
+    metric = SHADOW.labels(path='incoming', outcome='disagree' if change == 'exact' else 'agree')
+    before = metric._value.get()
+    with caplog.at_level('INFO'):
+        kept = choose_segments(
+            'synthetic-account', 'incoming', [old], incoming, incoming, incoming_row=upload, reference_row=target
+        )
+    assert kept == (proposed if mode == 'serve' else incoming)
+    assert metric._value.get() == before + 1
+    assert f"check=incoming outcome={'disagree' if change == 'exact' else 'agree'}" in caplog.text
+    assert new['text'] not in caplog.text and 'synthetic-account' not in caplog.text
+    assert (target, upload) == snapshot
+
+
+def test_capture_proven_exact_retry_keeps_original_indices_after_lexical_drop():
+    existing = [segment(1), segment(2, start=1010), segment(3, start=1020)]
+    incoming = [segment(1), segment(2, start=1010), segment(3, start=1020)]
+    incoming[1]['text'] += ' actually'
+    # The short exact retry cannot pass the lexical token minimum.
+    existing[2]['text'] = incoming[2]['text'] = lexical(3, 2)
+    assert dedupe(existing, incoming, proof=lambda *args: frozenset({0, 1, 2})) == incoming[1:2]

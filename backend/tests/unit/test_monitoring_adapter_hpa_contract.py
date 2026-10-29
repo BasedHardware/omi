@@ -12,6 +12,8 @@ from scripts.diff_prod_adapter import (
     API_SERVICES,
     NLLB_RULE,
     DIARIZER_BATCH_RULE,
+    BATCH_PIPELINE_RULE,
+    BATCH_PIPELINE_CAPACITY_RULE,
     PARAKEET_QUEUE_RULES,
     compare,
     expected_config,
@@ -48,13 +50,17 @@ def test_diff_accepts_only_exact_new_parakeet_queue_rules():
         expected_config(broken)
 
 
-@pytest.mark.parametrize('service', ['parakeet', 'backend-listen', 'pusher', 'vad', 'diarizer', 'nllb-translation'])
+@pytest.mark.parametrize(
+    'service', ['parakeet', 'backend-listen', 'pusher', 'vad', 'diarizer', 'nllb-translation', 'batch-pipeline-worker']
+)
 def test_prod_hpa_consumed_metrics_have_adapter_rules(service):
     helm = shutil.which('helm')
     if helm is None:
         pytest.skip('helm is not installed')
     chart = CHARTS / service
     values = chart / f'prod_omi_{service.replace("-", "_")}_values.yaml'
+    if service == 'batch-pipeline-worker':
+        values = chart / 'prod_omi_batch-pipeline-worker_values.yaml'
     templates = ['templates/hpa.yaml']
     command = [
         helm,
@@ -68,6 +74,12 @@ def test_prod_hpa_consumed_metrics_have_adapter_rules(service):
     ]
     for template in templates:
         command.extend(['--show-only', template])
+    if service == 'batch-pipeline-worker':
+        command.extend(['--set-string', 'image.digest=sha256:' + 'b' * 64])
+        # The production default remains fixed4 until qualification. Verify the
+        # prepared HPA cutover against the adapter without enabling it by default.
+        # f05065 cutover shape: single OD-pinned HPA from the prod 3/16 budget.
+        command.extend(['--set', 'autoscaling.enabled=true'])
     rendered = subprocess.run(command, check=True, capture_output=True, text=True).stdout
     hpas = [obj for obj in yaml.safe_load_all(rendered) if obj and obj['kind'] == 'HorizontalPodAutoscaler']
     assert hpas, f'{service}: no prod HPA rendered'
@@ -93,6 +105,57 @@ def test_cluster_adapter_keeps_all_parakeet_rules():
             assert indexed[rule['name']['as']] == rule
 
 
+def test_batch_pipeline_adapter_is_the_scoped_freshness_contract():
+    rules = yaml.safe_load(ADAPTER.read_text())['rules']['external']
+    actual = [r for r in rules if r['name']['as'] == BATCH_PIPELINE_RULE['name']['as']]
+    assert actual == [BATCH_PIPELINE_RULE]
+    supplied = yaml.safe_load((CHARTS / 'batch-pipeline-worker/prometheus-adapter-rules.yaml').read_text())
+    capacity = [r for r in rules if r['name']['as'] == BATCH_PIPELINE_CAPACITY_RULE['name']['as']]
+    assert actual + capacity == supplied['external']
+    assert capacity == [BATCH_PIPELINE_CAPACITY_RULE]
+    query = capacity[0]['metricsQuery']
+    assert 'max by (namespace, worker_release, priority)' in query
+    assert 'count by (namespace, worker_release)' in query and '== 3' in query
+    assert 'capacity_refreshed_at_seconds < 60' in query
+    assert 'or vector(0)' not in query
+
+
+def test_diff_accepts_missing_batch_rule_but_rejects_false_zero_or_duplicate():
+    rules = yaml.safe_load(ADAPTER.read_text())['rules']
+    live = {'rules': rules['custom'], 'externalRules': rules['external']}
+    old = copy.deepcopy(live)
+    old['externalRules'].remove(BATCH_PIPELINE_RULE)
+    assert expected_config(old) == expected_config(live)
+    broken = copy.deepcopy(live)
+    next(r for r in broken['externalRules'] if r['name']['as'] == BATCH_PIPELINE_RULE['name']['as'])[
+        'metricsQuery'
+    ] = 'vector(0)'
+    with pytest.raises(ValueError, match='Unexpected live batch pipeline'):
+        expected_config(broken)
+    duplicate = copy.deepcopy(live)
+    duplicate['externalRules'].append(copy.deepcopy(BATCH_PIPELINE_RULE))
+    with pytest.raises(ValueError, match='Unexpected live batch pipeline'):
+        expected_config(duplicate)
+
+
+def test_diff_capacity_rule_is_a_closed_reviewed_addition():
+    rules = yaml.safe_load(ADAPTER.read_text())['rules']
+    live = {'rules': rules['custom'], 'externalRules': rules['external']}
+    missing = copy.deepcopy(live)
+    missing['externalRules'].remove(BATCH_PIPELINE_CAPACITY_RULE)
+    assert expected_config(missing) == expected_config(live)
+    for mutation in ('false_zero', 'duplicate'):
+        broken = copy.deepcopy(live)
+        if mutation == 'duplicate':
+            broken['externalRules'].append(copy.deepcopy(BATCH_PIPELINE_CAPACITY_RULE))
+        else:
+            next(r for r in broken['externalRules'] if r['name']['as'] == BATCH_PIPELINE_CAPACITY_RULE['name']['as'])[
+                'metricsQuery'
+            ] = 'vector(0)'
+        with pytest.raises(ValueError, match='Unexpected live batch pipeline capacity'):
+            expected_config(broken)
+
+
 def test_hpa_and_adapter_changes_select_this_contract():
     sources = [ADAPTER] + list(CHARTS.glob('*/prod*values.yaml'))
     sources += list(CHARTS.glob('*/templates/hpa.yaml'))
@@ -104,6 +167,7 @@ def test_hpa_and_adapter_changes_select_this_contract():
         'diarizer',
         'nllb-translation',
         'monitoring',
+        'batch-pipeline-worker',
     }
     all_tests = selector.discover_all_tests()
     for source in sources:

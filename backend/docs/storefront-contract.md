@@ -151,7 +151,7 @@ Android release whose displayed and charged prices differ.
 The current archived price is still shown. With no usable ladder price, Plus
 and Pro are hidden. Architect stays visible with `action: none`, except a Pro
 subscriber who is not cancel-scheduled and not on the exhausted surface: that
-sheet omits Architect entirely. Free is the zero price with headline `$0`.
+sheet omits Architect entirely. Free is the zero price with headline `US$0`.
 No amount is copied out of env or `proposed_prices`.
 
 `months_free` is `floor(12 − annual/monthly)` when that value is at least 1.
@@ -162,12 +162,12 @@ currency's minor unit (USD: cents), except the same-tier monthly-to-yearly
 switch card, whose headline stays the current monthly price.
 
 Every price, saving, subline, and current line uses one formatter. USD is
-`$` plus the amount; other currencies keep a trailing ISO code. Thousands
+`US$` plus the amount; other currencies keep a trailing ISO code. Thousands
 separators always apply. A whole major unit omits a trailing `.00`
-(`$199/month`, `$1,990 billed yearly`, `save $398`,
-`You're on Architect · $199/mo`). A non-zero fraction keeps its decimals
-(`$19.99`, `$16.66`, `$39.98`, `$499.90`). Zero-decimal currencies (JPY and
-Stripe's other zero-decimal codes) are not divided by 100. Free stays `$0`.
+(`US$199/month`, `US$1,990 billed yearly`, `save US$398`,
+`You're on Architect · US$199/mo`). A non-zero fraction keeps its decimals
+(`US$19.99`, `US$16.66`, `US$39.98`, `US$499.90`). Zero-decimal currencies (JPY and
+Stripe's other zero-decimal codes) are not divided by 100. Free stays `US$0`.
 
 Recording hours are `floor_to_nice(budget × 0.85 / 130)`. Free is fixed at 15.
 Budgets are the plan-catalog usage units when the catalog declares them, and
@@ -227,3 +227,20 @@ The chat-quota response sets `uses_shared_budget=true` for flagged ladder/Free
 accounts at every percentage. Clients use the server `allowed` value there;
 legacy question counters and optimistic question deltas do not decide admission.
 The marker and pause state are omitted on the legacy/flag-off quota response.
+
+
+### Currency-safe client interpolation
+
+USD copy uses `US$`. Checkout disables Adaptive Pricing, pins the selected Price's
+original `currency`, and uses `locale=auto` only for language. The hosted submit
+notice identifies USD explicitly; Stripe controls its own glyphs.
+
+Schema v2 adds optional `current.amount_minor`, `current.currency`, and
+`current.line_template` (`{price}` slot), plus `prices[].saving_minor`,
+`cta_label_template` (`{saving}` slot), and `confirm_line_templates` (`{price}`
+slot). Flutter formats these raw amounts with its shared billing formatter;
+existing clients continue to read the original rendered fields. Missing fields
+retain the old-server behavior until the backend is deployed. These fields
+change presentation only: price IDs, purchase eligibility, allocations and
+legacy JPY management remain unchanged. Flutter's annual headline is the full
+annual charge; a monthly equivalent must remain secondary.

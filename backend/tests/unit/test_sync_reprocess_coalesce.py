@@ -28,6 +28,7 @@ def state(monkeypatch):
         return result
 
     monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setattr(reprocess, '_mutate', mutate)
     monkeypatch.setattr(reprocess, '_enqueue', lambda row: tasks.append(deepcopy(row)))
     monkeypatch.setattr(reprocess, '_wake_exists', lambda *_: False)
@@ -179,13 +180,14 @@ def test_pipeline_flags_off_eager_and_process_now_bypasses_coalescing(monkeypatc
     process, mark = Mock(), Mock()
     monkeypatch.setattr(pipeline, '_reprocess_conversation_after_update', process)
     monkeypatch.setattr(reprocess, 'mark', mark)
+    monkeypatch.setenv('SYNC_PROCESSING_HOLD_ENABLED', 'false')
     monkeypatch.setenv('SYNC_REPROCESS_COALESCE_ENABLED', 'false')
     pipeline._reprocess_merged_conversations('u', {'_merged': {'c': 'en'}})
     process.assert_called_once_with('u', 'c', 'en')
     mark.assert_not_called()
     monkeypatch.setenv('SYNC_REPROCESS_COALESCE_ENABLED', 'true')
     pipeline._reprocess_merged_conversations('u', {'_merged': {'c': 'en'}})
-    mark.assert_called_once_with('u', 'c', 'en')
+    mark.assert_called_once_with('u', 'c', 'en', sync_hold=False)
     process.assert_called_once()
     pipeline._reprocess_merged_conversations('u', {'_merged': {'c': 'en'}}, user_selected=True)
     assert process.call_count == 2 and mark.call_count == 1
@@ -226,12 +228,13 @@ def test_owns_runtime_only_allows_production_or_emulator(monkeypatch, stage, nam
 
 
 def test_partial_result_replay_recovers_intent_without_transient_merged_map(pipeline, monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     monkeypatch.setenv('SYNC_REPROCESS_COALESCE_ENABLED', 'true')
     mark = Mock()
     monkeypatch.setattr(reprocess, 'mark', mark)
     response = {'updated_memories': {'c', 'fenced'}, pipeline._RESPONSE_FENCED_CONVERSATION_IDS: {'fenced'}}
     pipeline._reprocess_merged_conversations('u', response)
-    mark.assert_called_once_with('u', 'c', pipeline._LINEAGE_RETRY_LANGUAGE)
+    mark.assert_called_once_with('u', 'c', pipeline._LINEAGE_RETRY_LANGUAGE, sync_hold=True)
 
 
 def test_backfill_recovery_retains_its_queue_worker_and_identity(state, monkeypatch):

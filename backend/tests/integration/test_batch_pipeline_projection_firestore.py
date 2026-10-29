@@ -265,7 +265,7 @@ def test_crash_after_ledger_completion_repairs_client_without_reprocessing(lane)
 
 
 @pytest.mark.parametrize('kind', ['account', 'conversation'])
-def test_deletion_during_projection_cannot_resurrect_or_complete(lane, monkeypatch, kind):
+def test_deletion_during_projection_never_resurrects_and_only_conversation_deletion_settles(lane, monkeypatch, kind):
     from database.batch_pipeline_privacy import BatchPrivacyBlocked
     from utils.batch_pipeline import projection
 
@@ -291,10 +291,16 @@ def test_deletion_during_projection_cannot_resurrect_or_complete(lane, monkeypat
                 {'deleted': True}
             )
         deleted.set()
-        with pytest.raises(BatchPrivacyBlocked):
-            future.result()
-    assert not active_rows(lane) and not lane.tasks and not lane.published
-    assert batch.ledger.get().to_dict()['status'] == 'processing'
+        if kind == 'account':
+            assert future.result() is None
+            held = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+            assert held['projection_privacy_refusal']['reason'] == 'account_deleted'
+            assert held['projection']['privacy_control_only']
+        else:
+            assert future.result()['reason_code'] == 'conversation_deleted'
+    assert not active_rows(lane) and not lane.tasks
+    assert batch.ledger.get().to_dict()['status'] == ('processing' if kind == 'account' else 'completed')
+    assert len(lane.published) == (0 if kind == 'account' else 1)
 
 
 def test_silence_commits_without_loading_transcript_or_marking_enrichment(lane):
@@ -408,14 +414,16 @@ def test_delete_after_assignment_cannot_recreate_reprocess_obligation(lane, monk
     lane.finish(batch)
     original = bridge.finish_sync_bridges
 
-    def delete_before_mark(uid, cid):
-        result = original(uid, cid)
+    def delete_before_mark(uid, cid, **kwargs):
+        result = original(uid, cid, **kwargs)
         lane.client.collection('account_deletions').document(lane.uid).set({'wipe_status': 'queued'})
         return result
 
     monkeypatch.setattr(bridge, 'finish_sync_bridges', delete_before_mark)
-    with pytest.raises(BatchPrivacyBlocked):
-        lane.projector.project(batch.ids[0])
+    assert lane.projector.project(batch.ids[0]) is None
+    held = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+    assert held['projection_privacy_refusal']['reason'] == 'account_deleted'
+    assert held['projection']['state'] == 'quarantined'
     assert batch.ledger.get().to_dict()['status'] == 'processing'
     assert not lane.tasks and not lane.published
     assert not list(lane.client.collection(lane.reprocess.COLLECTION).stream())
@@ -694,7 +702,7 @@ def test_multipart_ambiguity_replays_proven_parts_without_completing_held_upload
     assert not list(lane.user.collection('hourly_usage').stream())
 
 
-def test_quarantine_transaction_rechecks_privacy_before_releasing_head(lane, monkeypatch):
+def test_quarantine_transaction_holds_privacy_without_assigning_or_acknowledging_content(lane, monkeypatch):
     from database.batch_pipeline_privacy import BatchPrivacyBlocked
     from database.batch_pipeline_projection_session import ProjectionSession
     from utils.batch_pipeline.scheduler import owner_key
@@ -710,12 +718,14 @@ def test_quarantine_transaction_rechecks_privacy_before_releasing_head(lane, mon
         return original(session, **kwargs)
 
     monkeypatch.setattr(ProjectionSession, 'persist_empty', erase_before_commit)
-    with pytest.raises(BatchPrivacyBlocked):
-        lane.projector.project(batch.ids[0])
+    assert lane.projector.project(batch.ids[0]) is None
     row = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
-    assert not row.get('projection_parts') and row['protocol_version'] == 1
-    assert lane.projector.store.projection_watermark(owner_key(lane.uid)) is None
-    assert not active_rows(lane)
+    assert not row.get('projection_parts') and row['protocol_version'] == 2
+    assert row['projection']['privacy_control_only']
+    assert row['projection_privacy_refusal']['reason'] == 'data_protection_changed'
+    assert lane.projector.store.projection_watermark(owner_key(lane.uid)) == batch.ids[0]
+    assert not active_rows(lane) and not lane.tasks and not lane.published
+    assert batch.ledger.get().to_dict()['status'] == 'processing'
 
 
 def test_mixed_quarantine_keeps_proven_followups_discoverable_after_restart(lane, monkeypatch):
@@ -1715,9 +1725,18 @@ def test_superseded_settlement_rechecks_fences_after_failed_assignment(lane, mon
 
     superseded_anchor(lane, batch.items[0])
     monkeypatch.setattr(lane.conversations, 'assign_sync_conversation', fail)
-    with pytest.raises((BatchPrivacyBlocked, ProjectionBlocked)):
-        lane.projector.project(batch.ids[0])
-    assert not lane.projector.store.ref('results', batch.ids[0]).get().to_dict().get('projection')
+    if kind in {'account', 'generation'}:
+        assert lane.projector.project(batch.ids[0]) is None
+        held = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+        assert held['projection']['privacy_control_only']
+        assert held['projection'].get('disposition') != 'superseded'
+        assert held['projection_privacy_refusal']['reason'] == (
+            'account_deleted' if kind == 'account' else 'privacy_generation_changed'
+        )
+    else:
+        with pytest.raises((BatchPrivacyBlocked, ProjectionBlocked)):
+            lane.projector.project(batch.ids[0])
+        assert not lane.projector.store.ref('results', batch.ids[0]).get().to_dict().get('projection')
     assert batch.ledger.get().to_dict()['status'] == 'processing'
     assert not lane.tasks and not lane.published
 

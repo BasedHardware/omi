@@ -255,6 +255,27 @@ def test_expiry_recovery_within_budget_when_time_allows():
     assert clock.monotonic() - start <= SYNC_HANDLER_RETRY_BUDGET_SECONDS
 
 
+def test_deadline_scope_exited_in_a_different_context_never_raises():
+    # The batch projection follow-up enters its advisory claim (and this scope)
+    # in one run_blocking executor leaf and releases it in a later leaf; each
+    # leaf runs in its own contextvars.copy_context(), exactly like the two
+    # contexts below. The release must not raise "Token was created in a
+    # different Context" — the exit context never observed the set, so the
+    # scope has nothing to undo there.
+    import contextvars
+
+    enter_context = contextvars.copy_context()
+    exit_context = contextvars.copy_context()
+    scope = transaction_retry_deadline_scope(1000.0)
+    enter_context.run(scope.__enter__)
+    assert enter_context[firestore_transaction_retry._retry_deadline] == 1000.0
+    exit_context.run(scope.__exit__, None, None, None)
+    # The exit context stays untouched (it never carried the scoped deadline),
+    # and the caller's own context never saw either leaf's copy.
+    assert firestore_transaction_retry._retry_deadline.get() is None
+    assert firestore_transaction_retry._retry_deadline not in exit_context
+
+
 def test_ambient_deadline_scope_inherits_overrides_and_resets():
     clock = FakeClock()
     scoped = clock.monotonic() + 100.0

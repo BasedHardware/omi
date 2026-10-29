@@ -10,6 +10,7 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_cross_job_assignment import chunk, conversations
 from utils.sync.assignment import assign_in_transaction
 from utils.sync.live_overlap import choose_live_overlap, live_overlap_enabled
+from utils.sync.assignment_errors import SyncAssignmentSuperseded
 
 
 @pytest.fixture(scope='module', autouse=True)
@@ -61,6 +62,31 @@ def test_overlap_keeps_live_identity_words_and_lifecycle(status):
     assert len(conversations(store)) == 1
     again, created, survivors = assign(store, incoming)
     assert not created and not survivors and len(again['transcript_segments']) == 1
+
+
+def test_discovered_tombstoned_live_row_is_not_adopted_without_batch_validator():
+    store = seeded()
+    store.rows[('users', 'u', 'deleted_conversations', 'live')] = {'deleted': True}
+    before = deepcopy(store.rows[('users', 'u', 'conversations', 'live')])
+    row, created, survivors = assign(store, chunk('wal', 1000, text='New retained speech.'))
+    assert created and row['id'] == 'wal' and survivors
+    assert row['sync_merged_from'] == []
+    assert store.rows[('users', 'u', 'conversations', 'live')] == before
+
+
+def test_redirect_to_tombstoned_live_survivor_cannot_receive_speech():
+    store = seeded()
+    store.rows[('users', 'u', 'deleted_conversations', 'live')] = {'deleted': True}
+    store.rows[('users', 'u', 'conversations', 'donor')] = {
+        'id': 'donor',
+        'deleted': True,
+        'sync_merged_into': 'live',
+        'smart_merge': {'role': 'donor'},
+    }
+    before = deepcopy(store.rows)
+    with pytest.raises(SyncAssignmentSuperseded):
+        assign(store, chunk('wal', 1000), target_id='donor')
+    assert store.rows == before
 
 
 @pytest.mark.parametrize('start', [900, 1009.5, 1120])
@@ -179,7 +205,9 @@ def test_merge_size_failure_publishes_immediately_without_hidden_pending_row(mon
     from utils.sync import assignment
 
     store = seeded()
-    monkeypatch.setattr(assignment, 'SYNC_CONVERSATION_BYTE_BUDGET', 1)
+    # Keep room for a new encoded row; only the existing live row is full.
+    store.rows[('users', 'u', 'conversations', 'live')]['structured'] = {'overview': 'x' * 8192}
+    monkeypatch.setattr(assignment, 'SYNC_CONVERSATION_BYTE_BUDGET', 4096)
     incoming = dict(
         chunk('wal', 1005, text='Speech that is not already in the live conversation.'),
         data_protection_level='standard',

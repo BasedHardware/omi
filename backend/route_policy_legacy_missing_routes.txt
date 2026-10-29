@@ -41,7 +41,6 @@ backend-main:http:DELETE:/v1/staged-tasks/{task_id}
 backend-main:http:DELETE:/v1/summary-app-ids/{app_id}
 backend-main:http:DELETE:/v1/task-integrations/{app_key}
 backend-main:http:DELETE:/v1/users/daily-summaries/{summary_id}
-backend-main:http:DELETE:/v1/users/delete-account
 backend-main:http:DELETE:/v1/users/me/byok-active
 backend-main:http:DELETE:/v1/users/people/{person_id}
 backend-main:http:DELETE:/v1/users/people/{person_id}/speech-samples/{sample_index}

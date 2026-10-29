@@ -5,27 +5,28 @@ import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:omi/backend/http/api/users.dart';
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/core/app_shell.dart';
 import 'package:omi/pages/settings/data_export.dart';
 import 'package:omi/pages/settings/widgets/leave_flow_widgets.dart';
-import 'package:omi/services/auth_service.dart';
-import 'package:omi/services/services.dart';
-import 'package:omi/services/wals/deleted_account_uids.dart';
-import 'package:omi/services/wals/wal_interfaces.dart';
+import 'package:omi/services/account_deletion_data.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:provider/provider.dart';
+
+export 'package:omi/services/account_deletion_data.dart' show DeletionPendingData;
 import 'package:omi/ui/ui.dart';
-import 'package:omi/utils/auth/clear_user_state.dart';
-import 'package:omi/utils/auth/clear_deleted_account_session.dart';
+import 'package:omi/utils/auth/finish_account_deletion.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/utils/wal_file_manager.dart';
-
-const _stepCount = 3;
 
 /// Account deletion: reason → feedback → typed confirmation. Each step is its own route, so the
 /// iOS edge swipe and system back step back one step. This widget is step 1 and owns the flow.
 class DeleteAccount extends StatefulWidget {
-  const DeleteAccount({super.key});
+  const DeleteAccount({super.key, this.loadPendingData, this.pauseRecording});
+
+  final Future<void> Function()? pauseRecording;
+
+  /// Injected only for hermetic tests and renders; production loads the API and WAL store.
+  final Future<DeletionPendingData?> Function()? loadPendingData;
 
   @override
   State<DeleteAccount> createState() => _DeleteAccountState();
@@ -33,10 +34,18 @@ class DeleteAccount extends StatefulWidget {
 
 /// What the reader has entered so far, shared by the three steps.
 class _DeleteAccountFlow {
+  _DeleteAccountFlow({this.loadPendingData, this.pauseRecording});
+
+  final Future<void> Function()? pauseRecording;
+
+  final Future<DeletionPendingData?> Function()? loadPendingData;
   final exit = LeaveFlowExit();
   final details = TextEditingController();
   final confirm = TextEditingController();
   String? reason;
+
+  bool get offersPause => reason == 'taking_break' || reason == 'technical_issues';
+  int get stepCount => offersPause ? 4 : 3;
 
   String? get detailsText => details.text.trim().isNotEmpty ? details.text.trim() : null;
 
@@ -47,7 +56,7 @@ class _DeleteAccountFlow {
 }
 
 class _DeleteAccountState extends State<DeleteAccount> {
-  final _flow = _DeleteAccountFlow();
+  late final _flow = _DeleteAccountFlow(loadPendingData: widget.loadPendingData, pauseRecording: widget.pauseRecording);
 
   static const _reasons = [
     _Reason('privacy_concerns', FontAwesomeIcons.shield),
@@ -93,7 +102,7 @@ class _DeleteAccountState extends State<DeleteAccount> {
     final reason = _flow.reason;
     return LeaveFlowStepScaffold(
       step: 0,
-      stepCount: _stepCount,
+      stepCount: _flow.stepCount,
       title: context.l10n.deleteFlowReasonTitle,
       subtitle: context.l10n.deleteFlowReasonSubtitle,
       onPopInvoked: (didPop) {
@@ -120,8 +129,114 @@ class _DeleteAccountState extends State<DeleteAccount> {
             ? null
             : () {
                 PlatformManager.instance.analytics.deleteAccountReasonSelected(reason: reason);
-                routeToPage(context, _DeleteFeedbackStep(flow: _flow));
+                routeToPage(
+                  context,
+                  _flow.offersPause ? _DeletePauseInsteadStep(flow: _flow) : _DeleteFeedbackStep(flow: _flow),
+                );
               },
+      ),
+    );
+  }
+}
+
+/// Offered between the reason and feedback steps when the reason suggests a pause solves it:
+/// recording stops, everything is kept, and the user can come back anytime. Pausing is the
+/// primary action; continuing the deletion stays possible but secondary.
+class _DeletePauseInsteadStep extends StatefulWidget {
+  const _DeletePauseInsteadStep({required this.flow});
+
+  final _DeleteAccountFlow flow;
+
+  @override
+  State<_DeletePauseInsteadStep> createState() => _DeletePauseInsteadStepState();
+}
+
+class _DeletePauseInsteadStepState extends State<_DeletePauseInsteadStep> {
+  bool _pausing = false;
+  _DeleteAccountFlow get flow => widget.flow;
+
+  Future<void> _pause() async {
+    setState(() => _pausing = true);
+    try {
+      if (flow.pauseRecording != null) {
+        await flow.pauseRecording!();
+      } else {
+        final capture = context.read<CaptureProvider>();
+        await capture.pauseCapture();
+        // Also persist the device off toggle when no source is currently live.
+        await capture.pauseDeviceRecording();
+      }
+      if (!mounted) return;
+      OmiFeedback.confirm(context, context.l10n.deletePauseConfirmation);
+      flow.exit.close(context);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _pausing = false);
+        OmiFeedback.error(context, context.l10n.somethingWentWrong);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LeaveFlowStepScaffold(
+      step: 1,
+      canPop: !_pausing,
+      stepCount: flow.stepCount,
+      title: context.l10n.deletePauseInsteadTitle,
+      subtitle: context.l10n.deletePauseInsteadSubtitle,
+      body: ListView(
+        padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(OmiSpacing.md),
+            decoration: BoxDecoration(
+              color: OmiColors.surface1,
+              borderRadius: OmiRadius.mdAll,
+              border: Border.all(color: OmiColors.border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  context.l10n.deletePauseRecordingLine,
+                  style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.5),
+                ),
+                const SizedBox(height: OmiSpacing.sm),
+                Text(
+                  context.l10n.deletePauseKeepLine,
+                  style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.5),
+                ),
+                const SizedBox(height: OmiSpacing.sm),
+                Text(
+                  context.l10n.deletePauseReturnLine,
+                  style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.5),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      actions: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          OmiButton(
+            key: const Key('delete_pause_omi'),
+            label: context.l10n.pauseOmiButton,
+            expand: true,
+            isLoading: _pausing,
+            onPressed: _pausing ? null : _pause,
+          ),
+          const SizedBox(height: OmiSpacing.xs),
+          OmiButton.secondary(
+            key: const Key('delete_continue_deleting'),
+            label: context.l10n.continueDeletingButton,
+            expand: true,
+            onPressed: _pausing ? null : () => routeToPage(context, _DeleteFeedbackStep(flow: flow)),
+          ),
+        ],
       ),
     );
   }
@@ -136,8 +251,8 @@ class _DeleteFeedbackStep extends StatelessWidget {
   Widget build(BuildContext context) {
     void next() => routeToPage(context, _DeleteConfirmStep(flow: flow));
     return LeaveFlowStepScaffold(
-      step: 1,
-      stepCount: _stepCount,
+      step: flow.offersPause ? 2 : 1,
+      stepCount: flow.stepCount,
       title: context.l10n.deleteFlowFeedbackTitle,
       subtitle: context.l10n.deleteFlowFeedbackSubtitle,
       body: Align(
@@ -173,12 +288,40 @@ class _DeleteConfirmStep extends StatefulWidget {
 
 class _DeleteConfirmStepState extends State<_DeleteConfirmStep> {
   bool _isDeleting = false;
+  DeletionPendingData? _pending;
+  bool _loadingPending = true;
+  bool _pendingFailed = false;
 
-  LocalWalSync _phoneWalSync() => ServiceManager.instance().wal.getSyncs().phone as LocalWalSync;
+  @override
+  void initState() {
+    super.initState();
+    // The warning must reflect the moment of confirmation, not the moment the flow opened.
+    _loadPending();
+  }
+
+  Future<void> _loadPending() async {
+    try {
+      final data = await (widget.flow.loadPendingData ?? loadDeletionPendingData)();
+      if (mounted) {
+        setState(() {
+          _pending = data;
+          _loadingPending = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _pendingFailed = true;
+          _loadingPending = false;
+        });
+      }
+    }
+  }
 
   _DeleteAccountFlow get _flow => widget.flow;
 
   Future<void> _confirmDelete() async {
+    if (_isDeleting) return;
     FocusScope.of(context).unfocus();
     setState(() => _isDeleting = true);
     final details = _flow.detailsText;
@@ -198,18 +341,7 @@ class _DeleteConfirmStepState extends State<_DeleteConfirmStep> {
       );
       PlatformManager.instance.analytics.deleteUser();
       _flow.exit.finished = true;
-      final deletedUid = SharedPreferencesUtil().uid;
-      final previouslyDeleted = await readDeletedAccountUids();
-      await clearDeletedAccountSession(
-        authService: AuthService.instance,
-        purgeAccountAudio: () => _phoneWalSync().purgeAccountWals(deletedUid),
-        clearUserState: () => clearAllUserState(context),
-        clearWal: WalFileManager.clearAll,
-        clearPreferences: SharedPreferencesUtil().clear,
-        rememberDeletedAccount: deletedUid.isEmpty
-            ? null
-            : () => saveDeletedAccountUids(withDeletedAccountUid(previouslyDeleted, deletedUid)),
-      );
+      await clearFinishedDeletion(context);
       if (!mounted) return;
       routeToPage(context, const AppShell(), replace: true);
     } catch (_) {
@@ -223,26 +355,46 @@ class _DeleteConfirmStepState extends State<_DeleteConfirmStep> {
   Widget build(BuildContext context) {
     final confirmWord = context.l10n.deleteConfirmationWord;
     return LeaveFlowStepScaffold(
-      step: 2,
-      stepCount: _stepCount,
+      step: _flow.stepCount - 1,
+      stepCount: _flow.stepCount,
       title: context.l10n.deleteFlowConfirmTitle,
-      subtitle: context.l10n.deleteFlowConfirmSubtitle,
+      subtitle:
+          _pending?.hasGrace != true ? context.l10n.deleteFlowConfirmSubtitle : context.l10n.deleteConfirmGraceSubtitle,
       canPop: !_isDeleting,
-      // Irreversibility is said once, in the subtitle. The typed confirmation sits with the
-      // buttons so it is never hidden behind them, and stays above the keyboard.
+      // Keep typed confirmation with the buttons, above the keyboard.
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
         children: [
+          if (_loadingPending) const Center(child: OmiSpinner()),
+          if (_pendingFailed)
+            OmiButton.secondary(
+              label: context.l10n.retry,
+              onPressed: () {
+                setState(() {
+                  _pendingFailed = false;
+                  _loadingPending = true;
+                });
+                _loadPending();
+              },
+            ),
+          if (_pending != null && (_pending!.hasGrace || _pending!.pendingCount > 0)) ...[
+            _DeletionPendingNotice(data: _pending!),
+            const SizedBox(height: OmiSpacing.md),
+          ],
           OmiSettingsGroup(
             children: [
               OmiSettingsRow(
                 leading: const FaIcon(FontAwesomeIcons.solidCommentDots),
-                title: context.l10n.allDataErased,
+                title: _pending?.hasGrace == true
+                    ? context.l10n.deleteDataErasedAfterDays(_pending!.gracePeriodDays)
+                    : context.l10n.allDataErased,
               ),
-              OmiSettingsRow(leading: const FaIcon(FontAwesomeIcons.puzzlePiece), title: context.l10n.appsDisconnected),
+              OmiSettingsRow(
+                  leading: const FaIcon(FontAwesomeIcons.puzzlePiece),
+                  title: context.l10n.deleteAppsDisconnectImmediately),
               OmiSettingsRow(
                 leading: const FaIcon(FontAwesomeIcons.creditCard),
-                title: context.l10n.deleteConsequenceSubscription,
+                title: context.l10n.deleteSubscriptionImmediately,
               ),
             ],
           ),
@@ -267,7 +419,8 @@ class _DeleteConfirmStepState extends State<_DeleteConfirmStep> {
       actions: ValueListenableBuilder<TextEditingValue>(
         valueListenable: _flow.confirm,
         builder: (context, value, _) {
-          final canDelete = !_isDeleting && value.text.trim().toUpperCase() == confirmWord;
+          final canDelete =
+              !_isDeleting && !_loadingPending && !_pendingFailed && value.text.trim().toUpperCase() == confirmWord;
           return Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -320,4 +473,52 @@ class _Reason {
   final String key;
   final FaIconData icon;
   const _Reason(this.key, this.icon);
+}
+
+/// Server-held recordings survive the reported grace window; phone-only audio does not.
+class _DeletionPendingNotice extends StatelessWidget {
+  const _DeletionPendingNotice({required this.data});
+
+  final DeletionPendingData data;
+
+  @override
+  Widget build(BuildContext context) {
+    final losing = data.notUploadedCount > 0 || (!data.hasGrace && data.processingCount > 0);
+    final color = OmiColors.warning;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(OmiSpacing.sm),
+      decoration: BoxDecoration(
+        color: losing ? color.withValues(alpha: 0.12) : OmiColors.surface1,
+        borderRadius: OmiRadius.mdAll,
+        border: Border.all(color: losing ? color.withValues(alpha: 0.3) : OmiColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (data.processingCount > 0) ...[
+            Text(
+              data.hasGrace
+                  ? context.l10n.deleteProcessingKept(data.processingCount, data.gracePeriodDays)
+                  : context.l10n.deletePendingRecordingsWarning(data.processingCount),
+              style: OmiType.footnote.copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.w600, height: 1.5),
+            ),
+            const SizedBox(height: OmiSpacing.xs),
+          ],
+          if (data.notUploadedCount > 0) ...[
+            Text(
+              context.l10n.deleteLocalRecordingsWarning(data.notUploadedCount),
+              style: OmiType.footnote.copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.w600, height: 1.5),
+            ),
+            const SizedBox(height: OmiSpacing.xs),
+          ],
+          if (data.hasGrace)
+            Text(
+              context.l10n.deleteGracePeriodNotice(data.gracePeriodDays),
+              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.5),
+            ),
+        ],
+      ),
+    );
+  }
 }

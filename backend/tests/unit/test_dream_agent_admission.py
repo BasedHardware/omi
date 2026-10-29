@@ -106,7 +106,7 @@ async def test_authoritative_store_still_rejects_deleted_allowlisted_owner(admis
     monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', UID)
     admission.rows[('users', UID)]['deleted'] = True
     model = AsyncMock(side_effect=AssertionError('deleted owner reached model'))
-    assert await dream_agent.run_pass(UID, turn=model) == {'status': 'not_admitted'}
+    assert await dream_agent.run_pass(UID, turn=model) == {'status': 'not_admitted', 'reason': 'ineligible'}
     dream_capacity.claim.assert_awaited_once()
     dream_capacity.release.assert_awaited_once()
     model.assert_not_awaited()

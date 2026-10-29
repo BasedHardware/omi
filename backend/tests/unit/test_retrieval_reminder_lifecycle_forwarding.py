@@ -1,85 +1,56 @@
 """Real retrieval producers must pass saved lifecycle state to the reminder gate."""
 
-import contextvars
 from datetime import datetime, timezone
-from pathlib import Path
-from types import ModuleType
 from unittest.mock import MagicMock
+from types import SimpleNamespace
 
 import pytest
+from database import chat_edits, notifications as notification_db
+from utils.retrieval.tool_services import action_items as service
+from utils.retrieval.tools import action_item_tools as tools
 
-from testing.import_isolation import load_module_fresh, stub_modules
-
-BACKEND = Path(__file__).resolve().parents[2]
 DUE = datetime(2099, 10, 9, 17, tzinfo=timezone.utc)
 
 
 @pytest.fixture(params=['service', 'tool'])
-def producer(request):
-    database = ModuleType('database.action_items')
-    database.create_action_item = MagicMock(return_value='task-1')
-    database.get_action_item = MagicMock()
-
+def producer(request, monkeypatch):
     def update(*args, **kwargs):
         if 'expected_chat_state' in kwargs:
             kwargs['expected_chat_state']['after'] = dict(args[2])
         return True
 
-    database.update_action_item = MagicMock(side_effect=update)
-    chat_edits = ModuleType('database.chat_edits')
-    chat_edits.snapshot = MagicMock(return_value={'completed': False})
-    chat_edits.envelope = lambda snapshot, summary: {'_snapshot': snapshot, '_summary': summary}
-    database.get_action_items = MagicMock(return_value=[])
-    notifications = ModuleType('utils.notifications')
+    database = SimpleNamespace(
+        create_action_item=MagicMock(return_value='task-1'),
+        get_action_item=MagicMock(),
+        get_action_items=MagicMock(return_value=[]),
+        update_action_item=MagicMock(side_effect=update),
+    )
+    notifications = SimpleNamespace()
     for name in (
         'send_action_item_completed_notification',
         'send_action_item_created_notification',
         'send_action_item_data_message',
         'sync_action_item_reminder',
     ):
-        setattr(notifications, name, MagicMock())
-    notification_db = ModuleType('database.notifications')
-    notification_db.get_user_time_zone = MagicMock(return_value='UTC')
-    render = ModuleType('utils.conversations.render')
-    render.format_local_time = lambda *args: ''
-    render.resolve_display_tz = lambda *args: (timezone.utc, 'UTC')
-    conversation_services = ModuleType('utils.retrieval.tool_services.conversations')
-    conversation_services.parse_iso_date = lambda value, field: datetime.fromisoformat(value)
-    safety = ModuleType('utils.retrieval.safety')
-    safety.safe_isoformat = lambda value: value.isoformat() if value else None
-    chat_scope = ModuleType('utils.retrieval.chat_scope')
-    chat_scope.apply_chat_scope_dates = lambda scope, start, end: (start, end, None)
-    chat_scope.chat_scope_from_config = lambda config: None
-    agentic = ModuleType('utils.retrieval.agentic')
-    agentic.agent_config_context = contextvars.ContextVar('reminder-test-config', default=None)
-    messaging_undo = ModuleType('utils.messaging.undo')
-    messaging_undo.record_write = MagicMock(return_value='')
-    langchain_tools = ModuleType('langchain_core.tools')
-    langchain_tools.tool = lambda fn: fn
-    langchain_runnables = ModuleType('langchain_core.runnables')
-    langchain_runnables.RunnableConfig = dict
-    fakes = {
-        'database.action_items': database,
-        'database.chat_edits': chat_edits,
-        'database.notifications': notification_db,
-        'utils.notifications': notifications,
-        'utils.conversations.render': render,
-        'utils.retrieval.tool_services.conversations': conversation_services,
-        'utils.retrieval.safety': safety,
-        'utils.retrieval.chat_scope': chat_scope,
-        'utils.retrieval.agentic': agentic,
-        'utils.messaging.undo': messaging_undo,
-        'langchain_core.tools': langchain_tools,
-        'langchain_core.runnables': langchain_runnables,
-    }
-    module_name = (
-        'utils.retrieval.tool_services.action_items'
+        sender = MagicMock()
+        setattr(notifications, name, sender)
+        monkeypatch.setattr(service, name, sender)
+        monkeypatch.setattr(tools, name, sender)
+    monkeypatch.setattr(service, 'action_items_db', database)
+    monkeypatch.setattr(tools, 'action_items_db', database)
+    monkeypatch.setattr(notification_db, 'get_user_time_zone', lambda *_: 'UTC')
+    monkeypatch.setattr(chat_edits, 'snapshot', MagicMock(return_value={'completed': False}))
+    monkeypatch.setattr(chat_edits, 'envelope', lambda snapshot, summary: {'_snapshot': snapshot, '_summary': summary})
+    monkeypatch.setattr(tools, 'record_write', MagicMock(return_value=''))
+    module = (
+        service
         if request.param == 'service'
-        else 'utils.retrieval.tools.action_item_tools'
+        else SimpleNamespace(
+            create_action_item_tool=tools.create_action_item_tool.func,
+            update_action_item_tool=tools.update_action_item_tool.func,
+        )
     )
-    with stub_modules(fakes):
-        module = load_module_fresh(module_name, str(BACKEND / (module_name.replace('.', '/') + '.py')))
-        yield request.param, module, database, notifications
+    return request.param, module, database, notifications
 
 
 def _create(kind, module):

@@ -36,6 +36,7 @@ from utils.analytics import billable_transcription_seconds, record_usage
 from utils.usage_provenance import live_usage_metadata
 from utils.apps import is_audio_bytes_app_enabled, get_enabled_apps
 from utils.sync.mobile_standard_batch import mobile_standard_batch_enabled, mobile_standard_batch_rollout_enabled
+from config.server_batch import owned as server_batch_owned
 from routers.listen.local_preview import renew_local_preview
 from utils.observability.fallback import record_fallback
 from utils.async_tasks import WebSocketTaskSupervisor, drain_tasks, wait_for_event
@@ -189,6 +190,7 @@ class ListenSessionRuntime:
         )
         self.client_kind = resolve_client_kind_from_headers(request.websocket.headers)
         self.use_custom_stt = request.custom_stt_mode.value == 'enabled'
+        self.server_batch_byok = bool(get_byok_keys())
         self.pusher_enabled = PUSHER_ENABLED
         self.is_multi_channel = request.channels >= 2
         self.language = request.language
@@ -204,6 +206,8 @@ class ListenSessionRuntime:
         self.private_cloud_sync_enabled = False
         # Mobile local-preview lane, pinned once before STT starts (routers/listen/local_preview.py).
         self.local_preview_batch = False
+        self.server_batch_only = False
+        self.server_batch_initialized = False
         self.has_speech_profile = False
         self.conversation_creation_timeout = request.conversation_timeout
         self.occasion_mode = False
@@ -286,7 +290,7 @@ class ListenSessionRuntime:
 
     def start_live_transcription(self) -> None:
         """Accept the journey once the listen socket has received real audio."""
-        if self.use_custom_stt:
+        if self.use_custom_stt or getattr(self, 'server_batch_only', False):
             return
         if self.state.live_transcription_attempt is None:
             self.state.live_transcription_attempt = LiveSTTAttempt(
@@ -451,7 +455,7 @@ class ListenSessionRuntime:
         self._session_transcript_outcome_recorded = True
         # getattr: harness-constructed runtimes may predate this field; a real
         # session always sets it in __init__ and defaults to counting.
-        if getattr(self, 'use_custom_stt', False):
+        if getattr(self, 'use_custom_stt', False) or getattr(self, 'server_batch_only', False):
             return
         try:
             outcome = self._session_transcript_outcome()
@@ -919,6 +923,8 @@ class ListenSessionRuntime:
                     logger.error('Silent-user notification refresh failed type=%s', type(error).__name__)
 
     async def _flush_usage(self, *, final: bool) -> int:
+        if getattr(self, 'server_batch_only', False):
+            return 0  # Batch projection owns transcription usage; no live provider ran.
         if self.state.fair_use_track_dg_usage and self.state.dg_usage_ms_pending:
             await self.persistence.call(record_dg_usage_ms, self.request.uid, self.state.dg_usage_ms_pending)
             self.state.dg_usage_ms_pending = 0
@@ -1433,11 +1439,13 @@ class ListenSessionRuntime:
                             conversation_id,
                             {'external_data.conversation_finalization_reason': finalization_reason},
                         )
-                    if (
-                        conversation
-                        and self.state.close_code == 1000
-                        and getattr(conversation.get('source'), 'value', conversation.get('source')) == 'desktop'
-                        and (conversation.get('transcript_segments') or conversation.get('photos'))
+                    if conversation and (
+                        server_batch_owned(conversation)
+                        or (
+                            self.state.close_code == 1000
+                            and getattr(conversation.get('source'), 'value', conversation.get('source')) == 'desktop'
+                            and (conversation.get('transcript_segments') or conversation.get('photos'))
+                        )
                     ):
                         await self.transcripts.flush_speaker_assignments(conversation_id)
                         if await self.conversations.process_conversation(conversation_id):

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-merged-page-cut-drops-paged-source-hits",
+  "violated_contract": "A result page that merges one source's page N with extra hits from an unpaged source may only cut the extras. The next request resumes the paged source at page N+1, so a page-N hit the merged page drops is never returned on any page. Conversation search put spoken-word (transcript chunk) hits ahead of Typesense page 1, filled its candidate cap and cut the page to per_page, so the Typesense hits pushed past the cut were skipped while page 2 started at Typesense page 2.",
+  "canonical_prevention": "Keep every hit of the paged source's current page on the merged page: extra hits take only the candidate slots the page's own hits leave, and the per_page cut drops extras only. A behavioural test walks two pages with extra hits leading page 1 and asserts every paged-source hit is listed exactly once, including when the extras alone would fill the candidate cap.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_conversation_search_async_fanout.py",
+    "backend/tests/unit/test_mcp_transcript_search.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/conversations.py",
+    "backend/utils/conversations/mcp_transcript_search.py"
+  ],
+  "status": "open"
+}

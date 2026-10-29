@@ -71,21 +71,54 @@ class LivePreviewStart {
   }
 }
 
+/// One independently timed recognizer span (a word when the engine provides it).
+class LivePreviewSpan {
+  const LivePreviewSpan({required this.text, required this.startedAt, required this.endedAt});
+  final String text;
+  final DateTime startedAt;
+  final DateTime endedAt;
+}
+
 /// One recognizer hypothesis. A volatile result is replaced by the next result
 /// with the same [segmentId]; a final one is settled.
 class LivePreviewResult {
-  const LivePreviewResult({required this.segmentId, required this.text, required this.isFinal});
+  const LivePreviewResult(
+      {required this.segmentId,
+      required this.text,
+      required this.isFinal,
+      this.startedAt,
+      this.endedAt,
+      this.spans = const []});
 
   final String segmentId;
   final String text;
   final bool isFinal;
+
+  /// Audio time, not result delivery time. Missing timing cannot prove coverage.
+  final DateTime? startedAt;
+  final DateTime? endedAt;
+  final List<LivePreviewSpan> spans;
 
   static LivePreviewResult? fromWire(Object? value) {
     if (value is! Map) return null;
     final id = value['segmentId'];
     final text = value['text'];
     if (id is! String || id.isEmpty || text is! String) return null;
-    return LivePreviewResult(segmentId: id, text: text, isFinal: value['isFinal'] == true);
+    DateTime? time(Object? ms) =>
+        ms is num && ms.isFinite ? DateTime.fromMillisecondsSinceEpoch(ms.round(), isUtc: true) : null;
+    return LivePreviewResult(
+        segmentId: id,
+        text: text,
+        isFinal: value['isFinal'] == true,
+        startedAt: time(value['startMs']),
+        endedAt: time(value['endMs']),
+        spans: [
+          if (value['spans'] is List)
+            for (final span in value['spans'] as List)
+              if (span is Map && span['text'] is String && time(span['startMs']) != null && time(span['endMs']) != null)
+                LivePreviewSpan(
+                    text: span['text'] as String, startedAt: time(span['startMs'])!, endedAt: time(span['endMs'])!),
+        ]);
   }
 }
 
@@ -109,7 +142,7 @@ abstract interface class LivePreviewEngine {
   Future<LivePreviewStart> start(String language, {Set<LivePreviewEngineKind> exclude = const {}});
 
   /// Returns false when the engine refused or failed the chunk. Callers drop it.
-  Future<bool> feedPcm16(Uint8List pcm);
+  Future<bool> feedPcm16(Uint8List pcm, {DateTime? startedAt});
 
   Future<void> stop();
 
@@ -164,9 +197,11 @@ class MethodChannelLivePreviewEngine implements LivePreviewEngine {
   }
 
   @override
-  Future<bool> feedPcm16(Uint8List pcm) async {
+  Future<bool> feedPcm16(Uint8List pcm, {DateTime? startedAt}) async {
     try {
-      return await _channel.invokeMethod<bool>('feed', pcm) ?? false;
+      return await _channel.invokeMethod<bool>(
+              'feed', {'pcm': pcm, if (startedAt != null) 'startMs': startedAt.millisecondsSinceEpoch}) ??
+          false;
     } catch (_) {
       return false;
     }

@@ -31,6 +31,7 @@ from utils.executors import db_executor, storage_executor, sync_executor, run_bl
 from utils.other.local_storage import create_storage_client
 from utils.other.storage import list_audio_chunks, private_cloud_sync_bucket
 from utils.sync.stage import current_stage
+from config.server_batch import owned as server_batch_owned, has_audio as server_batch_has_audio
 
 logger = logging.getLogger(__name__)
 OWNER = 'batch_live_v1'
@@ -64,6 +65,8 @@ def reserve_recording(uid: str, conversation: dict) -> str | None:
 def register_recording(uid: str, conversation: dict, *, store=None, now=None) -> bool:
     if conversation.get('record_lane_owner') != OWNER:
         return False
+    if server_batch_owned(conversation) and not server_batch_has_audio(conversation):
+        return False
     if conversation.get('deleted') or conversation.get('discarded') or conversation.get('uses_custom_stt'):
         return False
     if not conversation.get('private_cloud_sync_enabled'):
@@ -89,6 +92,8 @@ def register_recording(uid: str, conversation: dict, *, store=None, now=None) ->
             'data_protection_level',
         )
     }
+    if (conversation.get('external_data') or {}).get('server_batch_only') is True:
+        snapshot['server_batch_only'] = True
 
     def commit(tx):
         previous = tx.get('jobs', segment)
@@ -329,6 +334,7 @@ async def admit_recording(store, pending, *, now=None):
             'total_audio_seconds': sum(i.duration_seconds for i in staged),
             'lane': 'fresh',
             'record_ranges': [{'start': i.capture_at, 'end': i.capture_at + i.duration_seconds} for i in staged],
+            **({'server_batch_only': True} if row.get('server_batch_only') is True else {}),
         },
     )
 

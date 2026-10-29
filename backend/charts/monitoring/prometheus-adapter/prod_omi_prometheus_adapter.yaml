@@ -128,6 +128,47 @@ rules:
       resources:
         overrides:
           namespace: { resource: "namespace" }
+    # Both pool HPAs consume the same durable queue, scoped to this release.
+    # A missing/stale sample must be unavailable, never a fabricated zero.
+    - seriesQuery: 'omi_batch_pipeline_ready_age_seconds{namespace!="",worker_release!="",priority!=""}'
+      resources:
+        overrides:
+          namespace: {resource: namespace}
+      name:
+        matches: '^omi_batch_pipeline_ready_age_seconds$'
+        as: omi_batch_pipeline_ready_age_seconds
+      metricsQuery: >-
+        max by (namespace, worker_release, priority) (
+          omi_batch_pipeline_ready_age_seconds{<<.LabelMatchers>>}
+          and on (namespace, worker_release, pod)
+          (time() - omi_batch_pipeline_metrics_refreshed_at_seconds < 60)
+        )
+    - seriesQuery: 'omi_batch_pipeline_admissible_ready_units{namespace!="",worker_release!="",priority=~"fresh|recent|deep"}'
+      resources:
+        overrides:
+          namespace: {resource: namespace}
+      name:
+        matches: '^omi_batch_pipeline_admissible_ready_units$'
+        as: omi_batch_pipeline_admissible_ready_units
+      # Workers report the same global queue. Max before summing priorities avoids
+      # multiplying demand by replica count. All three fresh classes are required.
+      metricsQuery: |-
+        sum by (namespace, worker_release) (
+          max by (namespace, worker_release, priority) (
+            omi_batch_pipeline_admissible_ready_units{<<.LabelMatchers>>}
+            and on (namespace, worker_release, pod)
+            (time() - omi_batch_pipeline_capacity_refreshed_at_seconds < 60)
+          )
+        )
+        and on (namespace, worker_release) (
+          count by (namespace, worker_release) (
+            max by (namespace, worker_release, priority) (
+              omi_batch_pipeline_admissible_ready_units{<<.LabelMatchers>>}
+              and on (namespace, worker_release, pod)
+              (time() - omi_batch_pipeline_capacity_refreshed_at_seconds < 60)
+            )
+          ) == 3
+        )
   custom:
     # Queue ages are refreshed by the GPU owner, independent of pressure polls.
     - seriesQuery: 'parakeet_batch_lane_oldest_pending_seconds{namespace!="",pod!="",lane="live"}'

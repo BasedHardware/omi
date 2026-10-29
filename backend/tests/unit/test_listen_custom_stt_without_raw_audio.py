@@ -177,7 +177,9 @@ async def test_custom_transcript_without_raw_audio_is_persisted(monkeypatch, fun
     assert [segment.id for segment in segments] == ['a', 'b']
     # The provider stream began about `end` seconds before its latest segment arrived.
     assert state.first_audio_byte_timestamp == NOW - 84.0
-    assert started_at.timestamp() == NOW - 84.0 + 81.0
+    assert started_at.timestamp() == NOW - 84.0
+    assert [segment.start for segment in segments] == [81.0, 83.0]
+    assert started_at.timestamp() + segments[0].start == NOW - 3.0
     # No audio was accepted: the first-audio funnel, provider journey and
     # usage window stay untouched.
     assert funnel == []

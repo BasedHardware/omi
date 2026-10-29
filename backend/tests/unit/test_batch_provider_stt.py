@@ -681,6 +681,8 @@ UPLOAD = dict(
 
 @pytest.fixture
 def dark_intake(world, monkeypatch):
+    # Pin the existing provider route independently of admission exclusion.
+    monkeypatch.setenv('BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED', 'false')
     from types import SimpleNamespace
     from utils.batch_pipeline import intake
     from utils.sync.legacy_dark import LegacySyncMode

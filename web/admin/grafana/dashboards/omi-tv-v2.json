@@ -4003,7 +4003,7 @@
     {
       "type": "timeseries",
       "title": "Cost run rate vs MRR",
-      "description": "The variable margin's two lines: violet = MRR (that day's FinOps book snapshot, USD-only: non-USD paying subscriptions excluded), blue-grey = real monthly cost (trailing-7-day run rate \u00d7 30.44). Dashed green = the cost level where margin is 50% (\u00bd MRR). Same scope as the Variable margin tile above (GCP net ex prepaid Vertex reserved, one-time GCP incidents included, + OpenAI, Soniox, Modulate, Stripe fees); the tooltip carries each line's run rate and the excluded prepaid reserved dollars. Settled D\u22122; a day without a book snapshot gaps the MRR line, never borrows a neighbour's.",
+      "description": "The variable margin's two lines: violet = MRR (that day's FinOps book snapshot, USD-only: non-USD paying subscriptions excluded), blue-grey = real monthly cost (trailing-7-day run rate \u00d7 30.44). Dashed green = the cost level where margin is 50%. Same scope as the Variable margin tile above (GCP net ex prepaid Vertex reserved, one-time GCP incidents included, + OpenAI, Soniox, Modulate, Stripe fees); the tooltip carries each line's run rate and the excluded prepaid reserved dollars. Settled D\u22122; a day without a book snapshot gaps the MRR line, never borrows a neighbour's.",
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"

@@ -878,3 +878,42 @@ async def test_legacy_live_persist_failure_is_retained_and_not_fatal(monkeypatch
 
     # The failure neither escaped nor dropped the drain: it was re-queued and retried.
     assert calls >= 2, 'the failed legacy persist must be retried, not dropped'
+
+
+@pytest.mark.parametrize('reconnect_seconds,first_word_seconds', [(0, 485), (480, 5)])
+@pytest.mark.parametrize('stored_start', ['capture', None, 'unparseable'])
+async def test_delayed_first_live_words_keep_capture_start(
+    monkeypatch, reconnect_seconds, first_word_seconds, stored_start
+):
+    store = StrictFirestore()
+    start = datetime.fromtimestamp(T0, tz=timezone.utc)
+    saved = start if stored_start == 'capture' else stored_start
+    row = _seed_row(store, 'conv-delayed', started_at=saved)
+    processor, _ = _processor(monkeypatch, store, current='conv-delayed')
+    processor.host.state.capture_timeline_v2 = False
+    processor.host.state.first_audio_byte_timestamp = T0 + reconnect_seconds
+    processor.host.state.speaker_map_dirty = False
+    processor.segment_buffer.append(
+        {
+            'id': 'delayed',
+            'text': 'first words',
+            'start': first_word_seconds,
+            'end': first_word_seconds + 1,
+            'speaker': 'SPEAKER_00',
+            'is_user': False,
+        }
+    )
+    processor.host.state.active = False
+    processor.host.wait = lambda seconds: asyncio.sleep(0, result=False)
+    processor.host.speakers.tasks = []
+    processor.host.speakers.drain = _async_noop
+    processor.flush_speaker_assignments = _async_noop
+    await asyncio.wait_for(processor.process_loop(), timeout=3)
+    expected_origin = T0 if stored_start == 'capture' else T0 + reconnect_seconds
+    assert row['started_at'].timestamp() == expected_origin
+    segments = conversations_db._decode_transcript_segments_strict(
+        UID, row.get('transcript_segments', []), bool(row.get('transcript_segments_compressed'))
+    )
+    assert len(segments) == 1
+    assert segments[0]['start'] == pytest.approx(T0 + 485 - expected_origin)
+    assert row['started_at'].timestamp() + segments[0]['start'] == pytest.approx(T0 + 485)

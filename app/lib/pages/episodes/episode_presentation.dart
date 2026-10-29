@@ -1,5 +1,3 @@
-import 'package:flutter/material.dart';
-
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
@@ -131,16 +129,4 @@ abstract final class EpisodePresentation {
     final minutes = updated == null ? 0 : now.difference(updated).inMinutes;
     return minutes < 1 ? l10n.episodeUpdatedJustNow : l10n.episodeUpdatedMinutesAgo(minutes);
   }
-
-  /// The live tile: a green, pulsing dot on a soft green square; grey when not listening.
-  static Widget liveTile({required bool listening, double size = 40}) => Container(
-        width: size,
-        height: size,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: listening ? OmiColors.successSurface : OmiColors.surface2,
-          borderRadius: OmiRadius.mdAll,
-        ),
-        child: OmiLiveDot(live: listening),
-      );
 }

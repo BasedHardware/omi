@@ -24,7 +24,8 @@ from typing import Any, Mapping
 from config.episodes import episodes_enabled_for
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.episodes import client_gate
-from utils.executors import lifecycle_executor, submit_with_context
+from utils.executors import ExecutorSaturatedError, lifecycle_executor, submit_with_context, submit_with_context_retry
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +56,7 @@ def attach_synced_at_intake(uid: str, conversation_id: str, row: Mapping[str, An
 
 
 def schedule_synced_intake_attach(uid: str, conversation_id: str, row: Mapping[str, Any] | None) -> None:
-    """Run the intake episode join on the episode pool; sync intake never waits on Firestore for it."""
+    """Run on the episode pool; saturation queues admission with bounded producer backpressure."""
     if not episodes_enabled_for(uid) or not conversation_id:
         return
     snapshot = dict(row) if isinstance(row, Mapping) else {}
@@ -63,6 +64,8 @@ def schedule_synced_intake_attach(uid: str, conversation_id: str, row: Mapping[s
         submit_with_context(
             lifecycle_executor(uid, episode=True), attach_synced_at_intake, uid, conversation_id, snapshot
         )
+    except ExecutorSaturatedError:
+        _queue_retry(uid, attach_synced_at_intake, uid, conversation_id, snapshot)
     except Exception as error:
         logger.warning('event=episode_sync_intake_attach outcome=error exception_type=%s', type(error).__name__)
 
@@ -84,13 +87,29 @@ def close_now(uid: str, conversation_id: str, trigger: ProcessingTrigger, source
 
 
 def schedule_after_finalization(uid: str, conversation_id: str, trigger: ProcessingTrigger) -> None:
-    """Run the post-processing episode hook on the episode pool; the caller never waits."""
+    """Run on the episode pool; saturation queues admission with bounded producer backpressure."""
     if not episodes_enabled_for(uid):
         return
     try:
         submit_with_context(lifecycle_executor(uid, episode=True), _after_finalization, uid, conversation_id, trigger)
+    except ExecutorSaturatedError:
+        _queue_retry(uid, _after_finalization, uid, conversation_id, trigger)
     except Exception as error:
         logger.warning('event=episode_finalize outcome=error exception_type=%s', type(error).__name__)
+
+
+def _queue_retry(uid: str, hook, *args) -> None:
+    try:
+        submit_with_context_retry(lifecycle_executor(uid, episode=True), hook, *args)
+        record_fallback(
+            component='other',
+            from_mode='episode_submit',
+            to_mode='episode_deferred',
+            reason='capacity_full',
+            outcome='degraded',
+        )
+    except Exception as error:
+        logger.warning('event=episode_retry outcome=error exception_type=%s', type(error).__name__)
 
 
 def _after_finalization(uid: str, conversation_id: str, trigger: ProcessingTrigger) -> None:

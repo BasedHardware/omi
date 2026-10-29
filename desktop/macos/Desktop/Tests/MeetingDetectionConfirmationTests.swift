@@ -154,7 +154,14 @@ final class MeetingDetectionConfirmationTests: XCTestCase {
         detector.applyDetected(false)
         XCTAssertFalse(detector.isMeetingActive)
         XCTAssertTrue(detector.isMeetingConfirmed, "capture closes before the resume window ends")
-        now += MeetingDetectionTiming.resumeWindow
+        if snapshot.browserWindows.isEmpty {
+          now += MeetingDetectionTiming.resumeWindow
+        } else {
+          now += MeetingDetectionTiming.meetingCodeResumeWindow
+          detector.applyDetected(false)
+          XCTAssertTrue(detector.isMeetingConfirmed, "a Meet code retains the inclusive 15-minute hold")
+          now += 1
+        }
         detector.applyDetected(false)
         XCTAssertFalse(detector.isMeetingConfirmed)
         XCTAssertEqual(role, .ambient)

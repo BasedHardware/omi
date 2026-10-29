@@ -2430,7 +2430,9 @@ enum PaywallOpenedSource {
   screenContextGate("screen_context_gate"),
   mcpDailyCap("mcp_daily_cap"),
   budget80("budget_80"),
-  onboarding("onboarding");
+  onboarding("onboarding"),
+  ahaFirstSummary("aha_first_summary"),
+  freeCap("free_cap");
   const PaywallOpenedSource(this.wireName);
   final String wireName;
 }
@@ -2500,7 +2502,9 @@ enum UpgradePlanSelectedSource {
   screenContextGate("screen_context_gate"),
   mcpDailyCap("mcp_daily_cap"),
   budget80("budget_80"),
-  onboarding("onboarding");
+  onboarding("onboarding"),
+  ahaFirstSummary("aha_first_summary"),
+  freeCap("free_cap");
   const UpgradePlanSelectedSource(this.wireName);
   final String wireName;
 }
@@ -2694,6 +2698,112 @@ final class SubscriptionCancelAbandoned extends RegisteredEvent {
   Map<String, Object> get properties => {"step": step, "reason": reason.wireName};
 }
 
+enum SubscriptionYearlySwitchShownSurface {
+  home("home"),
+  plans("plans");
+  const SubscriptionYearlySwitchShownSurface(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionYearlySwitchShown extends RegisteredEvent {
+  const SubscriptionYearlySwitchShown({required this.surface});
+  final SubscriptionYearlySwitchShownSurface surface;
+  @override
+  String get wireName => "Subscription Yearly Switch Shown";
+  @override
+  Map<String, Object> get properties => {"surface": surface.wireName};
+}
+
+enum SubscriptionYearlySwitchOpenedSurface {
+  home("home"),
+  plans("plans");
+  const SubscriptionYearlySwitchOpenedSurface(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionYearlySwitchOpened extends RegisteredEvent {
+  const SubscriptionYearlySwitchOpened({required this.surface});
+  final SubscriptionYearlySwitchOpenedSurface surface;
+  @override
+  String get wireName => "Subscription Yearly Switch Opened";
+  @override
+  Map<String, Object> get properties => {"surface": surface.wireName};
+}
+
+enum SubscriptionYearlySwitchConfirmedSurface {
+  home("home"),
+  plans("plans");
+  const SubscriptionYearlySwitchConfirmedSurface(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionYearlySwitchConfirmed extends RegisteredEvent {
+  const SubscriptionYearlySwitchConfirmed({required this.surface});
+  final SubscriptionYearlySwitchConfirmedSurface surface;
+  @override
+  String get wireName => "Subscription Yearly Switch Confirmed";
+  @override
+  Map<String, Object> get properties => {"surface": surface.wireName};
+}
+
+enum SubscriptionYearlySwitchSucceededSurface {
+  home("home"),
+  plans("plans");
+  const SubscriptionYearlySwitchSucceededSurface(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionYearlySwitchSucceeded extends RegisteredEvent {
+  const SubscriptionYearlySwitchSucceeded({required this.surface});
+  final SubscriptionYearlySwitchSucceededSurface surface;
+  @override
+  String get wireName => "Subscription Yearly Switch Succeeded";
+  @override
+  Map<String, Object> get properties => {"surface": surface.wireName};
+}
+
+enum SubscriptionYearlySwitchFailedSurface {
+  home("home"),
+  plans("plans");
+  const SubscriptionYearlySwitchFailedSurface(this.wireName);
+  final String wireName;
+}
+
+enum SubscriptionYearlySwitchFailedReason {
+  declined("declined"),
+  refused("refused"),
+  previewUnavailable("preview_unavailable"),
+  error("error");
+  const SubscriptionYearlySwitchFailedReason(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionYearlySwitchFailed extends RegisteredEvent {
+  const SubscriptionYearlySwitchFailed({required this.surface, required this.reason});
+  final SubscriptionYearlySwitchFailedSurface surface;
+  final SubscriptionYearlySwitchFailedReason reason;
+  @override
+  String get wireName => "Subscription Yearly Switch Failed";
+  @override
+  Map<String, Object> get properties => {"surface": surface.wireName, "reason": reason.wireName};
+}
+
+enum SubscriptionYearlySwitchDismissedSurface {
+  home("home"),
+  plans("plans");
+  const SubscriptionYearlySwitchDismissedSurface(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionYearlySwitchDismissed extends RegisteredEvent {
+  const SubscriptionYearlySwitchDismissed({required this.surface});
+  final SubscriptionYearlySwitchDismissedSurface surface;
+  @override
+  String get wireName => "Subscription Yearly Switch Dismissed";
+  @override
+  Map<String, Object> get properties => {"surface": surface.wireName};
+}
+
 enum GuidedIntroPayoffShownAnswerSource {
   chat("chat"),
   fallback("fallback");
@@ -2866,7 +2976,9 @@ enum PaywallVariantShownSource {
   screenContextGate("screen_context_gate"),
   mcpDailyCap("mcp_daily_cap"),
   budget80("budget_80"),
-  onboarding("onboarding");
+  onboarding("onboarding"),
+  ahaFirstSummary("aha_first_summary"),
+  freeCap("free_cap");
   const PaywallVariantShownSource(this.wireName);
   final String wireName;
 }
@@ -3167,4 +3279,54 @@ final class LivePreviewVerdict extends RegisteredEvent {
   String get wireName => "Live Preview Verdict";
   @override
   Map<String, Object> get properties => {"verdict": verdict.wireName, "platform": platform.wireName, "verdict_latency_ms": verdictLatencyMs, "hold_duration_ms": holdDurationMs, "held_frames": heldFrames, "hold_timeout_replayed": holdTimeoutReplayed};
+}
+
+enum LivePreviewNotesEngine {
+  appleFoundationModels("apple_foundation_models"),
+  none("none");
+  const LivePreviewNotesEngine(this.wireName);
+  final String wireName;
+}
+
+enum LivePreviewNotesOutcome {
+  ok("ok"),
+  unavailable("unavailable"),
+  error("error"),
+  droppedBusy("dropped_busy");
+  const LivePreviewNotesOutcome(this.wireName);
+  final String wireName;
+}
+
+final class LivePreviewNotes extends RegisteredEvent {
+  const LivePreviewNotes({required this.engine, required this.outcome, required this.latencyMs, required this.bulletCount});
+  final LivePreviewNotesEngine engine;
+  final LivePreviewNotesOutcome outcome;
+  final int latencyMs;
+  final int bulletCount;
+  @override
+  String get wireName => "Live Preview Notes";
+  @override
+  Map<String, Object> get properties => {"engine": engine.wireName, "outcome": outcome.wireName, "latency_ms": latencyMs, "bullet_count": bulletCount};
+}
+
+enum WalUploadRefusedReason {
+  invalidCaptureTime("invalid_capture_time"),
+  tooLarge("too_large"),
+  serverRefused("server_refused"),
+  invalidFile("invalid_file"),
+  malformedMultipart("malformed_multipart"),
+  tooManyParts("too_many_parts"),
+  emptyClip("empty_clip");
+  const WalUploadRefusedReason(this.wireName);
+  final String wireName;
+}
+
+final class WalUploadRefused extends RegisteredEvent {
+  const WalUploadRefused({required this.reason, required this.statusCode});
+  final WalUploadRefusedReason reason;
+  final int statusCode;
+  @override
+  String get wireName => "WAL Upload Refused";
+  @override
+  Map<String, Object> get properties => {"reason": reason.wireName, "status_code": statusCode};
 }

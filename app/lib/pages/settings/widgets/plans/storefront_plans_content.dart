@@ -4,6 +4,7 @@ import 'package:omi/models/plan_storefront.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/billing_price.dart';
 
 /// Pure presentation. Rank, recommendation, prices, copy, and eligibility arrive from the server.
 /// The host retains purchase and payment-management calls and the close shell.
@@ -73,7 +74,7 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
             if (data.current != null) ...[
               const SizedBox(height: OmiSpacing.xs),
               Text(
-                data.current!.line,
+                data.current!.displayLine,
                 key: const Key('storefront_current_plan'),
                 style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
               ),
@@ -206,11 +207,17 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
         ]),
         if (price != null) ...[
           const SizedBox(height: OmiSpacing.xs),
-          Text(price.headline, key: Key('storefront_price_${tier.planId}'), style: OmiType.title3),
+          Text(
+              price.amountMinor == 0
+                  ? formatBillingPrice(0, price.currency)
+                  : context.l10n
+                      .billingRecurringPrice(formatBillingPrice(price.amountMinor, price.currency), price.interval),
+              key: Key('storefront_price_${tier.planId}'),
+              style: OmiType.title3),
           if (price.subline != null)
             Padding(
               padding: const EdgeInsets.only(top: OmiSpacing.xxs),
-              child: Text(price.subline!,
+              child: Text(context.l10n.annualBillingSummary(12, formatBillingPrice(price.amountMinor, price.currency)),
                   key: Key('storefront_subline_${tier.planId}'),
                   style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
             ),

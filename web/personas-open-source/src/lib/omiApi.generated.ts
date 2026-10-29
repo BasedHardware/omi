@@ -51,6 +51,34 @@ export interface AccountCutoverManifestSummary {
 
 export type AccountCutoverState = "legacy" | "migrating" | "new" | "rolled_back_stranded";
 
+export interface AccountDeletionActionResponse {
+  message: string;
+  pending_deletion?: boolean;
+  status: string;
+  wipe_at?: string | null;
+}
+
+export interface AccountDeletionLossSummary {
+  backlog_conversations?: number;
+  backlog_seconds?: number;
+  held_audio_seconds?: number;
+  held_recordings?: number;
+}
+
+export interface AccountDeletionRestoreResponse {
+  billing_cancelled?: boolean;
+  restored: boolean;
+  status: string;
+}
+
+export interface AccountDeletionStatusResponse {
+  grace_period_days?: number;
+  loss_summary: AccountDeletionLossSummary;
+  pending_deletion?: boolean;
+  status?: string | null;
+  wipe_at?: string | null;
+}
+
 export interface Action {
   action: ActionType;
 }
@@ -1755,6 +1783,7 @@ export interface ConversationTestPromptResponse {
 }
 
 export interface ConversationTopicRequest {
+  conversation_language?: string | null;
   transcript: string;
 }
 
@@ -2092,6 +2121,7 @@ export interface DeferralReceipt {
 }
 
 export interface DeleteAccountRequest {
+  erase_now?: boolean;
   reason?: string | null;
   reason_details?: string | null;
 }
@@ -3095,6 +3125,20 @@ export interface HeldAudioSummary {
   state?: "paused" | "recovering";
 }
 
+export interface HiddenNoiseCountsResponse {
+  days: Array<HiddenNoiseDayCount>;
+  end_date: string;
+  start_date: string;
+  total: number;
+  truncated: boolean;
+  tz: string;
+}
+
+export interface HiddenNoiseDayCount {
+  count: number;
+  date: string;
+}
+
 export interface IgnoredVoice {
   conversation_id: string;
   conversation_started_at?: string | null;
@@ -3428,6 +3472,7 @@ export interface MeetingParticipant {
 
 export interface MeetingParticipantSources {
   expected_calendar?: Array<MeetingParticipant> | null;
+  observed_call_tiles?: Array<MeetingParticipant> | null;
   observed_screen_listing?: Array<MeetingParticipant> | null;
 }
 
@@ -5246,6 +5291,7 @@ export interface StoreMeetingRequest {
   end_time: string;
   meeting_link?: string | null;
   notes?: string | null;
+  participant_sources?: MeetingParticipantSources | null;
   participants?: Array<MeetingParticipant>;
   platform?: string | null;
   start_time: string;
@@ -5272,11 +5318,14 @@ export interface StorefrontCapChoice {
 }
 
 export interface StorefrontCurrent {
+  amount_minor?: number | null;
   cancel_at_period_end?: boolean;
+  currency?: string | null;
   interval?: "month" | "year" | null;
   legacy: boolean;
   legacy_note?: string | null;
   line: string;
+  line_template?: string | null;
   name: string;
   plan_id: string;
   price_id?: string | null;
@@ -5284,14 +5333,17 @@ export interface StorefrontCurrent {
 
 export interface StorefrontPrice {
   amount_minor: number;
+  confirm_line_templates?: Array<string> | null;
   confirm_lines?: Array<string> | null;
   cta_label?: string | null;
+  cta_label_template?: string | null;
   currency: string;
   headline: string;
   interval: "month" | "year";
   months_free?: number | null;
   price_id?: string | null;
   renewal_line?: string | null;
+  saving_minor?: number | null;
   subline?: string | null;
 }
 
@@ -5982,8 +6034,11 @@ export interface UpdateSummaryRequest {
 }
 
 export interface UpgradeSubscriptionRequest {
+  expected_amount_due?: number | null;
   price_id: string;
   promotion_code?: string | null;
+  proration_date?: number | null;
+  switch_now?: boolean;
 }
 
 export interface UsageHistoryPoint {
@@ -6272,6 +6327,21 @@ export interface WrappedStatusResponse {
   year?: number;
 }
 
+export interface YearlySwitchResponse {
+  amount_due_today?: number | null;
+  currency?: string | null;
+  eligible: boolean;
+  first_billing_period?: boolean | null;
+  monthly_amount?: number | null;
+  plan_id?: string | null;
+  price_id?: string | null;
+  proration_date?: number | null;
+  reason: string;
+  renews_at?: number | null;
+  savings_amount?: number | null;
+  yearly_amount?: number | null;
+}
+
 export interface routers__desktop_tts_updates__TtsSynthesizeRequest {
   instructions?: string | null;
   text: string;
@@ -6331,6 +6401,10 @@ export interface OmiApiSchemas {
   "AccountCutoverControl": AccountCutoverControl;
   "AccountCutoverManifestSummary": AccountCutoverManifestSummary;
   "AccountCutoverState": AccountCutoverState;
+  "AccountDeletionActionResponse": AccountDeletionActionResponse;
+  "AccountDeletionLossSummary": AccountDeletionLossSummary;
+  "AccountDeletionRestoreResponse": AccountDeletionRestoreResponse;
+  "AccountDeletionStatusResponse": AccountDeletionStatusResponse;
   "Action": Action;
   "ActionItem": ActionItem;
   "ActionItemCreateRequest": ActionItemCreateRequest;
@@ -6715,6 +6789,8 @@ export interface OmiApiSchemas {
   "HasSpeechProfileResponse": HasSpeechProfileResponse;
   "HeldAudioRecording": HeldAudioRecording;
   "HeldAudioSummary": HeldAudioSummary;
+  "HiddenNoiseCountsResponse": HiddenNoiseCountsResponse;
+  "HiddenNoiseDayCount": HiddenNoiseDayCount;
   "IgnoredVoice": IgnoredVoice;
   "IgnoredVoicesResponse": IgnoredVoicesResponse;
   "ImportJobResponse": ImportJobResponse;
@@ -7150,6 +7226,7 @@ export interface OmiApiSchemas {
   "WorkstreamStatus": WorkstreamStatus;
   "WorkstreamUpdate": WorkstreamUpdate;
   "WrappedStatusResponse": WrappedStatusResponse;
+  "YearlySwitchResponse": YearlySwitchResponse;
   "routers__desktop_tts_updates__TtsSynthesizeRequest": routers__desktop_tts_updates__TtsSynthesizeRequest;
   "routers__focus_sessions__ScreenActivityRow": routers__focus_sessions__ScreenActivityRow;
   "routers__mcp__TranscriptMatchSnippet": routers__mcp__TranscriptMatchSnippet;
@@ -8210,6 +8287,16 @@ export interface OmiApiPaths {
       operationId: "create_conversation_from_segments_user_v1_conversations_from_segments_post";
       responses: {
         "200": ConversationCreateResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/hidden-noise-counts": {
+    get: {
+      operationId: "get_hidden_noise_counts_v1_conversations_hidden_noise_counts_get";
+      responses: {
+        "200": HiddenNoiseCountsResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -10291,6 +10378,16 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/payments/yearly-switch": {
+    get: {
+      operationId: "get_yearly_switch_endpoint_v1_payments_yearly_switch_get";
+      responses: {
+        "200": YearlySwitchResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/paypal/payment-details": {
     get: {
       operationId: "get_paypal_payment_details_endpoint_v1_paypal_payment_details_get";
@@ -11147,7 +11244,17 @@ export interface OmiApiPaths {
     delete: {
       operationId: "delete_account_v1_users_delete_account_delete";
       responses: {
-        "200": UserStatusResponse;
+        "200": AccountDeletionActionResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/deletion-status": {
+    get: {
+      operationId: "get_account_deletion_status_endpoint_v1_users_deletion_status_get";
+      responses: {
+        "200": AccountDeletionStatusResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -11649,6 +11756,16 @@ export interface OmiApiPaths {
       operationId: "record_channel_v1_users_release_channel_put";
       responses: {
         "204": void;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/restore-account": {
+    post: {
+      operationId: "restore_account_deletion_endpoint_v1_users_restore_account_post";
+      responses: {
+        "200": AccountDeletionRestoreResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -14624,6 +14741,28 @@ export async function create_conversation_from_segments_user_v1_conversations_fr
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_hidden_noise_counts_v1_conversations_hidden_noise_counts_get(query: { start_date: string, end_date: string, tz?: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<HiddenNoiseCountsResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/conversations/hidden-noise-counts`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -18558,6 +18697,28 @@ export async function upgrade_subscription_endpoint_v1_payments_upgrade_subscrip
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_yearly_switch_endpoint_v1_payments_yearly_switch_get(query: { preview?: boolean }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<YearlySwitchResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/payments/yearly-switch`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_paypal_payment_details_endpoint_v1_paypal_payment_details_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<PayPalPaymentDetailsResponse | null> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/paypal/payment-details`;
@@ -20236,10 +20397,13 @@ export async function test_daily_summary_v1_users_daily_summary_settings_test_po
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function delete_account_v1_users_delete_account_delete(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: DeleteAccountRequest, init?: OmiApiClientInit): Promise<UserStatusResponse> {
+export async function delete_account_v1_users_delete_account_delete(query: { grace?: boolean }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: DeleteAccountRequest, init?: OmiApiClientInit): Promise<AccountDeletionActionResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/delete-account`;
-  const _search = "";
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "DELETE",
     headers: {
@@ -20252,6 +20416,25 @@ export async function delete_account_v1_users_delete_account_delete(header: { au
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_account_deletion_status_endpoint_v1_users_deletion_status_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AccountDeletionStatusResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/deletion-status`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -21317,6 +21500,25 @@ export async function record_channel_v1_users_release_channel_put(header: { auth
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return;
+}
+
+export async function restore_account_deletion_endpoint_v1_users_restore_account_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AccountDeletionRestoreResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/restore-account`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
 export async function get_chat_message_count_v1_users_stats_chat_messages_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ChatMessageCountResponse> {
@@ -23044,4 +23246,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 530 client methods generated.
+// Total: 534 client methods generated.

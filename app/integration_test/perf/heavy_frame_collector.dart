@@ -1,5 +1,7 @@
-import 'package:flutter/scheduler.dart';
+import 'dart:async';
 import 'dart:developer' as developer;
+
+import 'package:flutter/scheduler.dart';
 import 'dart:ui' show FramePhase;
 import 'dart:math' as math;
 
@@ -29,6 +31,7 @@ class HeavyFrameCollector {
   final Map<String, Duration> _wall = {};
   developer.TimelineTask? _task;
   int? _openedVmUs;
+  HeavyStallProbe? _stalls;
 
   void _onTimings(List<FrameTiming> timings) {
     if (_current == null) return;
@@ -43,9 +46,13 @@ class HeavyFrameCollector {
     _openedVmUs = developer.Timeline.now;
     _openOrder.add(name);
     _task = developer.TimelineTask()..start('heavy.$name');
+    _stalls = HeavyStallProbe()..start();
   }
 
   Future<Map<String, Object?>> end() async {
+    // Stalls belong to the scripted flow, not to the frame drain below.
+    final stalls = _stalls!.stop();
+    _stalls = null;
     // FrameTiming batches can arrive up to one second after the last frame.
     // Drain before opening the next scenario, or late frames cross windows.
     await Future<void>.delayed(const Duration(milliseconds: 1200));
@@ -66,6 +73,7 @@ class HeavyFrameCollector {
     _task?.finish();
     return {
       ...summarize(name, frames, _wall[name]!),
+      ...stalls,
       'start_vm_us': _openedVmUs,
       'end_vm_us': developer.Timeline.now,
       'frame_timings': [
@@ -73,23 +81,31 @@ class HeavyFrameCollector {
           {
             'build_us': frame.buildDuration.inMicroseconds,
             'raster_us': frame.rasterDuration.inMicroseconds,
-            'total_us': frame.totalSpan.inMicroseconds,
+            'total_us': frameTotalUs(frame),
             'vsync_start_us': frame.timestampInMicroseconds(FramePhase.vsyncStart),
             'build_start_us': frame.timestampInMicroseconds(FramePhase.buildStart),
           }
       ],
       'slow_frames': [
-        for (final frame in frames.where((f) => f.totalSpan.inMicroseconds > 100000).take(20))
+        for (final frame in frames.where((f) => frameTotalUs(f) > 100000).take(20))
           {
             'build_us': frame.buildDuration.inMicroseconds,
             'raster_us': frame.rasterDuration.inMicroseconds,
-            'total_us': frame.totalSpan.inMicroseconds,
+            'total_us': frameTotalUs(frame),
             'vsync_start_us': frame.timestampInMicroseconds(FramePhase.vsyncStart),
             'build_start_us': frame.timestampInMicroseconds(FramePhase.buildStart),
           }
       ],
     };
   }
+
+  /// Raster finish minus the earlier of vsync and build start. On iOS 27 (iPhone 15 Pro Max) a
+  /// frame the framework schedules outside the vsync callback can start building ~1 ms before its
+  /// recorded vsync, and [FrameTiming.totalSpan] (raster finish - vsync) then goes negative.
+  static int frameTotalUs(FrameTiming frame) =>
+      frame.timestampInMicroseconds(FramePhase.rasterFinish) -
+      math.min(
+          frame.timestampInMicroseconds(FramePhase.vsyncStart), frame.timestampInMicroseconds(FramePhase.buildStart));
 
   List<String> get windowOrder => List.unmodifiable(_openOrder);
 
@@ -107,7 +123,7 @@ class HeavyFrameCollector {
 
     final buildUs = frames.map((f) => f.buildDuration.inMicroseconds).toList()..sort();
     final rasterUs = frames.map((f) => f.rasterDuration.inMicroseconds).toList()..sort();
-    final totalUs = frames.map((f) => f.totalSpan.inMicroseconds).toList()..sort();
+    final totalUs = frames.map((f) => frameTotalUs(f)).toList()..sort();
     return {
       'scenario': name,
       'percentile_method': 'nearest-rank/v1',
@@ -128,6 +144,47 @@ class HeavyFrameCollector {
       'worst_build_us': buildUs.isEmpty ? 0 : buildUs.last,
       'worst_raster_us': rasterUs.isEmpty ? 0 : rasterUs.last,
       'worst_total_us': totalUs.isEmpty ? 0 : totalUs.last,
+    };
+  }
+}
+
+/// Main-isolate stalls inside a window, the field lag watchdog's view: a short periodic timer
+/// whose late ticks measure how long the event loop was blocked. A stall while the screen is idle
+/// draws no frame, so frame timings alone never see it.
+class HeavyStallProbe {
+  static const tick = Duration(milliseconds: 20);
+
+  final _clock = Stopwatch();
+  final _stalls = <int>[];
+  Timer? _timer;
+  int _lastUs = 0;
+
+  void start() {
+    _clock.start();
+    _lastUs = 0;
+    _timer = Timer.periodic(tick, (_) => record(_clock.elapsedMicroseconds));
+  }
+
+  /// One tick observed at [nowUs]; anything beyond the tick period is blocked time.
+  void record(int nowUs) {
+    final lateUs = nowUs - _lastUs - tick.inMicroseconds;
+    _lastUs = nowUs;
+    if (lateUs >= 50000) _stalls.add(lateUs);
+  }
+
+  Map<String, Object?> stop() {
+    _timer?.cancel();
+    _timer = null;
+    return summarize(_stalls);
+  }
+
+  static Map<String, Object?> summarize(List<int> stallsUs) {
+    final over100 = stallsUs.where((us) => us >= 100000).toList();
+    return {
+      'stalls_over_50ms': stallsUs.length,
+      'stalls_over_100ms': over100.length,
+      'stall_blocked_over_100ms_us': over100.fold<int>(0, (sum, us) => sum + us),
+      'worst_stall_us': stallsUs.fold<int>(0, math.max),
     };
   }
 }

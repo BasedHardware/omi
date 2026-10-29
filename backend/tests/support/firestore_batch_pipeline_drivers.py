@@ -9,6 +9,18 @@ def entries():
     namespaces = ['batch_pipeline_prod', 'batch_pipeline_dev']
     return (
         DriverEntry(
+            'database.batch_pipeline_store.ready_for_capacity',
+            domains={'namespace': namespaces, 'priority': [0, 1, 2]},
+            neutrals={'now': (1.0, 'availability cutoff only')},
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreStore.ready_for_capacity',
+            covered_by=('database.batch_pipeline_store.ready_for_capacity',),
+            reason='thin adapter forwards the client, namespace, priority and availability cutoff',
+            expect_observed=False,
+            body_digest='975eabd92f43ba5da3d847439f4d8e3592525ccd31c11dcac6463365535eac10',
+        ),
+        DriverEntry(
             'utils.batch_pipeline.redrive_scope.owner_jobs',
             base={'collection': ref_collection('batch_pipeline_prod_jobs'), 'uid': 'synthetic-owner'},
             neutrals={
@@ -16,7 +28,11 @@ def entries():
                 'read_budget': (20000, 'aggregate scan bound only'),
             },
         ),
-        DriverEntry('database.batch_pipeline_shadow.pool_busy', domains={'namespace': namespaces}),
+        DriverEntry(
+            'database.batch_pipeline_shadow.pool_busy',
+            domains={'namespace': namespaces},
+            neutrals={'now': (7200.0, 'lease, retry and recording-window timestamp operand only')},
+        ),
         DriverEntry(
             'database.batch_pipeline_shadow.stale_jobs',
             domains={'namespace': namespaces},
@@ -27,7 +43,7 @@ def entries():
             covered_by=('database.batch_pipeline_shadow.pool_busy',),
             reason='thin adapter forwards the owning client and stage-qualified namespace unchanged',
             expect_observed=False,
-            body_digest='3be03e458c8e65c535fed1475cbfae9c97421970c89dc751e2f4eaa4a46a4467',
+            body_digest='bf2a9290745e8dd01ebb927b03ed67b08fac05fdb43fd76f81f2dcfa54e0b85a',
         ),
         CoveredByEntry(
             'database.batch_pipeline_shadow.ShadowStore.reap',
@@ -174,7 +190,7 @@ def entries():
             covered_by=('database.batch_pipeline_store.control_candidate',),
             reason='thin store adapter forwards namespace and bounded query arguments unchanged',
             expect_observed=False,
-            body_digest='73808da191932dbe29ef2a4d06712add5c584fb0b6e93f980ff666c08df60288',
+            body_digest='d82ee8b1c03be61b104e25304d6a0a732a9b59453fd302f4e7794a75622d65ad',
         ),
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreStore.oldest_retry',
@@ -190,8 +206,16 @@ def entries():
         ),
         DriverEntry(
             'database.batch_pipeline_store.control_candidate',
-            domains={'namespace': namespaces, 'priority': [0, 1, 2], 'pool': ['batch', 'live']},
-            neutrals={'now': (1.0, 'eligibility timestamp operand only')},
+            domains={
+                'namespace': namespaces,
+                'priority': [0, 1, 2],
+                'pool': ['batch', 'live'],
+                'worker_id': ['', 'worker-a'],
+            },
+            neutrals={
+                'now': (1.0, 'eligibility timestamp operand only'),
+                'exclude': ((), 'in-memory exclusion only'),
+            },
         ),
         DriverEntry(
             'database.batch_pipeline_store.oldest_retry',
@@ -261,5 +285,17 @@ def entries():
         DriverEntry(
             'database.batch_pipeline_store.oldest',
             domains={'namespace': namespaces, 'priority': [0, 1, 2], 'ready_only': [False, True]},
+        ),
+        DriverEntry(
+            'database.batch_pipeline_projection_release.held_page_ids',
+            domains={'namespace': namespaces, 'after_id': [None, 'result-100']},
+            neutrals={'limit': (32, 'bounded page size only; equality is served by the automatic single-field index')},
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_projection_release.release_page',
+            covered_by=('database.batch_pipeline_projection_release.held_page_ids',),
+            reason='bounded release scan delegates its only query to held_page_ids; resets are document transactions',
+            expect_observed=False,
+            body_digest='9f5875cb08b271ad83fd1da1785bef66074919d494ae1a73590f2e02baa64edf',
         ),
     )

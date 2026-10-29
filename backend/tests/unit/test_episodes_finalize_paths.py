@@ -8,6 +8,7 @@ durable finalizer. ``test_episodes_service`` covers what the close and the hook 
 from __future__ import annotations
 
 import asyncio
+import inspect
 import os
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -15,6 +16,8 @@ from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 
 os.environ.setdefault(
     'ENCRYPTION_SECRET',
@@ -262,6 +265,31 @@ def test_schedule_after_finalization_survives_a_saturated_pool(monkeypatch):
     episode_finalize.schedule_after_finalization(_UID, 'c1', ProcessingTrigger.CLIENT_FINALIZE)
 
 
+@pytest.mark.parametrize('intake', [False, True])
+def test_saturated_episode_hook_is_queued_until_capacity_returns_without_another_append(monkeypatch, intake):
+    import threading
+    from utils.executors import MonitoredThreadPoolExecutor
+
+    pool = MonitoredThreadPoolExecutor('episode-retry-test', max_workers=1, max_queue_size=0, wait_on_saturation=True)
+    release, executed = threading.Event(), threading.Event()
+    occupied = pool.submit(release.wait, 5)
+    monkeypatch.setattr(episode_finalize, 'lifecycle_executor', lambda *a, **kw: pool)
+    hook = 'attach_synced_at_intake' if intake else '_after_finalization'
+    monkeypatch.setattr(episode_finalize, hook, lambda *a: executed.set())
+    try:
+        if intake:
+            episode_finalize.schedule_synced_intake_attach(_UID, 'c1', {'id': 'c1'})
+        else:
+            episode_finalize.schedule_after_finalization(_UID, 'c1', ProcessingTrigger.CLIENT_FINALIZE)
+        assert not executed.is_set()
+        release.set()
+        occupied.result(timeout=5)
+        assert executed.wait(5), 'the final hook was dropped on saturation'
+    finally:
+        release.set()
+        pool.shutdown(wait=True)
+
+
 def test_attach_synced_at_intake_joins_through_the_service_and_normalizes_the_row(monkeypatch):
     from utils.episodes import service
 
@@ -294,3 +322,70 @@ def test_attach_synced_at_intake_is_gated_and_fail_open(monkeypatch):
 
     monkeypatch.setattr(service, 'attach_synced_intake', boom)
     assert episode_finalize.attach_synced_at_intake(_UID, 'c-wal', {'id': 'c-wal'}) == 'error'
+
+
+@pytest.mark.parametrize('route', ['cloud_tasks', 'queued'])
+def test_mobile_process_now_uses_exact_id_durable_handoff(conv, monkeypatch, route):
+    """Mobile must acknowledge durable intent before expensive work, even if enqueue ACK is lost."""
+    timeline = []
+    in_progress = _conversation(ConversationStatus.in_progress)
+    monkeypatch.setattr(conv, 'is_listen_finalization_dispatch_enabled', lambda: True)
+    monkeypatch.setattr(conv.byok, 'has_byok_keys', lambda: False)
+    monkeypatch.setattr(conv, 'retrieve_in_progress_conversation', lambda uid: {'id': 'conv-finalize'})
+    monkeypatch.setattr(conv, '_get_valid_conversation_by_id', lambda uid, cid: {'id': cid})
+    monkeypatch.setattr(conv, 'deserialize_conversation', lambda data: in_progress)
+
+    def admit(uid, cid, **kwargs):
+        assert cid == 'conv-finalize'
+        assert kwargs['trigger'] is ProcessingTrigger.CLIENT_FINALIZE
+        assert kwargs['require_cloud_tasks'] is True
+        timeline.append(('enqueue',))
+        return {'route': route, 'job_id': 'durable-job'}
+
+    monkeypatch.setattr(conv.lifecycle_service, 'request_finalization', admit)
+    monkeypatch.setattr(conv, 'process_conversation', lambda *a, **k: pytest.fail('request ran expensive work'))
+    # Redis moved to the next capture after the initial lookup. Never remove it.
+    monkeypatch.setattr(conv.redis_db, 'get_in_progress_conversation_id', lambda uid: 'next-capture')
+    monkeypatch.setattr(
+        conv.redis_db, 'remove_in_progress_conversation_id', lambda uid: pytest.fail('removed next capture')
+    )
+    _episode_spies(monkeypatch, conv, timeline)
+    app = FastAPI()
+    app.add_api_route('/v1/conversations', conv.process_in_progress_conversation, methods=['POST'])
+    uid_dependency = inspect.signature(conv.process_in_progress_conversation).parameters['uid'].default.dependency
+    app.dependency_overrides[uid_dependency] = lambda: _UID
+    with TestClient(app) as client:
+        result = client.post('/v1/conversations', json={})
+    assert result.status_code == 200
+    assert result.json()['conversation']['id'] == 'conv-finalize'
+    assert result.json()['conversation']['status'] == 'processing'
+    assert result.json()['messages'] == []
+    assert timeline == [('enqueue',), ('close', 'conv-finalize', ProcessingTrigger.CLIENT_FINALIZE)]
+
+
+def test_mobile_durable_admission_unavailable_leaves_recording_recoverable(conv, monkeypatch):
+    in_progress = _conversation(ConversationStatus.in_progress)
+    monkeypatch.setattr(conv, 'is_listen_finalization_dispatch_enabled', lambda: True)
+    monkeypatch.setattr(conv.byok, 'has_byok_keys', lambda: False)
+    monkeypatch.setattr(conv, 'retrieve_in_progress_conversation', lambda uid: {'id': 'conv-finalize'})
+    monkeypatch.setattr(conv, '_get_valid_conversation_by_id', lambda uid, cid: {'id': cid})
+    monkeypatch.setattr(conv, 'deserialize_conversation', lambda data: in_progress)
+
+    def refuse(*args, **kwargs):
+        raise conv.lifecycle_service.FinalizationDispatchUnavailable('unconfigured queue')
+
+    monkeypatch.setattr(conv.lifecycle_service, 'request_finalization', refuse)
+    monkeypatch.setattr(conv, 'record_product_event', lambda *a, **k: None)
+    monkeypatch.setattr(conv, 'process_conversation', lambda *a, **k: pytest.fail('inline fallback'))
+    with pytest.raises(HTTPException) as error:
+        conv.process_in_progress_conversation(uid=_UID)
+    assert error.value.status_code == 503
+    assert in_progress.status is ConversationStatus.in_progress
+
+
+def test_mobile_byok_keeps_request_scoped_processing(conv, monkeypatch):
+    monkeypatch.setattr(conv, 'is_listen_finalization_dispatch_enabled', lambda: True)
+    monkeypatch.setattr(conv.byok, 'has_byok_keys', lambda: True)
+    monkeypatch.setattr(conv.lifecycle_service, 'request_finalization', lambda *a, **k: pytest.fail('queued BYOK'))
+    timeline = _drive_sync_route(conv, monkeypatch)
+    assert [step for step, *_ in timeline] == ['close', 'process', 'after']

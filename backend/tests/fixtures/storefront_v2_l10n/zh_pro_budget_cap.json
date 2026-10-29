@@ -10,8 +10,11 @@
     "interval": "month",
     "legacy": false,
     "cancel_at_period_end": false,
-    "line": "你当前使用的是 Pro · $49.99/月 · 11月1日 续费",
-    "legacy_note": null
+    "line": "你当前使用的是 Pro · US$49.99/月 · 11月1日 续费",
+    "legacy_note": null,
+    "amount_minor": 4999,
+    "currency": "usd",
+    "line_template": "你当前使用的是 Pro · {price}/月 · 11月1日 续费"
   },
   "usage": {
     "kind": "usage_budget",
@@ -48,7 +51,7 @@
           "interval": "month",
           "amount_minor": 19900,
           "currency": "usd",
-          "headline": "$199/月",
+          "headline": "US$199/月",
           "subline": null,
           "renewal_line": "按月自动续费，直到你取消。可随时在设置中取消。"
         },
@@ -57,8 +60,8 @@
           "interval": "year",
           "amount_minor": 199000,
           "currency": "usd",
-          "headline": "$165.83/月",
-          "subline": "年付 $1,990 · 免费 2 个月",
+          "headline": "US$165.83/月",
+          "subline": "年付 US$1,990 · 免费 2 个月",
           "renewal_line": "按年自动续费，直到你取消。可随时在设置中取消。",
           "months_free": 2
         }
@@ -86,7 +89,7 @@
           "interval": "month",
           "amount_minor": 1999,
           "currency": "usd",
-          "headline": "$19.99/月",
+          "headline": "US$19.99/月",
           "subline": null,
           "renewal_line": "按月自动续费，直到你取消。可随时在设置中取消。"
         },
@@ -95,8 +98,8 @@
           "interval": "year",
           "amount_minor": 19990,
           "currency": "usd",
-          "headline": "$16.66/月",
-          "subline": "年付 $199.90 · 免费 2 个月",
+          "headline": "US$16.66/月",
+          "subline": "年付 US$199.90 · 免费 2 个月",
           "renewal_line": "按年自动续费，直到你取消。可随时在设置中取消。",
           "months_free": 2
         }
@@ -120,16 +123,23 @@
           "interval": "year",
           "amount_minor": 49990,
           "currency": "usd",
-          "headline": "$49.99/月",
-          "subline": "年付 $499.90 · 免费 2 个月",
+          "headline": "US$49.99/月",
+          "subline": "年付 US$499.90 · 免费 2 个月",
           "renewal_line": "按年自动续费，直到你取消。可随时在设置中取消。",
           "months_free": 2,
           "confirm_lines": [
             "你的月付套餐将持续到 11月1日",
-            "年付套餐开始时，将从你的付款方式扣除 $499.90",
+            "年付套餐开始时，将从你的付款方式扣除 US$499.90",
             "你的年付套餐将于 11月1日 开始"
           ],
-          "cta_label": "切换为年付 · 节省 $99.98"
+          "cta_label": "切换为年付 · 节省 US$99.98",
+          "cta_label_template": "切换为年付 · 节省 {saving}",
+          "saving_minor": 9998,
+          "confirm_line_templates": [
+            "你的月付套餐将持续到 11月1日",
+            "年付套餐开始时，将从你的付款方式扣除 {price}",
+            "你的年付套餐将于 11月1日 开始"
+          ]
         }
       ]
     }

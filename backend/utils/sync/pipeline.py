@@ -7,6 +7,10 @@ Extracted from routers/sync.py so the router stays thin and utils never imports 
 
 from __future__ import annotations
 
+from utils.enrichment.admission import SyncConversationPersistenceFenced
+from utils.enrichment.admission import require_current_persistence as _require_current_conversation_persistence
+from utils.enrichment.admission import run_created_webhook as _run_conversation_created_webhook
+
 from utils.conversations.silent_redrive import is_silent_redrive
 from utils.observability.sync_phases import sync_phase, sync_attempt
 from database.sync_snapshot_resolve_cache import sync_snapshot_resolve_job
@@ -54,6 +58,7 @@ from utils.conversations.summary_delivery import (
     REPAIR_CONTEXT,
     PROCESS_CONTEXT,
     SummaryRepairSuperseded,
+    present as summary_output_present,
 )
 from database import users as users_db
 from database.auth import get_user_name
@@ -107,6 +112,11 @@ from utils.conversations.fragment_visibility import is_user_curated
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.process_conversation import process_conversation
+from utils.sync import processing_hold
+from utils.enrichment.smart_refresh import settle_survivor
+from utils.conversations.sync_hold_completion import complete_explicit
+from utils.conversations.smart_merge_policy import refresh_owed
+from utils.enrichment.admission import ConversationAbsorbed
 from utils.conversations.relevance import sync_intake_decision
 from utils.episodes.finalize import schedule_after_finalization, schedule_synced_intake_attach
 from utils.executors import (
@@ -254,6 +264,7 @@ from utils.sync.telemetry import bounded_sync_language as _bounded_retry_languag
 from utils.sync.telemetry import bounded_sync_model as _bounded_sync_model
 from utils.sync.telemetry import bounded_sync_phase as _bounded_sync_phase
 from utils.sync.telemetry import new_attempt_ref as _new_attempt_ref
+from utils.sync.size_telemetry import size_fields, with_size_attribution
 from utils.sync.merge_audio import store_partial_merge_survivor_audio, store_intake_audio, store_sync_audio_chunk
 from utils.sync.assignment import fragment_rule
 from utils.sync.speaker_identity import PersonEmbeddingsCache, SpeakerIdentityDependencies, USER_SELF_PERSON_ID
@@ -666,16 +677,6 @@ async def _record_sync_segment_failure_async(
         errors.append(failure.error_code)
 
 
-class SyncConversationPersistenceFenced(RuntimeError):
-    """Conversation lifecycle rejected this worker's stale processing result."""
-
-
-def _require_current_conversation_persistence(persisted: bool) -> None:
-    """Turn a lifecycle fence into the worker's terminal supersession signal."""
-    if not persisted:
-        raise SyncConversationPersistenceFenced('sync conversation persistence fenced')
-
-
 def _raise_sync_terminal_result(result: object) -> None:
     """Preserve lifecycle fences across ``asyncio.gather`` exception fan-in."""
     if isinstance(result, SyncConversationPersistenceFenced):
@@ -1038,13 +1039,6 @@ def retrieve_vad_segments(
         del aseg
 
 
-def _run_conversation_created_webhook(uid: str, conversation: Conversation) -> None:
-    """Load the webhook surface only in the post-processing worker that uses it."""
-    from utils.webhooks import conversation_created_webhook
-
-    asyncio.run(conversation_created_webhook(uid, conversation))
-
-
 def _reprocess_conversation_after_update(uid: str, conversation_id: str, language: str):
     """
     Reprocess a conversation after new segments have been added.
@@ -1089,6 +1083,33 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
             context['defer_reason'] = 'open_live_target'
         return
 
+    if context is not None and (context.get('sync_hold') or processing_hold.FIELD in conversation_data):
+        context['sync_hold'] = True
+        # Rollback bypasses admission, but still settles stored hold metadata
+        # after success so lazy effects do not remain fenced indefinitely.
+        outcome, due = (
+            processing_hold.admission(conversation_data, context, now=time.time())
+            if processing_hold.enabled_for(context)
+            else ('ready', None)
+        )
+        processing_hold.record(outcome)
+        context['hold_outcome'] = outcome
+        if due is not None:
+            context.update(defer_reason=outcome, defer_until=due)
+            return
+        if outcome in {'unchanged', 'late_cap', 'immaterial'}:
+            if (conversation_data.get('smart_merge') or {}).get('role') == 'survivor' and refresh_owed(
+                conversation_data
+            ):
+                settle_survivor(uid, conversation_id, owner=context['owner'], skip_processing=True)
+            if not conversations_db.complete_sync_processing_hold(
+                uid, conversation_id, conversation_data.get('sync_content_revision'), None
+            ):
+                raise SyncConversationPersistenceFenced('hold completion snapshot changed')
+            context['hold_skipped'] = True
+            return
+        context['hold_snapshot'] = processing_hold.content_snapshot(conversation_data)
+
     # Intake already discarded a rule-settled fragment; skip the processing
     # spend. Everything else goes through the relevance step (SYNC_UPDATE),
     # which reassesses the whole merged transcript, so later speech promotes it.
@@ -1122,6 +1143,36 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     ):
         raise SyncConversationPersistenceFenced('summary processing snapshot changed')
 
+    if (
+        context is not None
+        and context.get('sync_hold')
+        and (conversation_data.get('smart_merge') or {}).get('role') == 'survivor'
+        and refresh_owed(conversation_data)
+    ):
+        # Preserve the smart-merge refresh lease/checkpoints and its vector work.
+        settle_survivor(uid, conversation_id, owner=context['owner'])
+        if context.get('hold_budget_denied_at_max'):
+            if not conversations_db.complete_sync_processing_hold(
+                uid, conversation_id, conversation_data.get('sync_content_revision'), None
+            ):
+                raise SyncConversationPersistenceFenced('hold completion snapshot changed')
+            context['hold_skipped'] = True
+            return
+        refreshed = conversations_db.get_conversation(uid, conversation_id)
+        if (
+            refreshed
+            and (refreshed.get('discarded') or summary_output_present(refreshed.get('structured')))
+            and context.get('hold_snapshot') is not None
+            and not conversations_db.complete_sync_processing_hold(
+                uid,
+                conversation_id,
+                conversation_data.get('sync_content_revision'),
+                context['hold_snapshot'] if summary_output_present(refreshed.get('structured')) else None,
+            )
+        ):
+            raise SyncConversationPersistenceFenced('hold completion snapshot changed')
+        return deserialize_conversation(refreshed) if refreshed else None
+
     # Convert to Conversation object
     conversation = deserialize_conversation(conversation_data)
     if language == _LINEAGE_RETRY_LANGUAGE:
@@ -1140,18 +1191,46 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     # finalization, so discarded -> visible still accepts once.
     already_visible_finalized = already_sync_processed and not was_discarded
     started = time.monotonic()
-    processed_conversation = process_conversation(
-        uid=uid,
-        language_code=language or 'en',
-        conversation=conversation,
-        trigger=ProcessingTrigger.SYNC_UPDATE,
-        defer_derived_effects=silent_redrive,
-        user_kept=is_user_curated(conversation_data) or REPAIR_CONTEXT.get() is not None,
-        persistence_observer=_require_current_conversation_persistence,
-        # Deserialize drops relevance_decision. The raw row still has it:
-        # sync_update means a previous enrichment, sync_intake or absence does not.
-        prior_relevance_decision=prior_decision if isinstance(prior_decision, dict) else None,
-    )
+    try:
+        processed_conversation = process_conversation(
+            uid=uid,
+            language_code=language or 'en',
+            conversation=conversation,
+            trigger=ProcessingTrigger.SYNC_UPDATE,
+            defer_derived_effects=silent_redrive,
+            user_kept=is_user_curated(conversation_data) or REPAIR_CONTEXT.get() is not None,
+            persistence_observer=_require_current_conversation_persistence,
+            # Deserialize drops relevance_decision. The raw row still has it:
+            # sync_update means a previous enrichment, sync_intake or absence does not.
+            prior_relevance_decision=prior_decision if isinstance(prior_decision, dict) else None,
+        )
+    except ConversationAbsorbed as absorbed:
+        if context is not None:
+            context['redirect_to'] = absorbed.canonical_id
+            return
+        canonical = conversations_db.get_sync_redirected_conversation(uid, conversation_id)
+        return deserialize_conversation(canonical) if canonical else None
+
+    if context is not None and context.get('hold_budget_denied_at_max'):
+        if not conversations_db.complete_sync_processing_hold(
+            uid, conversation_id, conversation_data.get('sync_content_revision'), None
+        ):
+            raise SyncConversationPersistenceFenced('hold completion snapshot changed')
+        context['hold_skipped'] = True
+        return None
+
+    if (
+        context is not None
+        and context.get('hold_snapshot') is not None
+        and (processed_conversation.discarded or summary_output_present(processed_conversation.structured))
+        and not conversations_db.complete_sync_processing_hold(
+            uid,
+            conversation_id,
+            conversation_data.get('sync_content_revision'),
+            context['hold_snapshot'] if summary_output_present(processed_conversation.structured) else None,
+        )
+    ):
+        raise SyncConversationPersistenceFenced('hold completion snapshot changed')
     elapsed = time.monotonic() - started
     # Persistence is guaranteed here: a fenced write raises before return.
     # client_platform is the Conversation field set at sync intake; None -> unknown.
@@ -1428,6 +1507,7 @@ def _assign_segment_speakers(
     return transcript_segments, segment_end_timestamp
 
 
+@with_size_attribution
 def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pipeline sits at Pyright's analyzer complexity ceiling
     path: str,
     uid: str,
@@ -1488,6 +1568,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
         'job_id': job_id,
     }
     conversation_id = None
+    incoming: dict | None = None
     conversation_turns: list[conversation_turn_lease.ConversationTurn | None] = []
     provider = 'unknown'
     model = 'unknown'
@@ -1940,13 +2021,13 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
             # never log exception text, document IDs, paths, or transcript.
             logger.error(
                 'event=sync_persistence_exception exception_type=%s firestore_error=%s firestore_doc_kind=%s '
-                'job_ref=%s attempt_ref=%s value_error_reason=%s',
+                'value_error_reason=%s %s',
                 _bounded_exception_type(e),
                 _firestore_error_class(e),
                 _firestore_doc_kind(e),
-                _bounded_correlation_ref(job_id),
-                _bounded_correlation_ref(attempt_ref),
                 value_error_reason(e),
+                getattr(e, 'sync_size_fields', size_fields(incoming))
+                + (' outcome=rejected' if is_document_size_limit_error(e) else ''),
             )
         if phase == 'finalize':
             logger.error(
@@ -2025,7 +2106,8 @@ def _reprocess_merged_conversations(
 
     from config.demand_processing import enabled as demand_enabled
 
-    coalescing = (coalesce_enabled() or demand_enabled(uid)) and not user_selected
+    hold = processing_hold.scheduling_enabled()
+    coalescing = (hold or coalesce_enabled() or demand_enabled(uid)) and not user_selected
     merged = response.pop('_merged', {})
     if coalescing:
         # Partial-result IDs survive a crash after append/checkpoint but before
@@ -2051,10 +2133,11 @@ def _reprocess_merged_conversations(
             if coalescing:
                 from utils.sync.reprocess import mark
 
-                mark(uid, conversation_id, language)
+                mark(uid, conversation_id, language, sync_hold=hold)
             else:
-                _reprocess_conversation_after_update(uid, conversation_id, language)
+                processed = _reprocess_conversation_after_update(uid, conversation_id, language)
                 if user_selected:
+                    complete_explicit(uid, processed, ProcessingTrigger.BACKLOG_CHOICE)
                     from utils.conversations.demand_processing import promote_conversation_effects
 
                     promote_conversation_effects(uid, conversation_id)
@@ -2239,11 +2322,11 @@ def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
     for file in files:
         filename = file.filename
         if not filename:
-            raise HTTPException(status_code=400, detail='Uploaded file is missing a filename')
-        if not filename.endswith('.bin'):
-            raise HTTPException(status_code=400, detail='Invalid sync file format')
+            raise HTTPException(status_code=400, detail={'code': 'invalid_file', 'message': 'Missing sync filename'})
+        if '/' in filename or '\\' in filename or not filename.endswith('.bin'):
+            raise HTTPException(status_code=400, detail={'code': 'invalid_file', 'message': 'Invalid sync file format'})
         if '_' not in filename:
-            raise HTTPException(status_code=400, detail='Invalid sync file format')
+            raise HTTPException(status_code=400, detail={'code': 'invalid_file', 'message': 'Invalid sync file format'})
         try:
             timestamp = get_timestamp_from_path(filename)
         except CaptureTimeWindowError as error:

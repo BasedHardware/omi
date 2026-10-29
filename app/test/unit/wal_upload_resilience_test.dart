@@ -278,7 +278,7 @@ void main() {
       // production file validation accepts the file.
       const filename = 'valid_audio_5000.bin';
       final file = File('${tempDir.path}/$filename');
-      await file.writeAsBytes([0xAA, 0xBB]); // Any content — just needs to exist
+      await file.writeAsBytes([1, 0, 0, 0, 0xAA]); // Any content — just needs to exist
 
       final wal = _makeWal(timerStart: 5000, filePath: filename);
       sync.testWals = [wal];
@@ -315,7 +315,7 @@ void main() {
 
       const filename = 'zombie_audio_6000.bin';
       final file = File('${tempDir.path}/$filename');
-      await file.writeAsBytes([0xAA, 0xBB]); // File exists — passes pre-upload checks
+      await file.writeAsBytes([1, 0, 0, 0, 0xAA]); // File exists — passes pre-upload checks
 
       final wal = _makeWal(timerStart: 6000, filePath: filename);
       expect(wal.retryCount, 0);
@@ -351,7 +351,7 @@ void main() {
       // `isAutoUploadEligible` now applies `walMaxAutoRetries` to every auto loop.
       const filename = 'high_retry_7000.bin';
       final file = File('${tempDir.path}/$filename');
-      await file.writeAsBytes([0xAA, 0xBB]);
+      await file.writeAsBytes([1, 0, 0, 0, 0xAA]);
 
       final wal = _makeWal(timerStart: 7000, filePath: filename);
       wal.retryCount = 50; // Has failed 50 times already
@@ -371,7 +371,7 @@ void main() {
     test('syncAll still uploads a WAL with budget left', () async {
       const filename = 'some_retry_7100.bin';
       final file = File('${tempDir.path}/$filename');
-      await file.writeAsBytes([0xAA, 0xBB]);
+      await file.writeAsBytes([1, 0, 0, 0, 0xAA]);
 
       final wal = _makeWal(timerStart: 7100, filePath: filename);
       wal.retryCount = walMaxAutoRetries - 1;
@@ -400,7 +400,7 @@ void main() {
 
     Future<File> writeAudio(String filename) async {
       final file = File('${tempDir.path}/$filename');
-      await file.writeAsBytes([0xAA, 0xBB]);
+      await file.writeAsBytes([1, 0, 0, 0, 0xAA]);
       return file;
     }
 
@@ -508,7 +508,7 @@ void main() {
       for (var i = 0; i < 2; i++) {
         final start = now - 180 + i * 60;
         final name = 'audio_omi_$start.bin';
-        await File('${tempDir.path}/$name').writeAsBytes([0xAA, i]);
+        await File('${tempDir.path}/$name').writeAsBytes([1, 0, 0, 0, i]);
         wals.add(_makeWal(timerStart: start, filePath: name)
           ..conversationId = 'live-recording'
           ..captureRoot = '12345678-1234-1234-1234-123456789abc'
@@ -533,7 +533,7 @@ void main() {
         final wals = <Wal>[];
         for (var i = 0; i < 3; i++) {
           final name = 'audio_omi_1000$i.bin';
-          await File('${tempDir.path}/$name').writeAsBytes([0xAA, i]);
+          await File('${tempDir.path}/$name').writeAsBytes([1, 0, 0, 0, i]);
           wals.add(_makeWal(timerStart: 10000 + i, filePath: name));
         }
         sync.testWals = wals;
@@ -551,8 +551,8 @@ void main() {
         expect(uploadAttempts.map((attempt) => attempt.length), [3, 1, 1, 1]);
         expect(wals.take(2).map((wal) => wal.status), everyElement(WalStatus.uploaded));
         expect(wals.last.status, statusCode == 400 ? WalStatus.uploadRejected : WalStatus.uploaded);
-        expect(result?.localUploadPermanentFailures, statusCode == 400 ? 1 : 0);
-        expect(result?.localUploadFailures, statusCode == 400 ? 1 : 0);
+        expect(result?.localUploadPermanentFailures, 0);
+        expect(result?.localUploadFailures, 0);
         for (final wal in wals) {
           expect(File('${tempDir.path}/${wal.filePath}').existsSync(), isTrue);
           expect(wal.timerStart, 10000 + wals.indexOf(wal), reason: 'recovery never invents a capture time');
@@ -563,20 +563,20 @@ void main() {
     Future<Wal> refusedWal(int statusCode) async {
       uploadFailure = SyncUploadHttpException(statusCode, 'definitive refusal');
       final filename = 'refused_$statusCode.bin';
-      await File('${tempDir.path}/$filename').writeAsBytes([0xAA, 0xBB]);
+      await File('${tempDir.path}/$filename').writeAsBytes([1, 0, 0, 0, 0xAA]);
       final wal = _makeWal(timerStart: 10000 + statusCode, filePath: filename);
       sync.testWals = [wal];
       return wal;
     }
 
     for (final statusCode in [400, 413]) {
-      test('HTTP $statusCode becomes terminal and repeated wakes do not re-upload', () async {
+      test('HTTP $statusCode is quiet and immediate repeated wakes do not re-upload', () async {
         final wal = await refusedWal(statusCode);
 
         final first = await sync.syncAll();
         final second = await sync.syncAll();
 
-        expect(first?.localUploadPermanentFailures, 1);
+        expect(first?.localUploadPermanentFailures, 0);
         expect(second, isNull, reason: 'a connectivity wake must not re-offer a definitive refusal');
         expect(wal.status, WalStatus.uploadRejected);
         expect(wal.syncDisplayState, WalSyncDisplayState.uploadRejected);
@@ -625,7 +625,7 @@ void main() {
       final originals = <Wal>[];
       for (var i = 0; i < 2; i++) {
         final name = 'audio_old_$i.bin';
-        await File('${tempDir.path}/$name').writeAsBytes([0xAA, i]);
+        await File('${tempDir.path}/$name').writeAsBytes([1, 0, 0, 0, i]);
         originals.add(_makeWal(timerStart: 10100 + i, filePath: name));
       }
       final next = _makeWal(timerStart: 10200, filePath: 'audio_next.bin');
@@ -685,12 +685,11 @@ void main() {
         WalStatus.corrupted,
         WalStatus.outsideRecoveryWindow,
         WalStatus.unsupportedAudio,
-        WalStatus.uploadRejected,
       ];
 
       for (var index = 0; index < terminalStatuses.length; index++) {
         final filename = 'manual_terminal_$index.bin';
-        await File('${tempDir.path}/$filename').writeAsBytes([0xAA, 0xBB]);
+        await File('${tempDir.path}/$filename').writeAsBytes([1, 0, 0, 0, 0xAA]);
         final wal = _makeWal(timerStart: 11000 + index, status: terminalStatuses[index], filePath: filename);
         manualSync.testWals = [wal];
 
@@ -706,7 +705,7 @@ void main() {
     test('recent ID-less WAL drains after connectivity returns without lifecycle events', () async {
       final now = DateTime.utc(2026, 9, 26, 12);
       const filename = 'accepted_socket_no_lifecycle.bin';
-      await File('${tempDir.path}/$filename').writeAsBytes([0xAA, 0xBB]);
+      await File('${tempDir.path}/$filename').writeAsBytes([1, 0, 0, 0, 0xAA]);
       var uploads = 0;
       String? uploadedConversationId = 'not-called';
       var claimedLiveCapture = true;

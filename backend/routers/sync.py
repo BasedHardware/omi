@@ -2,6 +2,7 @@ from database import sync_redrive
 from database.sync_snapshot_resolve_cache import sync_snapshot_resolve_job
 from database.legal_holds import DestructiveOperationInProgress
 from utils.sync import minimal_redrive, redrive_policy, playback_build
+from utils.other.playback_identity import PlaybackSourceChanged
 from utils.capture.coverage_endpoint import router as coverage_router
 from utils.observability.sync_phases import sync_attempt, set_sync_metrics_lane
 import asyncio
@@ -26,6 +27,7 @@ from config.policy import resolve_batch_policy
 from config.policy.ramp import audio_span
 from database.batch_ramp import ramp_admission_policy
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from utils.batch_pipeline.intake import (
     accept_upload as accept_batch_upload,
     get_durable_job_status,
@@ -191,6 +193,8 @@ from utils.sync.pipeline import (
     retrieve_vad_segments,
     SyncConversationPersistenceFenced,
 )
+from utils.sync.empty_upload import EmptySyncUpload, prepare_sync_uploads, nonempty_manifest_claims
+from utils.sync.job_retry_policy import terminal_repeat_failure_kwargs
 from utils.sync.capture_clock import (
     INVALID_CAPTURE_TIME_CODE,
     INVALID_CAPTURE_TIME_DETAIL,
@@ -1060,6 +1064,13 @@ async def sync_local_files_v2(
     immediately, then runs the full pipeline (decode → VAD → STT → LLM) as
     an async background task. The app polls GET /v2/sync-local-files/{job_id}.
     """
+    # Empty/torn-header clips contain no audio frames. Acknowledge them before
+    # clock/age admission; a bogus date on zero audio has nothing to recover.
+    upload_filenames = [f.filename or '' for f in files]
+    try:
+        files = await run_blocking(sync_executor, prepare_sync_uploads, files, uid)
+    except EmptySyncUpload:
+        return JSONResponse(status_code=200, content={'new_memories': [], 'updated_memories': []})
     if isinstance(recording_session_id, str):
         recording_session_id = recording_session_id.strip() or None
     else:
@@ -1096,8 +1107,9 @@ async def sync_local_files_v2(
         uid,
         client_device_context.client_device_id,
         conversation_id,
-        filenames,
+        upload_filenames,
     )
+    manifest_claims = nonempty_manifest_claims(manifest_claims, filenames)
     record_snapshot = {}
     has_server_capture_proof = manifest_claims is not None and await run_blocking(
         db_executor,
@@ -1233,6 +1245,7 @@ async def sync_local_files_v2(
         try:
             paths = await run_blocking(sync_executor, _retrieve_file_paths_v2, files, uid, job_id)
         except SyncCaptureTimeRejected:
+            logger.info('sync_upload_refused uid=%s status=400 reason=invalid_capture_time', uid)
             # Typed 400 for implausible capture times (beyond the shared
             # future-skew tolerance or before 2024). Released clients only see
             # the status + detail; new clients can act on the code.
@@ -1903,7 +1916,11 @@ async def sync_local_files_v2(
                 'lane': lane_decision.lane.value,
             },
         )
-    except HTTPException:
+    except HTTPException as error:
+        if error.status_code == 400:
+            reason = error.detail.get('code', 'server_refused') if isinstance(error.detail, dict) else 'server_refused'
+            logger.info('sync_upload_refused uid=%s status=400 reason=%s', uid, reason)
+            return JSONResponse(status_code=400, content={'code': reason, 'detail': 'Invalid sync file format'})
         if backfill_slot_acquired:
             try:
                 await run_blocking(db_executor, release_backfill_slot, uid, job_id)
@@ -1928,21 +1945,6 @@ async def sync_local_files_v2(
         )
     finally:
         _cleanup_files(paths)
-
-
-def _terminal_repeat_failure_kwargs(job: dict) -> dict[str, str]:
-    """Carry a terminal job's strike through racing poll/task claim cleanup."""
-    if job.get('status') not in {'failed', 'partial_failure'}:
-        return {}
-    if job.get('status') == 'failed' and job.get('reason_code') == 'sync_invalid_audio':
-        return {'failure_key': 'invalid_audio'}
-    result = job.get('result')
-    if isinstance(result, dict) and result.get('repeat_failure_key') == 'persistent_persistence':
-        return {
-            'failure_key': 'persistent_persistence',
-            'failure_fingerprint': result.get('repeat_failure_fingerprint'),
-        }
-    return {}
 
 
 @router.get("/v2/sync-local-files/{job_id}", response_model=SyncJobStatusResponse, response_model_exclude_none=True)
@@ -2064,7 +2066,7 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
         # the ledger stale window and looks permanently stuck to the client.
         try:
             release_sync_content_claim_after_job_retired(
-                uid, job['content_id'], job_id, **_terminal_repeat_failure_kwargs(job)
+                uid, job['content_id'], job_id, **terminal_repeat_failure_kwargs(job)
             )
         except Exception as error:
             logger.error('event=sync_terminal_cleanup outcome=retrying exception_type=%s', type(error).__name__)
@@ -3206,6 +3208,10 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
         payload = await request.json()
         job_id = payload['job_id']
         uid = payload['uid']
+        if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
+            # Keep the original task and staged capture available for restore or
+            # the final wipe. Acknowledging here would permanently drop it.
+            return JSONResponse(status_code=503, content={'status': 'account_pending_deletion'})
         blob_paths = list(payload['raw_blob_paths'])
         source = ConversationSource(payload.get('source') or 'omi')
         should_lock = bool(payload.get('should_lock', False))
@@ -3353,7 +3359,7 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
                     release_sync_content_claim_after_job_retired if ledger_fence_active else release_sync_content_claim
                 )
                 await run_blocking(
-                    db_executor, release_claim, uid, content_id, job_id, **_terminal_repeat_failure_kwargs(job)
+                    db_executor, release_claim, uid, content_id, job_id, **terminal_repeat_failure_kwargs(job)
                 )
             if ledger_fence_active:
                 await run_blocking(db_executor, delete_sync_job_run_lock_epoch, job_id)
@@ -3700,6 +3706,41 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
 AUDIO_MERGE_DESTRUCTIVE_DEFERRALS_MAX = 6
 
 
+async def _refuse_changed_playback_source(payload: dict, *, fingerprint: str | None = None):
+    """A replaced source cannot be repaired by retrying its old immutable key."""
+    from database.legal_holds import DestructiveOperationInProgress
+
+    try:
+        if fingerprint is None:
+            await run_blocking(
+                storage_executor,
+                mark_playback_unavailable,
+                payload['uid'],
+                payload['conversation_id'],
+                payload['audio_file_id'],
+                'source_changed',
+            )
+        else:
+            await run_blocking(
+                storage_executor,
+                mark_conversation_playback_unavailable,
+                payload['uid'],
+                payload['conversation_id'],
+                fingerprint,
+                'source_changed',
+            )
+    except DestructiveOperationInProgress:
+        deferred = await _defer_merge_for_destructive_operation(payload)
+        if deferred is not None:
+            return deferred
+        return JSONResponse(status_code=503, content={'status': 'retry'})
+    PLAYBACK_WRITES.labels('skipped').inc()
+    logger.warning(
+        'audio_merge: refused reason=source_manifest_changed kind=%s', 'file' if fingerprint is None else 'conversation'
+    )
+    return JSONResponse(status_code=200, content={'status': 'unavailable', 'reason': 'source_manifest_changed'})
+
+
 async def _defer_merge_for_destructive_operation(payload: dict):
     """Return a 200 'deferred' response after re-enqueueing, or None to keep the
     caller's existing retry and final-attempt handling (deferrals exhausted, or
@@ -3745,6 +3786,11 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
     except Exception as e:
         logger.error(f'audio_merge handler: invalid payload, dropping task: {e}')
         return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_payload'})
+
+    task_uid = payload.get('uid')
+    if isinstance(task_uid, str) and await run_blocking(db_executor, account_deletion_blocks_user_work, task_uid):
+        # Cloud Tasks retains the task; a restore can resume processing.
+        return JSONResponse(status_code=503, content={'status': 'account_pending_deletion'})
 
     # The v2 conversation-merge dispatch runs OUTSIDE the payload-parse guard so its
     # transient GCS/Firestore failures (during the doc read, artifact upload, or doc
@@ -3813,6 +3859,8 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
                         else {}
                     ),
                 )
+        except PlaybackSourceChanged:
+            return await _refuse_changed_playback_source(payload)
         except FileNotFoundError:
             logger.warning(f'audio_merge: chunks missing conv={conversation_id} file={audio_file_id}, dropping')
             # Persist the verdict or /urls reports pending forever and clients
@@ -4006,6 +4054,8 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
                     artifact_fingerprint,
                     strict_sources=demand,
                 )
+        except PlaybackSourceChanged:
+            return await _refuse_changed_playback_source(payload, fingerprint=fingerprint)
         except FileNotFoundError:
             logger.warning(f'audio_merge: conversation chunks missing conv={conversation_id}, dropping')
             try:

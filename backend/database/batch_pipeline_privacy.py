@@ -29,8 +29,22 @@ class BatchPrivacyReason(str, Enum):
     UNKNOWN = 'unknown'
 
 
+STRUCTURAL_REASONS = frozenset(
+    {
+        BatchPrivacyReason.CONVERSATION_REDIRECT_CYCLE,
+        BatchPrivacyReason.CONVERSATION_REDIRECT_MISSING,
+        BatchPrivacyReason.CONVERSATION_FENCE_BUDGET,
+    }
+)
+
+
 class BatchPrivacyBlocked(RuntimeError):
     """A deleted, migrating or E2EE owner/source cannot accept server results."""
+
+    def __init__(self, *args, conversation_id: str | None = None):
+        super().__init__(*args)
+        # Internal re-planning hint only; never include identifiers in the message.
+        self.conversation_id = conversation_id
 
     @property
     def reason(self) -> BatchPrivacyReason:
@@ -141,7 +155,7 @@ def assert_batch_write_allowed(
             if not conversation_id or '/' in conversation_id or len(conversation_id.encode()) > 256:
                 raise ValueError('bounded conversation document ID required')
             if read(user.collection('deleted_conversations').document(conversation_id)).exists:
-                raise BatchPrivacyBlocked('conversation_deleted')
+                raise BatchPrivacyBlocked('conversation_deleted', conversation_id=conversation_id)
             conversation = read(user.collection('conversations').document(conversation_id))
             row = conversation.to_dict() or {}
             chain[conversation_id] = bool(conversation.exists)
@@ -159,7 +173,7 @@ def assert_batch_write_allowed(
                 break
             target = row.get('sync_merged_into')
             if not isinstance(target, str) or not target:
-                raise BatchPrivacyBlocked('conversation_deleted')
+                raise BatchPrivacyBlocked('conversation_deleted', conversation_id=conversation_id)
             # Server-owned redirects are expected. Follow the target in this
             # transaction; user intent above always dominates a redirect.
             conversation_id, redirected = target, True

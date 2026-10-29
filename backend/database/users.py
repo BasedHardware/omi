@@ -24,7 +24,12 @@ from database.account_deletion_marker import (
     account_deletion_firestore_client,
     get_user_deletion_wipe_status,
 )
-from database.account_deletion_policy import deletion_billing_error_is_already_gone
+import database.account_deletion_grace as account_deletion_grace_db
+from database.account_deletion_policy import (
+    ACCOUNT_DELETION_GRACE_STATUS,
+    deletion_billing_error_is_already_gone,
+    deletion_wipe_retry_delay,
+)
 from database.account_deletion_transitions import (
     adopt_legacy_late_agent_vm_cleanup as _adopt_legacy_late_agent_vm_cleanup_txn,
     mark_wipe_completed as _mark_user_deletion_wipe_completed_txn,
@@ -63,12 +68,6 @@ import logging
 logger = logging.getLogger(__name__)
 # Run-lock TTL (30 minutes) plus grace for a dead worker's last heartbeat.
 DELETION_WIPE_RUNNING_STALE_AFTER = timedelta(minutes=45)
-# A wipe that fails for a persistent reason (a missing queue, a dependency that is down) is
-# re-selected by every reconciler tick on every pod. Without a delay that is one claim
-# transaction per pod per tick, forever, against a record that cannot make progress. The
-# delay backs off per attempt and stops there: it never gives up on an accepted deletion.
-DELETION_WIPE_RETRY_BASE_DELAY = timedelta(minutes=5)
-DELETION_WIPE_RETRY_MAX_DELAY = timedelta(hours=1)
 _DELETION_WIPE_TERMINAL_STATUSES = frozenset({'completed', 'cancelled'})
 LOCATION_CONTEXT_CONSENT_TTL = timedelta(days=30)
 ONBOARDING_ADMISSION_PATH = "onboarding_admission/current"
@@ -699,20 +698,6 @@ def cancel_user_deletion_wipe(uid: str):
     )
 
 
-def deletion_wipe_retry_delay(attempts: int) -> timedelta:
-    """How long a ``failed`` wipe waits before it is selected again.
-
-    Doubles per recorded attempt and saturates at ``DELETION_WIPE_RETRY_MAX_DELAY``. The first
-    failure still retries on the next tick, so a transient error costs nothing.
-    """
-    if attempts <= 1:
-        return timedelta(0)
-    # Clamp the exponent before applying it: ``timedelta * 2 ** large`` overflows, and any
-    # exponent past the cap is the same answer anyway.
-    doublings = min(attempts - 2, 20)
-    return min(DELETION_WIPE_RETRY_BASE_DELAY * (2**doublings), DELETION_WIPE_RETRY_MAX_DELAY)
-
-
 def get_pending_deletion_wipes(
     limit: int = 100,
     stale_after: timedelta = timedelta(minutes=10),
@@ -720,7 +705,9 @@ def get_pending_deletion_wipes(
 ) -> list[dict]:
     """Return account_deletions documents whose wipe needs retry.
 
-    Queries ``failed`` records whose per-attempt backoff has elapsed,
+    Returns incomplete grace records whose immediate actions need retry and
+    due grace records whose window has elapsed, plus ``failed`` records whose
+    per-attempt backoff has elapsed,
     ``billing_failed`` records with historical already-gone billing errors,
     stale ``pending`` records
     (queued more than ``stale_after`` ago), stale ``deleting_auth`` records
@@ -768,6 +755,10 @@ def get_pending_deletion_wipes(
             data = doc.to_dict()
             if deletion_billing_error_is_already_gone(data.get('billing_error')):
                 result.append(data | {'uid': doc.id})
+
+    if len(result) < limit:
+        grace_docs = account_deletion_collection().where('wipe_status', '==', ACCOUNT_DELETION_GRACE_STATUS).stream()
+        result.extend(account_deletion_grace_db.pending_grace_wipes(grace_docs, limit - len(result), now))
 
     if len(result) < limit:
         # Over-fetch *all* pending docs and age-filter in Python. A tight
@@ -858,6 +849,8 @@ def _claim_deletion_wipe_txn(
             return None
         transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
         return snapshot.id
+    if status == ACCOUNT_DELETION_GRACE_STATUS:
+        return account_deletion_grace_db.claim_due_grace_txn(transaction, doc_ref, snapshot.id, data, now)
     if status == 'deleting_auth':
         # Recoverable only after the caller verified the Firebase auth user is
         # gone. Re-validate the age inside the transaction so a fresh intent
@@ -944,6 +937,9 @@ def _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after: tim
         return 'completed'
     if status in ('cancelled', 'deleting_auth'):
         return 'not_actionable'
+    if status == ACCOUNT_DELETION_GRACE_STATUS:
+        if not account_deletion_grace_db.grace_wipe_is_due(data, now):
+            return 'not_actionable'
     if status == 'running':
         running_at = data.get('wipe_running_at')
         if running_at and running_at >= now - running_stale_after:
@@ -951,7 +947,7 @@ def _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after: tim
 
     # A queued task retries transient pre-Auth billing failures. The reconciler
     # only recovers historical already-gone billing errors, never an outage.
-    if status in ('pending', 'retrying', 'failed', 'running', 'billing_failed'):
+    if status in ('pending', 'retrying', 'failed', 'running', 'billing_failed', ACCOUNT_DELETION_GRACE_STATUS):
         transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
         return 'claimed'
 

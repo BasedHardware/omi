@@ -9,6 +9,16 @@ import org.junit.Assert.assertSame
 import org.junit.Test
 
 class LivePreviewPolicyTest {
+    @Test fun `word timing is anchored to input audio and absent timing cannot prove coverage`() {
+        val spans = LivePreviewPolicy.timedSpans(1000, listOf("first" to 10L, "last" to 500L))
+        assertEquals(1010L, spans.first()["startMs"])
+        assertEquals(1501L, spans.last()["endMs"])
+        assertEquals("last", spans.last()["text"])
+        assertTrue(LivePreviewPolicy.timedSpans(1000, listOf("untimed" to 0L)).isEmpty())
+        assertTrue(LivePreviewPolicy.timedSpans(1000, listOf("late" to 10L, "early" to 5L)).isEmpty())
+        assertTrue(LivePreviewPolicy.timedSpans(1000, listOf("invalid" to -1L)).isEmpty())
+    }
+
     @Test fun `os older than Android 13 cannot feed the recognizer and is never probed`() {
         var probed = false
         assertEquals("os_too_old", LivePreviewPolicy.preflight(32, true) { probed = true; true })

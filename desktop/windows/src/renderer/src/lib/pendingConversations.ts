@@ -1,6 +1,7 @@
 import { addPendingConversation, setPendingTopic } from './pageCache'
 import { generateConversationTopic } from './conversationTopic'
 import { liveConversation } from './liveConversation'
+import { getPreferences } from './preferences'
 import type { TranscriptLine } from '../../../shared/types'
 
 // Turn finalized live segments into a transcript string for titling/preview.
@@ -22,7 +23,7 @@ export function createPendingConversation(segments: TranscriptLine[]): void {
   const transcript = segmentsToTranscript(segments)
   if (!transcript) return
   const id = addPendingConversation(transcript)
-  void generateConversationTopic(transcript).then((t) => {
+  void generateConversationTopic(transcript, getPreferences().language).then((t) => {
     if (!t) return
     setPendingTopic(id, t.title, t.emoji) // the Conversations list
     liveConversation.setSavedTopic(t.title, t.emoji) // the live view header

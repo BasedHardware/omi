@@ -1,5 +1,5 @@
 // Derived by python3 tool/perf_shell.py from main.dart. Do not hand edit.
-// Extracted shell SHA256 (imports, telemetry field, builder chain): c493dd9098cd21e93eaf0006850fc3cf7f4009e6880a4d3f9554ac7c75232324
+// Extracted shell SHA256 (imports, telemetry field, builder chain): a3b3930d4fbd4db035ca8b831a88ae17cedb050ab6bdecb35d4b69f7ae768da5
 // ignore_for_file: unused_import, unnecessary_import
 import 'package:omi/services/on_device/on_device_background.dart';
 import 'package:omi/services/onboarding_sync_runtime.dart';
@@ -21,6 +21,7 @@ import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
+import 'package:omi/services/sync_health_watchdog.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/widgets/bluetooth_guidance_listener.dart';
@@ -110,6 +111,7 @@ import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
 import 'package:omi/utils/environment_detector.dart';
 import 'package:omi/utils/analytics/rage_click_context_tracker.dart';
+import 'package:omi/utils/analytics/session_replay.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -187,7 +189,9 @@ class _PerfProductionShellState extends State<PerfProductionShell> {
                   child: KeyedSubtree(key: ValueKey(brightness), child: child!),
                 );
                 final guidedContent = BluetoothGuidanceListener(child: content);
-                return widget.iosAnalytics ? RageClickContextTracker(child: guidedContent) : guidedContent;
+                return SessionReplayScope(
+                  child: widget.iosAnalytics ? RageClickContextTracker(child: guidedContent) : guidedContent,
+                );
               },
               home: TalkerWrapper(
                 talker: Logger.instance.talker,

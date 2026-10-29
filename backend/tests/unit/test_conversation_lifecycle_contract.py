@@ -121,7 +121,7 @@ def test_ingest_sync_conversation_records_created_versus_merged(monkeypatch):
 
     created_result = lifecycle_service.ingest_sync_conversation('uid', {'status': ConversationStatus.completed.value})
     assert created_result == ({'id': 'created-row'}, True, [])
-    assert recorded == [{'created': True}]
+    assert recorded == [{'created': True, 'projected_size_bucket': None}]
 
     recorded.clear()
     monkeypatch.setattr(
@@ -133,7 +133,7 @@ def test_ingest_sync_conversation_records_created_versus_merged(monkeypatch):
         'uid', {'status': ConversationStatus.completed.value}, candidate_id='hint'
     )
     assert merged_result == ({'id': 'merged-row'}, False, [])
-    assert recorded == [{'created': False}]
+    assert recorded == [{'created': False, 'projected_size_bucket': None}]
 
 
 def test_lifecycle_service_allows_only_declared_transitions(lifecycle_store):

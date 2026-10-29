@@ -6,7 +6,7 @@ the same API surface as google.cloud.firestore — collections,
 subcollections, where filters, batch operations, get_all, etc.
 """
 
-from copy import deepcopy
+from copy import copy, deepcopy
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -20,6 +20,7 @@ from fake_firestore.document import (
     get_by_path,
     set_by_path,
 )
+from fake_firestore.query import FakeQuery
 
 # Module-level singleton — set by conftest.py before backend imports.
 _mock_store: Optional[MockFirestore] = None
@@ -62,6 +63,18 @@ def _patch_document_id_query_ordering():
         return _DocumentIdAwareDict(data, self.id)
 
     FakeDocumentSnapshot.to_dict = _to_dict
+
+    # fake-firestore applies stable sorts in declaration order, making the LAST
+    # field primary. Firestore's first order_by is primary. #20629's explicit
+    # created_at/document-id cursor reproduced the reversal in the HTTP journey.
+    original_query_stream = FakeQuery.stream
+
+    def _ordered_stream(self, *args, **kwargs):
+        ordered = copy(self)
+        ordered.orders = list(reversed(self.orders))
+        return original_query_stream(ordered, *args, **kwargs)
+
+    FakeQuery.stream = _ordered_stream
 
 
 def _patch_document_merge_preserves_subcollections():

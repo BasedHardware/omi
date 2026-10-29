@@ -2148,7 +2148,7 @@ export async function assignBulkTranscriptSegments(
  * (backend returns HTTP 402 for `/segments/text` on gated accounts).
  */
 export class SegmentEditPlanRequiredError extends Error {
-  constructor(message = 'Editing the transcript requires the Unlimited plan.') {
+  constructor(message = 'Editing the transcript requires Omi Pro.') {
     super(message);
     this.name = 'SegmentEditPlanRequiredError';
   }

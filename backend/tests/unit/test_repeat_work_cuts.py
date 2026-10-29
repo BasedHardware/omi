@@ -267,6 +267,135 @@ def test_pre_projection_stamp_still_refuses_when_encoded_core_changed():
         validate_sources([af], drifted)
 
 
+def test_late_upload_covering_raw_fragment_keeps_sample_clock_identity(monkeypatch):
+    """The original incident: the encoded object never changes, only raw coverage."""
+    from utils.other.playback_identity import resolve_sources, validate_sources
+    from utils.sync import playback
+
+    monkeypatch.delenv('BUCKET_AUDIO_DERIVED', raising=False)
+    monkeypatch.setattr(storage.audio_archive, 'admitted', lambda *_: True)
+    blob = SimpleNamespace(
+        name='chunks/u/c/1000.000.bin',
+        size=160000,
+        generation='7',
+        md5_hash='md5',
+        crc32c='crc',
+        metadata={'v2_start': '1000.00025', 'v2_samples': '80000', 'v2_sample_rate': '16000'},
+    )
+    client = Mock()
+    client.bucket.return_value.list_blobs.return_value = [blob]
+    monkeypatch.setattr(storage, '_get_storage_client', lambda: client)
+    monkeypatch.setattr(storage, 'list_packs', lambda *_: [])
+    fragment = dict(timestamp=1010.00025, path='raw-live/u/c/pack', generation='8', raw_end=1011.0, size=32000)
+    projection = Mock(side_effect=[[fragment], []])
+    monkeypatch.setattr(storage, 'uncovered_raw_packs', projection)
+    during_upload = storage.list_audio_chunks('u', 'c', source_identity=True)
+    stamped = conversations._finalize_audio_file_group('u', 'c', during_upload[:1], []).dict()
+    after_upload = storage.list_audio_chunks('u', 'c', source_identity=True)
+    assert during_upload[0] == after_upload[0]
+    assert stamped['chunk_timestamps'] == [1000.00025]
+    assert resolve_sources(stamped, after_upload) == after_upload
+    validate_sources([stamped], after_upload)
+
+    # Both pre-build and post-build validation see legitimate growth; neither
+    # changes the immutable source selection or consumes a queue attempt.
+    monkeypatch.setattr(playback, 'list_audio_chunks', Mock(side_effect=[during_upload, after_upload]))
+    merge = Mock(return_value=b'\0' * 32)
+    monkeypatch.setattr(playback, 'download_audio_chunks_and_merge', merge)
+    segment = Mock()
+    segment.export.side_effect = lambda buf, **kw: buf.write(b'mp3')
+    monkeypatch.setattr(playback, 'AudioSegment', Mock(return_value=segment))
+    assert (
+        playback.build_playback_artifact(
+            'u', 'c', stamped['chunk_timestamps'], source_fingerprint=stamped['source_fingerprint']
+        )
+        == b'mp3'
+    )
+    assert merge.call_args.kwargs['listed_chunks'] == during_upload[:1]
+
+    # A flag rollback must not change the clock either.
+    monkeypatch.setattr(storage.audio_archive, 'admitted', lambda *_: False)
+    assert storage.list_audio_chunks('u', 'c', source_identity=True) == after_upload
+
+
+def test_filename_clock_stamp_resolves_after_sample_clock_normalization():
+    from utils.other.playback_identity import resolve_sources
+
+    old = chunks()
+    current = []
+    for chunk in old:
+        chunk['span'] = dict(start=chunk['timestamp'] + 0.00025, samples=80000, sample_rate=16000)
+        current.append({**chunk, 'legacy_timestamp': chunk['timestamp'], 'timestamp': chunk['span']['start']})
+    af = dict(chunk_timestamps=[1000, 1005], source_fingerprint=source_fingerprint(old))
+    assert resolve_sources(af, current) == current
+    changed = deepcopy(current)
+    changed[0]['generation'] = 'replacement'
+    with pytest.raises(RuntimeError, match='source manifest changed'):
+        resolve_sources(af, changed)
+
+
+def test_reordered_listing_and_same_timestamp_siblings_resolve_only_stamped_group():
+    from utils.other.playback_identity import resolve_sources
+
+    original = chunks()
+    af = dict(chunk_timestamps=[1000, 1005], source_fingerprint=source_fingerprint(original))
+    assert resolve_sources(af, original[::-1]) == original
+    sibling = {**original[0], 'path': 'other', 'span': dict(start=1000, samples=80000, sample_rate=16000)}
+    first = {**original[0], 'span': dict(start=1000, samples=80000, sample_rate=16000)}
+    single = dict(chunk_timestamps=[1000], source_fingerprint=source_fingerprint([first]))
+    assert resolve_sources(single, [sibling, first]) == [first]
+    with pytest.raises(RuntimeError, match='source manifest changed'):
+        resolve_sources(single, [{**first, 'generation': 'changed'}, sibling])
+
+
+def test_230_file_growth_does_not_fan_out_manifest_retries():
+    from utils.other.playback_identity import resolve_sources, validate_sources
+
+    listing = [
+        dict(path=f'chunks/u/c/{i}.bin', timestamp=1000.0 + i * 100, generation='7', size=32000) for i in range(230)
+    ]
+    files = [dict(chunk_timestamps=[c['timestamp']], source_fingerprint=source_fingerprint([c])) for c in listing]
+    growing = [*listing, dict(path='chunks/u/c/late.bin', timestamp=99999.0, generation='8', size=32000)]
+    for af, source in zip(files, listing):
+        assert resolve_sources(af, growing[::-1]) == [source]
+    validate_sources(files, growing)
+    changed = deepcopy(growing)
+    changed[100]['generation'] = 'replacement'
+    with pytest.raises(RuntimeError, match='source manifest changed'):
+        validate_sources(files, changed)
+
+
+@pytest.mark.parametrize('replacement', [False, True])
+@pytest.mark.parametrize('filename', ['1000.000.bin', '1000.001.bin'])
+def test_stamped_download_pins_generation_and_never_reads_unstamped_sibling(monkeypatch, replacement, filename):
+    from google.api_core.exceptions import PreconditionFailed
+
+    monkeypatch.setattr(storage.audio_archive, 'admitted', lambda *_: False)
+    monkeypatch.delenv('BUCKET_AUDIO_DERIVED', raising=False)
+    bucket = Mock()
+    bucket.blob.return_value.download_as_bytes.return_value = b'\x01\x00' * 16
+    if replacement:
+        bucket.blob.return_value.download_as_bytes.side_effect = PreconditionFailed('replaced')
+    client = Mock()
+    client.bucket.return_value = bucket
+    monkeypatch.setattr(storage, '_get_storage_client', lambda: client)
+    path = f'chunks/u/c/{filename}'
+    listing = [dict(path=path, timestamp=1000.00025, generation='7', size=32)]
+    if filename != '1000.000.bin':
+        # A canonical-looking spelling may belong to a different sample key.
+        listing.append(dict(path='chunks/u/c/1000.000.bin', timestamp=2000.0, generation='8', size=32))
+    if replacement:
+        with pytest.raises(RuntimeError, match='source could not be read'):
+            storage.download_audio_chunks_and_merge('u', 'c', [1000.00025], listed_chunks=listing, strict_sources=True)
+    else:
+        assert (
+            storage.download_audio_chunks_and_merge('u', 'c', [1000.00025], listed_chunks=listing, strict_sources=True)
+            == b'\x01\x00' * 16
+        )
+    bucket.blob.assert_called_once_with(path)
+    bucket.blob.return_value.download_as_bytes.assert_called_once_with(if_generation_match='7')
+
+
 def test_initial_generation_calls_join_the_chosen_durable_id(monkeypatch, caplog):
     monkeypatch.setenv('REPEAT_WORK_REVISION_ENABLED', 'true')
     caplog.set_level('INFO', logger=metrics.__name__)

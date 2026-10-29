@@ -571,3 +571,46 @@ def test_cancelled_queue_payloads_do_not_escape_the_bound():
     finally:
         release.set()
         pool.shutdown()
+
+
+def test_deferred_submission_preserves_context_and_surfaces_failure():
+    from utils import executors
+    import contextvars
+
+    value = contextvars.ContextVar('deferred-test', default='missing')
+    pool = MonitoredThreadPoolExecutor('test-deferred', max_workers=1, max_queue_size=0, wait_on_saturation=True)
+    release = threading.Event()
+    first = pool.submit(release.wait, 5)
+    token = value.set('caller')
+    try:
+        result = executors.submit_with_context_retry(pool, value.get)
+        failed = executors.submit_with_context_retry(pool, lambda: 1 / 0)
+        cancelled = executors.submit_with_context_retry(pool, lambda: pytest.fail('cancelled call ran'))
+        assert cancelled.cancel()
+        value.reset(token)
+        release.set()
+        first.result(5)
+        assert result.result(5) == 'caller'
+        with pytest.raises(ZeroDivisionError):
+            failed.result(5)
+        assert cancelled.cancelled()
+    finally:
+        release.set()
+        pool.shutdown()
+
+
+def test_shutdown_cancels_deferred_payloads_without_retrying_on_a_closed_pool():
+    pool = MonitoredThreadPoolExecutor(
+        'test-deferred-shutdown', max_workers=1, max_queue_size=0, wait_on_saturation=True
+    )
+    release = threading.Event()
+    first = pool.submit(release.wait, 5)
+    pending = pool.submit_when_available(lambda: pytest.fail('shutdown call ran'))
+    try:
+        pool.shutdown(wait=False, cancel_futures=True)
+        assert pending.cancelled() and not pool._deferred
+        release.set()
+        first.result(5)
+    finally:
+        release.set()
+        pool.shutdown()
