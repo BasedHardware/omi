@@ -556,18 +556,24 @@ def test_unknown_failure_keeps_the_failed_write_arm_and_never_retries(monkeypatc
 
 
 def test_residual_arm_still_owns_the_verifier_signal(monkeypatch, caplog, retry_spy):
-    """The torn-purge classification is untouched: INFO, no event, no retry —
-    the residue converges under the verifier's own next pass."""
+    """The torn-purge classification is untouched: the verifier signal is not
+    a storage blip, and no degradation event fires — and the residue now gets
+    the same owned re-attack the blip arm has, instead of waiting for a
+    reclamation that a terminal (already-deleted) generation never earns."""
     _failing_sweep(monkeypatch, RuntimeError('owner storage purge left 1 objects under chunks/uid/conv/'))
     fallbacks = _fallback_spy(monkeypatch)
 
     with caplog.at_level('INFO'):
         lifecycle_service._discard_unreferenced_audio('uid', 'conv', {})
 
-    retained = [r for r in caplog.records if 'Retained unreferenced audio behind a late writer' in r.getMessage()]
-    assert retained and all(r.levelno == 20 for r in retained)
+    assert not lifecycle_service._is_storage_blip(
+        RuntimeError('owner storage purge left 1 objects under chunks/uid/conv/')
+    )
+    deferred = [r for r in caplog.records if 'Unreferenced audio sweep deferred' in r.getMessage()]
+    assert deferred and all(r.levelno == 30 for r in deferred), 'the residue defers with a warning, not a traceback'
+    assert not [r for r in caplog.records if r.levelno >= 40]
     assert fallbacks == []
-    assert retry_spy.calls == [], 'the verifier signal is not a storage blip'
+    assert retry_spy.calls, 'the verifier signal arms its own residue retry'
 
 
 def test_purge_verifier_still_fails_closed_for_the_account_wipe():

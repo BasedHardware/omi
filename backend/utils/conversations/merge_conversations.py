@@ -880,7 +880,15 @@ def _delete_conversation_and_related_data(
     except Exception as e:
         if merged_into:
             raise
-        logger.error(f"Error deleting audio files for {conversation_id}: {e}")
+        if lifecycle_service._is_residual_audio_sweep(e):
+            # The purge verifier's residue verdict on a rollback sweep: the
+            # merge target never landed, so this cleanup is post-commit
+            # best-effort — the raced object gets the same bounded re-attack
+            # the empty-generation boundary arms instead of a leak. The rest
+            # of the cleanup still runs.
+            lifecycle_service._defer_or_keep_residual_sweep(uid, conversation_id)
+        else:
+            logger.error(f"Error deleting audio files for {conversation_id}: {e}")
 
     try:
         # Delete vector embedding
@@ -930,7 +938,15 @@ def _cleanup_merged_target_after_failure(uid: str, merged_conversation_id: str) 
     try:
         delete_conversation_audio_files(uid, merged_conversation_id)
     except Exception as e:
-        logger.error(f"Error deleting merged conversation audio for {merged_conversation_id}: {e}")
+        if lifecycle_service._is_residual_audio_sweep(e):
+            # The purge verifier's residue verdict during rollback cleanup:
+            # post-commit best-effort work on a target that never landed, so
+            # the raced object gets the same bounded re-attack the
+            # empty-generation boundary arms — not a log-and-leak. The rest
+            # of the cleanup still runs.
+            lifecycle_service._defer_or_keep_residual_sweep(uid, merged_conversation_id)
+        else:
+            logger.error(f"Error deleting merged conversation audio for {merged_conversation_id}: {e}")
     try:
         delete_vector(uid, merged_conversation_id)
     except Exception as e:

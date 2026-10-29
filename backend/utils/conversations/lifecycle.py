@@ -940,6 +940,16 @@ _SWEEP_RETRY_DELAY_SECONDS = 5.0
 _SWEEP_RETRY_MAX_PASSES = 2
 _SWEEP_RETRY_THREAD_NAME = 'unreferenced-audio-sweep-retry'
 
+# The verifier's residue verdict gets the same treatment: a same-key late
+# upload racing the sweep is the same bounded transient one layer up, so the
+# re-attack is bounded and named for its own family. Concurrent sweeps of one
+# conversation (empty-generation cleanup, merge rollback, reclamation) share
+# one inflight slot so a race arms one retry, not one per racing sweep.
+_RESIDUAL_RETRY_MAX_PASSES = 2
+_RESIDUAL_RETRY_THREAD_NAME = 'unreferenced-audio-residue-retry'
+_residue_sweeps_inflight: set[tuple[str, str]] = set()
+_residue_sweeps_inflight_lock = threading.Lock()
+
 
 def _schedule_sweep_retry(
     attempt: Callable[..., None],
@@ -949,15 +959,25 @@ def _schedule_sweep_retry(
     delay: float = _SWEEP_RETRY_DELAY_SECONDS,
     start_thread: Callable[..., Any] = threading.Thread,
     sleep: Callable[[float], None] = time.sleep,
-) -> bool:
+    on_exhausted: Optional[Callable[[BaseException], None]] = None,
+    thread_name: str = _SWEEP_RETRY_THREAD_NAME,
+    start: bool = True,
+) -> Any:
     """Arm one detached daemon pass that re-attacks the deferred sweep.
 
-    Returns ``True`` when the retry thread was started. The pass sleeps, then
-    repeats the exact same sweep (``attempt(*args)``); if it still blips it
-    sleeps again and finishes the remaining passes — the classifier at the
-    boundary of each attempt owns every classification, so a retry that sees a
-    permanent failure logs it loudly via the same arms instead of silently
-    dying inside a daemon thread.
+    Returns ``True`` when the retry thread was started (the default). With
+    ``start=False`` the constructed-but-unstarted thread is returned instead,
+    so a caller that owns the start — the residue re-attack's guarded arm —
+    can release its bookkeeping when the start itself fails. The pass sleeps,
+    then repeats the exact same sweep (``attempt(*args)``); if it still blips
+    — or still shows the purge verifier's residue, the same bounded transient
+    one layer up — it sleeps again and finishes the remaining passes — the
+    classifier at the boundary of each attempt owns every classification. With
+    no ``on_exhausted`` reporter a permanent failure or a drained budget logs
+    loudly via the failed-write arm; with one, exhaustion is handed over
+    instead (the residue re-attack keeps its quiet retained-audio family), and
+    a reporter fault is demoted to DEBUG inside the thread rather than
+    fabricating a new ERROR.
     """
 
     def _run() -> None:
@@ -969,7 +989,17 @@ def _schedule_sweep_retry(
                 attempt(*args)
                 return
             except Exception as retry_error:
-                if not _is_storage_blip(retry_error) or not remaining:
+                transient = _is_storage_blip(retry_error) or _is_residual_audio_sweep(retry_error)
+                if not transient or not remaining:
+                    if on_exhausted is not None:
+                        try:
+                            on_exhausted(retry_error)
+                        except Exception:
+                            logger.debug(
+                                'unreferenced audio sweep retry reporter failed',
+                                exc_info=True,
+                            )
+                        return
                     logger.error(
                         'Unreferenced audio sweep retry exhausted uid=%s conversation_id=%s',
                         args[0] if args else '?',
@@ -977,11 +1007,98 @@ def _schedule_sweep_retry(
                         exc_info=retry_error,
                     )
                     return
-                # Still blipping with passes left: sleep again and re-attack.
+                # Still transient with passes left: sleep again and re-attack.
 
-    thread = start_thread(target=_run, name=_SWEEP_RETRY_THREAD_NAME, daemon=True)
+    thread = start_thread(target=_run, name=thread_name, daemon=True)
+    if not start:
+        return thread
     thread.start()
     return True
+
+
+def _defer_or_keep_residual_sweep(
+    uid: str,
+    conversation_id: str,
+    *,
+    passes: int = _RESIDUAL_RETRY_MAX_PASSES,
+    delay: float = _SWEEP_RETRY_DELAY_SECONDS,
+    start_thread: Callable[..., Any] = threading.Thread,
+    sleep: Callable[[float], None] = time.sleep,
+) -> bool:
+    """Give a raced residue its own bounded re-attack, or keep the verdict.
+
+    Returns ``True`` when a re-attack was armed. Concurrent sweeps of the same
+    conversation share one inflight slot: a race between the empty-generation
+    cleanup, the merge rollback and the reclamation sweep arms one retry, and
+    the deduped sweeps keep the retained-audio classification. Exhaustion
+    never reclassifies the committed delete — the row is gone either way — so
+    the budget drains into the same INFO family the sensor already knows, with
+    the final fault demoted to DEBUG. A start failure (thread factory
+    exhausted) releases the slot immediately and keeps the verdict.
+    """
+
+    key = (uid, conversation_id)
+    with _residue_sweeps_inflight_lock:
+        if key in _residue_sweeps_inflight:
+            logger.info(
+                'Retained unreferenced audio behind a late writer uid=%s conversation_id=%s',
+                uid,
+                conversation_id,
+            )
+            return False
+        _residue_sweeps_inflight.add(key)
+
+    def _release() -> None:
+        with _residue_sweeps_inflight_lock:
+            _residue_sweeps_inflight.discard(key)
+
+    def _attempt() -> None:
+        try:
+            delete_conversation_audio_files(uid, conversation_id)
+        finally:
+            _release()
+
+    def _exhausted(error: BaseException) -> None:
+        logger.info(
+            'Retained unreferenced audio behind a late writer uid=%s conversation_id=%s',
+            uid,
+            conversation_id,
+        )
+        logger.debug(
+            'Unreferenced audio residue retry exhausted uid=%s conversation_id=%s',
+            uid,
+            conversation_id,
+            exc_info=error,
+        )
+
+    try:
+        logger.warning(
+            'Unreferenced audio sweep deferred behind a late writer uid=%s conversation_id=%s',
+            uid,
+            conversation_id,
+        )
+        thread = _schedule_sweep_retry(
+            _attempt,
+            (),
+            passes=passes,
+            delay=delay,
+            start_thread=start_thread,
+            sleep=sleep,
+            on_exhausted=_exhausted,
+            thread_name=_RESIDUAL_RETRY_THREAD_NAME,
+            start=False,
+        )
+        thread.start()
+        return True
+    except Exception:
+        _release()
+        logger.info(
+            'Retained unreferenced audio behind a late writer uid=%s conversation_id=%s',
+            uid,
+            conversation_id,
+        )
+        logger.debug('unreferenced audio residue re-attack could not be armed', exc_info=True)
+        return False
 
 
 def _discard_unreferenced_audio(
@@ -1014,15 +1131,13 @@ def _discard_unreferenced_audio(
             # generation without registered audio can only leave chunks nothing
             # references any more. One residual object is the boundary between
             # this sweep and a same-key late upload or the storage's own
-            # delete-propagation read; it converges under the next reclamation,
-            # so it keeps the retained-audio classification — INFO, no traceback,
-            # no degradation event — instead of reclassifying the committed
-            # delete as a failed write.
-            logger.info(
-                'Retained unreferenced audio behind a late writer uid=%s conversation_id=%s',
-                uid,
-                conversation_id,
-            )
+            # delete-propagation read; it converges under a re-attack this
+            # boundary now owns — the same bounded deferral the storage-blip
+            # arm uses, deduped per conversation so concurrent sweeps of one
+            # prefix share one budget. Exhaustion keeps the retained-audio
+            # classification — INFO, no traceback, no degradation event —
+            # instead of reclassifying the committed delete as a failed write.
+            _defer_or_keep_residual_sweep(uid, conversation_id)
             return
         if _is_storage_blip(error):
             # A momentary storage fault — the GCS SDK's own retryable set
