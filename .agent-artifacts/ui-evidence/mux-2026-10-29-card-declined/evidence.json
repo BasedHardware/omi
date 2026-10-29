@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-before.png",
+      "platform": "mobile-ios",
+      "description": "Main: same past_due month-2 payer, Home has no payment recovery row",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-home-card-declined.png",
+      "platform": "mobile-ios",
+      "description": "Past_due payer: approved Home row above Today with Update",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-home-card-declined-dark.png",
+      "platform": "mobile-ios",
+      "description": "The payment recovery row in dark mode",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-mobile-ios-home-card-declined-xxxl.png",
+      "platform": "mobile-ios",
+      "description": "The row at the largest accessibility text size",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "005-mobile-ios-billing-portal-stub.png",
+      "platform": "mobile-ios",
+      "description": "Update opens the existing payment web view and offline billing portal",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "006-mobile-ios-home-invoice-paid.png",
+      "platform": "mobile-ios",
+      "description": "After the invoice is paid in the offline fixture, returning Home removes the row",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "007-mobile-ios-home-card-declined-de.png",
+      "platform": "mobile-ios",
+      "description": "German localized payment recovery row",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "008-mobile-ios-home-card-declined-ja.png",
+      "platform": "mobile-ios",
+      "description": "Japanese localized payment recovery row",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "009-mobile-ios-home-card-declined-ar.png",
+      "platform": "mobile-ios",
+      "description": "Arabic right-to-left payment recovery row",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "010-mobile-ios-home-portal-unavailable.png",
+      "platform": "mobile-ios",
+      "description": "Portal error shows feedback and retains the recovery row",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "011-mobile-ios-home-before-after.png",
+      "platform": "mobile-ios",
+      "description": "Same seeded payer on main and this branch, before and after",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "012-mobile-ios-home-before-xxxl.png",
+      "platform": "mobile-ios",
+      "description": "Main at largest text: existing header, conversation and chat input overflows are outside this proposal",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}
