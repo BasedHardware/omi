@@ -203,6 +203,7 @@
           {
             "group": "Devices",
             "pages": [
+              "doc/hardware/how-the-pendant-works",
               "doc/hardware/OmiConsumer",
               "doc/hardware/DevKit2",
               "doc/hardware/DevKit1",

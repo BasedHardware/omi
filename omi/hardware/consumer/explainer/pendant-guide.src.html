@@ -1,0 +1,701 @@
+<title>How the Omi Pendant Works</title>
+<meta name="description" content="A picture-first, step-by-step guide to the Omi pendant: what's inside, where audio goes, what the light means, its limits, and how it fails.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700&display=swap">
+<style>
+/* Layout: a visual guide. An animated "watch it work" scene up top, the real exploded view and
+   board, then numbered behaviour cards that each tie back to the board. All rules are scoped
+   under .pg so the guide can be embedded in the docs site without leaking styles.
+   Colours always mean the same thing: green = live, teal = saved, red = lost, blue = the Bluetooth light. */
+.pg{
+  --bg:#f4f6f8; --panel:#ffffff; --ink:#1b2430; --muted:#5b6675; --line:#d5dbe2; --sunk:#e9edf1;
+  --yellow:#f2b705; --yellow-soft:#fdf3d0;
+  --live:#2e9e5b; --live-soft:#dcf1e4; --saved:#1b8fa0; --saved-soft:#d7eff2; --lost:#d94338; --lost-soft:#fbe0dd;
+  --blue:#2f6fde; --case:#c9ced6; --case-dark:#8d96a3; --screen:#eef2f6; --doze:#8b95a3;
+  --f-display:"Fredoka","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif;
+  --f-body:"Nunito Sans",-apple-system,"Segoe UI",system-ui,sans-serif;
+  --r:14px;
+}
+@media (prefers-color-scheme: dark){html:not([data-theme="light"]) .pg{
+  --bg:#11161c; --panel:#18202a; --ink:#e7ecf2; --muted:#9aa6b4; --line:#2b3644; --sunk:#202a36;
+  --yellow:#f5c431; --yellow-soft:#3a3115;
+  --live:#5cc787; --live-soft:#173323; --saved:#4fc0cf; --saved-soft:#143139; --lost:#f07a70; --lost-soft:#3b1c1a;
+  --blue:#6b9bf0; --case:#6c7684; --case-dark:#4a5360; --screen:#25303d; --doze:#7f8a98;
+  color-scheme:dark}}
+html[data-theme="dark"] .pg{
+  --bg:#11161c; --panel:#18202a; --ink:#e7ecf2; --muted:#9aa6b4; --line:#2b3644; --sunk:#202a36;
+  --yellow:#f5c431; --yellow-soft:#3a3115;
+  --live:#5cc787; --live-soft:#173323; --saved:#4fc0cf; --saved-soft:#143139; --lost:#f07a70; --lost-soft:#3b1c1a;
+  --blue:#6b9bf0; --case:#6c7684; --case-dark:#4a5360; --screen:#25303d; --doze:#7f8a98;
+  color-scheme:dark}
+html.dark .pg{
+  --bg:#11161c; --panel:#18202a; --ink:#e7ecf2; --muted:#9aa6b4; --line:#2b3644; --sunk:#202a36;
+  --yellow:#f5c431; --yellow-soft:#3a3115;
+  --live:#5cc787; --live-soft:#173323; --saved:#4fc0cf; --saved-soft:#143139; --lost:#f07a70; --lost-soft:#3b1c1a;
+  --blue:#6b9bf0; --case:#6c7684; --case-dark:#4a5360; --screen:#25303d; --doze:#7f8a98;
+  color-scheme:dark}
+.pg, .pg *{box-sizing:border-box}
+.pg{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:1.05rem;line-height:1.55;margin:0}
+.pg .wrap{max-width:1000px;margin:0 auto;padding-inline:clamp(16px,4vw,36px);padding-block:0 5rem}
+.pg h1, .pg h2, .pg h3{font-family:var(--f-display);font-weight:600;line-height:1.1;text-wrap:balance;margin:0}
+.pg h1{font-size:clamp(2.3rem,6vw,3.6rem);font-weight:700}
+.pg h2{font-size:clamp(1.6rem,3.6vw,2.2rem);margin-bottom:.4rem}
+.pg h3{font-size:1.35rem}
+.pg p{margin:0 0 .8rem}
+.pg a{color:var(--blue)}
+.pg button:focus-visible, .pg input:focus-visible{outline:3px solid var(--yellow);outline-offset:2px}
+.pg .muted{color:var(--muted)}
+.pg .small{font-size:.88rem}
+.pg header{padding-block:2.6rem 1rem;display:grid;gap:.8rem}
+.pg .kicker{font-family:var(--f-display);font-weight:600;font-size:.95rem;color:var(--ink);background:var(--yellow);display:inline-block;padding:.15rem .7rem;border-radius:999px;justify-self:start}
+.pg .lede{font-size:1.2rem;color:var(--muted);max-width:56ch}
+.pg .chapter{padding-block:2.4rem .4rem}
+.pg .chapter>p{max-width:60ch;color:var(--muted)}
+
+/* scene */
+.pg .scene{background:var(--panel);border:2px solid var(--ink);border-radius:var(--r);overflow:hidden}
+.pg .scene svg{display:block;width:100%;height:auto}
+.pg .modes{display:flex;flex-wrap:wrap;gap:.45rem;padding:.8rem;border-top:2px solid var(--ink);background:var(--sunk)}
+.pg .mode{all:unset;cursor:pointer;font-family:var(--f-display);font-weight:600;font-size:.95rem;padding:.42rem .85rem;border-radius:999px;background:var(--panel);border:2px solid var(--line);color:var(--ink)}
+.pg .mode[aria-pressed="true"]{border-color:var(--ink);background:var(--yellow);color:#1b2430}
+.pg .fixtg{display:inline-flex;align-items:center;gap:.5rem;font-size:.92rem;margin-left:auto;cursor:pointer;padding:.3rem .2rem}
+.pg .fixtg input{appearance:none;width:40px;height:22px;border-radius:999px;background:var(--line);position:relative;cursor:pointer;transition:background .15s;flex:none}
+.pg .fixtg input::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--panel);transition:left .15s}
+.pg .fixtg input:checked{background:var(--saved)} .pg .fixtg input:checked::after{left:21px}
+.pg .caption{display:grid;grid-template-columns:auto minmax(0,1fr);gap:.8rem;align-items:center;padding:.9rem 1rem;border-top:2px solid var(--ink)}
+.pg .caption .badge{font-family:var(--f-display);font-weight:600;padding:.3rem .8rem;border-radius:8px;white-space:nowrap}
+.pg .b-live{background:var(--live-soft);color:var(--live)} .pg .b-saved{background:var(--saved-soft);color:var(--saved)} .pg .b-lost{background:var(--lost-soft);color:var(--lost)} .pg .b-doze{background:var(--sunk);color:var(--doze)}
+.pg .caption p{margin:0}
+@media (max-width:560px){.pg .caption{grid-template-columns:minmax(0,1fr)}.pg .fixtg{margin-left:0}}
+
+/* step panels */
+.pg .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:1rem;margin-top:1.2rem}
+.pg .step{background:var(--panel);border:2px solid var(--ink);border-radius:var(--r);padding:1rem 1rem 1.1rem;display:grid;grid-template-rows:auto auto 1fr;gap:.6rem;position:relative;min-width:0}
+.pg .step.wide{grid-column:1/-1}
+.pg .step .num{font-family:var(--f-display);font-weight:700;font-size:2.6rem;line-height:1;color:var(--ink)}
+.pg .step .head{display:flex;align-items:flex-start;gap:.7rem}
+.pg .step .head h3{padding-top:.35rem}
+.pg .step svg{width:100%;height:auto;display:block;background:var(--sunk);border-radius:10px}
+.pg .step p{margin:0;font-size:.98rem}
+.pg .step.warn .head{padding-right:6rem}
+.pg .step.warn{border-color:var(--lost);box-shadow:6px 6px 0 var(--lost-soft)}
+.pg .callout{position:absolute;top:.8rem;right:.8rem;font-size:.72rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;border:2px solid var(--ink);border-radius:6px;padding:.1rem .45rem;background:var(--yellow);color:#1b2430}
+.pg .callout.red{background:var(--lost);color:#fff;border-color:var(--lost)}
+
+/* parts tray */
+.pg .tray{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.6rem}
+@media (max-width:620px){.pg .tray{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.pg .part{background:var(--sunk);border-radius:10px;padding:.6rem .4rem .7rem;text-align:center;min-width:0}
+.pg .part svg{width:64px;height:64px;background:none;margin:0 auto .3rem}
+.pg .part b{font-family:var(--f-display);font-weight:600;font-size:1rem;display:block}
+.pg .part span{font-size:.82rem;color:var(--muted);display:block;line-height:1.3}
+.pg .part .qty{display:inline-block;font-family:var(--f-display);font-weight:700;font-size:.8rem;background:var(--panel);border:1.5px solid var(--ink);border-radius:5px;padding:0 .35rem;margin-bottom:.2rem}
+
+/* lights */
+.pg .lights{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:.6rem}
+.pg .light{display:flex;gap:.65rem;align-items:flex-start;background:var(--sunk);border-radius:10px;padding:.65rem .7rem}
+.pg .light i{flex:none;width:26px;height:26px;border-radius:50%;box-shadow:0 0 0 4px var(--panel),0 0 14px 2px currentColor}
+.pg .light b{font-family:var(--f-display);font-weight:600;display:block}
+.pg .light span{font-size:.88rem;color:var(--muted)}
+@keyframes blink{50%{opacity:.15}} .pg .blink{animation:blink 1s steps(1) infinite}
+@keyframes alt{0%,49%{background:#2e9e5b;color:#2e9e5b}50%,100%{background:#2f6fde;color:#2f6fde}} .pg .alt{animation:alt 2s steps(1) infinite}
+
+/* gauges */
+.pg .gauges{display:grid;gap:.9rem}
+.pg .g{display:grid;grid-template-columns:7.5rem minmax(0,1fr);gap:.7rem;align-items:center}
+.pg .g b{font-family:var(--f-display);font-weight:600}
+.pg .track{height:28px;background:var(--sunk);border-radius:8px;position:relative;overflow:hidden;border:2px solid var(--ink)}
+.pg .fill{position:absolute;inset:0 auto 0 0;border-radius:5px;display:flex;align-items:center;padding-left:.5rem;font-weight:700;font-size:.82rem;color:#fff;white-space:nowrap}
+.pg .tick{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--ink)}
+.pg .ticklbl{position:absolute;top:30px;font-size:.72rem;color:var(--muted);transform:translateX(-50%)}
+
+/* day sim */
+.pg .sim{background:var(--panel);border:2px solid var(--ink);border-radius:var(--r);padding:1rem;margin-top:1rem}
+.pg .simtop{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;justify-content:space-between;margin-bottom:.8rem}
+.pg .tl{display:flex;height:58px;border-radius:10px;overflow:hidden;border:2px solid var(--ink)}
+.pg .blk{all:unset;cursor:pointer;display:flex;align-items:flex-end;padding:.3rem .35rem;font-weight:700;font-size:.7rem;min-width:0;overflow:hidden;border-right:2px solid var(--panel)}
+.pg .blk:last-child{border-right:0}
+.pg .blk.live{background:var(--live-soft);color:var(--live)} .pg .blk.saved{background:var(--saved-soft);color:var(--saved)} .pg .blk.lost{background:var(--lost-soft);color:var(--lost)}
+.pg .blk.doze{background:repeating-linear-gradient(135deg,var(--sunk) 0 6px,var(--panel) 6px 11px);color:var(--doze)} .pg .blk.off{background:var(--line);color:var(--muted)}
+.pg .blk[aria-pressed="true"]{outline:3px solid var(--ink);outline-offset:-3px}
+.pg .daycard{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:1rem;margin-top:.9rem}
+@media (max-width:640px){.pg .daycard{grid-template-columns:minmax(0,1fr)}.pg .blk{font-size:0}}
+.pg .daycard h3{font-size:1.25rem;margin:.1rem 0 .3rem}
+.pg .mini{background:var(--sunk);border-radius:10px;padding:.55rem .75rem;font-size:.92rem;margin-bottom:.45rem}
+.pg .mini b{display:block;font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.pg .dot{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:.35rem;vertical-align:-1px}
+.pg .tot{display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem;margin-top:.9rem}
+.pg .tot div{border-radius:10px;padding:.45rem .6rem;background:var(--sunk)}
+.pg .tot b{font-family:var(--f-display);font-size:1.4rem;display:block;font-variant-numeric:tabular-nums}
+.pg .tot span{font-size:.75rem;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+@media (max-width:520px){.pg .tot{grid-template-columns:repeat(2,1fr)}}
+
+/* trouble cards */
+.pg .trouble{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:.8rem;margin-top:1rem}
+.pg .t{background:var(--panel);border:2px solid var(--line);border-radius:var(--r);padding:.9rem 1rem;min-width:0}
+.pg .t .say{font-family:var(--f-display);font-weight:600;font-size:1.12rem;line-height:1.25;margin-bottom:.4rem}
+.pg .t .say::before{content:"“";color:var(--muted)} .pg .t .say::after{content:"”";color:var(--muted)}
+.pg .t p{font-size:.93rem;margin:0 0 .45rem}
+.pg .chips{display:flex;flex-wrap:wrap;gap:.3rem}
+.pg .chip{font-size:.74rem;font-weight:700;border-radius:999px;padding:.08rem .55rem;border:1.5px solid currentColor}
+.pg .c-no{color:var(--lost)} .pg .c-yes{color:var(--live)} .pg .c-some{color:#b07d00} .pg .c-fix{color:var(--muted)}
+html[data-theme="dark"] .pg .c-some{color:var(--yellow)}
+@media (prefers-color-scheme: dark){html:not([data-theme="light"]) .pg .c-some{color:var(--yellow)}}
+
+/* rules */
+.pg .rules{display:grid;gap:.6rem;margin-top:1rem;counter-reset:q}
+.pg .rule{display:grid;grid-template-columns:2.4rem minmax(0,1fr);gap:.7rem;align-items:start;background:var(--panel);border:2px solid var(--line);border-radius:var(--r);padding:.8rem .9rem}
+.pg .rule::before{counter-increment:q;content:counter(q);font-family:var(--f-display);font-weight:700;font-size:1.3rem;width:2.2rem;height:2.2rem;border-radius:50%;background:var(--yellow);color:#1b2430;display:grid;place-items:center}
+.pg .rule b{font-family:var(--f-display);font-weight:600;font-size:1.1rem;display:block}
+.pg .rule span{font-size:.95rem;color:var(--muted)}
+.pg .big-rule{background:var(--yellow-soft);border:2px solid var(--yellow);border-radius:var(--r);padding:1rem 1.1rem;margin-top:1rem;display:grid;grid-template-columns:auto minmax(0,1fr);gap:1rem;align-items:center}
+.pg .big-rule svg{width:84px;height:84px}
+.pg .big-rule p{margin:0}
+.pg .big-rule b{font-family:var(--f-display);font-size:1.25rem;font-weight:600;display:block;margin-bottom:.2rem}
+@media (max-width:520px){.pg .big-rule{grid-template-columns:minmax(0,1fr)}}
+
+/* inside: exploded view + board */
+.pg .inside{display:grid;gap:1rem;margin-top:1rem}
+.pg .exploded{position:relative;background:#ececec;border:2px solid var(--ink);border-radius:var(--r);overflow:hidden}
+.pg .exploded img{display:block;width:100%;height:auto}
+.pg .pin{position:absolute;transform:translate(-50%,-50%);width:30px;height:30px;border-radius:50%;background:var(--yellow);border:2px solid #1b2430;color:#1b2430;font-family:var(--f-display);font-weight:700;display:grid;place-items:center;font-size:.95rem;box-shadow:0 2px 0 #1b2430}
+.pg .keys{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.4rem .9rem;margin:.7rem 0 0;padding:0;list-style:none}
+.pg .keys li{display:flex;gap:.55rem;align-items:flex-start;font-size:.95rem}
+.pg .keys li b.k{flex:none;width:24px;height:24px;border-radius:50%;background:var(--yellow);border:2px solid var(--ink);display:grid;place-items:center;font-family:var(--f-display);font-size:.8rem;color:#1b2430}
+.pg .boardbox{display:grid;grid-template-columns:minmax(0,1fr);gap:1rem;background:var(--panel);border:2px solid var(--ink);border-radius:var(--r);padding:1rem}
+@media (min-width:760px){.pg .boardbox{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+.pg .boardstage{background:#1d3a2f;border-radius:12px;padding:.8rem;display:grid;gap:.6rem;justify-items:center}
+.pg .boardstage svg{width:100%;max-width:420px;height:auto}
+.pg .flip{display:inline-flex;border-radius:999px;overflow:hidden;border:2px solid #e8efe9}
+.pg .flip button{all:unset;cursor:pointer;font-family:var(--f-display);font-weight:600;font-size:.9rem;padding:.3rem .9rem;color:#e8efe9}
+.pg .flip button[aria-pressed="true"]{background:#e8efe9;color:#1d3a2f}
+.pg .ly.mask{color:#16302a}.pg .ly.cu{color:#c88a4a;opacity:.38}.pg .ly.inner{display:none}.pg .ly.silk{color:#f4f1e4}.pg .ly.edge{color:#f4f1e4;opacity:.7}
+.pg{--pcb-hole:#1d3a2f}
+.pg .hs{cursor:pointer}
+.pg .hs circle{fill:rgba(242,183,5,.2);stroke:#f2b705;stroke-width:.22}
+.pg .hs text{font-family:var(--f-display);font-weight:700;font-size:.95px;fill:#1b2430}
+.pg .hs .tagbg{fill:#f2b705}
+.pg .hs.on circle{fill:rgba(242,183,5,.45);stroke-width:.3}
+.pg .hs:focus{outline:none}.pg .hs:focus circle{stroke:#fff}
+.pg .partcard h3{font-size:1.5rem;margin:.2rem 0 .4rem}
+.pg .partcard .eyebrow{font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.pg .partlist{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.8rem}
+.pg .partlist button{all:unset;cursor:pointer;font-size:.84rem;font-weight:700;border:2px solid var(--line);border-radius:999px;padding:.15rem .6rem}
+.pg .partlist button[aria-pressed="true"]{border-color:var(--ink);background:var(--yellow);color:#1b2430}
+.pg .where{display:flex;gap:.75rem;align-items:center;border-top:2px dashed var(--line);padding-top:.7rem;margin-top:.2rem}
+.pg .where svg.mini-board{flex:none;width:96px;height:96px;background:none!important;border-radius:50%}
+.pg .where span{font-size:.88rem;color:var(--muted);line-height:1.4}
+.pg .where b{display:block;color:var(--ink);font-size:.74rem;letter-spacing:.06em;text-transform:uppercase}
+.pg .mini-board .hl{fill:rgba(242,183,5,.55);stroke:#fff;stroke-width:.6}
+.pg footer{margin-top:3rem;padding-top:1rem;border-top:2px solid var(--line);font-size:.85rem;color:var(--muted)}
+
+/* small SVG animations */
+@keyframes wave{0%{opacity:0;transform:scale(.6)}40%{opacity:1}100%{opacity:0;transform:scale(1.25)}}
+.pg .wv{transform-box:fill-box;transform-origin:left center;animation:wave 1.6s ease-out infinite}
+.pg .wv.d1{animation-delay:.4s}.pg .wv.d2{animation-delay:.8s}
+@keyframes slide{0%{transform:translateX(0);opacity:0}10%{opacity:1}90%{opacity:1}100%{transform:translateX(var(--dx));opacity:0}}
+.pg .mv{animation:slide 2.2s linear infinite}
+@keyframes drop{0%{transform:translateY(0);opacity:0}15%{opacity:1}85%{opacity:1}100%{transform:translateY(var(--dy));opacity:0}}
+.pg .dr{animation:drop 1.8s ease-in infinite}
+@keyframes zz{0%{opacity:0;transform:translate(0,0)}30%{opacity:1}100%{opacity:0;transform:translate(14px,-22px)}}
+.pg .zz{animation:zz 2.4s ease-out infinite}.pg .zz.d1{animation-delay:.8s}.pg .zz.d2{animation-delay:1.6s}
+@keyframes grow{0%,10%{transform:scaleY(.2)}60%,100%{transform:scaleY(1)}}
+.pg .gr{transform-box:fill-box;transform-origin:bottom;animation:grow 3s ease-in-out infinite alternate}
+@keyframes shrink{0%,10%{transform:scaleY(1)}60%,100%{transform:scaleY(.15)}}
+.pg .sh{transform-box:fill-box;transform-origin:bottom;animation:shrink 3s ease-in-out infinite alternate}
+@keyframes pulse{50%{opacity:.35}} .pg .pl{animation:pulse 1.4s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){.pg, .pg *{animation:none!important;transition:none!important}}
+
+/* defend against host prose styles (Mintlify) */
+.pg .boardstage{align-content:start}
+.pg .boardbox{align-items:start}
+.pg .flip{align-self:start;height:auto;line-height:1.2}
+.pg .flip button{line-height:1.2;height:auto;margin:0}
+.pg ul.keys{padding-left:0;margin-left:0}
+.pg .keys li{padding-left:0;margin:0}
+.pg .keys li::before{display:none;content:none}
+.pg img{margin:0;border-radius:0}
+.pg button{min-height:0}
+/* page ground for standalone hosting; Mintlify supplies its own */
+body{margin:0;background:#f4f6f8}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) body{background:#11161c}}
+:root[data-theme="dark"] body{background:#11161c}
+.pg{min-height:100%}
+</style>
+
+<!-- shared drawings -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="pendant" viewBox="-40 -40 80 80">
+      <circle r="36" fill="var(--case)" stroke="var(--ink)" stroke-width="3"/>
+      <circle r="27" fill="none" stroke="var(--case-dark)" stroke-width="2"/>
+      <circle cx="-11" r="4.5" fill="currentColor"/><circle cx="11" r="4.5" fill="currentColor"/>
+      <circle r="6" fill="var(--panel)" stroke="var(--ink)" stroke-width="2"/>
+    </symbol>
+    <symbol id="phone" viewBox="0 0 50 90">
+      <rect x="2" y="2" width="46" height="86" rx="9" fill="var(--panel)" stroke="var(--ink)" stroke-width="3"/>
+      <rect x="7" y="11" width="36" height="64" rx="3" fill="var(--screen)"/>
+      <rect x="19" y="80" width="12" height="3" rx="1.5" fill="var(--ink)"/>
+    </symbol>
+    <symbol id="box" viewBox="0 0 90 70">
+      <path d="M5 18 L45 4 L85 18 L85 64 L5 64 Z" fill="var(--panel)" stroke="var(--ink)" stroke-width="3" stroke-linejoin="round"/>
+      <path d="M5 18 L45 30 L85 18 M45 30 L45 64" fill="none" stroke="var(--ink)" stroke-width="2"/>
+    </symbol>
+    <symbol id="bin" viewBox="0 0 60 70">
+      <path d="M8 16 H52 L47 66 H13 Z" fill="var(--lost-soft)" stroke="var(--lost)" stroke-width="3" stroke-linejoin="round"/>
+      <rect x="4" y="8" width="52" height="8" rx="3" fill="var(--lost)"/>
+      <path d="M22 26 V58 M30 26 V58 M38 26 V58" stroke="var(--lost)" stroke-width="2.5"/>
+    </symbol>
+    <symbol id="cloud" viewBox="0 0 90 56">
+      <path d="M22 50 H70 A16 16 0 0 0 68 18 A22 22 0 0 0 26 16 A17 17 0 0 0 22 50 Z" fill="var(--panel)" stroke="var(--ink)" stroke-width="3"/>
+    </symbol>
+    <symbol id="chip" viewBox="0 0 64 64">
+      <g stroke="var(--ink)" stroke-width="3"><path d="M20 8v8M32 8v8M44 8v8M20 48v8M32 48v8M44 48v8M8 20h8M8 32h8M8 44h8M48 20h8M48 32h8M48 44h8"/></g>
+      <rect x="15" y="15" width="34" height="34" rx="5" fill="var(--ink)"/>
+      <circle cx="23" cy="23" r="3" fill="var(--yellow)"/>
+    </symbol>
+    <symbol id="board-top" viewBox="-0.3 -0.3 21.6 21.6"><circle cx="10.49" cy="10.49" r="10.5" fill="#1d3a2f"/>{{TOP}}</symbol>
+    <symbol id="board-bot" viewBox="-0.3 -0.3 21.6 21.6"><circle cx="10.49" cy="10.49" r="10.5" fill="#1d3a2f"/><g transform="translate(20.98 0) scale(-1 1)">{{BOT}}</g></symbol>
+  </defs>
+</svg>
+
+<div class="pg"><div class="wrap">
+<header>
+  <span class="kicker">Omi pendant · visual guide</span>
+  <h1>How the Omi Pendant Works</h1>
+  <p class="lede">A visual guide to what's inside the pendant, where your audio goes, and what can go wrong. No electronics knowledge needed.</p>
+</header>
+
+<section class="chapter" aria-labelledby="watch">
+  <h2 id="watch">Watch it work</h2>
+  <p>Each little block is a slice of sound, 1/50th of a second. Pick a situation and follow the blocks.</p>
+  <div class="scene">
+    <svg id="scene" viewBox="0 0 820 330" role="img" aria-label="Animated scene: audio blocks travel from the pendant to the phone, into its memory, or into the bin">
+      <text x="410" y="28" text-anchor="middle" font-family="var(--f-display)" font-size="15" fill="var(--muted)" id="s-radio-lbl">Bluetooth</text>
+      <line id="s-radio" x1="185" y1="140" x2="650" y2="140" stroke="var(--blue)" stroke-width="3" stroke-dasharray="2 10" stroke-linecap="round"/>
+      <g id="s-waves">
+        <path class="wv" d="M70 120 q-12 20 0 40" fill="none" stroke="var(--ink)" stroke-width="3" stroke-linecap="round"/>
+        <path class="wv d1" d="M55 108 q-18 32 0 64" fill="none" stroke="var(--ink)" stroke-width="3" stroke-linecap="round"/>
+        <path class="wv d2" d="M40 96 q-24 44 0 88" fill="none" stroke="var(--ink)" stroke-width="3" stroke-linecap="round"/>
+      </g>
+      <g id="s-zz" font-family="var(--f-display)" font-weight="700" fill="var(--doze)" style="display:none">
+        <text class="zz" x="160" y="90" font-size="22">z</text><text class="zz d1" x="172" y="78" font-size="18">z</text><text class="zz d2" x="182" y="66" font-size="14">z</text>
+      </g>
+      <use href="#pendant" id="s-pendant" x="80" y="90" width="100" height="100" style="color:var(--blue)"/>
+      <text x="130" y="210" text-anchor="middle" font-family="var(--f-display)" font-size="15" fill="var(--ink)">Pendant</text>
+      <!-- memory -->
+      <use href="#box" x="85" y="240" width="90" height="70"/>
+      <clipPath id="boxclip"><rect x="91" y="272" width="78" height="35"/></clipPath>
+      <rect id="s-mem" x="91" y="307" width="78" height="0" fill="var(--saved)" opacity=".85" clip-path="url(#boxclip)"/>
+      <text x="190" y="290" font-family="var(--f-display)" font-size="14" fill="var(--muted)">memory</text>
+      <!-- bin -->
+      <use href="#bin" id="s-bin" x="385" y="245" width="52" height="62"/>
+      <text x="446" y="292" font-family="var(--f-display)" font-size="14" fill="var(--lost)" id="s-binlbl">thrown away</text>
+      <!-- phone -->
+      <g id="s-phonegrp">
+        <circle id="s-range" cx="690" cy="140" r="0" fill="none" stroke="var(--muted)" stroke-dasharray="4 6"/>
+        <use href="#phone" id="s-phone" x="655" y="80" width="70" height="126"/>
+        <g id="s-lines"></g>
+        <text id="s-phonelbl" x="690" y="228" text-anchor="middle" font-family="var(--f-display)" font-size="15" fill="var(--ink)">Phone</text>
+      </g>
+      <text id="s-phonenote" x="690" y="250" text-anchor="middle" font-family="var(--f-body)" font-size="12.5" fill="var(--muted)"></text>
+      <g id="s-pk"></g>
+    </svg>
+    <div class="modes" role="group" aria-label="Situation">
+      <button type="button" class="mode" data-m="live" aria-pressed="true">Talking, phone nearby</button>
+      <button type="button" class="mode" data-m="away" aria-pressed="false">Phone left behind</button>
+      <button type="button" class="mode" data-m="back" aria-pressed="false">Phone comes back</button>
+      <button type="button" class="mode" data-m="quiet" aria-pressed="false">Quiet room</button>
+      <button type="button" class="mode" data-m="deaf" aria-pressed="false">Phone stops listening</button>
+      <label class="fixtg"><input type="checkbox" id="fix"> With the planned fix</label>
+    </div>
+    <div class="caption"><span class="badge" id="s-badge"></span><p id="s-cap"></p></div>
+  </div>
+</section>
+
+<section class="chapter" aria-labelledby="inside">
+  <h2 id="inside">What's inside</h2>
+  <p>Take it apart and you get a stack of layers about the size of a large coin. The parts that matter for behaviour are the circuit board and the battery.</p>
+  <div class="inside">
+    <figure style="margin:0">
+      <div class="exploded">
+        <img src="{{EXPLODED}}" alt="Exploded 3D view of the pendant's parts laid out in a line: covers, shell, frame, circuit boards, buzzer, battery and lanyard.">
+        <span class="pin" style="left:34.4%;top:38%">1</span>
+        <span class="pin" style="left:13%;top:31%">2</span>
+        <span class="pin" style="left:69.5%;top:47%">3</span>
+        <span class="pin" style="left:63.5%;top:34%">4</span>
+        <span class="pin" style="left:37.5%;top:50%">5</span>
+        <span class="pin" style="left:22.5%;top:79%">6</span>
+      </div>
+      <ul class="keys">
+        <li><b class="k">1</b><span><b>Main circuit board.</b> The brain, microphones, memory and radio, all on a 21 mm disc. Explore it below.</span></li>
+        <li><b class="k">2</b><span><b>Small boards.</b> A flex strip and the charging contacts.</span></li>
+        <li><b class="k">3</b><span><b>Battery.</b> 150 mAh, soldered in, about a day of use.</span></li>
+        <li><b class="k">4</b><span><b>Buzzer.</b> A tiny vibration motor for taps and replies.</span></li>
+        <li><b class="k">5</b><span><b>Metal covers.</b> Machined aluminium. They also act as the radio antenna.</span></li>
+        <li><b class="k">6</b><span><b>Shell.</b> The moulded outer ring. Glued and screwed shut, with no ports.</span></li>
+      </ul>
+      <p class="muted small" style="margin-top:.5rem">Image from the open-source hardware files. The small red labels name how each part is manufactured.</p>
+    </figure>
+
+    <div class="boardbox">
+      <div class="boardstage">
+        <span class="flip" role="group" aria-label="Board side"><button type="button" id="bt" aria-pressed="true">Front</button><button type="button" id="bb" aria-pressed="false">Back</button></span>
+        <svg id="board" viewBox="-0.3 -0.3 21.6 21.6" role="img" aria-label="The real circuit board, rendered from the design files"><use id="boarduse" href="#board-top"/><g id="hs"></g></svg>
+      </div>
+      <div class="partcard" aria-live="polite">
+        <div class="eyebrow" id="pc-side">Front of the board</div>
+        <h3 id="pc-name"></h3>
+        <p id="pc-text"></p>
+        <div class="partlist" id="partlist"></div>
+        <p class="muted small" style="margin-top:.8rem">This is the actual board, drawn from its design files. Copper is shown in orange and printed labels in white. Tap a highlighted part.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="chapter" aria-labelledby="build">
+  <h2 id="build">How it works, one picture at a time</h2>
+  <p>Each card shows one behaviour, plus where it happens on the real board.</p>
+  <div class="steps">
+
+    <div class="step">
+      <div class="head"><span class="num">1</span><h3>Sound becomes blocks</h3></div>
+      <svg viewBox="0 0 300 140" aria-hidden="true">
+        <path class="wv" d="M40 55 q-10 15 0 30" fill="none" stroke="var(--ink)" stroke-width="3" stroke-linecap="round"/>
+        <path class="wv d1" d="M28 45 q-16 25 0 50" fill="none" stroke="var(--ink)" stroke-width="3" stroke-linecap="round"/>
+        <use href="#pendant" x="60" y="35" width="70" height="70" style="color:var(--blue)"/>
+        <g class="mv" style="--dx:130px"><rect x="140" y="62" width="16" height="16" rx="3" fill="var(--live)"/></g>
+        <g class="mv" style="--dx:130px;animation-delay:.55s"><rect x="140" y="62" width="16" height="16" rx="3" fill="var(--live)"/></g>
+        <g class="mv" style="--dx:130px;animation-delay:1.1s"><rect x="140" y="62" width="16" height="16" rx="3" fill="var(--live)"/></g>
+        <g class="mv" style="--dx:130px;animation-delay:1.65s"><rect x="140" y="62" width="16" height="16" rx="3" fill="var(--live)"/></g>
+        <text x="215" y="118" text-anchor="middle" font-family="var(--f-display)" font-size="14" fill="var(--muted)">50 blocks every second</text>
+      </svg>
+      <p>While awake, the microphones capture sound and the brain chops it into tiny compressed blocks, about the size of a text message each.</p>
+      <div class="where"><svg class="mini-board" data-side="t" data-refs="MIC1 MIC2 U1" viewBox="-0.3 -0.3 21.6 21.6" aria-hidden="true"></svg><span><b>On the board</b>The two microphones sit on opposite edges. The brain chip does the chopping.</span></div>
+    </div>
+
+    <div class="step">
+      <div class="head"><span class="num">2</span><h3>Blocks fly to the phone</h3></div>
+      <svg viewBox="0 0 300 140" aria-hidden="true">
+        <use href="#pendant" x="16" y="40" width="64" height="64" style="color:var(--blue)"/>
+        <line x1="84" y1="72" x2="226" y2="72" stroke="var(--blue)" stroke-width="3" stroke-dasharray="2 9" stroke-linecap="round"/>
+        <g class="mv" style="--dx:130px"><rect x="88" y="64" width="16" height="16" rx="3" fill="var(--live)"/></g>
+        <g class="mv" style="--dx:130px;animation-delay:.7s"><rect x="88" y="64" width="16" height="16" rx="3" fill="var(--live)"/></g>
+        <g class="mv" style="--dx:130px;animation-delay:1.4s"><rect x="88" y="64" width="16" height="16" rx="3" fill="var(--live)"/></g>
+        <use href="#phone" x="232" y="28" width="46" height="84"/>
+        <rect x="241" y="48" width="26" height="4" rx="2" fill="var(--live)"/><rect x="241" y="57" width="20" height="4" rx="2" fill="var(--live)"/><rect x="241" y="66" width="24" height="4" rx="2" fill="var(--live)"/>
+      </svg>
+      <p>Over Bluetooth, the blocks go to the Omi app. The app sends them to the cloud, which turns them into words. <b>All the smart stuff happens there, not on the pendant.</b></p>
+      <div class="where"><svg class="mini-board" data-side="t" data-refs="U1 PP1" viewBox="-0.3 -0.3 21.6 21.6" aria-hidden="true"></svg><span><b>On the board</b>The radio is built into the brain chip. A spring contact passes the signal to the metal case, which works as the antenna.</span></div>
+    </div>
+
+    <div class="step">
+      <div class="head"><span class="num">3</span><h3>No phone? Save it for later</h3></div>
+      <svg viewBox="0 0 300 140" aria-hidden="true">
+        <use href="#pendant" x="40" y="10" width="64" height="64" style="color:#d94338"/>
+        <g class="dr" style="--dy:40px"><rect x="64" y="76" width="16" height="16" rx="3" fill="var(--saved)"/></g>
+        <g class="dr" style="--dy:40px;animation-delay:.6s"><rect x="64" y="76" width="16" height="16" rx="3" fill="var(--saved)"/></g>
+        <g class="dr" style="--dy:40px;animation-delay:1.2s"><rect x="64" y="76" width="16" height="16" rx="3" fill="var(--saved)"/></g>
+        <use href="#box" x="35" y="88" width="74" height="50"/>
+        <rect class="gr" x="42" y="112" width="60" height="22" fill="var(--saved)" opacity=".8"/>
+        <use href="#phone" x="220" y="30" width="44" height="80" opacity=".3"/>
+        <path d="M200 40 L284 110 M284 40 L200 110" stroke="var(--muted)" stroke-width="3" stroke-linecap="round" opacity=".6"/>
+        <text x="242" y="130" text-anchor="middle" font-family="var(--f-display)" font-size="13" fill="var(--muted)">out of range</text>
+      </svg>
+      <p>When the phone is out of range, the pendant stores the blocks in its own memory instead, as long as its clock is set. The light turns <b style="color:var(--lost)">red</b>, but that's normal, nothing is wrong.</p>
+      <div class="where"><svg class="mini-board" data-side="b" data-refs="U7" viewBox="-0.3 -0.3 21.6 21.6" aria-hidden="true"></svg><span><b>On the board</b>The memory chip is on the underside of the board.</span></div>
+    </div>
+
+    <div class="step">
+      <div class="head"><span class="num">4</span><h3>Phone's back: catch up</h3></div>
+      <svg viewBox="0 0 300 140" aria-hidden="true">
+        <use href="#box" x="20" y="70" width="74" height="50"/>
+        <rect class="sh" x="27" y="94" width="60" height="22" fill="var(--saved)" opacity=".8"/>
+        <path d="M94 92 C140 92 150 72 220 72" fill="none" stroke="var(--blue)" stroke-width="3" stroke-dasharray="2 9" stroke-linecap="round"/>
+        <g class="mv" style="--dx:120px"><rect x="98" y="70" width="16" height="16" rx="3" fill="var(--saved)"/></g>
+        <g class="mv" style="--dx:120px;animation-delay:.7s"><rect x="98" y="70" width="16" height="16" rx="3" fill="var(--saved)"/></g>
+        <g class="mv" style="--dx:120px;animation-delay:1.4s"><rect x="98" y="70" width="16" height="16" rx="3" fill="var(--saved)"/></g>
+        <use href="#phone" x="226" y="30" width="46" height="84"/>
+        <use href="#pendant" x="26" y="6" width="56" height="56" style="color:var(--blue)"/>
+      </svg>
+      <p>When the phone reconnects, the app quietly downloads what was saved. Those conversations show up <b>later</b>, sometimes hours later. That's expected.</p>
+      <div class="where"><svg class="mini-board" data-side="b" data-refs="U7" viewBox="-0.3 -0.3 21.6 21.6" aria-hidden="true"></svg><span><b>On the board</b>The same memory chip, read back over Bluetooth.</span></div>
+    </div>
+
+    <div class="step">
+      <div class="head"><span class="num">5</span><h3>Quiet room? Take a nap</h3></div>
+      <svg viewBox="0 0 300 140" aria-hidden="true">
+        <use href="#pendant" x="100" y="40" width="74" height="74" style="color:var(--blue)"/>
+        <g font-family="var(--f-display)" font-weight="700" fill="var(--doze)"><text class="zz" x="176" y="50" font-size="24">z</text><text class="zz d1" x="190" y="38" font-size="19">z</text><text class="zz d2" x="202" y="26" font-size="15">z</text></g>
+        <text x="137" y="132" text-anchor="middle" font-family="var(--f-display)" font-size="13" fill="var(--muted)">after ~10 s of quiet</text>
+      </svg>
+      <p>After about 10 seconds of silence, recording pauses to save battery, and the microphone's own low-power detector keeps listening. A loud enough sound restarts recording. Quiet sounds, and the first moment of speech, can be missed.</p>
+      <div class="where"><svg class="mini-board" data-side="t" data-refs="MIC1" viewBox="-0.3 -0.3 21.6 21.6" aria-hidden="true"></svg><span><b>On the board</b>The left microphone has a "wake up" wire back to the brain. It listens for sound on its own.</span></div>
+    </div>
+
+    <div class="step warn">
+      <div class="head"><span class="num">6</span><h3>Connected but not listening</h3></div>
+      <svg viewBox="0 0 300 140" aria-hidden="true">
+        <use href="#pendant" x="12" y="22" width="64" height="64" style="color:var(--blue)"/>
+        <line x1="80" y1="54" x2="226" y2="54" stroke="var(--blue)" stroke-width="3" stroke-dasharray="2 9" stroke-linecap="round"/>
+        <use href="#phone" x="232" y="12" width="46" height="84"/>
+        <text x="255" y="58" text-anchor="middle" font-family="var(--f-display)" font-size="10" fill="var(--muted)">zzz</text>
+        <g class="dr" style="--dy:52px"><rect x="94" y="62" width="16" height="16" rx="3" fill="var(--lost)"/></g>
+        <g class="dr" style="--dy:52px;animation-delay:.6s"><rect x="94" y="62" width="16" height="16" rx="3" fill="var(--lost)"/></g>
+        <g class="dr" style="--dy:52px;animation-delay:1.2s"><rect x="94" y="62" width="16" height="16" rx="3" fill="var(--lost)"/></g>
+        <use href="#bin" x="80" y="94" width="44" height="46"/>
+        <text x="140" y="126" font-family="var(--f-display)" font-size="13" fill="var(--lost)">light still blue</text>
+      </svg>
+      <p>Sometimes the phone stays connected but stops asking for audio. iPhones do this to apps in the background. The pendant <b>throws the blocks away</b> and the light stays <b style="color:var(--blue)">blue</b>, so nobody notices. This is how a real meeting was lost. A fix is in progress.</p>
+      <div class="where"><svg class="mini-board" data-side="t" data-refs="U1" viewBox="-0.3 -0.3 21.6 21.6" aria-hidden="true"></svg><span><b>On the board</b>This happens in the brain chip's software, so the fix is a firmware update.</span></div>
+    </div>
+
+    <div class="step wide">
+      <div class="head"><span class="num">7</span><h3>Read the light</h3></div>
+      <div class="lights">
+        <div class="light"><i style="background:#2f6fde;color:#2f6fde"></i><div><b>Solid blue</b><span>Connected. <u>Not</u> proof that audio is reaching the phone.</span></div></div>
+        <div class="light"><i style="background:#d94338;color:#d94338"></i><div><b>Solid red</b><span>No phone. Saving to memory, which is fine.</span></div></div>
+        <div class="light"><i class="blink" style="background:#d94338;color:#d94338"></i><div><b>Blinking red</b><span>Its clock isn't set, usually because it has never connected to the app. It can't save anything offline yet.</span></div></div>
+        <div class="light"><i class="alt"></i><div><b>Green + blue/red</b><span>Charging. The other colour shows connection.</span></div></div>
+        <div class="light"><i style="background:#2e9e5b;color:#2e9e5b"></i><div><b>Solid green</b><span>Charged.</span></div></div>
+      </div>
+      <p class="muted small">Users read blue as "working" and red as "broken". Both can be wrong. Making the light honest is on the list for the next firmware release.</p>
+      <div class="where"><svg class="mini-board" data-side="t" data-refs="D2 D7 K2" viewBox="-0.3 -0.3 21.6 21.6" aria-hidden="true"></svg><span><b>On the board</b>Two colour lights sit either side of the button, in the middle of the board.</span></div>
+    </div>
+
+    <div class="step wide">
+      <div class="head"><span class="num">8</span><h3>Know the limits</h3></div>
+      <div class="gauges">
+        <div class="g"><b>Battery</b><div class="track"><div class="fill" style="width:44%;background:var(--live)">~17–20 h if it never naps</div><div class="tick" style="left:66.6%"></div><span class="ticklbl" style="left:66.6%">1 day</span></div></div>
+        <div class="g"><b>Memory</b><div class="track"><div class="fill" style="width:100%;background:var(--saved)">~1.5 days of audio</div><div class="tick" style="left:66.6%"></div></div></div>
+        <div class="g" style="margin-top:.6rem"><b>Field logs</b><div class="track"><div class="fill" style="width:0"></div><span style="position:absolute;left:.6rem;top:3px;font-weight:700;font-size:.85rem">none: the pendant doesn't report problems</span></div></div>
+      </div>
+      <p class="muted small" style="margin-top:.9rem">Bars share one scale of 36 hours, and the tick marks one day. <b>Battery runs out before memory does.</b> These are estimates from the design and past measurements, not field data.</p>
+      <div class="where"><svg class="mini-board" data-side="t" data-refs="U15" viewBox="-0.3 -0.3 21.6 21.6" aria-hidden="true"></svg><span><b>On the board</b>The battery isn't on the board. It is soldered to two pads, and this small chip charges it from the dock.</span></div>
+    </div>
+
+    <div class="step wide">
+      <div class="head"><span class="num">9</span><h3>Getting a fix onto the pendant</h3></div>
+      <svg viewBox="0 0 860 150" aria-hidden="true">
+        <g font-family="var(--f-display)" font-size="14" fill="var(--ink)" text-anchor="middle">
+          <rect x="30" y="40" width="110" height="64" rx="10" fill="var(--panel)" stroke="var(--ink)" stroke-width="3"/><text x="85" y="78">new firmware</text>
+          <use href="#cloud" x="215" y="38" width="110" height="68"/><text x="270" y="130">release</text>
+          <use href="#phone" x="420" y="30" width="50" height="90"/><text x="445" y="140">user taps "Product Update"</text>
+          <use href="#pendant" x="600" y="38" width="76" height="76" style="color:var(--blue)"/><text x="638" y="140">installed</text>
+          <text x="780" y="70" fill="var(--muted)">…if the user</text><text x="780" y="90" fill="var(--muted)">ever does</text>
+        </g>
+        <g stroke="var(--muted)" stroke-width="3" fill="none" stroke-linecap="round"><path d="M148 72h56M338 72h70M482 72h104"/></g>
+        <g class="mv" style="--dx:440px"><rect x="150" y="62" width="22" height="20" rx="4" fill="var(--yellow)" stroke="var(--ink)" stroke-width="2"/></g>
+      </svg>
+      <p>The case is sealed, so normal updates arrive only through the app, and only when someone accepts them. Engineers can also reflash by wire, but that means opening the case. Many never do. <b>Every old version stays out in the world</b>, and the app has to keep working with all of them. App and cloud fixes reach everyone within days. Firmware fixes trickle out.</p>
+      <div class="where"><svg class="mini-board" data-side="b" data-refs="U12" viewBox="-0.3 -0.3 21.6 21.6" aria-hidden="true"></svg><span><b>On the board</b>New firmware first downloads into this small separate chip. On restart, the pendant swaps it in.</span></div>
+    </div>
+  </div>
+
+  <div class="big-rule">
+    <svg viewBox="0 0 84 84" aria-hidden="true"><circle cx="42" cy="42" r="38" fill="var(--yellow)" stroke="var(--ink)" stroke-width="3"/><path d="M26 44l11 11 22-26" fill="none" stroke="var(--ink)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <p><b>The one rule: audio is never silently lost.</b>Every block must reach the phone or be saved for later, unless the user turned the pendant off or muted it on purpose. Saving phone battery can change <i>when</i> blocks are sent, never <i>whether</i> they survive. (Internally this is called INV-CAP-1.)</p>
+  </div>
+</section>
+
+<section class="chapter" aria-labelledby="day">
+  <h2 id="day">Play through a day</h2>
+  <p>Tap a stretch of the day. Then flip on the planned fix and see what changes.</p>
+  <div class="sim">
+    <div class="simtop">
+      <span class="modes" style="padding:0;border:0;background:none" role="group" aria-label="Scenario">
+        <button type="button" class="mode" id="sc-typ" aria-pressed="true">Typical day</button>
+        <button type="button" class="mode" id="sc-new" aria-pressed="false">Brand-new pendant</button>
+      </span>
+      <label class="fixtg"><input type="checkbox" id="dfix"> With the planned fix</label>
+    </div>
+    <div class="tl" id="tl" role="group" aria-label="Timeline of the day"></div>
+    <div class="daycard" id="dcard" aria-live="polite"></div>
+    <div class="tot" id="dtot"></div>
+  </div>
+</section>
+
+<section class="chapter" aria-labelledby="trouble">
+  <h2 id="trouble">When a user says…</h2>
+  <div class="trouble">
+    <div class="t"><div class="say">Half my meeting is missing.</div><p>The phone stopped listening while still connected (step 6). The blocks went in the bin.</p><div class="chips"><span class="chip c-no">Nobody is told</span><span class="chip c-fix">Fix: pendant firmware</span></div></div>
+    <div class="t"><div class="say">It didn't record anything on day one.</div><p>It was worn before it was set up in the app. It won't save without a valid clock, and the app is what sets it.</p><div class="chips"><span class="chip c-some">Light blinks red</span><span class="chip c-fix">Fix: onboarding or firmware</span></div></div>
+    <div class="t"><div class="say">My conversations showed up hours late.</div><p>The phone was away, so audio was saved and synced later (steps 3–4). It's working as designed.</p><div class="chips"><span class="chip c-yes">App shows syncing</span><span class="chip c-fix">Fix: clearer messaging</span></div></div>
+    <div class="t"><div class="say">It died before dinner.</div><p>Battery. Talkative days drain it faster, and it switches itself off when low.</p><div class="chips"><span class="chip c-some">We see battery %, not why</span><span class="chip c-fix">Fix: firmware power work</span></div></div>
+    <div class="t"><div class="say">It wouldn't charge or pair out of the box.</div><p>Often physical: the dock or cable isn't seated. How often this happens isn't known yet.</p><div class="chips"><span class="chip c-some">Support tickets only</span><span class="chip c-fix">Fix: packaging and setup</span></div></div>
+    <div class="t"><div class="say">It cut off my first word.</div><p>Recording was paused in a quiet room and restarted only once the sound was loud enough (step 5).</p><div class="chips"><span class="chip c-no">Nobody is told</span><span class="chip c-fix">Fix: firmware (draft exists)</span></div></div>
+  </div>
+</section>
+
+<section class="chapter" aria-labelledby="ask">
+  <h2 id="ask">Before you decide anything about the pendant</h2>
+  <div class="rules">
+    <div class="rule"><div><b>Does it change when the phone stops listening?</b><span>Then it must not open a gap where blocks go in the bin.</span></div></div>
+    <div class="rule"><div><b>Does it need new firmware?</b><span>Expect a slow, partial rollout. If the app or cloud can solve it, start there.</span></div></div>
+    <div class="rule"><div><b>How will we know it worked?</b><span>The pendant reports nothing by itself. Decide what to measure before you ship.</span></div></div>
+    <div class="rule"><div><b>What does the user see when it fails?</b><span>An honest "this part is missing" beats a clean timeline with hidden holes.</span></div></div>
+    <div class="rule"><div><b>What does it cost in battery?</b><span>A full day of battery is the hardest limit the device has.</span></div></div>
+  </div>
+</section>
+
+<footer>
+  Want the engineering detail? See <a href="/doc/hardware/consumer/electronics">the open-source electronics</a>, <a href="/doc/developer/firmware/Compile_firmware">compiling the firmware</a>, and the firmware source in <code>omi/firmware/omi/</code>. The board pictures are rendered from the KiCad files in <code>omi/hardware/consumer/</code>. Battery and memory figures are estimates from the design, not field measurements.
+</footer>
+</div></div>
+
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const NS='http://www.w3.org/2000/svg';
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- scene ---------- */
+const MODES={
+  live:{badge:['b-live','Live'],cap:'Each block goes straight to the phone, and words appear within seconds.',led:'var(--blue)',phone:'on',note:'listening'},
+  away:{badge:['b-saved','Saved for later'],cap:'No phone in range, so blocks pile up in the pendant\'s memory. The light is red, and that is normal.',led:'#d94338',phone:'gone',note:'out of range'},
+  back:{badge:['b-saved','Catching up'],cap:'The phone is back. New blocks go live while the saved pile empties to the phone in the background.',led:'var(--blue)',phone:'on',note:'syncing saved audio'},
+  quiet:{badge:['b-doze','Napping'],cap:'Nobody is talking. Recording pauses to save battery, and a low-power detector restarts it when sound returns. Quiet sounds can slip through.',led:'var(--blue)',phone:'on',note:'nothing new, which is correct'},
+  deaf:{badge:['b-lost','Lost'],cap:'Still connected, but the phone stopped asking for audio. The pendant throws every block away and the light stays blue. Nobody notices.',led:'var(--blue)',phone:'deaf',note:'connected, not listening'},
+  deafFix:{badge:['b-saved','Saved for later'],cap:'Proposed behaviour (not shipped): "connected but not listening" is treated like "no phone". Blocks are saved, and they sync once the app wakes up.',led:'var(--blue)',phone:'deaf',note:'connected, not listening'},
+};
+let mode='live', mem=0, lines=0, packets=[], lastSpawn=0;
+function effMode(){return mode==='deaf'&&$('#fix').checked?'deafFix':mode}
+function setMode(m){mode=m;$$('.mode[data-m]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m===m));if(m==='live'||m==='back')lines=Math.min(lines,2);drawStatic()}
+function drawStatic(){
+  const M=MODES[effMode()];
+  $('#s-badge').className='badge '+M.badge[0]; $('#s-badge').textContent=M.badge[1]; $('#s-cap').textContent=M.cap;
+  $('#s-pendant').style.color=M.led;
+  $('#s-waves').style.display=mode==='quiet'?'none':''; $('#s-zz').style.display=mode==='quiet'?'':'none';
+  const gone=M.phone==='gone';
+  $('#s-phonegrp').setAttribute('opacity',gone?.25:1);
+  $('#s-phonegrp').setAttribute('transform',gone?'translate(60 0)':'');
+  $('#s-radio').setAttribute('x2',gone?420:650); $('#s-radio').setAttribute('opacity',gone?.35:1);
+  $('#s-radio-lbl').textContent=gone?'Bluetooth: no phone in range':'Bluetooth';
+  $('#s-phonenote').textContent=M.note;
+  const deaf=M.phone==='deaf'; $('#s-bin').setAttribute('opacity',mode==='deaf'&&!$('#fix').checked?1:.35); $('#s-binlbl').setAttribute('opacity',mode==='deaf'&&!$('#fix').checked?1:.35);
+  drawLines(deaf);
+  drawMem();
+}
+function drawMem(){const h=Math.min(35,mem*0.7);$('#s-mem').setAttribute('y',307-h);$('#s-mem').setAttribute('height',h)}
+function drawLines(deaf){
+  const g=$('#s-lines');g.innerHTML='';
+  if(deaf){const t=document.createElementNS(NS,'text');t.setAttribute('x',690);t.setAttribute('y',140);t.setAttribute('text-anchor','middle');t.setAttribute('font-size','11');t.setAttribute('fill','var(--muted)');t.textContent='zzz';g.appendChild(t);return}
+  if(MODES[effMode()].phone==='gone')return;
+  for(let i=0;i<Math.min(lines,9);i++){const r=document.createElementNS(NS,'rect');r.setAttribute('x',668);r.setAttribute('y',98+i*9);r.setAttribute('width',[36,28,40,22,34,30,38,26,32][i]);r.setAttribute('height',4.5);r.setAttribute('rx',2);r.setAttribute('fill',i%3===2?'var(--saved)':'var(--live)');g.appendChild(r)}
+}
+function spawn(route,color){
+  const el=document.createElementNS(NS,'rect');el.setAttribute('width',16);el.setAttribute('height',16);el.setAttribute('rx',3);el.setAttribute('fill',color);
+  $('#s-pk').appendChild(el); packets.push({el,route,t:0,len:route.reduce((a,s,i)=>i?a+Math.hypot(s[0]-route[i-1][0],s[1]-route[i-1][1]):0,0)});
+}
+const R={live:[[180,132],[648,132]],save:[[122,180],[122,262]],bin:[[180,132],[403,132],[403,262]],drain:[[175,282],[240,250],[420,150],[648,150]]};
+function tick(ts){
+  const em=effMode();
+  if(ts-lastSpawn>260){lastSpawn=ts;
+    if(em==='live')spawn(R.live,'var(--live)');
+    else if(em==='away'||em==='deafFix')spawn(R.save,'var(--saved)');
+    else if(em==='deaf')spawn(R.bin,'var(--lost)');
+    else if(em==='back'){spawn(R.live,'var(--live)'); if(mem>0){spawn(R.drain,'var(--saved)');mem=Math.max(0,mem-1.2);drawMem()}}
+  }
+  const speed=0.34;
+  packets=packets.filter(p=>{
+    p.t+=speed*16;let d=p.t,i=1;
+    while(i<p.route.length){const a=p.route[i-1],b=p.route[i],L=Math.hypot(b[0]-a[0],b[1]-a[1]);if(d<=L){p.el.setAttribute('x',a[0]+(b[0]-a[0])*d/L-8);p.el.setAttribute('y',a[1]+(b[1]-a[1])*d/L-8);return true}d-=L;i++}
+    p.el.remove();
+    if(p.route===R.save){mem=Math.min(50,mem+1);drawMem()}
+    if(p.route===R.live||p.route===R.drain){if(Math.random()<.25){lines=(lines+1)%10;drawLines(false)}}
+    return false;
+  });
+  requestAnimationFrame(tick);
+}
+$$('.mode[data-m]').forEach(b=>b.onclick=()=>setMode(b.dataset.m));
+$('#fix').onchange=drawStatic;
+lines=4; drawStatic();
+if(reduce){ // static rendering of the route
+  const r={live:R.live}; [0.2,0.45,0.7].forEach(f=>{const a=R.live[0],b=R.live[1];const el=document.createElementNS(NS,'rect');el.setAttribute('x',a[0]+(b[0]-a[0])*f-8);el.setAttribute('y',a[1]-8);el.setAttribute('width',16);el.setAttribute('height',16);el.setAttribute('rx',3);el.setAttribute('fill','var(--live)');$('#s-pk').appendChild(el)});
+} else requestAnimationFrame(tick);
+
+
+/* ---------- board ---------- */
+const PARTS={{PARTS}};
+const FRIENDLY=[
+ {id:'brain',name:'The brain',refs:['U1'],side:'t',text:'One chip runs everything: it turns sound into blocks, decides where each block goes, and holds the Bluetooth radio. Its software is the "firmware".'},
+ {id:'mics',name:'Two microphones',refs:['MIC1','MIC2'],side:'t',text:'One on each edge, listening through small holes. Their sound is mixed into one track. The left one can also wake the pendant from a nap.'},
+ {id:'lights',name:'Button and lights',refs:['K2','D2','D7'],side:'t',text:'The button sits in the centre with a colour light on each side. Tap, double-tap, or hold for 3 seconds to turn it off.'},
+ {id:'antenna',name:'Antenna contact',refs:['PP1'],side:'t',text:'A tiny spring pin that touches the metal cover, turning the whole case into the Bluetooth antenna.'},
+ {id:'charge',name:'Battery charger',refs:['U15'],side:'t',text:'Charges the battery from the magnetic dock. The battery itself is wired to two pads on the edge.'},
+ {id:'debug',name:'Engineer\'s connector',refs:['J1'],side:'t',text:'A tiny socket for loading firmware by wire. It\'s inside the sealed case, so regular updates go over Bluetooth instead.'},
+ {id:'memory',name:'Memory chip',refs:['U7'],side:'b',text:'512 MB of storage, about a day and a half of audio. This is where blocks go when the phone is away.'},
+ {id:'update',name:'Update chip',refs:['U12'],side:'b',text:'A small separate chip that holds a new firmware version while it downloads, so a failed update can\'t break the pendant.'},
+ {id:'motion',name:'Motion sensor',refs:['U5'],side:'b',text:'Present, but motion features are switched off. Today it only helps the pendant keep track of time while it\'s off.'},
+];
+let bside='t', bsel='brain';
+function bxy(ref){const p=PARTS[ref];if(!p)return null;return [p[2]==='b'?20.98-p[0]:p[0],p[1]]}
+function boardRender(){
+  $('#boarduse').setAttribute('href',bside==='t'?'#board-top':'#board-bot');
+  $('#bt').setAttribute('aria-pressed',bside==='t');$('#bb').setAttribute('aria-pressed',bside==='b');
+  const g=$('#hs');g.innerHTML='';
+  FRIENDLY.filter(f=>f.side===bside).forEach((f,idx)=>{
+    const a=document.createElementNS(NS,'g');a.setAttribute('class','hs'+(f.id===bsel?' on':''));a.setAttribute('tabindex','0');a.setAttribute('role','button');a.setAttribute('aria-label',f.name);
+    let h='';f.refs.forEach(r=>{const c=bxy(r);if(c)h+=`<circle cx="${c[0]}" cy="${c[1]}" r="${r==='U1'||r==='U7'?2:1.1}"/>`});
+    a.innerHTML=h;a.onclick=()=>{bsel=f.id;boardRender()};a.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();bsel=f.id;boardRender()}};
+    g.appendChild(a);
+  });
+  const f=FRIENDLY.find(x=>x.id===bsel);
+  $('#pc-side').textContent=f.side==='t'?'Front of the board':'Back of the board';
+  $('#pc-name').textContent=f.name;$('#pc-text').textContent=f.text;
+  $('#partlist').innerHTML=FRIENDLY.map(x=>`<button type="button" data-id="${x.id}" aria-pressed="${x.id===bsel}">${x.name}</button>`).join('');
+  $$('#partlist button').forEach(b=>b.onclick=()=>{const x=FRIENDLY.find(y=>y.id===b.dataset.id);bsel=x.id;bside=x.side;boardRender()});
+}
+$('#bt').onclick=()=>{bside='t';bsel='brain';boardRender()};
+$('#bb').onclick=()=>{bside='b';bsel='memory';boardRender()};
+boardRender();
+$$('.mini-board').forEach(svg=>{
+  const side=svg.dataset.side;let h=`<use href="${side==='t'?'#board-top':'#board-bot'}"/>`;
+  svg.dataset.refs.split(' ').forEach(r=>{const c=bxy(r);if(c)h+=`<circle class="hl" cx="${c[0]}" cy="${c[1]}" r="${r==='U1'||r==='U7'?2.6:1.8}"/>`});
+  svg.innerHTML=h;
+});
+
+/* ---------- day ---------- */
+const LED={blue:'#2f6fde',red:'#d94338',green:'#2e9e5b',off:'#777'};
+const DAYS={
+ typ:[
+  {t:'7am',h:1,k:'live',n:'Morning, phone in pocket',w:'App running in the background. Blocks go straight to the phone.',led:'blue',app:'Live transcript.'},
+  {t:'8am',h:1,k:'doze',n:'Quiet commute',w:'Nobody is talking, so recording pauses and the mic\'s detector listens. Quiet sounds or the first words of speech can be missed.',led:'blue',app:'Nothing new, which is correct.'},
+  {t:'9am',h:1.5,k:'lost',fk:'saved',n:'Meeting, phone in bag',w:'The iPhone quietly stops the app from asking for audio, but stays connected. The pendant bins every block. This is the real lost meeting.',fw:'With the fix, the pendant saves the blocks instead, and they sync when the app wakes.',led:'blue',app:'No transcript, and no warning.',fapp:'The meeting appears a bit later.'},
+  {t:'10:30',h:1.5,k:'live',n:'User opens the app',w:'Audio flows live again. The meeting does not come back.',fw:'Audio flows live again, and the saved meeting syncs up behind it.',led:'blue',app:'Live again. The meeting is missing.',fapp:'Live again. The meeting fills in.'},
+  {t:'noon',h:1,k:'saved',n:'Lunch, phone on the desk',w:'Out of range, so the pendant saves to memory.',led:'red',app:'Nothing yet.'},
+  {t:'1pm',h:4,k:'live',n:'Back at the desk',w:'Reconnects, goes live, and downloads the saved lunch audio in the background.',led:'blue',app:'Live, and lunch shows up later.'},
+  {t:'5pm',h:3,k:'doze',n:'Quiet evening',w:'Napping through the quiet, which is where the battery savings come from.',led:'blue',app:'Nothing new.'},
+  {t:'8pm',h:1.5,k:'live',n:'Dinner',w:'Streaming normally.',led:'blue',app:'Live transcript.'},
+  {t:'9:30',h:1.5,k:'off',n:'Battery runs out',w:'A talkative day can drain the small battery before bedtime. It switches itself off.',led:'off',app:'Shows as disconnected.'},
+ ],
+ neu:[
+  {t:'7am',h:2,k:'lost',fk:'lost',n:'Worn before setting up the app',w:'No phone, so it tries to save, but its clock has never been set and it won\'t save without a valid one. Everything is dropped.',fw:'The planned fix doesn\'t cover this. It needs its own onboarding or firmware change.',led:'redblink',app:'Not set up yet.'},
+  {t:'9am',h:1,k:'live',n:'Pairs with the app',w:'Once connected, the app sets the clock and live audio starts. From then on saving works, as long as the clock stays valid and storage is healthy.',led:'blue',app:'First transcript.'},
+  {t:'10am',h:2,k:'saved',n:'Phone left at home',w:'Saved to memory.',led:'red',app:'Syncs later.'},
+  {t:'noon',h:4,k:'live',n:'Normal use',w:'Streaming normally.',led:'blue',app:'Live transcript.'},
+  {t:'4pm',h:2,k:'doze',n:'Quiet afternoon',w:'Napping.',led:'blue',app:'Nothing new.'},
+  {t:'6pm',h:5,k:'live',n:'Evening, then on the dock',w:'Works normally, even while charging. On the dock the light alternates green with blue, then goes solid green when full.',led:'green',app:'Live transcript.'},
+ ]};
+const LBL={live:'Live',saved:'Saved for later',lost:'Lost',doze:'Napping',off:'Off'};
+const COL={live:'var(--live)',saved:'var(--saved)',lost:'var(--lost)',doze:'var(--doze)',off:'var(--muted)'};
+let day='typ',sel=2;
+function kind(s){return $('#dfix').checked&&s.fk?s.fk:s.k}
+function led(l){if(l==='redblink')return `<span class="dot blink" style="background:${LED.red}"></span>Blinking red`;if(l==='off')return `<span class="dot" style="background:${LED.off}"></span>Dark`;return `<span class="dot" style="background:${LED[l]}"></span>${{blue:'Blue',red:'Red',green:'Green'}[l]}`}
+function dayRender(){
+  const d=DAYS[day],fix=$('#dfix').checked;
+  $('#sc-typ').setAttribute('aria-pressed',day==='typ');$('#sc-new').setAttribute('aria-pressed',day==='neu');
+  $('#tl').innerHTML=d.map((s,i)=>`<button type="button" class="blk ${kind(s)}" style="flex:${s.h}" aria-pressed="${i===sel}" data-i="${i}" aria-label="${s.t}: ${s.n}, ${LBL[kind(s)]}">${s.t}</button>`).join('');
+  $$('#tl .blk').forEach(b=>b.onclick=()=>{sel=+b.dataset.i;dayRender()});
+  const s=d[sel],k=kind(s),ch=fix&&s.fw;
+  $('#dcard').innerHTML=`<div><span class="badge" style="font-family:var(--f-display);font-weight:600;color:${COL[k]}">${LBL[k]}</span><h3>${s.n}</h3><p style="margin:0">${ch?s.fw:s.w}</p></div><div><div class="mini"><b>The light</b>${led(s.led)}</div><div class="mini"><b>In the app</b>${ch&&s.fapp?s.fapp:s.app}</div></div>`;
+  const tot={live:0,saved:0,lost:0,doze:0};d.forEach(x=>{const kk=kind(x);if(kk in tot)tot[kk]+=x.h});
+  const f=h=>h%1?h.toFixed(1):h;
+  $('#dtot').innerHTML=['live','saved','lost','doze'].map(k=>`<div><b style="color:${COL[k]}">${f(tot[k])} h</b><span>${LBL[k]}</span></div>`).join('');
+}
+$('#sc-typ').onclick=()=>{day='typ';sel=2;dayRender()};
+$('#sc-new').onclick=()=>{day='neu';sel=0;dayRender()};
+$('#dfix').onchange=dayRender;
+dayRender();
+</script>

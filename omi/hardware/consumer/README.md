@@ -4,6 +4,8 @@ Complete hardware design files for the Omi Consumer, the world's leading open-so
 
 Licensed under MIT (see [LICENSE](LICENSE)).
 
+**New to the pendant?** Start with the visual guide, [How the Omi pendant works](https://docs.omi.me/doc/hardware/how-the-pendant-works). Its source is in [`explainer/`](explainer/).
+
 ## What's Inside
 
 ### Electrical (`electrical/`)
