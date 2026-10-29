@@ -169,8 +169,37 @@ class ReadOnlyFirestore:
             for row in rows:
                 if 'found' in row:
                     doc = row['found']
-                    found[doc['name'].split('/documents/', 1)[1]] = decode_dict(doc.get('fields', {}))
+                    found[doc['name'].split('/documents/', 1)[1]] = {
+                        **decode_dict(doc.get('fields', {})),
+                        '_exists': True,
+                    }
         return found
+
+
+def target_shape(target, digest, *, child=True):
+    return {
+        'exists': target.get('_exists', bool(target)),
+        'discarded': target.get('discarded') is True,
+        'deleted': target.get('deleted') is True,
+        'status': state(target.get('status')),
+        'redirect': digest(target.get('sync_merged_into')),
+        'route_owner': (
+            target.get('record_lane_owner')
+            if target.get('record_lane_owner') in {'batch_live_v1', 'batch_sync_v1'}
+            else 'other'
+        ),
+        'custom_stt': target.get('uses_custom_stt') is True,
+        'protection': (
+            target.get('data_protection_level', 'enhanced')
+            if target.get('data_protection_level', 'enhanced') in {'standard', 'enhanced'}
+            else 'other'
+        ),
+        'redirect_state': (
+            target_shape(target['_redirect_state'], digest, child=False)
+            if child and '_redirect_state' in target
+            else None
+        ),
+    }
 
 
 def sanitize(job, entry, owner, target, digest):
@@ -226,28 +255,7 @@ def sanitize(job, entry, owner, target, digest):
         'recovery_attempt': number(job.get('recovery_attempt')),
         'retry_present': job.get('retry_at') is not None,
         'recovery_state': state(job.get('recovery_state')),
-        'target_state': (
-            {
-                'exists': bool(target),
-                'discarded': target.get('discarded') is True,
-                'deleted': target.get('deleted') is True,
-                'status': state(target.get('status')),
-                'redirect': digest(target.get('sync_merged_into')),
-                'route_owner': (
-                    target.get('record_lane_owner')
-                    if target.get('record_lane_owner') in {'batch_live_v1', 'batch_sync_v1'}
-                    else 'other'
-                ),
-                'custom_stt': target.get('uses_custom_stt') is True,
-                'protection': (
-                    target.get('data_protection_level')
-                    if target.get('data_protection_level') in {'standard', 'enhanced'}
-                    else 'other'
-                ),
-            }
-            if target_id
-            else None
-        ),
+        'target_state': target_shape(target, digest) if target_id else None,
     }
 
 
@@ -276,6 +284,14 @@ def capture(output, limit):
         if target_id and job.get('owner_id'):
             target_paths.append(f"users/{job['owner_id']}/conversations/{target_id}")
     targets = client.read(target_paths, TARGET_FIELDS)
+    redirect_paths = {
+        path: path.rsplit('/', 1)[0] + '/' + row['sync_merged_into']
+        for path, row in targets.items()
+        if row.get('sync_merged_into')
+    }
+    redirects = client.read(redirect_paths.values(), TARGET_FIELDS)
+    for path, redirect_path in redirect_paths.items():
+        targets[path]['_redirect_state'] = redirects.get(redirect_path, {})
     for sid, entry in snapshots:
         entry['segment_id'] = sid
         job = jobs.get(prefix + 'jobs/' + sid, {})

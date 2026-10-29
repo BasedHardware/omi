@@ -18,6 +18,100 @@ import sys
 from unittest.mock import patch
 
 
+def geometry_boundaries(units, validate_spans, source_audio, item_type, priority):
+    """Synthetic boundary distribution, labelled separately from captured shapes."""
+    durations = sorted(
+        {
+            unit['duration']
+            for unit in units
+            if type(unit.get('duration')) in (int, float) and 0 < unit['duration'] <= 7200
+        }
+    )
+    samples = (
+        sorted({durations[round((len(durations) - 1) * quantile)] for quantile in (0, 0.25, 0.5, 0.75, 0.9, 0.99, 1)})
+        if durations
+        else []
+    )
+    failures = []
+    cases = expected_rejections = 0
+
+    def check(name, operation, reject=False):
+        nonlocal cases, expected_rejections
+        cases += 1
+        try:
+            operation()
+        except ValueError as error:
+            if reject:
+                expected_rejections += 1
+            else:
+                failures.append({'case': name, 'exception': type(error).__name__})
+        except Exception as error:
+            failures.append({'case': name, 'exception': type(error).__name__})
+        else:
+            if reject:
+                failures.append({'case': name, 'exception': 'MissingExpectedRejection'})
+
+    for index, duration in enumerate(samples):
+        if duration <= 1 / 16000:
+            continue
+        for offset in (-1, 0, 1):
+            end = duration + offset / 16000
+            start = max(0.0, end - min(0.5, duration / 2))
+            payload = {'speech_spans': [{'start': start, 'end': end}], 'speech_seconds': end - start}
+            check(f'vad-{index}-eof-{offset}', lambda payload=payload: validate_spans(payload, duration))
+        end = duration + 0.101
+        payload = {'speech_spans': [{'start': 0.0, 'end': end}], 'speech_seconds': end}
+        check(f'vad-{index}-outside-tolerance', lambda: validate_spans(payload, duration), reject=True)
+        item = item_type(
+            f'boundary-{index}',
+            'synthetic-boundary-owner',
+            1700000000.0,
+            'synthetic:audio',
+            duration,
+            priority,
+            conversation_id='synthetic-boundary-target',
+        )
+        frames = round(duration * 16000)
+        if frames < 1:
+            continue
+        pcm = bytes(4)
+        for name, start, offset, length, reject in (
+            ('last-frame', frames - 1, 1, 1, False),
+            ('first-frame', 0, 0, 1, False),
+            ('past-capture', frames, 0, 1, True),
+            ('past-source', 0, 2, 1, True),
+            ('zero-frames', 0, 0, 0, True),
+        ):
+            ref = {
+                'start_frame': start,
+                'offset_frame': offset,
+                'frames': length,
+                'pcm_sha256': hashlib.sha256(pcm).hexdigest(),
+            }
+            body = (
+                source_audio.MAGIC
+                + json.dumps(
+                    {
+                        'owner_id': item.owner_id,
+                        'conversation_id': item.conversation_id,
+                        'capture_at': item.capture_at,
+                        'references': [ref],
+                        'context': {},
+                    }
+                ).encode()
+            )
+            check(
+                f'slice-{index}-{name}', lambda body=body: source_audio.materialize(body, item, lambda _: pcm), reject
+            )
+    return {
+        'source': 'synthetic-boundaries-from-duration-quantiles',
+        'durations': samples,
+        'cases': cases,
+        'expected_rejections': expected_rejections,
+        'failures': failures,
+    }
+
+
 def replay(corpus, backend):
     # This adapter is fixed across REF and BASE; only product code changes.
     sys.path.insert(0, str(backend))
@@ -284,23 +378,32 @@ def _replay(corpus):
         unit = by_id[active[0]]
         client = StrictFirestore()
         target = unit.get('target_state') or {}
-        if target_id and target.get('exists'):
+
+        def seed(cid, state, *, child=True):
+            if not state.get('exists'):
+                return
             current = {
                 **deepcopy(incoming),
-                'id': target_id,
-                'record_lane_owner': target.get('route_owner', 'batch_sync_v1'),
-                'discarded': target.get('discarded', False),
-                'deleted': target.get('deleted', False),
-                'status': target.get('status'),
+                'id': cid,
+                'record_lane_owner': state.get('route_owner', 'batch_sync_v1'),
+                'discarded': state.get('discarded', False),
+                'deleted': state.get('deleted', False),
+                'status': state.get('status'),
                 'started_at': incoming['started_at'],
                 'transcript_segments': [],
-                'uses_custom_stt': target.get('custom_stt', False),
-                'data_protection_level': target.get('protection', 'enhanced'),
+                'uses_custom_stt': state.get('custom_stt', False),
+                'data_protection_level': state.get('protection', 'enhanced'),
             }
-            if target.get('redirect'):
-                current['sync_merged_into'] = target['redirect']
-                coverage['missing_target_redirect_state'] += 1
-            client.rows[('users', owner, 'conversations', target_id)] = current
+            if state.get('redirect'):
+                current['sync_merged_into'] = state['redirect']
+                if child and state.get('redirect_state') is not None:
+                    seed(state['redirect'], state['redirect_state'], child=False)
+                else:
+                    coverage['missing_target_redirect_state'] += 1
+            client.rows[('users', owner, 'conversations', cid)] = current
+
+        if target_id:
+            seed(target_id, target)
         transaction = client.transaction()
         before_assign(transaction)
         planned = assign_in_transaction(
@@ -386,6 +489,11 @@ def _replay(corpus):
                 asyncio.run(followups())
     finally:
         root.handlers, root.level = old_handlers, old_level
+    boundaries = geometry_boundaries(units, projection_speech_spans, source_audio, WorkItem, Priority.DEEP)
+    for failure in boundaries['failures']:
+        key = f"synthetic_boundary:{failure['exception']}:{failure['case']}"
+        exceptions[key] += 1
+        issues['synthetic-boundaries'].add(key)
     return {
         'schema': 1,
         'units': len(units),
@@ -394,6 +502,7 @@ def _replay(corpus):
         'chain_blocks': blocks,
         'persisted': len(log.persist_order),
         'coverage': dict(sorted(coverage.items())),
+        'boundaries': boundaries,
     }
 
 

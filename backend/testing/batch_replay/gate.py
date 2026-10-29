@@ -38,7 +38,12 @@ def compare(candidate, baseline):
     }
 
 
-def gate(repo, corpus, ref, base, output, allow_incomplete=False):
+GEOMETRY_LIMITS = frozenset(
+    {'missing_decoded_duration', 'missing_source_geometry', 'missing_vad_spans', 'missing_speech_accounting'}
+)
+
+
+def gate(repo, corpus, ref, base, output, allow_incomplete=False, require_captured_geometry=False):
     runner = Path(__file__).with_name('runner.py')
     resolved = {
         label: subprocess.check_output(
@@ -48,6 +53,8 @@ def gate(repo, corpus, ref, base, output, allow_incomplete=False):
     }
     output.mkdir(parents=True, exist_ok=True, mode=0o700)
     reports = {}
+    incidents = {}
+    fixture = runner.with_name('regressions.json')
     for label, sha in resolved.items():
         with tempfile.TemporaryDirectory(prefix=f'batch-replay-{label}-', dir=output) as directory:
             snapshot = Path(directory)
@@ -87,18 +94,69 @@ def gate(repo, corpus, ref, base, output, allow_incomplete=False):
                     timeout=1800,
                 )
             reports[label] = json.loads(report.read_text())
+            if corpus.resolve() == fixture.resolve():
+                incidents[label] = reports[label]
+            else:
+                incident_report = output / f'{label}.incidents.json'
+                with (output / f'{label}.incidents.log').open('wb') as stream:
+                    subprocess.run(
+                        [
+                            sys.executable,
+                            '-I',
+                            str(runner),
+                            '--backend',
+                            str(snapshot / 'backend'),
+                            '--corpus',
+                            str(fixture),
+                            '--output',
+                            str(incident_report.resolve()),
+                        ],
+                        env=environment,
+                        stdout=stream,
+                        stderr=stream,
+                        check=True,
+                        timeout=1800,
+                    )
+                incidents[label] = json.loads(incident_report.read_text())
     diff = compare(reports['candidate'], reports['baseline'])
+    incident_diff = compare(incidents['candidate'], incidents['baseline'])
     coverage = reports['candidate']['coverage']
-    incomplete = {key: count for key, count in coverage.items() if key.startswith(('missing_', 'invalid_')) and count}
+    limits = {key: count for key, count in coverage.items() if key in GEOMETRY_LIMITS and count}
+    incomplete = {
+        key: count
+        for key, count in coverage.items()
+        if key.startswith(('missing_', 'invalid_')) and count and key not in GEOMETRY_LIMITS
+    }
+    if require_captured_geometry:
+        incomplete.update(limits)
+    synthetic_failures = (
+        len(incidents['candidate']['exceptions'])
+        + len(incidents['candidate']['chain_blocks'])
+        + len(reports['candidate']['boundaries']['failures'])
+    )
     result = {
         'schema': 1,
         'refs': resolved,
         'corpus_sha256': hashlib.sha256(corpus.read_bytes()).hexdigest(),
-        'adapter_sha256': hashlib.sha256(Path(__file__).read_bytes() + runner.read_bytes()).hexdigest(),
+        'adapter_sha256': hashlib.sha256(
+            Path(__file__).read_bytes() + runner.read_bytes() + fixture.read_bytes()
+        ).hexdigest(),
         **diff,
+        'synthetic_comparison': incident_diff,
+        'synthetic_failures': synthetic_failures,
+        'coverage_scope': 'firestore-structure+synthetic-boundaries',
+        'coverage_ruling': 'lead:a76a1a',
+        'coverage_limits': limits,
         'incomplete': incomplete,
         'diagnostic_only': allow_incomplete,
-        'verdict': 'FAIL' if diff['regression'] or (incomplete and not allow_incomplete) else 'PASS',
+        'verdict': (
+            'FAIL'
+            if diff['regression']
+            or incident_diff['regression']
+            or synthetic_failures
+            or (incomplete and not allow_incomplete)
+            else 'PASS'
+        ),
     }
     (output / 'gate.json').write_text(json.dumps(result, indent=2, sort_keys=True) + '\n')
     print(
@@ -110,6 +168,9 @@ def gate(repo, corpus, ref, base, output, allow_incomplete=False):
                 'new_chain_blocks': len(diff['new_chain_blocks']),
                 'incomplete': incomplete,
                 'diagnostic_only': allow_incomplete,
+                'synthetic_failures': synthetic_failures,
+                'coverage_scope': result['coverage_scope'],
+                'coverage_limits': limits,
             },
             sort_keys=True,
         )
@@ -125,5 +186,18 @@ if __name__ == '__main__':
     parser.add_argument('--base', required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--allow-incomplete', action='store_true', help='diagnostic comparison; not a deploy receipt')
+    parser.add_argument(
+        '--require-captured-geometry', action='store_true', help='also require observed artifact geometry'
+    )
     args = parser.parse_args()
-    sys.exit(gate(args.repo, args.corpus, args.ref, args.base, args.output, args.allow_incomplete))
+    sys.exit(
+        gate(
+            args.repo,
+            args.corpus,
+            args.ref,
+            args.base,
+            args.output,
+            args.allow_incomplete,
+            args.require_captured_geometry,
+        )
+    )

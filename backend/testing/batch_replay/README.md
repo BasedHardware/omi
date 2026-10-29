@@ -20,9 +20,18 @@ backend/.venv/bin/python -I backend/testing/batch_replay/capture.py \
 `gate.json` contains the SHAs and corpus SHA256, new exception class/site
 counts, per-unit failures and owner chain blocks. `candidate.json` and
 `baseline.json` contain counts, hashed chain heads and coverage. A failure is
-a new exception/site, an exception reaching a new unit, a new chain head
-block, or incomplete input coverage. Reports/logs stay outside Git. Diagnostic
+a new exception/site, an exception reaching a new unit, newly blocked units,
+or unexpected synthetic boundary/incident failures. Reports/logs stay outside Git. Diagnostic
 `gate.py --allow-incomplete` comparisons are explicitly **not deploy receipts**.
+
+The normal gate's approved scope is **Firestore structure + synthetic
+geometry**, per lead ruling `a76a1a` (2026-10-29). It always also runs the
+incident fixture and boundary distributions from duration quantiles: EOF
+minus/exact/plus one sample, out-of-tolerance VAD, first/last valid slices,
+and slices past source/capture or with zero frames. Negative cases must be
+rejected. Captured geometry gaps remain visible in `coverage_limits`, and
+`coverage_scope` names this narrower acceptance. No artifact export or
+decryption is allowed. `gate.py --require-captured-geometry` also fails gaps.
 
 The corpus window is the latest 2,000 committed result records by
 `committed_at`, including already projected and pending/wedged rows. Capture
@@ -43,13 +52,16 @@ allowlist):
   recovery state/attempt, retry presence; VAD receipt captured/speech sample
   counts; binding target/content/sibling IDs and record/native booleans;
   optional numeric decoded duration, speech seconds, VAD/reference geometry.
-- Owners: projection watermark only. Targets: discarded/deleted/status and
-  redirect only. No user document is read.
+- Owners: projection watermark only. Targets and one referenced redirect target:
+  discarded/deleted/status, redirect, route owner and privacy flags. No user
+  document is read.
 
 Stored values are constructed field by field: HMAC identifiers, numeric
 geometry, booleans, and closed state enums. No names, emails, text, URIs,
 raw error strings, exact capture times or GCS generations are persisted.
 No salt, corpus or captured report belongs in Git.
+Delete the private corpus and salt after the program, per David's `a5c4f6`
+ruling. The lead owns the program-end disposal handoff.
 
 ## What runs
 
@@ -78,9 +90,10 @@ empty-recovery result without its artifact proof is incomplete coverage.
 
 **Coverage matters:** production VAD spans/manifests generally live in encrypted
 artifacts, not queue metadata. A Firestore-only corpus can have missing shapes.
-Those fields are counted as missing; only assignment is modelled for such
-units. A passing comparison with missing geometry cannot authorize a deploy.
-Capture must never fetch transcript/audio or invent missing production spans.
+Those fields are counted as missing; assignment uses labelled model inputs
+for such units. A normal PASS establishes the approved structure plus synthetic
+scope. It does not establish correctness on captured VAD/source shapes.
+Capture must never fetch transcript/audio or invent observed production spans.
 
 ## Historical incident check
 
