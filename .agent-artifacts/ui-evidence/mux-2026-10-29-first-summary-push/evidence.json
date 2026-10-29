@@ -14,6 +14,20 @@
       "description": "The other tap path: the app was killed, the same push is opened from the lock screen, and the app launches straight onto the conversation's Summary tab. iPhone 17 Pro simulator.",
       "captured_by": "agent",
       "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-push-after-onboarding-opens-summary.png",
+      "platform": "mobile-ios",
+      "description": "Opened right after a real first-run onboarding (brand-new install, the shipped onboarding with the iOS notification prompt allowed, Home, first conversation processed, phone locked, push opened from the lock screen). Left: the push. Second: main's app lands on Home with the row marked New, because the Home that onboarding swapped in had no registered opener. Right three: this PR's app opens that conversation's Summary tab, three runs in a row. iPhone 17 Pro simulator.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-mobile-ios-localized-first-summary-push.png",
+      "platform": "mobile-ios",
+      "description": "The push for three brand-new owners whose language preference is German, Japanese and Arabic, as the lock screen shows it. Each message was built by this branch's backend from the owner's first processed conversation and delivered with xcrun simctl push. Title from the per-locale copy, body is the conversation title. iPhone 17 Pro simulator.",
+      "captured_by": "agent",
+      "source": "screencapture"
     }
   ]
 }
