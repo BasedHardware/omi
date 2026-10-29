@@ -6,15 +6,21 @@ a new uncached privacy transaction, checks `funded_processing.consent_allows`,
 and asks `sync_allowed` for the batch lane. Execution-admission cohort membership
 never skips those checks. The item carries the initial privacy generation.
 
-A denial remains sticky for the unit, so resolver fallback cannot buy a second
-call. The caller checks the guard after resolution: privacy denial returns the
-existing409 response; consent/funding/read failure returns the existing503 retry
-response. Neither acknowledges success, stages the denied unit, admits a queue
-job, transfers ownership to legacy, nor deletes a source. Earlier staged units
-remain retained for reconciliation. The sync router archives raw capture before
-intake and the client retains its WAL on retry. Cap-held admission treats503 as
-retry and retains its original durable hold. This is not a new accepted-job or
-hold-state protocol.
+The per-unit result distinguishes `PROBE_SKIPPED` from `REFUSED`; both stop
+later probes for that unit. A funding denial or unavailable funding read skips
+optional classification and retains ordinary unknown-language staging/admission.
+It does not strand capped uploads in503 retries or authorize an unfunded model
+call. Existing compute/provider dispatch still applies its own funding fence.
+
+Only privacy, consent or their unavailable authority refuses intake. The caller
+checks the guard after resolution: privacy denial returns the existing409;
+consent/privacy-read failure returns the existing503 retry. These refusals do
+not acknowledge success, stage the denied unit, admit a queue job, transfer
+ownership to legacy, or delete a source. Earlier stages remain for reconciliation.
+The sync router archives raw capture before intake and the client retains its WAL
+on retry. Cap-held admission retains its durable hold on503. A consent reset
+during a funding check is rechecked and refuses rather than being treated as a
+budget-only skip. No accepted-job or hold-state protocol changes.
 
 Declared language invokes no probe and keeps the existing admission behavior.
 The resolver's optional self-probe hook is shared with #24057; callers that do

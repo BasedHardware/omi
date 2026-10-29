@@ -11,7 +11,7 @@ from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from utils import funded_processing, stt_cap_dispatch
 from utils.batch_pipeline import intake
 from utils.batch_pipeline.artifacts import ProtectionContext
-from utils.batch_pipeline.audio import audio_unit
+from utils.batch_pipeline.audio import audio_unit, read_context
 from utils.stt import batch_language
 from utils.sync.legacy_dark import LegacySyncMode
 
@@ -24,7 +24,9 @@ def world(monkeypatch, tmp_path):
     monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-never-sent')
     source = tmp_path / 'retained-wal.bin'
     source.write_bytes(b'synthetic caller custody')
-    state = SimpleNamespace(revoked=False, language='multi', units=1, staged=[], admissions=[], authorizations=[])
+    state = SimpleNamespace(
+        revoked=False, language='multi', units=1, staged=[], staged_contexts=[], admissions=[], authorizations=[]
+    )
 
     def authorize(store, item, *, snapshots):
         state.authorizations.append(item)
@@ -44,6 +46,7 @@ def world(monkeypatch, tmp_path):
 
     def stage(item, body):
         state.staged.append(item)
+        state.staged_contexts.append(read_context(body))
         if getattr(state, 'after_stage', None):
             state.after_stage()
         return 'synthetic://retained-stage'
@@ -116,7 +119,7 @@ def world(monkeypatch, tmp_path):
 
 @pytest.mark.parametrize('execution_enabled', [False, True])
 @pytest.mark.parametrize('self_probe', [False, True])
-async def test_funding_denial_blocks_every_model_even_outside_execution_cohort(
+async def test_capped_upload_is_accepted_without_probes_in_both_execution_cohorts(
     world, monkeypatch, execution_enabled, self_probe
 ):
     from config import stt_cap_dispatch as flags
@@ -125,11 +128,61 @@ async def test_funding_denial_blocks_every_model_even_outside_execution_cohort(
     monkeypatch.setattr(batch_language, 'language_gate_shadow_enabled', lambda: self_probe)
     world.funding.return_value = False
     response = await world.upload()
-    assert response.status_code == 503
+    assert response.status_code == 202
     assert len(world.authorizations) == 2
-    assert world.consent.call_count == world.funding.call_count == 1
+    assert world.consent.call_count == 2 and world.funding.call_count == 1
+    assert not world.model.called and not world.vendor.called
+    assert len(world.staged) == len(world.admissions) == 1
+    assert world.staged_contexts[0]['stt_language'] == 'und'
+    assert world.staged_contexts[0]['stt_language_evidence'] == 'unavailable'
+
+
+async def test_second_probe_funding_denial_accepts_unknown_unit(world, monkeypatch):
+    monkeypatch.setattr(batch_language, 'language_gate_shadow_enabled', lambda: True)
+    world.funding.side_effect = [True, False]
+    response = await world.upload()
+    assert response.status_code == 202
+    assert len(world.authorizations) == 3
+    assert world.model.call_count == 1 and not world.vendor.called
+    assert len(world.staged) == len(world.admissions) == 1
+    assert world.staged_contexts[0]['stt_language'] == 'und'
+
+
+async def test_funding_read_unavailable_skips_probe_without_stranding_upload(world):
+    world.funding.side_effect = RuntimeError('synthetic billing read unavailable')
+    response = await world.upload()
+    assert response.status_code == 202
+    assert not world.model.called and not world.vendor.called
+    assert len(world.staged) == len(world.admissions) == 1
+    assert world.staged_contexts[0]['stt_language'] == 'und'
+
+
+async def test_consent_reset_during_funding_check_still_refuses(world):
+    def reset(*args, **kwargs):
+        world.consent.return_value = False
+        return False
+
+    world.funding.side_effect = reset
+    response = await world.upload()
+    assert response.status_code == 503
+    assert world.consent.call_count == 2
     assert not world.model.called and not world.vendor.called
     assert not world.staged and not world.admissions
+
+
+async def test_capped_first_unit_does_not_bypass_next_unit_privacy(world):
+    world.units = 2
+    world.funding.return_value = False
+
+    def revoke():
+        world.revoked = True
+
+    world.after_stage = revoke
+    response = await world.upload()
+    assert response.status_code == 409
+    assert len(world.staged) == 1 and not world.admissions
+    assert world.staged_contexts[0]['stt_language'] == 'und'
+    assert not world.model.called and not world.vendor.called
 
 
 async def test_consent_revocation_between_self_and_vendor_is_rechecked(world, monkeypatch):
