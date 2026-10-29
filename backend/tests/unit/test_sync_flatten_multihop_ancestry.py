@@ -37,13 +37,13 @@ def world(monkeypatch):
 
 def _ordinary_chain(world):
     """Build e <- h <- g with real ordinary sync intakes (no smart state)."""
-    world.add('h', 33, 2, sync_content_revision=1)
-    world.add('g', 36, 2, sync_content_revision=1)
+    world.add('h', 33, 2, sync_content_revision=1, structured={})
+    world.add('g', 36, 2, sync_content_revision=1, structured={})
     _seed_index(world, 'h', 'g')
     result, _, _ = _assign(world, _sync_chunk('wal-hg', 34, minutes=3))
     assert result['id'] == 'h'
     assert world.raw('g')['sync_merged_into'] == 'h'
-    world.add('e', 29, 2, sync_content_revision=1)
+    world.add('e', 29, 2, sync_content_revision=1, structured={})
     _seed_index(world, 'e')
     result, _, _ = _assign(world, _sync_chunk('wal-eh', 30, minutes=4))
     assert result['id'] == 'e'
