@@ -494,6 +494,59 @@ class AndroidChecks(unittest.TestCase):
                 Mock(), "edit-id", "1.2.3", "23", "New line", status="inProgress", user_fraction=0.25, extra_codes=("23",)
             )
 
+    def test_retained_releases_ride_along_unchanged(self):
+        # tracks.update replaces the whole releases list, so the completed base
+        # under a staged rollout must be carried explicitly — every code and
+        # every metadata field exactly as the server returned it.
+        client = Mock()
+        base = {
+            "name": "1.0.577 (1500)",
+            "versionCodes": ["1500", "1499"],
+            "status": "completed",
+            "releaseNotes": [{"language": "en-US", "text": "Base notes"}],
+            "inAppUpdatePriority": 2,
+        }
+        promote.submit_android(
+            client,
+            "edit-id",
+            "1.2.3",
+            "23",
+            "New line",
+            status="inProgress",
+            user_fraction=0.05,
+            retained_releases=[base],
+        )
+        body = client.edits().tracks().update.call_args.kwargs["body"]
+        self.assertEqual(len(body["releases"]), 2)
+        self.assertEqual(body["releases"][0]["versionCodes"], ["23"])
+        self.assertEqual(body["releases"][0]["status"], "inProgress")
+        self.assertEqual(body["releases"][1], base)
+        client.edits().commit.assert_called_once()
+        # Only completed or draft releases may be retained (one staged release
+        # per PUT), and retained codes must not overlap the written release's.
+        with self.assertRaisesRegex(promote.PromotionError, "completed or draft"):
+            promote.submit_android(
+                Mock(),
+                "edit-id",
+                "1.2.3",
+                "23",
+                "n",
+                status="inProgress",
+                user_fraction=0.05,
+                retained_releases=[{"name": "x", "versionCodes": ["5"], "status": "inProgress", "userFraction": 0.5}],
+            )
+        with self.assertRaisesRegex(promote.PromotionError, "unique"):
+            promote.submit_android(
+                Mock(),
+                "edit-id",
+                "1.2.3",
+                "23",
+                "n",
+                status="inProgress",
+                user_fraction=0.05,
+                retained_releases=[{"name": "x", "versionCodes": ["23"], "status": "completed"}],
+            )
+
     def test_advancing_a_base_release_preserves_its_metadata(self):
         client = Mock()
         staged = {

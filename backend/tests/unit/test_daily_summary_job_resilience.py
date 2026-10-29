@@ -116,6 +116,10 @@ def _loaded_job() -> Iterator[Tuple[ModuleType, ModuleType, FakeRedis, RecordedF
         },
     )
     stubs = {
+        'database.account_deletion_marker': _module(
+            'database.account_deletion_marker',
+            account_deletion_blocks_user_work=lambda _uid: False,
+        ),
         # utils.memory.learned_today -> models.memories -> database._client pulls
         # the Firestore SDK into the import graph; the job never touches it here.
         'database._client': AutoMockModule('database._client'),
@@ -525,6 +529,10 @@ def _loaded_send_path(
         return memories_learned
 
     stubs = {
+        'database.account_deletion_marker': _module(
+            'database.account_deletion_marker',
+            account_deletion_blocks_user_work=lambda _uid: False,
+        ),
         'database._client': AutoMockModule('database._client'),
         'database.conversations': _module(
             'database.conversations',

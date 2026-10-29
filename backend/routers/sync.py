@@ -2,6 +2,7 @@ from database import sync_redrive
 from database.sync_snapshot_resolve_cache import sync_snapshot_resolve_job
 from database.legal_holds import DestructiveOperationInProgress
 from utils.sync import minimal_redrive, redrive_policy, playback_build
+from utils.other.playback_identity import PlaybackSourceChanged
 from utils.capture.coverage_endpoint import router as coverage_router
 from utils.observability.sync_phases import sync_attempt, set_sync_metrics_lane
 import asyncio
@@ -26,6 +27,7 @@ from config.policy import resolve_batch_policy
 from config.policy.ramp import audio_span
 from database.batch_ramp import ramp_admission_policy
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from utils.batch_pipeline.intake import (
     accept_upload as accept_batch_upload,
     get_durable_job_status,
@@ -3206,6 +3208,10 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
         payload = await request.json()
         job_id = payload['job_id']
         uid = payload['uid']
+        if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
+            # Keep the original task and staged capture available for restore or
+            # the final wipe. Acknowledging here would permanently drop it.
+            return JSONResponse(status_code=503, content={'status': 'account_pending_deletion'})
         blob_paths = list(payload['raw_blob_paths'])
         source = ConversationSource(payload.get('source') or 'omi')
         should_lock = bool(payload.get('should_lock', False))
@@ -3700,6 +3706,41 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
 AUDIO_MERGE_DESTRUCTIVE_DEFERRALS_MAX = 6
 
 
+async def _refuse_changed_playback_source(payload: dict, *, fingerprint: str | None = None):
+    """A replaced source cannot be repaired by retrying its old immutable key."""
+    from database.legal_holds import DestructiveOperationInProgress
+
+    try:
+        if fingerprint is None:
+            await run_blocking(
+                storage_executor,
+                mark_playback_unavailable,
+                payload['uid'],
+                payload['conversation_id'],
+                payload['audio_file_id'],
+                'source_changed',
+            )
+        else:
+            await run_blocking(
+                storage_executor,
+                mark_conversation_playback_unavailable,
+                payload['uid'],
+                payload['conversation_id'],
+                fingerprint,
+                'source_changed',
+            )
+    except DestructiveOperationInProgress:
+        deferred = await _defer_merge_for_destructive_operation(payload)
+        if deferred is not None:
+            return deferred
+        return JSONResponse(status_code=503, content={'status': 'retry'})
+    PLAYBACK_WRITES.labels('skipped').inc()
+    logger.warning(
+        'audio_merge: refused reason=source_manifest_changed kind=%s', 'file' if fingerprint is None else 'conversation'
+    )
+    return JSONResponse(status_code=200, content={'status': 'unavailable', 'reason': 'source_manifest_changed'})
+
+
 async def _defer_merge_for_destructive_operation(payload: dict):
     """Return a 200 'deferred' response after re-enqueueing, or None to keep the
     caller's existing retry and final-attempt handling (deferrals exhausted, or
@@ -3745,6 +3786,11 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
     except Exception as e:
         logger.error(f'audio_merge handler: invalid payload, dropping task: {e}')
         return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_payload'})
+
+    task_uid = payload.get('uid')
+    if isinstance(task_uid, str) and await run_blocking(db_executor, account_deletion_blocks_user_work, task_uid):
+        # Cloud Tasks retains the task; a restore can resume processing.
+        return JSONResponse(status_code=503, content={'status': 'account_pending_deletion'})
 
     # The v2 conversation-merge dispatch runs OUTSIDE the payload-parse guard so its
     # transient GCS/Firestore failures (during the doc read, artifact upload, or doc
@@ -3813,6 +3859,8 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
                         else {}
                     ),
                 )
+        except PlaybackSourceChanged:
+            return await _refuse_changed_playback_source(payload)
         except FileNotFoundError:
             logger.warning(f'audio_merge: chunks missing conv={conversation_id} file={audio_file_id}, dropping')
             # Persist the verdict or /urls reports pending forever and clients
@@ -4006,6 +4054,8 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
                     artifact_fingerprint,
                     strict_sources=demand,
                 )
+        except PlaybackSourceChanged:
+            return await _refuse_changed_playback_source(payload, fingerprint=fingerprint)
         except FileNotFoundError:
             logger.warning(f'audio_merge: conversation chunks missing conv={conversation_id}, dropping')
             try:

@@ -27,9 +27,17 @@ def load_tests(loader, tests, pattern):
 class PerfGateTests(unittest.TestCase):
     def test_shell_includes_production_wrappers_and_forces_ios_arm(self):
         code = generate((APP / 'lib/main.dart').read_text())
-        for name in ('WithForegroundTask(', 'MaterialApp(', 'RageClickContextTracker(', 'BluetoothGuidanceListener(', 'TalkerWrapper(', '_performanceTelemetry.attach()'):
+        for name in (
+            'WithForegroundTask(',
+            'MaterialApp(',
+            'RageClickContextTracker(',
+            'BluetoothGuidanceListener(',
+            'SessionReplayScope(',
+            'TalkerWrapper(',
+            '_performanceTelemetry.attach()',
+        ):
             self.assertIn(name, code)
-        self.assertIn('return widget.iosAnalytics', code)
+        self.assertIn('child: widget.iosAnalytics\n', code)
         self.assertNotIn('const AppShell()', code)
 
     def test_new_root_wrapper_is_not_silently_dropped(self):

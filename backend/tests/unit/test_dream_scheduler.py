@@ -15,6 +15,11 @@ from utils.llm.shaped_agent import Turn
 NOW = datetime(2026, 10, 14, tzinfo=timezone.utc)
 
 
+@pytest.fixture(autouse=True)
+def _allow_synthetic_scheduler_owners(monkeypatch):
+    monkeypatch.setattr(dream_scheduler, 'account_deletion_blocks_user_work', lambda _uid: False)
+
+
 def test_due_queue_orders_backlog_and_staleness_independently_of_discovery(monkeypatch):
     monkeypatch.setenv('DREAM_AGENT_ENABLED', 'true')
     db = DreamFirestore()
@@ -42,6 +47,34 @@ def test_due_queue_orders_backlog_and_staleness_independently_of_discovery(monke
     page = dream_scheduler.candidates(limit=5000, now=NOW, firestore_client=db)
     assert page == ['old-backlog', 'due-hunt'] and seen == [db]
     assert not db.rows  # Unattempted work is retained by the queue, never cursor-skipped.
+
+
+def test_pending_deletion_owner_is_removed_from_dream_due_queue(monkeypatch):
+    monkeypatch.setenv('DREAM_AGENT_ENABLED', 'true')
+    db = DreamFirestore()
+    removed = []
+    monkeypatch.setattr(dream_scheduler, 'discover', lambda database, now: None)
+    monkeypatch.setattr(dream_scheduler, 'account_deletion_blocks_user_work', lambda uid: uid == 'pending')
+    monkeypatch.setattr(dream_scheduler, 'remove_due', lambda uid, **_kwargs: removed.append(uid))
+
+    class Query:
+        def where(self, *, filter):
+            return self
+
+        def order_by(self, field):
+            return self
+
+        def limit(self, count):
+            return self
+
+        def stream(self, **_kwargs):
+            return [SimpleNamespace(id='pending'), SimpleNamespace(id='active')]
+
+    original = db.collection
+    monkeypatch.setattr(db, 'collection', lambda name: Query() if name == 'dream_due' else original(name))
+
+    assert dream_scheduler.candidates(limit=10, now=NOW, firestore_client=db) == ['active']
+    assert removed == ['pending']
 
 
 def test_staleness_and_backlog_priority_are_bounded():

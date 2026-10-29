@@ -22,7 +22,7 @@ from utils.batch_pipeline.contracts import (
     ValidationFailureWork,
 )
 from utils.batch_pipeline.merge import OrderedMerge
-from utils.batch_pipeline.errors import FatalGpuError
+from utils.batch_pipeline.errors import FatalGpuError, error_site_field
 from utils.batch_pipeline.compute_client import from_env as compute_client_from_env
 from utils.batch_pipeline.leader import LeaderLease
 from utils.batch_pipeline.metrics import QueueMetrics
@@ -141,7 +141,11 @@ class Pump:
                 async with self._maintenance:
                     await self._maintain()
             except Exception as error:
-                logger.error('event=batch_maintenance outcome=retry exception_type=%s', type(error).__name__)
+                logger.error(
+                    'event=batch_maintenance outcome=retry exception_type=%s%s',
+                    type(error).__name__,
+                    error_site_field(error),
+                )
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=1)
             except asyncio.TimeoutError:
@@ -154,7 +158,11 @@ class Pump:
             except FatalGpuError:
                 raise  # Fatal CUDA requires process replacement, never another pull.
             except Exception as error:
-                logger.error('event=batch_pump outcome=retry exception_type=%s', type(error).__name__)
+                logger.error(
+                    'event=batch_pump outcome=retry exception_type=%s%s',
+                    type(error).__name__,
+                    error_site_field(error),
+                )
                 count = 0
             if not count:
                 try:

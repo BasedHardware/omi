@@ -999,18 +999,6 @@ abstract class AppLocalizations {
   /// **'Auto-Sync'**
   String get autoSync;
 
-  /// Device Settings toggle title: stall alerts for the paired pendant
-  ///
-  /// In en, this message translates to:
-  /// **'Sync Health Alerts'**
-  String get syncHealthAlerts;
-
-  /// Device Settings toggle subtitle under Sync Health Alerts
-  ///
-  /// In en, this message translates to:
-  /// **'Alert if Omi hasn\'t synced recordings for over a day'**
-  String get syncHealthAlertsDescription;
-
   /// Subtitle explaining the Auto-Sync toggle in device settings
   ///
   /// In en, this message translates to:
@@ -16317,6 +16305,48 @@ abstract class AppLocalizations {
   /// **'Other'**
   String get deleteReasonOther;
 
+  /// Interstitial offered when the delete reason is taking a break or technical issues
+  ///
+  /// In en, this message translates to:
+  /// **'Pause Omi Instead?'**
+  String get deletePauseInsteadTitle;
+
+  /// Subtitle of the pause-instead interstitial
+  ///
+  /// In en, this message translates to:
+  /// **'Stop recording and keep everything. Come back anytime.'**
+  String get deletePauseInsteadSubtitle;
+
+  /// First line of the pause-instead card
+  ///
+  /// In en, this message translates to:
+  /// **'Recording stops. Nothing new is captured while you are away.'**
+  String get deletePauseRecordingLine;
+
+  /// Second line of the pause-instead card
+  ///
+  /// In en, this message translates to:
+  /// **'Your memories, conversations and apps are kept exactly as they are.'**
+  String get deletePauseKeepLine;
+
+  /// Pause v1 keeps the session and does not change billing
+  ///
+  /// In en, this message translates to:
+  /// **'You stay signed in. Resume recording anytime. Your subscription continues unchanged.'**
+  String get deletePauseReturnLine;
+
+  /// Primary action of the pause-instead interstitial
+  ///
+  /// In en, this message translates to:
+  /// **'Pause Omi'**
+  String get pauseOmiButton;
+
+  /// Secondary action of the pause-instead interstitial; continues the delete flow
+  ///
+  /// In en, this message translates to:
+  /// **'Continue Deleting'**
+  String get continueDeletingButton;
+
   /// Title on delete-account flow feedback step
   ///
   /// In en, this message translates to:
@@ -16358,6 +16388,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your account cannot be restored — not even by support.'**
   String get deleteConsequenceNoRecovery;
+
+  /// Delete confirmation warning when recordings are still processing or not yet uploaded; deleting loses them
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{You have 1 recording still processing. Deleting now loses it.} other{You have {count} recordings still processing. Deleting now loses them.}}'**
+  String deletePendingRecordingsWarning(int count);
+
+  /// Backend-reported grace window; never infer a duration
+  ///
+  /// In en, this message translates to:
+  /// **'{days, plural, =1{Sign in again within 1 day to restore your account.} other{Sign in again within {days} days to restore your account.}}'**
+  String deleteGracePeriodNotice(int days);
 
   /// Instruction to type DELETE to confirm
   ///
@@ -16880,18 +16922,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Waiting for internet'**
   String get syncCardWaitingInternet;
-
-  /// Local notification title when the sync stall alert fires
-  ///
-  /// In en, this message translates to:
-  /// **'Omi Not Syncing'**
-  String get syncStallAlertTitle;
-
-  /// Local notification body when the sync stall alert fires
-  ///
-  /// In en, this message translates to:
-  /// **'No recordings have synced from your Omi in over {hours} hours. Open Omi to check your device connection.'**
-  String syncStallAlertBody(int hours);
 
   /// Status card: items that need user attention
   ///
@@ -24315,18 +24345,6 @@ abstract class AppLocalizations {
   /// **'Recordings paused'**
   String get activityAttentionStorageSubtitle;
 
-  /// Needs attention row title: no sync activity at all for the stall threshold
-  ///
-  /// In en, this message translates to:
-  /// **'Omi isn\'t syncing'**
-  String get activityAttentionSyncStalledTitle;
-
-  /// Needs attention row subtitle: how long the pipeline has been silent
-  ///
-  /// In en, this message translates to:
-  /// **'No recordings synced for over {hours} hours'**
-  String activityAttentionSyncStalledSubtitle(int hours);
-
   /// Needs attention row title: uploads made no progress long enough to need attention
   ///
   /// In en, this message translates to:
@@ -26012,6 +26030,252 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}'**
   String homeNoiseFoldHide(int count);
+
+  /// Loss warning only for recordings stored on this phone and not uploaded
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 recording hasn\'t uploaded yet. Deleting now loses it — keep the app open to finish uploading.} other{{count} recordings haven\'t uploaded yet. Deleting now loses them — keep the app open to finish uploading.}}'**
+  String deleteLocalRecordingsWarning(int count);
+
+  /// Confirmation subtitle when a backend restore window is available
+  ///
+  /// In en, this message translates to:
+  /// **'Review what happens to your data before you leave.'**
+  String get deleteConfirmGraceSubtitle;
+
+  /// Brief confirmation after capture pause succeeds
+  ///
+  /// In en, this message translates to:
+  /// **'Omi is paused. Resume recording anytime.'**
+  String get deletePauseConfirmation;
+
+  /// Server-held recordings survive the server-reported grace window. Two consecutive plurals: count controls recordings/pronoun; days controls day/days. Preserve the space between clauses and every selector/placeholder position. A one-day backend policy must say 1 day, not 1 days.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 recording is still processing. It is kept with your account for } other{{count} recordings are still processing. They’re kept with your account for }}{days, plural, =1{1 day.} other{{days} days.}}'**
+  String deleteProcessingKept(int count, int days);
+
+  /// Consequence row; days comes from backend
+  ///
+  /// In en, this message translates to:
+  /// **'{days, plural, =1{Your memories and conversations will be erased after 1 day.} other{Your memories and conversations will be erased after {days} days.}}'**
+  String deleteDataErasedAfterDays(int days);
+
+  /// Immediate effect even during grace
+  ///
+  /// In en, this message translates to:
+  /// **'Your apps and integrations disconnect immediately.'**
+  String get deleteAppsDisconnectImmediately;
+
+  /// Immediate cancellation when account deletion is requested
+  ///
+  /// In en, this message translates to:
+  /// **'Your subscription is cancelled immediately.'**
+  String get deleteSubscriptionImmediately;
+
+  /// Title on sign-in into a pending-deletion account
+  ///
+  /// In en, this message translates to:
+  /// **'Your account is pending deletion'**
+  String get deleteRestoreTitle;
+
+  /// Restore decision description
+  ///
+  /// In en, this message translates to:
+  /// **'Changed your mind? Restore your account before it is erased.'**
+  String get deleteRestoreSubtitle;
+
+  /// Restoration benefit row
+  ///
+  /// In en, this message translates to:
+  /// **'Restore your memories and conversations.'**
+  String get deleteRestoreKeepData;
+
+  /// Restoring does not restart billing or reconnect revoked integrations
+  ///
+  /// In en, this message translates to:
+  /// **'Your subscription stays cancelled. Reconnect apps and integrations after restoring.'**
+  String get deleteRestoreBillingNotice;
+
+  /// Restore screen line showing whole days remaining until the backend wipe_at deadline. {days} is the whole-day count rounded down.
+  ///
+  /// In en, this message translates to:
+  /// **'{days, plural, =1{You have 1 day left to restore your account.} other{You have {days} days left to restore your account.}}'**
+  String deleteRestoreDaysRemaining(int days);
+
+  /// Primary action on pending deletion sign-in
+  ///
+  /// In en, this message translates to:
+  /// **'Restore my account'**
+  String get deleteRestoreButton;
+
+  /// Secondary action reveals final erase-now confirmation
+  ///
+  /// In en, this message translates to:
+  /// **'Finish deleting'**
+  String get deleteFinishButton;
+
+  /// Destructive confirmation; sends erase_now true
+  ///
+  /// In en, this message translates to:
+  /// **'Erase my account now'**
+  String get deleteFinishNowButton;
+
+  /// Final warning before erase_now
+  ///
+  /// In en, this message translates to:
+  /// **'This ends the restore window. Your account and its recordings will be permanently erased.'**
+  String get deleteFinishNowWarning;
+
+  /// Restore screen line shown when the backend wipe_at deadline is less than one day away.
+  ///
+  /// In en, this message translates to:
+  /// **'You have less than a day left to restore your account.'**
+  String get deleteRestoreLessThanDayRemaining;
+
+  /// Title of the final confirmation dialog after the user taps Erase my account now on the pending-deletion restore screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Erase Your Account?'**
+  String get deleteFinishNowTitle;
+
+  /// Device Settings toggle title: stall alerts for the paired pendant
+  ///
+  /// In en, this message translates to:
+  /// **'Sync Health Alerts'**
+  String get syncHealthAlerts;
+
+  /// Device Settings toggle subtitle under Sync Health Alerts
+  ///
+  /// In en, this message translates to:
+  /// **'Alert if Omi hasn\'t synced recordings for over a day'**
+  String get syncHealthAlertsDescription;
+
+  /// Local notification title when the sync stall alert fires
+  ///
+  /// In en, this message translates to:
+  /// **'Omi Not Syncing'**
+  String get syncStallAlertTitle;
+
+  /// Local notification body when the sync stall alert fires
+  ///
+  /// In en, this message translates to:
+  /// **'No recordings have synced from your Omi in over {hours} hours. Open Omi to check your device connection.'**
+  String syncStallAlertBody(int hours);
+
+  /// Needs attention row title: no sync activity at all for the stall threshold
+  ///
+  /// In en, this message translates to:
+  /// **'Omi isn\'t syncing'**
+  String get activityAttentionSyncStalledTitle;
+
+  /// Needs attention row subtitle: how long the pipeline has been silent
+  ///
+  /// In en, this message translates to:
+  /// **'No recordings synced for over {hours} hours'**
+  String activityAttentionSyncStalledSubtitle(int hours);
+
+  /// Developer Settings toggle title: show the Daily Recaps row on Home
+  ///
+  /// In en, this message translates to:
+  /// **'Daily Recaps on Home'**
+  String get dailyRecapsOnHome;
+
+  /// Subtitle for the Daily Recaps on Home toggle in Developer Settings
+  ///
+  /// In en, this message translates to:
+  /// **'Show your latest recaps at the top of Home.'**
+  String get dailyRecapsOnHomeDescription;
+
+  /// Title of the sheet, row and button that switch a monthly subscription to the same plan billed yearly
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to Yearly'**
+  String get yearlySwitchTitle;
+
+  /// Plans & Billing row subtitle for an Omi Pro monthly subscriber: the exact yearly saving with its currency, like US$89.97
+  ///
+  /// In en, this message translates to:
+  /// **'Save {amount} a year'**
+  String yearlySwitchRowSavings(String amount);
+
+  /// Home row for an Omi Pro monthly subscriber: yearly billing of the same plan saves this much a year; amount is the exact saving with its currency, like US$89.97
+  ///
+  /// In en, this message translates to:
+  /// **'Save {amount} a year with yearly'**
+  String yearlySwitchHomeTitle(String amount);
+
+  /// Second line of the Home row: nothing about the plan changes except billing once a year
+  ///
+  /// In en, this message translates to:
+  /// **'Same plan, billed once a year'**
+  String get yearlySwitchHomeSubtitle;
+
+  /// Label of the row naming the plan in the switch-to-yearly preview
+  ///
+  /// In en, this message translates to:
+  /// **'Plan'**
+  String get yearlySwitchPlanLabel;
+
+  /// Value of the Plan row in the switch-to-yearly preview, e.g. "Unlimited, $269.91 a year"
+  ///
+  /// In en, this message translates to:
+  /// **'{plan}, {price} a year'**
+  String yearlySwitchPlanValue(String plan, String price);
+
+  /// Label of the amount charged today when switching to yearly
+  ///
+  /// In en, this message translates to:
+  /// **'Due today'**
+  String get yearlySwitchDueToday;
+
+  /// Label of the date the yearly plan renews, in the switch-to-yearly preview
+  ///
+  /// In en, this message translates to:
+  /// **'Renews'**
+  String get yearlySwitchRenews;
+
+  /// Under the switch-to-yearly preview: today’s charge is lower because the unused part of the current month is credited
+  ///
+  /// In en, this message translates to:
+  /// **'Includes credit for the rest of this month.'**
+  String get yearlySwitchCreditNote;
+
+  /// Shown when the card is declined while switching to yearly; nothing changed and the subscription stays monthly
+  ///
+  /// In en, this message translates to:
+  /// **'Payment declined. You\'re still on monthly.'**
+  String get yearlySwitchDeclined;
+
+  /// Shown when switching to yearly fails for another reason; nothing changed
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t switch. You\'re still on monthly.'**
+  String get yearlySwitchFailed;
+
+  /// Shown in the switch-to-yearly sheet when the price preview cannot be loaded; a Try Again button follows
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load your price.'**
+  String get yearlySwitchPreviewFailed;
+
+  /// Shown in the switch-to-yearly sheet when the subscription can no longer switch (for example it was cancelled meanwhile)
+  ///
+  /// In en, this message translates to:
+  /// **'Yearly billing isn\'t available for your plan right now.'**
+  String get yearlySwitchUnavailable;
+
+  /// Success title after switching to yearly billing
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re on yearly'**
+  String get yearlySwitchDoneTitle;
+
+  /// Success line after switching to yearly: what was charged today and when the yearly plan renews
+  ///
+  /// In en, this message translates to:
+  /// **'{amount} charged today. Renews {date}.'**
+  String yearlySwitchDoneBody(String amount, String date);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

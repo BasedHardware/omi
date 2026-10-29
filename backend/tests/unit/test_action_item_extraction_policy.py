@@ -163,6 +163,35 @@ def test_first_processing_writer_uses_the_same_guards(monkeypatch):
     ]
 
 
+@pytest.mark.parametrize('cited', [False, True])
+def test_refresh_keeps_context_grounded_reference_after_canonical_projection(world, monkeypatch, cited):
+    monkeypatch.setenv('ACTION_ITEM_VALIDITY_MODE', 'serve')
+    monkeypatch.setenv('ACTION_ITEMS_V2_MODE', 'serve')
+    monkeypatch.setattr(extraction, 'get_user_full_name', lambda *_: 'Riley Chen')
+    monkeypatch.setattr(
+        pc.conversation_capture,
+        'canonical_conversation_fields',
+        lambda ai, conv: pc.conversation_capture.canonical_fields(ai, conv.id, conv.transcript_segments),
+    )
+    action = SimpleNamespace(
+        **item('Send it'),
+        context='The Q3 deck goes to Morgan',
+        owner_name='Riley Chen',
+        source_segment_ids=['s1'] if cited else [],
+    )
+    conv = SimpleNamespace(
+        id='survivor',
+        is_locked=False,
+        sync_content_revision=1,
+        transcript_segments=[SimpleNamespace(id='s1', start=0, end=1, text='The Q3 deck goes to Morgan')],
+        structured=SimpleNamespace(action_items=[action]),
+    )
+    pc._write_action_items(UID, conv, Trigger.SYNC_UPDATE)
+    rows = [row for path, row in world.store.rows.items() if path[-2] == 'action_items']
+    assert {row['description'] for row in rows} == {'Send report', 'Send it'}
+    assert world.store.rows[task_path('original')]['exported'] is True
+
+
 def test_direct_refresh_entry_filters_raw_extractions(world, monkeypatch):
     monkeypatch.setattr(extraction, 'get_user_full_name', lambda uid: 'Riley Chen')
     conv = SimpleNamespace(id='survivor', sync_content_revision=1)

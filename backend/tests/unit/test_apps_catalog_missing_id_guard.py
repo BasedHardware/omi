@@ -21,6 +21,7 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 import pytest  # noqa: E402
 
 from utils import apps as apps_utils  # noqa: E402
+from routers import apps as apps_router  # noqa: E402
 
 
 class _PassThroughCache:
@@ -67,6 +68,7 @@ def _patch_public_set(monkeypatch, records, *, from_cache):
         monkeypatch.setattr(apps_utils, 'get_public_approved_apps_db', lambda: [dict(r) for r in records])
     monkeypatch.setattr(apps_utils, 'get_apps_installs_count', lambda ids: {})
     monkeypatch.setattr(apps_utils, 'get_apps_reviews', lambda ids: {})
+    monkeypatch.setattr(apps_utils, 'account_deletion_blocks_user_work', lambda _uid: False)
 
 
 def _catalog(monkeypatch, records, *, from_cache=False):
@@ -171,3 +173,75 @@ def test_available_apps_prefers_public_approved_over_stale_private_slice(monkeyp
 
     assert [app.id for app in apps] == ['toggled-1']
     assert apps[0].private is False
+
+
+@pytest.mark.parametrize('listing', ['browse', 'available'])
+@pytest.mark.parametrize('from_cache', [False, True], ids=['from_db', 'from_redis_cache'])
+def test_marketplace_hides_apps_owned_by_pending_deletion_accounts(monkeypatch, listing, from_cache):
+    records = [
+        {**_valid_app('pending-app'), 'uid': 'pending-owner'},
+        {**_valid_app('active-app'), 'uid': 'active-owner'},
+    ]
+    blocked = {'pending-owner'}
+    _patch_public_set(monkeypatch, records, from_cache=from_cache)
+    monkeypatch.setattr(apps_utils, 'account_deletion_blocks_user_work', lambda uid: uid in blocked)
+    if listing == 'browse':
+        apps = apps_utils.get_approved_available_apps()
+    else:
+        monkeypatch.setattr(apps_utils, 'is_tester', lambda uid: False)
+        monkeypatch.setattr(apps_utils, 'get_private_apps', lambda uid: [])
+        monkeypatch.setattr(apps_utils, 'get_public_unapproved_apps', lambda uid: [])
+        monkeypatch.setattr(apps_utils, 'get_apps_for_tester_db', lambda uid: [])
+        monkeypatch.setattr(apps_utils, 'get_enabled_apps', lambda uid: [])
+        apps = apps_utils.get_available_apps('viewer')
+
+    assert [app.id for app in apps] == ['active-app']
+
+
+def test_marketplace_hides_apps_when_creator_deletion_authority_is_unavailable(monkeypatch):
+    _patch_public_set(
+        monkeypatch,
+        [{**_valid_app('creator-app'), 'uid': 'creator'}],
+        from_cache=True,
+    )
+
+    def unavailable(_uid):
+        raise RuntimeError('synthetic marker outage')
+
+    monkeypatch.setattr(apps_utils, 'account_deletion_blocks_user_work', unavailable)
+
+    assert apps_utils.get_approved_available_apps() == []
+
+
+def test_app_detail_cache_is_fenced_by_creator_deletion(monkeypatch):
+    monkeypatch.setattr(
+        apps_utils, 'get_app_cache_by_id', lambda _app_id: {**_valid_app('creator-app'), 'uid': 'creator'}
+    )
+    monkeypatch.setattr(apps_utils, 'account_deletion_blocks_user_work', lambda uid: uid == 'creator')
+
+    assert apps_utils.get_available_app_by_id('creator-app', 'viewer') is None
+
+
+def test_public_catalog_does_not_return_a_stale_route_cache_entry(monkeypatch):
+    monkeypatch.setattr(apps_router, 'get_generic_cache', lambda _key: pytest.fail('route cache must not bypass fence'))
+    monkeypatch.setattr(apps_router, 'get_approved_available_apps', lambda **_kwargs: [])
+    monkeypatch.setattr(apps_router, 'get_capabilities_list', lambda: [])
+    monkeypatch.setattr(apps_router, 'filter_apps_by_capability', lambda apps, _capability: apps)
+    monkeypatch.setattr(apps_router, 'sort_apps_by_installs', lambda apps: apps)
+    monkeypatch.setattr(apps_router, 'paginate_apps', lambda apps, _offset, _limit: apps)
+    monkeypatch.setattr(
+        apps_router,
+        'build_pagination_metadata',
+        lambda total, offset, limit, _category=None: {
+            'total': total,
+            'count': 0,
+            'offset': offset,
+            'limit': limit,
+            'hasNext': False,
+            'hasPrevious': False,
+        },
+    )
+
+    result = apps_router.get_apps_v2(capability='chat', offset=0, limit=20, include_reviews=False)
+
+    assert result['data'] == []

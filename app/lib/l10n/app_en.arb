@@ -560,14 +560,6 @@
     "@autoSync": {
         "description": "Title of the toggle in device settings that controls automatic syncing of offline recordings"
     },
-    "syncHealthAlerts": "Sync Health Alerts",
-    "@syncHealthAlerts": {
-        "description": "Device Settings toggle title: stall alerts for the paired pendant"
-    },
-    "syncHealthAlertsDescription": "Alert if Omi hasn't synced recordings for over a day",
-    "@syncHealthAlertsDescription": {
-        "description": "Device Settings toggle subtitle under Sync Health Alerts"
-    },
     "autoSyncDescription": "Automatically sync offline recordings when your device connects",
     "@autoSyncDescription": {
         "description": "Subtitle explaining the Auto-Sync toggle in device settings"
@@ -10414,6 +10406,34 @@
     "@deleteReasonOther": {
         "description": "Delete reason option"
     },
+    "deletePauseInsteadTitle": "Pause Omi Instead?",
+    "@deletePauseInsteadTitle": {
+        "description": "Interstitial offered when the delete reason is taking a break or technical issues"
+    },
+    "deletePauseInsteadSubtitle": "Stop recording and keep everything. Come back anytime.",
+    "@deletePauseInsteadSubtitle": {
+        "description": "Subtitle of the pause-instead interstitial"
+    },
+    "deletePauseRecordingLine": "Recording stops. Nothing new is captured while you are away.",
+    "@deletePauseRecordingLine": {
+        "description": "First line of the pause-instead card"
+    },
+    "deletePauseKeepLine": "Your memories, conversations and apps are kept exactly as they are.",
+    "@deletePauseKeepLine": {
+        "description": "Second line of the pause-instead card"
+    },
+    "deletePauseReturnLine": "You stay signed in. Resume recording anytime. Your subscription continues unchanged.",
+    "@deletePauseReturnLine": {
+        "description": "Pause v1 keeps the session and does not change billing"
+    },
+    "pauseOmiButton": "Pause Omi",
+    "@pauseOmiButton": {
+        "description": "Primary action of the pause-instead interstitial"
+    },
+    "continueDeletingButton": "Continue Deleting",
+    "@continueDeletingButton": {
+        "description": "Secondary action of the pause-instead interstitial; continues the delete flow"
+    },
     "deleteFlowFeedbackTitle": "Tell us more",
     "@deleteFlowFeedbackTitle": {
         "description": "Title on delete-account flow feedback step"
@@ -10441,6 +10461,24 @@
     "deleteConsequenceNoRecovery": "Your account cannot be restored — not even by support.",
     "@deleteConsequenceNoRecovery": {
         "description": "Delete consequence bullet"
+    },
+    "deletePendingRecordingsWarning": "{count, plural, =1{You have 1 recording still processing. Deleting now loses it.} other{You have {count} recordings still processing. Deleting now loses them.}}",
+    "@deletePendingRecordingsWarning": {
+        "description": "Delete confirmation warning when recordings are still processing or not yet uploaded; deleting loses them",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "deleteGracePeriodNotice": "{days, plural, =1{Sign in again within 1 day to restore your account.} other{Sign in again within {days} days to restore your account.}}",
+    "@deleteGracePeriodNotice": {
+        "description": "Backend-reported grace window; never infer a duration",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
     },
     "deleteTypeToConfirm": "Type DELETE to confirm",
     "@deleteTypeToConfirm": {
@@ -10806,19 +10844,6 @@
     },
     "syncCardProcessing": "Processing on Omi…",
     "syncCardWaitingInternet": "Waiting for internet",
-    "syncStallAlertTitle": "Omi Not Syncing",
-    "@syncStallAlertTitle": {
-        "description": "Local notification title when the sync stall alert fires"
-    },
-    "syncStallAlertBody": "No recordings have synced from your Omi in over {hours} hours. Open Omi to check your device connection.",
-    "@syncStallAlertBody": {
-        "description": "Local notification body when the sync stall alert fires",
-        "placeholders": {
-            "hours": {
-                "type": "int"
-            }
-        }
-    },
     "syncCardNeedsAttention": "{count} recording{count, plural, =1{} other{s}} need attention",
     "@syncCardNeedsAttention": {
         "description": "Status card: items that need user attention",
@@ -16537,19 +16562,6 @@
     "@activityAttentionStorageSubtitle": {
         "description": "Needs attention row subtitle under the storage title: new recordings cannot be saved"
     },
-    "activityAttentionSyncStalledTitle": "Omi isn't syncing",
-    "@activityAttentionSyncStalledTitle": {
-        "description": "Needs attention row title: no sync activity at all for the stall threshold"
-    },
-    "activityAttentionSyncStalledSubtitle": "No recordings synced for over {hours} hours",
-    "@activityAttentionSyncStalledSubtitle": {
-        "description": "Needs attention row subtitle: how long the pipeline has been silent",
-        "placeholders": {
-            "hours": {
-                "type": "int"
-            }
-        }
-    },
     "activityAttentionUploadStalledTitle": "Upload stalled",
     "@activityAttentionUploadStalledTitle": {
         "description": "Needs attention row title: uploads made no progress long enough to need attention"
@@ -18008,6 +18020,229 @@
         "placeholders": {
             "count": {
                 "type": "int"
+            }
+        }
+    },
+    "deleteLocalRecordingsWarning": "{count, plural, =1{1 recording hasn't uploaded yet. Deleting now loses it — keep the app open to finish uploading.} other{{count} recordings haven't uploaded yet. Deleting now loses them — keep the app open to finish uploading.}}",
+    "@deleteLocalRecordingsWarning": {
+        "description": "Loss warning only for recordings stored on this phone and not uploaded",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "deleteConfirmGraceSubtitle": "Review what happens to your data before you leave.",
+    "@deleteConfirmGraceSubtitle": {
+        "description": "Confirmation subtitle when a backend restore window is available"
+    },
+    "deletePauseConfirmation": "Omi is paused. Resume recording anytime.",
+    "@deletePauseConfirmation": {
+        "description": "Brief confirmation after capture pause succeeds"
+    },
+    "deleteProcessingKept": "{count, plural, =1{1 recording is still processing. It is kept with your account for } other{{count} recordings are still processing. They’re kept with your account for }}{days, plural, =1{1 day.} other{{days} days.}}",
+    "@deleteProcessingKept": {
+        "description": "Server-held recordings survive the server-reported grace window. Two consecutive plurals: count controls recordings/pronoun; days controls day/days. Preserve the space between clauses and every selector/placeholder position. A one-day backend policy must say 1 day, not 1 days.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            },
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "deleteDataErasedAfterDays": "{days, plural, =1{Your memories and conversations will be erased after 1 day.} other{Your memories and conversations will be erased after {days} days.}}",
+    "@deleteDataErasedAfterDays": {
+        "description": "Consequence row; days comes from backend",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "deleteAppsDisconnectImmediately": "Your apps and integrations disconnect immediately.",
+    "@deleteAppsDisconnectImmediately": {
+        "description": "Immediate effect even during grace"
+    },
+    "deleteSubscriptionImmediately": "Your subscription is cancelled immediately.",
+    "@deleteSubscriptionImmediately": {
+        "description": "Immediate cancellation when account deletion is requested"
+    },
+    "deleteRestoreTitle": "Your account is pending deletion",
+    "@deleteRestoreTitle": {
+        "description": "Title on sign-in into a pending-deletion account"
+    },
+    "deleteRestoreSubtitle": "Changed your mind? Restore your account before it is erased.",
+    "@deleteRestoreSubtitle": {
+        "description": "Restore decision description"
+    },
+    "deleteRestoreKeepData": "Restore your memories and conversations.",
+    "@deleteRestoreKeepData": {
+        "description": "Restoration benefit row"
+    },
+    "deleteRestoreBillingNotice": "Your subscription stays cancelled. Reconnect apps and integrations after restoring.",
+    "@deleteRestoreBillingNotice": {
+        "description": "Restoring does not restart billing or reconnect revoked integrations"
+    },
+    "deleteRestoreDaysRemaining": "{days, plural, =1{You have 1 day left to restore your account.} other{You have {days} days left to restore your account.}}",
+    "@deleteRestoreDaysRemaining": {
+        "description": "Restore screen line showing whole days remaining until the backend wipe_at deadline. {days} is the whole-day count rounded down.",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "deleteRestoreButton": "Restore my account",
+    "@deleteRestoreButton": {
+        "description": "Primary action on pending deletion sign-in"
+    },
+    "deleteFinishButton": "Finish deleting",
+    "@deleteFinishButton": {
+        "description": "Secondary action reveals final erase-now confirmation"
+    },
+    "deleteFinishNowButton": "Erase my account now",
+    "@deleteFinishNowButton": {
+        "description": "Destructive confirmation; sends erase_now true"
+    },
+    "deleteFinishNowWarning": "This ends the restore window. Your account and its recordings will be permanently erased.",
+    "@deleteFinishNowWarning": {
+        "description": "Final warning before erase_now"
+    },
+    "deleteRestoreLessThanDayRemaining": "You have less than a day left to restore your account.",
+    "@deleteRestoreLessThanDayRemaining": {
+        "description": "Restore screen line shown when the backend wipe_at deadline is less than one day away."
+    },
+    "deleteFinishNowTitle": "Erase Your Account?",
+    "@deleteFinishNowTitle": {
+        "description": "Title of the final confirmation dialog after the user taps Erase my account now on the pending-deletion restore screen."
+    },
+    "syncHealthAlerts": "Sync Health Alerts",
+    "@syncHealthAlerts": {
+        "description": "Device Settings toggle title: stall alerts for the paired pendant"
+    },
+    "syncHealthAlertsDescription": "Alert if Omi hasn't synced recordings for over a day",
+    "@syncHealthAlertsDescription": {
+        "description": "Device Settings toggle subtitle under Sync Health Alerts"
+    },
+    "syncStallAlertTitle": "Omi Not Syncing",
+    "@syncStallAlertTitle": {
+        "description": "Local notification title when the sync stall alert fires"
+    },
+    "syncStallAlertBody": "No recordings have synced from your Omi in over {hours} hours. Open Omi to check your device connection.",
+    "@syncStallAlertBody": {
+        "description": "Local notification body when the sync stall alert fires",
+        "placeholders": {
+            "hours": {
+                "type": "int"
+            }
+        }
+    },
+    "activityAttentionSyncStalledTitle": "Omi isn't syncing",
+    "@activityAttentionSyncStalledTitle": {
+        "description": "Needs attention row title: no sync activity at all for the stall threshold"
+    },
+    "activityAttentionSyncStalledSubtitle": "No recordings synced for over {hours} hours",
+    "@activityAttentionSyncStalledSubtitle": {
+        "description": "Needs attention row subtitle: how long the pipeline has been silent",
+        "placeholders": {
+            "hours": {
+                "type": "int"
+            }
+        }
+    },
+    "dailyRecapsOnHome": "Daily Recaps on Home",
+    "@dailyRecapsOnHome": {
+        "description": "Developer Settings toggle title: show the Daily Recaps row on Home"
+    },
+    "dailyRecapsOnHomeDescription": "Show your latest recaps at the top of Home.",
+    "@dailyRecapsOnHomeDescription": {
+        "description": "Subtitle for the Daily Recaps on Home toggle in Developer Settings"
+    },
+    "yearlySwitchTitle": "Switch to Yearly",
+    "@yearlySwitchTitle": {
+        "description": "Title of the sheet, row and button that switch a monthly subscription to the same plan billed yearly"
+    },
+    "yearlySwitchRowSavings": "Save {amount} a year",
+    "@yearlySwitchRowSavings": {
+        "description": "Plans & Billing row subtitle for an Omi Pro monthly subscriber: the exact yearly saving with its currency, like US$89.97",
+        "placeholders": {
+            "amount": {
+                "type": "String"
+            }
+        }
+    },
+    "yearlySwitchHomeTitle": "Save {amount} a year with yearly",
+    "@yearlySwitchHomeTitle": {
+        "description": "Home row for an Omi Pro monthly subscriber: yearly billing of the same plan saves this much a year; amount is the exact saving with its currency, like US$89.97",
+        "placeholders": {
+            "amount": {
+                "type": "String"
+            }
+        }
+    },
+    "yearlySwitchHomeSubtitle": "Same plan, billed once a year",
+    "@yearlySwitchHomeSubtitle": {
+        "description": "Second line of the Home row: nothing about the plan changes except billing once a year"
+    },
+    "yearlySwitchPlanLabel": "Plan",
+    "@yearlySwitchPlanLabel": {
+        "description": "Label of the row naming the plan in the switch-to-yearly preview"
+    },
+    "yearlySwitchPlanValue": "{plan}, {price} a year",
+    "@yearlySwitchPlanValue": {
+        "description": "Value of the Plan row in the switch-to-yearly preview, e.g. \"Unlimited, $269.91 a year\"",
+        "placeholders": {
+            "plan": {
+                "type": "String"
+            },
+            "price": {
+                "type": "String"
+            }
+        }
+    },
+    "yearlySwitchDueToday": "Due today",
+    "@yearlySwitchDueToday": {
+        "description": "Label of the amount charged today when switching to yearly"
+    },
+    "yearlySwitchRenews": "Renews",
+    "@yearlySwitchRenews": {
+        "description": "Label of the date the yearly plan renews, in the switch-to-yearly preview"
+    },
+    "yearlySwitchCreditNote": "Includes credit for the rest of this month.",
+    "@yearlySwitchCreditNote": {
+        "description": "Under the switch-to-yearly preview: today’s charge is lower because the unused part of the current month is credited"
+    },
+    "yearlySwitchDeclined": "Payment declined. You're still on monthly.",
+    "@yearlySwitchDeclined": {
+        "description": "Shown when the card is declined while switching to yearly; nothing changed and the subscription stays monthly"
+    },
+    "yearlySwitchFailed": "Couldn't switch. You're still on monthly.",
+    "@yearlySwitchFailed": {
+        "description": "Shown when switching to yearly fails for another reason; nothing changed"
+    },
+    "yearlySwitchPreviewFailed": "Couldn't load your price.",
+    "@yearlySwitchPreviewFailed": {
+        "description": "Shown in the switch-to-yearly sheet when the price preview cannot be loaded; a Try Again button follows"
+    },
+    "yearlySwitchUnavailable": "Yearly billing isn't available for your plan right now.",
+    "@yearlySwitchUnavailable": {
+        "description": "Shown in the switch-to-yearly sheet when the subscription can no longer switch (for example it was cancelled meanwhile)"
+    },
+    "yearlySwitchDoneTitle": "You're on yearly",
+    "@yearlySwitchDoneTitle": {
+        "description": "Success title after switching to yearly billing"
+    },
+    "yearlySwitchDoneBody": "{amount} charged today. Renews {date}.",
+    "@yearlySwitchDoneBody": {
+        "description": "Success line after switching to yearly: what was charged today and when the yearly plan renews",
+        "placeholders": {
+            "amount": {
+                "type": "String"
+            },
+            "date": {
+                "type": "String"
             }
         }
     }

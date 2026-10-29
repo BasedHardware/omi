@@ -32,6 +32,7 @@ from config import dream_levers
 from config.dream_session import HEAVY_TOKENS, LIGHT_TOKENS, MEDIUM_TOKENS
 from database import dream_feedback
 from database import dream_scheduler, dream_store, dream_turns, legal_holds, review_store
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from config.rollout_cohorts import warm_rollout_cohorts, RolloutCohortUnavailable
 from database.dream_dirty import dream_writing
 from database.legal_holds import DestructiveOperationInProgress, LegalHoldActive
@@ -931,6 +932,11 @@ async def run_pass(
     dry_run=False,
     bootstrap_tools=None,
 ):
+    if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
+        report = {'status': 'not_admitted', 'reason': 'account_pending_deletion'}
+        if not dry_run:
+            record_pass(report)
+        return report
     if generated_compute_configured() and not await run_blocking(
         db_executor, generated_compute_allowed, uid, 'dream', allow_byok=False
     ):

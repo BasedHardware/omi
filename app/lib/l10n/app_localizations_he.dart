@@ -425,12 +425,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get autoSync => 'סנכרון אוטומטי';
 
   @override
-  String get syncHealthAlerts => 'התראות תקינות סנכרון';
-
-  @override
-  String get syncHealthAlertsDescription => 'התראה אם Omi לא סנכרן הקלטות במשך יותר מיממה';
-
-  @override
   String get autoSyncDescription => 'סנכרן אוטומטית הקלטות לא מקוונות כשהמכשיר שלך מתחבר';
 
   @override
@@ -8658,6 +8652,27 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deleteReasonOther => 'אחר';
 
   @override
+  String get deletePauseInsteadTitle => 'להשהות את Omi במקום למחוק?';
+
+  @override
+  String get deletePauseInsteadSubtitle => 'הפסיקו את ההקלטה ושמרו הכול. אפשר לחזור בכל עת.';
+
+  @override
+  String get deletePauseRecordingLine => 'ההקלטה תיפסק. בזמן היעדרכם לא יוקלט דבר חדש.';
+
+  @override
+  String get deletePauseKeepLine => 'הזיכרונות, השיחות והאפליקציות שלכם יישארו בדיוק כפי שהם.';
+
+  @override
+  String get deletePauseReturnLine => 'תישארו מחוברים. תוכלו לחדש את ההקלטה בכל עת. המינוי שלכם ימשיך ללא שינוי.';
+
+  @override
+  String get pauseOmiButton => 'השהיית Omi';
+
+  @override
+  String get continueDeletingButton => 'המשך המחיקה';
+
+  @override
   String get deleteFlowFeedbackTitle => 'ספר לנו עוד';
 
   @override
@@ -8677,6 +8692,28 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get deleteConsequenceNoRecovery => 'לא ניתן לשחזר את החשבון שלך — אפילו לא על ידי התמיכה.';
+
+  @override
+  String deletePendingRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count הקלטות עדיין בעיבוד. מחיקה עכשיו תגרום לאובדן שלהן.',
+      one: 'יש לכם הקלטה אחת שעדיין בעיבוד. מחיקה עכשיו תגרום לאובדנה.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteGracePeriodNotice(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'התחברו שוב בתוך $days ימים כדי לשחזר את החשבון.',
+      one: 'התחברו שוב בתוך יום אחד כדי לשחזר את החשבון.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get deleteTypeToConfirm => 'הקלד DELETE לאישור';
@@ -8981,14 +9018,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'ממתין לאינטרנט';
-
-  @override
-  String get syncStallAlertTitle => 'Omi לא מסתנכרן';
-
-  @override
-  String syncStallAlertBody(int hours) {
-    return 'לא סונכרנו הקלטות מה-Omi שלך במשך יותר מ-$hours שעות. פתח את Omi כדי לבדוק את חיבור המכשיר.';
-  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13595,14 +13624,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get activityAttentionStorageSubtitle => 'ההקלטות מושהות';
 
   @override
-  String get activityAttentionSyncStalledTitle => 'Omi לא מסתנכרן';
-
-  @override
-  String activityAttentionSyncStalledSubtitle(int hours) {
-    return 'לא סונכרנו הקלטות במשך יותר מ-$hours שעות';
-  }
-
-  @override
   String get activityAttentionUploadStalledTitle => 'ההעלאה נתקעה';
 
   @override
@@ -14624,5 +14645,179 @@ class AppLocalizationsHe extends AppLocalizations {
       one: 'הסתר קטע קצר 1',
     );
     return '$_temp0';
+  }
+
+  @override
+  String deleteLocalRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count הקלטות עדיין לא הועלו. מחיקה עכשיו תגרום לאובדן שלהן — השאירו את האפליקציה פתוחה עד לסיום ההעלאה.',
+      one: 'הקלטה אחת עדיין לא הועלתה. מחיקה עכשיו תגרום לאובדנה — השאירו את האפליקציה פתוחה עד לסיום ההעלאה.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConfirmGraceSubtitle => 'בדקו מה יקרה לנתונים שלכם לפני שתעזבו.';
+
+  @override
+  String get deletePauseConfirmation => 'Omi מושהה. תוכלו לחדש את ההקלטה בכל עת.';
+
+  @override
+  String deleteProcessingKept(int count, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count הקלטות עדיין בעיבוד. הן נשמרות בחשבונך למשך ',
+      one: 'הקלטה אחת עדיין בעיבוד. היא נשמרת בחשבונך למשך ',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days ימים.',
+      one: 'יום אחד.',
+    );
+    return '$_temp0$_temp1';
+  }
+
+  @override
+  String deleteDataErasedAfterDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'הזיכרונות והשיחות שלכם יימחקו לאחר $days ימים.',
+      one: 'הזיכרונות והשיחות שלכם יימחקו לאחר יום אחד.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteAppsDisconnectImmediately => 'החיבור לאפליקציות ולאינטגרציות שלכם ינותק מיד.';
+
+  @override
+  String get deleteSubscriptionImmediately => 'המינוי שלכם יבוטל מיד.';
+
+  @override
+  String get deleteRestoreTitle => 'החשבון שלכם ממתין למחיקה';
+
+  @override
+  String get deleteRestoreSubtitle => 'שיניתם את דעתכם? שחזרו את החשבון לפני שיימחק.';
+
+  @override
+  String get deleteRestoreKeepData => 'שחזרו את הזיכרונות והשיחות שלכם.';
+
+  @override
+  String get deleteRestoreBillingNotice =>
+      'המינוי שלכם יישאר מבוטל. לאחר השחזור, חברו מחדש את האפליקציות והאינטגרציות.';
+
+  @override
+  String deleteRestoreDaysRemaining(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'נותרו לך $days ימים לשחזר את החשבון שלך.',
+      one: 'נותר לך יום אחד לשחזר את החשבון שלך.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteRestoreButton => 'שחזור החשבון שלי';
+
+  @override
+  String get deleteFinishButton => 'סיום המחיקה';
+
+  @override
+  String get deleteFinishNowButton => 'מחקו את החשבון שלי עכשיו';
+
+  @override
+  String get deleteFinishNowWarning => 'פעולה זו תסיים את תקופת השחזור. החשבון שלכם וההקלטות שבו יימחקו לצמיתות.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'נותר לך פחות מיום לשחזר את החשבון שלך.';
+
+  @override
+  String get deleteFinishNowTitle => 'למחוק את החשבון שלך?';
+
+  @override
+  String get syncHealthAlerts => 'התראות תקינות סנכרון';
+
+  @override
+  String get syncHealthAlertsDescription => 'התראה אם Omi לא סנכרן הקלטות במשך יותר מיממה';
+
+  @override
+  String get syncStallAlertTitle => 'Omi לא מסתנכרן';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'לא סונכרנו הקלטות מה-Omi שלך במשך יותר מ-$hours שעות. פתח את Omi כדי לבדוק את חיבור המכשיר.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi לא מסתנכרן';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'לא סונכרנו הקלטות במשך יותר מ-$hours שעות';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'סיכומים יומיים במסך הבית';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'הצג את הסיכומים האחרונים שלך בראש מסך הבית.';
+
+  @override
+  String get yearlySwitchTitle => 'מעבר לתשלום שנתי';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'חסכו $amount בשנה';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'חסכו $amount בשנה עם תשלום שנתי';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'אותה תוכנית, תשלום פעם בשנה';
+
+  @override
+  String get yearlySwitchPlanLabel => 'תוכנית';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price לשנה';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'לתשלום היום';
+
+  @override
+  String get yearlySwitchRenews => 'מתחדש';
+
+  @override
+  String get yearlySwitchCreditNote => 'כולל זיכוי על יתרת החודש.';
+
+  @override
+  String get yearlySwitchDeclined => 'התשלום נדחה. נשארת בתשלום חודשי.';
+
+  @override
+  String get yearlySwitchFailed => 'המעבר נכשל. נשארת בתשלום חודשי.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'לא ניתן היה לטעון את המחיר.';
+
+  @override
+  String get yearlySwitchUnavailable => 'תשלום שנתי אינו זמין כרגע לתוכנית שלך.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'עברת לתשלום שנתי';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'חויבו היום $amount. מתחדש ב-$date.';
   }
 }

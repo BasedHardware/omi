@@ -430,12 +430,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get autoSync => 'Автоматична синхронизация';
 
   @override
-  String get syncHealthAlerts => 'Сигнали за състоянието на синхронизацията';
-
-  @override
-  String get syncHealthAlertsDescription => 'Сигнал, ако Omi не е синхронизирал записи повече от ден';
-
-  @override
   String get autoSyncDescription => 'Автоматично синхронизиране на офлайн записите при свързване на устройството ви';
 
   @override
@@ -8760,6 +8754,28 @@ class AppLocalizationsBg extends AppLocalizations {
   String get deleteReasonOther => 'Друго';
 
   @override
+  String get deletePauseInsteadTitle => 'Да поставите Omi на пауза вместо това?';
+
+  @override
+  String get deletePauseInsteadSubtitle => 'Спрете записването и запазете всичко. Върнете се по всяко време.';
+
+  @override
+  String get deletePauseRecordingLine => 'Записването спира. Докато ви няма, няма да се записва нищо ново.';
+
+  @override
+  String get deletePauseKeepLine => 'Спомените, разговорите и приложенията ви ще останат точно както са.';
+
+  @override
+  String get deletePauseReturnLine =>
+      'Ще останете в профила си. Можете да възобновите записването по всяко време. Абонаментът ви ще продължи без промяна.';
+
+  @override
+  String get pauseOmiButton => 'Поставяне на Omi на пауза';
+
+  @override
+  String get continueDeletingButton => 'Продължаване с изтриването';
+
+  @override
   String get deleteFlowFeedbackTitle => 'Разкажете ни повече';
 
   @override
@@ -8779,6 +8795,28 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get deleteConsequenceNoRecovery => 'Акаунтът ви не може да бъде възстановен — дори от поддръжката.';
+
+  @override
+  String deletePendingRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Все още се обработват $count записа. Ако ги изтриете сега, ще ги загубите.',
+      one: 'Все още се обработва един запис. Ако го изтриете сега, ще го загубите.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteGracePeriodNotice(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Влезте отново до $days дни, за да възстановите профила си.',
+      one: 'Влезте отново до 1 ден, за да възстановите профила си.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get deleteTypeToConfirm => 'Въведете DELETE за потвърждение';
@@ -9083,14 +9121,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'Изчакване на интернет';
-
-  @override
-  String get syncStallAlertTitle => 'Omi не се синхронизира';
-
-  @override
-  String syncStallAlertBody(int hours) {
-    return 'Няма синхронизирани записи от вашия Omi от повече от $hours часа. Отворете Omi, за да проверите връзката на устройството.';
-  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13738,14 +13768,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get activityAttentionStorageSubtitle => 'Записите са спрени';
 
   @override
-  String get activityAttentionSyncStalledTitle => 'Omi не се синхронизира';
-
-  @override
-  String activityAttentionSyncStalledSubtitle(int hours) {
-    return 'Няма синхронизирани записи от повече от $hours часа';
-  }
-
-  @override
   String get activityAttentionUploadStalledTitle => 'Качването е спряно';
 
   @override
@@ -14781,5 +14803,182 @@ class AppLocalizationsBg extends AppLocalizations {
       one: 'Скрий 1 кратък запис',
     );
     return '$_temp0';
+  }
+
+  @override
+  String deleteLocalRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count записа все още не са качени. Ако ги изтриете сега, ще ги загубите — оставете приложението отворено, за да завърши качването.',
+      one:
+          'Един запис все още не е качен. Ако го изтриете сега, ще го загубите — оставете приложението отворено, за да завърши качването.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConfirmGraceSubtitle => 'Прегледайте какво ще се случи с данните ви, преди да си тръгнете.';
+
+  @override
+  String get deletePauseConfirmation => 'Omi е на пауза. Можете да възобновите записването по всяко време.';
+
+  @override
+  String deleteProcessingKept(int count, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count записа все още се обработват. Те ще се пазят в акаунта ви още ',
+      one: '1 запис все още се обработва. Той ще се пази в акаунта ви още ',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days дни.',
+      one: '1 ден.',
+    );
+    return '$_temp0$_temp1';
+  }
+
+  @override
+  String deleteDataErasedAfterDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Спомените и разговорите ви ще бъдат изтрити след $days дни.',
+      one: 'Спомените и разговорите ви ще бъдат изтрити след 1 ден.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteAppsDisconnectImmediately => 'Приложенията и интеграциите ви ще бъдат прекъснати веднага.';
+
+  @override
+  String get deleteSubscriptionImmediately => 'Абонаментът ви ще бъде отменен веднага.';
+
+  @override
+  String get deleteRestoreTitle => 'Профилът ви чака да бъде изтрит';
+
+  @override
+  String get deleteRestoreSubtitle => 'Променихте ли решението си? Възстановете профила си, преди да бъде изтрит.';
+
+  @override
+  String get deleteRestoreKeepData => 'Възстановете спомените и разговорите си.';
+
+  @override
+  String get deleteRestoreBillingNotice =>
+      'Абонаментът ви остава отменен. Свържете отново приложенията и интеграциите след възстановяването.';
+
+  @override
+  String deleteRestoreDaysRemaining(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Имате още $days дни, за да възстановите акаунта си.',
+      one: 'Имате още 1 ден, за да възстановите акаунта си.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteRestoreButton => 'Възстановяване на профила ми';
+
+  @override
+  String get deleteFinishButton => 'Завършване на изтриването';
+
+  @override
+  String get deleteFinishNowButton => 'Изтриване на профила ми сега';
+
+  @override
+  String get deleteFinishNowWarning =>
+      'Това прекратява периода за възстановяване. Профилът ви и записите в него ще бъдат изтрити завинаги.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Имате по-малко от ден, за да възстановите акаунта си.';
+
+  @override
+  String get deleteFinishNowTitle => 'Да изтриете акаунта си?';
+
+  @override
+  String get syncHealthAlerts => 'Сигнали за състоянието на синхронизацията';
+
+  @override
+  String get syncHealthAlertsDescription => 'Сигнал, ако Omi не е синхронизирал записи повече от ден';
+
+  @override
+  String get syncStallAlertTitle => 'Omi не се синхронизира';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Няма синхронизирани записи от вашия Omi от повече от $hours часа. Отворете Omi, за да проверите връзката на устройството.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi не се синхронизира';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Няма синхронизирани записи от повече от $hours часа';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Дневни резюмета в Начало';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Показвай последните резюмета в горната част на Начало.';
+
+  @override
+  String get yearlySwitchTitle => 'Преминете към годишен';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Спестете $amount годишно';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Спестете $amount годишно с годишно плащане';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Същият план, плащане веднъж годишно';
+
+  @override
+  String get yearlySwitchPlanLabel => 'План';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price годишно';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Дължимо днес';
+
+  @override
+  String get yearlySwitchRenews => 'Подновяване';
+
+  @override
+  String get yearlySwitchCreditNote => 'Включва кредит за остатъка от този месец.';
+
+  @override
+  String get yearlySwitchDeclined => 'Плащането е отказано. Оставате на месечно плащане.';
+
+  @override
+  String get yearlySwitchFailed => 'Превключването не успя. Оставате на месечно плащане.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Цената не можа да се зареди.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Годишното плащане в момента не е достъпно за вашия план.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Вече плащате годишно';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Днес са таксувани $amount. Подновяване на $date.';
   }
 }

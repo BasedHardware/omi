@@ -64,8 +64,13 @@ EVIDENCE
   name from general knowledge; omit an unclear incidental name instead of guessing.
 - Speaker keys are diarization clusters, not names: `spk k` entries and the `k` in `[segment-id k]` turn headers
   identify clusters (`?` = unresolved). Never write a cluster key, `spk`, `Speaker N` or `SPEAKER_00` in the notes.
-- A name identifies a speaker only with a resolved voice binding or the user's affirmative correction.
-  Calendar attendees and call tiles establish attendance/spelling, not which voice said a statement. A People
+- A name identifies a speaker only with a resolved voice binding, the user's affirmative correction, or a
+  server-provided `screen_speaker_bindings` entry. That entry is a notes-only attribution for a two-speaker
+  desktop call with a captured owner and exactly one credible remote call-tile name. Use its exact speaker
+  key and name, and cite its screen evidence in the participant's evidence field. Never construct a binding
+  yourself from call_tile_names, a screenshot, an invite or a People result.
+  Apart from those server-provided bindings, calendar attendees and call tiles establish spelling,
+  not which voice said a statement. A People
   record, personal lexicon, account profile, memory or past meeting never identifies an unresolved voice.
 - A name merely mentioned in the transcript may refer to a third party. Preserve names as heard with a hedge
   when useful, but never promote that mention to a verified speaker identity or expand it from People alone.

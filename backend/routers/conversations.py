@@ -15,6 +15,7 @@ import database.hidden_noise_counts as hidden_noise_counts_db
 import database._client as db_client_module
 import database.action_items as action_items_db
 import database.redis_db as redis_db
+from database.account_deletion_marker import account_deletion_blocks_user_work
 import database.users as users_db
 from utils.agent_capabilities.errors import TRANSCRIPT_EDIT_HTTP_ERRORS
 from database import conversation_tombstones
@@ -39,6 +40,7 @@ from models.calendar_context import CalendarMeetingContext
 from utils.free_tier_processing_policy import client_summaries_at_cap_enabled
 from models.client_processing import PROJECTION_FAMILY_FIELDS, ClientProcessing
 from models.conversation import (
+    ProcessConversationRequest,
     BulkAssignSegmentsRequest,
     CalendarEventLink,
     Conversation,
@@ -294,21 +296,6 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
     # Return immediately — still status=processing, no summary yet; the client polls for completion.
     conversation['deferred'] = False
     return conversation
-
-
-class ProcessConversationRequest(BaseModel):
-    calendar_meeting_context: Optional[CalendarMeetingContext] = None
-    # Unvalidated on purpose: a malformed projection must not 422 a finished recording.
-    # Schema, size caps, and transcript-hash binding run in the handler.
-    client_processing: Optional[Any] = Field(
-        default=None,
-        description=(
-            "Untrusted client-authored display projection. Accepted as a raw payload "
-            "and validated in the handler so a malformed projection cannot 422 a "
-            "finished recording. Hash-bound to the persisted transcript. Display only "
-            "— never an input to intelligence."
-        ),
-    )
 
 
 # Provenance is untrusted client input. Bound it before it reaches a log
@@ -2069,6 +2056,14 @@ def get_shared_conversation_by_id(conversation_id: str):
         raise HTTPException(status_code=404, detail="Conversation is private")
 
     try:
+        if account_deletion_blocks_user_work(uid):
+            raise HTTPException(status_code=404, detail="Conversation is private")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail='Shared conversation unavailable') from exc
+
+    try:
         conversation = _get_valid_conversation_by_id(uid, conversation_id)
     except HTTPException:
         raise
@@ -2265,8 +2260,8 @@ async def search_conversations_endpoint(
 
     # Spoken-word hits (optional transcript-chunk index) are merged on page 1 only so
     # Typesense pagination stays stable. Snippets still attach for every hydrated hit.
-    # Over-fetch candidates on page 1 so lock/speaker/date filters can still fill per_page
-    # without permanently dropping displaced Typesense hits that lost the merge race.
+    # Over-fetch candidates on page 1 so lock/speaker/date filters can still fill per_page.
+    # Page 2 starts at the next Typesense page, so the per_page cut below keeps every hit of this one.
     merge_cap = effective_per_page
     if effective_page == 1 and (search_request.query or '').strip():
         merge_cap = min(effective_per_page * 2, 250)
@@ -2324,7 +2319,7 @@ async def search_conversations_endpoint(
         if conversation_matches_speaker(conversation, search_request.speaker_id)
         and conversation_matches_date_range(conversation, start_timestamp, end_timestamp)
     ]
-    conversations = conversations[:effective_per_page]
+    conversations = [c for i, c in enumerate(conversations) if i < effective_per_page or c.get('id') in typesense_ids]
     # Attach grep-style transcript snippets (start/end for seek-to-moment) before list redaction
     # clears segments on locked rows.
     if (search_request.query or '').strip():

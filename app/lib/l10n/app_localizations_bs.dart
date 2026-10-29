@@ -428,12 +428,6 @@ class AppLocalizationsBs extends AppLocalizations {
   String get autoSync => 'Automatska sinkronizacija';
 
   @override
-  String get syncHealthAlerts => 'Upozorenja o stanju sinhronizacije';
-
-  @override
-  String get syncHealthAlertsDescription => 'Upozori me ako Omi nije sinhronizovao snimke više od jednog dana';
-
-  @override
   String get autoSyncDescription => 'Automatski sinkronizuj offline snimke kada se vaš uređaj poveže';
 
   @override
@@ -8746,6 +8740,28 @@ class AppLocalizationsBs extends AppLocalizations {
   String get deleteReasonOther => 'Ostalo';
 
   @override
+  String get deletePauseInsteadTitle => 'Pauzirati Omi umjesto brisanja?';
+
+  @override
+  String get deletePauseInsteadSubtitle => 'Zaustavite snimanje i sačuvajte sve. Vratite se kad god želite.';
+
+  @override
+  String get deletePauseRecordingLine => 'Snimanje se zaustavlja. Dok ste odsutni, ništa novo se neće snimati.';
+
+  @override
+  String get deletePauseKeepLine => 'Vaše uspomene, razgovori i aplikacije ostaju tačno onakvi kakvi jesu.';
+
+  @override
+  String get deletePauseReturnLine =>
+      'Ostat ćete prijavljeni. Snimanje možete nastaviti bilo kada. Vaša pretplata se nastavlja bez promjena.';
+
+  @override
+  String get pauseOmiButton => 'Pauziraj Omi';
+
+  @override
+  String get continueDeletingButton => 'Nastavi brisanje';
+
+  @override
   String get deleteFlowFeedbackTitle => 'Recite nam više';
 
   @override
@@ -8765,6 +8781,28 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get deleteConsequenceNoRecovery => 'Vaš račun se ne može vratiti — čak ni preko podrške.';
+
+  @override
+  String deletePendingRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count snimaka se još obrađuje. Ako ih sada izbrišete, izgubit ćete ih.',
+      one: 'Jedan snimak se još obrađuje. Ako ga sada izbrišete, izgubit ćete ga.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteGracePeriodNotice(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Prijavite se ponovo u roku od $days dana da biste vratili svoj račun.',
+      one: 'Prijavite se ponovo u roku od 1 dana da biste vratili svoj račun.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get deleteTypeToConfirm => 'Upišite DELETE za potvrdu';
@@ -9070,14 +9108,6 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'Čekanje interneta';
-
-  @override
-  String get syncStallAlertTitle => 'Omi se ne sinhronizuje';
-
-  @override
-  String syncStallAlertBody(int hours) {
-    return 'Snimci se nisu sinhronizovali s vašeg Omija više od $hours sati. Otvorite Omi da provjerite vezu uređaja.';
-  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13719,14 +13749,6 @@ class AppLocalizationsBs extends AppLocalizations {
   String get activityAttentionStorageSubtitle => 'Snimke su pauzirane';
 
   @override
-  String get activityAttentionSyncStalledTitle => 'Omi se ne sinhronizuje';
-
-  @override
-  String activityAttentionSyncStalledSubtitle(int hours) {
-    return 'Nijedan snimak nije sinhronizovan više od $hours sati';
-  }
-
-  @override
   String get activityAttentionUploadStalledTitle => 'Otpremanje je zastalo';
 
   @override
@@ -14758,5 +14780,182 @@ class AppLocalizationsBs extends AppLocalizations {
       one: 'Sakrijte 1 kratki snimak',
     );
     return '$_temp0';
+  }
+
+  @override
+  String deleteLocalRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count snimaka još nije otpremljeno. Ako ih sada izbrišete, izgubit ćete ih — ostavite aplikaciju otvorenom da se otpremanje završi.',
+      one:
+          'Jedan snimak još nije otpremljen. Ako ga sada izbrišete, izgubit ćete ga — ostavite aplikaciju otvorenom da se otpremanje završi.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConfirmGraceSubtitle => 'Prije odlaska pogledajte šta će se desiti s vašim podacima.';
+
+  @override
+  String get deletePauseConfirmation => 'Omi je pauziran. Snimanje možete nastaviti bilo kada.';
+
+  @override
+  String deleteProcessingKept(int count, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count snimaka se još obrađuje. Čuvaju se na vašem računu još ',
+      one: '1 snimak se još obrađuje. Čuva se na vašem računu još ',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days dana.',
+      one: '1 dan.',
+    );
+    return '$_temp0$_temp1';
+  }
+
+  @override
+  String deleteDataErasedAfterDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Vaše uspomene i razgovori bit će izbrisani nakon $days dana.',
+      one: 'Vaše uspomene i razgovori bit će izbrisani nakon 1 dana.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteAppsDisconnectImmediately => 'Vaše aplikacije i integracije odmah će se odspojiti.';
+
+  @override
+  String get deleteSubscriptionImmediately => 'Vaša pretplata bit će odmah otkazana.';
+
+  @override
+  String get deleteRestoreTitle => 'Vaš račun čeka na brisanje';
+
+  @override
+  String get deleteRestoreSubtitle => 'Predomislili ste se? Vratite svoj račun prije nego što bude izbrisan.';
+
+  @override
+  String get deleteRestoreKeepData => 'Vratite svoje uspomene i razgovore.';
+
+  @override
+  String get deleteRestoreBillingNotice =>
+      'Vaša pretplata ostaje otkazana. Ponovo povežite aplikacije i integracije nakon vraćanja računa.';
+
+  @override
+  String deleteRestoreDaysRemaining(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Imate $days dana preostalo za oporavak vašeg naloga.',
+      one: 'Imate 1 dan preostalo za oporavak vašeg naloga.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteRestoreButton => 'Vrati moj račun';
+
+  @override
+  String get deleteFinishButton => 'Završi brisanje';
+
+  @override
+  String get deleteFinishNowButton => 'Izbriši moj račun sada';
+
+  @override
+  String get deleteFinishNowWarning =>
+      'Time se završava period za vraćanje računa. Vaš račun i njegovi snimci bit će trajno izbrisani.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Imate manje od jednog dana za oporavak vašeg naloga.';
+
+  @override
+  String get deleteFinishNowTitle => 'Izbrisati vaš nalog?';
+
+  @override
+  String get syncHealthAlerts => 'Upozorenja o stanju sinhronizacije';
+
+  @override
+  String get syncHealthAlertsDescription => 'Upozori me ako Omi nije sinhronizovao snimke više od jednog dana';
+
+  @override
+  String get syncStallAlertTitle => 'Omi se ne sinhronizuje';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Snimci se nisu sinhronizovali s vašeg Omija više od $hours sati. Otvorite Omi da provjerite vezu uređaja.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi se ne sinhronizuje';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Nijedan snimak nije sinhronizovan više od $hours sati';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Dnevni rezimei na početnoj';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Prikaži najnovije rezimee na vrhu početne.';
+
+  @override
+  String get yearlySwitchTitle => 'Pređi na godišnje';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Uštedite $amount godišnje';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Uštedite $amount godišnje uz godišnje plaćanje';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Isti plan, plaćanje jednom godišnje';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Plan';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price godišnje';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Za plaćanje danas';
+
+  @override
+  String get yearlySwitchRenews => 'Obnavlja se';
+
+  @override
+  String get yearlySwitchCreditNote => 'Uključuje kredit za ostatak ovog mjeseca.';
+
+  @override
+  String get yearlySwitchDeclined => 'Plaćanje je odbijeno. I dalje plaćate mjesečno.';
+
+  @override
+  String get yearlySwitchFailed => 'Prelazak nije uspio. I dalje plaćate mjesečno.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Cijena se nije mogla učitati.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Godišnje plaćanje trenutno nije dostupno za vaš plan.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Sada plaćate godišnje';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Danas naplaćeno $amount. Obnavlja se $date.';
   }
 }

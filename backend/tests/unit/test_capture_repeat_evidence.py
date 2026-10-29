@@ -7,7 +7,11 @@ root, epoch, rate and mono channel. Anything missing, malformed, conflicting
 or partial is unproven. All ids and evidence are synthetic.
 """
 
+import copy
+import pytest
+
 from utils.sync.capture_repeat_evidence import capture_covered_indices
+from tests.unit.test_committed_coverage import _envelope
 
 ROOT = 'a1b2c3d4-1111-4222-8333-444455556666'
 OTHER_ROOT = 'b2c3d4e5-2222-4333-8444-555566667777'
@@ -92,6 +96,32 @@ def test_valid_receipt_and_full_live_coverage_still_proves_nothing():
     """A well-formed receipt pair alone is not proof; every index stays kept."""
     incoming = [segment('s0'), segment('s1'), segment('s2')]
     assert covered(incoming) == frozenset()
+
+
+def test_committed_transcript_runs_prove_incoming_source_frames_without_wav_context():
+    live = _envelope(range(100), root=ROOT, epoch=EPOCH, rate=RATE, spf=SPF)
+    assert covered([segment('s0')], live_env=live) == frozenset({0})
+
+
+@pytest.mark.parametrize('mutation', ['receipt_only', 'lifetime', 'conflict', 'partial', 'offset', 'foreign'])
+def test_committed_proof_still_abstains_for_invalid_incomplete_or_mismatched_evidence(mutation):
+    live = _envelope(range(100), root=ROOT, epoch=EPOCH, rate=RATE, spf=SPF)
+    sync = sync_evidence([receipt('s0')])
+    if mutation == 'receipt_only':
+        live.pop('proof')
+    elif mutation == 'lifetime':
+        live['lifetime']['complete'] = False
+    elif mutation == 'conflict':
+        live['conflicts'] = 1
+    elif mutation == 'partial':
+        sync['receipts'][0]['source_end_frame'] = 101
+    elif mutation == 'offset':
+        sync['receipts'][0]['source_start_offset'] = SPF
+    else:
+        sync['receipts'][0]['capture_root'] = OTHER_ROOT
+    before = copy.deepcopy((live, sync))
+    assert covered([segment('s0')], sync_env=sync, live_env=live) == frozenset()
+    assert (live, sync) == before
 
 
 def test_no_evidence_or_wrong_envelope_never_proves():

@@ -8,6 +8,7 @@ isolated Redis, Firestore, and filesystem-backed staged blobs.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import time
 import wave
@@ -240,8 +241,10 @@ elif ROLE == 'worker':
     _post_ledger_failures_remaining = _nonnegative_int('OMI_SYNC_STACK_POST_LEDGER_FAILURES')
     _cleanup_failures_remaining = _nonnegative_int('OMI_SYNC_STACK_CLEANUP_FAILURES')
     _process_persistence_fenced = os.getenv('OMI_SYNC_STACK_PROCESS_PERSISTENCE_FENCED', 'false').lower() == 'true'
-    _gate_dir_raw = os.getenv('OMI_SYNC_STACK_PROCESS_GATE_DIR', '').strip()
-    _gate_dir = Path(_gate_dir_raw) if _gate_dir_raw else None
+    _stt_gate_dir_raw = os.getenv('OMI_SYNC_STACK_STT_GATE_DIR', '').strip()
+    _stt_gate_dir = Path(_stt_gate_dir_raw) if _stt_gate_dir_raw else None
+    _worker_pipeline_gate_dir_raw = os.getenv('OMI_SYNC_STACK_WORKER_PIPELINE_GATE_DIR', '').strip()
+    _worker_pipeline_gate_dir = Path(_worker_pipeline_gate_dir_raw) if _worker_pipeline_gate_dir_raw else None
 
     def _job_id_from_path(path: str) -> str:
         # Production paths are syncing/<uid>/<job-id>/<file>; never record path.
@@ -260,6 +263,9 @@ elif ROLE == 'worker':
     def _local_prerecorded(audio_url: str, *, return_language: bool = False, **_kwargs: Any) -> Any:
         """Deterministic STT leaf; it emits no transcript into evidence."""
         job_id = audio_url.rsplit('/', 1)[-1]
+        # The upload worker owns paid STT. Full note processing can be held
+        # for merge settlement and no longer runs inside this worker lease.
+        _wait_for_stt_gate(job_id)
         write_event('providers', {'event': 'stt_completed', 'job_id': job_id, 'word_count': 1})
         words = [
             {
@@ -270,19 +276,35 @@ elif ROLE == 'worker':
         ]
         return (words, 'en') if return_language else words
 
-    def _wait_for_process_gate(conversation_id: str) -> None:
-        if _gate_dir is None:
+    def _wait_for_stt_gate(job_id: str) -> None:
+        if _stt_gate_dir is None:
             return
-        _gate_dir.mkdir(parents=True, exist_ok=True)
-        entered = _gate_dir / 'entered'
-        release = _gate_dir / 'release'
+        _stt_gate_dir.mkdir(parents=True, exist_ok=True)
+        entered = _stt_gate_dir / 'entered'
+        release = _stt_gate_dir / 'release'
         entered.write_text('entered', encoding='utf-8')
-        write_event('providers', {'event': 'processor_gate_entered', 'conversation_id': conversation_id})
+        write_event('providers', {'event': 'stt_gate_entered', 'job_id': job_id})
         deadline = time.monotonic() + 15.0
         while not release.exists():
             if time.monotonic() >= deadline:
-                raise RuntimeError('controlled Sync processor gate timed out')
+                raise RuntimeError('controlled Sync STT gate timed out')
             time.sleep(0.01)
+
+    async def _wait_for_worker_pipeline_gate() -> None:
+        if _worker_pipeline_gate_dir is None:
+            return
+        _worker_pipeline_gate_dir.mkdir(parents=True, exist_ok=True)
+        entered = _worker_pipeline_gate_dir / 'entered'
+        release = _worker_pipeline_gate_dir / 'release'
+        entered.write_text('entered', encoding='utf-8')
+        write_event('worker', {'event': 'worker_pipeline_gate_entered'})
+        # Hold after worker lease acquisition and before pipeline work so the
+        # concurrent-delivery scenario is independent of transcript content.
+        deadline = time.monotonic() + 60.0
+        while not release.exists():
+            if time.monotonic() >= deadline:
+                raise RuntimeError('controlled Sync worker pipeline gate timed out')
+            await asyncio.sleep(0.01)
 
     def _local_process_conversation(
         uid: str,
@@ -299,7 +321,7 @@ elif ROLE == 'worker':
         conversation_id = getattr(conversation, 'id', None)
         if not isinstance(conversation_id, str) or not conversation_id:
             raise ValueError('Sync stack processor requires a durable conversation id')
-        _wait_for_process_gate(conversation_id)
+        write_event('providers', {'event': 'conversation_processor_entered', 'conversation_id': conversation_id})
         effective_language = language_code or language or 'en'
         started_at = getattr(conversation, 'started_at', None) or datetime.now(timezone.utc)
         finished_at = getattr(conversation, 'finished_at', None) or started_at
@@ -350,6 +372,7 @@ elif ROLE == 'worker':
             _worker_failures_remaining -= 1
             write_event('worker', {'event': 'intentional_worker_failure'})
             raise RuntimeError('controlled Sync worker execution failure')
+        await _wait_for_worker_pipeline_gate()
         return await _original_run_full_pipeline(*args, **kwargs)
 
     async def _delete_staged_blobs_with_controlled_failure(blob_paths: list[str], **custody) -> None:

@@ -422,12 +422,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get autoSync => '自動同期';
 
   @override
-  String get syncHealthAlerts => '同期状態の通知';
-
-  @override
-  String get syncHealthAlertsDescription => 'Omi の録音が 1 日以上同期されていないときに通知します';
-
-  @override
   String get autoSyncDescription => 'デバイスの接続時にオフライン録音を自動的に同期します';
 
   @override
@@ -8601,6 +8595,27 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deleteReasonOther => 'その他';
 
   @override
+  String get deletePauseInsteadTitle => '代わりにOmiを一時停止しますか？';
+
+  @override
+  String get deletePauseInsteadSubtitle => '録音を停止して、すべてをそのまま残します。いつでも戻れます。';
+
+  @override
+  String get deletePauseRecordingLine => '録音は停止します。不在中に新しい内容が記録されることはありません。';
+
+  @override
+  String get deletePauseKeepLine => '記憶、会話、アプリはすべてそのまま保持されます。';
+
+  @override
+  String get deletePauseReturnLine => 'サインインしたままになります。録音はいつでも再開できます。サブスクリプションは変更なく継続します。';
+
+  @override
+  String get pauseOmiButton => 'Omiを一時停止';
+
+  @override
+  String get continueDeletingButton => '削除を続ける';
+
+  @override
   String get deleteFlowFeedbackTitle => 'もう少し聞かせてください';
 
   @override
@@ -8620,6 +8635,28 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get deleteConsequenceNoRecovery => 'アカウントは復元できません — サポートでも対応できません。';
+
+  @override
+  String deletePendingRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '処理中の録音が$count件あります。今削除すると失われます。',
+      one: '処理中の録音が1件あります。今削除すると失われます。',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteGracePeriodNotice(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'アカウントを復元するには、$days日以内にもう一度サインインしてください。',
+      one: 'アカウントを復元するには、1日以内にもう一度サインインしてください。',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get deleteTypeToConfirm => '確認のためにDELETEと入力してください';
@@ -8920,14 +8957,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'インターネット接続を待機中';
-
-  @override
-  String get syncStallAlertTitle => 'Omi が同期されていません';
-
-  @override
-  String syncStallAlertBody(int hours) {
-    return '$hours 時間以上、Omi から録音が同期されていません。端末の接続を確認するには Omi を開いてください。';
-  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13500,14 +13529,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get activityAttentionStorageSubtitle => '録音を一時停止中';
 
   @override
-  String get activityAttentionSyncStalledTitle => 'Omi が同期されていません';
-
-  @override
-  String activityAttentionSyncStalledSubtitle(int hours) {
-    return '$hours 時間以上、録音が同期されていません';
-  }
-
-  @override
   String get activityAttentionUploadStalledTitle => 'アップロードが停止しています';
 
   @override
@@ -14522,5 +14543,178 @@ class AppLocalizationsJa extends AppLocalizations {
       one: '短いクリップ1件を非表示にする',
     );
     return '$_temp0';
+  }
+
+  @override
+  String deleteLocalRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '未アップロードの録音が$count件あります。今削除すると失われます — アップロードが完了するまでアプリを開いたままにしてください。',
+      one: '未アップロードの録音が1件あります。今削除すると失われます — アップロードが完了するまでアプリを開いたままにしてください。',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConfirmGraceSubtitle => '利用を終了する前に、データがどうなるか確認してください。';
+
+  @override
+  String get deletePauseConfirmation => 'Omiを一時停止しました。録音はいつでも再開できます。';
+
+  @override
+  String deleteProcessingKept(int count, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件の録音を処理中です。アカウントに ',
+      one: '録音1件を処理中です。アカウントに ',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days日間保存されます。',
+      one: '1日間保存されます。',
+    );
+    return '$_temp0$_temp1';
+  }
+
+  @override
+  String deleteDataErasedAfterDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '記憶と会話は$days日後に消去されます。',
+      one: '記憶と会話は1日後に消去されます。',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteAppsDisconnectImmediately => 'アプリと連携機能はすぐに切断されます。';
+
+  @override
+  String get deleteSubscriptionImmediately => 'サブスクリプションはすぐに解約されます。';
+
+  @override
+  String get deleteRestoreTitle => 'アカウントは削除待ちです';
+
+  @override
+  String get deleteRestoreSubtitle => '気が変わりましたか？消去される前にアカウントを復元してください。';
+
+  @override
+  String get deleteRestoreKeepData => '記憶と会話を復元します。';
+
+  @override
+  String get deleteRestoreBillingNotice => 'サブスクリプションは解約されたままです。復元後にアプリと連携機能を再接続してください。';
+
+  @override
+  String deleteRestoreDaysRemaining(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'アカウントを復元できるのは残り$days日です。',
+      one: 'アカウントを復元できるのは残り1日です。',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteRestoreButton => 'アカウントを復元';
+
+  @override
+  String get deleteFinishButton => '削除を完了';
+
+  @override
+  String get deleteFinishNowButton => '今すぐアカウントを消去';
+
+  @override
+  String get deleteFinishNowWarning => 'これにより復元期間が終了します。アカウントと録音は完全に消去されます。';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'アカウントを復元できるのは残り1日未満です。';
+
+  @override
+  String get deleteFinishNowTitle => 'アカウントを完全に削除しますか？';
+
+  @override
+  String get syncHealthAlerts => '同期状態の通知';
+
+  @override
+  String get syncHealthAlertsDescription => 'Omi の録音が 1 日以上同期されていないときに通知します';
+
+  @override
+  String get syncStallAlertTitle => 'Omi が同期されていません';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return '$hours 時間以上、Omi から録音が同期されていません。端末の接続を確認するには Omi を開いてください。';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi が同期されていません';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return '$hours 時間以上、録音が同期されていません';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'ホームの日次の要約';
+
+  @override
+  String get dailyRecapsOnHomeDescription => '最新の要約をホームの上部に表示します。';
+
+  @override
+  String get yearlySwitchTitle => '年払いに切り替える';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return '年間$amountお得';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return '年払いで年間$amountお得';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => '同じプランを年1回のお支払いで';
+
+  @override
+  String get yearlySwitchPlanLabel => 'プラン';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan、年額$price';
+  }
+
+  @override
+  String get yearlySwitchDueToday => '本日のお支払い';
+
+  @override
+  String get yearlySwitchRenews => '次回更新';
+
+  @override
+  String get yearlySwitchCreditNote => '今月の残り期間分のクレジットを含みます。';
+
+  @override
+  String get yearlySwitchDeclined => 'お支払いが拒否されました。月払いのままです。';
+
+  @override
+  String get yearlySwitchFailed => '切り替えられませんでした。月払いのままです。';
+
+  @override
+  String get yearlySwitchPreviewFailed => '料金を読み込めませんでした。';
+
+  @override
+  String get yearlySwitchUnavailable => '現在、お使いのプランでは年払いをご利用いただけません。';
+
+  @override
+  String get yearlySwitchDoneTitle => '年払いに切り替わりました';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return '本日$amountを請求しました。次回更新は$dateです。';
   }
 }

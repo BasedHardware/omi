@@ -6,6 +6,7 @@ import asyncio
 import logging
 from threading import Event
 import time
+from datetime import datetime, timezone
 from typing import Any, Callable, Literal, TypedDict, cast
 
 from firebase_admin import auth as firebase_auth
@@ -21,7 +22,10 @@ from database.legal_holds import (
 from database.dev_api_key import delete_dev_key, get_dev_keys_for_user
 from database.mcp_api_key import delete_mcp_key, get_mcp_keys_for_user
 from database.mcp_oauth import delete_user_oauth_credentials
+from database import account_deletion_grace as deletion_grace_db
+from database import account_deletion_marker as deletion_marker_db
 from database import users as users_db
+from database import processing_backlog as processing_backlog_db
 from database.action_items import get_action_item_ids
 from database.conversations import get_conversation_ids, get_conversation_photos
 from database.screen_activity import get_screen_activity_ids
@@ -54,6 +58,12 @@ from utils.retrieval.frame_request_storage import (
 from utils.twilio_service import delete_user_caller_ids_strict as delete_user_caller_ids
 from utils.integration_telemetry import emit_posthog_event
 from services.users.agent_vm_account_cleanup import delete_agent_vm_for_account
+from config.account_deletion_grace import (
+    account_deletion_grace_enabled,
+    account_deletion_grace_window,
+    account_deletion_grace_window_days,
+)
+from utils.sync.cap_hold import read_held_audio_summary
 
 logger = logging.getLogger(__name__)
 
@@ -384,6 +394,9 @@ def background_wipe_user_data(
         # leave an account usable and recoverable.
         current_operation = 'billing_subscription'
         heartbeat()
+        # A late checkout/webhook could have created a subscription after the
+        # grace admission check. Re-read Stripe at the irreversible boundary,
+        # even when admission recorded an earlier successful cancellation.
         _cancel_subscription_for_account_deletion(uid)
         current_operation = 'agent_vm'
         heartbeat()
@@ -421,22 +434,12 @@ def background_wipe_user_data(
         wipe_result = users_db.delete_user_data(uid)
         if wipe_result.get('status') != 'ok':
             raise RuntimeError('authoritative Firestore user-data wipe did not complete')
-        # Best-effort Typesense conversation purge AFTER the wipe: while the
-        # Firebase extension still owns production indexing, account deletion
-        # must not fail closed on Typesense. The purge is userId-filter-based,
-        # so it stays executable (and retryable) even with the user document
-        # gone; a failure here never changes the wipe outcome.
+        # Typesense is a serving surface, so its owner purge is part of
+        # completion. The filter remains executable after Firestore deletion,
+        # and propagating failures leaves the durable wipe retryable.
         current_operation = 'conversation_typesense_purge'
         heartbeat()
-        try:
-            from utils.conversations.typesense_index import purge_user_conversation_index
-
-            purge_user_conversation_index(uid)
-        except Exception as purge_err:
-            logger.error(
-                f'delete_account post-wipe conversation typesense purge failed for {uid}: '
-                f'{sanitize(str(purge_err))}'
-            )
+        purge_user_conversation_index(uid)
         current_operation = 'memory_maintenance_registry'
         heartbeat()
         _delete_memory_maintenance_registry(uid)
@@ -590,21 +593,96 @@ def _cancel_subscription_for_account_deletion(uid: str) -> None:
         raise DeletionBillingError(subscription_id, error) from error
 
 
-def start_account_deletion(uid: str, reason: str | None = None, reason_details: str | None = None) -> dict[str, str]:
+def purge_user_conversation_index(uid: str) -> None:
+    """Remove Typesense's owner documents; failures keep the wipe retryable."""
+    from utils.conversations.typesense_index import purge_user_conversation_index as purge
+
+    purge(uid, raise_on_failure=True)
+
+
+def _run_immediate_deletion_steps(uid: str) -> None:
+    """Cancel billing and revoke owner credentials before accepting deletion."""
+    failures: list[Exception] = []
+    try:
+        _cancel_subscription_for_account_deletion(uid)
+    except Exception as error:
+        failures.append(error)
+    try:
+        firebase_auth.revoke_refresh_tokens(uid)
+    except firebase_auth.UserNotFoundError:
+        logger.info('delete_account immediate revocation observed Firebase Auth user already absent')
+    except Exception as error:
+        failures.append(error)
+    try:
+        delete_account_credentials(uid)
+    except Exception as error:
+        failures.append(error)
+    if failures:
+        raise failures[0]
+
+
+def _account_deletion_result(status: str, wipe_at: datetime | None = None) -> dict[str, Any]:
+    return {
+        'status': 'ok',
+        'message': 'Account deletion started',
+        'pending_deletion': status == 'pending_deletion',
+        'wipe_at': wipe_at if status == 'pending_deletion' else None,
+    }
+
+
+def _summary_count(value: Any) -> int:
+    try:
+        return max(0, int(float(value or 0)))
+    except (TypeError, ValueError, OverflowError):
+        return 0
+
+
+def _deletion_due_at(value: Any) -> datetime | None:
+    if not isinstance(value, datetime):
+        return None
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+
+def start_account_deletion(
+    uid: str,
+    reason: str | None = None,
+    reason_details: str | None = None,
+    *,
+    grace: bool = False,
+    erase_now: bool = False,
+) -> dict[str, Any]:
     # Admission is also fenced before creating a durable deletion intent. This
     # keeps a newly-held account from entering the destructive queue at all;
     # the worker repeats the check because holds can change while queued.
     assert_account_deletion_permitted(uid)
-    # Persist the authoritative, actionable intent before dispatch. This state
-    # is enough for reconciliation to recover a failed queue handoff, while the
-    # Cloud Tasks handler claim fences all destructive work. If either write or
-    # dispatch fails, no Firebase Auth or billing mutation has happened.
-    wipe_intent = _retry_firestore_write(
-        lambda: users_db.mark_user_deletion_wipe_intent(uid),
-        uid=uid,
-        fail_msg='Failed to persist deletion-wipe intent',
-        on_failure='raise',
-    )
+    # Persist the authoritative intent before billing/session revocation. Grace
+    # markers are not dispatchable until the stored deadline and the immediate
+    # action receipt are both present. Immediate requests keep the established
+    # durable queue claim and worker as the destructive executor.
+    grace_window = account_deletion_grace_window()
+    use_grace = account_deletion_grace_enabled() and grace and not erase_now and grace_window.total_seconds() > 0
+    wipe_due_at: datetime | None = None
+    if use_grace:
+        wipe_due_at = datetime.now(timezone.utc) + grace_window
+        wipe_intent = _retry_firestore_write(
+            lambda: deletion_grace_db.mark_user_deletion_grace_intent(uid, wipe_due_at),
+            uid=uid,
+            fail_msg='Failed to persist deletion-grace intent',
+            on_failure='raise',
+        )
+    else:
+        promoted_intent = _retry_firestore_write(
+            lambda: deletion_grace_db.promote_grace_to_immediate(uid),
+            uid=uid,
+            fail_msg='Failed to promote deletion-grace intent',
+            on_failure='raise',
+        )
+        wipe_intent = promoted_intent or _retry_firestore_write(
+            lambda: users_db.mark_user_deletion_wipe_intent(uid),
+            uid=uid,
+            fail_msg='Failed to persist deletion-wipe intent',
+            on_failure='raise',
+        )
     wipe_job_id = wipe_intent.get('wipe_job_id') if isinstance(wipe_intent, dict) else None
     if not isinstance(wipe_job_id, str) or not wipe_job_id:
         raise RuntimeError('deletion-wipe intent did not persist a wipe_job_id')
@@ -613,10 +691,40 @@ def start_account_deletion(uid: str, reason: str | None = None, reason_details: 
             users_db.set_user_deletion_feedback(uid, reason, reason_details)
         except Exception as e:
             logger.info(f'delete_account feedback store failed: {sanitize(str(e))}')
+    if use_grace:
+        mode = wipe_intent.get('mode') if isinstance(wipe_intent, dict) else 'legacy'
+        status = wipe_intent.get('wipe_status') if isinstance(wipe_intent, dict) else 'pending_deletion'
+        joined_due_at = wipe_intent.get('wipe_due_at') if isinstance(wipe_intent, dict) else wipe_due_at
+        if mode == 'legacy':
+            logger.info('delete_account joined an existing immediate deletion intent')
+            return _account_deletion_result(str(status or 'pending'), joined_due_at)
+        if mode == 'created':
+            # The marker fences every capture path before any provider calls.
+            # Firebase Auth remains enabled so sign-in continues to resolve to
+            # this uid; all ordinary requests receive the pending-deletion
+            # fence while the status and restore routes remain available.
+            _run_immediate_deletion_steps(uid)
+            if deletion_grace_db.mark_user_deletion_grace_actions_complete(uid, wipe_job_id) is False:
+                marker = deletion_marker_db.read_account_deletion_marker(uid) or {}
+                if marker.get('wipe_status') != 'cancelled':
+                    raise RuntimeError('deletion grace immediate steps could not be committed')
+            status = (deletion_marker_db.read_account_deletion_marker(uid) or {}).get('wipe_status') or status
+            joined_due_at = (deletion_marker_db.read_account_deletion_marker(uid) or {}).get(
+                'wipe_due_at'
+            ) or joined_due_at
+        else:
+            logger.info('delete_account joined existing grace-window deletion intent')
+        return _account_deletion_result(str(status or 'pending_deletion'), joined_due_at)
+
     dispatch_claimed = wipe_intent.get('dispatch_claimed') is True if isinstance(wipe_intent, dict) else False
     if not dispatch_claimed:
         logger.info('delete_account joined existing durable deletion intent')
-        return {'status': 'ok', 'message': 'Account deletion started'}
+        return _account_deletion_result('pending')
+
+    # User asked for immediate erasure (or the grace kill switch is off).
+    # Keep billing/session revocation ahead of task dispatch, as in the grace
+    # path, while retaining the existing durable worker as the wipe owner.
+    _run_immediate_deletion_steps(uid)
 
     try:
         enqueue_deletion_wipe(uid, wipe_job_id)
@@ -632,18 +740,55 @@ def start_account_deletion(uid: str, reason: str | None = None, reason_details: 
         )
         # The actionable marker is committed. Queue dispatch is only an
         # acceleration path; reconciliation owns eventual completion.
-        return {'status': 'ok', 'message': 'Account deletion started'}
+        return _account_deletion_result('pending')
 
     logger.info('delete_account accepted durable deletion intent and queue acceleration')
-    return {'status': 'ok', 'message': 'Account deletion started'}
+    return _account_deletion_result('pending')
+
+
+def account_deletion_status(uid: str) -> dict[str, Any]:
+    """Owner-facing deletion state and metadata-only loss summary."""
+    marker = deletion_marker_db.read_account_deletion_marker(uid) or {}
+    status = marker.get('wipe_status')
+    wipe_at = marker.get('wipe_due_at') if status == 'pending_deletion' else None
+    held = read_held_audio_summary(uid) or {}
+    backlog = processing_backlog_db.read_processing_backlog_summary(uid) or {}
+    return {
+        'status': status,
+        'pending_deletion': status == 'pending_deletion',
+        'wipe_at': wipe_at,
+        'grace_period_days': account_deletion_grace_window_days() if account_deletion_grace_enabled() else 0,
+        'loss_summary': {
+            'held_recordings': _summary_count(held.get('count')),
+            'held_audio_seconds': _summary_count(held.get('seconds')),
+            'backlog_conversations': _summary_count(backlog.get('count')),
+            'backlog_seconds': _summary_count(backlog.get('seconds')),
+        },
+    }
+
+
+def restore_account_deletion(uid: str) -> dict[str, Any]:
+    """Restore the existing uid while the grace marker is still restorable."""
+    marker = deletion_marker_db.read_account_deletion_marker(uid) or {}
+    if marker.get('wipe_status') != 'pending_deletion':
+        return {'status': 'not_pending', 'restored': False}
+    if marker.get('grace_actions_complete') is not True:
+        _run_immediate_deletion_steps(uid)
+        deletion_grace_db.mark_user_deletion_grace_actions_complete(uid, str(marker.get('wipe_job_id') or ''))
+    outcome = deletion_grace_db.restore_user_deletion(uid)
+    return {
+        'status': outcome,
+        'restored': outcome == 'restored',
+        'billing_cancelled': outcome == 'restored',
+    }
 
 
 def reconcile_pending_deletion_wipes(limit: int = 100) -> dict[str, int]:
-    """Re-enqueue account-deletion wipes that were cancelled or failed.
+    """Retry incomplete grace admission actions and re-enqueue due wipes.
 
     Called by a periodic worker (cron, Cloud Scheduler, or startup hook) to drain
-    the ``wipe_status in ('pending', 'failed', 'retrying')`` backlog left behind
-    when a durable task enqueue or worker execution failed.
+    incomplete grace actions and the ``wipe_status in ('pending', 'failed', 'retrying')``
+    backlog left behind when a durable task enqueue or worker execution failed.
 
     Also recovers stale legacy ``'deleting_auth'`` records. The worker owns
     Firebase Auth deletion, so the durable intent itself is sufficient recovery
@@ -671,6 +816,28 @@ def reconcile_pending_deletion_wipes(limit: int = 100) -> dict[str, int]:
         if not uid:
             skipped += 1
             continue
+        if record.get('wipe_status') == 'pending_deletion':
+            if record.get('grace_actions_complete') is not True:
+                job_id = record.get('wipe_job_id')
+                if not isinstance(job_id, str) or not job_id:
+                    skipped += 1
+                    continue
+                try:
+                    _run_immediate_deletion_steps(uid)
+                    actions_completed = deletion_grace_db.mark_user_deletion_grace_actions_complete(uid, job_id)
+                except Exception as error:
+                    logger.error(
+                        'delete_account grace immediate-action retry failed for %s: %s', uid, sanitize(str(error))
+                    )
+                    skipped += 1
+                    continue
+                if actions_completed is not True:
+                    skipped += 1
+                    continue
+            due_at = _deletion_due_at(record.get('wipe_due_at'))
+            if due_at is None or due_at > datetime.now(timezone.utc):
+                skipped += 1
+                continue
         # ``deleting_auth`` is a legacy durable intent from the former
         # two-transaction admission path. The worker now owns Firebase Auth
         # deletion, so a stale legacy intent is safe to claim even when the

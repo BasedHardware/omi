@@ -431,12 +431,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get autoSync => 'Αυτόματος συγχρονισμός';
 
   @override
-  String get syncHealthAlerts => 'Ειδοποιήσεις κατάστασης συγχρονισμού';
-
-  @override
-  String get syncHealthAlertsDescription => 'Ειδοποίηση αν το Omi δεν συγχρόνισε ηχογραφήσεις για πάνω από μια μέρα';
-
-  @override
   String get autoSyncDescription => 'Αυτόματος συγχρονισμός των εκτός σύνδεσης εγγραφών όταν συνδέεται η συσκευή σας';
 
   @override
@@ -8789,6 +8783,29 @@ class AppLocalizationsEl extends AppLocalizations {
   String get deleteReasonOther => 'Άλλο';
 
   @override
+  String get deletePauseInsteadTitle => 'Παύση του Omi αντί για διαγραφή;';
+
+  @override
+  String get deletePauseInsteadSubtitle => 'Σταματήστε την καταγραφή και κρατήστε τα πάντα. Επιστρέψτε όποτε θέλετε.';
+
+  @override
+  String get deletePauseRecordingLine => 'Η καταγραφή θα σταματήσει. Όσο λείπετε, δεν θα καταγράφεται τίποτα νέο.';
+
+  @override
+  String get deletePauseKeepLine =>
+      'Οι αναμνήσεις, οι συνομιλίες και οι εφαρμογές σας θα παραμείνουν ακριβώς όπως είναι.';
+
+  @override
+  String get deletePauseReturnLine =>
+      'Θα παραμείνετε συνδεδεμένοι. Συνεχίστε την καταγραφή όποτε θέλετε. Η συνδρομή σας θα συνεχιστεί χωρίς αλλαγές.';
+
+  @override
+  String get pauseOmiButton => 'Παύση του Omi';
+
+  @override
+  String get continueDeletingButton => 'Συνέχεια διαγραφής';
+
+  @override
   String get deleteFlowFeedbackTitle => 'Πείτε μας περισσότερα';
 
   @override
@@ -8808,6 +8825,28 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get deleteConsequenceNoRecovery => 'Ο λογαριασμός σας δεν μπορεί να αποκατασταθεί — ούτε από την υποστήριξη.';
+
+  @override
+  String deletePendingRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Έχετε $count ηχογραφήσεις που βρίσκονται ακόμη σε επεξεργασία. Αν τις διαγράψετε τώρα, θα χαθούν.',
+      one: 'Έχετε 1 ηχογράφηση που βρίσκεται ακόμη σε επεξεργασία. Αν τη διαγράψετε τώρα, θα χαθεί.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteGracePeriodNotice(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Συνδεθείτε ξανά μέσα σε $days ημέρες για να επαναφέρετε τον λογαριασμό σας.',
+      one: 'Συνδεθείτε ξανά μέσα σε 1 ημέρα για να επαναφέρετε τον λογαριασμό σας.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get deleteTypeToConfirm => 'Πληκτρολογήστε DELETE για επιβεβαίωση';
@@ -9112,14 +9151,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'Αναμονή για σύνδεση';
-
-  @override
-  String get syncStallAlertTitle => 'Το Omi δεν συγχρονίζεται';
-
-  @override
-  String syncStallAlertBody(int hours) {
-    return 'Καμία ηχογράφηση από το Omi σας δεν συγχρονίστηκε για πάνω από $hours ώρες. Ανοίξτε το Omi για να ελέγξετε τη σύνδεση της συσκευής.';
-  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13775,14 +13806,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get activityAttentionStorageSubtitle => 'Οι ηχογραφήσεις τέθηκαν σε παύση';
 
   @override
-  String get activityAttentionSyncStalledTitle => 'Το Omi δεν συγχρονίζεται';
-
-  @override
-  String activityAttentionSyncStalledSubtitle(int hours) {
-    return 'Καμία ηχογράφηση δεν συγχρονίστηκε για πάνω από $hours ώρες';
-  }
-
-  @override
   String get activityAttentionUploadStalledTitle => 'Η αποστολή σταμάτησε';
 
   @override
@@ -14827,5 +14850,183 @@ class AppLocalizationsEl extends AppLocalizations {
       one: 'Απόκρυψη 1 σύντομου αποσπάσματος',
     );
     return '$_temp0';
+  }
+
+  @override
+  String deleteLocalRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count ηχογραφήσεις δεν έχουν μεταφορτωθεί ακόμη. Αν τις διαγράψετε τώρα, θα χαθούν — αφήστε την εφαρμογή ανοιχτή για να ολοκληρωθεί η μεταφόρτωση.',
+      one:
+          '1 ηχογράφηση δεν έχει μεταφορτωθεί ακόμη. Αν τη διαγράψετε τώρα, θα χαθεί — αφήστε την εφαρμογή ανοιχτή για να ολοκληρωθεί η μεταφόρτωση.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConfirmGraceSubtitle => 'Δείτε τι θα συμβεί στα δεδομένα σας πριν φύγετε.';
+
+  @override
+  String get deletePauseConfirmation => 'Το Omi είναι σε παύση. Συνεχίστε την καταγραφή όποτε θέλετε.';
+
+  @override
+  String deleteProcessingKept(int count, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count ηχογραφήσεις εξακολουθούν να υποβάλλονται σε επεξεργασία. Παραμένουν στον λογαριασμό σας για ακόμα ',
+      one: '1 ηχογράφηση εξακολουθεί να υποβάλλεται σε επεξεργασία. Παραμένει στον λογαριασμό σας για ακόμα ',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days ημέρες.',
+      one: '1 ημέρα.',
+    );
+    return '$_temp0$_temp1';
+  }
+
+  @override
+  String deleteDataErasedAfterDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Οι αναμνήσεις και οι συνομιλίες σας θα διαγραφούν μετά από $days ημέρες.',
+      one: 'Οι αναμνήσεις και οι συνομιλίες σας θα διαγραφούν μετά από 1 ημέρα.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteAppsDisconnectImmediately => 'Οι εφαρμογές και οι ενσωματώσεις σας θα αποσυνδεθούν αμέσως.';
+
+  @override
+  String get deleteSubscriptionImmediately => 'Η συνδρομή σας θα ακυρωθεί αμέσως.';
+
+  @override
+  String get deleteRestoreTitle => 'Ο λογαριασμός σας εκκρεμεί προς διαγραφή';
+
+  @override
+  String get deleteRestoreSubtitle => 'Αλλάξατε γνώμη; Επαναφέρετε τον λογαριασμό σας πριν διαγραφεί.';
+
+  @override
+  String get deleteRestoreKeepData => 'Επαναφέρετε τις αναμνήσεις και τις συνομιλίες σας.';
+
+  @override
+  String get deleteRestoreBillingNotice =>
+      'Η συνδρομή σας θα παραμείνει ακυρωμένη. Συνδέστε ξανά τις εφαρμογές και τις ενσωματώσεις μετά την επαναφορά.';
+
+  @override
+  String deleteRestoreDaysRemaining(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Έχετε $days ημέρες για να επαναφέρετε τον λογαριασμό σας.',
+      one: 'Έχετε 1 ημέρα για να επαναφέρετε τον λογαριασμό σας.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteRestoreButton => 'Επαναφορά του λογαριασμού μου';
+
+  @override
+  String get deleteFinishButton => 'Ολοκλήρωση διαγραφής';
+
+  @override
+  String get deleteFinishNowButton => 'Οριστική διαγραφή του λογαριασμού μου τώρα';
+
+  @override
+  String get deleteFinishNowWarning =>
+      'Έτσι λήγει το χρονικό περιθώριο επαναφοράς. Ο λογαριασμός σας και οι ηχογραφήσεις του θα διαγραφούν οριστικά.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Έχετε λιγότερο από μία ημέρα για να επαναφέρετε τον λογαριασμό σας.';
+
+  @override
+  String get deleteFinishNowTitle => 'Διαγραφή του λογαριασμού σας;';
+
+  @override
+  String get syncHealthAlerts => 'Ειδοποιήσεις κατάστασης συγχρονισμού';
+
+  @override
+  String get syncHealthAlertsDescription => 'Ειδοποίηση αν το Omi δεν συγχρόνισε ηχογραφήσεις για πάνω από μια μέρα';
+
+  @override
+  String get syncStallAlertTitle => 'Το Omi δεν συγχρονίζεται';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Καμία ηχογράφηση από το Omi σας δεν συγχρονίστηκε για πάνω από $hours ώρες. Ανοίξτε το Omi για να ελέγξετε τη σύνδεση της συσκευής.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Το Omi δεν συγχρονίζεται';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Καμία ηχογράφηση δεν συγχρονίστηκε για πάνω από $hours ώρες';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Ημερήσιες περιλήψεις στην Αρχική';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Εμφάνιση των πιο πρόσφατων περιλήψεων στην κορυφή της Αρχικής.';
+
+  @override
+  String get yearlySwitchTitle => 'Μετάβαση σε ετήσιο';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Εξοικονομήστε $amount τον χρόνο';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Εξοικονομήστε $amount τον χρόνο με ετήσια χρέωση';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Ίδιο πρόγραμμα, μία πληρωμή τον χρόνο';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Πρόγραμμα';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price τον χρόνο';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Πληρωτέο σήμερα';
+
+  @override
+  String get yearlySwitchRenews => 'Ανανέωση';
+
+  @override
+  String get yearlySwitchCreditNote => 'Περιλαμβάνει πίστωση για το υπόλοιπο του μήνα.';
+
+  @override
+  String get yearlySwitchDeclined => 'Η πληρωμή απορρίφθηκε. Παραμένετε σε μηνιαία χρέωση.';
+
+  @override
+  String get yearlySwitchFailed => 'Η αλλαγή δεν ήταν δυνατή. Παραμένετε σε μηνιαία χρέωση.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Δεν ήταν δυνατή η φόρτωση της τιμής.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Η ετήσια χρέωση δεν είναι διαθέσιμη για το πρόγραμμά σας αυτή τη στιγμή.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Είστε πλέον σε ετήσια χρέωση';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Χρεώθηκαν σήμερα $amount. Ανανέωση στις $date.';
   }
 }
