@@ -4631,8 +4631,7 @@ def complete_sync_processing_hold(
         if snapshot is not None:
             state = processing_hold.completion_patch(existing, snapshot, automatic=automatic)
         else:
-            state.update(pending_since=None, held=False)
-            state.pop('unprocessed_donor', None)
+            state.update(pending_since=None, held=False, unprocessed_donor=False)
         transaction.update(ref, {processing_hold.FIELD: state})
         return True
 
