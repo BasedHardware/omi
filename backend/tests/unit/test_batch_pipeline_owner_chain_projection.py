@@ -17,6 +17,8 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from google.api_core import exceptions as api_exceptions
+
 from config.policy import ProjectionPolicy
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay
 from database.batch_pipeline_projection_protocol import ProjectionPredecessorPending
@@ -428,6 +430,27 @@ def test_retired_record_target_quarantines_even_on_fresh_rows(monkeypatch):
 # --- the generic poison-head rule (lead ruling 5d2ae7) --------------------------
 
 
+@pytest.mark.parametrize(
+    'error,transient',
+    [
+        (ConnectionError('synthetic'), True),
+        (TimeoutError('synthetic'), True),
+        (api_exceptions.BadGateway('502'), True),
+        (api_exceptions.ServiceUnavailable('503'), True),
+        (api_exceptions.Aborted('409'), True),
+        (api_exceptions.TooManyRequests('429'), True),
+        (ValueError('payload contract'), False),
+        (TypeError('bug'), False),
+        (KeyError('bug'), False),
+    ],
+)
+def test_head_retry_classification(error, transient):
+    """Review r1 P1: every availability-shaped API error retries; only content
+    poison and unknown permanent kinds hold."""
+    assert projection.projection_exception_transient(error) is transient
+    assert projection.head_holds_without_retry(error, None) is not transient
+
+
 def test_generic_poison_head_holds_and_unblocks_the_chain():
     """Any non-transient exception at a chain head holds that unit (audio
     retained, quarantine_held receipt) and advances the watermark; an unknown
@@ -465,7 +488,7 @@ def test_generic_poison_head_holds_and_unblocks_the_chain():
 def test_transient_head_failure_retries_then_holds_at_the_bound():
     """Infrastructure contention retries, but not forever: past the durable
     bound the head takes the held disposition so the chain can advance."""
-    from google.api_core import exceptions as api_exceptions
+    # imported at module level for the classification matrix above
 
     log = ResultLog()
     ids = chain(log, BURST, 'a', 2)

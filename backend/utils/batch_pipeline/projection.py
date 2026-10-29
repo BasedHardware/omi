@@ -191,6 +191,7 @@ def projection_exception_transient(error: BaseException) -> bool:
         error,
         (
             api_exceptions.Aborted,
+            api_exceptions.BadGateway,
             api_exceptions.DeadlineExceeded,
             api_exceptions.ServiceUnavailable,
             api_exceptions.TooManyRequests,
