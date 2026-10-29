@@ -16,7 +16,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Union
 
-
 DONE_WORDS = {"true", "yes", "1", "done", "completed"}
 
 
@@ -28,8 +27,6 @@ def strip_surrogates(value: str) -> str:
     the remaining text and lets the note export.
     """
     return value.encode("utf-8", "ignore").decode("utf-8")
-
-
 
 
 def is_completed(value: Any) -> bool:
@@ -85,22 +82,25 @@ def conversation_to_markdown(conv: Dict[str, Any]) -> str:
     action_items = structured.get("action_items") or []
 
     # Transcript segments
-    transcript_segments = conv.get("transcript_segments") or []
+    raw_segments = conv.get("transcript_segments")
+    if not isinstance(raw_segments, list):
+        raw_segments = conv.get("segments")
+    transcript_segments = raw_segments if isinstance(raw_segments, list) else []
 
     # Clean date representation normalized to UTC
     date_str = ""
     if started_at:
         try:
-            dt = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+            dt = datetime.fromisoformat(str(started_at).replace("Z", "+00:00"))
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=timezone.utc)
             else:
                 dt = dt.astimezone(timezone.utc)
             date_str = dt.strftime("%Y-%m-%d %H:%M:%S UTC")
         except Exception:
-            date_str = started_at
+            date_str = str(started_at)
 
-    category_tag = strip_surrogates(category).lower().replace(" ", "-")
+    category_tag = strip_surrogates(str(category)).lower().replace(" ", "-")
 
     # Serialize YAML frontmatter scalars safely using json.dumps to prevent injection and Python 3.10/3.11 SyntaxError
     lines: List[str] = [
@@ -124,22 +124,31 @@ def conversation_to_markdown(conv: Dict[str, Any]) -> str:
 
     # Overview / Summary section
     if overview:
-        lines.extend([
-            "## Summary",
-            "",
-            overview.strip(),
-            "",
-        ])
+        lines.extend(
+            [
+                "## Summary",
+                "",
+                overview.strip(),
+                "",
+            ]
+        )
 
     # Action items checklist
     if action_items and isinstance(action_items, list):
-        lines.extend([
-            "## Action Items",
-            "",
-        ])
+        lines.extend(
+            [
+                "## Action Items",
+                "",
+            ]
+        )
         for item in action_items:
             if isinstance(item, dict):
-                desc = str(item.get("description") or item.get("title") or "").strip().replace("\r\n", " ").replace("\n", " ")
+                desc = (
+                    str(item.get("description") or item.get("title") or "")
+                    .strip()
+                    .replace("\r\n", " ")
+                    .replace("\n", " ")
+                )
                 if not desc:
                     desc = "Untitled action item"
                 completed = is_completed(item.get("completed", False))
@@ -151,27 +160,31 @@ def conversation_to_markdown(conv: Dict[str, Any]) -> str:
 
     # Transcript section
     if transcript_segments:
-        lines.extend([
-            "## Transcript",
-            "",
-        ])
+        transcript_lines: List[str] = []
         for seg in transcript_segments:
             if not isinstance(seg, dict):
                 continue
-            speaker = seg.get("speaker", "Speaker")
-            if isinstance(speaker, int):
-                speaker_label = f"Speaker {speaker}"
+            raw_speaker = seg.get("speaker")
+            if raw_speaker is None or (isinstance(raw_speaker, str) and not raw_speaker.strip()):
+                raw_speaker = seg.get("speaker_name")
+            if raw_speaker is None or (isinstance(raw_speaker, str) and not raw_speaker.strip()):
+                raw_speaker = seg.get("speaker_id")
+            if isinstance(raw_speaker, int) and not isinstance(raw_speaker, bool):
+                speaker_label = f"Speaker {raw_speaker}"
+            elif raw_speaker is not None and not isinstance(raw_speaker, bool) and str(raw_speaker).strip():
+                speaker_label = str(raw_speaker).strip()
             else:
-                speaker_label = str(speaker) if speaker else "Speaker"
+                speaker_label = "Speaker"
 
             start_time = format_timestamp(seg.get("start"))
-            text = (seg.get("text") or "").strip()
+            text = " ".join(str(seg.get("text") or "").splitlines()).strip()
             if text:
-                lines.append(f"> **[{start_time}] {speaker_label}:** {text}")
-                lines.append(">")
-        if lines[-1] == ">":
-            lines.pop()
-        lines.append("")
+                transcript_lines.append(f"> **[{start_time}] {speaker_label}:** {text}")
+                transcript_lines.append(">")
+        if transcript_lines:
+            if transcript_lines[-1] == ">":
+                transcript_lines.pop()
+            lines.extend(["## Transcript", "", *transcript_lines, ""])
 
     return strip_surrogates("\n".join(lines)).rstrip() + "\n"
 
@@ -209,6 +222,10 @@ def export_conversations(
         md_content = conversation_to_markdown(conv)
 
         if overwrite:
+            counter = 1
+            while filepath in used_paths:
+                counter += 1
+                filepath = output_dir / f"{base_name}_{counter}.md"
             used_paths.add(filepath)
             filepath.write_text(md_content, encoding="utf-8")
         else:
@@ -266,9 +283,7 @@ def extract_conversations(data: Any) -> List[Dict[str, Any]]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Convert Omi conversation JSON exports to Markdown files."
-    )
+    parser = argparse.ArgumentParser(description="Convert Omi conversation JSON exports to Markdown files.")
     parser.add_argument(
         "input",
         help="Path to JSON file (or '-' for stdin).",

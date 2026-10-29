@@ -280,6 +280,49 @@ class TestConversationsToMarkdown(unittest.TestCase):
             text = exported[0].read_text(encoding="utf-8")
             self.assertIn("hello  world", text)
 
+    def test_overwrite_true_disambiguates_same_batch_collisions(self):
+        conv1 = {
+            "id": "12345678-1111-4111-8111-111111111111",
+            "started_at": "2026-09-17T10:00:00Z",
+            "structured": {"title": "Meeting", "overview": "First meeting in batch"},
+        }
+        conv2 = {
+            "id": "12345678-2222-4222-8222-222222222222",
+            "started_at": "2026-09-17T11:00:00Z",
+            "structured": {"title": "Meeting", "overview": "Second meeting in batch"},
+        }
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            out_dir = Path(tmp_dir)
+            pre_existing = out_dir / "2026-09-17_meeting_12345678.md"
+            pre_existing.write_text("Stale prior export", encoding="utf-8")
+
+            exported = c2m.export_conversations([conv1, conv2], output_dir=out_dir, overwrite=True)
+
+            self.assertEqual(len(exported), 2)
+            self.assertEqual(len(set(exported)), 2)
+            file1 = out_dir / "2026-09-17_meeting_12345678.md"
+            file2 = out_dir / "2026-09-17_meeting_12345678_2.md"
+            self.assertIn("First meeting in batch", file1.read_text(encoding="utf-8"))
+            self.assertIn("Second meeting in batch", file2.read_text(encoding="utf-8"))
+
+    def test_non_string_category_and_transcript_speaker_and_multiline_flattening(self):
+        conv = {
+            "id": "conv_edge",
+            "started_at": "2026-09-17T12:00:00Z",
+            "structured": {"title": "Edge Case", "category": 404},
+            "segments": [
+                {"text": "Line one\nLine two", "speaker": None, "speaker_id": 0, "start": 0.0},
+                {"text": "Bool speaker check", "speaker": False, "start": 5.0},
+            ],
+        }
+        md = c2m.conversation_to_markdown(conv)
+
+        self.assertIn('category: "404"', md)
+        self.assertIn("> **[00:00] Speaker 0:** Line one Line two", md)
+        self.assertIn("> **[00:05] Speaker:** Bool speaker check", md)
+        self.assertNotIn("Speaker False", md)
+
 
 if __name__ == "__main__":
     unittest.main()
