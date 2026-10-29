@@ -885,7 +885,7 @@ def refresh_survivor(
                 return
             # Persist the obligation before acknowledging the merge. Further
             # absorbs may proceed while this durable worker waits for quiet.
-            hold_args = {'sync_hold': True}
+            hold_args: dict[str, Any] = {'sync_hold': True}
             if (row.get(processing_hold.FIELD) or {}).get('merge_first'):
                 hold_args['merge_hold'] = True
             enrichment_outbox.mark(uid, survivor_id, row.get('language') or 'en', **hold_args)

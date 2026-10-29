@@ -524,7 +524,7 @@ def assign_in_transaction(
                 # discarded donor after the maximum hold has elapsed.
                 canonical = (
                     own_id
-                    if own_id in processed_ids
+                    if own_id is not None and own_id in processed_ids
                     else min(processed_ids, key=lambda cid: (matched[cid]['started_at'], cid))
                 )
             protected_donors = processed_ids - {canonical}
