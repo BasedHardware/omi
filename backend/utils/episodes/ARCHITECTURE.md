@@ -100,9 +100,19 @@ one capture window's evidence.
    only recorded activity; old audio cannot replace current activity with
    ingestion time. With no covering episode, sync creates a **closed** episode
    at its recorded start/end and leaves both `current` and `last_closed`
-   navigation pointers alone. Retry membership is immutable and notes still
+   navigation pointers alone. Retry membership is stable inside its recorded window and notes still
    use the existing transactional content receipts. A later append extends
-   the same member's recorded window before notes recovery.
+   the same member's recorded window before notes recovery. A conversation that
+   crosses a four-hour or existing explicit boundary remains one storage row
+   referenced by successive closed windows, just like a live cap rotation.
+   Its membership link records all windows and names the latest one. Recovery
+   assigns each placed segment to its start window once, clamps moment clocks
+   at the cap, and retains unplaced evidence in the first window. Receipts
+   remain global to the conversation, so retries cannot duplicate the text.
+   A later **fresh live** capture may resume a silence-closed owner under the
+   timeline/current-pointer fence; late intake never calls that transition.
+   Explicit closes and the four-hour boundary stay closed. Finalization
+   reconciles provisional items in every capped window.
 6. Realtime input derives its start/end from the conversation origin and
    placed segment offsets. Late batches use recorded-time attachment rather
    than the live tracker; unplaced text supplies no boundary. Timely moment

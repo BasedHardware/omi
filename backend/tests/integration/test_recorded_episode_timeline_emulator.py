@@ -89,3 +89,46 @@ def test_metadata_window_finds_old_owner_and_preserves_new_live_pointer(store):
     )
     assert result['id'] == 'old' and result['status'] == 'closed'
     assert episodes.get_current_episode(uid, firestore_client=client)['id'] == 'live'
+
+
+def test_long_capture_caps_and_only_fresh_live_resume_changes_navigation(store):
+    client, uid = store
+    root = client.collection('users').document(uid)
+    root.collection('episode_links').document('last_closed').set({'episode_id': 'previous'})
+    result = episode_timeline.attach_recorded(
+        uid,
+        'long',
+        'phone',
+        T0,
+        T0 + timedelta(hours=5),
+        choose=choose_recorded_episode,
+        new_episode={'sources': [], 'conversation_ids': [], 'provisional_items': [], 'moments': []},
+        firestore_client=client,
+    )
+    windows = result['_recorded_windows']
+    assert len(windows) == 2 and all(w['status'] == 'closed' for w in windows)
+    assert windows[0]['last_activity_at'] == windows[1]['started_at'] == T0 + timedelta(hours=4)
+    assert episodes.get_current_episode(uid, firestore_client=client) is None
+    assert len(episode_timeline.member_episodes(uid, 'long', firestore_client=client)) == 2
+    resumed = episode_timeline.resume_recorded(
+        uid,
+        windows[1]['id'],
+        T0 + timedelta(hours=5, seconds=30),
+        expected_version=windows[1]['state_version'],
+        choose=choose_recorded_episode,
+        firestore_client=client,
+    )
+    assert resumed['status'] == 'live'
+    assert episodes.get_current_episode(uid, firestore_client=client)['id'] == windows[1]['id']
+    assert root.collection('episode_links').document('last_closed').get().to_dict()['episode_id'] == 'previous'
+    assert (
+        episode_timeline.resume_recorded(
+            uid,
+            windows[0]['id'],
+            T0 + timedelta(minutes=5),
+            expected_version=windows[0]['state_version'],
+            choose=choose_recorded_episode,
+            firestore_client=client,
+        )
+        is None
+    )  # A competing current owner cannot be replaced.

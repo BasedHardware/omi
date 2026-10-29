@@ -367,7 +367,13 @@ sessions = _SessionCounter()
 
 
 async def _attach_if_client_seen(
-    uid: str, conversation_id: str, source: Optional[str], started_at: datetime, *, first: bool = True
+    uid: str,
+    conversation_id: str,
+    source: Optional[str],
+    started_at: datetime,
+    *,
+    first: bool = True,
+    ended_at: Optional[datetime] = None,
 ) -> str:
     """Retained speech: open/join or advance activity, with no model call."""
     seen = await executors.run_blocking(executors.db_executor, client_gate.client_seen_cached, uid)
@@ -378,8 +384,18 @@ async def _attach_if_client_seen(
         return 'skipped_no_client'
     from utils.episodes.service import attach_conversation
 
+    if ended_at is None:
+        return await executors.run_blocking(
+            executors.db_executor, attach_conversation, uid, conversation_id, source, started_at=started_at
+        )
     return await executors.run_blocking(
-        executors.db_executor, attach_conversation, uid, conversation_id, source, started_at=started_at
+        executors.db_executor,
+        attach_conversation,
+        uid,
+        conversation_id,
+        source,
+        started_at=started_at,
+        ended_at=ended_at,
     )
 
 
@@ -450,6 +466,7 @@ async def on_realtime_segments(
                         source,
                         recorded[0] if recorded else datetime.now(timezone.utc),
                         first=first,
+                        ended_at=recorded[1] if recorded else None,
                     ),
                     name='episode_attach',
                 )

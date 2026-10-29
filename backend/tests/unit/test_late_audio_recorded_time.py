@@ -123,7 +123,7 @@ def test_four_hour_cap_and_thirty_minute_quiet_contract():
     assert config.MAX_EPISODE_SECONDS == 4 * 60 * 60
     assert config.CLOSE_GAP_SECONDS == 30 * 60
     old = _episode('old', T0, T0 + timedelta(hours=3, minutes=59))
-    assert timeline.choose_recorded_episode([old], T0 + timedelta(hours=4), T0 + timedelta(hours=4)) == old
+    assert timeline.choose_recorded_episode([old], T0 + timedelta(hours=4), T0 + timedelta(hours=4)) is None
     assert (
         timeline.choose_recorded_episode([old], T0 + timedelta(hours=4, seconds=1), T0 + timedelta(hours=4, seconds=1))
         is None
@@ -523,3 +523,146 @@ def test_stale_capture_origin_cannot_bind_old_wal_to_new_live_speech():
     assert result['id'] == 'old'
     assert result['finished_at'] == T0 + timedelta(seconds=39.5)
     assert store.rows[('users', 'u', 'conversations', 'live')]['transcript_segments'] == target['transcript_segments']
+
+
+def test_five_hour_offline_capture_forms_two_capped_closed_windows(timeline_store):
+    store = timeline_store
+    row = _attach(store, 'long', T0, T0 + timedelta(hours=5))
+    windows = row['_recorded_windows']
+    assert len(windows) == 2
+    assert windows[0]['close_reason'] == 'hard_cap' and windows[1]['close_reason'] == 'gap'
+    assert [(w['started_at'], w['last_activity_at']) for w in windows] == [
+        (T0, T0 + timedelta(hours=4)),
+        (T0 + timedelta(hours=4), T0 + timedelta(hours=5)),
+    ]
+    assert all(w['status'] == 'closed' and w['conversation_ids'] == ['long'] for w in windows)
+    retry = _attach(store, 'long', T0, T0 + timedelta(hours=5))
+    assert [w['id'] for w in retry['_recorded_windows']] == [w['id'] for w in windows]
+    assert (
+        timeline.episode_owning_recorded_time('u', T0 + timedelta(hours=4, minutes=30), firestore_client=store)['id']
+        == windows[1]['id']
+    )
+    assert ('users', 'u', 'episode_links', 'current') not in store.rows
+
+
+def test_late_append_rotates_at_existing_episode_start_plus_four_hours(timeline_store):
+    store = timeline_store
+    _attach(store, 'earlier', T0, T0 + timedelta(minutes=20))
+    row = _attach(store, 'continued', T0 + timedelta(minutes=20), T0 + timedelta(hours=4, minutes=10))
+    windows = row['_recorded_windows']
+    assert len(windows) == 2
+    assert windows[0]['last_activity_at'] == windows[1]['started_at'] == T0 + timedelta(hours=4)
+    assert windows[1]['last_activity_at'] == T0 + timedelta(hours=4, minutes=10)
+
+
+def test_capped_recovery_places_each_segment_once_and_keeps_unplaced_content(timeline_store):
+    from utils.episodes.recorded_recovery import record_windows
+
+    store = timeline_store
+    placed = _attach(store, 'long', T0, T0 + timedelta(hours=5))
+    row = dict(
+        started_at=T0,
+        finished_at=T0 + timedelta(hours=5),
+        source='omi',
+        transcript_segments=[
+            dict(id='before', start=4 * 3600 - 10, end=4 * 3600 + 10, text='Words across the cap.'),
+            dict(id='after', start=4 * 3600 + 30, end=4 * 3600 + 40, text='Words in the next window.'),
+            dict(id='unknown', start=-1, end=-1, audio_alignment='unplaced', text='Unplaced words are retained.'),
+        ],
+    )
+    seen = []
+
+    def record(uid, moment, c, *, member_episode_id):
+        seen.append((member_episode_id, moment))
+        return 'applied'
+
+    assert (
+        record_windows('u', 'long', row, placed['_recorded_windows'], None, record, now=T0 + timedelta(hours=8))
+        == 'applied'
+    )
+    first, second = placed['_recorded_windows']
+    assert {s['id'] for eid, moment in seen if eid == first['id'] for s in moment.segments} == {'before', 'unknown'}
+    assert {s['id'] for eid, moment in seen if eid == second['id'] for s in moment.segments} == {'after'}
+    assert len([s for _, moment in seen for s in moment.segments]) == 3
+    assert seen[0][1].ended_at <= T0 + timedelta(hours=4)
+
+
+def test_capped_donor_repoint_preserves_every_historical_window(timeline_store):
+    store = timeline_store
+    placed = _attach(store, 'donor', T0, T0 + timedelta(hours=5))
+    c = service.Collaborators(firestore_client=store, now=lambda: T0 + timedelta(hours=8))
+    service._repoint_sync_donors('u', 'survivor', {'sync_merged_from': ['donor']}, c)
+    for window in placed['_recorded_windows']:
+        stored = episodes.get_episode('u', window['id'], firestore_client=store)
+        assert stored['conversation_ids'] == ['survivor']
+        assert stored['status'] == 'closed'
+
+
+def test_recorded_idle_close_cannot_extend_beyond_four_hour_cap():
+    row = _episode('e', T0, T0 + timedelta(hours=4), 'live')
+    assert service._idle_closed_at(row, T0 + timedelta(hours=8)) == T0 + timedelta(hours=4)
+
+
+def test_only_fresh_live_speech_resumes_a_silence_closed_historical_occasion(timeline_store):
+    store = timeline_store
+    original = _attach(store, 'offline', T0, T0 + timedelta(minutes=20))
+    c = service.Collaborators(firestore_client=store, now=lambda: T0 + timedelta(minutes=21))
+    assert service._attach_once('u', 'live', 'omi', T0 + timedelta(minutes=21), c) == 'joined'
+    owner = episodes.get_current_episode('u', firestore_client=store)
+    assert owner['id'] == original['id'] and owner['started_at'] == T0
+    assert owner['last_activity_at'] == T0 + timedelta(minutes=21)
+
+
+def test_direct_late_attach_cannot_open_or_resume_a_live_episode(timeline_store):
+    store = timeline_store
+    c = service.Collaborators(firestore_client=store, now=lambda: T0 + timedelta(minutes=10))
+    assert service._attach_once('u', 'offline', 'omi', T0, c) == 'recorded'
+    assert episodes.get_current_episode('u', firestore_client=store) is None
+    assert service._attach_once('u', 'offline-2', 'omi', T0 + timedelta(minutes=1), c) == 'recorded'
+    assert episodes.get_current_episode('u', firestore_client=store) is None
+
+
+def test_invalid_unbounded_capture_fails_before_any_timeline_write(timeline_store):
+    store = timeline_store
+    with pytest.raises(episodes.EpisodeConflict, match='recorded_capture_window_exhausted'):
+        _attach(store, 'invalid', T0, T0 + timedelta(days=365))
+    assert store.rows == {}
+
+
+def test_long_fresh_batch_uses_recorded_end_to_determine_liveness(timeline_store):
+    store = timeline_store
+    ended = T0 + timedelta(minutes=3)
+    c = service.Collaborators(firestore_client=store, now=lambda: ended, tz_name='UTC')
+    assert service._attach_once('u', 'fresh', 'omi', T0, c, ended_at=ended) == 'opened'
+    assert episodes.get_current_episode('u', firestore_client=store)['started_at'] == T0
+
+
+def test_first_sync_finalization_reconciles_all_capped_windows(monkeypatch, timeline_store):
+    store = timeline_store
+    row = dict(
+        started_at=T0,
+        finished_at=T0 + timedelta(hours=5),
+        source='omi',
+        transcript_segments=[
+            dict(id=f's{i}', start=i * 60, end=i * 60 + 18, text='We agreed to review the release plan on Friday.')
+            for i in range(300)
+        ],
+    )
+    c = service.Collaborators(firestore_client=store, now=lambda: T0 + timedelta(hours=8))
+    monkeypatch.setattr(service, '_record_recovered', lambda *a: 'skipped_applied')
+    seen = []
+    monkeypatch.setattr(service, '_reconcile', lambda uid, episode, *a: seen.append(episode['id']) or 'finalized')
+    assert service._on_finalized('u', 'long', row, 'sync_update', None, c) == 'finalized'
+    assert len(seen) == len(set(seen)) == 2
+    assert set(seen) == {e['id'] for e in episode_timeline.member_episodes('u', 'long', firestore_client=store)}
+
+
+def test_fresh_capture_after_user_close_opens_a_new_occasion(timeline_store):
+    store = timeline_store
+    old = _attach(store, 'old', T0, T0 + timedelta(minutes=20))
+    raw = store.rows[('users', 'u', 'episodes', old['id'])]
+    raw['close_reason'] = 'user'
+    c = service.Collaborators(firestore_client=store, now=lambda: T0 + timedelta(minutes=21), tz_name='UTC')
+    assert service._attach_once('u', 'fresh', 'omi', T0 + timedelta(minutes=21), c) == 'opened'
+    assert episodes.get_current_episode('u', firestore_client=store)['id'] != old['id']
+    assert episodes.get_episode('u', old['id'], firestore_client=store)['status'] == 'closed'

@@ -462,7 +462,7 @@ class TranscriptProcessor:
         audio_timeline: Optional[Dict[str, Any]] = None,
         update_finished_at: bool = True,
     ) -> Optional[tuple[Conversation, List[TranscriptSegment], List[str]]]:
-        origin = started_at or conversation.started_at
+        origin = started_at or getattr(conversation, 'started_at', None)
         fresh_segments = [segment.model_dump() for segment in segments]
         if late_audio_intake_enabled() and not photos and is_late(recorded_span(origin, fresh_segments), finished_at):
             # A socket is transport, not proof that this speech is happening

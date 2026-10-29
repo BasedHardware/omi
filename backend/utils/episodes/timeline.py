@@ -23,9 +23,9 @@ def choose_recorded_episode(rows: list[dict], started: datetime, finished: datet
         gap = max(0.0, (started - hi).total_seconds(), (lo - finished).total_seconds())
         if gap >= CLOSE_GAP_SECONDS or (max(hi, finished) - min(lo, started)).total_seconds() > MAX_EPISODE_SECONDS:
             continue
-        if row.get('status') == 'live' and (started - lo).total_seconds() >= MAX_EPISODE_SECONDS:
+        if (started - lo).total_seconds() >= MAX_EPISODE_SECONDS:
             continue
-        if started > hi and row.get('status') != 'live' and row.get('close_reason') not in {'gap', 'idle'}:
+        if started >= hi and row.get('status') != 'live' and row.get('close_reason') not in {'gap', 'idle'}:
             continue
         overlap = max(0.0, (min(hi, finished) - max(lo, started)).total_seconds())
         candidates.append((gap, -overlap, lo, str(row['id']), row))

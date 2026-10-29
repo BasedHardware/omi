@@ -1063,6 +1063,21 @@ _add(
         patchers=(_stub('database.episodes.seal', {'id': 'recorded-1'}),),
     )
 )
+_add(
+    DriverEntry(
+        'database.episode_timeline._attach_recorded_window',
+        base={
+            'uid': UID,
+            'conversation_id': 'recorded-1',
+            'source': 'omi',
+            'started': T0,
+            'finished': T1,
+            'choose': lambda rows, start, end: None,
+            'new_episode': {'id': 'recorded-1'},
+        },
+        patchers=(_stub('database.episodes.seal', {'id': 'recorded-1'}),),
+    )
+)
 _add(DriverEntry('database.conversations.get_conversation_ids', base={'uid': UID}))
 _add(DriverEntry('database.conversations.get_conversation_photos', base={'uid': UID, 'conversation_id': 'conv-1'}))
 _add(
