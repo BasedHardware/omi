@@ -17,6 +17,8 @@ moving them is the A4 outbox + receipt-fence seam, not this PR.
 
 from __future__ import annotations
 
+from psycopg.sql import SQL, Identifier
+
 import re
 import hashlib
 from contextlib import contextmanager
@@ -289,7 +291,7 @@ class PostgresStore:
 
     def read_doc(self, conn: Any, table: str, key: str) -> dict:
         if table in _TYPED:
-            row = conn.execute(f'SELECT doc FROM {table} WHERE namespace = %s AND key = %s', (self.namespace, key))
+            row = conn.execute(SQL('SELECT doc FROM {} WHERE namespace = %s AND key = %s').format(Identifier(table)), (self.namespace, key))
         else:
             row = conn.execute(
                 'SELECT doc FROM docs WHERE namespace = %s AND tbl = %s AND key = %s', (self.namespace, table, key)
@@ -300,8 +302,8 @@ class PostgresStore:
     def write_doc(self, conn: Any, table: str, key: str, value: dict) -> None:
         if table in _TYPED:
             conn.execute(
-                f'INSERT INTO {table} (namespace, key, doc) VALUES (%s, %s, %s) '
-                'ON CONFLICT (namespace, key) DO UPDATE SET doc = EXCLUDED.doc',
+                SQL('INSERT INTO {} (namespace, key, doc) VALUES (%s, %s, %s) '
+                'ON CONFLICT (namespace, key) DO UPDATE SET doc = EXCLUDED.doc').format(Identifier(table)),
                 (self.namespace, key, jsonb(value)),
             )
         else:
@@ -313,7 +315,7 @@ class PostgresStore:
 
     def delete_doc(self, conn: Any, table: str, key: str) -> None:
         if table in _TYPED:
-            conn.execute(f'DELETE FROM {table} WHERE namespace = %s AND key = %s', (self.namespace, key))
+            conn.execute(SQL('DELETE FROM {} WHERE namespace = %s AND key = %s').format(Identifier(table)), (self.namespace, key))
         else:
             conn.execute(
                 'DELETE FROM docs WHERE namespace = %s AND tbl = %s AND key = %s', (self.namespace, table, key)
@@ -344,4 +346,4 @@ class PostgresStore:
             raise RuntimeError('only test namespaces may be purged')
         with self._read_conn() as conn:
             for table in ('jobs', 'results', 'control', 'docs', 'outbox'):
-                conn.execute(f'DELETE FROM {table} WHERE namespace = %s', (self.namespace,))
+                conn.execute(SQL('DELETE FROM {} WHERE namespace = %s').format(Identifier(table)), (self.namespace,))
