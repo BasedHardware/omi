@@ -383,6 +383,30 @@ class GeneratedProcessingBacklog {
   }
 }
 
+class GeneratedPaymentIssue {
+  final String plan;
+  final String status;
+
+  const GeneratedPaymentIssue({
+    required this.plan,
+    required this.status,
+  });
+
+  factory GeneratedPaymentIssue.fromJson(Map<String, dynamic> json) {
+    return GeneratedPaymentIssue(
+      plan: _required(_readFieldValue<String>(_readField(json, const ["plan"]), "plan", _readString, requiredField: true, nullable: false), "plan"),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'plan': plan,
+      'status': status,
+    };
+  }
+}
+
 class GeneratedUserSubscriptionResponse {
   final List<GeneratedSubscriptionPlan> availablePlans;
   final bool chatQuotaAllowed;
@@ -395,6 +419,7 @@ class GeneratedUserSubscriptionResponse {
   final GeneratedHeldAudioSummary? heldAudio;
   final int insightsGainedLimit;
   final int insightsGainedUsed;
+  final GeneratedPaymentIssue? paymentIssue;
   final GeneratedPhoneCallQuota? phoneCallQuota;
   final GeneratedProcessingBacklog? processingBacklog;
   final bool showSubscriptionUi;
@@ -418,6 +443,7 @@ class GeneratedUserSubscriptionResponse {
     this.heldAudio,
     required this.insightsGainedLimit,
     required this.insightsGainedUsed,
+    this.paymentIssue,
     this.phoneCallQuota,
     this.processingBacklog,
     this.showSubscriptionUi = true,
@@ -443,6 +469,7 @@ class GeneratedUserSubscriptionResponse {
       heldAudio: _readFieldValue<GeneratedHeldAudioSummary>(_readField(json, const ["held_audio"]), "held_audio", (value) => _readObject(value, GeneratedHeldAudioSummary.fromJson), requiredField: false, nullable: true),
       insightsGainedLimit: _required(_readFieldValue<int>(_readField(json, const ["insights_gained_limit"]), "insights_gained_limit", _readInt, requiredField: true, nullable: false), "insights_gained_limit"),
       insightsGainedUsed: _required(_readFieldValue<int>(_readField(json, const ["insights_gained_used"]), "insights_gained_used", _readInt, requiredField: true, nullable: false), "insights_gained_used"),
+      paymentIssue: _readFieldValue<GeneratedPaymentIssue>(_readField(json, const ["payment_issue"]), "payment_issue", (value) => _readObject(value, GeneratedPaymentIssue.fromJson), requiredField: false, nullable: true),
       phoneCallQuota: _readFieldValue<GeneratedPhoneCallQuota>(_readField(json, const ["phone_call_quota"]), "phone_call_quota", (value) => _readObject(value, GeneratedPhoneCallQuota.fromJson), requiredField: false, nullable: true),
       processingBacklog: _readFieldValue<GeneratedProcessingBacklog>(_readField(json, const ["processing_backlog"]), "processing_backlog", (value) => _readObject(value, GeneratedProcessingBacklog.fromJson), requiredField: false, nullable: true),
       showSubscriptionUi: _required(_readFieldValue<bool>(_readField(json, const ["show_subscription_ui"]), "show_subscription_ui", _readBool, requiredField: false, nullable: false, defaultValue: true), "show_subscription_ui"),
@@ -469,6 +496,7 @@ class GeneratedUserSubscriptionResponse {
       'held_audio': heldAudio?.toJson(),
       'insights_gained_limit': insightsGainedLimit,
       'insights_gained_used': insightsGainedUsed,
+      'payment_issue': paymentIssue?.toJson(),
       'phone_call_quota': phoneCallQuota?.toJson(),
       'processing_backlog': processingBacklog?.toJson(),
       'show_subscription_ui': showSubscriptionUi,

@@ -59,7 +59,7 @@ from database.users import (
     resolve_deletion_wipe_job_id,
     set_user_transcription_preferences,
 )
-from utils import screen_vector_entitlements
+from utils import billing_recovery, screen_vector_entitlements
 from utils.observability.fallback import record_fallback
 from config.daily_summary_depth import DEFAULT_DAILY_SUMMARY_DEPTH, DailySummaryDepth
 from utils.sync.held_audio_summary import attach_subscription_held_audio
@@ -1569,7 +1569,6 @@ def _user_subscription_response(
     chat_percent = 0.0
     if chat_snapshot['limit'] is not None and chat_snapshot['limit'] > 0:
         chat_percent = min(100.0, round(100.0 * chat_snapshot['used'] / chat_snapshot['limit'], 2))
-    chat_allowed = chat_snapshot['allowed']
 
     # Grandfather is read from the true plan before the label is remapped for
     # clients whose enum predates `plus`/`unlimited_v2` (see wire_plan_for_client).
@@ -1590,10 +1589,11 @@ def _user_subscription_response(
         chat_quota_used=round(chat_snapshot['used'], 4),
         chat_quota_unit=chat_snapshot['unit'],
         chat_quota_percent=chat_percent,
-        chat_quota_allowed=chat_allowed,
+        chat_quota_allowed=chat_snapshot['allowed'],
         chat_quota_reset_at=chat_snapshot['reset_at'],
         phone_call_quota=phone_call_quota,
         desktop_grandfather_until=desktop_grandfather_until,
+        payment_issue=billing_recovery.payment_issue_for(uid, subscription) if show_subscription_ui else None,
     )
 
 

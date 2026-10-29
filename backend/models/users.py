@@ -242,6 +242,18 @@ class ProcessingBacklog(BaseModel):
     exceeds_remaining: bool = False
 
 
+class PaymentIssue(BaseModel):
+    """A paid plan whose renewal charge failed and can still be paid.
+
+    Set only while the stored Stripe subscription is past_due or unpaid with an
+    open invoice. The fix is a Stripe-hosted page the client opens through
+    POST /v1/payments/customer-portal; this response carries no payment URL.
+    """
+
+    status: Literal['past_due', 'unpaid']
+    plan: PlanType
+
+
 class UserSubscriptionResponse(BaseModel):
     subscription: Subscription
     transcription_seconds_used: int
@@ -280,6 +292,8 @@ class UserSubscriptionResponse(BaseModel):
     processing_backlog: Optional[ProcessingBacklog] = None
     # Server catalog capability, independent of BYOK and usage-budget availability.
     cloud_screen_vectors: Optional[bool] = None
+    # A failed renewal the user can still pay. Omitted when there is none; older clients ignore it.
+    payment_issue: Optional[PaymentIssue] = None
 
     @model_serializer(mode='wrap')
     def serialize_optional_held_audio(self, handler):
@@ -290,6 +304,8 @@ class UserSubscriptionResponse(BaseModel):
             data.pop('held_audio', None)
         if data.get('processing_backlog') is None:
             data.pop('processing_backlog', None)
+        if data.get('payment_issue') is None:
+            data.pop('payment_issue', None)
         return data
 
 

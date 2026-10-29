@@ -3956,6 +3956,11 @@ export interface PaymentCheckoutSessionResponse {
   url?: string | null;
 }
 
+export interface PaymentIssue {
+  plan: PlanType;
+  status: "past_due" | "unpaid";
+}
+
 export interface PaymentMethodStatusResponse {
   default?: string | null;
   paypal: string;
@@ -4112,6 +4117,7 @@ export interface PlanIdentityUserSubscriptionResponse {
   held_audio?: HeldAudioSummary | null;
   insights_gained_limit: number;
   insights_gained_used: number;
+  payment_issue?: PaymentIssue | null;
   phone_call_quota?: PhoneCallQuota | null;
   processing_backlog?: ProcessingBacklog | null;
   show_subscription_ui?: boolean;
@@ -6126,6 +6132,7 @@ export interface UserSubscriptionResponse {
   held_audio?: HeldAudioSummary | null;
   insights_gained_limit: number;
   insights_gained_used: number;
+  payment_issue?: PaymentIssue | null;
   phone_call_quota?: PhoneCallQuota | null;
   processing_backlog?: ProcessingBacklog | null;
   show_subscription_ui?: boolean;
@@ -6888,6 +6895,7 @@ export interface OmiApiSchemas {
   "Participant": Participant;
   "PayPalPaymentDetailsResponse": PayPalPaymentDetailsResponse;
   "PaymentCheckoutSessionResponse": PaymentCheckoutSessionResponse;
+  "PaymentIssue": PaymentIssue;
   "PaymentMethodStatusResponse": PaymentMethodStatusResponse;
   "PaymentMutationResponse": PaymentMutationResponse;
   "PaymentStatusMessageResponse": PaymentStatusMessageResponse;

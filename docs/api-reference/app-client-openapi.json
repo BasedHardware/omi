@@ -24674,6 +24674,28 @@
         "title": "PaymentCheckoutSessionResponse",
         "type": "object"
       },
+      "PaymentIssue": {
+        "description": "A paid plan whose renewal charge failed and can still be paid.\n\nSet only while the stored Stripe subscription is past_due or unpaid with an\nopen invoice. The fix is a Stripe-hosted page the client opens through\nPOST /v1/payments/customer-portal; this response carries no payment URL.",
+        "properties": {
+          "plan": {
+            "$ref": "#/components/schemas/PlanType"
+          },
+          "status": {
+            "enum": [
+              "past_due",
+              "unpaid"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "plan"
+        ],
+        "title": "PaymentIssue",
+        "type": "object"
+      },
       "PaymentMethodStatusResponse": {
         "properties": {
           "default": {
@@ -25593,6 +25615,16 @@
           "insights_gained_used": {
             "title": "Insights Gained Used",
             "type": "integer"
+          },
+          "payment_issue": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaymentIssue"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "phone_call_quota": {
             "anyOf": [
@@ -37800,6 +37832,16 @@
           "insights_gained_used": {
             "title": "Insights Gained Used",
             "type": "integer"
+          },
+          "payment_issue": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaymentIssue"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "phone_call_quota": {
             "anyOf": [
