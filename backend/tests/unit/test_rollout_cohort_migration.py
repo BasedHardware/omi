@@ -71,6 +71,9 @@ def test_verify_compares_sets_not_counts_and_never_writes(monkeypatch, capsys, e
     # The shadow cohort is legacy-all, so extra grants match and only denials would narrow it.
     assert result == (0 if name in {'messaging-telegram', 'batch-pipeline-shadow'} else 1)
     factory.return_value.batch.assert_not_called()
+    output = capsys.readouterr().out
+    assert 'private-one' not in output and 'private-two' not in output
+    assert f'{name}: live_members=' in output
 
 
 @pytest.mark.parametrize('member_count', [0, migration.LIMIT, migration.LIMIT + 1])
@@ -103,9 +106,6 @@ def test_malformed_ramp_does_not_bypass_seed_validation(payload):
     with pytest.raises(ValueError):
         migration.validate_stored_documents(client)
     client.batch.assert_not_called()
-    output = capsys.readouterr().out
-    assert 'private-one' not in output and 'private-two' not in output
-    assert f'{name}: live_members=' in output
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
