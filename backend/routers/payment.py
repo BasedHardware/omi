@@ -830,10 +830,14 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         # Check if the subscription is currently in a free trial
         now_ts = int(time.time())
         trial_end = stripe_sub.get('trial_end')
-        is_trialing = stripe_sub.get('status') == 'trialing' or (bool(trial_end) and trial_end > now_ts)
+        is_trialing = (
+            stripe_sub.get('status') == 'trialing'
+            or getattr(current_subscription, 'status', None) == 'trialing'
+            or (bool(trial_end) and trial_end > now_ts)
+        )
 
         if is_trialing:
-            # During an active trial, changing the billing interval (e.g. annual -> monthly)
+            # During an active trial, changing the billing interval (e.g. annual -> monthly or monthly -> annual)
             # must not end the trial early or trigger an immediate subscription_update invoice
             # for the annual price. Creating a SubscriptionSchedule without trial params causes
             # Stripe to end the trial immediately and charge the full annual amount.
@@ -845,7 +849,7 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                 'proration_behavior': 'none',
                 'metadata': {'uid': uid, 'upgrade_type': f'{current_plan.value}_{target_interval}'},
             }
-            if trial_end and trial_end > now_ts:
+            if trial_end:
                 modify_params['trial_end'] = trial_end
             if resolved_promo_id:
                 modify_params['discounts'] = [{'promotion_code': resolved_promo_id}]
