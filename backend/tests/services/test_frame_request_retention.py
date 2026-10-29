@@ -8,13 +8,15 @@ from services.frame_request_retention import (
     _release_lease,
     _load_user_page,
     _store_user_cursor,
-    FrameCleanupPage
+    FrameCleanupPage,
 )
+
 
 @pytest.fixture
 def mock_firestore():
     client = MagicMock()
     return client
+
 
 @patch("services.frame_request_retention.get_firestore_client")
 @patch("services.frame_request_retention.emit_posthog_event")
@@ -45,7 +47,7 @@ def test_run_maintenance_no_lease(
     _acquire_lease,
     emit_posthog_event,
     get_firestore_client,
-    mock_firestore
+    mock_firestore,
 ):
     get_firestore_client.return_value = mock_firestore
     _acquire_lease.return_value = None
@@ -56,9 +58,11 @@ def test_run_maintenance_no_lease(
     _load_user_page.assert_not_called()
     emit_posthog_event.assert_not_called()
 
+
 def test_run_maintenance_invalid_limits():
     with pytest.raises(ValueError):
         run_frame_request_retention_maintenance(user_limit=0, rows_per_user=10)
+
 
 def test_acquire_lease(mock_firestore):
     mock_transaction = MagicMock()
@@ -77,6 +81,7 @@ def test_acquire_lease(mock_firestore):
     assert generation == 1
     mock_transaction.set.assert_called_once()
 
+
 def test_acquire_lease_active(mock_firestore):
     mock_transaction = MagicMock()
     mock_firestore.transaction.return_value = mock_transaction
@@ -87,14 +92,13 @@ def test_acquire_lease_active(mock_firestore):
     mock_snapshot = MagicMock()
     mock_snapshot.exists = True
     now = datetime.now(timezone.utc)
-    mock_snapshot.to_dict.return_value = {
-        "lease_expires_at": now + timedelta(minutes=5)
-    }
+    mock_snapshot.to_dict.return_value = {"lease_expires_at": now + timedelta(minutes=5)}
     mock_ref.get.return_value = mock_snapshot
 
     generation = _acquire_lease(mock_firestore, owner="test-owner", now=now)
     assert generation is None
     mock_transaction.set.assert_not_called()
+
 
 def test_release_lease(mock_firestore):
     mock_transaction = MagicMock()
@@ -105,15 +109,13 @@ def test_release_lease(mock_firestore):
 
     mock_snapshot = MagicMock()
     mock_snapshot.exists = True
-    mock_snapshot.to_dict.return_value = {
-        "lease_owner": "test-owner",
-        "lease_generation": 1
-    }
+    mock_snapshot.to_dict.return_value = {"lease_owner": "test-owner", "lease_generation": 1}
     mock_ref.get.return_value = mock_snapshot
 
     success = _release_lease(mock_firestore, owner="test-owner", generation=1)
     assert success is True
     mock_transaction.update.assert_called_once()
+
 
 def test_release_lease_wrong_owner(mock_firestore):
     mock_transaction = MagicMock()
@@ -124,10 +126,7 @@ def test_release_lease_wrong_owner(mock_firestore):
 
     mock_snapshot = MagicMock()
     mock_snapshot.exists = True
-    mock_snapshot.to_dict.return_value = {
-        "lease_owner": "wrong-owner",
-        "lease_generation": 1
-    }
+    mock_snapshot.to_dict.return_value = {"lease_owner": "wrong-owner", "lease_generation": 1}
     mock_ref.get.return_value = mock_snapshot
 
     success = _release_lease(mock_firestore, owner="test-owner", generation=1)
@@ -164,7 +163,7 @@ def test_run_maintenance_success(
     _acquire_lease,
     emit_posthog_event,
     get_firestore_client,
-    mock_firestore
+    mock_firestore,
 ):
     get_firestore_client.return_value = mock_firestore
     _acquire_lease.return_value = 1
@@ -189,7 +188,7 @@ def test_run_maintenance_success(
     assert result["lease_skipped"] == 0
     assert result["users_scanned"] == 1
     assert result["rows_pruned"] == 10
-    assert result["pixels_cleaned"] == 15 # 5 + 5 + 5
+    assert result["pixels_cleaned"] == 15  # 5 + 5 + 5
     assert result["metadata_deleted"] == 5
     assert result["vision_outputs_stripped"] == 5
     assert result["cursor_committed"] == 1
@@ -228,7 +227,7 @@ def test_run_maintenance_with_failures(
     _acquire_lease,
     emit_posthog_event,
     get_firestore_client,
-    mock_firestore
+    mock_firestore,
 ):
     get_firestore_client.return_value = mock_firestore
     _acquire_lease.return_value = 1
@@ -267,10 +266,7 @@ def test_store_user_cursor(mock_firestore):
 
     mock_snapshot = MagicMock()
     mock_snapshot.exists = True
-    mock_snapshot.to_dict.return_value = {
-        "lease_owner": "test-owner",
-        "lease_generation": 1
-    }
+    mock_snapshot.to_dict.return_value = {"lease_owner": "test-owner", "lease_generation": 1}
     mock_ref.get.return_value = mock_snapshot
 
     success = _store_user_cursor(
@@ -278,23 +274,22 @@ def test_store_user_cursor(mock_firestore):
         cursor_uid="next-cursor",
         retry_cursor_uid="retry-cursor",
         lease_owner="test-owner",
-        lease_generation=1
+        lease_generation=1,
     )
 
     assert success is True
     mock_transaction.set.assert_called_once()
 
+
 def test_store_user_cursor_without_lease(mock_firestore):
     mock_ref = MagicMock()
     mock_firestore.collection().document.return_value = mock_ref
 
-    success = _store_user_cursor(
-        mock_firestore,
-        cursor_uid="next-cursor"
-    )
+    success = _store_user_cursor(mock_firestore, cursor_uid="next-cursor")
 
     assert success is True
     mock_ref.set.assert_called_once()
+
 
 def test_load_user_page(mock_firestore):
     mock_state_ref = MagicMock()
@@ -302,10 +297,7 @@ def test_load_user_page(mock_firestore):
 
     mock_state_snapshot = MagicMock()
     mock_state_snapshot.exists = True
-    mock_state_snapshot.to_dict.return_value = {
-        "cursor_uid": "user-2",
-        "retry_cursor_uid": ""
-    }
+    mock_state_snapshot.to_dict.return_value = {"cursor_uid": "user-2", "retry_cursor_uid": ""}
     mock_state_ref.get.return_value = mock_state_snapshot
 
     mock_retry_query = MagicMock()
@@ -344,16 +336,14 @@ def test_drain_due_pages():
     from services.frame_request_retention import _drain_due_pages
 
     mock_op = MagicMock()
-    mock_op.side_effect = [
-        FrameCleanupPage(processed=10, cleaned=5),
-        FrameCleanupPage(processed=5, cleaned=2)
-    ]
+    mock_op.side_effect = [FrameCleanupPage(processed=10, cleaned=5), FrameCleanupPage(processed=5, cleaned=2)]
 
     total, more_due = _drain_due_pages(mock_op, page_size=10, max_pages=8)
 
     assert total == 7
     assert more_due is False
     assert mock_op.call_count == 2
+
 
 def test_drain_due_pages_max_pages():
     from services.frame_request_retention import _drain_due_pages
