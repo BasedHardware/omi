@@ -42,37 +42,26 @@ def partition(uid, facts):
             groups[-1][1] = max(groups[-1][1], fact['end'])
             groups[-1][2].append(cid)
     windows = []
-    for start, end, ids in groups:
-        cursor = start
-        while True:
-            stop = min(end, cursor + timedelta(seconds=MAX_EPISODE_SECONDS))
-            members = [
-                cid
-                for cid in ids
-                if cursor <= facts[cid]['start'] < stop
-                or facts[cid]['start'] == facts[cid]['end'] == stop == end
-                and (stop - cursor).total_seconds() < MAX_EPISODE_SECONDS
-            ]
-            if not members:
-                if stop >= end:
-                    break
-                cursor = stop
-                continue
+    for _, _, ids in groups:
+        remaining = list(ids)
+        while remaining:
+            # The crossing capture remains in its starting window. Its tail
+            # cannot open a successor or supply a successor member's clock.
+            cursor = min(facts[cid]['start'] for cid in remaining)
+            cap = cursor + timedelta(seconds=MAX_EPISODE_SECONDS)
+            members = [cid for cid in remaining if facts[cid]['start'] < cap]
+            remaining = [cid for cid in remaining if cid not in members]
+            member_end = max(facts[cid]['end'] for cid in members)
+            stop = min(member_end, cap)
             windows.append(
                 {
                     'id': str(uuid5(NAMESPACE_URL, f'recorded-window:{uid}:{cursor.isoformat()}')),
                     'started_at': cursor,
                     'last_activity_at': stop,
                     'conversation_ids': sorted(members),
-                    'close_reason': 'hard_cap' if stop < end else 'gap',
+                    'close_reason': 'hard_cap' if member_end > stop or remaining else 'gap',
                 }
             )
-            capped_point = (stop - cursor).total_seconds() == MAX_EPISODE_SECONDS and any(
-                facts[cid]['start'] == facts[cid]['end'] == stop for cid in ids
-            )
-            if stop >= end and not capped_point:
-                break
-            cursor = stop
     return windows
 
 
