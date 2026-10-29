@@ -57,6 +57,7 @@ COUNT_PROFILES = (
     _profile('main-count-multi-status', statuses=_MULTI_STATUS, sources=[[], ['omi']], **_DATES, **_SELECTORS),
     _profile('search-overview-starred', statuses=[None], starred=[True]),
     _profile('search-overview-folder', statuses=[None], folder_id=['folder-1']),
+    _profile('first-summary-push', statuses=[['completed']]),
 )
 
 WITHOUT_PHOTOS_PROFILES = (

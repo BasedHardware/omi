@@ -8,6 +8,11 @@ users/{uid}/fcm_tokens (subcollection)
       ├── created_at: timestamp
       └── time_zone: "America/New_York"
 
+users/{uid}/notification_markers/first_summary_push (document)
+  ├── outcome: "sent" | "not_first" | "in_app" | "notifications_disabled"
+  ├── conversation_id: the conversation that decided it
+  └── created_at: timestamp
+
 users/{uid} always carries daily_summary_enabled and daily_summary_hour_local
 once a time_zone or preference write has run (and after the one-time backfill).
 Those two fields are the write-time form of the Python defaults True / 22.
@@ -15,6 +20,7 @@ Those two fields are the write-time form of the Python defaults True / 22.
 
 from models.time_zone_admission import is_schedulable_time_zone
 
+from google.api_core.exceptions import AlreadyExists
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud import firestore
 from google.cloud.firestore import DELETE_FIELD
@@ -331,6 +337,32 @@ def set_mentor_notification_frequency(uid: str, frequency: int) -> bool:
     # Invalidate local cache so this instance sees the update immediately
     get_memory_cache().delete(f"mentor_frequency:{uid}")
     return True
+
+
+def _first_summary_push_ref(uid: str, firestore_client: Any = None) -> Any:
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    return client.collection('users').document(uid).collection('notification_markers').document('first_summary_push')
+
+
+def has_first_summary_push_marker(uid: str, *, firestore_client: Any = None) -> bool:
+    """Whether the account's one first-summary push decision is already recorded."""
+    return bool(getattr(_first_summary_push_ref(uid, firestore_client).get(), 'exists', False))
+
+
+def try_mark_first_summary_push(uid: str, outcome: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
+    """Record the account's one first-summary push decision. False when one is already recorded.
+
+    ``create`` is atomic: concurrent or retried processing records one decision, and only the
+    caller that recorded ``sent`` may send. Storage errors propagate; callers treat them as not
+    recorded, so a failure can drop the push but never send it twice.
+    """
+    try:
+        _first_summary_push_ref(uid, firestore_client).create(
+            {'outcome': outcome, 'conversation_id': conversation_id, 'created_at': firestore.SERVER_TIMESTAMP}
+        )
+        return True
+    except AlreadyExists:
+        return False
 
 
 def get_all_tokens(uid: str, *, legacy_token: Optional[str] = None, user_document_loaded: bool = False) -> list[str]:

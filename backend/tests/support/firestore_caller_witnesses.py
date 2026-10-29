@@ -35,6 +35,7 @@ import routers.search as search_router
 import routers.support as support_router
 import routers.users as users_router
 import utils.apps as apps_utils
+import utils.conversations.first_summary_push as first_summary_push
 import utils.conversations.meeting_context_pack as meeting_context_pack
 import utils.imports.limitless as limitless
 import utils.llm.fair_use_classifier as fair_use_classifier
@@ -387,6 +388,18 @@ def _run_prior_meetings(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture)
     )
 
 
+def _run_first_summary_push(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    _stub(monkeypatch, first_summary_push.notification_db, 'has_first_summary_push_marker', lambda uid: False)
+    conversation = SimpleNamespace(id='c1', discarded=False, structured=SimpleNamespace(overview='Notes.'))
+    trial(
+        capture,
+        first_summary_push.maybe_send_first_summary_push,
+        'u1',
+        conversation,
+        first_summary_push.ProcessingTrigger.CAPTURE_END,
+    )
+
+
 def _run_limitless_lookup(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
     trial(capture, limitless.find_legacy_limitless_conversation_id, 'u1', FROZEN_NOW)
 
@@ -672,6 +685,14 @@ WITNESSES: dict[str, CallerWitness] = {
             ('prior-meeting-context',),
             1,
             _run_prior_meetings,
+        ),
+        CallerWitness(
+            'utils/conversations/first_summary_push.py:maybe_send_first_summary_push:database.conversations.get_conversations_count',
+            'database.conversations.get_conversations_count',
+            'database.conversations.get_conversations_count',
+            ('first-summary-push',),
+            1,
+            _run_first_summary_push,
         ),
         CallerWitness(
             'utils/imports/limitless.py:find_legacy_limitless_conversation_id:database.conversations.get_conversations',

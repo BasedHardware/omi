@@ -1,6 +1,6 @@
 from utils import funded_processing
 from utils.sync import processing_hold
-from utils.conversations.summary_delivery import PROCESS_CONTEXT
+from utils.conversations.summary_delivery import PROCESS_CONTEXT, present as summary_present
 from utils.processing_backlog import defer_estimate
 import os
 import time
@@ -2599,6 +2599,9 @@ def process_conversation(
     """
     silent_backfill = trigger is ProcessingTrigger.SILENT_BACKFILL
     backlog_authorized = trigger is ProcessingTrigger.BACKLOG_CHOICE
+    # Read before this pass replaces it: the first-summary push is for a summary this pass
+    # makes appear, never for one it regenerates.
+    summary_was_present = summary_present(getattr(conversation, 'structured', None))
     mode = PROCESSING_MODES[trigger]
     force_process, is_reprocess = mode.run_now, mode.reprocess
     # Snapshot before this call replaces structured or status. Sync intake's
@@ -3031,6 +3034,9 @@ def process_conversation(
                 logger.error(f"Error during folder assignment for conversation {conversation.id}: {e}")
 
         if not discarded:
+            # First, so a failing app or memory step below cannot drop it.
+            if not summary_was_present:
+                submit_with_context(postprocess_executor, _send_first_summary_push, uid, conversation, trigger)
             # Analytics tracking
             insights_gained = 0
             if conversation.structured:
@@ -3192,6 +3198,12 @@ def process_conversation(
     complete_explicit(uid, conversation, trigger)
     logger.info(f'process_conversation completed conversation.id= {conversation.id}')
     return conversation
+
+
+def _send_first_summary_push(uid: str, conversation: Conversation, trigger: ProcessingTrigger) -> None:
+    from utils.conversations.first_summary_push import maybe_send_first_summary_push
+
+    maybe_send_first_summary_push(uid, conversation, trigger)
 
 
 def _send_important_conversation_notification_if_needed(uid: str, conversation: Conversation) -> None:  # type: ignore[reportUnusedFunction]  # reserved for re-enablement

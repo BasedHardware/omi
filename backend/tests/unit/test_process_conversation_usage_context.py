@@ -519,6 +519,70 @@ def test_deferred_derived_effects_emit_nothing_until_runner_invoked(monkeypatch)
     assert all(call.args[1] is not process_conversation.save_structured_vector for call in submit.call_args_list)
 
 
+def _first_summary_pushes(submit):
+    return [call for call in submit.call_args_list if process_conversation._send_first_summary_push in call.args]
+
+
+def _process_for_first_summary_push(monkeypatch, prior_structured, submit, extract_memories=None, **process_kwargs):
+    """Process a conversation whose stored structure was ``prior_structured``."""
+    input_conversation = MagicMock()
+    input_conversation.source = "omi"
+    input_conversation.get_person_ids.return_value = []
+    input_conversation.structured = prior_structured
+    completed = _explicit_selection_flow_conversation()
+    monkeypatch.setattr(process_conversation, "_get_structured", lambda *args, **kwargs: (MagicMock(), False))
+    monkeypatch.setattr(process_conversation, "_get_conversation_obj", lambda *args, **kwargs: completed)
+    monkeypatch.setattr(
+        process_conversation.lifecycle_service, "persist_processed_conversation", MagicMock(return_value=True)
+    )
+    monkeypatch.setattr(process_conversation, "submit_with_context", submit)
+    monkeypatch.setattr(process_conversation, "trigger_conversation_apps", MagicMock())
+    monkeypatch.setattr(process_conversation, "_extract_memories", extract_memories or MagicMock())
+    monkeypatch.setattr(process_conversation, "_save_action_items", MagicMock())
+    monkeypatch.setattr(process_conversation.conversations_db, "update_conversation", MagicMock())
+    process_conversation.process_conversation("uid", "en", input_conversation, **process_kwargs)
+    return completed
+
+
+def test_a_summary_this_pass_creates_goes_to_the_first_summary_push(monkeypatch):
+    submit = MagicMock()
+    completed = _process_for_first_summary_push(monkeypatch, Structured(title='Processing'), submit)
+
+    pushes = _first_summary_pushes(submit)
+    assert len(pushes) == 1
+    assert pushes[0].args[1:] == (
+        process_conversation._send_first_summary_push,
+        "uid",
+        completed,
+        process_conversation.ProcessingTrigger.CAPTURE_END,
+    )
+
+
+def test_a_regenerated_summary_never_goes_to_the_first_summary_push(monkeypatch):
+    submit = MagicMock()
+    _process_for_first_summary_push(
+        monkeypatch,
+        Structured(title='Standup', overview='Already summarized.'),
+        submit,
+        trigger=process_conversation.ProcessingTrigger.SYNC_UPDATE,
+    )
+
+    assert _first_summary_pushes(submit) == []
+
+
+def test_a_failing_memory_step_cannot_drop_the_first_summary_push(monkeypatch):
+    def memory_extraction_down(uid, conversation):
+        raise RuntimeError('memory extraction unavailable')
+
+    submit = MagicMock()
+    with pytest.raises(RuntimeError):
+        _process_for_first_summary_push(
+            monkeypatch, Structured(title='Processing'), submit, extract_memories=memory_extraction_down
+        )
+
+    assert len(_first_summary_pushes(submit)) == 1
+
+
 def _run_merge_created_webhook_flow(monkeypatch, **process_kwargs):
     """Process a MERGE run with every submitted job run inline; return (result, delivered webhooks)."""
     input_conversation = MagicMock()
