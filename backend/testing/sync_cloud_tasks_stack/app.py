@@ -260,6 +260,9 @@ elif ROLE == 'worker':
     def _local_prerecorded(audio_url: str, *, return_language: bool = False, **_kwargs: Any) -> Any:
         """Deterministic STT leaf; it emits no transcript into evidence."""
         job_id = audio_url.rsplit('/', 1)[-1]
+        # The upload worker owns paid STT. Full note processing can be held
+        # for merge settlement and no longer runs inside this worker lease.
+        _wait_for_process_gate(job_id)
         write_event('providers', {'event': 'stt_completed', 'job_id': job_id, 'word_count': 1})
         words = [
             {
@@ -270,14 +273,14 @@ elif ROLE == 'worker':
         ]
         return (words, 'en') if return_language else words
 
-    def _wait_for_process_gate(conversation_id: str) -> None:
+    def _wait_for_process_gate(job_id: str) -> None:
         if _gate_dir is None:
             return
         _gate_dir.mkdir(parents=True, exist_ok=True)
         entered = _gate_dir / 'entered'
         release = _gate_dir / 'release'
         entered.write_text('entered', encoding='utf-8')
-        write_event('providers', {'event': 'processor_gate_entered', 'conversation_id': conversation_id})
+        write_event('providers', {'event': 'processor_gate_entered', 'job_id': job_id})
         deadline = time.monotonic() + 15.0
         while not release.exists():
             if time.monotonic() >= deadline:
@@ -299,7 +302,6 @@ elif ROLE == 'worker':
         conversation_id = getattr(conversation, 'id', None)
         if not isinstance(conversation_id, str) or not conversation_id:
             raise ValueError('Sync stack processor requires a durable conversation id')
-        _wait_for_process_gate(conversation_id)
         effective_language = language_code or language or 'en'
         started_at = getattr(conversation, 'started_at', None) or datetime.now(timezone.utc)
         finished_at = getattr(conversation, 'finished_at', None) or started_at
