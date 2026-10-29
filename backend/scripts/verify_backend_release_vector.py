@@ -28,6 +28,10 @@ LISTENER_SERVICE = 'backend-listen'
 MIN_CLOUD_RUN_TIMEOUT_SECONDS = 300
 DEFAULT_LATEST_READY_WAIT_SECONDS = 300.0
 DEFAULT_LATEST_READY_POLL_INTERVAL_SECONDS = 10.0
+# Every gcloud/kubectl query is a bounded subprocess call so a stalled query
+# fails the verification instead of holding the deploy (and its deployment
+# lock) open past the caller's wait budget.
+QUERY_TIMEOUT_SECONDS = 120
 
 
 @dataclass(frozen=True)
@@ -210,7 +214,16 @@ def assert_commands_are_read_only(commands: Mapping[str, Sequence[str]]) -> None
 def collect_documents(commands: Mapping[str, Sequence[str]]) -> dict[str, Mapping[str, Any]]:
     documents: dict[str, Mapping[str, Any]] = {}
     for name, command in commands.items():
-        completed = subprocess.run(command, check=False, capture_output=True, text=True)
+        try:
+            completed = subprocess.run(
+                command,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=QUERY_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(f'{name} query timed out after {QUERY_TIMEOUT_SECONDS}s') from exc
         if completed.returncode != 0:
             detail = completed.stderr.strip() or completed.stdout.strip() or f'exit code {completed.returncode}'
             raise RuntimeError(f'{name} query failed: {detail}')
@@ -422,6 +435,8 @@ def poll_latest_ready_convergence(
     pointer passes, and any new non-pointer mismatch aborts the poll
     immediately. When the window expires with pointer-only errors still
     standing, the poll reports ``timed_out`` and the caller fails verification.
+    Each query carries its own subprocess timeout, so a stalled gcloud fails
+    closed instead of holding the deploy past the window.
     """
     resolve = collector or collect_documents
     poll_commands = build_read_only_commands(expectation, include_listener=False, include_revision_documents=True)

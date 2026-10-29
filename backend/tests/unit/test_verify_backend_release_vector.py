@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 from pathlib import Path
 import sys
 from types import SimpleNamespace
@@ -1051,6 +1052,23 @@ def test_partition_latest_ready_lag_separates_pointer_lag_from_other_errors() ->
     assert verifier.partition_latest_ready_lag(expectation, [lag]) == (['backend-integration'], [])
     assert verifier.partition_latest_ready_lag(expectation, [lag, other]) == (['backend-integration'], [other])
     assert verifier.partition_latest_ready_lag(expectation, [other]) == ([], [other])
+
+
+def test_collect_documents_fails_closed_when_a_query_stalls(monkeypatch) -> None:
+    # A stalled gcloud during the latest-ready poll must surface as a clean
+    # RuntimeError (exit 1), never an unbounded subprocess holding the deploy.
+    def stalled_run(command, **kwargs):
+        assert kwargs.get('timeout') == verifier.QUERY_TIMEOUT_SECONDS, 'queries must carry a subprocess timeout'
+        raise subprocess.TimeoutExpired(cmd=command, timeout=kwargs['timeout'])
+
+    monkeypatch.setattr(
+        verifier,
+        'subprocess',
+        SimpleNamespace(run=stalled_run, TimeoutExpired=subprocess.TimeoutExpired),
+    )
+
+    with pytest.raises(RuntimeError, match='cloud_run/backend query timed out'):
+        verifier.collect_documents({'cloud_run/backend': ['gcloud', 'run', 'services', 'describe', 'backend']})
 
 
 def test_latest_ready_poll_refreshes_only_lagging_services_until_convergence() -> None:
