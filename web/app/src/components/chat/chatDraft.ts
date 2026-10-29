@@ -29,6 +29,11 @@ export function setChatDraftOwner(uid: string | null): void {
   owner = next;
 }
 
+/** The owner the current draft keys are scoped to ('' while signed out). */
+export function chatDraftOwner(): string {
+  return owner;
+}
+
 export const chatDraftKeys = baseKeys;
 
 export function readChatDraft(key: string): string {

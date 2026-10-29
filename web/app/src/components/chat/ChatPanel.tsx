@@ -3,6 +3,7 @@
 import { ChatBudgetPause, useChatBudgetPause } from './ChatBudgetPause';
 import {
   chatDraftKeys,
+  chatDraftOwner,
   clearChatDraft,
   readChatDraft,
   writeChatDraft,
@@ -233,7 +234,12 @@ export function ChatPanel() {
 
     setInput('');
     setSelectedFiles([]);
+    const ownerAtSend = chatDraftOwner();
     const accepted = await sendMessage(text, fileIds, currentContext);
+    // A different account may have signed in while this send ran; the
+    // continuation must not write the previous account's prompt under the new
+    // owner's draft key.
+    if (chatDraftOwner() !== ownerAtSend) return;
     // Only this send's own draft is retired on acceptance; a newer draft the
     // user typed while the reply streamed is never clobbered. The persist
     // effect may have already cleared the composer's own copy, so an empty

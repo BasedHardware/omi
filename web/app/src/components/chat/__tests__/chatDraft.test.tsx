@@ -150,4 +150,27 @@ describe('chat draft persistence', () => {
     expect(localStorage.getItem(chatDraftKeys.panel)).toBeNull();
     expect(localStorage.getItem(`${chatDraftKeys.panel}:uid-a`)).toBeNull();
   });
+
+  it('a send that outlives its account writes nothing under the new owner', async () => {
+    setChatDraftOwner('uid-a');
+    let resolveSend: (accepted: boolean) => void = () => {};
+    sendMessage.mockReturnValueOnce(
+      new Promise<boolean>((resolve) => {
+        resolveSend = resolve;
+      }),
+    );
+    render(<ChatPanel />);
+    typeDraft('account a unsent');
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+
+    // The account switches while the send is still running; the switch clears
+    // A's drafts and rescopes the keys.
+    setChatDraftOwner('uid-b');
+
+    resolveSend(false);
+    await waitFor(() => expect(sendMessage).toHaveBeenCalled());
+    expect(readChatDraft(chatDraftKeys.panel)).toBe('');
+    expect(localStorage.getItem(`${chatDraftKeys.panel}:uid-b`)).toBeNull();
+    expect(localStorage.getItem(`${chatDraftKeys.panel}:uid-a`)).toBeNull();
+  });
 });
