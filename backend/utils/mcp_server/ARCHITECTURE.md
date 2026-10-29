@@ -30,6 +30,7 @@ array bodies, status codes, and rate buckets.
 | `handlers/conversations.py` | Conversation list/get/search tools |
 | `handlers/action_items.py` | Action-item read/write tools |
 | `handlers/other.py` | Screen activity, people, goals, chat, X posts, daily summaries |
+| `handlers/speakers.py` | `assign_speaker` through the shared manual-assignment commit; `create_person` (REST People create contract) |
 | `handlers/profile.py` | User-profile tool |
 
 ## Transport and protocol boundary

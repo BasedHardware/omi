@@ -18,6 +18,8 @@ MCP_DEFAULT_API_KEY_SCOPES = [
     "screen_activity.read",
     "people.read",
     "people.rename",
+    "people.create",
+    "speakers.assign",
 ]
 
 # Never granted implicitly -- not to legacy keys, not to newly created keys, not
