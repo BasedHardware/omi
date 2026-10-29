@@ -5,6 +5,7 @@ This app provides Shopify integration through OAuth authentication
 and chat tools for analytics, orders, and customer management.
 """
 import os
+import re
 import hmac
 import hashlib
 import urllib.parse
@@ -351,6 +352,9 @@ async def shopify_auth(uid: str, shop: Optional[str] = None):
     if not shop.endswith('.myshopify.com'):
         shop = f"{shop}.myshopify.com"
 
+    if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9\-]*\.myshopify\.com$', shop):
+        raise HTTPException(status_code=400, detail="Invalid shop domain")
+
     # Build OAuth URL
     scopes = ",".join(SHOPIFY_SCOPES)
     params = {
@@ -413,6 +417,14 @@ async def shopify_callback(
             "request": request,
             "authenticated": False,
             "error": "Invalid callback state"
+        })
+
+    # Validate shop domain before using it in URLs
+    if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9\-]*\.myshopify\.com$', shop):
+        return templates.TemplateResponse("setup.html", {
+            "request": request,
+            "authenticated": False,
+            "error": "Invalid shop domain"
         })
 
     # Exchange code for access token
