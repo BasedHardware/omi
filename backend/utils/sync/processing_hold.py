@@ -53,9 +53,16 @@ def enabled() -> bool:
 
 
 def enabled_for(row: Mapping[str, Any]) -> bool:
+    # Outbox/context provenance owns this epoch. A mixed obligation remains
+    # held while either independently enabled producer still needs its window.
+    if 'sync_hold' in row:
+        sync_requested = row.get('sync_hold_requested') or not row.get('merge_hold')
+        return bool((row.get('merge_hold') and merge_before_processing_enabled()) or (sync_requested and enabled()))
     state = row.get(FIELD) or {}
-    if row.get('merge_hold') or state.get('merge_first'):
-        return merge_before_processing_enabled()
+    if state.get('merge_first'):
+        return merge_before_processing_enabled() or bool(
+            (row.get('sync_relevance') is not None or row.get('sync_live_target')) and enabled()
+        )
     return enabled()
 
 

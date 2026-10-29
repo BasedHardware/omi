@@ -101,7 +101,7 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
         # after success so lazy effects do not remain fenced indefinitely.
         outcome, due = (
             processing_hold.admission(conversation_data, context, now=time.time())
-            if processing_hold.enabled_for(conversation_data)
+            if processing_hold.enabled_for(context)
             else ('ready', None)
         )
         processing_hold.record(outcome)

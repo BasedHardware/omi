@@ -7878,8 +7878,11 @@ merge-before-processing kill switch. The first survivor notes supply the baselin
 subsequent absorbs coalesce against it. Unchanged, immaterial and capped work
 settles the merge revision without a paid refresh. A raw survivor still passes
 the normal `SYNC_UPDATE` relevance policy on its first full processing.
-Rollback drains existing merge holds immediately through their stored wakes and
-the existing repair sweep. New absorbs use the legacy path after rollback.
+Rollback drains live-only merge holds through their stored wakes and the repair
+sweep. Mixed sync/live obligations keep the independent sync window while its
+switch remains on. New epochs reset their producer markers, so a historical live
+hold cannot disable a future sync hold. New absorbs use the legacy path after
+rollback.
 
 Successful automatic processing stores a content digest, word count and union
 speech duration in `sync_processing_hold.full_snapshot`, after processing and its existing effects return, through a

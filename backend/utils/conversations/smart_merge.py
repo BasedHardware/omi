@@ -52,6 +52,7 @@ from config.conversation_smart_merge import (
     smart_merge_mode,
 )
 from config.jev_decisions import JEV_MODEL
+from config.merge_before_processing import enabled as merge_before_processing_enabled
 from database import conversations as conversations_db
 from database import notifications as notification_db
 from database import smart_merge as smart_merge_db
@@ -886,7 +887,7 @@ def refresh_survivor(
             # Persist the obligation before acknowledging the merge. Further
             # absorbs may proceed while this durable worker waits for quiet.
             hold_args: dict[str, Any] = {'sync_hold': True}
-            if (row.get(processing_hold.FIELD) or {}).get('merge_first'):
+            if (row.get(processing_hold.FIELD) or {}).get('merge_first') and merge_before_processing_enabled():
                 hold_args['merge_hold'] = True
             enrichment_outbox.mark(uid, survivor_id, row.get('language') or 'en', **hold_args)
             if not smart_merge_db.delegate_survivor_refresh(uid, survivor_id, revision=revision(row)):

@@ -404,8 +404,15 @@ def mark_update(
             ceiling = 3540 if demand_enabled else 3600
             row['due_at'] = min(row['due_at'], row['first_pending_at'] + ceiling)
 
+        if old and not old.get('dormant') and old.get('sync_hold') and not old.get('merge_hold'):
+            row['sync_hold_requested'] = True
+        if old and old.get('dormant'):
+            row.pop('merge_hold', None)
+            row.pop('sync_hold_requested', None)
         if sync_hold or merge_hold:
             row['sync_hold'] = True
+            if sync_hold and not merge_hold:
+                row['sync_hold_requested'] = True
             if merge_hold:
                 row['merge_hold'] = True
             row['due_at'] = min(
@@ -584,6 +591,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
             process_context.update(
                 sync_hold=bool(row.get('sync_hold')),
                 merge_hold=bool(row.get('merge_hold')),
+                sync_hold_requested=bool(row.get('sync_hold_requested')),
                 first_pending_at=row['first_pending_at'],
             )
         process_token = summary_delivery.PROCESS_CONTEXT.set(process_context)

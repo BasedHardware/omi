@@ -376,3 +376,51 @@ def test_note_call_or_derived_task_receipt_protects_a_donor_even_without_rich_no
     world.raw('n').update(extra)
     invoke(world)
     assert not world.raw('n').get('deleted') and not world.jev_calls
+
+
+@pytest.mark.parametrize(
+    'sync_enabled,merge_enabled,expected', [('true', 'false', True), ('false', 'true', True), ('false', 'false', False)]
+)
+def test_mixed_pending_hold_obeys_either_enabled_producer(state, monkeypatch, sync_enabled, merge_enabled, expected):
+    rows, tasks = state
+    outbox.mark('u', 'p', 'en', now=100, sync_hold=True, merge_hold=True)
+    outbox.mark('u', 'p', 'en', now=110, sync_hold=True)
+    pending = rows[outbox.key('u', 'p')]
+    monkeypatch.setenv('SYNC_PROCESSING_HOLD_ENABLED', sync_enabled)
+    monkeypatch.setenv('CONVERSATION_MERGE_BEFORE_PROCESSING', merge_enabled)
+    assert hold.enabled_for(pending) is expected
+
+
+def test_new_sync_epoch_does_not_inherit_retired_live_hold_switch(state, monkeypatch):
+    rows, tasks = state
+    outbox.mark('u', 'p', 'en', now=100, sync_hold=True, merge_hold=True)
+    key = outbox.key('u', 'p')
+    rows[key]['dormant'] = True
+    outbox.mark('u', 'p', 'en', now=1000, sync_hold=True)
+    monkeypatch.setenv('CONVERSATION_MERGE_BEFORE_PROCESSING', 'false')
+    monkeypatch.setenv('SYNC_PROCESSING_HOLD_ENABLED', 'true')
+    assert not rows[key].get('merge_hold') and rows[key]['sync_hold_requested']
+    assert hold.enabled_for(rows[key])
+
+
+def test_new_live_epoch_does_not_inherit_retired_sync_hold_switch(state, monkeypatch):
+    rows, tasks = state
+    outbox.mark('u', 'p', 'en', now=100, sync_hold=True)
+    key = outbox.key('u', 'p')
+    rows[key]['dormant'] = True
+    outbox.mark('u', 'p', 'en', now=1000, sync_hold=True, merge_hold=True)
+    monkeypatch.setenv('CONVERSATION_MERGE_BEFORE_PROCESSING', 'false')
+    monkeypatch.setenv('SYNC_PROCESSING_HOLD_ENABLED', 'true')
+    assert not rows[key].get('sync_hold_requested') and rows[key]['merge_hold']
+    assert not hold.enabled_for(rows[key])
+
+
+def test_existing_sync_obligation_keeps_its_window_when_live_merge_joins(state, monkeypatch):
+    rows, tasks = state
+    outbox.mark('u', 'p', 'en', now=100, sync_hold=True)
+    key = outbox.key('u', 'p')
+    rows[key].pop('sync_hold_requested')  # A stored step-1 obligation predates this field.
+    outbox.mark('u', 'p', 'en', now=110, sync_hold=True, merge_hold=True)
+    monkeypatch.setenv('CONVERSATION_MERGE_BEFORE_PROCESSING', 'false')
+    monkeypatch.setenv('SYNC_PROCESSING_HOLD_ENABLED', 'true')
+    assert rows[key]['sync_hold_requested'] and hold.enabled_for(rows[key])
