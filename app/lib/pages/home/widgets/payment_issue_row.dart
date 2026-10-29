@@ -64,6 +64,7 @@ class PaymentIssueRow extends StatelessWidget {
                   key: const ValueKey('payment_issue_update'),
                   label: l10n.update,
                   size: OmiButtonSize.compact,
+                  pill: true,
                   onPressed: () => openPaymentIssuePortal(context, portalPage: portalPage),
                 ),
               ],
