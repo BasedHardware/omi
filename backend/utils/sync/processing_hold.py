@@ -132,12 +132,14 @@ def admission(row: Mapping[str, Any], obligation: Mapping[str, Any], *, now: flo
     previous = state.get('full_snapshot')
     if previous:
         current = content_snapshot(row)
-        if previous.get('digest') == current['digest']:
+        unprocessed_donor = bool(state.get('unprocessed_donor'))
+        if previous.get('digest') == current['digest'] and not unprocessed_donor:
             return 'unchanged', None
-        if int(state.get('late_runs') or 0) >= MAX_LATE_RUNS:
+        if not unprocessed_donor and int(state.get('late_runs') or 0) >= MAX_LATE_RUNS:
             return 'late_cap', None
         if (
-            current['speech_seconds'] - float(previous.get('speech_seconds') or 0) < 30
+            not unprocessed_donor
+            and current['speech_seconds'] - float(previous.get('speech_seconds') or 0) < 30
             and current['words'] - int(previous.get('words') or 0) < 80
         ):
             return 'immaterial', None
@@ -153,4 +155,5 @@ def completion_patch(
         automatic and bool(previous) and previous.get('digest') != snapshot.get('digest')
     )
     state.update(full_snapshot=dict(snapshot), pending_since=None, held=False)
+    state.pop('unprocessed_donor', None)
     return state

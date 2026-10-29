@@ -957,6 +957,15 @@ def _refresh_claimed(uid: str, survivor_id: str, claimed: int, *, owner: str, sk
             record_conversation_smart_merge_refresh('failed')
             raise
         if not persistence['owned']:
+            context = PROCESS_CONTEXT.get()
+            if context and context.get('hold_budget_denied_at_max'):
+                # Funding denial at the terminal hold cap settles the survivor
+                # refresh ledger without pretending processing persisted.
+                if not smart_merge_db.checkpoint_survivor_processing(
+                    uid, survivor_id, owner=owner, revision=claimed, sync_revision=row.get('sync_content_revision')
+                ) or not smart_merge_db.complete_survivor_refresh(uid, survivor_id, owner=owner, revision=claimed):
+                    raise SmartMergeIncomplete('refresh_completion_fenced')
+                return
             # Deleted, or a sync append moved the transcript on; the next decision
             # against this survivor pays the refresh it still owes.
             record_conversation_smart_merge_refresh('fenced')

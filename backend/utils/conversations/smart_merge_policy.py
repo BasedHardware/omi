@@ -580,6 +580,9 @@ def absorb_payloads(
         if merge_hold:
             hold = dict(survivor.get(processing_hold.FIELD) or {})
             hold['merge_first'] = True
+            # This donor never ran full processing, so even a small append must
+            # refresh the canonical notes and derived effects.
+            hold['unprocessed_donor'] = True
             # The survivor already owns its first notes. Count only material
             # late content; never give every absorb a fresh paid-run budget.
             if not hold.get('full_snapshot') and summary_present(survivor.get('structured')):

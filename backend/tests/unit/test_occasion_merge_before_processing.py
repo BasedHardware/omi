@@ -7,10 +7,11 @@ from unittest.mock import Mock
 import pytest
 
 from config import merge_before_processing as switch
+from database import conversations as conversations_db
 from database import smart_merge as merge_db
 from utils.conversations import merge_before_processing as boundary
 from utils.conversations import process_conversation as process_module
-from utils.conversations import smart_merge, finalizer
+from utils.conversations import smart_merge, finalizer, sync_hold_completion
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.relevance import RelevanceDecision
@@ -194,7 +195,7 @@ def test_current_live_job_can_absorb_without_fanout_or_paid_notes(world):
     assert world.processed == [] and world.raw('n')['deleted']
 
 
-def test_repeated_parent_absorbs_share_a_window_and_one_material_late_run(world):
+def test_repeated_parent_absorbs_share_a_window_and_unprocessed_donors_still_refresh(world):
     with pytest.raises(ConversationAbsorbed):
         invoke(world)
     world.add('third', 30, 10, status='processing', structured={})
@@ -216,9 +217,9 @@ def test_repeated_parent_absorbs_share_a_window_and_one_material_late_run(world)
     with pytest.raises(ConversationAbsorbed):
         boundary.before_notes(UID, deserialize_conversation(world.get(UID, 'fourth')), ProcessingTrigger.CAPTURE_END)
     latest = world.get(UID, 'p')
-    assert hold.admission(latest, {'first_pending_at': 0}, now=1e12)[0] == 'late_cap'
-    smart_merge.refresh_survivor(UID, 'p', owner='capped', settled=True, skip_processing=True)
-    assert len(world.processed) == 1
+    assert hold.admission(latest, {'first_pending_at': 0}, now=1e12)[0] == 'max_hold'
+    smart_merge.refresh_survivor(UID, 'p', owner='capped', settled=True)
+    assert len(world.processed) == 2
     assert world.raw('p')['smart_merge']['refreshed_revision'] == 3
 
 
@@ -308,11 +309,80 @@ def test_immaterial_content_settles_ledger_without_notes_or_vector(world):
         invoke(world)
     row = world.get(UID, 'p')
     snapshot = hold.content_snapshot(row)
+    row[hold.FIELD].pop('unprocessed_donor', None)  # Model a donor whose full processing already ran.
     row[hold.FIELD]['full_snapshot'] = snapshot
     world.raw('p')[hold.FIELD] = row[hold.FIELD]
     assert hold.admission(row, {'first_pending_at': 0}, now=1e12)[0] == 'unchanged'
     smart_merge.refresh_survivor(UID, 'p', owner='unchanged', settled=True, skip_processing=True)
     assert world.processed == [] and world.vectors == []
+    assert world.raw('p')['smart_merge']['refreshed_revision'] == 1
+
+
+def test_unprocessed_40_word_20_second_donor_refreshes_the_survivor(world):
+    donor = world.get(UID, 'n')
+    segments = donor['transcript_segments']
+    segments[0].update(text=' '.join(['donor'] * 20), start=0, end=10)
+    segments[1].update(text=' '.join(['donor'] * 20), start=10, end=20)
+    world.store.rows[_path('n')] = conversations_db.encode_conversation_for_write(UID, donor, 'enhanced')
+
+    with pytest.raises(ConversationAbsorbed):
+        invoke(world)
+
+    parent = world.get(UID, 'p')
+    hold_state = parent[hold.FIELD]
+    previous = hold_state['full_snapshot']
+    current = hold.content_snapshot(parent)
+    assert current['words'] - previous['words'] == 40
+    assert current['speech_seconds'] - previous['speech_seconds'] == 20
+    assert hold_state['unprocessed_donor']
+    assert (
+        hold.admission(
+            parent,
+            {'first_pending_at': hold_state['pending_since']},
+            now=hold_state['pending_since'] + hold.QUIET_SECONDS,
+        )[0]
+        == 'ready'
+    )
+
+    smart_merge.refresh_survivor(UID, 'p', owner='small-donor', settled=True)
+    assert len(world.processed) == 1
+
+
+def test_max_hold_budget_denial_settles_merge_refresh_without_rearming(world, monkeypatch):
+    world.raw('p').update(
+        sync_content_revision=2,
+        **{hold.FIELD: {'pending_since': 100, 'last_content_at': 100, 'held': True}},
+        smart_merge={'role': 'survivor', 'revision': 1, 'refreshed_revision': 0},
+    )
+    monkeypatch.setattr(callback, 'repair_fenced', lambda _: False)
+    monkeypatch.setattr(callback, 'claim_from_snapshot', lambda *_: True)
+    monkeypatch.setattr(callback, 'get_firestore_client', lambda: world.store)
+    monkeypatch.setattr(callback, 'schedule_after_finalization', lambda *_: None)
+    monkeypatch.setattr(callback.time, 'time', lambda: 3700)
+
+    def denied(_uid, _language, conversation, *, persistence_observer, **_kwargs):
+        sync_hold_completion.defer_held_budget_denial()
+        persistence_observer(False)
+        return conversation
+
+    monkeypatch.setattr(smart_merge, 'process_conversation', denied)
+    context = {
+        'owner': 'budget-denied',
+        'lease_until': 4000,
+        'first_pending_at': 100,
+        'sync_hold': True,
+        'merge_hold': True,
+    }
+    token = PROCESS_CONTEXT.set(context)
+    try:
+        assert callback.enrich_conversation(UID, 'p', 'en') is None
+    finally:
+        PROCESS_CONTEXT.reset(token)
+
+    state = world.raw('p')[hold.FIELD]
+    assert state['pending_since'] is None and not state['held']
+    assert context['hold_budget_denied_at_max'] and context['hold_skipped']
+    assert 'defer_reason' not in context
     assert world.raw('p')['smart_merge']['refreshed_revision'] == 1
 
 
