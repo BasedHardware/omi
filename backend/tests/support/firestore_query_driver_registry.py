@@ -1250,6 +1250,11 @@ _add(
 _add(DriverEntry('database.feedback.list_report_dates', neutrals={'limit': _LIMIT}))
 _add(
     DriverEntry(
+        'database.first_summary_push.oldest_conversation_summaries', base={'uid': UID}, neutrals={'limit': _LIMIT}
+    )
+)
+_add(
+    DriverEntry(
         'database.focus_sessions.get_focus_sessions',
         base={'uid': UID},
         domains={'date': [None, '2026-01-01']},
