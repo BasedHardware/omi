@@ -49,6 +49,13 @@
       "description": "The real monthly offer in German, Japanese and Arabic.",
       "captured_by": "agent",
       "source": "screencapture"
+    },
+    {
+      "file": "008-mobile-ios-eligibility-lost-no-offer.png",
+      "platform": "mobile-ios",
+      "description": "A customer saved during yearly checkout leaves the plan basic but trial-ineligible; returning shows no monthly offer. Repeat taps open no checkout.",
+      "captured_by": "agent",
+      "source": "screencapture"
     }
   ]
 }
