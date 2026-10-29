@@ -457,6 +457,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _pendantTimer = _periodic(const Duration(seconds: 10), (t) async {
       final generation = _sessionGeneration;
       await _drainPendantTail(generation);
+      await _drainPhoneTail(generation);
     });
     try {
       WidgetsBinding.instance.addObserver(this);
@@ -479,15 +480,10 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           Logger.debug('LocalWalSync: lifecycle pendant drain failed: $e');
         }),
       );
-      // Seal the live phone-mic tail the same way: the ordinary 105-second
-      // chunk/flush timers may never run again once the app is suspended.
-      // Same shape as checkpointWatchAudio; the capture session keeps running.
+      // Seal the live phone-mic tail the same way: suspension may follow, and
+      // the ordinary timers may never run again.
       unawaited(
-        _enqueueBuffer(() async {
-          if (!_isCurrent(generation) || _deviceId != 'phone-mic') return;
-          await _finalizeCurrentSession(generation);
-          await _flush(generation);
-        }).catchError((e) {
+        _drainPhoneTail(generation).catchError((e) {
           Logger.debug('LocalWalSync: lifecycle phone-mic seal failed: $e');
         }),
       );
@@ -928,6 +924,16 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   Future<void> _drainPendantTail(int generation) => _enqueueBuffer(() async {
         if (_sealPendantTail(generation)) await _flush(generation);
+      });
+
+  /// The phone-mic twin of the pendant 10-second drain: a process death must
+  /// never leave more than one drain interval of live frames un-stored, so the
+  /// whole buffer is finalized and flushed on the same cadence the pendant
+  /// ring uses (and that [checkpointWatchAudio] uses on demand).
+  Future<void> _drainPhoneTail(int generation) => _enqueueBuffer(() async {
+        if (!_isCurrent(generation) || _deviceId != 'phone-mic' || _frames.isEmpty) return;
+        await _finalizeCurrentSession(generation);
+        await _flush(generation);
       });
 
   /// Move the complete pendant tail into WAL custody before any I/O yields.

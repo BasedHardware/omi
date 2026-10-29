@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -183,5 +185,40 @@ void main() {
 
     expect(SharedPreferencesUtil().chatMessageDraft, '', reason: 'the draft is cleared only after acceptance');
     expect(find.text('delivered message'), findsOneWidget);
+  });
+
+  testWidgets('a newer draft typed while the reply streams is never clobbered', (tester) async {
+    final replyStarted = Completer<void>();
+    final letReplyFinish = Completer<void>();
+    final provider = _QuietMessages()
+      ..replyStreamOverride = (text, {appId, filesId, context, chatSessionId}) async* {
+        if (!replyStarted.isCompleted) replyStarted.complete();
+        await letReplyFinish.future;
+        yield ServerMessageChunk(
+          'recovered',
+          '',
+          MessageChunkType.done,
+          message: _aiMessage('Received'),
+        );
+      };
+    addTearDown(provider.dispose);
+
+    await mountChat(tester, provider);
+    await tester.enterText(find.byType(TextField), 'first message');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.byKey(const ValueKey('omi.chat.send')));
+    await tester.pump();
+    await replyStarted.future;
+
+    // The user starts a second draft while the first reply is still streaming.
+    await tester.enterText(find.byType(TextField), 'second draft');
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(SharedPreferencesUtil().chatMessageDraft, 'second draft');
+
+    letReplyFinish.complete();
+    await tester.pump(const Duration(seconds: 2));
+
+    expect(SharedPreferencesUtil().chatMessageDraft, 'second draft',
+        reason: 'the accepted first send must not erase the newer draft');
   });
 }

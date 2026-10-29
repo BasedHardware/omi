@@ -81,20 +81,21 @@ void main() {
   }
 
   test('fully transport-synced phone-mic chunks are stored as safety copies, not dropped', () async {
-    // 60s of audio at the default 100 fps; the chunk timer (75s) stores the
-    // first 45s (the 15s newFrameSyncDelaySeconds tail stays buffered).
+    // 60s of audio at the default 100 fps. The 10-second live-tail drain
+    // stores a safety copy long before the 75s chunk timer would.
     await captureTransportSynced(6000);
-    expect(sync.testWals, isEmpty, reason: 'nothing stored before the chunk timer runs');
+    expect(sync.testWals, isEmpty, reason: 'nothing stored before a drain runs');
 
-    scheduler.elapse(const Duration(seconds: 75));
+    scheduler.elapse(const Duration(seconds: 10));
     await Future<void>.delayed(const Duration(milliseconds: 30));
 
-    expect(sync.testWals, hasLength(1));
-    final wal = sync.testWals.single;
+    expect(sync.testWals, isNotEmpty);
+    final wal = sync.testWals.first;
     expect(wal.status, WalStatus.synced, reason: 'all frames were transport-marked synced');
     expect(wal.syncedAt, 0, reason: 'a transport send must not start the retention clock');
     expect(wal.syncedFrameOffset, wal.totalFrames);
     expect(wal.device, 'phone-mic');
+    expect(wal.storage, WalStorage.disk, reason: 'the drain flushes before it returns');
   });
 
   test('lifecycle pause seals the phone-mic tail before the app can be killed', () async {
@@ -115,11 +116,8 @@ void main() {
 
   test('transport-only synced safety copies bind to the conversation and confirm or repair', () async {
     await captureTransportSynced(6000);
-    scheduler.elapse(const Duration(seconds: 75));
-    await Future<void>.delayed(const Duration(milliseconds: 30));
-    // The 105s flush timer moves the mem copy to disk, where the drain can
-    // reach it after a repair reclassification.
-    scheduler.elapse(const Duration(seconds: 105));
+    // One 10-second drain produces exactly one durable safety copy.
+    scheduler.elapse(const Duration(seconds: 10));
     await Future<void>.delayed(const Duration(milliseconds: 30));
     final wal = sync.testWals.single;
     expect(wal.syncedAt, 0);

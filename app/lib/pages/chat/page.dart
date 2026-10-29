@@ -824,7 +824,15 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     final reply = provider.messages.length > messageCountBeforeReply ? provider.messages.last : null;
     final accepted = reply != null && !provider.isReplyFailed(reply) && !provider.isChatQuotaExceeded;
     _draftSaveTimer?.cancel();
-    prefs.chatMessageDraft = accepted ? '' : text;
+    // Never clobber a newer draft the user typed while this reply streamed:
+    // the persisted copy is only replaced when it still holds this send's
+    // text (accepted: clear it; failed: keep it restorable).
+    final persisted = prefs.chatMessageDraft;
+    if (persisted == text) {
+      prefs.chatMessageDraft = accepted ? '' : persisted;
+    } else if (persisted.isEmpty && !accepted) {
+      prefs.chatMessageDraft = text;
+    }
   }
 
   /// Sends the message behind a failed reply again (the reply's Try Again).
