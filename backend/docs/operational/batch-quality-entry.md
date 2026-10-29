@@ -38,7 +38,9 @@ python3 -I backend/scripts/rollout/batch_quality_observer.py \
   --sampler "$SAMPLER" --since "$OBSERVATION_START" --percent 0 --out "$OBSERVER_OUT"
 ```
 
-Poll at most every two minutes. `OBSERVATION_START` is the actual new-state
+Target a two-minute poll interval. Freshness and observed continuity permit at
+most 300 seconds between samples, matching the census freshness limit.
+`OBSERVATION_START` is the actual new-state
 observation start, including partial-apply obligations. It is a measurement
 boundary, not an arming permit. No guard qualifies until a full 30-minute new
 state lookback has elapsed. Keep numeric-only `watch-samples.jsonl` and
@@ -56,7 +58,7 @@ contract, not the truth of a caller-supplied receipt.
 | --- | --- |
 | `errclass` | `complete=true`, `serving_sha`, `at`, `evidence_ref`, `baseline_hours>=24`, `includes_zero_percent_traffic=true`, `untriaged_new_classes=0`. No count threshold may hide a new class. Include all batch traffic that continues at 0%. |
 | `replay` | `complete=true`, `serving_sha`, `at`, `evidence_ref`, `verdict="PASS"`. State real corpus coverage, synthetic-only coverage and unsupported concurrency separately. Missing required coverage cannot be waived by changing the verdict string. |
-| `observer` | The fresh `watch-latest.json` from the new observer, with measured T1/T2/T4 all CLEAN and at least 30 minutes from `observation_since` through the collector's `observed_through` readTime. Post-read wall time does not fill missing observation. No hard harm in `reasons`; soft alerts remain visible. |
+| `observer` | The fresh `watch-latest.json` from the new observer, with measured T1/T2/T4 all CLEAN and at least 30 minutes of continuously observed CLEAN samples. The observer derives the start from actual collector readTimes; a supplied `observation_since` cannot backdate it. Gaps above 300 seconds or UNKNOWN reset continuity. Post-read wall time does not fill missing observation. No hard harm in `reasons`; soft alerts remain visible. |
 
 Errclass/replay receipts expire after 15 minutes; observer evidence after five.
 An expired receipt asks its owner to refresh evidence, never to reseal a packet.
