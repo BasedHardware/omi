@@ -868,7 +868,7 @@ async def tool_add_comment(request: Request):
 
 @app.get("/")
 async def root(
-    request: Request,
+    request: Request = None,
     uid: str = Query(None),
     github_settings_token: str = Query(None),
     github_tools_token: str = Query(None),
@@ -877,11 +877,11 @@ async def root(
     settings_token = (
         github_settings_token
         or github_tools_token
-        or request.query_params.get("github_settings_token")
-        or request.query_params.get("github_tools_token")
+        or (request.query_params.get("github_settings_token") if request else None)
+        or (request.query_params.get("github_tools_token") if request else None)
         or ""
     )
-    if not settings_token:
+    if not settings_token and request:
         auth_header = request.headers.get("Authorization", "")
         if auth_header.lower().startswith("bearer "):
             settings_token = auth_header[7:].strip()
