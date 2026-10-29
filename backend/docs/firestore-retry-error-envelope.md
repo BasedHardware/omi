@@ -51,6 +51,27 @@ around a member of the availability trio is the same bounded transient:
   every fence inside those bodies (version fences, deletion-state
   fences, teaching authorization) is re-evaluated by the replay, never
   bypassed; expiry cannot launder a denial into a write.
+- every conversation-row transaction in `database/conversations.py`
+  runs on the shared bounded fresh-transaction budget
+  (`_run_conversation_transaction`) as of 2026-10-29, including the
+  bootstrap create that every live session is born inside
+  (`create_in_progress_conversation` → `upsert_conversation_with_lifecycle`,
+  reached from `prepare()` on the ASGI coroutine at every socket open and
+  rollover). Those bodies READ the row before writing, and Firestore never
+  retries an abort raised by a transactional read, so a bare call surfaced
+  a mid-write contention burst as uvicorn's `Exception in ASGI
+  application` on a freshly opened session (prod backend-listen
+  2026-10-29 04:00Z: read-time `Aborted 409 Too much contention` from
+  `batch_get_documents` in the bootstrap create chain; the `run_asgi`
+  bucket carried ×472 events across the prior two days). The segments
+  write (2026-10-28) and the sync assignment (env-gated) had already
+  drained their own halves of the same seam. Replays stay atomic: every
+  attempt re-reads the row and re-derives the user-owned-field merge from
+  what it reads, so a user edit committed between attempts still wins.
+  An exhausted budget raises `FirestoreContentionExhausted` — the
+  recording-session fail-open classification and the persist-loop
+  transient arm absorb it; a router mapping may still surface it as a
+  409, but a live session boot never again dies to a single burst.
 
 ## What stays loud
 
@@ -72,6 +93,11 @@ Guards: `tests/unit/test_firestore_retry_error_envelope_transient.py`
 `tests/unit/test_mcp_oauth_retry_error_rotation.py` (MCP rotation budget).
 The users-writer side of the fresh-transaction restart lives in
 `tests/unit/test_users_transaction_expiry_restart.py`.
+The conversation-row budget side lives in
+`tests/unit/test_conversation_row_writers_contention_budget.py`
+(bootstrap create replays end-to-end through the real controller bootstrap,
+plus the segments/summary/status/discard/restore/bind/diagnostics/photo
+writer contract).
 The SDK-truth tests drain a real `api_core.retry.retry_target` budget on the
 transport's own predicate, so a pinned-SDK predicate change that alters the
 envelope shape fails loudly here first. The recording-session side of this

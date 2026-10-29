@@ -90,6 +90,37 @@ logger = logging.getLogger(__name__)
 
 conversations_collection = 'conversations'
 
+# Every conversation-row transaction in this module runs through this budget.
+# The transactional bodies READ the row (or its photos/corrections) before
+# writing, and Firestore never retries an abort raised by a transactional
+# read, while a commit abort is replayed by the SDK on the SAME — often
+# already retired — transaction id. A bare transactional call therefore
+# surfaces a mid-write contention burst as a failed write on the exact
+# callers that own a live WebSocket session and cannot classify it (prod
+# backend-listen 2026-10-29: read-time `Aborted 409 Too much contention`
+# out of the bootstrap create chain surfaced as uvicorn's
+# `Exception in ASGI application`, tearing down freshly opened sessions;
+# the run_asgi bucket carried ×472 events across the two prior days). The
+# sibling writers — recording-session open/renewal/event, the segments
+# write, sync assignment — already replay contention on this shared bounded
+# fresh-transaction budget. Replays stay atomic: every attempt re-reads the
+# row and re-derives its merge or fence from what it reads, so a concurrent
+# writer's commit between attempts still wins. Expired-id restarts stay
+# inside `run_transactional`. An exhausted budget raises
+# `FirestoreContentionExhausted`, classified as transient contention by the
+# caller arms (recording-session fail-open, persist-loop transient, and the
+# router 409 mapping), never as a permanent rejection or a deterministic
+# defect.
+
+
+def _run_conversation_transaction(client: Any, transactional_callable: Callable[..., Any], operation: str) -> Any:
+    return run_with_transaction_contention_retry(
+        client.transaction,
+        lambda transaction: run_transactional(client, transactional_callable, initial_transaction=transaction),
+        operation_name=operation,
+    )
+
+
 _LIFECYCLE_FIELDS = frozenset({'status', 'discarded'})
 # Top-level fields behind the Typesense conversation projection (see
 # utils/conversations/typesense_index.py). A generic update re-syncs the index
@@ -322,7 +353,7 @@ def update_owner_recognition_diagnostics(uid: str, conversation_id: str, diagnos
             transaction.update(ref, patch)
         return True
 
-    return run_transactional(client, persist)
+    return _run_conversation_transaction(client, persist, 'owner_recognition_diagnostics_write')
 
 
 def _prepare_conversation_for_write(
@@ -993,7 +1024,34 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
         write_data.setdefault('has_photos', False)
         transaction.set(conversation_ref, write_data)
 
-    run_transactional(db, _write_processing_result)
+    # The bootstrap create is the transaction every live session is born
+    # inside: `create_new_in_progress_conversation` (routers/listen) reaches
+    # it through `lifecycle.create_in_progress_conversation` at every socket
+    # open and every rollover, on the ASGI coroutine via `prepare()`. The
+    # body reads the conversation row before writing, and the SDK never
+    # retries an abort raised by a transactional read while replaying a
+    # commit abort only on the SAME — often already retired — transaction
+    # id, so one contention burst escaped `prepare()` as uvicorn's
+    # `Exception in ASGI application` and tore down the freshly opened
+    # session (prod backend-listen 2026-10-29 04:00Z: read-time
+    # `Aborted 409 Too much contention` full traceback out of the bootstrap
+    # create chain; the run_asgi bucket carried ×472 events across the two
+    # prior days). The conversation-surface writers that share this seam —
+    # segments write, sync assignment, recording-session open/renewal/event
+    # — already replay contention on this shared bounded fresh-transaction
+    # budget. The replay stays atomic: every fresh attempt re-reads the row
+    # and re-derives the user-owned-field merge from what it reads, so a
+    # user edit committed between attempts still wins, and the
+    # expired-transaction restart stays inside `run_transactional` where it
+    # already lived. An exhausted budget raises
+    # `FirestoreContentionExhausted`, which every caller arm classifies as
+    # transient contention — the recording-session fail-open classification
+    # absorbs it on the same bootstrap chain instead of failing the open.
+    _run_conversation_transaction(
+        db,
+        _write_processing_result,
+        'conversation_create_write',
+    )
     invalidate_people_stats_cache(uid)
     _sync_conversation_search_index(uid, conversation_data['id'])
 
@@ -1167,7 +1225,7 @@ def persist_processing_result_with_lifecycle(
         ) and write_status in (ConversationStatus.completed, ConversationStatus.completed.value)
         return True
 
-    persisted = run_transactional(db, _persist)
+    persisted = _run_conversation_transaction(db, _persist, 'conversation_processing_persist')
     if persisted:
         invalidate_people_stats_cache(uid)
     if persisted or stale_sync_revision:
@@ -1908,7 +1966,7 @@ def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional
                 return 'ok'
         return 'app_result_not_found'
 
-    result = run_transactional(db, _update)
+    result = _run_conversation_transaction(db, _update, 'conversation_summary_write')
     if result == 'ok' and app_id is None:
         _sync_conversation_search_index(uid, conversation_id)
     return result
@@ -2151,7 +2209,7 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
             transaction.update(doc_snapshot.reference, prepared)
             return True
 
-        if not run_transactional(db, _migrate):
+        if not _run_conversation_transaction(db, _migrate, 'conversation_level_migration'):
             continue
 
         # Photos retain their separate batched migration path.
@@ -2344,7 +2402,7 @@ def link_duplicate_capture(uid: str, primary: Any, secondary: Any, overlap: dict
         transaction.update(secondary_ref, {'external_data': external_data})
         return True
 
-    return run_transactional(client, link)
+    return _run_conversation_transaction(client, link, 'duplicate_capture_link')
 
 
 def transition_conversation_status(uid: str, conversation_id: str, status: str):
@@ -2397,7 +2455,7 @@ def claim_conversation_status(
         transaction.update(conversation_ref, updates)
         return True
 
-    claimed = run_transactional(db, _claim)
+    claimed = _run_conversation_transaction(db, _claim, 'conversation_status_claim')
     if claimed:
         invalidate_people_stats_cache(uid)
     return claimed
@@ -2443,7 +2501,7 @@ def discard_by_relevance(
         transaction.update(conversation_ref, {'discarded': True, 'relevance_decision': relevance_decision})
         return True
 
-    discarded = run_transactional(db, _discard)
+    discarded = _run_conversation_transaction(db, _discard, 'conversation_relevance_discard')
     if discarded:
         invalidate_people_stats_cache(uid)
         _sync_conversation_search_index(uid, conversation_id)
@@ -2483,7 +2541,7 @@ def restore_conversation_from_discarded(uid: str, conversation_id: str):
         transaction.update(conversation_ref, updates)
         return True
 
-    restored = run_transactional(db, _restore)
+    restored = _run_conversation_transaction(db, _restore, 'conversation_discard_restore')
     if restored:
         invalidate_people_stats_cache(uid)
         _sync_conversation_search_index(uid, conversation_id)
@@ -2882,7 +2940,7 @@ def bind_client_processing(
         transaction.update(doc_ref, bound_updates)
         return True
 
-    return run_transactional(client, _bind)
+    return _run_conversation_transaction(client, _bind, 'client_processing_bind')
 
 
 def assign_conversation_speaker(
@@ -3461,7 +3519,7 @@ def materialize_translation(
             **({'original_text': selected['text']} if current.get('has_transcript_corrections') else {}),
         }
 
-    return run_transactional(client, _write)
+    return _run_conversation_transaction(client, _write, 'conversation_translation_materialization')
 
 
 # ***********************************
@@ -3538,7 +3596,7 @@ def reserve_share_email_recipients(
             transaction.update(conversation_ref, claims)
         return to_dispatch, already_sent, in_flight_elsewhere
 
-    return run_transactional(db, _reserve)
+    return _run_conversation_transaction(db, _reserve, 'share_email_recipient_reserve')
 
 
 def confirm_share_email_recipients(uid: str, conversation_id: str, emails: list[str]) -> None:
@@ -3793,7 +3851,7 @@ def store_conversation_photos(
         transaction.update(conversation_ref, {'has_content': True, 'has_photos': True})
         return True
 
-    return run_transactional(client, _store)
+    return _run_conversation_transaction(client, _store, 'conversation_photo_store')
 
 
 # ********************************
@@ -4040,7 +4098,7 @@ def promote_final_pass_if_current(
         transaction.update(parent, prepared)
         return True
 
-    written = run_transactional(client, commit)
+    written = _run_conversation_transaction(client, commit, 'conversation_final_pass_promotion')
     if written:
         invalidate_people_stats_cache(uid)
     return bool(written)

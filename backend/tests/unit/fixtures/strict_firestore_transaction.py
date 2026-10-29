@@ -53,6 +53,17 @@ def _assert_storable(value: Any, *, in_array: bool = False) -> None:
             _assert_storable(item)
 
 
+def _deep_merge_rows(existing: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
+    """Firestore ``set(merge=True)`` merge: maps merge recursively, everything else replaces."""
+    merged = dict(existing)
+    for key, value in patch.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merge_rows(merged[key], value)
+        else:
+            merged[key] = deepcopy(value)
+    return merged
+
+
 _SUPPORTED_OPERATIONS = (
     'document get/create, transaction-bound document get, transaction create/set/update, bounded equality id queries, '
     'projected client folder-membership BatchGet'
@@ -226,13 +237,19 @@ class StrictFirestoreTransaction:
         if ref._database is not self._database:
             raise ForeignTransactionError('Firestore transaction and document reference must belong to the same store')
 
-    def set(self, ref: StrictFirestoreDocument, data: dict[str, Any]) -> None:
+    def set(self, ref: StrictFirestoreDocument, data: dict[str, Any], *, merge: bool = False) -> None:
         self._assert_reference_belongs(ref)
         _assert_storable(data)
         self.has_written = True
         payload = deepcopy(data)
         self.sets.append((ref.path, payload))
-        self._database.rows[ref.path] = payload
+        if merge and ref.path in self._database.rows:
+            # Firestore ``set(merge=True)`` deep-merges maps and replaces
+            # scalars/arrays (added for the conversation-create contention
+            # guard, which replays a set(merge=True) across budget attempts).
+            self._database.rows[ref.path] = _deep_merge_rows(self._database.rows[ref.path], payload)
+        else:
+            self._database.rows[ref.path] = payload
 
     def create(self, ref: StrictFirestoreDocument, data: dict[str, Any]) -> None:
         self._assert_reference_belongs(ref)

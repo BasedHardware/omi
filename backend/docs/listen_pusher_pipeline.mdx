@@ -2236,6 +2236,31 @@ real bounded replay instead of a single attempt. The deterministic arms
 refuse on the first attempt without any replay, because their answers
 cannot change between transactions.
 
+Since 2026-10-29 every conversation-row transaction in
+`database/conversations.py` runs on that same shared bounded budget through
+`_run_conversation_transaction`, which closes the last bare gap on the
+session boot path: the bootstrap create that every live session is born
+inside. `prepare()` (the ASGI coroutine's first persistence step) reaches
+`lifecycle.create_in_progress_conversation` →
+`upsert_conversation_with_lifecycle` at every socket open and every
+rollover, and that transactional body reads the conversation row before
+writing — the shape the SDK never retries. A mid-open contention burst
+escaped `prepare()` as uvicorn's `Exception in ASGI application` and tore
+down the freshly opened session (prod backend-listen 2026-10-29 04:00Z:
+read-time `Aborted 409 Too much contention` full traceback out of the
+bootstrap create chain; the `run_asgi` bucket carried ×472 events across
+the prior two days). The status claims (transition/finalize), relevance
+discard and restore, processing persist, summary edit, client projection
+bind, owner-diagnostics flush, photo store, duplicate-capture link,
+level migration, share-email claim, translation materialization, and
+final-pass promotion all run through the same budget now. Replays stay
+atomic — each attempt re-reads the row and re-derives the user-owned-field
+merge or its fence from what it reads — and the exhausted budget surfaces
+as the transient `FirestoreContentionExhausted`, which the recording-session
+fail-open classification absorbs on the boot chain (the session degrades to
+the legacy route instead of dying) and the persist loop's transient arm
+absorbs mid-recording.
+
 Eligible meeting receipts also carry the stable Chat intent ID and, after the
 desktop kernel acknowledges its journal write, the materialization time. The
 durable receipt projection remains on the finalization write path. The disabled
