@@ -11,7 +11,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const uid = 'memory-edit-continuity-qa'
+// Must match the dedicated OMI_E2E_FAKE_AUTH principal in dev/e2eAuth.ts.
+const uid = 'e2e-user'
 const snapshotKey = `omi.cache.memories.${uid}`
 const original = {
   id: 'continuity-original',
@@ -160,6 +161,22 @@ test('failed correction retains its draft; retry selects and persists only the c
   await page.goto('http://127.0.0.1:49601/index.html')
   await page.waitForFunction(() => !!document.querySelector('#root')?.childElementCount)
   await page.evaluate((value) => localStorage.setItem('omi.lastSignedInUid', value), uid)
+  const ipc = await page.evaluate(async () => {
+    const before = await window.omi.assistantsGetSettings()
+    const legacy = await window.omi.assistantsSetSettings({ notificationFrequency: 2 })
+    const refused = await window.omi.assistantsSetSettings(
+      { notificationFrequency: 5 },
+      'unverified-owner'
+    )
+    await window.omi.assistantsSetSettings({ notificationFrequency: before.notificationFrequency })
+    return { legacy: legacy.notificationFrequency, refused: refused.notificationFrequency }
+  })
+  assert.deepEqual(
+    ipc,
+    { legacy: 2, refused: 2 },
+    'legacy local writes work; unverified owner-tagged writes stay refused'
+  )
+
   await page.evaluate(() => {
     location.hash = '#/memories'
   })
@@ -175,8 +192,16 @@ test('failed correction retains its draft; retry selects and persists only the c
   await page.getByText('Could not update memory', { exact: true }).waitFor()
   assert.equal(await dialog.getByRole('textbox').inputValue(), replacement.content)
   await dialog.getByRole('button', { name: 'Save', exact: true }).click()
+  // Draft text alone is not a save receipt: it is already visible while the PATCH is pending.
+  await dialog.getByRole('textbox').waitFor({ state: 'detached' })
+  await dialog.getByTitle('Click to edit').waitFor()
   await dialog.getByText(replacement.content, { exact: true }).waitFor()
   assert.equal(attempts, 2)
+  assert.equal(
+    await page.evaluate(() => localStorage.getItem('omi.lastSignedInUid')),
+    uid,
+    'the snapshot belongs to the active fixture principal'
+  )
   let rows = JSON.parse(await page.evaluate((key) => localStorage.getItem(key), snapshotKey))
   assert.deepEqual(
     rows.map((row) => row.id),

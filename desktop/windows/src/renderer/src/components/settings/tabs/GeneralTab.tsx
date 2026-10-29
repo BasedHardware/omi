@@ -201,7 +201,11 @@ export function ScreenAnalysisRow(): React.JSX.Element {
 
   const change = (next: boolean): void => {
     setOn(next) // optimistic; the coordinator re-syncs off the settings write
-    void window.omi?.assistantsSetSettings?.({ screenAnalysisEnabled: next }, user?.uid)
+    if (user?.uid) {
+      void window.omi?.assistantsSetSettings?.({ screenAnalysisEnabled: next }, user.uid)
+    } else {
+      void window.omi?.assistantsSetSettings?.({ screenAnalysisEnabled: next })
+    }
   }
 
   return (

@@ -43,7 +43,9 @@ Main-process assistant settings bind only through the existing signature-verifie
 PiMono session relay. The exact admitted session object fences delayed verifier
 results, including A→B→A. Clear the previous owner before awaiting verification.
 Raw auth-persistence payloads and audio-start tokens are not owner authority.
-Owner-tagged IPC writes must match the current owner; existing untagged local
+Owner-tagged IPC writes must match the current owner. Missing owner arguments
+are omitted at the preload and UI callsites for legacy IPC compatibility;
+existing untagged local
 preference calls retain their local-device semantics. This does not introduce
 account-wide Electron settings sync or key portability.
 

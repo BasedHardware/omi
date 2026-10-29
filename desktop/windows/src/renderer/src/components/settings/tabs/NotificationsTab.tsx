@@ -41,7 +41,10 @@ export function NotificationsTab(): React.JSX.Element {
 
   const patch = (p: Partial<AssistantSettingsView>): void => {
     setSettings((cur) => (cur ? { ...cur, ...p } : cur)) // optimistic
-    void window.omi.assistantsSetSettings(p, user?.uid).then(setSettings)
+    const req = user?.uid
+      ? window.omi.assistantsSetSettings(p, user.uid)
+      : window.omi.assistantsSetSettings(p)
+    void req.then(setSettings)
   }
 
   const notifOn = !!settings?.notificationsEnabled

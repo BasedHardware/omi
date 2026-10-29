@@ -14,10 +14,10 @@
     "desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Settings.swift": "9199de7af732f89321c98977a7cc56b706967718c5d99d63febad5423316e99a",
     "desktop/windows/src/main/ipc/assistantSettings.ts": "b3d0528cc9f3e817c7668a1642c5788deb6837da6dbc67a1a9e5859ce0b74794",
     "desktop/windows/src/main/ipc/pimono.ts": "bf74dc01d0c0d4ecab615ac8fd0fe6b401d36c84078be2c66a1415c685680a4a",
-    "desktop/windows/src/preload/index.ts": "203258bacd015796656dbb1d05cbc2689844f5fbd31f752917173643dbeb681e",
+    "desktop/windows/src/preload/index.ts": "68d1a6a4d385a5eecb42c47d15bfdc131bee62abf33b3a662228ed922527296a",
     "desktop/windows/src/renderer/src/components/memories/MemoryDetailSheet.tsx": "a1123cfaa65f6fc8d0c8592114a7ba9225240a2fcb1261da620380b4e7b12171",
-    "desktop/windows/src/renderer/src/components/settings/tabs/GeneralTab.tsx": "22138145a34a57561c3442310c9a38ca0486b8572e368316882e15ed22f830de",
-    "desktop/windows/src/renderer/src/components/settings/tabs/NotificationsTab.tsx": "4d34c5ef95b5d9249122a9ec348780599ea585131f524ebb19f8a988feb6165e",
+    "desktop/windows/src/renderer/src/components/settings/tabs/GeneralTab.tsx": "72ed23c5603588aae379130b2946dbcd9cab0e5cdbfbd11860ae601af7f74bff",
+    "desktop/windows/src/renderer/src/components/settings/tabs/NotificationsTab.tsx": "8d4e3bfc95f004fdb6ac33e0e78ebf10ff95b7f800694b22babdac06a2fa7789",
     "desktop/windows/src/renderer/src/env.d.ts": "b2e0ebbb526bea679379dc6049e78b7005944eb47e35698daaad198a70d2606d",
     "desktop/windows/src/renderer/src/hooks/useMemories.ts": "d0aecd93ac8b13d13d5aa8fb34756be96cc1d34e91917b2255b4b3dd7294b2fd",
     "desktop/windows/src/renderer/src/lib/apiClient.ts": "78893c1ff42a6591e6126e8186200b0295270f2d5149e05bbda80aeeb32059e4",
@@ -60,9 +60,10 @@
     "pnpm": "10.23.0",
     "unit_tests": {
       "passed": 5567,
-      "skipped": 33
+      "skipped": 33,
+      "source_revision": "80c5418c7cca7a9f187047db5415b4387a3b6395"
     },
-    "focused_tests": 110,
+    "focused_tests": 120,
     "functional": {
       "passed": 1,
       "transport": "real HTTP loopback fixture and unchanged built assets on one origin; production CSP/webSecurity enabled",
@@ -70,7 +71,9 @@
         "HTTP 400 preserves draft",
         "retry publishes replacement ID",
         "persisted cache holds only canonical replacement",
-        "app restart with API request failure preserves canonical cache"
+        "app restart with API request failure preserves canonical cache",
+        "real preload/main IPC accepts legacy untagged settings writes",
+        "real preload/main IPC refuses an unverified owner-tagged settings write and restores the original setting"
       ]
     },
     "limitations": [
@@ -88,5 +91,15 @@
     "independent account-isolation approval"
   ],
   "validation_main_revision": "92bff3c2d5d121d0a02c5ce8932bb73f159ebb62",
-  "evidence_reuse": "Production source hashes are unchanged from 83fe829c50. Newer upstream changes do not touch desktop production sources or the memory/settings endpoints. After replacing unsafe unwraps in two test fixtures, all 44 affected Swift tests passed again."
+  "evidence_reuse": "Mac production and all other Electron production files retain the tested hashes. Three Electron callsite compatibility refinements from the contributor were rebuilt and reverified with 120 focused tests, typecheck/lint and a built-app HTTP + real settings IPC journey. The full 5567-test suite from 80c5418c7c covers unchanged modules; exact-head required CI remains separate.",
+  "contributor_integration": {
+    "commit": "368b3a6a783e96215067ec843ac2d726462aa10f",
+    "review": "18 of 25 incoming paths byte-identical to the earlier contribution; seven rebased/main integrations reviewed",
+    "retained_refinements": [
+      "omit absent owner argument in preload IPC",
+      "keep exact legacy untagged General settings calls",
+      "keep exact legacy untagged Notification settings calls"
+    ],
+    "histories_preserved": true
+  }
 }
