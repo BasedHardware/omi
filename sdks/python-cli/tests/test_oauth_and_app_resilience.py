@@ -418,6 +418,17 @@ def test_firebase_signin_rejects_a_non_string_token(monkeypatch, token: Any) -> 
         oauth._firebase_signin_with_custom_token("ct")
 
 
+def test_firebase_signin_raises_when_id_token_missing(monkeypatch) -> None:
+    """_firebase_signin_with_custom_token must fail when idToken is absent (refreshToken present)."""
+    def fake_post(self, url, **kwargs):  # noqa: ANN001
+        return httpx.Response(200, json={"refreshToken": "fb_refr", "expiresIn": "3600"})
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    with pytest.raises(AuthError) as info:
+        oauth._firebase_signin_with_custom_token("ct")
+    assert "missing tokens" in str(info.value).lower()
+
+
 def test_code_exchange_rejects_a_whitespace_only_custom_token(monkeypatch) -> None:
     def fake_post(self, url, **kwargs):  # noqa: ANN001
         return httpx.Response(200, json={"custom_token": "   "})
@@ -431,6 +442,22 @@ def test_code_exchange_rejects_a_whitespace_only_custom_token(monkeypatch) -> No
             redirect_uri="http://127.0.0.1:5555/callback",
             code_verifier="verifier-123",
         )
+
+
+def test_exchange_code_raises_when_custom_token_is_boolean(monkeypatch) -> None:
+    """_exchange_code_for_custom_token must reject a non-string custom_token (e.g. boolean)."""
+    def fake_post(self, url, **kwargs):  # noqa: ANN001
+        return httpx.Response(200, json={"custom_token": True})
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    with pytest.raises(AuthError) as info:
+        oauth._exchange_code_for_custom_token(
+            FAKE_API_BASE,
+            code="auth_code",
+            redirect_uri="http://127.0.0.1:5555/callback",
+            code_verifier="verifier-123",
+        )
+    assert "custom token" in str(info.value).lower()
 
 
 def test_dev_key_exchange_rejects_a_whitespace_only_key(monkeypatch) -> None:
