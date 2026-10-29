@@ -44,6 +44,7 @@ from config import merge_ancestry, merge_before_processing
 import config.speaker_match_scores as match_scores
 from utils.conversations.fragment_visibility import is_rule_discard_decision, is_user_curated
 from config.occasion_relevance import enabled as occasion_relevance_enabled
+from utils.conversations.recorded_time import recorded_span, sync_recorded_end
 from utils.conversations.relevance import sync_intake_decision
 from utils.conversations.smart_merge_policy import user_managed as _policy_user_managed
 from utils.conversations.relevance_rules import deterministic_relevance
@@ -490,10 +491,26 @@ def assign_in_transaction(
             selected = [incoming['transcript_segments'][i] for i in segment_indices]
             extent['started_at'] = incoming['started_at'] + timedelta(seconds=min(s['start'] for s in selected))
             extent['finished_at'] = incoming['started_at'] + timedelta(seconds=max(s['end'] for s in selected))
+        recorded_input_finish = extent['finished_at']
         if plan_target_id and plan_target:
             matched[plan_target_id] = plan_target
-            extent['started_at'] = min(extent['started_at'], plan_target['started_at'])
-            extent['finished_at'] = max(extent['finished_at'], plan_target['finished_at'])
+            target_span = (
+                recorded_span(plan_target['started_at'], decode(plan_target).get('transcript_segments') or [])
+                if late_audio_intake_enabled()
+                else None
+            )
+            if late_audio_intake_enabled():
+                # An empty live stub's wall-clock end proves no recorded speech.
+                # A populated target contributes its placed span, never its old
+                # processing-time end, to temporal candidate discovery.
+                if target_span:
+                    extent['started_at'] = min(extent['started_at'], target_span[0])
+                target_end = sync_recorded_end(plan_target, target_span)
+                if target_end:
+                    extent['finished_at'] = max(extent['finished_at'], target_end)
+            else:
+                extent['started_at'] = min(extent['started_at'], plan_target['started_at'])
+                extent['finished_at'] = max(extent['finished_at'], plan_target['finished_at'])
         while True:
             if isolated_id:
                 # Preserve only this input, with no inherited donor content or
@@ -793,6 +810,16 @@ def assign_in_transaction(
             finished_at=extent['finished_at'],
             transcript_segments=apply_manual_assignments(segments, result.get('manual_speaker_assignments') or {}),
         )
+        if late_audio_intake_enabled():
+            merged_span = recorded_span(capture_start, segments)
+            proven_ends = [recorded_input_finish]
+            if merged_span:
+                proven_ends.append(merged_span[1])
+            for record in records:
+                end = sync_recorded_end(record, None)
+                if end is not None:
+                    proven_ends.append(end)
+            result['sync_recorded_end_at'] = result['finished_at'] = max(proven_ends)
         if incoming.get('capture_evidence') is not None:
             contributors = [row.get('capture_evidence') or {} for row in records] + [incoming['capture_evidence']]
             mapped = [receipt for item in contributors for receipt in item.get('receipts') or []]

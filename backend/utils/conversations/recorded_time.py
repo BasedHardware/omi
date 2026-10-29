@@ -34,3 +34,15 @@ def recorded_span(
 
 def is_late(span: tuple[datetime, datetime] | None, now: datetime) -> bool:
     return span is not None and (now - span[1]).total_seconds() >= DEFAULT_GAP_SECONDS
+
+
+def sync_recorded_end(row: dict, span: tuple[datetime, datetime] | None) -> datetime | None:
+    """A sync intake receipt proves audio extent, including silent tails.
+
+    Older pure-WAL rows already used recorded ends. Live stubs/targets did not,
+    so without an intake receipt they can only contribute placed speech.
+    """
+    end = row.get('sync_recorded_end_at')
+    if not isinstance(end, datetime) and row.get('sync_content_revision') and not row.get('sync_live_target'):
+        end = row.get('finished_at')
+    return end if isinstance(end, datetime) else span[1] if span else None

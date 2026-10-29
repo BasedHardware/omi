@@ -111,6 +111,11 @@ one capture window's evidence.
    processing use ordinary sync temporal assignment and its durable hold /
    enrichment outbox. They do not stamp the carrying socket as their target,
    and they do not feed realtime episode or pusher hooks a second time.
+   Sync assignment stores `sync_recorded_end_at` as proof of the incoming
+   audio extent (including a silent tail). A live target without that receipt
+   contributes placed speech only; its processing-time `finished_at` cannot
+   expand the temporal search or the stored end. Older pure-WAL extents remain
+   recorded-time inputs.
 7. Smart-merge donor links and content receipts still move to their survivor;
    finalization reconciles provisional items with the ordinary saved tasks.
    Episodes never merge or delete conversations themselves.

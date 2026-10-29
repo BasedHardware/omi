@@ -133,7 +133,7 @@ void main() {
         oldStart,
       );
 
-      final capStart = _t0.add(const Duration(hours: 3));
+      final capStart = _t0.add(const Duration(hours: 4));
       expect(
         anchor.resolve(
           episode: _episode(capStart, id: 'ep2'),

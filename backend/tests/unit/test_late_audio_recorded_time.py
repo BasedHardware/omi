@@ -457,3 +457,44 @@ def test_recorded_origin_reads_are_bounded_and_refresh_after_one_minute(monkeypa
     assert len(counter._origins) == 2
     counter.clear()
     assert counter.recorded_origin('u', 'c') is None
+
+
+@pytest.mark.parametrize('empty', [False, True])
+def test_sync_target_processing_end_never_extends_recorded_extent_or_search(empty):
+    store = StrictFirestore()
+    target = chunk('target', T0.timestamp())
+    target.update(status='in_progress', created_at=NOW, finished_at=NOW)
+    if empty:
+        target['transcript_segments'] = []
+    store.rows[('users', 'u', 'conversations', 'target')] = target
+    # A later sync recording inside the bogus upload-time extent must stay out.
+    future = chunk('unrelated', (T0 + timedelta(hours=2)).timestamp())
+    future.update(sync_content_revision=1)
+    store.rows[('users', 'u', 'conversations', 'unrelated')] = future
+    result, _, _ = intake(store, chunk('offline', T0.timestamp() + 30), target_id='target')
+    assert result['id'] == 'target'
+    assert result['finished_at'] == T0 + timedelta(seconds=39.5)
+    assert len(result['transcript_segments']) == (1 if empty else 2)
+    assert not store.rows[('users', 'u', 'conversations', 'unrelated')].get('deleted')
+    assert 'unrelated' not in result['sync_merged_from']
+
+
+def test_recorded_audio_tail_survives_later_append_and_retry():
+    store = StrictFirestore()
+    first = chunk('a', T0.timestamp())
+    first['finished_at'] = T0 + timedelta(seconds=70)  # audio continues after last recognized word
+    assert intake(store, first)[0]['finished_at'] == T0 + timedelta(seconds=70)
+    second = chunk('b', T0.timestamp() + 30)
+    result = intake(store, second)[0]
+    assert result['finished_at'] == result['sync_recorded_end_at'] == T0 + timedelta(seconds=70)
+    assert intake(store, second)[0]['finished_at'] == T0 + timedelta(seconds=70)
+
+
+def test_sync_extent_rollback_restores_live_target_wall_clock(monkeypatch):
+    monkeypatch.setenv('LATE_AUDIO_SYNC_INTAKE_ENABLED', 'false')
+    store = StrictFirestore()
+    target = chunk('target', T0.timestamp())
+    target.update(status='in_progress', finished_at=NOW)
+    store.rows[('users', 'u', 'conversations', 'target')] = target
+    result, _, _ = intake(store, chunk('offline', T0.timestamp() + 30), target_id='target')
+    assert result['finished_at'] == NOW
