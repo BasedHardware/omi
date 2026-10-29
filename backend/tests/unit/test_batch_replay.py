@@ -82,6 +82,14 @@ def test_gate_accepts_an_earlier_head_fix_that_exposes_a_later_existing_block():
         'chain_blocks': [{'owner': 'owner', 'head': 'b', 'blocked_units': 2, 'units': ['b', 'c']}],
     }
     assert not compare(candidate, baseline)['regression']
+    baseline['exceptions']['walk:Conflict:known'] = 1
+    candidate['exceptions']['walk:Conflict:known'] = 1
+    candidate['unit_issues']['b'] = ['walk:Conflict:known']
+    assert not compare(candidate, baseline)['regression']
+    assert compare(candidate, baseline)['newly_reached_known_failures'] == {'b': ['walk:Conflict:known']}
+    candidate['exceptions']['walk:ValueError:new'] = 1
+    candidate['unit_issues']['b'].append('walk:ValueError:new')
+    assert compare(candidate, baseline)['regression']
 
 
 def test_boundary_oracle_rejects_validators_that_accept_invalid_geometry():

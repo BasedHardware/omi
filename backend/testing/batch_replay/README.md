@@ -20,9 +20,11 @@ backend/.venv/bin/python -I backend/testing/batch_replay/capture.py \
 `gate.json` contains the SHAs and corpus SHA256, new exception class/site
 counts, per-unit failures and owner chain blocks. `candidate.json` and
 `baseline.json` contain counts, hashed chain heads and coverage. A failure is
-a new exception/site, an exception reaching a new unit, newly blocked units,
+a new exception/site, a regression on a previously exercised unit, newly blocked units,
 or unexpected synthetic boundary/incident failures. Reports/logs stay outside Git. Diagnostic
 `gate.py --allow-incomplete` comparisons are explicitly **not deploy receipts**.
+Known exceptions exposed behind a repaired head are reported separately as
+newly reached evidence; already-blocked baseline units were never successful.
 
 The normal gate's approved scope is **Firestore structure + synthetic
 geometry**, per lead ruling `a76a1a` (2026-10-29). It always also runs the

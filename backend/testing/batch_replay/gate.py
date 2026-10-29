@@ -25,15 +25,25 @@ def compare(candidate, baseline):
         )
     ]
     # Per-unit checks also catch a known exception/site spreading to new shapes.
-    new_units = {
+    changed_units = {
         unit: sorted(set(issues) - set(baseline['unit_issues'].get(unit, [])))
         for unit, issues in candidate['unit_issues'].items()
         if set(issues) - set(baseline['unit_issues'].get(unit, []))
     }
+    # Fixing a chain head exposes work the baseline never reached. A known
+    # site on an already-blocked unit is new evidence, not a regression.
+    # New classes/sites still fail even when previously unreachable.
+    newly_reached = {
+        unit: sites
+        for unit, sites in changed_units.items()
+        if unit in old_blocked and not set(sites).intersection(new_exceptions)
+    }
+    new_units = {unit: sites for unit, sites in changed_units.items() if unit not in newly_reached}
     return {
         'new_exception_sites': new_exceptions,
         'new_chain_blocks': new_blocks,
         'new_unit_failures': new_units,
+        'newly_reached_known_failures': newly_reached,
         'regression': bool(new_exceptions or new_blocks or new_units),
     }
 
