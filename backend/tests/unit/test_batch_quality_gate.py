@@ -160,6 +160,14 @@ class HardThreeTest(unittest.TestCase):
                 result = guard.classify('TRIP', [reason])
                 self.assertEqual(result, dict(verdict='CLEAN', reasons=[], alerts=[reason]))
 
+    def test_raw_soft_metrics_are_reported_and_do_not_trip(self):
+        sample = self.sample()
+        sample.update(t3_pending_over7200=3, t3_projection_over900=10, terminal_batch_units=100, failed_held=20)
+        result = guard.observer_record(sample, '2026-10-29T04:00:00Z')
+        self.assertEqual(result['verdict'], 'CLEAN')
+        self.assertIn('T3_admitted_nonterminal_over2h', result['alerts'])
+        self.assertIn('T5_failed_held_over2pct', result['alerts'])
+
     def test_mixed_trip_retains_each_hard_signal(self):
         for reason in guard.HARD:
             with self.subTest(reason=reason):

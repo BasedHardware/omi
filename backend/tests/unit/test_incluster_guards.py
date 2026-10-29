@@ -1367,6 +1367,19 @@ def test_soft_only_signal_never_creates_rollback_intent_or_cloud_write(tmp_path,
     assert 'pending' not in kube.state
 
 
+@pytest.mark.parametrize('old_reasons', [None, ['projection_wedge'], ['stuck_jobs']])
+def test_pre_policy_pending_intent_cannot_resume_a_soft_rollback(tmp_path, monkeypatch, old_reasons):
+    cloud, kube, path = prepare(tmp_path, monkeypatch)
+    state = kube.state
+    state['pending'] = {key: dict(pin, candidate=key + '-old-intent') for key, pin in batch.snapshot(cloud).items()}
+    if old_reasons is not None:
+        state['pending_reasons'] = old_reasons
+    kube.cm['data']['state'] = json.dumps(state)
+    assert batch.run(kube, cloud, path, now=1800) == 1
+    assert not cloud.writes
+    assert kube.state == state  # Preserve the intent for lead reconciliation.
+
+
 @pytest.mark.parametrize('bad', [None, float('nan'), -1, True])
 def test_unknown_never_clean_or_trip(bad):
     data = sample()

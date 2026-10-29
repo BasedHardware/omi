@@ -39,6 +39,40 @@ HARD_UNKNOWN = frozenset(
 POLICY = 'hard3-1029'
 
 
+def soft_signals(sample):
+    """Retain measured operational signals without making them entry gates."""
+    alerts = []
+    for key, reason, threshold in (
+        ('t3_projection_over900', 'T3_batch_wedge', 0),
+        ('t3_recovery_over900', 'T3_batch_wedge', 0),
+        ('t3_stuck_over1800', 'T3_batch_wedge', 0),
+        ('t3_pending_over7200', 'T3_admitted_nonterminal_over2h', 0),
+        ('t3_latency_sustained_seconds', 'T3_latency_sustained30m', 1799),
+        ('t3_wedge_sustained_seconds', 'T3_wedge_sustained30m', 1799),
+    ):
+        value = sample.get(key)
+        if type(value) in (int, float) and math.isfinite(value) and value > threshold:
+            alerts.append(reason)
+    terminal, held = sample.get('terminal_batch_units'), sample.get('failed_held')
+    if (
+        type(terminal) in (int, float)
+        and type(held) in (int, float)
+        and math.isfinite(terminal)
+        and math.isfinite(held)
+        and terminal > 0
+        and held / terminal > 0.02
+    ):
+        alerts.append('T5_failed_held_over2pct')
+    metrics = sample.get('metrics') or {}
+    age = metrics.get('worker_metrics_age') if isinstance(metrics, dict) else None
+    if type(age) not in (int, float) or not math.isfinite(age) or age > 120:
+        alerts.append('worker_metrics_stale')
+    unavailable = sample.get('unavailable', [])
+    if not isinstance(unavailable, list) or set(unavailable) - HARD_UNKNOWN:
+        alerts.append('soft_measurement_unavailable')
+    return sorted(set(alerts))
+
+
 def observer_record(sample, at, alerts=()):
     """Reduce actual aggregate evidence, without reading a manual T2 marker.
 
@@ -135,7 +169,7 @@ def observer_record(sample, at, alerts=()):
         at=at,
         verdict='TRIP' if reasons else 'CLEAN',
         reasons=sorted(reasons),
-        alerts=sorted(set(alerts)),
+        alerts=sorted(set(alerts) | set(soft_signals(sample))),
         hard3=hard3,
         policy=POLICY,
     )

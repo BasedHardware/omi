@@ -20,6 +20,7 @@ ROOT = f'projects/{PROJECT}/locations/{REGION}/services/'
 KEY = 'BATCH_PIPELINE_PERCENT'
 WINDOW = 1800
 MAX_AGE = 600
+HARD_REASONS = frozenset({'custody_missing', 'terminal_speech', 'failed_held_speech'})
 
 
 def digest(value):
@@ -344,6 +345,7 @@ def run(kube, cloud, sample_path, dry_run=False, now=None):
         if verdict == 'TRIP' and not dry_run:
             nonce = os.urandom(6).hex()
             state['pending'] = {key: dict(pin, candidate=key + '-guard-' + nonce) for key, pin in fleet.items()}
+            state['pending_reasons'] = list(reasons)
         persist(kube, cm, state, verdict)
         log(
             'batch_guard',
@@ -356,6 +358,17 @@ def run(kube, cloud, sample_path, dry_run=False, now=None):
         )
         if not state.get('pending'):
             return 1 if verdict in {'TRIP', 'BLIND'} else 0
+    # A pre-policy interrupted intent may have originated from T3. Keep it for
+    # lead reconciliation, but never resume an unclassified rollback after the
+    # policy narrows. New hard intents retain their reason through interruption.
+    reasons = state.get('pending_reasons')
+    if (
+        not isinstance(reasons, list)
+        or not reasons
+        or any(not isinstance(reason, str) or reason not in HARD_REASONS for reason in reasons)
+    ):
+        log('batch_rollback', verdict='BLIND', result='legacy_intent_requires_lead_reconciliation')
+        return 1
     if dry_run:
         log('batch_rollback', verdict='BLIND', result='pending_suppressed_by_dry_run')
         return 1
@@ -385,6 +398,7 @@ def run(kube, cloud, sample_path, dry_run=False, now=None):
         raise ValueError('rollback_intent_changed')
     if complete:
         state.pop('pending')
+        state.pop('pending_reasons', None)
     persist(kube, fresh_cm, state, 'ROLLED_BACK' if complete else 'ROLLBACK_FAILED')
     log(
         'batch_rollback',

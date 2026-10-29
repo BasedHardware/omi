@@ -136,6 +136,11 @@ T1 custody and T2 proven speech loss. T4 language remains with the external
 language observer: this aggregate schema has no language fields and must never
 be described as complete T4 coverage. See the [batch entry runbook](../../docs/operational/batch-quality-entry.md)
 for the replacement external observer and single entry gate.
+New pending hard rollback intents persist their classified reasons across Job
+interruption. An existing intent without those reasons, or with a soft reason,
+is preserved for lead reconciliation and issues no Cloud Run writes. Before
+deploying, inspect whether such an intent exists; do not delete/hand-archive it
+to make a rollout appear clean.
 Fallback VAD/duration and missing safety evidence hold clean assessment; quality
 p95/first-summary/log errors remain WATCH and do not auto-trip. Blindness does
 not itself roll admission back (P90 fast-mode ruling).

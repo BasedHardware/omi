@@ -9,6 +9,7 @@ The output is aggregate evidence, not authorization to change production.
 import argparse
 import datetime as dt
 import importlib.util
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -67,6 +68,29 @@ def main():
         # can exclude custody or turn missing evidence into zero.
         record['observation_since'] = args.since
         record['collector_scope'] = 'all_admitted_in_observation_window'
+        # Identity is provenance and alerting only, never a seal or a re-arm.
+        record['collector_sha256'] = hashlib.sha256(args.sampler.read_bytes()).hexdigest()
+        record['serving_fingerprint'] = hashlib.sha256(
+            json.dumps(
+                [
+                    (r.get('service'), r.get('revision'), r.get('image'), r.get('traffic'))
+                    for r in sample.get('serving', [])
+                ],
+                sort_keys=True,
+            ).encode()
+        ).hexdigest()
+        if any(str(row.get('percent')) != str(args.percent) for row in sample.get('serving', [])):
+            record['alerts'].append('serving_percent_drift')
+        try:
+            prior = json.loads((args.out / 'watch-latest.json').read_text())
+        except (OSError, ValueError):
+            prior = {}
+        for key, alert in (
+            ('collector_sha256', 'observer_source_changed'),
+            ('serving_fingerprint', 'serving_revision_changed_requalify'),
+        ):
+            if prior.get(key) and prior[key] != record[key]:
+                record['alerts'].append(alert)
     except Exception as error:
         record = dict(
             at=dt.datetime.now(dt.timezone.utc).isoformat(),
