@@ -536,3 +536,8 @@ tests/unit/test_payment_declined_proration.py::test_cross_plan_upgrade_passes_er
 # measured 1.05s CPU on a loaded PR shard (PR #23932 shard 6, 2026-10-29) against the 1.00s
 # guard; same import-amortized boundary shape as the entries above, assertions all pass.
 tests/unit/test_flag_budget.py::test_helper_kill_switch_budget_entries_match_the_default_on_registry
+# Imports the owner-chain ResultLog harness (serving/scheduler graph) to mirror
+# ProjectionSession.persist's redriven-watermark guard; measured 1.65s CPU on a
+# loaded local shard (2026-10-29) against the 1.00s guard; import-amortized
+# boundary shape as the entries above, assertions all pass.
+tests/unit/test_batch_pipeline_projection_release.py::test_redriven_reassignment_does_not_regress_the_watermark

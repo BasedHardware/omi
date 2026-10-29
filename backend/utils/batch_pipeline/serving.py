@@ -43,6 +43,9 @@ HELD_PARTIAL_TICK_SECONDS = 20.0
 HELD_PARTIAL_READS_PER_HOUR = 120_000
 HELD_PARTIAL_READS_PER_UNIT = 16
 HELD_PARTIAL_WINDOW_SECONDS = 3600.0
+# Held units whose record target may have been restored are re-examined at this
+# slow cadence: one bounded page per tick, wraps at the scan's own pace.
+RELEASE_HELD_INTERVAL_SECONDS = 900.0
 
 
 class Serving:
@@ -71,6 +74,8 @@ class Serving:
         # Held units change only on a recovery or operator settle: scan them
         # at a slow cadence, not every maintenance pass.
         self.held_partial_due = 0.0
+        # Restore redrives are rarer still: one bounded page per slow tick.
+        self.release_held_due = 0.0
         # (monotonic instant, reads charged) pairs: the hourly read governor.
         # Per serving instance; the maintenance lease usually pins one leader.
         self.held_partial_reads: list[tuple[float, int]] = []
@@ -215,6 +220,15 @@ class Serving:
             except Exception as error:
                 logging.getLogger(__name__).error(
                     'event=batch_held_partial action=sweep outcome=retry exception_type=%s', type(error).__name__
+                )
+        release_held = getattr(self.projector, 'release_held_scan', None)
+        if release_held is not None and time.monotonic() >= self.release_held_due:
+            self.release_held_due = time.monotonic() + RELEASE_HELD_INTERVAL_SECONDS
+            try:
+                release_held()
+            except Exception as error:
+                logging.getLogger(__name__).error(
+                    'event=batch_projection action=release_held outcome=retry exception_type=%s', type(error).__name__
                 )
         self.queue().recover(time.time())
         owners = set()
