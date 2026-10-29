@@ -31,7 +31,9 @@ ACTION_REDIRECT_NOT_FOLLOWED = 4
 _REDIRECT_NOTICE_INTERVAL = 86400
 
 _cache_lock = threading.Lock()
-_disabled_cache: dict[str, tuple[bool, float, int]] = {}  # (value, timestamp, generation)
+_disabled_cache: dict[str, tuple[bool, float, int]] = (
+    {}
+)  # (value, timestamp, generation)
 
 
 def _evict_oldest(d: Dict[str, Any]) -> None:
@@ -182,11 +184,15 @@ def _record_redirect_not_followed(app_id: str, status_code: int, endpoint: str) 
             return ACTION_NONE
         return ACTION_REDIRECT_NOT_FOLLOWED
     except Exception as e:
-        logger.warning(f"record_app_webhook_failure redirect path redis error app_id={app_id}: {e}")
+        logger.warning(
+            f"record_app_webhook_failure redirect path redis error app_id={app_id}: {e}"
+        )
         return ACTION_NONE
 
 
-def record_app_webhook_failure(app_id: str, status_code: int, error: str, endpoint: str = ENDPOINT_REALTIME) -> int:
+def record_app_webhook_failure(
+    app_id: str, status_code: int, error: str, endpoint: str = ENDPOINT_REALTIME
+) -> int:
     """Record a webhook failure for a marketplace app endpoint.
 
     Returns graduated response action:
@@ -199,7 +205,11 @@ def record_app_webhook_failure(app_id: str, status_code: int, error: str, endpoi
         key = f"app_webhook_health:{app_id}:{endpoint}"
         now_ts = int(time.time())
         script = _get_failure_script()
-        action = int(script(keys=[key], args=[now_ts, str(status_code), error[:200], _HEALTH_TTL]))
+        action = int(
+            script(
+                keys=[key], args=[now_ts, str(status_code), error[:200], _HEALTH_TTL]
+            )
+        )
         if action == ACTION_DISABLE:
             r.setex(f"app_webhook_disabled:{app_id}", _HEALTH_TTL, "1")
             with _cache_lock:
@@ -310,7 +320,9 @@ def is_app_webhook_disabled(app_id: str) -> bool:
         return False
 
 
-def get_app_webhook_health(app_id: str, endpoint: Optional[str] = None) -> Optional[Dict[str, Any]]:
+def get_app_webhook_health(
+    app_id: str, endpoint: Optional[str] = None
+) -> Optional[Dict[str, Any]]:
     """Get health state for an app's webhook endpoint(s). Returns None if no data."""
     try:
         if endpoint:
@@ -330,7 +342,28 @@ def get_app_webhook_health(app_id: str, endpoint: Optional[str] = None) -> Optio
         return None
 
 
-def disable_app_in_firestore(app_id: str, error: str, failure_hours: int, *, firestore_client: Any = None) -> bool:
+def _sanitize_disabled_error(error: Any) -> str:
+    """Sanitize disabled error to prevent raw exception reflection while preserving diagnostic status codes."""
+    if not error:
+        return ""
+    err_str = str(error).strip()
+    if not err_str:
+        return ""
+    if err_str.startswith("HTTP ") and err_str[5:].isdigit() and len(err_str) <= 8:
+        return err_str
+    if err_str in {
+        "TimeoutException",
+        "ConnectError",
+        "TimeoutError",
+        "ConnectionRefusedError",
+    }:
+        return err_str
+    return "Webhook delivery failed"
+
+
+def disable_app_in_firestore(
+    app_id: str, error: str, failure_hours: int, *, firestore_client: Any = None
+) -> bool:
     """Mark an app as disabled in Firestore due to webhook failures with existence check and client injection."""
     clean_id = (app_id or "").strip()
     if not clean_id:
@@ -348,13 +381,15 @@ def disable_app_in_firestore(app_id: str, error: str, failure_hours: int, *, fir
                 "disabled": True,
                 "disabled_reason": "webhook_failures",
                 "disabled_at": datetime.now(timezone.utc).isoformat(),
-                "disabled_error": str(error or "")[:200],
+                "disabled_error": _sanitize_disabled_error(error),
                 "disabled_failure_duration_hours": failure_hours,
             }
         )
         with _cache_lock:
             _set_disabled_state(clean_id, True)
-        logger.info(f"Auto-disabled app {clean_id} in Firestore after {failure_hours}h of webhook failures")
+        logger.info(
+            f"Auto-disabled app {clean_id} in Firestore after {failure_hours}h of webhook failures"
+        )
         return True
     except Exception as e:
         logger.error(f"Failed to disable app {clean_id} in Firestore: {e}")
@@ -402,7 +437,9 @@ def _get_dev_failure_script():
     return _dev_failure_script
 
 
-def _record_dev_webhook_failure_fallback(uid: str, wtype_str: str, status_code: int, error: str) -> bool:
+def _record_dev_webhook_failure_fallback(
+    uid: str, wtype_str: str, status_code: int, error: str
+) -> bool:
     """Non-Lua fallback for Redis clients without scripting (e.g. fakeredis in e2e).
 
     Keep this behavior equivalent to ``_DEV_RECORD_FAILURE_LUA``: once a webhook
@@ -443,7 +480,9 @@ def _record_dev_webhook_failure_fallback(uid: str, wtype_str: str, status_code: 
     return count == _DEV_FAILURE_THRESHOLD
 
 
-def record_dev_webhook_failure(uid: str, wtype: object, status_code: int, error: str) -> bool:
+def record_dev_webhook_failure(
+    uid: str, wtype: object, status_code: int, error: str
+) -> bool:
     """Record a developer webhook failure. Returns True if threshold exceeded (should disable)."""
     wtype_str = getattr(wtype, "value") if hasattr(wtype, "value") else str(wtype)
     try:
@@ -464,13 +503,17 @@ def record_dev_webhook_failure(uid: str, wtype: object, status_code: int, error:
         )
         return result == 1
     except Exception as e:
-        logger.warning(f"record_dev_webhook_failure redis error uid={uid} type={wtype}: {e}")
+        logger.warning(
+            f"record_dev_webhook_failure redis error uid={uid} type={wtype}: {e}"
+        )
         # fakeredis and some constrained Redis-compatible stores do not support
         # the Lua script API used in production. Fall back to the same state
         # transition with ordinary commands so hermetic tests and degraded Redis
         # deployments still record failures instead of silently resetting health.
         try:
-            return _record_dev_webhook_failure_fallback(uid, wtype_str, status_code, error)
+            return _record_dev_webhook_failure_fallback(
+                uid, wtype_str, status_code, error
+            )
         except Exception as fallback_error:
             logger.warning(
                 f"record_dev_webhook_failure redis error uid={uid} type={wtype}: {e}; fallback={fallback_error}"
@@ -497,7 +540,9 @@ def record_dev_webhook_success(uid: str, wtype: object):
         )
         r.expire(key, _HEALTH_TTL)
     except Exception as e:
-        logger.warning(f"record_dev_webhook_success redis error uid={uid} type={wtype}: {e}")
+        logger.warning(
+            f"record_dev_webhook_success redis error uid={uid} type={wtype}: {e}"
+        )
 
 
 _DLQ_TTL = 7 * 86400
