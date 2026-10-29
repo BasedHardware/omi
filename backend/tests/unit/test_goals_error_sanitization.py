@@ -45,6 +45,8 @@ def test_create_goal_source_uses_sanitizer():
 def test_raise_goal_store_error_source_handles_all_cases():
     source = _get_function_source("_raise_goal_store_error")
     assert "_sanitize_goal_conflict_error" in source
+    assert "_sanitize_goal_validation_error" in source
+    assert "detail=str(exc)" not in source
     assert "logger.error" in source
     assert 'status_code=500, detail="Failed to process goal operation"' in source
     assert "raise exc" not in source
@@ -83,6 +85,22 @@ def test_sanitize_goal_conflict_error_allowlist_and_fallback():
     assert sanitize(GoalConflictError("")) == "Goal conflict encountered. Please verify goal state and retry."
 
 
+def test_sanitize_goal_validation_error_allowlist_and_fallback():
+    sanitize = getattr(goals_router, "_sanitize_goal_validation_error", None)
+    assert sanitize is not None, "_sanitize_goal_validation_error must be defined in routers.goals"
+
+    GoalValidationError = goals_db.GoalValidationError
+
+    # 1. Closed allowlist of known safe validation messages returned as-is
+    assert sanitize(GoalValidationError("metric min must not exceed max")) == "metric min must not exceed max"
+    assert sanitize(GoalValidationError("Invalid goal metric")) == "Invalid goal metric"
+
+    # 2. Arbitrary or sensitive validation message filtered to safe generic detail
+    assert sanitize(GoalValidationError("Arbitrary internal validator traceback")) == "Invalid goal payload"
+    assert sanitize(GoalValidationError("Postgres syntax error: SELECT * FROM goals WHERE id=1")) == "Invalid goal payload"
+    assert sanitize(GoalValidationError("")) == "Invalid goal payload"
+
+
 def test_raise_goal_store_error_behavioral_contract():
     raise_store_error = getattr(goals_router, "_raise_goal_store_error", None)
     assert raise_store_error is not None, "_raise_goal_store_error must be defined in routers.goals"
@@ -93,7 +111,20 @@ def test_raise_goal_store_error_behavioral_contract():
     assert ctx.value.status_code == 404
     assert ctx.value.detail == "Goal not found"
 
-    # 2. GoalConflictError with known cause raises 409 with exact cause
+    # 2. GoalValidationError with known cause raises 422 with exact cause
+    with pytest.raises(HTTPException) as ctx:
+        raise_store_error(goals_db.GoalValidationError("metric min must not exceed max"))
+    assert ctx.value.status_code == 422
+    assert ctx.value.detail == "metric min must not exceed max"
+
+    # 2b. GoalValidationError with sensitive message raises 422 sanitized
+    with pytest.raises(HTTPException) as ctx:
+        raise_store_error(goals_db.GoalValidationError("Traceback: DB constraint failed at col 4"))
+    assert ctx.value.status_code == 422
+    assert ctx.value.detail == "Invalid goal payload"
+    assert "Traceback" not in ctx.value.detail
+
+    # 3. GoalConflictError with known cause raises 409 with exact cause
     with pytest.raises(HTTPException) as ctx:
         raise_store_error(goals_db.GoalConflictError("account generation mismatch"))
     assert ctx.value.status_code == 409

@@ -85,6 +85,19 @@ _KNOWN_GOAL_CONFLICTS = {
     "progress event idempotency key was reused with different content",
 }
 
+_KNOWN_GOAL_VALIDATIONS = {
+    "metric min must not exceed max",
+    "Invalid goal metric",
+}
+
+
+def _sanitize_goal_validation_error(exc: Exception) -> str:
+    logger.warning(f"Goal validation error: {type(exc).__name__}: {exc}")
+    detail = str(exc)
+    if detail in _KNOWN_GOAL_VALIDATIONS:
+        return detail
+    return "Invalid goal payload"
+
 
 def _sanitize_goal_conflict_error(exc: Exception) -> str:
     logger.warning(f"Goal mutation conflict: {type(exc).__name__}: {exc}")
@@ -134,7 +147,7 @@ def _raise_goal_store_error(exc: Exception) -> None:
     if isinstance(exc, goals_db.GoalNotFoundError):
         raise HTTPException(status_code=404, detail='Goal not found') from exc
     if isinstance(exc, goals_db.GoalValidationError):
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise HTTPException(status_code=422, detail=_sanitize_goal_validation_error(exc)) from exc
     if isinstance(exc, goals_db.GoalConflictError):
         raise HTTPException(status_code=409, detail=_sanitize_goal_conflict_error(exc)) from exc
     logger.error(f"Unexpected goal store error: {type(exc).__name__}: {exc}")
