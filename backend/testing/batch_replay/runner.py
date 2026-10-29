@@ -102,7 +102,11 @@ def _replay(corpus):
 
                 def prepare(self, transaction):
                     self.job, self.entry = log.jobs[sid], log.results[sid]
-                    receipt = self.entry.get('projection')
+                    receipt = (
+                        (self.entry.get('projection_parts') or {}).get(str(index))
+                        if index is not None
+                        else self.entry.get('projection')
+                    )
                     if receipt:
                         raise ProjectionReplay(receipt)
                     previous = self.entry['previous_segment_id']
@@ -126,10 +130,11 @@ def _replay(corpus):
                         row.setdefault('projection_parts', {})[str(index)] = receipt
                         if len(row['projection_parts']) < count:
                             return receipt
-                    row.update(
-                        projection=receipt,
-                        projection_state=('quarantine_held' if options.get('quarantined') else 'persisted'),
+                    held = options.get('quarantined') or any(
+                        part['state'] == 'quarantined' for part in (row.get('projection_parts') or {}).values()
                     )
+                    summary = {**receipt, 'state': 'quarantined' if held else 'persisted'}
+                    row.update(projection=summary, projection_state='quarantine_held' if held else 'persisted')
                     if options.get('quarantined'):
                         log.jobs[sid]['recovery_state'] = 'held'
                     log.owners.setdefault(row['owner_key'], {})['projection_watermark'] = sid
@@ -148,7 +153,11 @@ def _replay(corpus):
             index = options.get('part_index')
             receipt = row['projection_parts'][str(index)] if index is not None else row['projection']
             receipt['state'] = 'ready'
-            row['projection_state'] = 'ready'
+            parts = list((row.get('projection_parts') or {}).values()) or [receipt]
+            if any(part['state'] == 'quarantined' for part in parts):
+                row['projection_state'] = 'quarantine_held'
+            elif all(part['state'] == 'ready' for part in parts):
+                row['projection_state'] = 'ready'
 
     log = ReplayLog(Lanes(VirtualClock()))
     units = corpus['units']
@@ -166,16 +175,22 @@ def _replay(corpus):
         chains[owner].append(sid)
         duration = unit['duration']
         outcome = unit.get('outcome') or 'success'
-        item = WorkItem(
-            sid,
-            owner,
-            1700000000.0 + ordinal * 8000,
-            'synthetic:audio',
-            duration,
-            Priority.DEEP,
-            conversation_id=unit.get('conversation'),
-            unit_kind=unit.get('unit_kind', 'conversation'),
-        )
+        try:
+            item = WorkItem(
+                sid,
+                owner,
+                1700000000.0 + ordinal * 8000,
+                'synthetic:audio',
+                duration,
+                Priority.DEEP,
+                conversation_id=unit.get('conversation'),
+                unit_kind=unit.get('unit_kind', 'conversation'),
+            )
+        except Exception as error:
+            coverage['invalid_work_item'] += 1
+            record(error, 'work_item', sid)
+            chains[owner].remove(sid)
+            continue
         log.jobs[sid] = {**asdict(item), 'fresh_capture': unit['lane'] != 'backfill', 'policy_parts': log.policy_parts}
         log.bindings[sid] = ProjectionBinding(
             owner,
@@ -204,13 +219,23 @@ def _replay(corpus):
         spans = spans if spans is not None else [{'start': 0.0, 'end': duration}]
         decoded = decoded if decoded is not None else duration
         speech = unit.get('speech_seconds')
-        speech = speech if speech is not None else sum(s['end'] - s['start'] for s in spans)
+        numeric_spans = [
+            s for s in spans if type(s.get('start')) in (int, float) and type(s.get('end')) in (int, float)
+        ]
+        if speech is None and outcome == 'success' and corpus.get('source') == 'firestore-structure-only':
+            coverage['missing_speech_accounting'] += 1
+        speech = speech if speech is not None else sum(s['end'] - s['start'] for s in numeric_spans)
+        synthetic_spans = [
+            {'start': s['start'], 'end': min(duration, decoded, s['end'])}
+            for s in numeric_spans
+            if 0 <= s['start'] < min(duration, decoded, s['end'])
+        ]
         payloads[sid] = {
             'audio_seconds': decoded,
             'speech_seconds': speech,
             'speech_spans': spans,
-            'words': [{'word': 'synthetic.', 'timestamp': [0.0, min(duration, decoded)]}],
-            'diarization': {'turns': [{'start': 0.0, 'end': min(duration, decoded), 'speaker': 'a'}]},
+            'words': [{'word': 'synthetic.', 'timestamp': [s['start'], s['end']]} for s in synthetic_spans],
+            'diarization': {'turns': [{**s, 'speaker': 'a'} for s in synthetic_spans]},
         }
         if outcome not in {'success', 'silence'}:
             coverage['missing_terminal_empty_evidence'] += 1
@@ -327,6 +352,8 @@ def _replay(corpus):
                 )
             )
             for owner, segments in chains.items():
+                if not segments:
+                    continue
                 # Rewind the sampled window for counterfactual assignment replay.
                 # Keep original links; only the external boundary is anchored.
                 log.owners[owner_key(owner)] = {'projection_watermark': by_id[segments[0]].get('previous')}
