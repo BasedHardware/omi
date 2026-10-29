@@ -1,3 +1,6 @@
+import 'package:omi/providers/auth_provider.dart';
+import 'package:omi/backend/http/api/account_deletion.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'dart:async';
 
 import 'package:omi/services/onboarding_sync_runtime.dart';
@@ -579,6 +582,12 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       AuthComponent(
         onSignIn: () async {
           if (!mounted) return;
+          final deletion = await context.read<AuthenticationProvider>().checkAccountDeletion();
+          if (!context.mounted) return;
+          if (deletion is! ApiSuccess<AccountDeletionStatus> || deletion.data.pendingDeletion) {
+            Navigator.of(context).pushAndRemoveUntil(omiPageRoute(builder: (_) => const AppShell()), (_) => false);
+            return;
+          }
           PlatformManager.instance.analytics.onboardingStepCompleted('Auth');
           context.read<HomeProvider>().setupHasSpeakerProfile();
           // Refresh subscription on sign-in: AppShell only fetches it on mount,
