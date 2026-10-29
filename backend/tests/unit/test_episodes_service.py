@@ -869,7 +869,9 @@ def test_a_discarded_conversation_does_not_close_or_extend_its_episode_and_drops
     )
     closed = episodes_db.get_episode(UID, episode['id'], firestore_client=store)
     assert closed['status'] == 'live' and closed['last_activity_at'] == T0
-    assert [i['status'] for i in closed['provisional_items']] == ['dropped']
+    assert closed['provisional_items'] == []
+    assert closed['moments'] == []
+    assert closed['title'] == '' and closed['summary_needs_regeneration']
 
 
 def test_wrap_up_without_a_conversation_closes_now_and_dismiss_marks_an_item():

@@ -73,6 +73,9 @@ class _Transaction:
     def update(self, ref, data):
         ref.update(data)
 
+    def create(self, ref, data):
+        ref.create(data)
+
 
 class _PhotoRef:
     def __init__(self):
@@ -234,6 +237,7 @@ def test_first_processing_write_still_creates_complete_document(monkeypatch):
 
 
 def test_create_if_absent_never_persists_firestore_revision_metadata(monkeypatch):
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
     ref = _ConversationRef(_Snapshot(None, exists=False))
     monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
     revision = datetime(2026, 7, 9, 12, 0, tzinfo=timezone.utc)

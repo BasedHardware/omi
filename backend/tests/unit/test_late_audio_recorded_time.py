@@ -310,7 +310,9 @@ def test_morning_shape_34_fragments_replayed_through_sync_intake(monkeypatch, ti
         )
         assert (row['finished_at'] - row['started_at']).total_seconds() < 22 * 60
     old = [
-        row for key, row in store.rows.items() if len(key) == 4 and key[2] == 'episodes' and key[-1] != 'current-live'
+        row
+        for key, row in store.rows.items()
+        if len(key) == 4 and key[2] == 'episodes' and key[-1] != 'current-live' and not row.get('recorded_merged_into')
     ]
     assert len(old) == 1
     assert set(old[0]['conversation_ids']) == {row['id'] for row in kept}
@@ -546,7 +548,7 @@ def test_late_append_stays_with_original_owner_at_four_hour_cap(timeline_store):
     windows = row['_recorded_windows']
     assert len(windows) == 1
     assert windows[0]['last_activity_at'] == T0 + timedelta(hours=4)
-    assert windows[0]['conversation_ids'] == ['earlier', 'continued']
+    assert set(windows[0]['conversation_ids']) == {'earlier', 'continued'}
 
 
 def test_capped_recovery_places_each_segment_once_and_keeps_unplaced_content(timeline_store):

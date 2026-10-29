@@ -293,8 +293,9 @@ listen and pusher `/metrics` routes expose the same bounded-label families.
 
 ## Live integrity and grouped completion
 
-A confirmed capture-group join schedules attachment for every member, including
-`desktop`, with the admitted `capture_group` trigger. Metadata attachment runs
+A confirmed capture-group join schedules one canonical recovery, including
+`desktop` groups, with the admitted `capture_group` trigger. Other members join
+as hidden duplicates and contribute no additional moments or model work. Metadata attachment runs
 before short-tail/model checks, and completed finalizer replays repeat the hook.
 Grouping and primary-note refresh never substitute for episode membership.
 
@@ -303,3 +304,75 @@ activity. Per-member recorded clocks let a later discard remove only that
 member's contribution without a stale notes CAS restoring it. A retained hidden
 membership does not extend the quiet window. API visibility suppresses episodes
 with no retained members independently of the occasion-relevance kill switch.
+
+## Recorded span and time index (Phase A)
+
+Conversation storage writes `recorded_start`, `recorded_end`, `arrival_at` and
+`clock` for all channels, before compressing/encrypting transcript. The flat
+API fields come from `models.recorded_span.RecordedSpan`. `conversation_span`
+is the sole legacy derivation: placed transcript/frame offsets, then a sync
+recording receipt or named speech end, then an imported extent. A live empty
+stub is a point; its processing end never proves audio. Legacy derivation is
+read-only and tagged `legacy`; an old row's creation/admission timestamp is only
+an arrival estimate. There is no backfill. Live segment and sync CAS writes
+refresh the span with the accepted transcript, preserving first arrival.
+
+`utils.episodes.service.episode_at(uid, T)` answers recorded ownership without
+opening or closing anything. `episodes_between(uid, start, end)` returns ordered
+overlapping windows, paging on the built-in `started_at` index. Windows are
+half open; quiet ownership ends at last recorded activity plus 30 minutes,
+clipped to the four-hour cap. Explicit boundaries stay closed. Candidate
+queries used for placement still allow a late prefix to join the same occasion.
+New historical episodes retain their recorded member intervals. A late bridge
+or earlier prefix recomputes that component in recorded order in one fenced
+transaction, including its four-hour cuts. This makes cap placement independent
+of arrival order. Old episode IDs redirect to the resulting window. Existing
+live/user/calendar boundaries stay authoritative; no historical scan/backfill
+is performed outside intake. Member/window/query budgets fail closed.
+
+Each membership CAS writes `conversation.episode_id` alongside its overlay
+link. A conversation crossing the cap stays with its starting episode; only
+a different conversation starts the next window. An attach-before-create
+link is adopted by the conversation create transaction without fabricating a
+conversation. Episode writes retain `EPISODES_CLIENT_CHANNELS` admission; span
+writes are global. No new composite index or reconciliation is required.
+
+Boundary arithmetic cannot read ambient wall time. Pollers supply `arrival_at`
+to evaluate recorded quiet deadlines; recorded coordinates determine edges and
+activity. Moment buffering receives both recorded time and arrival explicitly;
+only cache eviction uses arrival. Live conversation cap checks and reconnect/
+calendar-continuation admission consume the same span; continuation timers
+receive explicit `arrival_at`. Missing recorded origins are never reconstructed
+from a creation/arrival timestamp. End-only legacy metadata keeps its declared
+legacy fallback until a normal writer supplies recording evidence. Missing live cap-hold capture coordinates
+fail closed before acknowledging audio custody.
+
+`LIFECYCLE_V2_MODE` remains: the flag registry still says pending/default-shadow
+with zero default serve percent, and it also gates recovery/executor behavior.
+Typed-span readers do not depend on this unfinished rollout. No runtime flag or
+production state is read or modified by this change.
+
+Read-only Phase B sizing: `omi_conversation_llm_calls_total{feature,outcome}`
+counts observed LangChain completions/errors and direct Jev dispatch attempts
+in processing, live-moment and smart-merge conversation scopes regardless
+of the revision-reuse flag. Content-free `repeat_work` log joins identify each
+conversation using an account-scoped hash. `omi_episode_survivor_refreshes_total`
+counts actual refresh processing attempts by assigned/unassigned membership;
+`episode_survivor_refresh` logs hash conversation and episode IDs for per-episode
+counts. Retries count as attempts. These measurements do not change LLM work,
+read production data, or add persistent measurement writes. Labels have fixed
+vocabularies; no user/conversation/episode ID appears in a metric label.
+
+Recorded-component membership reads use batches of at most 50 inside the same
+transaction, before any writes, so a busy component can retain all reverse
+links. Relevance and duplicate-capture discovery widen legacy `finished_at`
+prefilters by the shared clock-skew tolerance; recorded spans still decide
+adjacency and overlap, including delayed ingestion.
+
+Explicit closes store `recorded_end` from retained members' typed recorded spans,
+clipped to the hard cap and the next recorded episode. `closed_at` remains the
+close event time; it is never a new recorded ownership edge. The time index and
+all overlap guards use `recorded_end` for explicit closes. The existing hard-cap
+kill switch also disables the live activity clamp and automatic cap close.
+A late discard removes that member's moments and items, clears the mixed summary,
+and marks it for regeneration before later valid speech can reuse it.

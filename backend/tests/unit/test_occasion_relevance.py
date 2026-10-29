@@ -191,3 +191,45 @@ def test_hidden_neighbor_candidates_count_toward_isolation_proof(monkeypatch):
             'u', SimpleNamespace(id='c', started_at=T0, finished_at=T0), 'c', require_complete=True
         )
     assert seen['include_hidden'] is True
+
+
+@pytest.mark.parametrize('skew', [-600, 600])
+@pytest.mark.parametrize('arrival_delay', [0, 6 * 60 * 60])
+def test_neighbor_discovery_retains_recorded_adjacency_despite_skew_and_delayed_ingest(
+    monkeypatch, skew, arrival_delay
+):
+    from database import episodes
+    from utils.episodes import timeline
+
+    monkeypatch.setattr(episodes, 'get_episode_for_conversation', lambda *a: None)
+    monkeypatch.setattr(timeline, 'episode_owning_recorded_time', lambda *a, **kw: None)
+    neighbor = dict(
+        id='kept',
+        status='completed',
+        discarded=False,
+        started_at=T0 - timedelta(seconds=90),
+        finished_at=T0 + timedelta(seconds=skew - 10),
+        recorded_start=T0 - timedelta(seconds=90),
+        recorded_end=T0 - timedelta(seconds=10),
+        clock='live_capture',
+        arrival_at=T0,
+    )
+    far = dict(neighbor, id='far', recorded_start=T0 - timedelta(hours=3), recorded_end=T0 - timedelta(hours=2))
+
+    def query(uid, *, status, finished_after, limit, **kwargs):
+        return [row for row in [far, neighbor] if row['status'] == status and row['finished_at'] >= finished_after][
+            :limit
+        ]
+
+    monkeypatch.setattr(relevance_io.conversations_db, 'get_conversations_finished_after', query)
+    conversation = SimpleNamespace(
+        id='new',
+        started_at=T0,
+        finished_at=T0 + timedelta(seconds=20 + arrival_delay),
+        recorded_start=T0,
+        recorded_end=T0 + timedelta(seconds=20),
+        clock='device',
+        arrival_at=T0 + timedelta(seconds=20 + arrival_delay),
+    )
+    assert relevance_io.adjacent_conversation('u', conversation, 'new') == Neighbor('kept', 10, 'before')
+    assert relevance_io.occasion_retention('u', conversation) == 'occasion_neighbor'

@@ -80,7 +80,7 @@ def idle_close_due(episode: Optional[Mapping[str, Any]], now: datetime) -> bool:
 
 def hard_cap_due(episode: Optional[Mapping[str, Any]], at: datetime) -> bool:
     """The hard span cap belongs to the whole episode, including every member conversation."""
-    if episode is None or not is_live(episode):
+    if not episode_hard_cap_across_conversations_enabled() or episode is None or not is_live(episode):
         return False
     started = utc(episode.get('started_at'))
     point = utc(at)

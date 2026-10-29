@@ -1,4 +1,4 @@
-"""Episode orchestration: moments in, compact state out, conversations untouched.
+"""Episode orchestration: moments in, compact state and atomic membership out.
 
 Entry points (all synchronous, fail-open, run on a worker thread by callers):
 
@@ -33,7 +33,6 @@ Entry points (all synchronous, fail-open, run on a worker thread by callers):
 - ``live_episode`` / ``episode_for_conversation``: reads for the API, which
   close an idle live episode lazily.
 
-Nothing here writes a conversation, an action item or a memory.
 """
 
 from __future__ import annotations
@@ -47,8 +46,10 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Mapping, Optional, Sequence
 from uuid import uuid4
 from config.recorded_time import recorded_episodes_enabled, live_timer_start_enabled
-from utils.conversations.recorded_time import recorded_span, is_late
+from utils.conversations.recorded_time import conversation_span, is_late, at_offset as _wall
+from utils.sync.repeat_work_metrics import conversation_scope
 from utils.episodes.timeline import episode_owning_recorded_time, choose_recorded_episode
+from utils.episodes.timeline import episode_at as episode_at, episodes_between as episodes_between
 from database import episode_timeline
 
 from config.episodes import (
@@ -423,7 +424,7 @@ def _idle_closed_at(episode: Mapping[str, Any], now: datetime) -> datetime:
     last = policy.utc(episode.get('last_activity_at'))
     end = last + timedelta(seconds=CLOSE_GAP_SECONDS) if last else now
     start = policy.utc(episode.get('started_at'))
-    if recorded_episodes_enabled() and start is not None:
+    if recorded_episodes_enabled() and episode_hard_cap_across_conversations_enabled() and start is not None:
         end = min(end, start + timedelta(seconds=MAX_EPISODE_SECONDS))
     return min(now, end)
 
@@ -645,6 +646,7 @@ def _attach_once(
     return 'pending' if decision.action == policy.ASK else 'joined'
 
 
+@conversation_scope
 def record_moment(
     uid: str,
     moment: MomentInput,
@@ -772,6 +774,8 @@ def _record_moment_once(
         if member_episode_id
         else episodes_db.get_current_episode(uid, firestore_client=c.firestore_client)
     )
+    if episode and moment.conversation_id in (episode.get('duplicate_conversation_ids') or []):
+        return 'skipped_applied'
     if member_episode_id and (not episode or moment.conversation_id not in (episode.get('conversation_ids') or [])):
         return 'no_episode'
     # This entrypoint is also used without the realtime tracker. Record speech before
@@ -1364,12 +1368,10 @@ def _attach_synced_once(uid: str, conversation_id: str, row: Mapping[str, Any], 
     """
     started = policy.utc(row.get('started_at')) or policy.utc(row.get('created_at'))
     if recorded_episodes_enabled() and started is not None:
-        segments = [s for s in row.get('transcript_segments') or [] if isinstance(s, Mapping)]
-        span = recorded_span(started, segments)
-        finished = span[1] if span else policy.utc(row.get('last_speech_at')) or policy.utc(row.get('finished_at'))
-        if finished is None or finished < started:
+        span = conversation_span(row)
+        if span is None:
             return 'no_episode'
-        _attach_recorded(uid, conversation_id, row, span[0] if span else started, finished, c)
+        _attach_recorded(uid, conversation_id, row, span.recorded_start, span.recorded_end, c)
         return 'recorded'
     if started is None:
         return 'no_episode'
@@ -1425,9 +1427,48 @@ def _record_recovered(uid: str, episode_id: str, conversation_id: str, row: Mapp
     return outcome
 
 
+def _group_primary(row: Mapping[str, Any]) -> Optional[str]:
+    group = row.get('capture_group') or row.get('capture_group_member_context') or {}
+    return group.get('primary_id') if isinstance(group, Mapping) else None
+
+
+def _join_group_duplicates(
+    uid: str, owner: Mapping[str, Any], cid: str, row: Mapping[str, Any], c: Collaborators
+) -> None:
+    group = row.get('capture_group') or {}
+    ids = [m['id'] for m in group.get('members') or [] if isinstance(m, Mapping) and m.get('id') and m['id'] != cid]
+    if not ids:
+        return
+    duplicates = sorted(set(owner.get('duplicate_conversation_ids') or []) | set(ids))
+    content_removed = any(m.get('conversation_id') in duplicates for m in owner.get('moments') or [])
+    updates = {
+        'conversation_ids': list(dict.fromkeys([*(owner.get('conversation_ids') or []), *ids])),
+        'duplicate_conversation_ids': duplicates,
+    }
+    if content_removed:
+        updates.update(title='', bullets=[], people=[], open_questions=[], summary_needs_regeneration=True)
+    episodes_db.update_episode(
+        uid,
+        str(owner['id']),
+        expected_version=int(owner.get('state_version') or 0),
+        updates=updates,
+        link_conversation_ids=ids,
+        firestore_client=c.firestore_client,
+    )
+
+
 def _attach_synced(
     uid: str, conversation_id: str, row: Mapping[str, Any], c: Collaborators, *, absorbed_from: Optional[str] = None
 ) -> str:
+    primary = _group_primary(row)
+    if primary and primary != conversation_id:
+        canonical = conversations_db.get_conversation(uid, primary, firestore_client=c.firestore_client)
+        if canonical and not any(canonical.get(k) for k in ('discarded', 'deleted', 'sync_merged_into')):
+            owner = episodes_db.get_episode_for_conversation(uid, primary, firestore_client=c.firestore_client)
+            if owner and primary in (owner.get('recovered_conversation_ids') or []):
+                _join_group_duplicates(uid, owner, primary, canonical, c)
+                return 'attached'
+            return _attach_synced(uid, primary, canonical, c)
     # Re-read both membership and the boundary on every lost CAS. A last WAL
     # append cannot rely on another append arriving to repair a lost attachment.
     for attempt in range(3):
@@ -1456,6 +1497,7 @@ def _attach_synced(
                         updates={'recovered_conversation_ids': list(dict.fromkeys(recovered_ids))},
                         firestore_client=c.firestore_client,
                     )
+                _join_group_duplicates(uid, owner, conversation_id, row, c)
                 _record_recovered(uid, str(owner['id']), conversation_id, row, c)
             return outcome
         except episodes_db.EpisodeConflict:
@@ -1536,6 +1578,10 @@ def _on_finalized(
     if row.get('deleted') or row.get('discarded'):
         _end_discarded(uid, conversation_id, row, trigger, c)
         return 'skipped_discarded'
+    if _group_primary(row) not in {None, conversation_id}:
+        primary = conversations_db.get_conversation(uid, _group_primary(row), firestore_client=c.firestore_client)
+        if primary:
+            return _attach_synced(uid, conversation_id, row, c)
     started = policy.utc(row.get('started_at')) or policy.utc(row.get('created_at'))
     segments = [s for s in row.get('transcript_segments') or [] if isinstance(s, Mapping)]
     episode = episodes_db.get_episode_for_conversation(
@@ -1562,8 +1608,8 @@ def _on_finalized(
         episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
     if segments and not absorbed_from and trigger != SYNC_UPDATE:
         # Sync members use content receipts at attachment instead of this live cursor.
-        span = recorded_span(started, segments)
-        ended = span[1] if span else policy.utc(row.get('last_speech_at')) or started
+        span = conversation_span(row)
+        ended = span.recorded_end if span else _wall(started, max(_segment_end(s) for s in segments))
         tail = MomentInput(
             conversation_id=conversation_id,
             source=str(row.get('source') or '') or None,
@@ -1599,9 +1645,9 @@ def _end_discarded(uid: str, conversation_id: str, row: Mapping[str, Any], trigg
                 continue
             member = conversations_db.get_conversation(uid, cid, firestore_client=c.firestore_client)
             if member and not any(member.get(k) for k in ('discarded', 'deleted', 'sync_merged_into')):
-                span = recorded_span(policy.utc(member.get('started_at')), member.get('transcript_segments') or [])
+                span = conversation_span(member)
                 if span:
-                    activity[cid] = span[1]
+                    activity[cid] = span.recorded_end
     episode = episodes_db.update_episode(
         uid,
         str(episode['id']),
@@ -1612,21 +1658,6 @@ def _end_discarded(uid: str, conversation_id: str, row: Mapping[str, Any], trigg
         },
         firestore_client=c.firestore_client,
     )
-    items = provisional_items(episode)
-    dropped = 0
-    for item in items:
-        if item.get('status') == 'provisional' and item.get('conversation_id') == conversation_id:
-            item['status'] = 'dropped'
-            dropped += 1
-    if dropped:
-        episodes_db.update_episode(
-            uid,
-            str(episode['id']),
-            expected_version=int(episode.get('state_version') or 0),
-            updates={'provisional_items': items},
-            firestore_client=c.firestore_client,
-        )
-        metrics.record_provisional_outcomes({'dropped': dropped})
 
 
 def _calendar_identity(row: Mapping[str, Any]) -> Optional[str]:
@@ -1672,6 +1703,7 @@ def _repoint_absorbed(uid: str, episode: Mapping[str, Any], donor_id: str, survi
         str(episode['id']),
         expected_version=int(episode.get('state_version') or 0),
         updates={
+            **episode_timeline.repointed_members(episode, donor_id, survivor_id),
             'conversation_ids': list(dict.fromkeys(ids)),
             'recovered_conversation_ids': list(
                 dict.fromkeys(
@@ -1908,7 +1940,11 @@ def to_wire(episode: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
             for m in episode.get('moments') or []
             if m.get('id') and m.get('conversation_id') and m.get('started_at')
         ],
-        'conversation_ids': list(episode.get('conversation_ids') or []),
+        'conversation_ids': [
+            cid
+            for cid in episode.get('conversation_ids') or []
+            if cid not in (episode.get('duplicate_conversation_ids') or [])
+        ],
         'sources': list(episode.get('sources') or []),
         'state_updated_at': episode.get('state_updated_at'),
     }

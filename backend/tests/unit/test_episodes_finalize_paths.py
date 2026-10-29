@@ -391,14 +391,9 @@ def test_mobile_byok_keeps_request_scoped_processing(conv, monkeypatch):
     assert [step for step, *_ in timeline] == ['close', 'process', 'after']
 
 
-def test_group_join_schedules_each_member_with_an_admitted_trigger(monkeypatch):
-    from utils.episodes import service
-
+def test_group_join_schedules_one_group_recovery(monkeypatch):
     calls = []
     monkeypatch.setattr(episode_finalize.client_gate, 'client_seen_cached', lambda uid: True)
-    monkeypatch.setattr(
-        episode_finalize, 'schedule_after_finalization', lambda uid, cid, trigger: calls.append((cid, trigger.value))
-    )
+    monkeypatch.setattr(episode_finalize, 'submit_with_context', lambda executor, fn, *args: calls.append((fn, args)))
     episode_finalize.schedule_group_attachments(_UID, ['pendant', 'desktop', 'pendant'])
-    assert calls == [('pendant', 'capture_group'), ('desktop', 'capture_group')]
-    assert all(trigger in service.RECONCILE_TRIGGERS for _, trigger in calls)
+    assert calls == [(episode_finalize._after_group_join, (_UID, ['pendant', 'desktop']))]

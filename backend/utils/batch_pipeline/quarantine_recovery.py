@@ -34,6 +34,7 @@ from config.stt_provider_policy import HELD_RECOVERY_SECOND_PROVIDER
 from config.batch_language_recovery import (
     MAX_AUDIO_SECONDS,
     allowed as independent_allowed,
+    enabled as independent_enabled,
     language_guarded,
     below_silence_threshold,
 )
@@ -313,7 +314,13 @@ class QuarantineRecovery:
                         local_payload = silence_payload(duration)
                 except RecoveryFailure as error:
                     inspection_failure = error
-            if language_guarded(job) and inspected_spans == [] and not independent_allowed(duration):
+            worker = worker_vad_speech(job) if language_guarded(job) else None
+            if (
+                language_guarded(job)
+                and inspected_spans == []
+                and not independent_allowed(duration)
+                and not (independent_enabled() and worker is not None)
+            ):
                 if duration > MAX_AUDIO_SECONDS and self.protocol.hold_duration_limit(
                     segment_id, token, self.clock(), audio_uri=item.audio_uri, audio_seconds=duration
                 ):
@@ -337,7 +344,6 @@ class QuarantineRecovery:
             # new-admission guard is rolled back.
             # The worker's bound VAD receipt is the only evidence that may
             # locate recognized words when strict CPU VAD finds no speech.
-            worker = worker_vad_speech(job) if language_guarded(job) else None
             multilingual = (
                 safety_net_enabled()
                 or policy.speech_empty_multilingual

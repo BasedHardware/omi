@@ -95,6 +95,7 @@ from utils.conversations.smart_merge_policy import (
 from utils.conversations.smart_merge_state import QUESTION_NAME, QUESTIONS, build_state, state_sha256
 from utils.executors import lifecycle_executor, run_blocking
 from utils.llm.jev_client import ask_jev
+from utils.sync.repeat_work_metrics import conversation_scope
 from utils.metrics_smart_merge import record_merge_processing_stage
 from utils.metrics import (
     record_conversation_smart_merge,
@@ -148,6 +149,7 @@ async def smart_merge_step(
     )
 
 
+@conversation_scope
 def decide_and_apply(
     uid: str,
     conversation_id: str,
@@ -355,8 +357,10 @@ def _pair_state(
         if last is None:
             return None
         last_row = last_fragment_row if isinstance(last_fragment_row, Mapping) else survivor
-        a = replace(last, started_at=last_row['created_at'], finished_at=last_row['finished_at'])
-        b = replace(b, started_at=new_row['created_at'])
+        recorded = fragment_of(last_row)
+        if recorded is None:
+            return None
+        a = replace(last, started_at=recorded.started_at, finished_at=recorded.finished_at)
         candidates = [fragment for fragment in fragments if fragment.id != last.id]
         a_segments = (
             fragment_segments(survivor, survivor_segments, last)
@@ -938,6 +942,9 @@ def _refresh_claimed(uid: str, survivor_id: str, claimed: int, *, owner: str, sk
     if int(state.get('processed_revision') or 0) < claimed or state.get('processed_sync_revision') != row.get(
         'sync_content_revision'
     ):
+        from utils.sync.repeat_work_metrics import record_survivor_refresh
+
+        record_survivor_refresh(uid, survivor_id, row.get('episode_id'))
         persistence = {'owned': True}
         try:
             processed = process_conversation(

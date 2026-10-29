@@ -473,6 +473,9 @@ def absorb_conversation(
             dict(survivor_update, transcript_segments=survivor_update.get('transcript_segments', survivor_segments)),
         )
         remember_size_payload(donor_id, dict(donor, transcript_segments=donor_segments))
+        from utils.conversations.recorded_time import write_span
+
+        survivor_update.update(write_span({**survivor, **survivor_update}))
         payload = conversations_db.encode_conversation_for_write(uid, survivor_update, level)
         conversations_db.guard_match_score_size(payload, survivor_raw)
         if (
