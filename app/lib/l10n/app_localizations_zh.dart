@@ -14617,4 +14617,32 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deleteFinishNowTitle => '删除您的账户？';
+
+  @override
+  String get syncHealthAlerts => '同步状态提醒';
+
+  @override
+  String get syncHealthAlertsDescription => '如果 Omi 超过一天未同步录音，则发出提醒';
+
+  @override
+  String get syncStallAlertTitle => 'Omi 未同步';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return '你的 Omi 已超过 $hours 小时未同步任何录音。打开 Omi 检查设备连接。';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi 未同步';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return '超过 $hours 小时未同步任何录音';
+  }
+
+  @override
+  String get dailyRecapsOnHome => '首页每日回顾';
+
+  @override
+  String get dailyRecapsOnHomeDescription => '在首页顶部显示最新的回顾。';
 }

@@ -38,6 +38,7 @@ from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyRea
 from utils.batch_pipeline.projection_index import ProjectionIndex
 from database import conversations as conversations_db
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem, projection_speech_spans
+from utils.batch_pipeline.errors import error_site_field
 from utils.batch_pipeline.correctness_metrics import record_labels
 from utils.batch_pipeline.recovery_disposition import result_outcome
 from database.batch_pipeline_projection_claim import projection_claim
@@ -45,7 +46,7 @@ from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.voice_evidence import prepare as prepare_voice_evidence
 from utils.batch_pipeline.projection_parts import align_projection_words, bounded_projection_words
 from utils.sync.assignment_errors import SyncAssignmentSuperseded
-from utils.sync.intake_completion import log_sync_lineage_stamp_gap_refused
+from utils.stt.transcript_admission import filter_admission
 
 if TYPE_CHECKING:
     from utils.batch_pipeline.projection_prefetch import Prefetched
@@ -124,21 +125,6 @@ def error_type(error: BaseException) -> str:
     ):
         return 'FirestoreContentionExhausted'
     return type(error).__name__
-
-
-def error_site_field(error: BaseException) -> str:
-    """` site=<file>:<line>` of the innermost backend frame; static code location only."""
-    import os
-    import traceback
-
-    try:
-        frames = traceback.extract_tb(error.__traceback__)
-    except Exception:
-        return ''
-    for frame in reversed(frames):
-        if 'site-packages' not in frame.filename and 'dist-packages' not in frame.filename:
-            return f' site={os.path.basename(frame.filename)}:{frame.lineno}'
-    return ''
 
 
 def fence_reason_field(error: BaseException) -> str:
@@ -251,9 +237,20 @@ def build_incoming(
             segment.speaker_identity_status = 'ambiguous' if abstained else 'no_match'
             segment.speaker_match_source = 'batch_abstention' if abstained else 'batch_pyannote'
     started = datetime.fromtimestamp(item.capture_at, timezone.utc)
+    finished = datetime.fromtimestamp(item.capture_at + max(s.end for s in segments), timezone.utc)
+    # Projected sync must use the same narrow admission rules as legacy sync.
+    # Keep original clocks/accounting; shadow retains the identical segments.
+    segments, admission_receipts = filter_admission(item.owner_id, segments, origin='sync')
+    for reason in sorted({receipt.rule for receipt in admission_receipts}):
+        logger.info(
+            'event=batch_media_admission reason=%s count=%d serving=%s',
+            reason,
+            sum(receipt.rule == reason for receipt in admission_receipts),
+            str(any(receipt.dropped for receipt in admission_receipts)).lower(),
+        )
     create = CreateConversation(
         started_at=started,
-        finished_at=datetime.fromtimestamp(item.capture_at + max(s.end for s in segments), timezone.utc),
+        finished_at=finished,
         transcript_segments=segments,
         source=ConversationSource(binding.source),
         language=binding.language or payload.get('language'),
@@ -841,7 +838,8 @@ class Projector:
                             batch_segment_id=item.segment_id,
                             policy=policy,
                         )
-                    session.speaker_scope = incoming['transcript_segments'][0]['speaker_id_scope']
+                    if incoming['transcript_segments']:
+                        session.speaker_scope = incoming['transcript_segments'][0]['speaker_id_scope']
                     if binding.record_origin:
                         incoming['_batch_replace_live'] = {
                             'start': item.capture_at,
@@ -863,7 +861,7 @@ class Projector:
                         receipt_box[:] = [session.persist(transaction, planned)]
 
                     candidate = None
-                    if context.target_id is None:
+                    if context.target_id is None and incoming['transcript_segments']:
                         with projection_phase('candidate', policy):
                             span = (int(incoming['started_at'].timestamp()), int(incoming['finished_at'].timestamp()))
                             deadline = hint.deadline if hint is not None else None
@@ -900,8 +898,6 @@ class Projector:
                         )
                         receipt = receipt_box[0]
                         record_labels(assigned[2])
-                        if assigned[0].pop('_sync_lineage_stamp_gap_refused', False):
-                            log_sync_lineage_stamp_gap_refused()
             except ProjectionReplay as replay:
                 receipt = replay.receipt
             except ProjectionGenerationAmbiguous:

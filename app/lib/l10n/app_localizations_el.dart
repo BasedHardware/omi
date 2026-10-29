@@ -14948,4 +14948,32 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get deleteFinishNowTitle => 'Διαγραφή του λογαριασμού σας;';
+
+  @override
+  String get syncHealthAlerts => 'Ειδοποιήσεις κατάστασης συγχρονισμού';
+
+  @override
+  String get syncHealthAlertsDescription => 'Ειδοποίηση αν το Omi δεν συγχρόνισε ηχογραφήσεις για πάνω από μια μέρα';
+
+  @override
+  String get syncStallAlertTitle => 'Το Omi δεν συγχρονίζεται';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Καμία ηχογράφηση από το Omi σας δεν συγχρονίστηκε για πάνω από $hours ώρες. Ανοίξτε το Omi για να ελέγξετε τη σύνδεση της συσκευής.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Το Omi δεν συγχρονίζεται';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Καμία ηχογράφηση δεν συγχρονίστηκε για πάνω από $hours ώρες';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Ημερήσιες περιλήψεις στην Αρχική';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Εμφάνιση των πιο πρόσφατων περιλήψεων στην κορυφή της Αρχικής.';
 }

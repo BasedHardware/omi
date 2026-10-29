@@ -14907,4 +14907,33 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get deleteFinishNowTitle => 'Törlöd a fiókodat?';
+
+  @override
+  String get syncHealthAlerts => 'Szinkronizálási állapotriasztások';
+
+  @override
+  String get syncHealthAlertsDescription =>
+      'Figyelmeztetés, ha az Omi több mint egy napja nem szinkronizált felvételeket';
+
+  @override
+  String get syncStallAlertTitle => 'Az Omi nem szinkronizál';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Több mint $hours órája nem szinkronizálódott felvétel az Omidról. Nyisd meg az Omit az eszköz kapcsolatának ellenőrzéséhez.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Az Omi nem szinkronizál';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Több mint $hours órája nem szinkronizálódott felvétel';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Napi összefoglalók a Kezdőlapon';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'A legújabb összefoglalók megjelenítése a Kezdőlap tetején.';
 }

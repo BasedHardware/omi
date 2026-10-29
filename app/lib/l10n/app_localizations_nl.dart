@@ -14888,4 +14888,32 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get deleteFinishNowTitle => 'Je account wissen?';
+
+  @override
+  String get syncHealthAlerts => 'Waarschuwingen over synchronisatiestatus';
+
+  @override
+  String get syncHealthAlertsDescription => 'Waarschuw als Omi langer dan een dag geen opnames heeft gesynchroniseerd';
+
+  @override
+  String get syncStallAlertTitle => 'Omi synchroniseert niet';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Al meer dan $hours uur zijn er geen opnames van je Omi gesynchroniseerd. Open Omi om de verbinding van je apparaat te controleren.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi synchroniseert niet';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Al meer dan $hours uur geen gesynchroniseerde opnames';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Dagelijkse samenvattingen op Home';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Toon je nieuwste samenvattingen bovenaan Home.';
 }

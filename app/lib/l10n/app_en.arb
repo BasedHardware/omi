@@ -18117,5 +18117,47 @@
     "deleteFinishNowTitle": "Erase Your Account?",
     "@deleteFinishNowTitle": {
         "description": "Title of the final confirmation dialog after the user taps Erase my account now on the pending-deletion restore screen."
+    },
+    "syncHealthAlerts": "Sync Health Alerts",
+    "@syncHealthAlerts": {
+        "description": "Device Settings toggle title: stall alerts for the paired pendant"
+    },
+    "syncHealthAlertsDescription": "Alert if Omi hasn't synced recordings for over a day",
+    "@syncHealthAlertsDescription": {
+        "description": "Device Settings toggle subtitle under Sync Health Alerts"
+    },
+    "syncStallAlertTitle": "Omi Not Syncing",
+    "@syncStallAlertTitle": {
+        "description": "Local notification title when the sync stall alert fires"
+    },
+    "syncStallAlertBody": "No recordings have synced from your Omi in over {hours} hours. Open Omi to check your device connection.",
+    "@syncStallAlertBody": {
+        "description": "Local notification body when the sync stall alert fires",
+        "placeholders": {
+            "hours": {
+                "type": "int"
+            }
+        }
+    },
+    "activityAttentionSyncStalledTitle": "Omi isn't syncing",
+    "@activityAttentionSyncStalledTitle": {
+        "description": "Needs attention row title: no sync activity at all for the stall threshold"
+    },
+    "activityAttentionSyncStalledSubtitle": "No recordings synced for over {hours} hours",
+    "@activityAttentionSyncStalledSubtitle": {
+        "description": "Needs attention row subtitle: how long the pipeline has been silent",
+        "placeholders": {
+            "hours": {
+                "type": "int"
+            }
+        }
+    },
+    "dailyRecapsOnHome": "Daily Recaps on Home",
+    "@dailyRecapsOnHome": {
+        "description": "Developer Settings toggle title: show the Daily Recaps row on Home"
+    },
+    "dailyRecapsOnHomeDescription": "Show your latest recaps at the top of Home.",
+    "@dailyRecapsOnHomeDescription": {
+        "description": "Subtitle for the Daily Recaps on Home toggle in Developer Settings"
     }
 }

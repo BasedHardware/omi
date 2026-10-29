@@ -4491,5 +4491,13 @@
     "deleteFinishNowButton": "Esborra el meu compte ara",
     "deleteFinishNowWarning": "Això posa fi al període de restauració. El compte i els seus enregistraments s'esborraran definitivament.",
     "deleteRestoreLessThanDayRemaining": "Teniu menys d'un dia per recuperar el vostre compte.",
-    "deleteFinishNowTitle": "Voleu eliminar el vostre compte?"
+    "deleteFinishNowTitle": "Voleu eliminar el vostre compte?",
+    "syncHealthAlerts": "Alertes d'estat de sincronització",
+    "syncHealthAlertsDescription": "Avisa si l'Omi no ha sincronitzat enregistraments durant més d'un dia",
+    "syncStallAlertTitle": "Omi no se sincronitza",
+    "syncStallAlertBody": "Fa més de {hours} hores que no se sincronitza cap enregistrament del teu Omi. Obre Omi per comprovar la connexió del dispositiu.",
+    "activityAttentionSyncStalledTitle": "Omi no se sincronitza",
+    "activityAttentionSyncStalledSubtitle": "Cap enregistrament sincronitzat fa més de {hours} hores",
+    "dailyRecapsOnHome": "Resums diaris a l'Inici",
+    "dailyRecapsOnHomeDescription": "Mostra els teus resums més recents a dalt de l'Inici."
 }

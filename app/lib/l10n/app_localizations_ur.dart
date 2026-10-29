@@ -14861,4 +14861,32 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get deleteFinishNowTitle => 'اپنا اکاؤنٹ حذف کریں؟';
+
+  @override
+  String get syncHealthAlerts => 'سنک ہیلتھ الرٹس';
+
+  @override
+  String get syncHealthAlertsDescription => 'اگر Omi ایک دن سے زیادہ ریکارڈنگز سنک نہ کرے تو الرٹ دیں';
+
+  @override
+  String get syncStallAlertTitle => 'Omi سنک نہیں ہو رہا';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'آپ کے Omi سے $hours گھنٹوں سے زیادہ کوئی ریکارڈنگ سنک نہیں ہوئی۔ اپنے ڈیوائس کا کنکشن چیک کرنے کے لیے Omi کھولیں۔';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi سنک نہیں ہو رہا';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return '$hours گھنٹوں سے زیادہ کوئی ریکارڈنگ سنک نہیں ہوئی';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'ہوم پر روزانہ خلاصے';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'ہوم کے اوپر اپنے تازہ ترین خلاصے دکھائیں۔';
 }

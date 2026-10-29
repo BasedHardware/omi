@@ -4491,5 +4491,13 @@
     "deleteFinishNowButton": "Odstrániť môj účet teraz",
     "deleteFinishNowWarning": "Tým sa skončí obdobie na obnovenie. Váš účet a nahrávky sa natrvalo vymažú.",
     "deleteRestoreLessThanDayRemaining": "Na obnovenie účtu vám zostáva menej ako 1 deň.",
-    "deleteFinishNowTitle": "Odstrániť účet?"
+    "deleteFinishNowTitle": "Odstrániť účet?",
+    "syncHealthAlerts": "Upozornenia na stav synchronizácie",
+    "syncHealthAlertsDescription": "Upozorniť, keď Omi viac než deň nesynchronizuje nahrávky",
+    "syncStallAlertTitle": "Omi sa nesynchronizuje",
+    "syncStallAlertBody": "Viac než {hours} hodín sa z vášho Omi nesynchronizovali žiadne nahrávky. Otvorte Omi a skontrolujte pripojenie zariadenia.",
+    "activityAttentionSyncStalledTitle": "Omi sa nesynchronizuje",
+    "activityAttentionSyncStalledSubtitle": "Viac než {hours} hodín bez synchronizovaných nahrávok",
+    "dailyRecapsOnHome": "Denné súhrny na domovskej obrazovke",
+    "dailyRecapsOnHomeDescription": "Zobraziť najnovšie súhrny v hornej časti domovskej obrazovky."
 }

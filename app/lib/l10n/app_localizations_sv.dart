@@ -14858,4 +14858,32 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get deleteFinishNowTitle => 'Ta bort ditt konto?';
+
+  @override
+  String get syncHealthAlerts => 'Synkroniseringsvarningar';
+
+  @override
+  String get syncHealthAlertsDescription => 'Varna om Omi inte har synkroniserat inspelningar på mer än ett dygn';
+
+  @override
+  String get syncStallAlertTitle => 'Omi synkroniserar inte';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Inga inspelningar från din Omi har synkroniserats på mer än $hours timmar. Öppna Omi för att kontrollera enhetens anslutning.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi synkroniserar inte';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Inga inspelningar synkroniserade på mer än $hours timmar';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Dagliga sammanfattningar på Hem';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Visa dina senaste sammanfattningar högst upp på Hem.';
 }

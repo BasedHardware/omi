@@ -11917,5 +11917,13 @@
     "deleteFinishNowButton": "माझे खाते आत्ताच पुसून टाका",
     "deleteFinishNowWarning": "यामुळे खाते पुनर्संचयित करण्याची मुदत संपेल. तुमचे खाते आणि त्यातील रेकॉर्डिंग कायमची पुसली जातील.",
     "deleteRestoreLessThanDayRemaining": "तुमचे खाते पुनर्संचयित करण्यासाठी एका दिवसापेक्षा कमी वेळ बाकी आहे.",
-    "deleteFinishNowTitle": "तुमचे खाते हटवायचे आहे का?"
+    "deleteFinishNowTitle": "तुमचे खाते हटवायचे आहे का?",
+    "syncHealthAlerts": "सिंक आरोग्य अलर्ट",
+    "syncHealthAlertsDescription": "Omi ने एका दिवसापेक्षा जास्त काळ रेकॉर्डिंग्ज सिंक केल्या नाहीत तेव्हा सूचित करा",
+    "syncStallAlertTitle": "Omi सिंक होत नाहीये",
+    "syncStallAlertBody": "तुमच्या Omi मधून {hours} तासांपेक्षा जास्त काळ कोणतीही रेकॉर्डिंग सिंक झाली नाही. तुमच्या डिव्हाइसचे कनेक्शन तपासण्यासाठी Omi उघडा.",
+    "activityAttentionSyncStalledTitle": "Omi सिंक होत नाहीये",
+    "activityAttentionSyncStalledSubtitle": "{hours} तासांपेक्षा जास्त काळ कोणतीही रेकॉर्डिंग सिंक झाली नाही",
+    "dailyRecapsOnHome": "मुख्यपृष्ठावर दैनिक रीकॅप्स",
+    "dailyRecapsOnHomeDescription": "मुख्यपृष्ठाच्या वर तुमचे नवीनतम रीकॅप्स दाखवा."
 }

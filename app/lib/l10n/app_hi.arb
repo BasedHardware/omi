@@ -4491,5 +4491,13 @@
     "deleteFinishNowButton": "मेरा खाता अभी मिटाएं",
     "deleteFinishNowWarning": "इससे बहाली की अवधि समाप्त हो जाएगी। आपका खाता और उसकी रिकॉर्डिंग हमेशा के लिए मिटा दी जाएंगी।",
     "deleteRestoreLessThanDayRemaining": "आपका खाता रिस्टोर करने के लिए एक दिन से कम समय बाकी है।",
-    "deleteFinishNowTitle": "अपना खाता मिटाएं?"
+    "deleteFinishNowTitle": "अपना खाता मिटाएं?",
+    "syncHealthAlerts": "सिंक स्वास्थ्य अलर्ट",
+    "syncHealthAlertsDescription": "अगर Omi एक दिन से ज़्यादा समय से रिकॉर्डिंग सिंक नहीं कर रहा है तो अलर्ट दें",
+    "syncStallAlertTitle": "Omi सिंक नहीं हो रहा है",
+    "syncStallAlertBody": "आपके Omi से {hours} घंटे से ज़्यादा समय से कोई रिकॉर्डिंग सिंक नहीं हुई है। अपने डिवाइस का कनेक्शन जाँचने के लिए Omi खोलें।",
+    "activityAttentionSyncStalledTitle": "Omi सिंक नहीं हो रहा है",
+    "activityAttentionSyncStalledSubtitle": "{hours} घंटे से ज़्यादा समय से कोई रिकॉर्डिंग सिंक नहीं हुई",
+    "dailyRecapsOnHome": "होम पर दैनिक सारांश",
+    "dailyRecapsOnHomeDescription": "होम के ऊपर अपने नवीनतम सारांश दिखाएं।"
 }

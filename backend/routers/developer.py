@@ -6,6 +6,7 @@ from routers.developer_segments_models import (
     CaptureEvidenceLineage,
     CaptureEvidenceLineageUnit,
 )
+import hashlib
 import json
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -1777,6 +1778,29 @@ def _from_segments_conversation_id(uid: str, client_session_id: str) -> str:
     return str(uuid.uuid5(_FROM_SEGMENTS_CONVERSATION_NAMESPACE, f'{uid}\0{client_session_id}'))
 
 
+# Recording facts that identify a blank-id upload: the same values hash to one
+# conversation across retries, different recordings hash apart. Routing fields a
+# retry may legitimately resend differently (folder, calendar context, client
+# projection, finalization reason) are deliberately absent so a retry lands on
+# the first attempt's conversation instead of forking a duplicate.
+_BLANK_SESSION_ID_IDENTITY_FIELDS = frozenset(
+    {'source', 'started_at', 'finished_at', 'language', 'geolocation', 'transcript_segments'}
+)
+
+
+def _derived_client_session_id(uid: str, request: CreateConversationFromTranscriptRequest) -> str:
+    """Stable retry identity for uploads whose client persisted a blank session id.
+
+    These clients resend byte-identical requests (BasedHardware/omi#15500), so a
+    digest of the recording's own facts is identical on every retry while a
+    different recording — different segments or clock — digests apart.
+    """
+    payload = dict(request.model_dump(mode='json', by_alias=False, include=_BLANK_SESSION_ID_IDENTITY_FIELDS))
+    payload['uid'] = uid
+    digest = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    return f'derived:{digest}'
+
+
 def _is_stale_from_segments_claim(conversation: dict, client_session_id: str, now: datetime) -> bool:
     external_data = conversation.get('external_data') or {}
     if external_data.get('from_segments_client_session_id') != client_session_id:
@@ -2050,6 +2074,14 @@ def _ingest_conversation_from_segments(
 
     if request.chunk_count is None and len(request.transcript_segments) > 500:
         raise HTTPException(status_code=422, detail="Maximum 500 transcript segments allowed")
+
+    # A sent-blank client_session_id must not take the unkeyed create path: these
+    # clients resend byte-identical requests, so a lost 200 followed by the retry
+    # would fork a duplicate conversation (Luna review of #23886). Derive the
+    # stable id the client failed to send; an id that was never sent keeps the
+    # plain create path.
+    if request.client_session_id is None and request.sent_blank_client_session_id:
+        request = request.model_copy(update={'client_session_id': _derived_client_session_id(uid, request)})
 
     request, covered_response = developer_segments.admit_segments(uid, request, ConversationResponse)
     if covered_response is not None:

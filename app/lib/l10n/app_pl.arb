@@ -4526,5 +4526,13 @@
     "deleteFinishNowButton": "Usuń moje konto teraz",
     "deleteFinishNowWarning": "To kończy okres przywracania. Twoje konto i nagrania zostaną trwale usunięte.",
     "deleteRestoreLessThanDayRemaining": "Masz mniej niż 1 dzień na przywrócenie konta.",
-    "deleteFinishNowTitle": "Usunąć konto?"
+    "deleteFinishNowTitle": "Usunąć konto?",
+    "syncHealthAlerts": "Alerty stanu synchronizacji",
+    "syncHealthAlertsDescription": "Ostrzeż, jeśli Omi nie synchronizuje nagrań dłużej niż dobę",
+    "syncStallAlertTitle": "Omi nie synchronizuje się",
+    "syncStallAlertBody": "Od ponad {hours} godzin nie zsynchronizowano żadnego nagrania z Twojego Omi. Otwórz Omi, aby sprawdzić połączenie z urządzeniem.",
+    "activityAttentionSyncStalledTitle": "Omi nie synchronizuje się",
+    "activityAttentionSyncStalledSubtitle": "Od ponad {hours} godzin nie zsynchronizowano żadnego nagrania",
+    "dailyRecapsOnHome": "Podsumowania dnia na Głównej",
+    "dailyRecapsOnHomeDescription": "Pokazuj najnowsze podsumowania na górze Głównej."
 }

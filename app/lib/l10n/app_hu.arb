@@ -4587,5 +4587,13 @@
     "deleteFinishNowButton": "Fiókom törlése most",
     "deleteFinishNowWarning": "Ezzel véget ér a visszaállítási időszak. Fiókodat és a hozzá tartozó felvételeket véglegesen töröljük.",
     "deleteRestoreLessThanDayRemaining": "Kevesebb mint egy napod maradt a fiókod visszaállítására.",
-    "deleteFinishNowTitle": "Törlöd a fiókodat?"
+    "deleteFinishNowTitle": "Törlöd a fiókodat?",
+    "syncHealthAlerts": "Szinkronizálási állapotriasztások",
+    "syncHealthAlertsDescription": "Figyelmeztetés, ha az Omi több mint egy napja nem szinkronizált felvételeket",
+    "syncStallAlertTitle": "Az Omi nem szinkronizál",
+    "syncStallAlertBody": "Több mint {hours} órája nem szinkronizálódott felvétel az Omidról. Nyisd meg az Omit az eszköz kapcsolatának ellenőrzéséhez.",
+    "activityAttentionSyncStalledTitle": "Az Omi nem szinkronizál",
+    "activityAttentionSyncStalledSubtitle": "Több mint {hours} órája nem szinkronizálódott felvétel",
+    "dailyRecapsOnHome": "Napi összefoglalók a Kezdőlapon",
+    "dailyRecapsOnHomeDescription": "A legújabb összefoglalók megjelenítése a Kezdőlap tetején."
 }

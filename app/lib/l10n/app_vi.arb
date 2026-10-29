@@ -4491,5 +4491,13 @@
     "deleteFinishNowButton": "Xóa tài khoản của tôi ngay",
     "deleteFinishNowWarning": "Thao tác này sẽ kết thúc thời hạn khôi phục. Tài khoản và các bản ghi của bạn sẽ bị xóa vĩnh viễn.",
     "deleteRestoreLessThanDayRemaining": "Bạn còn chưa đến 1 ngày để khôi phục tài khoản của mình.",
-    "deleteFinishNowTitle": "Xóa tài khoản của bạn?"
+    "deleteFinishNowTitle": "Xóa tài khoản của bạn?",
+    "syncHealthAlerts": "Cảnh báo tình trạng đồng bộ",
+    "syncHealthAlertsDescription": "Cảnh báo nếu Omi không đồng bộ bản ghi hơn một ngày",
+    "syncStallAlertTitle": "Omi không đồng bộ",
+    "syncStallAlertBody": "Không có bản ghi nào từ Omi của bạn được đồng bộ trong hơn {hours} giờ. Mở Omi để kiểm tra kết nối thiết bị.",
+    "activityAttentionSyncStalledTitle": "Omi không đồng bộ",
+    "activityAttentionSyncStalledSubtitle": "Không có bản ghi nào được đồng bộ hơn {hours} giờ",
+    "dailyRecapsOnHome": "Tóm tắt hàng ngày trên Trang chủ",
+    "dailyRecapsOnHomeDescription": "Hiển thị các tóm tắt mới nhất ở đầu Trang chủ."
 }

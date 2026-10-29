@@ -4491,5 +4491,13 @@
     "deleteFinishNowButton": "Padam akaun saya sekarang",
     "deleteFinishNowWarning": "Ini menamatkan tempoh pemulihan. Akaun dan rakaman anda akan dipadamkan secara kekal.",
     "deleteRestoreLessThanDayRemaining": "Anda ada kurang daripada sehari untuk memulihkan akaun anda.",
-    "deleteFinishNowTitle": "Padam akaun anda?"
+    "deleteFinishNowTitle": "Padam akaun anda?",
+    "syncHealthAlerts": "Amaran kesihatan segerak",
+    "syncHealthAlertsDescription": "Maklumkan saya jika Omi tidak menyegerakkan rakaman selama lebih sehari",
+    "syncStallAlertTitle": "Omi tidak disegerakkan",
+    "syncStallAlertBody": "Tiada rakaman daripada Omi anda disegerakkan selama lebih {hours} jam. Buka Omi untuk menyemak sambungan peranti anda.",
+    "activityAttentionSyncStalledTitle": "Omi tidak disegerakkan",
+    "activityAttentionSyncStalledSubtitle": "Tiada rakaman disegerakkan selama lebih {hours} jam",
+    "dailyRecapsOnHome": "Ringkasan Harian di Utama",
+    "dailyRecapsOnHomeDescription": "Tunjukkan ringkasan terkini anda di bahagian atas Utama."
 }

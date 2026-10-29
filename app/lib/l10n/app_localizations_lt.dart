@@ -14871,4 +14871,32 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get deleteFinishNowTitle => 'Ištrinti jūsų paskyrą?';
+
+  @override
+  String get syncHealthAlerts => 'Sinchronizavimo būsenos įspėjimai';
+
+  @override
+  String get syncHealthAlertsDescription => 'Įspėti, jei Omi daugiau nei parą nesinchronizavo įrašų';
+
+  @override
+  String get syncStallAlertTitle => 'Omi nesinchronizuojama';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Dažiau nei $hours val. iš jūsų Omi nesinchronizuotas nė vienas įrašas. Atidarykite Omi ir patikrinkite įrenginio ryšį.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi nesinchronizuojama';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Dažiau nei $hours val. nesinchronizuotas nė vienas įrašas';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Dienos apžvalgos pradžios ekrane';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Rodyti naujausias apžvalgas pradžios ekrano viršuje.';
 }

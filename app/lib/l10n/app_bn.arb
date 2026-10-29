@@ -11917,5 +11917,13 @@
     "deleteFinishNowButton": "এখনই আমার অ্যাকাউন্ট মুছে ফেলুন",
     "deleteFinishNowWarning": "এতে পুনরুদ্ধারের সময়সীমা শেষ হবে। আপনার অ্যাকাউন্ট ও এর রেকর্ডিং স্থায়ীভাবে মুছে ফেলা হবে।",
     "deleteRestoreLessThanDayRemaining": "আপনার অ্যাকাউন্ট পুনরুদ্ধার করার জন্য এক দিনেরও কম সময় বাকি আছে।",
-    "deleteFinishNowTitle": "আপনার অ্যাকাউন্ট মুছবেন?"
+    "deleteFinishNowTitle": "আপনার অ্যাকাউন্ট মুছবেন?",
+    "syncHealthAlerts": "সিঙ্ক স্বাস্থ্য সতর্কতা",
+    "syncHealthAlertsDescription": "Omi এক দিনের বেশি রেকর্ডিং সিঙ্ক না করলে সতর্কতা দিন",
+    "syncStallAlertTitle": "Omi সিঙ্ক হচ্ছে না",
+    "syncStallAlertBody": "{hours} ঘণ্টার বেশি Omi থেকে কোনো রেকর্ডিং সিঙ্ক হয়নি। আপনার ডিভাইস সংযোগ পরীক্ষা করতে Omi খুলুন।",
+    "activityAttentionSyncStalledTitle": "Omi সিঙ্ক হচ্ছে না",
+    "activityAttentionSyncStalledSubtitle": "{hours} ঘণ্টার বেশি কোনো রেকর্ডিং সিঙ্ক হয়নি",
+    "dailyRecapsOnHome": "হোমে দৈনিক সংক্ষেপ",
+    "dailyRecapsOnHomeDescription": "হোমের উপরে আপনার সাম্প্রতিক সংক্ষেপ দেখান।"
 }

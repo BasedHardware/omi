@@ -14952,4 +14952,32 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get deleteFinishNowTitle => 'உங்கள் கணக்கை நீக்கவா?';
+
+  @override
+  String get syncHealthAlerts => 'ஒத்திசைவு நிலை எச்சரிக்கைகள்';
+
+  @override
+  String get syncHealthAlertsDescription => 'Omi ஒரு நாளுக்கு மேல் பதிவுகளை ஒத்திசைக்கவில்லை என்றால் எச்சரிக்கவும்';
+
+  @override
+  String get syncStallAlertTitle => 'Omi ஒத்திசைக்கவில்லை';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'உங்கள் Omi-யில் இருந்து $hours மணி நேரத்திற்கு மேல் எந்தப் பதிவும் ஒத்திசைக்கப்படவில்லை. உங்கள் சாதன இணைப்பைச் சரிபார்க்க Omi-ஐத் திறக்கவும்.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi ஒத்திசைக்கவில்லை';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return '$hours மணி நேரத்திற்கு மேல் எந்தப் பதிவும் ஒத்திசைக்கப்படவில்லை';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'முகப்பில் தினசரி சுருக்கங்கள்';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'முகப்பின் மேலே உங்கள் சமீபத்திய சுருக்கங்களைக் காட்டு.';
 }

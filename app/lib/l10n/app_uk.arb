@@ -4491,5 +4491,13 @@
     "deleteFinishNowButton": "Стерти обліковий запис зараз",
     "deleteFinishNowWarning": "Після цього період відновлення завершиться. Ваш обліковий запис і його записи буде стерто назавжди.",
     "deleteRestoreLessThanDayRemaining": "У вас залишилося менше ніж день, щоб відновити свій обліковий запис.",
-    "deleteFinishNowTitle": "Видалити ваш обліковий запис?"
+    "deleteFinishNowTitle": "Видалити ваш обліковий запис?",
+    "syncHealthAlerts": "Оповіщення про стан синхронізації",
+    "syncHealthAlertsDescription": "Повідомляти, якщо Omi не синхронізує записи понад добу",
+    "syncStallAlertTitle": "Omi не синхронізується",
+    "syncStallAlertBody": "Записи з вашого Omi не синхронізувалися понад {hours} годин. Відкрийте Omi, щоб перевірити з'єднання пристрою.",
+    "activityAttentionSyncStalledTitle": "Omi не синхронізується",
+    "activityAttentionSyncStalledSubtitle": "Записи не синхронізувалися понад {hours} годин",
+    "dailyRecapsOnHome": "Щоденні підсумки на головній",
+    "dailyRecapsOnHomeDescription": "Показувати останні підсумки вгорі головної."
 }

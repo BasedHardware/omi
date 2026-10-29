@@ -9,7 +9,7 @@ from pydantic.json_schema import SkipJsonSchema
 import config.speaker_match_scores as match_scores
 import config.owner_recognition_diagnostics as owner_diagnostics
 
-from pydantic import BaseModel, Field, field_validator, model_serializer, model_validator
+from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_serializer, model_validator
 
 from models.audio_file import AudioFile
 from models.calendar_context import CalendarMeetingContext
@@ -59,6 +59,7 @@ __all__ = [
     'MergeConversationsRequest',
     'MergeConversationsResponse',
     'PluginResult',
+    'ProcessConversationRequest',
     'SearchRequest',
     'SetConversationStarredOperation',
     'SetConversationTitleOperation',
@@ -614,6 +615,9 @@ class Conversation(BaseModel):
     app_id: Optional[str] = None
     # Cross-surface event membership (#3244). Read-only for every writer except database.capture_groups.
     capture_group: Optional[CaptureGroup] = None
+    # Ephemeral server-side context; persistence writes its separate raw field
+    # explicitly and it never becomes a Conversation API/model field.
+    _capture_group_member_context: Optional[Dict[str, Any]] = PrivateAttr(default=None)
 
     content_kind: Optional[ContentKind] = None
     discarded: bool = False
@@ -807,6 +811,24 @@ class CreateConversation(BaseModel):
 
     processing_conversation_id: Optional[str] = None
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
+
+    @field_validator('calendar_meeting_context', mode='before')
+    @classmethod
+    def discard_client_meeting_provenance(cls, value):
+        return CalendarMeetingContext.strip_client_provenance(value)
+
+    @field_validator('external_data', mode='before')
+    @classmethod
+    def discard_nested_meeting_provenance(cls, value):
+        if isinstance(value, dict) and 'calendar_meeting_context' in value:
+            return {
+                **value,
+                'calendar_meeting_context': CalendarMeetingContext.strip_client_provenance(
+                    value['calendar_meeting_context']
+                ),
+            }
+        return value
+
     folder_id: Optional[str] = None
     is_locked: bool = False
     private_cloud_sync_enabled: bool = False
@@ -827,6 +849,27 @@ class CreateConversation(BaseModel):
         if not self.transcript_segments:
             return []
         return list(set(segment.person_id for segment in self.transcript_segments if segment.person_id))
+
+
+class ProcessConversationRequest(BaseModel):
+    calendar_meeting_context: Optional[CalendarMeetingContext] = None
+
+    @field_validator('calendar_meeting_context', mode='before')
+    @classmethod
+    def discard_client_provenance(cls, value):
+        return CalendarMeetingContext.strip_client_provenance(value)
+
+    # Unvalidated on purpose: a malformed projection must not 422 a finished recording.
+    # Schema, size caps, and transcript-hash binding run in the handler.
+    client_processing: Optional[Any] = Field(
+        default=None,
+        description=(
+            "Untrusted client-authored display projection. Accepted as a raw payload "
+            "and validated in the handler so a malformed projection cannot 422 a "
+            "finished recording. Hash-bound to the persisted transcript. Display only "
+            "— never an input to intelligence."
+        ),
+    )
 
 
 class ExternalIntegrationCreateConversation(BaseModel):

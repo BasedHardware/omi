@@ -39,6 +39,7 @@ from models.calendar_context import CalendarMeetingContext
 from utils.free_tier_processing_policy import client_summaries_at_cap_enabled
 from models.client_processing import PROJECTION_FAMILY_FIELDS, ClientProcessing
 from models.conversation import (
+    ProcessConversationRequest,
     BulkAssignSegmentsRequest,
     CalendarEventLink,
     Conversation,
@@ -294,21 +295,6 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
     # Return immediately — still status=processing, no summary yet; the client polls for completion.
     conversation['deferred'] = False
     return conversation
-
-
-class ProcessConversationRequest(BaseModel):
-    calendar_meeting_context: Optional[CalendarMeetingContext] = None
-    # Unvalidated on purpose: a malformed projection must not 422 a finished recording.
-    # Schema, size caps, and transcript-hash binding run in the handler.
-    client_processing: Optional[Any] = Field(
-        default=None,
-        description=(
-            "Untrusted client-authored display projection. Accepted as a raw payload "
-            "and validated in the handler so a malformed projection cannot 422 a "
-            "finished recording. Hash-bound to the persisted transcript. Display only "
-            "— never an input to intelligence."
-        ),
-    )
 
 
 # Provenance is untrusted client input. Bound it before it reaches a log
@@ -2096,6 +2082,7 @@ class ConversationTopicRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
     transcript: str = Field(..., min_length=1, max_length=100_000)
+    conversation_language: Optional[str] = Field(default=None, max_length=32)
 
 
 class ConversationTopicResponse(BaseModel):
@@ -2126,7 +2113,9 @@ async def generate_conversation_topic_endpoint(
         raise HTTPException(status_code=402, detail='trial_expired')
     topic = await run_blocking(
         llm_executor,
-        lambda: conversation_topic_llm.generate_conversation_topic(uid, body.transcript),
+        lambda: conversation_topic_llm.generate_conversation_topic(
+            uid, body.transcript, conversation_language=body.conversation_language
+        ),
     )
     if topic is None:
         raise HTTPException(status_code=502, detail="conversation_topic_failed")

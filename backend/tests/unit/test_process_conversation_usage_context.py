@@ -705,13 +705,18 @@ def test_fresh_creation_uses_the_explicit_completed_lifecycle_owner(monkeypatch)
     # a projection is display, so it must not reach a stored conversation payload.
     # A null modeled processing_state is omitted too (flip-review F-1): persist is
     # merge=True, so a dumped None is a real Firestore key.
+    # The server-only member context is explicitly null on create so reprocessing
+    # can clear it after a later group separation.
+    expected_payload = completed_conversation.dict()
+    expected_payload['capture_group_member_context'] = None
     created.assert_called_once_with(
         'uid',
-        omit_null_processing_state(strip_client_processing(completed_conversation.dict())),
+        omit_null_processing_state(strip_client_processing(expected_payload)),
         idempotent=True,
     )
     assert 'client_processing' not in created.call_args.args[1]
     assert 'processing_state' not in created.call_args.args[1]
+    assert created.call_args.args[1]['capture_group_member_context'] is None
     persisted.assert_not_called()
 
 
@@ -2008,3 +2013,77 @@ def test_lazy_worker_uses_settled_notes_without_regenerating_them(monkeypatch):
     tasks.assert_called_once()
     vectors.assert_called_once()
     notes.assert_not_called()
+
+
+@pytest.mark.parametrize('late_dispatch', [False, True])
+def test_held_budget_denial_never_reports_superseded_persistence(monkeypatch, late_dispatch):
+    from utils.conversations.summary_delivery import PROCESS_CONTEXT
+    from utils.sync.processing_hold import ProcessingDeferred
+
+    completed = Conversation(
+        id='c',
+        status=ConversationStatus.completed,
+        source=ConversationSource.omi,
+        created_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
+        started_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 7, 14, 0, 1, tzinfo=timezone.utc),
+        structured=Structured(title='Prior notes', overview='Previous revision'),
+        transcript_segments=[],
+    )
+    monkeypatch.setattr(process_conversation.funded_processing, 'enabled', lambda *_: True)
+    monkeypatch.setattr(process_conversation.funded_processing, 'processing_allowed', lambda *_: False)
+    observer = MagicMock()
+    token = PROCESS_CONTEXT.set({'sync_hold': True})
+    try:
+        with pytest.raises(ProcessingDeferred, match='processing_budget'):
+            if late_dispatch:
+
+                @process_conversation._preserve_capture_on_budget_denial
+                def dispatch(*a, **kw):
+                    raise HTTPException(402, detail={'error': 'usage_budget_exhausted'})
+
+                dispatch('uid', 'en', completed, persistence_observer=observer)
+            else:
+                process_conversation.process_conversation('uid', 'en', completed, persistence_observer=observer)
+    finally:
+        PROCESS_CONTEXT.reset(token)
+    observer.assert_not_called()
+    assert completed.structured.overview == 'Previous revision'
+
+
+@pytest.mark.parametrize('late_dispatch', [False, True])
+def test_held_raw_budget_denial_preserves_backlog_choice_authority(monkeypatch, late_dispatch):
+    from utils.conversations.summary_delivery import PROCESS_CONTEXT
+
+    raw = Conversation(
+        id='c',
+        status=ConversationStatus.processing,
+        source=ConversationSource.omi,
+        created_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
+        started_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 7, 14, 0, 1, tzinfo=timezone.utc),
+        structured=Structured(),
+        transcript_segments=[],
+    )
+    stored = raw.model_copy(update={'processing_deferred': True})
+    store = MagicMock(return_value=(stored, True))
+    monkeypatch.setattr(process_conversation, '_store_budget_waiting', store)
+    monkeypatch.setattr(process_conversation.funded_processing, 'enabled', lambda *_: True)
+    monkeypatch.setattr(process_conversation.funded_processing, 'processing_allowed', lambda *_: False)
+    observer = MagicMock()
+    token = PROCESS_CONTEXT.set({'sync_hold': True})
+    try:
+        if late_dispatch:
+
+            @process_conversation._preserve_capture_on_budget_denial
+            def dispatch(*a, **kw):
+                raise HTTPException(402, detail={'error': 'usage_budget_exhausted'})
+
+            result = dispatch('uid', 'en', raw, persistence_observer=observer)
+        else:
+            result = process_conversation.process_conversation('uid', 'en', raw, persistence_observer=observer)
+    finally:
+        PROCESS_CONTEXT.reset(token)
+    assert result.processing_deferred
+    store.assert_called_once()
+    observer.assert_called_once_with(True)

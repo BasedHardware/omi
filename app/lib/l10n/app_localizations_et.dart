@@ -14842,4 +14842,32 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get deleteFinishNowTitle => 'Kas kustutada oma konto?';
+
+  @override
+  String get syncHealthAlerts => 'Sünkroonimise hoiatused';
+
+  @override
+  String get syncHealthAlertsDescription => 'Teavita, kui Omi pole üle päeva salvestusi sünkrooninud';
+
+  @override
+  String get syncStallAlertTitle => 'Omi ei sünkrooni';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Üle $hours tunni pole sinu Omist sünkroonitud ühtegi salvestust. Ava Omi ja kontrolli seadme ühendust.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi ei sünkrooni';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Üle $hours tunni pole sünkroonitud ühtegi salvestust';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Päevased kokkuvõtted avalehel';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Näita viimaseid kokkuvõtteid avalehe ülaosas.';
 }

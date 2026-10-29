@@ -4491,5 +4491,13 @@
     "deleteFinishNowButton": "Dzēst manu kontu tagad",
     "deleteFinishNowWarning": "Tādējādi beigsies konta atjaunošanas periods. Jūsu konts un tajā esošie ieraksti tiks neatgriezeniski dzēsti.",
     "deleteRestoreLessThanDayRemaining": "Jums ir atlikusi mazāk nekā diena, lai atjaunotu savu kontu.",
-    "deleteFinishNowTitle": "Dzēst jūsu kontu?"
+    "deleteFinishNowTitle": "Dzēst jūsu kontu?",
+    "syncHealthAlerts": "Sinhronizācijas stāvokļa brīdinājumi",
+    "syncHealthAlertsDescription": "Brīdināt, ja Omi vairāk nekā dienu nav sinhronizējis ierakstus",
+    "syncStallAlertTitle": "Omi nesinhronizējas",
+    "syncStallAlertBody": "Vairāk nekā {hours} stundas no jūsu Omi nav sinhronizēts neviens ieraksts. Atveriet Omi, lai pārbaudītu ierīces savienojumu.",
+    "activityAttentionSyncStalledTitle": "Omi nesinhronizējas",
+    "activityAttentionSyncStalledSubtitle": "Vairāk nekā {hours} stundas nav sinhronizēts neviens ieraksts",
+    "dailyRecapsOnHome": "Dienas kopsavilkumi sākumā",
+    "dailyRecapsOnHomeDescription": "Rādīt jaunākos kopsavilkumus sākuma augšdaļā."
 }

@@ -575,6 +575,45 @@ final captureScenarios = <AuditScenario>[
     },
   ),
   AuditScenario(
+    id: 'activity-sync-stall',
+    title: 'Activity: a full day of sync silence',
+    page: 'lib/pages/activity/activity_page.dart (ActivityPage)',
+    state: 'The sync watchdog declared a stall: no BLE audio, no WAL accepted, no batch finalized '
+        'for 26 hours; no other capture problem, recaps, changes, or server attention',
+    run: (a) async {
+      final monitor = CaptureWedgeMonitor(
+        featureGate: () async => true,
+        track: (_, __) {},
+        bleRetry: (_) async {},
+        transferRetry: () async {},
+        appBuild: () => 'audit',
+        platform: () => 'audit',
+      );
+      addTearDown(monitor.dispose);
+      monitor.observeSyncSilence(
+        stalled: true,
+        since: DateTime.now().subtract(const Duration(hours: 26)),
+      );
+      var stored = DateTime.now().subtract(const Duration(days: 1)).millisecondsSinceEpoch;
+      final seen = ActivitySeen(read: () => stored, write: (v) => stored = v);
+      await a.pump(
+        ActivityPage(
+          seen: seen,
+          captureWedgeMonitor: monitor,
+          probeDreamReport: () async => false,
+          loadRecaps: _noRecaps,
+          loadChanges: ({cursor}) async => const ApiSuccess(ReviewChangesPage(changes: [])),
+        ),
+        scaffold: false,
+      );
+      expect(find.byKey(const Key('activity_attention_sync_stalled')), findsOneWidget);
+      expect(find.text("Omi isn't syncing"), findsOneWidget);
+      // The only capture problem: no other attention row shares the section.
+      expect(find.byKey(const Key('activity_attention_upload_stalled')), findsNothing);
+      await a.shot('Open the bell: the sustained sync stall sits under Needs attention');
+    },
+  ),
+  AuditScenario(
     id: 'conversation-live-outage',
     title: 'Live page, transcription unavailable',
     page: _live,

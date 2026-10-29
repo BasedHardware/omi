@@ -14877,4 +14877,32 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get deleteFinishNowTitle => 'Izbriši račun?';
+
+  @override
+  String get syncHealthAlerts => 'Opozorila o stanju sinhronizacije';
+
+  @override
+  String get syncHealthAlertsDescription => 'Opozori me, če Omi več kot dan ni sinhroniziral posnetkov';
+
+  @override
+  String get syncStallAlertTitle => 'Omi se ne sinhronizira';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Več kot $hours ur ni bilo sinhroniziranih posnetkov z vašega Omi. Odprite Omi in preverite povezavo naprave.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi se ne sinhronizira';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Več kot $hours ur ni bilo sinhroniziranih posnetkov';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Dnevni povzetki na začetnem zaslonu';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Prikaži najnovejše povzetke na vrhu začetnega zaslona.';
 }

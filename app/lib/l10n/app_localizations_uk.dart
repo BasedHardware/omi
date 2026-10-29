@@ -14880,4 +14880,32 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get deleteFinishNowTitle => 'Видалити ваш обліковий запис?';
+
+  @override
+  String get syncHealthAlerts => 'Оповіщення про стан синхронізації';
+
+  @override
+  String get syncHealthAlertsDescription => 'Повідомляти, якщо Omi не синхронізує записи понад добу';
+
+  @override
+  String get syncStallAlertTitle => 'Omi не синхронізується';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Записи з вашого Omi не синхронізувалися понад $hours годин. Відкрийте Omi, щоб перевірити з\'єднання пристрою.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi не синхронізується';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Записи не синхронізувалися понад $hours годин';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Щоденні підсумки на головній';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Показувати останні підсумки вгорі головної.';
 }

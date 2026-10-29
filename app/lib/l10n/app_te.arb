@@ -11917,5 +11917,13 @@
     "deleteFinishNowButton": "నా ఖాతాను ఇప్పుడే తొలగించండి",
     "deleteFinishNowWarning": "దీంతో పునరుద్ధరణ గడువు ముగుస్తుంది. మీ ఖాతా, దానిలోని రికార్డింగ్‌లు శాశ్వతంగా తొలగించబడతాయి.",
     "deleteRestoreLessThanDayRemaining": "మీ ఖాతాను పునరుద్ధరించడానికి మీకు ఒక రోజు కంటే తక్కువ సమయం మిగిలి ఉంది.",
-    "deleteFinishNowTitle": "మీ ఖాతాను తొలగించాలా?"
+    "deleteFinishNowTitle": "మీ ఖాతాను తొలగించాలా?",
+    "syncHealthAlerts": "సింక్ ఆరోగ్య అలర్ట్‌లు",
+    "syncHealthAlertsDescription": "Omi రికార్డింగ్‌లను రోజు కంటే ఎక్కువ సింక్ చేయకపోతే అలర్ట్ చేయండి",
+    "syncStallAlertTitle": "Omi సింక్ కావడం లేదు",
+    "syncStallAlertBody": "మీ Omi నుండి {hours} గంటల కంటే ఎక్కువ ఏ రికార్డింగ్ సింక్ కాలేదు. మీ పరికర కనెక్షన్‌ను తనిఖీ చేయడానికి Omi తెరవండి.",
+    "activityAttentionSyncStalledTitle": "Omi సింక్ కావడం లేదు",
+    "activityAttentionSyncStalledSubtitle": "{hours} గంటల కంటే ఎక్కువ ఏ రికార్డింగ్ సింక్ కాలేదు",
+    "dailyRecapsOnHome": "హోమ్‌లో రోజువారీ రీక్యాప్‌లు",
+    "dailyRecapsOnHomeDescription": "హోమ్ పైభాగంలో మీ తాజా రీక్యాప్‌లను చూపించు."
 }

@@ -14853,4 +14853,32 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get deleteFinishNowTitle => 'Poista tilisi?';
+
+  @override
+  String get syncHealthAlerts => 'Synkronoinnin tila-ilmoitukset';
+
+  @override
+  String get syncHealthAlertsDescription => 'Ilmoita, jos Omi ei ole synkronoinut tallenteita yli vuorokauteen';
+
+  @override
+  String get syncStallAlertTitle => 'Omi ei synkronoi';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Omistasi ei ole synkronoitu tallenteita yli $hours tuntiin. Avaa Omi ja tarkista laitteen yhteys.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi ei synkronoi';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Tallenteita ei synkronoitu yli $hours tuntiin';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Päivittäiset yhteenvedot Koti-näkymässä';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Näytä uusimmat yhteenvedot Koti-näkymän yläosassa.';
 }

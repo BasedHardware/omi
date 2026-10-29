@@ -14883,4 +14883,32 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get deleteFinishNowTitle => 'Dzēst jūsu kontu?';
+
+  @override
+  String get syncHealthAlerts => 'Sinhronizācijas stāvokļa brīdinājumi';
+
+  @override
+  String get syncHealthAlertsDescription => 'Brīdināt, ja Omi vairāk nekā dienu nav sinhronizējis ierakstus';
+
+  @override
+  String get syncStallAlertTitle => 'Omi nesinhronizējas';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Vairāk nekā $hours stundas no jūsu Omi nav sinhronizēts neviens ieraksts. Atveriet Omi, lai pārbaudītu ierīces savienojumu.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi nesinhronizējas';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Vairāk nekā $hours stundas nav sinhronizēts neviens ieraksts';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Dienas kopsavilkumi sākumā';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Rādīt jaunākos kopsavilkumus sākuma augšdaļā.';
 }

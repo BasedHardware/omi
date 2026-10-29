@@ -4491,5 +4491,13 @@
     "deleteFinishNowButton": "Mein Konto jetzt löschen",
     "deleteFinishNowWarning": "Dadurch endet der Wiederherstellungszeitraum. Dein Konto und die darin gespeicherten Aufnahmen werden endgültig gelöscht.",
     "deleteRestoreLessThanDayRemaining": "Sie haben noch weniger als einen Tag, um Ihr Konto wiederherzustellen.",
-    "deleteFinishNowTitle": "Ihr Konto löschen?"
+    "deleteFinishNowTitle": "Ihr Konto löschen?",
+    "syncHealthAlerts": "Warnungen zum Synchronisierungsstatus",
+    "syncHealthAlertsDescription": "Warne, wenn Omi länger als einen Tag keine Aufnahmen synchronisiert hat",
+    "syncStallAlertTitle": "Omi synchronisiert nicht",
+    "syncStallAlertBody": "Seit über {hours} Stunden wurden keine Aufnahmen von deinem Omi synchronisiert. Öffne Omi, um die Verbindung deines Geräts zu prüfen.",
+    "activityAttentionSyncStalledTitle": "Omi synchronisiert nicht",
+    "activityAttentionSyncStalledSubtitle": "Seit über {hours} Stunden keine synchronisierten Aufnahmen",
+    "dailyRecapsOnHome": "Tägliche Zusammenfassungen auf Start",
+    "dailyRecapsOnHomeDescription": "Zeige deine neuesten Zusammenfassungen oben auf Start."
 }

@@ -4491,5 +4491,13 @@
     "deleteFinishNowButton": "ลบบัญชีของฉันทันที",
     "deleteFinishNowWarning": "การดำเนินการนี้จะสิ้นสุดช่วงเวลากู้คืน บัญชีและรายการบันทึกทั้งหมดจะถูกลบอย่างถาวร",
     "deleteRestoreLessThanDayRemaining": "คุณเหลือเวลาไม่ถึง 1 วันในการกู้คืนบัญชีของคุณ",
-    "deleteFinishNowTitle": "ลบบัญชีของคุณ?"
+    "deleteFinishNowTitle": "ลบบัญชีของคุณ?",
+    "syncHealthAlerts": "การแจ้งเตือนสถานะการซิงค์",
+    "syncHealthAlertsDescription": "แจ้งเตือนหาก Omi ไม่ได้ซิงค์การบันทึกเป็นเวลาเกินหนึ่งวัน",
+    "syncStallAlertTitle": "Omi ไม่ได้ซิงค์",
+    "syncStallAlertBody": "ไม่มีการบันทึกจาก Omi ของคุณถูกซิงค์เป็นเวลาเกิน {hours} ชั่วโมง เปิด Omi เพื่อตรวจสอบการเชื่อมต่อของอุปกรณ์",
+    "activityAttentionSyncStalledTitle": "Omi ไม่ได้ซิงค์",
+    "activityAttentionSyncStalledSubtitle": "ไม่มีการบันทึกที่ซิงค์เป็นเวลาเกิน {hours} ชั่วโมง",
+    "dailyRecapsOnHome": "สรุปรายวันในหน้าหลัก",
+    "dailyRecapsOnHomeDescription": "แสดงสรุปล่าสุดของคุณที่ด้านบนของหน้าหลัก"
 }

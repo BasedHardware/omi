@@ -14636,4 +14636,32 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get deleteFinishNowTitle => 'アカウントを完全に削除しますか？';
+
+  @override
+  String get syncHealthAlerts => '同期状態の通知';
+
+  @override
+  String get syncHealthAlertsDescription => 'Omi の録音が 1 日以上同期されていないときに通知します';
+
+  @override
+  String get syncStallAlertTitle => 'Omi が同期されていません';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return '$hours 時間以上、Omi から録音が同期されていません。端末の接続を確認するには Omi を開いてください。';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi が同期されていません';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return '$hours 時間以上、録音が同期されていません';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'ホームの日次の要約';
+
+  @override
+  String get dailyRecapsOnHomeDescription => '最新の要約をホームの上部に表示します。';
 }

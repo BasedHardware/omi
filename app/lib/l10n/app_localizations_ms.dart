@@ -14886,4 +14886,32 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get deleteFinishNowTitle => 'Padam akaun anda?';
+
+  @override
+  String get syncHealthAlerts => 'Amaran kesihatan segerak';
+
+  @override
+  String get syncHealthAlertsDescription => 'Maklumkan saya jika Omi tidak menyegerakkan rakaman selama lebih sehari';
+
+  @override
+  String get syncStallAlertTitle => 'Omi tidak disegerakkan';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Tiada rakaman daripada Omi anda disegerakkan selama lebih $hours jam. Buka Omi untuk menyemak sambungan peranti anda.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi tidak disegerakkan';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Tiada rakaman disegerakkan selama lebih $hours jam';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Ringkasan Harian di Utama';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Tunjukkan ringkasan terkini anda di bahagian atas Utama.';
 }

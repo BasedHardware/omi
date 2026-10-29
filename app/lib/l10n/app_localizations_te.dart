@@ -14912,4 +14912,32 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get deleteFinishNowTitle => 'మీ ఖాతాను తొలగించాలా?';
+
+  @override
+  String get syncHealthAlerts => 'సింక్ ఆరోగ్య అలర్ట్‌లు';
+
+  @override
+  String get syncHealthAlertsDescription => 'Omi రికార్డింగ్‌లను రోజు కంటే ఎక్కువ సింక్ చేయకపోతే అలర్ట్ చేయండి';
+
+  @override
+  String get syncStallAlertTitle => 'Omi సింక్ కావడం లేదు';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'మీ Omi నుండి $hours గంటల కంటే ఎక్కువ ఏ రికార్డింగ్ సింక్ కాలేదు. మీ పరికర కనెక్షన్‌ను తనిఖీ చేయడానికి Omi తెరవండి.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi సింక్ కావడం లేదు';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return '$hours గంటల కంటే ఎక్కువ ఏ రికార్డింగ్ సింక్ కాలేదు';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'హోమ్‌లో రోజువారీ రీక్యాప్‌లు';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'హోమ్ పైభాగంలో మీ తాజా రీక్యాప్‌లను చూపించు.';
 }

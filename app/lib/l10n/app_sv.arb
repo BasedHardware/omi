@@ -4491,5 +4491,13 @@
     "deleteFinishNowButton": "Radera mitt konto nu",
     "deleteFinishNowWarning": "Detta avslutar perioden då du kan återställa kontot. Ditt konto och dina inspelningar raderas permanent.",
     "deleteRestoreLessThanDayRemaining": "Du har mindre än en dag kvar för att återställa ditt konto.",
-    "deleteFinishNowTitle": "Ta bort ditt konto?"
+    "deleteFinishNowTitle": "Ta bort ditt konto?",
+    "syncHealthAlerts": "Synkroniseringsvarningar",
+    "syncHealthAlertsDescription": "Varna om Omi inte har synkroniserat inspelningar på mer än ett dygn",
+    "syncStallAlertTitle": "Omi synkroniserar inte",
+    "syncStallAlertBody": "Inga inspelningar från din Omi har synkroniserats på mer än {hours} timmar. Öppna Omi för att kontrollera enhetens anslutning.",
+    "activityAttentionSyncStalledTitle": "Omi synkroniserar inte",
+    "activityAttentionSyncStalledSubtitle": "Inga inspelningar synkroniserade på mer än {hours} timmar",
+    "dailyRecapsOnHome": "Dagliga sammanfattningar på Hem",
+    "dailyRecapsOnHomeDescription": "Visa dina senaste sammanfattningar högst upp på Hem."
 }

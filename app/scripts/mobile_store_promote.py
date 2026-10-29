@@ -24,19 +24,16 @@ BUILD_TAG_RE = re.compile(
     r"^v(?P<version>(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))"
     r"\+(?P<build>[1-9][0-9]{0,9})-(?:mobile|android)-cm$"
 )
-# Play auto-sends this app's automated commits for review again (since
-# 2026-10-27) and rejects changesNotSentForReview whenever the parameter is
-# present at all ("The query parameter changesNotSentForReview must not be
-# set"), so commits pass no such parameter. Play's requirement has flipped
-# both ways within a day (2026-10-26 it required the parameter; each
-# direction has broken publishing), which is why every commit site passes
-# the parameter only while this flag is True. Flip to True only when Play
-# refuses automated review submission again ("Changes cannot be sent for
-# review automatically"): every commit then holds its changes for the Play
-# Console -> Publishing overview -> Send for review press, and the daily
-# train reads this flag to park the exposure ladder (a held hop is
-# invisible to the API).
-CHANGES_NOT_SENT_FOR_REVIEW = False
+# Codemagic android-internal-auto runs on 2026-10-28 at 03:18Z, 05:55Z and
+# 06:24Z uploaded their bundles, then failed at Publishing with "Setting
+# release for Google Play track internal failed. Changes cannot be sent for
+# review automatically. Please set the query parameter changesNotSentForReview
+# to true." Hold every Play commit for the Play Console -> Publishing overview
+# -> Send changes for review press. The daily train reads this flag to park the
+# exposure ladder because held hops are invisible to the Play API. Play's
+# 2026-10-27 error said this parameter must not be set; keep this switch aligned
+# with the current Play response and both Codemagic publishing blocks.
+CHANGES_NOT_SENT_FOR_REVIEW = True
 
 
 # A version in any of these states is in Apple's hands or approved and waiting.
@@ -538,6 +535,7 @@ def submit_android(
     extra_codes: Sequence[str] = (),
     base_release: dict[str, object] | None = None,
     release_name: str | None = None,
+    retained_releases: Sequence[dict[str, object]] = (),
 ) -> None:
     """Write one production release for the given code(s).
 
@@ -554,6 +552,12 @@ def submit_android(
     the derived single-locale notes are used only when it carries none.
     release_name overrides the written name (defaults to the bare version);
     the daily train uses it to stamp a gate receipt into the name.
+    retained_releases are other server-returned releases that must stay on the
+    track unchanged: Play's tracks.update replaces the whole releases list,
+    so the completed base release under a staged rollout must be carried
+    explicitly or it leaves the track. Only completed or draft releases may be
+    retained (one staged release per PUT), and their version codes must not
+    overlap the written release's.
     """
     if status not in PLAY_RELEASE_STATUSES:
         raise PromotionError("Play release status must be completed, draft, inProgress or halted")
@@ -566,6 +570,11 @@ def submit_android(
     codes = [build_number, *extra_codes]
     if len(set(codes)) != len(codes):
         raise PromotionError("Play release version codes must be unique")
+    for retained in retained_releases:
+        if not isinstance(retained, dict) or retained.get("status") not in ("completed", "draft"):
+            raise PromotionError("retained Play releases must be server-returned completed or draft releases")
+        if set(codes) & set(release_codes(retained)):
+            raise PromotionError("Play release version codes must be unique across written and retained releases")
     existing_notes = base_release.get("releaseNotes") if isinstance(base_release, dict) else None
     preserved_notes = existing_notes if isinstance(existing_notes, list) and existing_notes else None
     release: dict[str, object] = dict(base_release) if isinstance(base_release, dict) else {}
@@ -590,7 +599,7 @@ def submit_android(
             packageName=PACKAGE_NAME,
             editId=edit_id,
             track="production",
-            body={"track": "production", "releases": [release]},
+            body={"track": "production", "releases": [release, *(dict(retained) for retained in retained_releases)]},
         ).execute()
         # changesNotSentForReview follows CHANGES_NOT_SENT_FOR_REVIEW: while
         # Play refuses automated review submission, every committed edit is

@@ -4491,5 +4491,13 @@
     "deleteFinishNowButton": "محو حسابي الآن",
     "deleteFinishNowWarning": "سينهي هذا فترة الاستعادة. سيتم محو حسابك والتسجيلات الموجودة فيه نهائيًا.",
     "deleteRestoreLessThanDayRemaining": "لديك أقل من يوم لاستعادة حسابك.",
-    "deleteFinishNowTitle": "حذف حسابك؟"
+    "deleteFinishNowTitle": "حذف حسابك؟",
+    "syncHealthAlerts": "تنبيهات سلامة المزامنة",
+    "syncHealthAlertsDescription": "تنبيه إذا لم تتم مزامنة التسجيلات من Omi لأكثر من يوم",
+    "syncStallAlertTitle": "Omi لا يتزامن",
+    "syncStallAlertBody": "لم تتم مزامنة أي تسجيلات من Omi الخاص بك لأكثر من {hours} ساعة. افتح Omi للتحقق من اتصال جهازك.",
+    "activityAttentionSyncStalledTitle": "Omi لا يتزامن",
+    "activityAttentionSyncStalledSubtitle": "لم تتم مزامنة أي تسجيلات لأكثر من {hours} ساعة",
+    "dailyRecapsOnHome": "الملخصات اليومية في الرئيسية",
+    "dailyRecapsOnHomeDescription": "اعرض أحدث ملخصاتك أعلى الشاشة الرئيسية."
 }

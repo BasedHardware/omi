@@ -26138,6 +26138,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Erase Your Account?'**
   String get deleteFinishNowTitle;
+
+  /// Device Settings toggle title: stall alerts for the paired pendant
+  ///
+  /// In en, this message translates to:
+  /// **'Sync Health Alerts'**
+  String get syncHealthAlerts;
+
+  /// Device Settings toggle subtitle under Sync Health Alerts
+  ///
+  /// In en, this message translates to:
+  /// **'Alert if Omi hasn\'t synced recordings for over a day'**
+  String get syncHealthAlertsDescription;
+
+  /// Local notification title when the sync stall alert fires
+  ///
+  /// In en, this message translates to:
+  /// **'Omi Not Syncing'**
+  String get syncStallAlertTitle;
+
+  /// Local notification body when the sync stall alert fires
+  ///
+  /// In en, this message translates to:
+  /// **'No recordings have synced from your Omi in over {hours} hours. Open Omi to check your device connection.'**
+  String syncStallAlertBody(int hours);
+
+  /// Needs attention row title: no sync activity at all for the stall threshold
+  ///
+  /// In en, this message translates to:
+  /// **'Omi isn\'t syncing'**
+  String get activityAttentionSyncStalledTitle;
+
+  /// Needs attention row subtitle: how long the pipeline has been silent
+  ///
+  /// In en, this message translates to:
+  /// **'No recordings synced for over {hours} hours'**
+  String activityAttentionSyncStalledSubtitle(int hours);
+
+  /// Developer Settings toggle title: show the Daily Recaps row on Home
+  ///
+  /// In en, this message translates to:
+  /// **'Daily Recaps on Home'**
+  String get dailyRecapsOnHome;
+
+  /// Subtitle for the Daily Recaps on Home toggle in Developer Settings
+  ///
+  /// In en, this message translates to:
+  /// **'Show your latest recaps at the top of Home.'**
+  String get dailyRecapsOnHomeDescription;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

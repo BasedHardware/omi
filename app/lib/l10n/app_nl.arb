@@ -4491,5 +4491,13 @@
     "deleteFinishNowButton": "Mijn account nu wissen",
     "deleteFinishNowWarning": "Hiermee eindigt de herstelperiode. Je account en opnames worden definitief gewist.",
     "deleteRestoreLessThanDayRemaining": "Je hebt nog minder dan een dag om je account te herstellen.",
-    "deleteFinishNowTitle": "Je account wissen?"
+    "deleteFinishNowTitle": "Je account wissen?",
+    "syncHealthAlerts": "Waarschuwingen over synchronisatiestatus",
+    "syncHealthAlertsDescription": "Waarschuw als Omi langer dan een dag geen opnames heeft gesynchroniseerd",
+    "syncStallAlertTitle": "Omi synchroniseert niet",
+    "syncStallAlertBody": "Al meer dan {hours} uur zijn er geen opnames van je Omi gesynchroniseerd. Open Omi om de verbinding van je apparaat te controleren.",
+    "activityAttentionSyncStalledTitle": "Omi synchroniseert niet",
+    "activityAttentionSyncStalledSubtitle": "Al meer dan {hours} uur geen gesynchroniseerde opnames",
+    "dailyRecapsOnHome": "Dagelijkse samenvattingen op Home",
+    "dailyRecapsOnHomeDescription": "Toon je nieuwste samenvattingen bovenaan Home."
 }

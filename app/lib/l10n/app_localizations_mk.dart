@@ -14913,4 +14913,32 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get deleteFinishNowTitle => 'Да го избришете вашиот профил?';
+
+  @override
+  String get syncHealthAlerts => 'Известувања за состојба на синхронизација';
+
+  @override
+  String get syncHealthAlertsDescription => 'Извести ме ако Omi повеќе од ден не синхронизира снимки';
+
+  @override
+  String get syncStallAlertTitle => 'Omi не се синхронизира';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Повеќе од $hours часа нема синхронизирано снимки од вашиот Omi. Отворете Omi за да ја проверите врската на уредот.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi не се синхронизира';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Повеќе од $hours часа нема синхронизирано снимки';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Дневни резимеа на Почетна';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Прикажи ги најновите резимеа на врвот на Почетна.';
 }

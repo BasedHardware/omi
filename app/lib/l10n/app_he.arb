@@ -11917,5 +11917,13 @@
     "deleteFinishNowButton": "מחקו את החשבון שלי עכשיו",
     "deleteFinishNowWarning": "פעולה זו תסיים את תקופת השחזור. החשבון שלכם וההקלטות שבו יימחקו לצמיתות.",
     "deleteRestoreLessThanDayRemaining": "נותר לך פחות מיום לשחזר את החשבון שלך.",
-    "deleteFinishNowTitle": "למחוק את החשבון שלך?"
+    "deleteFinishNowTitle": "למחוק את החשבון שלך?",
+    "syncHealthAlerts": "התראות תקינות סנכרון",
+    "syncHealthAlertsDescription": "התראה אם Omi לא סנכרן הקלטות במשך יותר מיממה",
+    "syncStallAlertTitle": "Omi לא מסתנכרן",
+    "syncStallAlertBody": "לא סונכרנו הקלטות מה-Omi שלך במשך יותר מ-{hours} שעות. פתח את Omi כדי לבדוק את חיבור המכשיר.",
+    "activityAttentionSyncStalledTitle": "Omi לא מסתנכרן",
+    "activityAttentionSyncStalledSubtitle": "לא סונכרנו הקלטות במשך יותר מ-{hours} שעות",
+    "dailyRecapsOnHome": "סיכומים יומיים במסך הבית",
+    "dailyRecapsOnHomeDescription": "הצג את הסיכומים האחרונים שלך בראש מסך הבית."
 }

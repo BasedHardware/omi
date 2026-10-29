@@ -14761,4 +14761,32 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get deleteFinishNowTitle => 'حذف حسابك؟';
+
+  @override
+  String get syncHealthAlerts => 'تنبيهات سلامة المزامنة';
+
+  @override
+  String get syncHealthAlertsDescription => 'تنبيه إذا لم تتم مزامنة التسجيلات من Omi لأكثر من يوم';
+
+  @override
+  String get syncStallAlertTitle => 'Omi لا يتزامن';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'لم تتم مزامنة أي تسجيلات من Omi الخاص بك لأكثر من $hours ساعة. افتح Omi للتحقق من اتصال جهازك.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi لا يتزامن';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'لم تتم مزامنة أي تسجيلات لأكثر من $hours ساعة';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'الملخصات اليومية في الرئيسية';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'اعرض أحدث ملخصاتك أعلى الشاشة الرئيسية.';
 }

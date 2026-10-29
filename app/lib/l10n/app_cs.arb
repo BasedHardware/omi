@@ -4491,5 +4491,13 @@
     "deleteFinishNowButton": "Smazat můj účet hned",
     "deleteFinishNowWarning": "Tím skončí lhůta pro obnovení. Váš účet i jeho záznamy budou trvale smazány.",
     "deleteRestoreLessThanDayRemaining": "Zbývá vám méně než den na obnovení vašeho účtu.",
-    "deleteFinishNowTitle": "Smazat váš účet?"
+    "deleteFinishNowTitle": "Smazat váš účet?",
+    "syncHealthAlerts": "Upozornění na stav synchronizace",
+    "syncHealthAlertsDescription": "Upozornit, když Omi déle než den nesynchronizuje nahrávky",
+    "syncStallAlertTitle": "Omi se nesynchronizuje",
+    "syncStallAlertBody": "Více než {hours} hodin se z vašeho Omi nesynchronizovaly žádné nahrávky. Otevřete Omi a zkontrolujte připojení zařízení.",
+    "activityAttentionSyncStalledTitle": "Omi se nesynchronizuje",
+    "activityAttentionSyncStalledSubtitle": "Více než {hours} hodin bez synchronizovaných nahrávek",
+    "dailyRecapsOnHome": "Denní souhrny na domovské obrazovce",
+    "dailyRecapsOnHomeDescription": "Zobrazit nejnovější souhrny v horní části domovské obrazovky."
 }

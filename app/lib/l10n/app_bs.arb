@@ -11917,5 +11917,13 @@
     "deleteFinishNowButton": "Izbriši moj račun sada",
     "deleteFinishNowWarning": "Time se završava period za vraćanje računa. Vaš račun i njegovi snimci bit će trajno izbrisani.",
     "deleteRestoreLessThanDayRemaining": "Imate manje od jednog dana za oporavak vašeg naloga.",
-    "deleteFinishNowTitle": "Izbrisati vaš nalog?"
+    "deleteFinishNowTitle": "Izbrisati vaš nalog?",
+    "syncHealthAlerts": "Upozorenja o stanju sinhronizacije",
+    "syncHealthAlertsDescription": "Upozori me ako Omi nije sinhronizovao snimke više od jednog dana",
+    "syncStallAlertTitle": "Omi se ne sinhronizuje",
+    "syncStallAlertBody": "Snimci se nisu sinhronizovali s vašeg Omija više od {hours} sati. Otvorite Omi da provjerite vezu uređaja.",
+    "activityAttentionSyncStalledTitle": "Omi se ne sinhronizuje",
+    "activityAttentionSyncStalledSubtitle": "Nijedan snimak nije sinhronizovan više od {hours} sati",
+    "dailyRecapsOnHome": "Dnevni rezimei na početnoj",
+    "dailyRecapsOnHomeDescription": "Prikaži najnovije rezimee na vrhu početne."
 }

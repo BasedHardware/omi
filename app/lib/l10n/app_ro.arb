@@ -4491,5 +4491,13 @@
     "deleteFinishNowButton": "Șterge-mi contul acum",
     "deleteFinishNowWarning": "Astfel se încheie perioada de restaurare. Contul și înregistrările tale vor fi șterse definitiv.",
     "deleteRestoreLessThanDayRemaining": "Mai ai mai puțin de o zi pentru a-ți recupera contul.",
-    "deleteFinishNowTitle": "Ștergi contul?"
+    "deleteFinishNowTitle": "Ștergi contul?",
+    "syncHealthAlerts": "Alerte de stare a sincronizării",
+    "syncHealthAlertsDescription": "Avertizează-mă dacă Omi nu a sincronizat înregistrări de peste o zi",
+    "syncStallAlertTitle": "Omi nu se sincronizează",
+    "syncStallAlertBody": "Nicio înregistrare de pe Omi-ul tău nu a fost sincronizată de peste {hours} ore. Deschide Omi pentru a verifica conexiunea dispozitivului.",
+    "activityAttentionSyncStalledTitle": "Omi nu se sincronizează",
+    "activityAttentionSyncStalledSubtitle": "Nicio înregistrare sincronizată de peste {hours} ore",
+    "dailyRecapsOnHome": "Recapitulări zilnice pe Acasă",
+    "dailyRecapsOnHomeDescription": "Afișează cele mai noi recapitulări în partea de sus a ecranului Acasă."
 }

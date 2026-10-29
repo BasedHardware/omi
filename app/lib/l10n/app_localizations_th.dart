@@ -14776,4 +14776,32 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get deleteFinishNowTitle => 'ลบบัญชีของคุณ?';
+
+  @override
+  String get syncHealthAlerts => 'การแจ้งเตือนสถานะการซิงค์';
+
+  @override
+  String get syncHealthAlertsDescription => 'แจ้งเตือนหาก Omi ไม่ได้ซิงค์การบันทึกเป็นเวลาเกินหนึ่งวัน';
+
+  @override
+  String get syncStallAlertTitle => 'Omi ไม่ได้ซิงค์';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'ไม่มีการบันทึกจาก Omi ของคุณถูกซิงค์เป็นเวลาเกิน $hours ชั่วโมง เปิด Omi เพื่อตรวจสอบการเชื่อมต่อของอุปกรณ์';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi ไม่ได้ซิงค์';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'ไม่มีการบันทึกที่ซิงค์เป็นเวลาเกิน $hours ชั่วโมง';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'สรุปรายวันในหน้าหลัก';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'แสดงสรุปล่าสุดของคุณที่ด้านบนของหน้าหลัก';
 }

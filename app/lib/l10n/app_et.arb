@@ -4491,5 +4491,13 @@
     "deleteFinishNowButton": "Kustuta minu konto kohe",
     "deleteFinishNowWarning": "See lõpetab konto taastamise võimaluse. Sinu konto ja selle salvestised kustutatakse jäädavalt.",
     "deleteRestoreLessThanDayRemaining": "Teil on vähem kui üks päev aega oma konto taastamiseks.",
-    "deleteFinishNowTitle": "Kas kustutada oma konto?"
+    "deleteFinishNowTitle": "Kas kustutada oma konto?",
+    "syncHealthAlerts": "Sünkroonimise hoiatused",
+    "syncHealthAlertsDescription": "Teavita, kui Omi pole üle päeva salvestusi sünkrooninud",
+    "syncStallAlertTitle": "Omi ei sünkrooni",
+    "syncStallAlertBody": "Üle {hours} tunni pole sinu Omist sünkroonitud ühtegi salvestust. Ava Omi ja kontrolli seadme ühendust.",
+    "activityAttentionSyncStalledTitle": "Omi ei sünkrooni",
+    "activityAttentionSyncStalledSubtitle": "Üle {hours} tunni pole sünkroonitud ühtegi salvestust",
+    "dailyRecapsOnHome": "Päevased kokkuvõtted avalehel",
+    "dailyRecapsOnHomeDescription": "Näita viimaseid kokkuvõtteid avalehe ülaosas."
 }

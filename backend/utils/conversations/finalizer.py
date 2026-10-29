@@ -34,6 +34,7 @@ from utils.conversations.episode_runtime import process_with_episode_budget
 from utils.conversations.processing_trigger import is_recovery_trigger
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.smart_merge import smart_merge_step
+from utils.conversations.sync_hold_completion import complete_explicit
 from utils.conversations.smart_merge_policy import is_donor
 from utils.conversations.meeting_evidence_admission import await_meeting_evidence
 from utils.conversations.meeting_receipt import record_finalized_meeting_receipt
@@ -57,6 +58,7 @@ from utils.observability.finalization import (
     finalization_diagnostic_id,
     record_finalization_failure,
 )
+from utils.conversations.capture_group_notes_refresh import refresh_primary_notes
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retry
 from services.conversation_keyframes import ensure_conversation_keyframe_job, reconcile_conversation_keyframe_jobs
 from utils.retrieval.frame_request_authority import resolve_frame_request_authority
@@ -469,6 +471,11 @@ async def finalize_persisted_conversation(
             await run_blocking(
                 db_executor, link_duplicate_captures, uid, overlap_snapshot(uid, conversation, conversation_data)
             )
+            # Grouping may have delivered meeting identity (member calendar
+            # context, screen evidence) that the primary's already-generated
+            # notes lack; regenerate them once per group revision. Never fails
+            # finalization: the step swallows its own errors.
+            await run_blocking(lifecycle_executor(uid), refresh_primary_notes, uid, conversation_id)
         if fanout['status'] == 'completed':
             schedule_person_voice_learning_retry(uid, conversation_id)
             # Re-finalization of a row whose fanout already completed (e.g.
@@ -615,6 +622,7 @@ async def finalize_persisted_conversation(
                         device_id=device_id,
                         account_generation=decision.account_generation,
                     )
+        await run_blocking(db_executor, complete_explicit, uid, conversation, trigger)
         stage = 'fanout_completion'
         fanout_completed = await run_blocking(
             db_executor,

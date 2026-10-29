@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-10-22 -->
+<!-- feature-flag-registry as-of: 2026-10-29 -->
 
 # Feature-flag authority registry
 
@@ -114,7 +114,65 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-10-22.
+These rollout/experiment entries passed `review_by`. The checker warns
+during the seven-day grace, then fails unless a dated `review_overdue`
+exception is recorded for David.
+
+- `ACTION_ITEMS_V2_MODE` — review_by 2026-10-26 (dazheng)
+- `ACTION_ITEMS_V2_MODE_SERVE_PERCENT` — review_by 2026-10-26 (dazheng)
+- `ACTION_ITEMS_V2_MODE_SERVE_UID_SHA256S` — review_by 2026-10-26 (dazheng)
+- `BATCH_PIPELINE_ASR_LEFT_CONTEXT_SECONDS` — review_by 2026-10-26 (dazheng)
+- `BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED` — review_by 2026-10-26 (dazheng)
+- `CALLS_RECAP_MODE` — review_by 2026-10-26 (dazheng)
+- `CALLS_RECAP_MODE_SERVE_PERCENT` — review_by 2026-10-26 (dazheng)
+- `CALLS_RECAP_MODE_SERVE_UID_SHA256S` — review_by 2026-10-26 (dazheng)
+- `CAPTURE_COVERAGE_MODE` — review_by 2026-10-26 (dazheng)
+- `CAPTURE_COVERAGE_MODE_SERVE_PERCENT` — review_by 2026-10-26 (dazheng)
+- `CAPTURE_COVERAGE_MODE_SERVE_UID_SHA256S` — review_by 2026-10-26 (dazheng)
+- `CAPTURE_COVERAGE_MODE_SHADOW_PERCENT` — review_by 2026-10-26 (dazheng)
+- `CLIENTS_FROM_SEGMENTS_CHUNKS_MODE` — review_by 2026-10-26 (dazheng)
+- `CLIENTS_FROM_SEGMENTS_CHUNKS_MODE_SERVE_PERCENT` — review_by 2026-10-26 (dazheng)
+- `CLIENTS_FROM_SEGMENTS_CHUNKS_MODE_SERVE_UID_SHA256S` — review_by 2026-10-26 (dazheng)
+- `CONVERSATION_NOTES_AGENT_PERCENT` — review_by 2026-10-27 (dazheng)
+- `CONVERSATION_NOTES_AGENT_UID_ALLOWLIST` — review_by 2026-10-27 (dazheng)
+- `DREAM_REQUIRED_INTAKE_BACKLOG_COHORT` — review_by 2026-10-28 (dazheng)
+- `DREAM_REQUIRED_INTAKE_BACKLOG_ENABLED` — review_by 2026-10-28 (dazheng)
+- `EPISODE_BOUNDARIES_MODE` — review_by 2026-10-26 (dazheng)
+- `EPISODE_BOUNDARIES_MODE_SERVE_PERCENT` — review_by 2026-10-26 (dazheng)
+- `EPISODE_BOUNDARIES_MODE_SERVE_UID_SHA256S` — review_by 2026-10-26 (dazheng)
+- `EPISODE_BOUNDARIES_MODE_SHADOW_PERCENT` — review_by 2026-10-26 (dazheng)
+- `LIFECYCLE_V2_MODE` — review_by 2026-10-26 (dazheng)
+- `LIFECYCLE_V2_MODE_SERVE_PERCENT` — review_by 2026-10-26 (dazheng)
+- `LIFECYCLE_V2_MODE_SERVE_UID_SHA256S` — review_by 2026-10-26 (dazheng)
+- `MEDIA_NOISE_MODE` — review_by 2026-10-26 (dazheng)
+- `MEDIA_NOISE_MODE_SERVE_PERCENT` — review_by 2026-10-26 (dazheng)
+- `MEDIA_NOISE_MODE_SERVE_UID_SHA256S` — review_by 2026-10-26 (dazheng)
+- `MEDIA_NOISE_MODE_SHADOW_PERCENT` — review_by 2026-10-26 (dazheng)
+- `NOTES_PACKET_V2_MODE` — review_by 2026-10-26 (dazheng)
+- `NOTES_PACKET_V2_MODE_SERVE_PERCENT` — review_by 2026-10-26 (dazheng)
+- `NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S` — review_by 2026-10-26 (dazheng)
+- `OMI_LIST_VERSION_EPOCH` — review_by 2026-10-24 (dazheng)
+- `SPEAKER_EVIDENCE_MODE` — review_by 2026-10-26 (dazheng)
+- `SPEAKER_EVIDENCE_MODE_SERVE_PERCENT` — review_by 2026-10-26 (dazheng)
+- `SPEAKER_EVIDENCE_MODE_SERVE_UID_SHA256S` — review_by 2026-10-26 (dazheng)
+- `SPEAKER_EVIDENCE_MODE_SHADOW_PERCENT` — review_by 2026-10-26 (dazheng)
+- `STT_CAP_DISPATCH_COHORT` — review_by 2026-10-27 (dazheng)
+- `STT_CAP_DISPATCH_ENFORCEMENT` — review_by 2026-10-27 (dazheng)
+- `STT_CAP_DISPATCH_LANES` — review_by 2026-10-27 (dazheng)
+- `STT_CAP_RECOVERY_COHORT` — review_by 2026-10-23 (dazheng)
+- `STT_LANGUAGE_HINTS_MODE` — review_by 2026-10-26 (dazheng)
+- `STT_LANGUAGE_HINTS_MODE_SERVE_PERCENT` — review_by 2026-10-26 (dazheng)
+- `STT_LANGUAGE_HINTS_MODE_SERVE_UID_SHA256S` — review_by 2026-10-26 (dazheng)
+- `STT_VOCAB_MODE` — review_by 2026-10-26 (dazheng)
+- `STT_VOCAB_MODE_SERVE_PERCENT` — review_by 2026-10-26 (dazheng)
+- `STT_VOCAB_MODE_SERVE_UID_SHA256S` — review_by 2026-10-26 (dazheng)
+- `STT_VOCAB_MODE_SHADOW_PERCENT` — review_by 2026-10-26 (dazheng)
+- `clients_boundary_evidence` — review_by 2026-10-26 (dazheng)
+- `clients_from_segments_chunks` — review_by 2026-10-26 (dazheng)
+- `clients_refactor` — review_by 2026-10-26 (dazheng)
+- `custody_capture_committed_release` — review_by 2026-10-26 (dazheng)
+- `screen_activity_lossless_sync` — review_by 2026-10-22 (dazheng)
+- `screen_activity_lossless_sync_kill` — review_by 2026-10-22 (dazheng)
 
 ## Flags
 
@@ -146,6 +204,7 @@ and an explicit empty literal renders as `''`.
 | `ACTION_ITEMS_V2_MODE_SERVE_UID_SHA256S` | Serve cohort digest selector; default empty | backend | env | closed | — | — | — | — | pending | undecided | 2026-10-26 | dazheng |
 | `ACTION_ITEM_IDENTITY_PRESERVE_ENABLED` | Keep a task's id and export marker when a conversation reprocess re-extracts the same task, so it is not sent to the user's cloud task app again; Apple Reminders excluded (default on) | backend | env | open | — | — | — | — | graduate | on | 2026-10-31 | dazheng |
 | `ACTION_ITEM_REFRESH_PRESERVE_ENABLED` | Preserve existing tasks and transfer smart-merge donor tasks on SMART_MERGE and SYNC_UPDATE; append exact-unmatched tasks (default on) | backend | env | open | true | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | graduate | on | 2026-11-01 | dazheng |
+| `ACTION_ITEM_VALIDITY_MODE` | Context-aware narrow task reference check after V2 selection; default shadow, serving zero percent | backend | env | closed | — | — | — | — | pending | undecided | 2026-10-31 | dazheng |
 | `AUDIO_ARCHIVE_COALESCE_ENABLED` | Default-off as-captured audio rollout setting AUDIO_ARCHIVE_COALESCE_ENABLED; David then <=5 percent for >=12h | backend | env | closed | true | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | undecided | 2026-11-14 | dazheng |
 | `AUDIO_ARCHIVE_PERCENT` | Default-off as-captured audio rollout setting AUDIO_ARCHIVE_PERCENT; David then <=5 percent for >=12h | backend | env | closed | declared | 0 (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | 100 (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | undecided | 2026-11-14 | dazheng |
 | `AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED` | Default-off as-captured audio rollout setting AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED; David then <=5 percent for >=12h | backend | env | closed | false | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | undecided | 2026-11-14 | dazheng |
@@ -212,6 +271,15 @@ and an explicit empty literal renders as `''`.
 | `DEMAND_PROCESSING_TOOL_ENABLED` | Default-off demand processing control: tool enabled | backend | env | closed | {value: 'false', category: rollout} | false (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, job/notifications-job) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, pusher (chart)); {value: 'false', category: rollout} (desktop-backend, gke/backend-listen, gke/pusher, job/notifications-job) | — | graduate | on | 2026-11-15 | dazheng |
 | `DEMAND_PROCESSING_UID_ALLOWLIST` | Default-off demand processing control: uid allowlist | backend | env | closed | {value: '', category: rollout} | '' (backend-listen (chart), pusher (chart)); {value: '', category: rollout} (gke/backend-listen, gke/pusher) | '' (backend-listen (chart), pusher (chart)); {value: '', category: rollout} (gke/backend-listen, gke/pusher) | — | kill | off | 2026-11-15 | dazheng |
 | `DREAM_AGENT_PAID_PERCENT` | Stable per-owner percent of paid owners eligible under ELIGIBILITY=paid; unset admits all paid owners, malformed admits none; listed owners always stay in | backend | env | closed | — | — | 100 | — | kill | off | 2026-11-04 | dazheng |
+| `DREAM_HISTORY_COMPACT_MODE` | Replace older large Dream tool results with a stub once the main prompt is large (seed and latest results kept): off/shadow/serve; default shadow measures elidable size only | backend | env | open | — | — | — | — | pending | undecided | 2026-11-04 | dazheng |
+| `DREAM_HISTORY_COMPACT_MODE_SERVE_PERCENT` | History-compaction serve cohort percentage under shadow mode; default 0 | backend | env | open | — | — | — | — | pending | undecided | 2026-11-04 | dazheng |
+| `DREAM_IDLE_SKIP_MODE` | Skip and park scheduled Dream passes for owners with no dirty work or owed backlog intake (no slow-rotation floor, David 2026-10-28): off/shadow/serve; default shadow records would_skip only | backend | env | open | — | — | — | — | pending | on | 2026-11-04 | dazheng |
+| `DREAM_IDLE_SKIP_MODE_SERVE_PERCENT` | Idle-skip serve cohort percentage under shadow mode; default 0, invalid admits nobody | backend | env | open | — | — | — | — | pending | on | 2026-11-04 | dazheng |
+| `DREAM_MATERIAL_BUDGET_MODE` | Size the Dream pass token ceiling by new material (dirty refs plus backlog candidates) instead of history size; never above today's ceiling: off/shadow/serve; default shadow | backend | env | open | — | — | — | — | pending | on | 2026-11-04 | dazheng |
+| `DREAM_MATERIAL_BUDGET_MODE_SERVE_PERCENT` | Material-budget serve cohort percentage under shadow mode; default 0 | backend | env | open | — | — | — | — | pending | on | 2026-11-04 | dazheng |
+| `DREAM_NO_PROGRESS_STOP_MODE` | End a Dream pass after consecutive tool batches with no new staged proposal once a share of its budget is spent; staged work is still verified: off/shadow/serve; default shadow records the stop point and later yield | backend | env | open | — | — | — | — | pending | on | 2026-11-04 | dazheng |
+| `DREAM_NO_PROGRESS_STOP_MODE_SERVE_PERCENT` | No-progress stop serve cohort percentage under shadow mode; default 0 | backend | env | open | — | — | — | — | pending | on | 2026-11-04 | dazheng |
+| `DREAM_PAYOFF_ORDER_MODE` | Order each Dream sweep's due owners by new material and last yield, owners 6 h overdue first: off/shadow/serve (global); default shadow logs reordered counts | backend | env | open | — | — | — | — | pending | on | 2026-11-04 | dazheng |
 | `DREAM_REQUIRED_INTAKE_BACKLOG_COHORT` | Empty denies historical fold-in; explicit uid:<owner>,pct:<0..100> or all cohort, separate from ordinary Dream eligibility | backend | env | closed | — | — | — | — | pending | on | 2026-10-28 | dazheng |
 | `DREAM_REQUIRED_INTAKE_BACKLOG_ENABLED` | Default off; Dream retrospectively resolves historical pending required submissions after canonical-neighbor dedupe and independent verification | backend | env | closed | — | — | — | — | pending | on | 2026-10-28 | dazheng |
 | `EDGE_SHADOW_PERCENT` | Plan D D2: static uid-hash cohort whose raw listen frames and VAD window decisions are mirrored fire-and-forget to listen-edge /v1/shadow; default 0 (kill switch) | backend | env | closed | — | — | 0 (backend-listen (chart)) | — | pending | undecided | 2026-11-20 | dazheng |
@@ -372,6 +440,7 @@ and an explicit empty literal renders as `''`.
 | key | summary | surfaces | kind | fail | _base | dev | prod | PostHog row | decision | terminal | review_by | owner |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `ACTION_ITEMS_LIST_STALE_CLIENT_REFUSE` | Refuse stale action-items list clients | backend | env | open | — | — | 1 | — | keep | keep | — | unowned |
+| `ACTION_ITEM_SOURCE_LINKS_ENABLED` | Default on; shared app/tool create validates supplied conversation sources within the authenticated account | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `ADMIN_KEY_AUTH_ENABLED` | Allow administrator-key authentication | backend | env | open | — | — | — | — | keep | keep | — | unowned |
 | `AUDIO_ARCHIVE_LIVE_ENABLED` | Legacy raw admission only when AUDIO_DURABLE_OUTBOX_ENABLED=false; false stops legacy packs, not default-on custody. Existing packs remain readable | backend | env | open | true | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | keep | keep | — | dazheng |
 | `AUDIO_ARCHIVE_READ_ENABLED` | Default on; chunk readers prefer raw-live Opus packs (decoded to PCM16 on read) and fall back to the stored PCM chunks. False reads PCM chunks only | backend | env | open | true | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | keep | keep | — | dazheng |
@@ -379,6 +448,7 @@ and an explicit empty literal renders as `''`.
 | `AUDIO_DURABLE_OUTBOX_ENABLED` | Default on; immutable media and frame-manifest receipts before PCM custody release | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED` | Default on unless false; exclude new unsupported-language batch uploads and non-single-language users without a supported conversation language in every legacy mode | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `BATCH_CONVERSATION_SPEAKERS_ENABLED` | Default on within persisted authoritative batch records; link unit speaker groups acoustically and name conversation groups | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `BATCH_PIPELINE_CONTENTION_RETRY_ENABLED` | Default on; batch Firestore transactions retry explicit contention on fresh transaction IDs with bounded jitter; false restores legacy SDK transaction behavior | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED` | Default on unless false; batch GPU worker diarizes only padded VAD and word evidence and maps turns back to capture clocks | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED` | Default on; one context-bearing Parakeet retry, independent fenced recovery and retained positive-VAD empty audio | backend | env | closed | {value: 'true', category: rollout} | {value: 'true', category: rollout} | {value: 'true', category: rollout} | — | keep | keep | — | dazheng |
 | `BATCH_PIPELINE_FRESH_GPU_PRIORITY_ENABLED` | Default on unless false; batch uploads in the 6 h fresh sync lane whose oldest capture is over 10 min old lease GPU at RECENT priority, after fresh uploads | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -409,9 +479,13 @@ and an explicit empty literal renders as `''`.
 | `BATCH_PIPELINE_WORKER_ENABLED` | Default-off dedicated GPU process switch; drains admitted work without enabling upload admission | backend | env | closed | false | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | keep | keep | — | dazheng |
 | `BATCH_PIPELINE_WORKER_PIPELINE_DEPTH` | Default 2; GPU worker pump flights overlap lease claim, compute admission and result publication with the exclusive GPU chain | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED` | Default on; strict silence for out-of-buffer VAD frames and first-attempt terminal GPU validation handoff with retained recovery custody | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `BATCH_SHARD_SPREAD_ENABLED` | Default on; token-fenced per-shard batch pull ownership with worker affinity among equal-service candidates; false restores legacy pulls | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `BATCH_SYNC_OFF_CENTROIDS_ENABLED` | Default on: temporary encrypted Omi-v2 centroids for sync-off authoritative batch speakers | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `CAPTURE_GROUP_PRIMARY_NOTES_REFRESH_ENABLED` | Default on; regenerate a capture-group primary's notes once per group revision when confirmed same-event members carry meeting context the primary lacks | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `CAP_HOLD_DURABLE_REDRIVE_ENABLED` | Default on; awaited periodic recovery of persisted processing choices, staged live sources and fragment cleanup | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
+| `CAP_HOLD_FLEET_SNAPSHOT_ENABLED` | Default on; refresh the held-content fleet gauge asynchronously with its own bounded RPC budget | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `CAP_HOLD_LIVE_FRAGMENT_ENABLED` | Default on; persist fifteen-second encrypted live fragments and compose one immutable source per minute | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
+| `CAP_HOLD_REDRIVE_PARALLEL_DRAIN_ENABLED` | Default on; visit up to eight existing processing choices concurrently and allow up to ten candidates per owner turn | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `CLIENT_SUMMARIES_AT_CAP_ENABLED` | Accept display-only on-device summaries at cap; default on; exact false disables new summaries without granting backlog consent | backend | env | open | true | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, pusher (chart)) | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, pusher (chart)) | — | keep | keep | — | dazheng |
 | `CLOUD_SCREEN_VECTORS_EMBED_REFUSAL_ENABLED` | Refuse cloud embeddings only for local-capable clients lacking catalog cloud_screen_vectors; default on; exact false disables refusal | backend | env | open | true | true | true | — | keep | keep | — | dazheng |
 | `CONVERSATION_KNOWN_SPELLINGS` | Default-on grounded spelling hints from Dream vocabulary and active People for conversation summaries, action items and memories; false disables hints and source reads; bounded to 60 terms and 1500 characters | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -424,14 +498,17 @@ and an explicit empty literal renders as `''`.
 | `CONVERSATION_SMART_MERGE_MODE` | Fold a finished pendant conversation into its predecessor when Jev says same occasion; default merge, set off to stop | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `CONVERSATION_SPEAKER_RESOLUTION_ENABLED` | Incident stop for conversation-wide speaker resolution | backend | env | open | — | — | — | — | keep | keep | — | unowned |
 | `CONVERSATION_STORED_MEETING_CONTEXT_ENABLED` | Incident stop for stored meeting context lookup | backend | env | open | — | — | — | — | keep | keep | — | unowned |
-| `CONVERSATION_TOPIC_DETERMINISTIC_SHORT_ENABLED` | Default on; the desktop provisional-topic endpoint answers transcripts under the notes short-clip word floor deterministically (first-sentence title, no emoji) instead of one conv_structure model call per request | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `CONVERSATION_TOPIC_DETERMINISTIC_SHORT_ENABLED` | Default on; the desktop provisional-topic endpoint answers short transcripts deterministically only when the conversation language matches the resolved output language; a mismatch uses one pinned conv_structure call | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `DAY3_REENGAGEMENT_EMAIL_KILL_SWITCH` | Stop day-three re-engagement email | backend | env | inverted | false | false | false | — | keep | keep | — | unowned |
 | `DEEPGRAM_SELF_HOSTED_ENABLED` | Retired 2026-08-27 with the rest of Deepgram; env removed from all charts and forbidden_env on every Cloud Run owner | backend | env | closed | — | — | — | — | keep | keep | — | unowned |
 | `DESKTOP_LOOP_WATCHDOG_ENABLED` | Desktop event-loop stall warning and liveness signal; default on, false disables both | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `DESKTOP_UPDATE_POINTERS_MODE` | Fall back to legacy desktop update pointers | backend | env | open | primary | primary (backend-listen (chart), cloud_run/backend, gke/backend-listen) | primary (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | keep | keep | — | unowned |
 | `DREAM_AGENT_ENABLED` | Global Dream harness kill switch; false prevents admission, model dispatch and effects | backend | env | closed | — | — | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | keep | keep | — | dazheng |
+| `DREAM_DEFECT_REPORTS_ENABLED` | Default-on Dream report_defect tool storing k-anonymous harness defect patterns (dream_feedback); 0/false/off/no withdraws the tool from new sessions | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `DREAM_GATEWAY_PROBE_ENABLED` | Default-on 3.8 reservation probe through the LLM gateway's reserved Dream route; 0/false/off/no makes no probe call and admission relies on fresh evidence from real Dream turns | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `DREAM_TELEMETRY_V2_ENABLED` | Default-on structured dream_pass/dream_sweep JSON records (counts, durations, uuid run/sweep ids, allowlisted labels); 0/false/off/no stops them, leaving the legacy text lines | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODES_ENABLED` | Default on unless set to a non-on value; live episodes overlay (per-moment gpt-5-nano update, provisional items, /v1/episodes capability). Off reports enabled=false and apps keep today's per-conversation UI | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `EPISODE_OUTPUT_LANGUAGE_PIN` | Default on unless set off (0/false/off/no); pins generated output to a safe language for live episodes, provisional topics, daily recaps, and proactive notifications; multi/auto captures use dominant in-memory segment language | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `FAIR_USE_ENABLED` | Enforce fair-use metering; set false to stop enforcement | backend | env | closed | — | true (backend-listen (chart)) | true (backend-listen (chart)) | — | keep | keep | — | unowned |
 | `FAIR_USE_KILL_SWITCH` | Emergency stop for fair-use enforcement | backend | env | inverted | — | false (backend-listen (chart)) | false (backend-listen (chart)) | — | keep | keep | — | unowned |
 | `FSR_KG_CITATION_INDEX` | Default on; query native reverse citations for KG node pruning; off restores the node scan | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -490,6 +567,7 @@ and an explicit empty literal renders as `''`.
 | `PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED` | Default on; internal live-window POSTs use ready GPU pods with per-pod 2-5 minute adaptive quarantine and one different-pod retry inside the original budget | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED` | Default on unless false; a stranded-flush window answer whose text fell beyond the posted fragment settles like an empty answer instead of holding replay until replay_ring_overflow | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `PINNED_SPEAKER_PRIOR_ENABLED` | Turn near-misses on pinned people into suggestions and record voice candidates for the suggestion card (never loosens auto-labels) | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `PLAYBACK_MANIFEST_RECOVERY_ENABLED` | Default on; next-access recovery for merge_failed playback markers after 15 minutes, deduped by marker generation | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `PUBLIC_SHARED_CONVERSATION_CHAT_MODE` | Enable chat on public shared conversations | backend | env | closed | declared (gke/backend-listen); gateway (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill) | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | gateway (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill); off (backend-listen (chart), gke/backend-listen) | — | keep | keep | — | dazheng |
 | `RATE_LIMIT_SHADOW_MODE` | Shadow backend rate limits | backend | env | closed | — | — | — | — | keep | keep | — | unowned |
 | `SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED` | Fallback to keyword search for screen activity | backend | env | open | — | — | — | — | keep | keep | — | unowned |
@@ -498,6 +576,7 @@ and an explicit empty literal renders as `''`.
 | `SONIOX_IDLE_CLOSE_SECONDS` | Default on at 45 s; close paid Soniox transports after continuous active-VAD silence or 60 s with no client frames; 0 or off is the kill switch | backend | env | open | — | — | — | — | keep | keep | — | backend |
 | `SPEAKER_AUTO_ENROLL_ENABLED` | Default on; explicit speaker tags teach an encrypted vector-only roster for retained private-cloud sync users | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `SPEAKER_IDENTITY_REPAIR_ENABLED` | Default on; repair unsupported notes participant bindings while preserving People-spelled prose mentions and owner names | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `SPEAKER_ROLE_PROJECTION_ENABLED` | Shared evidence-backed prompt roles for notes, memory quote sources and tasks; on unless explicitly false | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `STALE_IN_PROGRESS_RECOVERY_ENABLED` | Incident stop for reconnect stale in-progress recovery; default on | backend | env | open | {value: 'true', category: rollout} | true (backend-listen (chart)); {value: 'true', category: rollout} (gke/backend-listen) | true (backend-listen (chart)); {value: 'true', category: rollout} (gke/backend-listen) | — | keep | keep | — | backend listen |
 | `STT_CAP_FINALIZE_FORWARD_ENABLED` | Default on; preserve provider-specific finalize arguments through the funded STT cap proxy | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `STT_CAP_OFFLINE_ENFORCEMENT` | Default on; enforce existing finite transcription allowance before sync/batch cloud spend independently of legacy live scope | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -518,6 +597,7 @@ and an explicit empty literal renders as `''`.
 | `SYNC_LIVE_OVERLAP_ENABLED` | Default-on strict same-device sync/live overlap admission through the existing assignment merge; false restores ordinary temporal sync publication | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `SYNC_MINIMAL_REDRIVE_ENABLED` | Default on unless false; operator sync payloads with redrive_mode=minimal run Parakeet-only STT, attach-first targeting and one gpt-5-nano title per new row | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `SYNC_OPERATION_SNAPSHOT_ENABLED` | Default on; reuse one sync redirect snapshot and bridge metadata before any effects | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `SYNC_PROCESSING_HOLD_ENABLED` | Default on: debounce sync full processing until quiet; one material late run and a one-hour maximum hold | backend | env | open | — | — | — | — | keep | keep | — | rollout-meetings |
 | `SYNC_RETIRED_HANDLE_ACK_ENABLED` | Default on; legacy sync polling acknowledges Oct 15-17 expiry-retired handles held in custody as completed (empty, reason sync_retired_preserved) for owners admitted in sync_retired_handle_owners | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `TRANSCRIPTION_SHADOW_KILL_SWITCH` | Stop Parakeet final-pass shadow admission | backend | env | inverted | — | false (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | false (cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/pusher, pusher (chart)) | — | keep | keep | — | dazheng |
 | `TRANSLATION_DEMAND_GATE_ENABLED` | Gate live translation on transcript-view demand (on-demand rollout; false restores legacy always-translate) | backend | env | open | true | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | keep | keep | — | dazheng |
@@ -528,6 +608,7 @@ and an explicit empty literal renders as `''`.
 | `free-tier-kill-switch-v1` | Remote free-tier stop | macos | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | unowned |
 | `mobile-local-preview-disabled` | Stop the iOS and Android clients declaring local_preview=enabled on /v4/listen; false or absent keeps the on-device live preview request on for batch-lane sessions | mobile | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | dazheng |
 | `mobile-speech-analyzer-disabled` | Force existing iOS freemium fallback to SFSpeech; false or absent selects SpeechAnalyzer on supported iOS 26 devices/locales | mobile | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | dazheng |
+| `mobile-wal-delta-index-off` | True makes the iOS and Android clients save the WAL recording index through the pre-delta full-snapshot writer; false or absent keeps the delta index worker on | mobile | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | dazheng |
 | `negative_feedback_remediation_kill` | Stop negative-feedback remediation on macOS | macos | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | unowned |
 | `screen_task_jev_gate` | Default-on screen OCR text dedupe gate using Jev; explicit false is the kill switch; flag read failures keep it on | macos | posthog | open | — | — | — | expected (enable) | keep | keep | — | dazheng |
 | `watch_copy_dedupe_off` | True keeps and uploads Watch recovery copies; false deduplicates copies covered at least 95% by server-reachable live custody | mobile | posthog | closed | — | — | — | expected (kill) | keep | keep | — | dazheng |
@@ -537,6 +618,8 @@ and an explicit empty literal renders as `''`.
 | key | summary | surfaces | kind | fail | _base | dev | prod | PostHog row | decision | terminal | review_by | owner |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `ACCOUNT_DELETION_DISPATCH_MODE` | Select Cloud Tasks for account deletion | backend | env | closed | — | — | cloud_tasks (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | keep | keep | — | unowned |
+| `ACTION_ITEM_VALIDITY_MODE_SERVE_PERCENT` | Consistent uid serving percentage for task validity shadow mode; default zero | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
+| `ACTION_ITEM_VALIDITY_MODE_SERVE_UID_SHA256S` | Optional task validity serving uid digests; default empty | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `AUDIO_CLEANUP_HOLD_WINDOWS` | Inclusive capture preservation windows, comma-separated timezone-qualified start..end pairs; defaults to 2026-10-22T13:36:30Z..2026-10-24T07:16:00Z. Empty/malformed configuration holds cleanup | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `AUDIO_MERGE_DISPATCH_MODE` | Select audio-merge dispatch lane | backend | env | closed | — | — | — | — | keep | keep | — | unowned |
 | `BATCH_PIPELINE_API_URL` | Explicit HTTPS backend serving URL for fenced pre-compute spend admission; empty pauses required jobs without GPU inference | backend | env | closed | declared | '' (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | https://backend-sync-hhibjajaja-uc.a.run.app (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | keep | keep | — | dazheng |
@@ -648,6 +731,7 @@ and an explicit empty literal renders as `''`.
 | `ACTION_ITEMS_V2_MODE` | synthetic acceptance → 1% → 10% → 100% | omi_calls_refactor_shadow_total outcome=error stays zero; no false calls, premature scheduled recaps, missing provenance or STT config rejection; recap/STT latency and vendor spend stay within baseline | dazheng | 2026-10-26 |
 | `ACTION_ITEMS_V2_MODE_SERVE_PERCENT` | synthetic acceptance → 1% → 10% → 100% | omi_calls_refactor_shadow_total outcome=error stays zero; no false calls, premature scheduled recaps, missing provenance or STT config rejection; recap/STT latency and vendor spend stay within baseline | dazheng | 2026-10-26 |
 | `ACTION_ITEMS_V2_MODE_SERVE_UID_SHA256S` | synthetic acceptance → 1% → 10% → 100% | omi_calls_refactor_shadow_total outcome=error stays zero; no false calls, premature scheduled recaps, missing provenance or STT config rejection; recap/STT latency and vendor spend stay within baseline | dazheng | 2026-10-26 |
+| `ACTION_ITEM_VALIDITY_MODE` | synthetic and authorized fixture qualification by Oct 29 12Z; full 24h shadow where available → 5% Oct 30 12Z → 25% after six clean hours → 100% Oct 31 12Z | Protected tasks including context-resolved pronouns, manual text, multilingual speech, owner commitments, accepted requests and counterpart offers survive; no reviewed false suppression; consumer parity green; action_item_validity reason/error counts understood; insufficient samples block expansion | two-lane rollout lead | 2026-10-31 |
 | `AUDIO_ARCHIVE_LIVE_ENABLED` | all private-cloud-sync-consented sessions at deploy (David ruling 2026-10-22: store BLE Opus as captured) | omi_audio_archive_objects_total/bytes_total grow with live intake; omi_fallback_total{component=pusher,reason=upload_failed} stays near zero; PCM chunk writes unchanged | two-lane lead | 2026-10-23 |
 | `AUDIO_ARCHIVE_READ_ENABLED` | all conversations at deploy (packs exist only where LIVE wrote them) | batch STT success and WER parity on raw-decoded audio; playback/audio-merge build errors flat; omi_fallback_total{reason=decode_failed} near zero | two-lane lead | 2026-10-23 |
 | `AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT` | 0 until the derived bucket exists and IAM is verified → 5% for >=12h → 100% | derived-bucket object growth matches cohort share; dual-list calls stay flat for non-admitted owners; replication and Class A on omi-private-cloud-sync+syncing-local fall by cohort share | two-lane lead | 2026-11-22 |
@@ -679,6 +763,15 @@ and an explicit empty literal renders as `''`.
 | `CLIENTS_FROM_SEGMENTS_CHUNKS_MODE_SERVE_UID_SHA256S` | integrated synthetic and test cohort → 1% → 10% → 100% | Zero custody loss, duplicate session/chunk conversations, manual-label regressions, false frame acceptance or new upload failures; omi_clients_refactor_shadow_total errors stay zero | dazheng | 2026-10-26 |
 | `CONVERSATION_LLM_INPUT_DEDUPE_ENABLED` | prod backend, backend-integration, backend-listen and pusher on (backend-sync/backfill already on) → 1h soak green on dedupe counters → leave on | conversation_llm_input_dedupe_checkpoint_errors_total stays under 1% of hits+misses with hits+misses non-zero per feature per host, and no rise in processing failure counters | dazheng (C5 cost lane) | 2026-11-04 |
 | `DREAM_AGENT_PAID_PERCENT` | listed owner + 5% of paid owners, 1 h hold → 25%, 3 h hold → unset (all paid owners), 6 h soak | <2 failed Dream passes/h, no new Dream ERROR signatures on backend-sync, no probe_failed storm, undo rate under 0.2, zero 3.8 on-demand Dream spend | dazheng (Dream lane, deploys via the rollout lead) | 2026-10-22 |
+| `DREAM_HISTORY_COMPACT_MODE` | shadow: all paid owners, zero behavior change → 10% serve with 90% same-day shadow control → 50% serve → 100% serve after a 6 h soak | treatment vs control: applied edits per active owner >= 90% of control; undo rate not above control; failed passes < 2/h; zero new Dream ERROR lines; zero dream_telemetry_error; offline compaction eval first | dazheng | 2026-11-04 |
+| `DREAM_HISTORY_COMPACT_MODE_SERVE_PERCENT` | shadow: all paid owners, zero behavior change → 10% serve with 90% same-day shadow control → 50% serve → 100% serve after a 6 h soak | treatment vs control: applied edits per active owner >= 90% of control; undo rate not above control; failed passes < 2/h; zero new Dream ERROR lines; zero dream_telemetry_error | dazheng | 2026-11-04 |
+| `DREAM_IDLE_SKIP_MODE` | shadow: all paid owners, zero behavior change → 10% serve with 90% same-day shadow control → 50% serve → 100% serve after a 6 h soak | treatment vs control: applied edits per active owner >= 90% of control; undo rate not above control; failed passes < 2/h; zero new Dream ERROR lines; zero dream_telemetry_error | dazheng | 2026-11-04 |
+| `DREAM_IDLE_SKIP_MODE_SERVE_PERCENT` | shadow: all paid owners, zero behavior change → 10% serve with 90% same-day shadow control → 50% serve → 100% serve after a 6 h soak | treatment vs control: applied edits per active owner >= 90% of control; undo rate not above control; failed passes < 2/h; zero new Dream ERROR lines; zero dream_telemetry_error | dazheng | 2026-11-04 |
+| `DREAM_MATERIAL_BUDGET_MODE` | shadow: all paid owners, zero behavior change → 10% serve with 90% same-day shadow control → 50% serve → 100% serve after a 6 h soak | treatment vs control: applied edits per active owner >= 90% of control; undo rate not above control; failed passes < 2/h; zero new Dream ERROR lines; zero dream_telemetry_error | dazheng | 2026-11-04 |
+| `DREAM_MATERIAL_BUDGET_MODE_SERVE_PERCENT` | shadow: all paid owners, zero behavior change → 10% serve with 90% same-day shadow control → 50% serve → 100% serve after a 6 h soak | treatment vs control: applied edits per active owner >= 90% of control; undo rate not above control; failed passes < 2/h; zero new Dream ERROR lines; zero dream_telemetry_error | dazheng | 2026-11-04 |
+| `DREAM_NO_PROGRESS_STOP_MODE` | shadow: all paid owners, zero behavior change → 10% serve with 90% same-day shadow control → 50% serve → 100% serve after a 6 h soak | treatment vs control: applied edits per active owner >= 90% of control; undo rate not above control; failed passes < 2/h; zero new Dream ERROR lines; zero dream_telemetry_error; shadow applied_after at the stop point near zero before any serve step | dazheng | 2026-11-04 |
+| `DREAM_NO_PROGRESS_STOP_MODE_SERVE_PERCENT` | shadow: all paid owners, zero behavior change → 10% serve with 90% same-day shadow control → 50% serve → 100% serve after a 6 h soak | treatment vs control: applied edits per active owner >= 90% of control; undo rate not above control; failed passes < 2/h; zero new Dream ERROR lines; zero dream_telemetry_error | dazheng | 2026-11-04 |
+| `DREAM_PAYOFF_ORDER_MODE` | shadow: reordered counts per sweep → serve globally after idle-skip settles | no owner waits more than 6 h past due; applied edits per sweep not lower than the shadow week | dazheng | 2026-11-04 |
 | `DREAM_REQUIRED_INTAKE_BACKLOG_COHORT` | David only → 5% → 25% → 100% | Zero known duplicate admissions or lost material details, zero source/privacy/owner fence violations; pending-required counts and oldest age decline | two-lane rollout lead | 2026-10-28 |
 | `DREAM_REQUIRED_INTAKE_BACKLOG_ENABLED` | David only → 5% → 25% → 100% | Zero known duplicate admissions or lost material details, zero source/privacy/owner fence violations; pending-required counts and oldest age decline; observed memory_l2_flex plus Dream spend matches forecast | two-lane rollout lead | 2026-10-28 |
 | `EDGE_SHADOW_PERCENT` | 1% after listen-edge runs in prod (lead deploys) → 5% after 24 h clean → 25% for the D2 gate hold (>= 3 days) → 0% and remove the mirror after the D2 readout | listen: omi_listen_edge_shadow_sessions_total non-completed <= 1% and listen loop lag p99 / first-text unchanged vs unmirrored sessions; edge: scripts/edge_shadow_gate.py (window agreement >= 99.5%, gate-open offset p95 <= 32 ms, decode+VAD <= 7.92 ms per audio second) | dazheng (two-lane lead) | 2026-11-20 |
@@ -743,6 +836,10 @@ their code default (`fail` tells you which way a missing value resolves).
 - `ACTION_ITEMS_V2_MODE_SERVE_PERCENT` — Serve cohort percentage; default zero (fail: closed)
 - `ACTION_ITEMS_V2_MODE_SERVE_UID_SHA256S` — Serve cohort digest selector; default empty (fail: closed)
 - `ACTION_ITEM_IDENTITY_PRESERVE_ENABLED` — Keep a task's id and export marker when a conversation reprocess re-extracts the same task, so it is not sent to the user's cloud task app again; Apple Reminders excluded (default on) (fail: open)
+- `ACTION_ITEM_SOURCE_LINKS_ENABLED` — Default on; shared app/tool create validates supplied conversation sources within the authenticated account (fail: open)
+- `ACTION_ITEM_VALIDITY_MODE` — Context-aware narrow task reference check after V2 selection; default shadow, serving zero percent (fail: closed)
+- `ACTION_ITEM_VALIDITY_MODE_SERVE_PERCENT` — Consistent uid serving percentage for task validity shadow mode; default zero (fail: closed)
+- `ACTION_ITEM_VALIDITY_MODE_SERVE_UID_SHA256S` — Optional task validity serving uid digests; default empty (fail: closed)
 - `ADMIN_KEY_AUTH_ENABLED` — Allow administrator-key authentication (fail: open)
 - `AUDIO_CANONICAL_PACKING_ENABLED` — Default off; new release-scoped canonical capture intake and owner-only verified tar packing; requires new regional bucket (fail: closed)
 - `AUDIO_CLEANUP_HOLD_ENABLED` — Default on: routine legacy staging and batch artifact cleanup preserve configured incident capture windows; only false disables the window hold. Durable success gates still apply; privacy erasure bypasses the hold (fail: closed)
@@ -754,6 +851,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `BATCH_JOBSTORE_MODE` — Default firestore; shadow mirrors committed batch job-store writes to the staging Postgres and counts read parity (Firestore stays the only authority) (fail: closed)
 - `BATCH_PIPELINE_ASR_LEFT_CONTEXT_SECONDS` — Default 0 (off); seconds of the same capture stream's contiguous predecessor speech run prefixed to a unit whose speech starts at sample 0, so Parakeet TDT does not start mid-utterance (fail: closed)
 - `BATCH_PIPELINE_ASR_LEFT_CONTEXT_UNITS` — Process-local predecessor tails kept for ASR left context (default 64, range [0, 1024]; each <=8 s int16, 10 min TTL, keyed by owner, privacy generation and capture stream: source, device and lock from the staged intake context, or the record conversation) (fail: closed)
+- `BATCH_PIPELINE_CONTENTION_RETRY_ENABLED` — Default on; batch Firestore transactions retry explicit contention on fresh transaction IDs with bounded jitter; false restores legacy SDK transaction behavior (fail: open)
 - `BATCH_PIPELINE_CONTEXT_SECONDS` — GPU chain internal ASR boundary context seconds; default 2; requires AMI qualification (fail: closed)
 - `BATCH_PIPELINE_DIARIZER` — GPU chain diarizer registry selection; default pyannote; unavailable candidates fail closed (fail: closed)
 - `BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED` — Default on unless false; batch GPU worker diarizes only padded VAD and word evidence and maps turns back to capture clocks (fail: open)
@@ -800,6 +898,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `BATCH_PIPELINE_WORKER_PIPELINE_DEPTH` — Default 2; GPU worker pump flights overlap lease claim, compute admission and result publication with the exclusive GPU chain (fail: open)
 - `BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED` — Default off; empty-ASR worker jobs reuse integration strict local VAD to commit confirmed silence before quarantine (fail: closed)
 - `BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED` — Default on; strict silence for out-of-buffer VAD frames and first-attempt terminal GPU validation handoff with retained recovery custody (fail: open)
+- `BATCH_SHARD_SPREAD_ENABLED` — Default on; token-fenced per-shard batch pull ownership with worker affinity among equal-service candidates; false restores legacy pulls (fail: open)
 - `BATCH_SYNC_OFF_CENTROIDS_ENABLED` — Default on: temporary encrypted Omi-v2 centroids for sync-off authoritative batch speakers (fail: open)
 - `BILLING_WEBHOOK_LEDGER_ENABLED` — Durable Stripe webhook receipts, duplicate suppression and failed-schedule retries; default false; no deployment declaration or activation in INF sprint (fail: closed)
 - `CALLS_RECAP_MODE` — Boundary call metadata and completed-local-day revision-aware recap states; default shadow (fail: closed)
@@ -809,9 +908,12 @@ their code default (`fail` tells you which way a missing value resolves).
 - `CAPTURE_COVERAGE_MODE_SERVE_PERCENT` — Capture coverage serve cohort percentage; default zero, invalid values admit nobody (fail: closed)
 - `CAPTURE_COVERAGE_MODE_SERVE_UID_SHA256S` — Capture coverage explicit serve cohort; comma-separated SHA-256 identity digests, default empty (fail: closed)
 - `CAPTURE_COVERAGE_MODE_SHADOW_PERCENT` — Shadow ledger sample percentage; default 5 (code constant). The serve cohort always records; other uids record and query the coverage ledger in shadow only inside this sample (fail: closed)
+- `CAPTURE_GROUP_PRIMARY_NOTES_REFRESH_ENABLED` — Default on; regenerate a capture-group primary's notes once per group revision when confirmed same-event members carry meeting context the primary lacks (fail: open)
 - `CAPTURE_SHARED_SPEECH_UID_ALLOWLIST` — Comma-separated exact accounts admitted to shared speech mode; default empty, union with stable percentage cohort (fail: closed)
 - `CAP_HOLD_DURABLE_REDRIVE_ENABLED` — Default on; awaited periodic recovery of persisted processing choices, staged live sources and fragment cleanup (fail: closed)
+- `CAP_HOLD_FLEET_SNAPSHOT_ENABLED` — Default on; refresh the held-content fleet gauge asynchronously with its own bounded RPC budget (fail: closed)
 - `CAP_HOLD_LIVE_FRAGMENT_ENABLED` — Default on; persist fifteen-second encrypted live fragments and compose one immutable source per minute (fail: closed)
+- `CAP_HOLD_REDRIVE_PARALLEL_DRAIN_ENABLED` — Default on; visit up to eight existing processing choices concurrently and allow up to ten candidates per owner turn (fail: closed)
 - `CLIENTS_FROM_SEGMENTS_CHUNKS_MODE` — off/shadow/serve via refactor_modes; default shadow rejects continuation without acknowledging partial completion (fail: closed)
 - `CLIENTS_FROM_SEGMENTS_CHUNKS_MODE_SERVE_PERCENT` — Continuation serve cohort percentage; default zero (fail: closed)
 - `CLIENTS_FROM_SEGMENTS_CHUNKS_MODE_SERVE_UID_SHA256S` — Continuation digest serve cohort; default empty (fail: closed)
@@ -826,14 +928,25 @@ their code default (`fail` tells you which way a missing value resolves).
 - `CONVERSATION_SMART_MERGE_MODE` — Fold a finished pendant conversation into its predecessor when Jev says same occasion; default merge, set off to stop (fail: open)
 - `CONVERSATION_SPEAKER_RESOLUTION_ENABLED` — Incident stop for conversation-wide speaker resolution (fail: open)
 - `CONVERSATION_STORED_MEETING_CONTEXT_ENABLED` — Incident stop for stored meeting context lookup (fail: open)
-- `CONVERSATION_TOPIC_DETERMINISTIC_SHORT_ENABLED` — Default on; the desktop provisional-topic endpoint answers transcripts under the notes short-clip word floor deterministically (first-sentence title, no emoji) instead of one conv_structure model call per request (fail: open)
+- `CONVERSATION_TOPIC_DETERMINISTIC_SHORT_ENABLED` — Default on; the desktop provisional-topic endpoint answers short transcripts deterministically only when the conversation language matches the resolved output language; a mismatch uses one pinned conv_structure call (fail: open)
 - `DEEPGRAM_SELF_HOSTED_ENABLED` — Retired 2026-08-27 with the rest of Deepgram; env removed from all charts and forbidden_env on every Cloud Run owner (fail: closed)
 - `DESKTOP_LOOP_WATCHDOG_ENABLED` — Desktop event-loop stall warning and liveness signal; default on, false disables both (fail: open)
 - `DIARIZATION_V2_ENABLED` — Enable the separate batch-only diarizer app; default false; startup loads models before readiness (fail: closed)
 - `DREAM_AGENT_EXPECTED_TOKENS` — Expected session tokens for initial spend holds and derived concurrency; default 12000; actual turn reservations enforce ceilings (fail: closed)
+- `DREAM_DEFECT_REPORTS_ENABLED` — Default-on Dream report_defect tool storing k-anonymous harness defect patterns (dream_feedback); 0/false/off/no withdraws the tool from new sessions (fail: open)
 - `DREAM_GATEWAY_PROBE_ENABLED` — Default-on 3.8 reservation probe through the LLM gateway's reserved Dream route; 0/false/off/no makes no probe call and admission relies on fresh evidence from real Dream turns (fail: open)
+- `DREAM_HISTORY_COMPACT_MODE` — Replace older large Dream tool results with a stub once the main prompt is large (seed and latest results kept): off/shadow/serve; default shadow measures elidable size only (fail: open)
+- `DREAM_HISTORY_COMPACT_MODE_SERVE_PERCENT` — History-compaction serve cohort percentage under shadow mode; default 0 (fail: open)
+- `DREAM_IDLE_SKIP_MODE` — Skip and park scheduled Dream passes for owners with no dirty work or owed backlog intake (no slow-rotation floor, David 2026-10-28): off/shadow/serve; default shadow records would_skip only (fail: open)
+- `DREAM_IDLE_SKIP_MODE_SERVE_PERCENT` — Idle-skip serve cohort percentage under shadow mode; default 0, invalid admits nobody (fail: open)
+- `DREAM_MATERIAL_BUDGET_MODE` — Size the Dream pass token ceiling by new material (dirty refs plus backlog candidates) instead of history size; never above today's ceiling: off/shadow/serve; default shadow (fail: open)
+- `DREAM_MATERIAL_BUDGET_MODE_SERVE_PERCENT` — Material-budget serve cohort percentage under shadow mode; default 0 (fail: open)
+- `DREAM_NO_PROGRESS_STOP_MODE` — End a Dream pass after consecutive tool batches with no new staged proposal once a share of its budget is spent; staged work is still verified: off/shadow/serve; default shadow records the stop point and later yield (fail: open)
+- `DREAM_NO_PROGRESS_STOP_MODE_SERVE_PERCENT` — No-progress stop serve cohort percentage under shadow mode; default 0 (fail: open)
+- `DREAM_PAYOFF_ORDER_MODE` — Order each Dream sweep's due owners by new material and last yield, owners 6 h overdue first: off/shadow/serve (global); default shadow logs reordered counts (fail: open)
 - `DREAM_REQUIRED_INTAKE_BACKLOG_COHORT` — Empty denies historical fold-in; explicit uid:<owner>,pct:<0..100> or all cohort, separate from ordinary Dream eligibility (fail: closed)
 - `DREAM_REQUIRED_INTAKE_BACKLOG_ENABLED` — Default off; Dream retrospectively resolves historical pending required submissions after canonical-neighbor dedupe and independent verification (fail: closed)
+- `DREAM_TELEMETRY_V2_ENABLED` — Default-on structured dream_pass/dream_sweep JSON records (counts, durations, uuid run/sweep ids, allowlisted labels); 0/false/off/no stops them, leaving the legacy text lines (fail: open)
 - `EDGE_SHADOW_TOKEN` — Optional shared token listen sends to listen-edge /v1/shadow (x-edge-shadow-token); must match the edge's EDGE_SHADOW_TOKEN (fail: closed)
 - `ENRICHMENT_ROUTE` — Default sync_handler; enrichment_queue binds new sr- enrichment obligations to /v2/enrichment/run on the enrichment queue (plan C3) (fail: closed)
 - `EPISODES_CLIENT_CHANNELS` — Default beta; comma-separated X-Omi-App-Channel values (beta, store) whose episodes API calls are admitted and set the client-seen marker. A missing or unknown channel is never admitted (fail: closed)
@@ -844,6 +957,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `EPISODE_BOUNDARIES_MODE_SERVE_PERCENT` — Serve cohort percentage in shadow mode, default 0 (fail: closed)
 - `EPISODE_BOUNDARIES_MODE_SERVE_UID_SHA256S` — Serve cohort account digests in shadow mode, default empty; never raw account identifiers (fail: closed)
 - `EPISODE_BOUNDARIES_MODE_SHADOW_PERCENT` — Boundary evidence database writes sampled in shadow; default 5 percent, serve cohort always writes (fail: closed)
+- `EPISODE_OUTPUT_LANGUAGE_PIN` — Default on unless set off (0/false/off/no); pins generated output to a safe language for live episodes, provisional topics, daily recaps, and proactive notifications; multi/auto captures use dominant in-memory segment language (fail: open)
 - `FIRESTORE_CACHE_ENABLED` — Enable Firestore response cache (fail: closed)
 - `FIRST_SUMMARY_DEADLINE_SECONDS` — First required summary dispatch budget; default 120 seconds, bounded 60 to 120 (fail: closed)
 - `FIRST_SUMMARY_UID_ALLOWLIST` — Optional summary canary owner allowlist; empty admits only the positive percentage cohort when global gate is on (fail: closed)
@@ -935,6 +1049,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED` — Default on; internal live-window POSTs use ready GPU pods with per-pod 2-5 minute adaptive quarantine and one different-pod retry inside the original budget (fail: open)
 - `PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED` — Default on unless false; a stranded-flush window answer whose text fell beyond the posted fragment settles like an empty answer instead of holding replay until replay_ring_overflow (fail: open)
 - `PINNED_SPEAKER_PRIOR_ENABLED` — Turn near-misses on pinned people into suggestions and record voice candidates for the suggestion card (never loosens auto-labels) (fail: open)
+- `PLAYBACK_MANIFEST_RECOVERY_ENABLED` — Default on; next-access recovery for merge_failed playback markers after 15 minutes, deduped by marker generation (fail: closed)
 - `RATE_LIMIT_SHADOW_MODE` — Shadow backend rate limits (fail: closed)
 - `RECORDING_SESSION_MODE` — Select recording session migration mode (fail: closed)
 - `SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED` — Fallback to keyword search for screen activity (fail: open)
@@ -958,6 +1073,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `SPEAKER_EVIDENCE_MODE_SHADOW_PERCENT` — Speaker evidence database writes sampled in shadow; default 5 percent, serve cohort always writes (fail: closed)
 - `SPEAKER_GROUPING_CROSS_SCOPE_THRESHOLD` — G2 cross-scope cosine-distance threshold; default 0.60; invalid configuration uses 0.60 (fail: closed)
 - `SPEAKER_IDENTITY_REPAIR_ENABLED` — Default on; repair unsupported notes participant bindings while preserving People-spelled prose mentions and owner names (fail: open)
+- `SPEAKER_ROLE_PROJECTION_ENABLED` — Shared evidence-backed prompt roles for notes, memory quote sources and tasks; on unless explicitly false (fail: open)
 - `STOREFRONT_LADDER_V1_ENABLED` — Default-off versioned unified plans presentation; exact true admits v2 only; installed-client endpoints unchanged (fail: closed)
 - `STT_CAP_FINALIZE_FORWARD_ENABLED` — Default on; preserve provider-specific finalize arguments through the funded STT cap proxy (fail: open)
 - `STT_CAP_OFFLINE_ENFORCEMENT` — Default on; enforce existing finite transcription allowance before sync/batch cloud spend independently of legacy live scope (fail: open)
@@ -991,6 +1107,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `SYNC_LIVE_OVERLAP_ENABLED` — Default-on strict same-device sync/live overlap admission through the existing assignment merge; false restores ordinary temporal sync publication (fail: open)
 - `SYNC_MINIMAL_REDRIVE_ENABLED` — Default on unless false; operator sync payloads with redrive_mode=minimal run Parakeet-only STT, attach-first targeting and one gpt-5-nano title per new row (fail: closed)
 - `SYNC_OPERATION_SNAPSHOT_ENABLED` — Default on; reuse one sync redirect snapshot and bridge metadata before any effects (fail: open)
+- `SYNC_PROCESSING_HOLD_ENABLED` — Default on: debounce sync full processing until quiet; one material late run and a one-hour maximum hold (fail: open)
 - `SYNC_RETIRED_HANDLE_ACK_ENABLED` — Default on; legacy sync polling acknowledges Oct 15-17 expiry-retired handles held in custody as completed (empty, reason sync_retired_preserved) for owners admitted in sync_retired_handle_owners (fail: closed)
 - `TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED` — Default-off local speech VAD compaction for stored-audio ASR and pyannote final passes; sample-exact original clocks; failures retain original audio (fail: closed)
 - `TYPESENSE_CONVERSATION_INDEX_WRITES` — Write conversations to Typesense index (fail: closed)

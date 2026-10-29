@@ -11917,5 +11917,13 @@
     "deleteFinishNowButton": "என் கணக்கை இப்போதே அழிக்கவும்",
     "deleteFinishNowWarning": "இதனால் மீட்டெடுக்கும் காலம் முடிவடையும். உங்கள் கணக்கும் பதிவுகளும் நிரந்தரமாக அழிக்கப்படும்.",
     "deleteRestoreLessThanDayRemaining": "உங்கள் கணக்கை மீட்டெடுப்பதற்கு இன்னும் ஒரு நாளுக்கும் குறைவாகவே உள்ளது.",
-    "deleteFinishNowTitle": "உங்கள் கணக்கை நீக்கவா?"
+    "deleteFinishNowTitle": "உங்கள் கணக்கை நீக்கவா?",
+    "syncHealthAlerts": "ஒத்திசைவு நிலை எச்சரிக்கைகள்",
+    "syncHealthAlertsDescription": "Omi ஒரு நாளுக்கு மேல் பதிவுகளை ஒத்திசைக்கவில்லை என்றால் எச்சரிக்கவும்",
+    "syncStallAlertTitle": "Omi ஒத்திசைக்கவில்லை",
+    "syncStallAlertBody": "உங்கள் Omi-யில் இருந்து {hours} மணி நேரத்திற்கு மேல் எந்தப் பதிவும் ஒத்திசைக்கப்படவில்லை. உங்கள் சாதன இணைப்பைச் சரிபார்க்க Omi-ஐத் திறக்கவும்.",
+    "activityAttentionSyncStalledTitle": "Omi ஒத்திசைக்கவில்லை",
+    "activityAttentionSyncStalledSubtitle": "{hours} மணி நேரத்திற்கு மேல் எந்தப் பதிவும் ஒத்திசைக்கப்படவில்லை",
+    "dailyRecapsOnHome": "முகப்பில் தினசரி சுருக்கங்கள்",
+    "dailyRecapsOnHomeDescription": "முகப்பின் மேலே உங்கள் சமீபத்திய சுருக்கங்களைக் காட்டு."
 }

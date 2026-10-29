@@ -4491,5 +4491,13 @@
     "deleteFinishNowButton": "Slett kontoen min nå",
     "deleteFinishNowWarning": "Dette avslutter perioden for kontogjenoppretting. Kontoen din og opptakene dine blir slettet permanent.",
     "deleteRestoreLessThanDayRemaining": "Du har mindre enn en dag igjen for å gjenopprette kontoen din.",
-    "deleteFinishNowTitle": "Slette kontoen din?"
+    "deleteFinishNowTitle": "Slette kontoen din?",
+    "syncHealthAlerts": "Synkroniseringsvarsler",
+    "syncHealthAlertsDescription": "Varsle hvis Omi ikke har synkronisert opptak på over et døgn",
+    "syncStallAlertTitle": "Omi synkroniserer ikke",
+    "syncStallAlertBody": "Det er ikke synkronisert opptak fra Omi-en din på over {hours} timer. Åpne Omi for å sjekke enhetens tilkobling.",
+    "activityAttentionSyncStalledTitle": "Omi synkroniserer ikke",
+    "activityAttentionSyncStalledSubtitle": "Ingen opptak synkronisert på over {hours} timer",
+    "dailyRecapsOnHome": "Daglige oppsummeringer på Hjem",
+    "dailyRecapsOnHomeDescription": "Vis de nyeste oppsummeringene øverst på Hjem."
 }

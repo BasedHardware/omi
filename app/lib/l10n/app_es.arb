@@ -4491,5 +4491,13 @@
     "deleteFinishNowButton": "Borrar mi cuenta ahora",
     "deleteFinishNowWarning": "Esto pone fin al plazo de restauración. Tu cuenta y sus grabaciones se borrarán de forma permanente.",
     "deleteRestoreLessThanDayRemaining": "Te queda menos de un día para recuperar tu cuenta.",
-    "deleteFinishNowTitle": "¿Borrar tu cuenta?"
+    "deleteFinishNowTitle": "¿Borrar tu cuenta?",
+    "syncHealthAlerts": "Alertas de estado de sincronización",
+    "syncHealthAlertsDescription": "Avísame si Omi no ha sincronizado grabaciones durante más de un día",
+    "syncStallAlertTitle": "Omi no se está sincronizando",
+    "syncStallAlertBody": "Lleva más de {hours} horas sin sincronizarse ninguna grabación de tu Omi. Abre Omi para comprobar la conexión de tu dispositivo.",
+    "activityAttentionSyncStalledTitle": "Omi no se está sincronizando",
+    "activityAttentionSyncStalledSubtitle": "Ninguna grabación sincronizada durante más de {hours} horas",
+    "dailyRecapsOnHome": "Resúmenes diarios en Inicio",
+    "dailyRecapsOnHomeDescription": "Muestra tus resúmenes más recientes arriba en Inicio."
 }

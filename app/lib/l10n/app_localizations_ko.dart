@@ -14642,4 +14642,32 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get deleteFinishNowTitle => '계정을 완전히 삭제하시겠습니까?';
+
+  @override
+  String get syncHealthAlerts => '동기화 상태 알림';
+
+  @override
+  String get syncHealthAlertsDescription => 'Omi가 하루 이상 녹음을 동기화하지 않으면 알림 표시';
+
+  @override
+  String get syncStallAlertTitle => 'Omi가 동기화되지 않습니다';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return '$hours시간 이상 Omi에서 녹음이 동기화되지 않았습니다. 기기 연결을 확인하려면 Omi를 여세요.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi가 동기화되지 않습니다';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return '$hours시간 이상 녹음이 동기화되지 않았습니다';
+  }
+
+  @override
+  String get dailyRecapsOnHome => '홈의 일일 요약';
+
+  @override
+  String get dailyRecapsOnHomeDescription => '홈 상단에 최근 요약을 표시합니다.';
 }

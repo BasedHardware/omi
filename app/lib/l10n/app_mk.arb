@@ -11917,5 +11917,13 @@
     "deleteFinishNowButton": "Избриши ја мојата сметка сега",
     "deleteFinishNowWarning": "Со ова завршува периодот за обновување. Вашата сметка и снимките во неа ќе бидат трајно избришани.",
     "deleteRestoreLessThanDayRemaining": "Имате помалку од еден ден за да го вратите вашиот профил.",
-    "deleteFinishNowTitle": "Да го избришете вашиот профил?"
+    "deleteFinishNowTitle": "Да го избришете вашиот профил?",
+    "syncHealthAlerts": "Известувања за состојба на синхронизација",
+    "syncHealthAlertsDescription": "Извести ме ако Omi повеќе од ден не синхронизира снимки",
+    "syncStallAlertTitle": "Omi не се синхронизира",
+    "syncStallAlertBody": "Повеќе од {hours} часа нема синхронизирано снимки од вашиот Omi. Отворете Omi за да ја проверите врската на уредот.",
+    "activityAttentionSyncStalledTitle": "Omi не се синхронизира",
+    "activityAttentionSyncStalledSubtitle": "Повеќе од {hours} часа нема синхронизирано снимки",
+    "dailyRecapsOnHome": "Дневни резимеа на Почетна",
+    "dailyRecapsOnHomeDescription": "Прикажи ги најновите резимеа на врвот на Почетна."
 }

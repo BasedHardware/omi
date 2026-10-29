@@ -14897,4 +14897,32 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get deleteFinishNowTitle => 'Удалить аккаунт?';
+
+  @override
+  String get syncHealthAlerts => 'Оповещения о состоянии синхронизации';
+
+  @override
+  String get syncHealthAlertsDescription => 'Уведомлять, если Omi не синхронизирует записи больше суток';
+
+  @override
+  String get syncStallAlertTitle => 'Omi не синхронизируется';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Записи с вашего Omi не синхронизировались более $hours часов. Откройте Omi, чтобы проверить подключение устройства.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi не синхронизируется';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Записи не синхронизировались более $hours часов';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Ежедневные сводки на главной';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Показывать последние сводки вверху главной.';
 }

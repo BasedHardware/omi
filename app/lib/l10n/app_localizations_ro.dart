@@ -14912,4 +14912,32 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get deleteFinishNowTitle => 'Ștergi contul?';
+
+  @override
+  String get syncHealthAlerts => 'Alerte de stare a sincronizării';
+
+  @override
+  String get syncHealthAlertsDescription => 'Avertizează-mă dacă Omi nu a sincronizat înregistrări de peste o zi';
+
+  @override
+  String get syncStallAlertTitle => 'Omi nu se sincronizează';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Nicio înregistrare de pe Omi-ul tău nu a fost sincronizată de peste $hours ore. Deschide Omi pentru a verifica conexiunea dispozitivului.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi nu se sincronizează';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Nicio înregistrare sincronizată de peste $hours ore';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Recapitulări zilnice pe Acasă';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Afișează cele mai noi recapitulări în partea de sus a ecranului Acasă.';
 }

@@ -4491,5 +4491,13 @@
     "deleteFinishNowButton": "Изтриване на профила ми сега",
     "deleteFinishNowWarning": "Това прекратява периода за възстановяване. Профилът ви и записите в него ще бъдат изтрити завинаги.",
     "deleteRestoreLessThanDayRemaining": "Имате по-малко от ден, за да възстановите акаунта си.",
-    "deleteFinishNowTitle": "Да изтриете акаунта си?"
+    "deleteFinishNowTitle": "Да изтриете акаунта си?",
+    "syncHealthAlerts": "Сигнали за състоянието на синхронизацията",
+    "syncHealthAlertsDescription": "Сигнал, ако Omi не е синхронизирал записи повече от ден",
+    "syncStallAlertTitle": "Omi не се синхронизира",
+    "syncStallAlertBody": "Няма синхронизирани записи от вашия Omi от повече от {hours} часа. Отворете Omi, за да проверите връзката на устройството.",
+    "activityAttentionSyncStalledTitle": "Omi не се синхронизира",
+    "activityAttentionSyncStalledSubtitle": "Няма синхронизирани записи от повече от {hours} часа",
+    "dailyRecapsOnHome": "Дневни резюмета в Начало",
+    "dailyRecapsOnHomeDescription": "Показвай последните резюмета в горната част на Начало."
 }

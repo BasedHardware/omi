@@ -14851,4 +14851,32 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get deleteFinishNowTitle => 'Xóa tài khoản của bạn?';
+
+  @override
+  String get syncHealthAlerts => 'Cảnh báo tình trạng đồng bộ';
+
+  @override
+  String get syncHealthAlertsDescription => 'Cảnh báo nếu Omi không đồng bộ bản ghi hơn một ngày';
+
+  @override
+  String get syncStallAlertTitle => 'Omi không đồng bộ';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Không có bản ghi nào từ Omi của bạn được đồng bộ trong hơn $hours giờ. Mở Omi để kiểm tra kết nối thiết bị.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi không đồng bộ';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Không có bản ghi nào được đồng bộ hơn $hours giờ';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Tóm tắt hàng ngày trên Trang chủ';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Hiển thị các tóm tắt mới nhất ở đầu Trang chủ.';
 }

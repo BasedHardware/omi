@@ -4526,5 +4526,13 @@
     "deleteFinishNowButton": "Hesabımı şimdi sil",
     "deleteFinishNowWarning": "Bu işlem geri yükleme süresini sona erdirir. Hesabınız ve kayıtları kalıcı olarak silinir.",
     "deleteRestoreLessThanDayRemaining": "Hesabınızı geri yüklemek için bir günden az süreniz kaldı.",
-    "deleteFinishNowTitle": "Hesabınız Silinsin mi?"
+    "deleteFinishNowTitle": "Hesabınız Silinsin mi?",
+    "syncHealthAlerts": "Eşitleme durumu uyarıları",
+    "syncHealthAlertsDescription": "Omi bir günden uzun süre kayıt eşitlemezse uyar",
+    "syncStallAlertTitle": "Omi eşitlemiyor",
+    "syncStallAlertBody": "Omi cihazınızdan {hours} saatten uzun süredir hiçbir kayıt eşitlenmedi. Cihaz bağlantınızı kontrol etmek için Omi'yu açın.",
+    "activityAttentionSyncStalledTitle": "Omi eşitlemiyor",
+    "activityAttentionSyncStalledSubtitle": "{hours} saatten uzun süredir eşitlenmiş kayıt yok",
+    "dailyRecapsOnHome": "Ana Sayfada Günlük Özetler",
+    "dailyRecapsOnHomeDescription": "En son özetlerini Ana Sayfanın üstünde göster."
 }

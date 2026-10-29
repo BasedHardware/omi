@@ -14847,4 +14847,32 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get deleteFinishNowTitle => 'Smazat váš účet?';
+
+  @override
+  String get syncHealthAlerts => 'Upozornění na stav synchronizace';
+
+  @override
+  String get syncHealthAlertsDescription => 'Upozornit, když Omi déle než den nesynchronizuje nahrávky';
+
+  @override
+  String get syncStallAlertTitle => 'Omi se nesynchronizuje';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Více než $hours hodin se z vašeho Omi nesynchronizovaly žádné nahrávky. Otevřete Omi a zkontrolujte připojení zařízení.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi se nesynchronizuje';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Více než $hours hodin bez synchronizovaných nahrávek';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Denní souhrny na domovské obrazovce';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Zobrazit nejnovější souhrny v horní části domovské obrazovky.';
 }

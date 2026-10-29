@@ -11917,5 +11917,13 @@
     "deleteFinishNowButton": "همین حالا حسابم را پاک کن",
     "deleteFinishNowWarning": "با این کار مهلت بازیابی پایان می‌یابد. حساب شما و ضبط‌های آن برای همیشه پاک خواهند شد.",
     "deleteRestoreLessThanDayRemaining": "برای بازیابی حساب خود کمتر از یک روز باقی مانده است.",
-    "deleteFinishNowTitle": "حساب خود را حذف می‌کنید؟"
+    "deleteFinishNowTitle": "حساب خود را حذف می‌کنید؟",
+    "syncHealthAlerts": "هشدارهای سلامت همگام‌سازی",
+    "syncHealthAlertsDescription": "اگر Omi بیش از یک روز ضبط‌ها را همگام‌سازی نکرده باشد هشدار بده",
+    "syncStallAlertTitle": "Omi همگام‌سازی نمی‌شود",
+    "syncStallAlertBody": "بیش از {hours} ساعت هیچ ضبطی از Omi شما همگام‌سازی نشده است. برای بررسی اتصال دستگاهتان Omi را باز کنید.",
+    "activityAttentionSyncStalledTitle": "Omi همگام‌سازی نمی‌شود",
+    "activityAttentionSyncStalledSubtitle": "بیش از {hours} ساعت هیچ ضبطی همگام‌سازی نشده است",
+    "dailyRecapsOnHome": "خلاصه‌های روزانه در خانه",
+    "dailyRecapsOnHomeDescription": "نمایش جدیدترین خلاصه‌ها در بالای صفحه خانه."
 }

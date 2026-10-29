@@ -11917,5 +11917,13 @@
     "deleteFinishNowButton": "ನನ್ನ ಖಾತೆಯನ್ನು ಈಗಲೇ ಅಳಿಸಿ",
     "deleteFinishNowWarning": "ಇದರಿಂದ ಮರುಸ್ಥಾಪನೆಯ ಅವಧಿ ಮುಗಿಯುತ್ತದೆ. ನಿಮ್ಮ ಖಾತೆ ಮತ್ತು ಅದರ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಶಾಶ್ವತವಾಗಿ ಅಳಿಸಲಾಗುತ್ತದೆ.",
     "deleteRestoreLessThanDayRemaining": "ನಿಮ್ಮ ಖಾತೆಯನ್ನು ಮರುಪಡೆಯಲು ಒಂದು ದಿನಕ್ಕಿಂತ ಕಡಿಮೆ ಸಮಯ ಬಾಕಿ ಉಳಿದಿದೆ.",
-    "deleteFinishNowTitle": "ನಿಮ್ಮ ಖಾತೆಯನ್ನು ಅಳಿಸಬೇಕೆ?"
+    "deleteFinishNowTitle": "ನಿಮ್ಮ ಖಾತೆಯನ್ನು ಅಳಿಸಬೇಕೆ?",
+    "syncHealthAlerts": "ಸಿಂಕ್ ಆರೋಗ್ಯ ಎಚ್ಚರಿಕೆಗಳು",
+    "syncHealthAlertsDescription": "Omi ಒಂದು ದಿನಕ್ಕಿಂತ ಹೆಚ್ಚು ಕಾಲ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಸಿಂಕ್ ಮಾಡದಿದ್ದರೆ ಎಚ್ಚರಿಸಿ",
+    "syncStallAlertTitle": "Omi ಸಿಂಕ್ ಆಗುತ್ತಿಲ್ಲ",
+    "syncStallAlertBody": "{hours} ಗಂಟೆಗಳಿಗಿಂತ ಹೆಚ್ಚು ಕಾಲ ನಿಮ್ಮ Omi ಇಂದ ಯಾವುದೇ ರೆಕಾರ್ಡಿಂಗ್ ಸಿಂಕ್ ಆಗಿಲ್ಲ. ನಿಮ್ಮ ಸಾಧನದ ಸಂಪರ್ಕವನ್ನು ಪರಿಶೀಲಿಸಲು Omi ತೆರೆಯಿರಿ.",
+    "activityAttentionSyncStalledTitle": "Omi ಸಿಂಕ್ ಆಗುತ್ತಿಲ್ಲ",
+    "activityAttentionSyncStalledSubtitle": "{hours} ಗಂಟೆಗಳಿಗಿಂತ ಹೆಚ್ಚು ಕಾಲ ಯಾವುದೇ ರೆಕಾರ್ಡಿಂಗ್ ಸಿಂಕ್ ಆಗಿಲ್ಲ",
+    "dailyRecapsOnHome": "ಮುಖಪುಟದಲ್ಲಿ ದೈನಿಕ ಸಾರಾಂಶಗಳು",
+    "dailyRecapsOnHomeDescription": "ಮುಖಪುಟದ ಮೇಲ್ಭಾಗದಲ್ಲಿ ನಿಮ್ಮ ಇತ್ತೀಚಿನ ಸಾರಾಂಶಗಳನ್ನು ತೋರಿಸಿ."
 }

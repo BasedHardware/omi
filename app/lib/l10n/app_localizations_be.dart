@@ -14883,4 +14883,32 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get deleteFinishNowTitle => 'Выдаліць ваш рахунак?';
+
+  @override
+  String get syncHealthAlerts => 'Апавяшчэнні пра стан сінхранізацыі';
+
+  @override
+  String get syncHealthAlertsDescription => 'Апавяшчаць, калі запісы Omi не сінхранізуюцца больш за суткі';
+
+  @override
+  String get syncStallAlertTitle => 'Omi не сінхранізуецца';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Запісы з вашага Omi не сінхранізаваліся больш за $hours гадзін. Адкрыйце Omi, каб праверыць падключэнне прылады.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi не сінхранізуецца';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Запісы не сінхранізаваліся больш за $hours гадзін';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Штодзённыя рэзюмэ на галоўнай';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Паказваць апошнія рэзюмэ ўверсе галоўнай.';
 }

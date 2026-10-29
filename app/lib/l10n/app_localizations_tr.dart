@@ -14862,4 +14862,32 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get deleteFinishNowTitle => 'Hesabınız Silinsin mi?';
+
+  @override
+  String get syncHealthAlerts => 'Eşitleme durumu uyarıları';
+
+  @override
+  String get syncHealthAlertsDescription => 'Omi bir günden uzun süre kayıt eşitlemezse uyar';
+
+  @override
+  String get syncStallAlertTitle => 'Omi eşitlemiyor';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Omi cihazınızdan $hours saatten uzun süredir hiçbir kayıt eşitlenmedi. Cihaz bağlantınızı kontrol etmek için Omi\'yu açın.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi eşitlemiyor';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return '$hours saatten uzun süredir eşitlenmiş kayıt yok';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Ana Sayfada Günlük Özetler';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'En son özetlerini Ana Sayfanın üstünde göster.';
 }

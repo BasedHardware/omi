@@ -14834,4 +14834,32 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deleteFinishNowTitle => 'Erase Your Account?';
+
+  @override
+  String get syncHealthAlerts => 'Sync Health Alerts';
+
+  @override
+  String get syncHealthAlertsDescription => 'Alert if Omi hasn\'t synced recordings for over a day';
+
+  @override
+  String get syncStallAlertTitle => 'Omi Not Syncing';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'No recordings have synced from your Omi in over $hours hours. Open Omi to check your device connection.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi isn\'t syncing';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'No recordings synced for over $hours hours';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Daily Recaps on Home';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Show your latest recaps at the top of Home.';
 }

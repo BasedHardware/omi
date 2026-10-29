@@ -14844,4 +14844,32 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get deleteFinishNowTitle => 'حساب خود را حذف می‌کنید؟';
+
+  @override
+  String get syncHealthAlerts => 'هشدارهای سلامت همگام‌سازی';
+
+  @override
+  String get syncHealthAlertsDescription => 'اگر Omi بیش از یک روز ضبط‌ها را همگام‌سازی نکرده باشد هشدار بده';
+
+  @override
+  String get syncStallAlertTitle => 'Omi همگام‌سازی نمی‌شود';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'بیش از $hours ساعت هیچ ضبطی از Omi شما همگام‌سازی نشده است. برای بررسی اتصال دستگاهتان Omi را باز کنید.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi همگام‌سازی نمی‌شود';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'بیش از $hours ساعت هیچ ضبطی همگام‌سازی نشده است';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'خلاصه‌های روزانه در خانه';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'نمایش جدیدترین خلاصه‌ها در بالای صفحه خانه.';
 }

@@ -7,7 +7,7 @@ both sides then have to agree again.
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 import pytest
@@ -112,3 +112,55 @@ def test_glyph_free_names_survive_the_strip_unchanged():
 )
 def test_strip_leading_tile_glyphs_is_conservative(line, expected):
     assert strip_leading_tile_glyphs(line) == expected
+
+
+def test_duplicate_remote_tile_labels_never_authorize_binding():
+    rows = _zoom_call_rows(['Robert Ream'] * 3, second_tile='Robert Ream')
+    assert call_tile_names(rows, current_only=True) == []
+
+
+def test_latest_renamed_label_cannot_be_outvoted_by_old_sightings():
+    rows = _zoom_call_rows(['Old Label'] * 6 + ['Robert Ream'])
+    assert call_tile_names(rows, current_only=True) == []  # current name has only one sighting
+    rows += _zoom_call_rows(['Robert Ream'] * 3)
+    assert call_tile_names(rows, current_only=True) == ['Robert Ream']
+
+
+def test_separate_call_windows_and_old_sightings_cannot_vote_in_current_call():
+    old = _zoom_call_rows(['Old Label'] * 6)
+    current = _zoom_call_rows(['Robert Ream'])
+    for index, row in enumerate(old):
+        row['timestamp'] = (START + timedelta(seconds=index)).isoformat()
+    current[0]['timestamp'] = (START + timedelta(minutes=10)).isoformat()
+    assert call_tile_names(list(reversed(old + current)), current_only=True) == []
+    for row in old:
+        row['windowTitle'] = 'Meet - abc-defg-hij'
+    for row in current:
+        row['timestamp'] = (START + timedelta(seconds=10)).isoformat()
+    assert call_tile_names(old + current, current_only=True) == []
+
+
+def test_tile_provenance_keeps_names_without_nearby_ocr_email():
+    rows = _zoom_call_rows(['Robert Ream'] * 3)
+    for row in rows:
+        row['ocrText'] += '\nrobert@example.com'
+    context = context_from_screen_activity(rows, started_at=START, finished_at=END)
+    assert context is not None
+    tiles = context.to_storage_dict()['participant_sources']['observed_call_tiles']
+    assert tiles == [{'name': 'Robert Ream'}]
+    assert context.model_dump()['participant_sources']['observed_call_tiles'] == tiles
+
+
+@pytest.mark.parametrize('new_name', ['Alice Smith', 'Otter Bot'])
+def test_new_tile_alongside_persistent_label_does_not_bind_mixed_channel(new_name):
+    rows = _zoom_call_rows(['Robert Ream'] * 6)
+    rows[-1]['ocrText'] += '\n' + new_name
+    assert call_tile_names(rows, current_only=True) == []
+
+
+def test_capped_screen_read_cannot_treat_an_old_page_as_latest_evidence():
+    from utils.conversations.meeting_context import MAX_SCREEN_CONTEXT_ROWS
+
+    rows = _zoom_call_rows(['Robert Ream'] * MAX_SCREEN_CONTEXT_ROWS)
+    context = context_from_screen_activity(rows, started_at=START, finished_at=END)
+    assert context.participant_sources.observed_call_tiles == []

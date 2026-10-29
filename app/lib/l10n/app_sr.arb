@@ -11917,5 +11917,13 @@
     "deleteFinishNowButton": "Обриши мој налог сада",
     "deleteFinishNowWarning": "Овим се завршава период за враћање налога. Ваш налог и снимци биће трајно обрисани.",
     "deleteRestoreLessThanDayRemaining": "Преостаје вам мање од једног дана за опоравак налога.",
-    "deleteFinishNowTitle": "Обрисати налог?"
+    "deleteFinishNowTitle": "Обрисати налог?",
+    "syncHealthAlerts": "Обавештења о стању синхронизације",
+    "syncHealthAlertsDescription": "Обавести ме ако Omi није синхронизовао снимке дуже од једног дана",
+    "syncStallAlertTitle": "Omi се не синхронизује",
+    "syncStallAlertBody": "Снимци са вашег Omija нису синхронизовани дуже од {hours} сати. Отворите Omi да проверите везу уређаја.",
+    "activityAttentionSyncStalledTitle": "Omi се не синхронизује",
+    "activityAttentionSyncStalledSubtitle": "Ниједан снимак није синхронизован дуже од {hours} сати",
+    "dailyRecapsOnHome": "Дневни резимеи на почетној",
+    "dailyRecapsOnHomeDescription": "Прикажи најновије резимее на врху почетне."
 }

@@ -4491,5 +4491,13 @@
     "deleteFinishNowButton": "Poista tilini nyt",
     "deleteFinishNowWarning": "Tämä päättää palautusajan. Tilisi ja sen tallenteet poistetaan pysyvästi.",
     "deleteRestoreLessThanDayRemaining": "Sinulla on alle päivä aikaa palauttaa tilisi.",
-    "deleteFinishNowTitle": "Poista tilisi?"
+    "deleteFinishNowTitle": "Poista tilisi?",
+    "syncHealthAlerts": "Synkronoinnin tila-ilmoitukset",
+    "syncHealthAlertsDescription": "Ilmoita, jos Omi ei ole synkronoinut tallenteita yli vuorokauteen",
+    "syncStallAlertTitle": "Omi ei synkronoi",
+    "syncStallAlertBody": "Omistasi ei ole synkronoitu tallenteita yli {hours} tuntiin. Avaa Omi ja tarkista laitteen yhteys.",
+    "activityAttentionSyncStalledTitle": "Omi ei synkronoi",
+    "activityAttentionSyncStalledSubtitle": "Tallenteita ei synkronoitu yli {hours} tuntiin",
+    "dailyRecapsOnHome": "Päivittäiset yhteenvedot Koti-näkymässä",
+    "dailyRecapsOnHomeDescription": "Näytä uusimmat yhteenvedot Koti-näkymän yläosassa."
 }

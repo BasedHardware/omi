@@ -4491,5 +4491,13 @@
     "deleteFinishNowButton": "Οριστική διαγραφή του λογαριασμού μου τώρα",
     "deleteFinishNowWarning": "Έτσι λήγει το χρονικό περιθώριο επαναφοράς. Ο λογαριασμός σας και οι ηχογραφήσεις του θα διαγραφούν οριστικά.",
     "deleteRestoreLessThanDayRemaining": "Έχετε λιγότερο από μία ημέρα για να επαναφέρετε τον λογαριασμό σας.",
-    "deleteFinishNowTitle": "Διαγραφή του λογαριασμού σας;"
+    "deleteFinishNowTitle": "Διαγραφή του λογαριασμού σας;",
+    "syncHealthAlerts": "Ειδοποιήσεις κατάστασης συγχρονισμού",
+    "syncHealthAlertsDescription": "Ειδοποίηση αν το Omi δεν συγχρόνισε ηχογραφήσεις για πάνω από μια μέρα",
+    "syncStallAlertTitle": "Το Omi δεν συγχρονίζεται",
+    "syncStallAlertBody": "Καμία ηχογράφηση από το Omi σας δεν συγχρονίστηκε για πάνω από {hours} ώρες. Ανοίξτε το Omi για να ελέγξετε τη σύνδεση της συσκευής.",
+    "activityAttentionSyncStalledTitle": "Το Omi δεν συγχρονίζεται",
+    "activityAttentionSyncStalledSubtitle": "Καμία ηχογράφηση δεν συγχρονίστηκε για πάνω από {hours} ώρες",
+    "dailyRecapsOnHome": "Ημερήσιες περιλήψεις στην Αρχική",
+    "dailyRecapsOnHomeDescription": "Εμφάνιση των πιο πρόσφατων περιλήψεων στην κορυφή της Αρχικής."
 }

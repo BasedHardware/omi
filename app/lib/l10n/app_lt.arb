@@ -4491,5 +4491,13 @@
     "deleteFinishNowButton": "Ištrinti mano paskyrą dabar",
     "deleteFinishNowWarning": "Taip baigsis paskyros atkūrimo laikotarpis. Jūsų paskyra ir joje esantys įrašai bus ištrinti visam laikui.",
     "deleteRestoreLessThanDayRemaining": "Paskyrai atkurti liko mažiau nei viena diena.",
-    "deleteFinishNowTitle": "Ištrinti jūsų paskyrą?"
+    "deleteFinishNowTitle": "Ištrinti jūsų paskyrą?",
+    "syncHealthAlerts": "Sinchronizavimo būsenos įspėjimai",
+    "syncHealthAlertsDescription": "Įspėti, jei Omi daugiau nei parą nesinchronizavo įrašų",
+    "syncStallAlertTitle": "Omi nesinchronizuojama",
+    "syncStallAlertBody": "Dažiau nei {hours} val. iš jūsų Omi nesinchronizuotas nė vienas įrašas. Atidarykite Omi ir patikrinkite įrenginio ryšį.",
+    "activityAttentionSyncStalledTitle": "Omi nesinchronizuojama",
+    "activityAttentionSyncStalledSubtitle": "Dažiau nei {hours} val. nesinchronizuotas nė vienas įrašas",
+    "dailyRecapsOnHome": "Dienos apžvalgos pradžios ekrane",
+    "dailyRecapsOnHomeDescription": "Rodyti naujausias apžvalgas pradžios ekrano viršuje."
 }

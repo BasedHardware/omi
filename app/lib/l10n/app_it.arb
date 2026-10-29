@@ -4491,5 +4491,13 @@
     "deleteFinishNowButton": "Elimina subito il mio account",
     "deleteFinishNowWarning": "Così terminerà il periodo di ripristino. Il tuo account e le sue registrazioni verranno eliminati definitivamente.",
     "deleteRestoreLessThanDayRemaining": "Hai meno di un giorno per recuperare il tuo account.",
-    "deleteFinishNowTitle": "Eliminare il tuo account?"
+    "deleteFinishNowTitle": "Eliminare il tuo account?",
+    "syncHealthAlerts": "Avvisi sullo stato di sincronizzazione",
+    "syncHealthAlertsDescription": "Avvisa se Omi non sincronizza registrazioni da più di un giorno",
+    "syncStallAlertTitle": "Omi non si sta sincronizzando",
+    "syncStallAlertBody": "Nessuna registrazione del tuo Omi è stata sincronizzata da più di {hours} ore. Apri Omi per controllare la connessione del dispositivo.",
+    "activityAttentionSyncStalledTitle": "Omi non si sta sincronizzando",
+    "activityAttentionSyncStalledSubtitle": "Nessuna registrazione sincronizzata da più di {hours} ore",
+    "dailyRecapsOnHome": "Riepiloghi giornalieri nella Home",
+    "dailyRecapsOnHomeDescription": "Mostra i riepiloghi più recenti in cima alla Home."
 }

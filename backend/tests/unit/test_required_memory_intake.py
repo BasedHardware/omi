@@ -967,6 +967,7 @@ def test_source_quote_admission_requires_owner_anchor_and_revision(monkeypatch):
 
 @pytest.mark.parametrize('serving', [False, True])
 def test_explicit_text_and_nonserving_audio_keep_their_existing_authority(monkeypatch, serving):
+    monkeypatch.setenv('MEDIA_NOISE_MODE', 'off')
     monkeypatch.setattr(admission, 'assert_account_active', lambda *args: None)
     monkeypatch.setattr(admission, 'serving_for', lambda *a: serving)
     client = SimpleNamespace(document=lambda path: pytest.fail('explicit text must not read audio'))

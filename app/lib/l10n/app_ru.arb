@@ -4526,5 +4526,13 @@
     "deleteFinishNowButton": "Удалить аккаунт сейчас",
     "deleteFinishNowWarning": "После этого восстановить аккаунт будет нельзя. Ваш аккаунт и записи будут удалены без возможности восстановления.",
     "deleteRestoreLessThanDayRemaining": "Осталось менее одного дня на восстановление аккаунта.",
-    "deleteFinishNowTitle": "Удалить аккаунт?"
+    "deleteFinishNowTitle": "Удалить аккаунт?",
+    "syncHealthAlerts": "Оповещения о состоянии синхронизации",
+    "syncHealthAlertsDescription": "Уведомлять, если Omi не синхронизирует записи больше суток",
+    "syncStallAlertTitle": "Omi не синхронизируется",
+    "syncStallAlertBody": "Записи с вашего Omi не синхронизировались более {hours} часов. Откройте Omi, чтобы проверить подключение устройства.",
+    "activityAttentionSyncStalledTitle": "Omi не синхронизируется",
+    "activityAttentionSyncStalledSubtitle": "Записи не синхронизировались более {hours} часов",
+    "dailyRecapsOnHome": "Ежедневные сводки на главной",
+    "dailyRecapsOnHomeDescription": "Показывать последние сводки вверху главной."
 }

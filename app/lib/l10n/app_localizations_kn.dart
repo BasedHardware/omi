@@ -14897,4 +14897,33 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get deleteFinishNowTitle => 'ನಿಮ್ಮ ಖಾತೆಯನ್ನು ಅಳಿಸಬೇಕೆ?';
+
+  @override
+  String get syncHealthAlerts => 'ಸಿಂಕ್ ಆರೋಗ್ಯ ಎಚ್ಚರಿಕೆಗಳು';
+
+  @override
+  String get syncHealthAlertsDescription =>
+      'Omi ಒಂದು ದಿನಕ್ಕಿಂತ ಹೆಚ್ಚು ಕಾಲ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಸಿಂಕ್ ಮಾಡದಿದ್ದರೆ ಎಚ್ಚರಿಸಿ';
+
+  @override
+  String get syncStallAlertTitle => 'Omi ಸಿಂಕ್ ಆಗುತ್ತಿಲ್ಲ';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return '$hours ಗಂಟೆಗಳಿಗಿಂತ ಹೆಚ್ಚು ಕಾಲ ನಿಮ್ಮ Omi ಇಂದ ಯಾವುದೇ ರೆಕಾರ್ಡಿಂಗ್ ಸಿಂಕ್ ಆಗಿಲ್ಲ. ನಿಮ್ಮ ಸಾಧನದ ಸಂಪರ್ಕವನ್ನು ಪರಿಶೀಲಿಸಲು Omi ತೆರೆಯಿರಿ.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi ಸಿಂಕ್ ಆಗುತ್ತಿಲ್ಲ';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return '$hours ಗಂಟೆಗಳಿಗಿಂತ ಹೆಚ್ಚು ಕಾಲ ಯಾವುದೇ ರೆಕಾರ್ಡಿಂಗ್ ಸಿಂಕ್ ಆಗಿಲ್ಲ';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'ಮುಖಪುಟದಲ್ಲಿ ದೈನಿಕ ಸಾರಾಂಶಗಳು';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'ಮುಖಪುಟದ ಮೇಲ್ಭಾಗದಲ್ಲಿ ನಿಮ್ಮ ಇತ್ತೀಚಿನ ಸಾರಾಂಶಗಳನ್ನು ತೋರಿಸಿ.';
 }

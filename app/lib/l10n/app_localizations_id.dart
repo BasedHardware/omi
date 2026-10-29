@@ -14863,4 +14863,33 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get deleteFinishNowTitle => 'Hapus Akun Anda?';
+
+  @override
+  String get syncHealthAlerts => 'Peringatan kesehatan sinkronisasi';
+
+  @override
+  String get syncHealthAlertsDescription =>
+      'Beri tahu saya jika Omi tidak menyinkronkan rekaman selama lebih dari sehari';
+
+  @override
+  String get syncStallAlertTitle => 'Omi tidak tersinkronisasi';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Tidak ada rekaman dari Omi Anda yang tersinkronisasi selama lebih dari $hours jam. Buka Omi untuk memeriksa koneksi perangkat Anda.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi tidak tersinkronisasi';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Tidak ada rekaman yang tersinkronisasi selama lebih dari $hours jam';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Ringkasan Harian di Beranda';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Tampilkan ringkasan terbaru di bagian atas Beranda.';
 }

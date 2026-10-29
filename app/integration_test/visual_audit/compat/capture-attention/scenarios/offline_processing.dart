@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/services/wals/wal_derived_sync_views.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart' show BleAudioCodec;
 import 'package:omi/backend/schema/conversation.dart';
@@ -27,7 +28,7 @@ import '../../../harness.dart';
 import 'capture.dart';
 
 /// A SyncProvider reporting one fixed offline-sync pipeline state.
-class _SyncAuditProvider extends ChangeNotifier implements SyncProvider {
+class _SyncAuditProvider extends ChangeNotifier with WalDerivedSyncViews implements SyncProvider {
   _SyncAuditProvider({this.wals = const [], this.phase = SyncPhase.idle});
 
   final List<Wal> wals;

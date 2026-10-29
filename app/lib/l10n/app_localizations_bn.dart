@@ -14844,4 +14844,32 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get deleteFinishNowTitle => 'আপনার অ্যাকাউন্ট মুছবেন?';
+
+  @override
+  String get syncHealthAlerts => 'সিঙ্ক স্বাস্থ্য সতর্কতা';
+
+  @override
+  String get syncHealthAlertsDescription => 'Omi এক দিনের বেশি রেকর্ডিং সিঙ্ক না করলে সতর্কতা দিন';
+
+  @override
+  String get syncStallAlertTitle => 'Omi সিঙ্ক হচ্ছে না';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return '$hours ঘণ্টার বেশি Omi থেকে কোনো রেকর্ডিং সিঙ্ক হয়নি। আপনার ডিভাইস সংযোগ পরীক্ষা করতে Omi খুলুন।';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi সিঙ্ক হচ্ছে না';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return '$hours ঘণ্টার বেশি কোনো রেকর্ডিং সিঙ্ক হয়নি';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'হোমে দৈনিক সংক্ষেপ';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'হোমের উপরে আপনার সাম্প্রতিক সংক্ষেপ দেখান।';
 }

@@ -4526,5 +4526,13 @@
     "deleteFinishNowButton": "Hapus akun saya sekarang",
     "deleteFinishNowWarning": "Ini akan mengakhiri masa pemulihan. Akun dan rekaman Anda akan dihapus secara permanen.",
     "deleteRestoreLessThanDayRemaining": "Anda memiliki waktu kurang dari satu hari untuk memulihkan akun Anda.",
-    "deleteFinishNowTitle": "Hapus Akun Anda?"
+    "deleteFinishNowTitle": "Hapus Akun Anda?",
+    "syncHealthAlerts": "Peringatan kesehatan sinkronisasi",
+    "syncHealthAlertsDescription": "Beri tahu saya jika Omi tidak menyinkronkan rekaman selama lebih dari sehari",
+    "syncStallAlertTitle": "Omi tidak tersinkronisasi",
+    "syncStallAlertBody": "Tidak ada rekaman dari Omi Anda yang tersinkronisasi selama lebih dari {hours} jam. Buka Omi untuk memeriksa koneksi perangkat Anda.",
+    "activityAttentionSyncStalledTitle": "Omi tidak tersinkronisasi",
+    "activityAttentionSyncStalledSubtitle": "Tidak ada rekaman yang tersinkronisasi selama lebih dari {hours} jam",
+    "dailyRecapsOnHome": "Ringkasan Harian di Beranda",
+    "dailyRecapsOnHomeDescription": "Tampilkan ringkasan terbaru di bagian atas Beranda."
 }

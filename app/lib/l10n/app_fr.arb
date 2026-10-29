@@ -4526,5 +4526,13 @@
     "deleteFinishNowButton": "Effacer mon compte maintenant",
     "deleteFinishNowWarning": "Cette action met fin au délai de restauration. Votre compte et ses enregistrements seront définitivement effacés.",
     "deleteRestoreLessThanDayRemaining": "Il vous reste moins d'un jour pour restaurer votre compte.",
-    "deleteFinishNowTitle": "Effacer votre compte ?"
+    "deleteFinishNowTitle": "Effacer votre compte ?",
+    "syncHealthAlerts": "Alertes d'état de synchronisation",
+    "syncHealthAlertsDescription": "Alerter si Omi n'a pas synchronisé d'enregistrements depuis plus d'un jour",
+    "syncStallAlertTitle": "Omi ne se synchronise pas",
+    "syncStallAlertBody": "Aucun enregistrement de votre Omi n'a été synchronisé depuis plus de {hours} heures. Ouvrez Omi pour vérifier la connexion de votre appareil.",
+    "activityAttentionSyncStalledTitle": "Omi ne se synchronise pas",
+    "activityAttentionSyncStalledSubtitle": "Aucun enregistrement synchronisé depuis plus de {hours} heures",
+    "dailyRecapsOnHome": "Récapitulatifs quotidiens sur l'Accueil",
+    "dailyRecapsOnHomeDescription": "Affiche vos derniers récapitulatifs en haut de l'Accueil."
 }
