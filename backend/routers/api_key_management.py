@@ -12,6 +12,7 @@ from dependencies import get_current_user_id
 from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
 from models.mcp_api_key import McpApiKey, McpApiKeyCreate, McpApiKeyCreated
 from utils.dev_cache import invalidate_developer_cache
+from utils.log_sanitizer import sanitize
 from utils.observability.api_keys import record_api_key_repairs, record_api_key_revocation_exhausted
 from utils.mcp_scopes import MCP_SUPPORTED_SCOPES, validate_mcp_scopes
 from utils.scopes import AVAILABLE_SCOPES, validate_scopes
@@ -56,7 +57,9 @@ def create_mcp_key(key_data: McpApiKeyCreate, uid: str = Depends(get_current_use
             scopes=key_data.scopes,
         )
     except ApiKeyValidationError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        sanitized_detail = sanitize(str(exc))
+        logger.warning(f"MCP API key validation failed for user {uid}: {sanitized_detail}")
+        raise HTTPException(status_code=422, detail=sanitized_detail) from exc
     return McpApiKeyCreated(**api_key_data.model_dump(), key=raw_key)
 
 
@@ -124,7 +127,9 @@ def create_developer_key(key_data: DevApiKeyCreate, uid: str = Depends(get_curre
     try:
         raw_key, api_key_data = dev_api_key_db.create_dev_key(uid, key_data.name.strip(), scopes=key_data.scopes)
     except ApiKeyValidationError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        sanitized_detail = sanitize(str(exc))
+        logger.warning(f"Developer API key validation failed for user {uid}: {sanitized_detail}")
+        raise HTTPException(status_code=422, detail=sanitized_detail) from exc
     # Developer status changes affect proactive-notification limits immediately.
     invalidate_developer_cache(uid)
     return DevApiKeyCreated(**api_key_data.model_dump(), key=raw_key)
