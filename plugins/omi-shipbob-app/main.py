@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 
 import requests
+import httpx
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
@@ -527,8 +528,9 @@ async def handle_shipbob_callback(
 
     # Exchange code for access token
     try:
-        response = requests.post(
-            SHIPBOB_TOKEN_URL,
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                SHIPBOB_TOKEN_URL,
             data={
                 "grant_type": "authorization_code",
                 "code": code,
