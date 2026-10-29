@@ -28,6 +28,20 @@
       "description": "AFTER in dark mode: Connect (step 4), Name, voice intro. Real simulator shots.",
       "captured_by": "agent",
       "source": "screencapture"
+    },
+    {
+      "file": "005-mobile-ios-connect-first-largest-text.png",
+      "platform": "mobile-ios",
+      "description": "AFTER at the largest accessibility text size (accessibility-extra-extra-extra-large, set after sign-in): Connect (step 4, no Back) and Name. The Connect screen is the same as control's step 9: at this size it breaks its title, hides the subtitle and truncates two button labels; all three actions stay on screen and Skip moved on to Name. Real simulator shots.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "006-mobile-ios-connect-first-de-ja-ar.png",
+      "platform": "mobile-ios",
+      "description": "AFTER in German, Japanese and Arabic (right to left): Connect (step 4, no Back) and Name, app language from the first launch's language (what Settings > Language also writes). \"Skip for Now\" is English in all three: an existing translation gap, same in control. Real simulator shots.",
+      "captured_by": "agent",
+      "source": "screencapture"
     }
   ]
 }
