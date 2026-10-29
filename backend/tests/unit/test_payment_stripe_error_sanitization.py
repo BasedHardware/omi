@@ -1,11 +1,12 @@
-"""Stripe error details returned to API clients must not leak raw Stripe internals (#18608).
+"""Stripe error details returned to API clients must not leak raw Stripe internals (#18608, #18771).
 
-Several endpoints in routers/payment.py caught `stripe.error.StripeError` and put
-`str(e)` directly into the HTTPException `detail`, which FastAPI serializes straight
-into the JSON response body. Stripe's raw exception text can include internal error
-messages and object IDs (customer/account/subscription IDs) that should never reach
-an API client. These are source-level structural checks, matching the other payment
-endpoint tests (routers/payment.py has a heavy import graph).
+Several endpoints in routers/payment.py caught `stripe.error.StripeError` or
+`stripe.error.InvalidRequestError` and put `str(e)` directly or as fallback into the
+HTTPException `detail`, which FastAPI serializes straight into the JSON response body.
+Stripe's raw exception text can include internal error messages and object IDs
+(customer/account/subscription IDs) that should never reach an API client.
+These are source-level structural checks, matching the other payment endpoint tests
+(routers/payment.py has a heavy import graph).
 """
 
 from pathlib import Path
@@ -28,6 +29,9 @@ def test_no_raw_stripe_error_leaked_into_response_detail():
     # exception text straight into the HTTP response body.
     assert "detail=str(e)" not in source
     assert '{str(e)}"' not in source
+    # Falling back to `else str(e)` when user_message is absent leaks raw exception
+    # details (account/customer IDs, secret parameters) to the HTTP client (CWE-209).
+    assert "else str(e)" not in source
 
 
 def test_stripe_error_handlers_use_the_safe_detail_helper():
@@ -42,9 +46,28 @@ def test_stripe_error_handlers_use_the_safe_detail_helper():
         block_end = next_blank if next_blank != -1 else len(source)
         block = source[idx:block_end]
         assert (
-            "_stripe_client_error_detail(e," in block or "e.user_message" in block
+            "_stripe_client_error_detail(e," in block
         ), f"StripeError handler at offset {idx} raises detail without sanitizing it:\n{block}"
         found += 1
         idx = block_end
     # Sanity check that this test is actually exercising handlers, not vacuously passing.
     assert found >= 5
+
+
+def test_invalid_request_error_handlers_use_safe_detail_helper():
+    source = _source()
+    idx = 0
+    found = 0
+    while True:
+        idx = source.find("except stripe.error.InvalidRequestError as e:", idx)
+        if idx == -1:
+            break
+        next_blank = source.find("\n\n", idx)
+        block_end = next_blank if next_blank != -1 else len(source)
+        block = source[idx:block_end]
+        assert (
+            "_stripe_client_error_detail(e," in block
+        ), f"InvalidRequestError handler at offset {idx} raises detail without sanitizing it:\n{block}"
+        found += 1
+        idx = block_end
+    assert found >= 2

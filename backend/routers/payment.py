@@ -782,7 +782,8 @@ def create_checkout_session_endpoint(
             trial_period_days=trial_period_days,
         )
     except stripe.error.InvalidRequestError as e:
-        detail = str(e.user_message) if hasattr(e, 'user_message') and e.user_message else str(e)
+        logger.error(f"Stripe rejected checkout session creation: {sanitize(str(e))}")
+        detail = _stripe_client_error_detail(e, "Invalid checkout request. Please verify the requested plan.")
         raise HTTPException(status_code=400, detail=detail)
     if not session:
         raise HTTPException(status_code=500, detail="Could not create checkout session.")
@@ -1052,7 +1053,7 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         )
     except stripe.error.InvalidRequestError as e:
         logger.error(f"Stripe rejected subscription change: {sanitize(str(e))}")
-        detail = str(e.user_message) if hasattr(e, 'user_message') and e.user_message else str(e)
+        detail = _stripe_client_error_detail(e, "Invalid subscription change request. Please verify the requested plan.")
         raise HTTPException(status_code=400, detail=detail)
     except Exception as e:
         logger.error(f"Error processing subscription change: {sanitize(str(e))}")
