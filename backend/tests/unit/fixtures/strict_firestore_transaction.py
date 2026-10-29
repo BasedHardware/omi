@@ -327,8 +327,10 @@ class StrictFirestore:
             raise ValueError('Firestore document paths require an even number of non-empty segments')
         return StrictFirestoreDocument(self, segments)
 
-    def transaction(self) -> StrictFirestoreTransaction:
+    def transaction(self, max_attempts: int | None = None) -> StrictFirestoreTransaction:
         transaction = StrictFirestoreTransaction(self, allow_reads_after_writes=self._allow_reads_after_writes)
+        if max_attempts is not None:
+            transaction._max_attempts = max_attempts
         self.transactions.append(transaction)
         return transaction
 

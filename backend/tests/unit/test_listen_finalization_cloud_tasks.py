@@ -111,8 +111,9 @@ def test_prod_backend_sync_finalization_task_route_uses_rendered_oidc_contract(
     }
     verify = MagicMock(return_value=verified_claims)
     monkeypatch.setattr(cloud_tasks.id_token, 'verify_oauth2_token', verify)
-    # A lock contention is the narrow post-auth dependency seam: it proves the
-    # real FastAPI route accepted the task without touching a durable job.
+    # A missing durable job and lock contention are the narrow post-auth seams:
+    # they prove the real FastAPI route accepted the task without processing it.
+    monkeypatch.setattr(jobs_db, 'get_finalization_job', lambda _job_id: None)
     monkeypatch.setattr(finalization_router, 'try_acquire_job_run_lock', lambda _key: None)
 
     with _finalization_task_client() as client:
@@ -633,6 +634,53 @@ async def test_sync_reprocess_expected_retry_answers_409_never_503(monkeypatch):
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize('path', ['merge', 'quiet', 'preclaim', 'claim'])
+async def test_pending_deletion_finalization_task_uses_retry_contract(monkeypatch, path):
+    """Keep durable work available for a restored owner without using queue-wide 5xx throttling."""
+    from utils.conversations import demand_processing
+
+    monkeypatch.setattr(finalization_router, 'run_blocking', _inline_run_blocking)
+    if path == 'merge':
+        monkeypatch.setattr(lifecycle_service.merge_jobs, 'run', AsyncMock(return_value='account_pending_deletion'))
+        job_id = 'merge-job-1'
+    elif path == 'quiet':
+        monkeypatch.setattr(
+            finalization_router.quiet_finalization,
+            'run',
+            MagicMock(return_value='account_pending_deletion'),
+        )
+        job_id = 'quiet-job-1'
+    else:
+        monkeypatch.setattr(
+            jobs_db,
+            'get_finalization_job',
+            lambda _job_id: {'uid': 'uid-1', 'conversation_id': 'conversation-1'},
+        )
+        monkeypatch.setattr(
+            finalization_router,
+            'account_deletion_blocks_user_work',
+            lambda _uid: path == 'preclaim',
+        )
+        if path == 'claim':
+            monkeypatch.setattr(demand_processing, 'admit', lambda *args, **kwargs: True)
+            monkeypatch.setattr(finalization_router, 'try_acquire_job_run_lock', lambda _key: 'lock-token')
+            monkeypatch.setattr(finalization_router, 'release_job_run_lock', lambda *_args: None)
+            monkeypatch.setattr(
+                jobs_db,
+                'claim_finalization_job',
+                lambda *args, **kwargs: {'status': 'account_pending_deletion'},
+            )
+        job_id = 'job-1'
+
+    response = await finalization_router.run_listen_finalization_job(
+        _Request({'job_id': job_id, 'dispatch_generation': 1}), task_retry_count=0
+    )
+
+    assert response.status_code == 409
+    assert json.loads(response.body) == {'status': 'retry', 'reason': 'persistence_fenced'}
+
+
+@pytest.mark.anyio
 async def test_sync_reprocess_unexpected_failure_answers_500(monkeypatch):
     from utils.batch_pipeline import enrichment
 
@@ -731,6 +779,12 @@ async def test_worker_acknowledges_stale_generation_without_cloud_task_retry(mon
     monkeypatch.setattr(finalization_router, 'run_blocking', _inline_run_blocking)
     monkeypatch.setattr(finalization_router, 'try_acquire_job_run_lock', lambda key: 'lock-token')
     monkeypatch.setattr(finalization_router, 'release_job_run_lock', lambda key, token: None)
+    monkeypatch.setattr(
+        jobs_db,
+        'get_finalization_job',
+        lambda _job_id: {'uid': 'uid-1', 'conversation_id': 'conversation-1'},
+    )
+    monkeypatch.setattr(finalization_router, 'account_deletion_blocks_user_work', lambda _uid: False)
     monkeypatch.setattr(jobs_db, 'claim_finalization_job', lambda *args, **kwargs: {'status': 'stale_generation'})
 
     response = await finalization_router.run_listen_finalization_job(

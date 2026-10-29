@@ -5,7 +5,7 @@ import io
 from pathlib import Path
 import sys
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from urllib.parse import parse_qs, urlsplit
 
 SCRIPTS = Path(__file__).resolve().parents[3] / "app" / "scripts"
@@ -35,6 +35,7 @@ class FakePlay:
         }
         self.calls = []
         self.pending = None
+        self.held_pending = None
         self.mismatch = False
         self.update_mismatch = False
         self.fraction_mismatch = False
@@ -76,12 +77,19 @@ class FakePlay:
     def commit(self, **kw):
         self.calls.append(("commit", kw))
 
+        request = Request(lambda: {})
+
         def execute():
             if not self.mismatch:
-                self.live = self.pending
+                query = parse_qs(urlsplit(request.uri).query)
+                if query.get("changesNotSentForReview") == ["true"]:
+                    self.held_pending = copy.deepcopy(self.pending)
+                else:
+                    self.live = copy.deepcopy(self.pending)
             return {}
 
-        self.commit_request = Request(execute)
+        request.fn = execute
+        self.commit_request = request
         return self.commit_request
 
     def insert(self, **kw):
@@ -96,18 +104,17 @@ class FakePlay:
 
 
 class BrakeTests(unittest.TestCase):
-    def run_action(self, play, action="halt", code="1471", confirm="brake"):
-        return brake.run_brake(
-            action, code, confirm, edit_factory=lambda: (play, "original"), quiescence_check=lambda: None
-        )
+    def run_action(self, play, action="halt", code="1471", confirm="brake", held_mode=False):
+        with patch.object(brake.promote, "CHANGES_NOT_SENT_FOR_REVIEW", held_mode):
+            return brake.run_brake(
+                action, code, confirm, edit_factory=lambda: (play, "original"), quiescence_check=lambda: None
+            )
 
-    def test_halt_preserves_everything_except_status_and_reads_fresh_edit(self):
+    def test_non_held_halt_preserves_everything_except_status_and_reads_fresh_edit(self):
         play = FakePlay()
         expected = copy.deepcopy(play.live)
         expected["releases"][1]["status"] = "halted"
-        # Pin held-changes mode explicitly so this commit contract stays clear
-        # if the operational default changes later.
-        with patch.object(brake.promote, "CHANGES_NOT_SENT_FOR_REVIEW", True):
+        with patch.object(brake.promote, "CHANGES_NOT_SENT_FOR_REVIEW", False):
             self.assertEqual(
                 self.run_action(play),
                 "BRAKE_RESULT action=halt versionCode=1471 status_before=inProgress status_after=halted userFraction=0.1",
@@ -118,21 +125,28 @@ class BrakeTests(unittest.TestCase):
         self.assertEqual(
             parse_qs(urlsplit(play.commit_request.uri).query)["changesInReviewBehavior"], ["ERROR_IF_IN_REVIEW"]
         )
-        self.assertEqual(parse_qs(urlsplit(play.commit_request.uri).query)["changesNotSentForReview"], ["true"])
+        self.assertNotIn("changesNotSentForReview", parse_qs(urlsplit(play.commit_request.uri).query))
         for _, args in play.calls:
             self.assertEqual(args["packageName"], "com.friend.ios")
             if "track" in args:
                 self.assertEqual(args["track"], "production")
 
-    def test_held_mode_follows_the_shared_constant(self):
-        # Explicitly disable held-changes mode to verify that only the
-        # in-review guard remains in auto-send mode.
-        play = FakePlay()
-        with patch.object(brake.promote, "CHANGES_NOT_SENT_FOR_REVIEW", False):
-            self.assertIn("status_after=halted", self.run_action(play))
-        query = parse_qs(urlsplit(play.commit_request.uri).query)
-        self.assertEqual(query["changesInReviewBehavior"], ["ERROR_IF_IN_REVIEW"])
-        self.assertNotIn("changesNotSentForReview", query)
+    def test_held_mode_fails_closed_before_opening_halt_or_resume_edit(self):
+        for action, status in [("halt", "inProgress"), ("resume", "halted")]:
+            with self.subTest(action=action):
+                play = FakePlay(status)
+                edit_factory = Mock(return_value=(play, "original"))
+                with patch.object(brake.promote, "CHANGES_NOT_SENT_FOR_REVIEW", True):
+                    with self.assertRaisesRegex(brake.BrakeError, "Test and release.*verify the live track"):
+                        brake.run_brake(
+                            action,
+                            "1471",
+                            "brake",
+                            edit_factory=edit_factory,
+                            quiescence_check=lambda: None,
+                        )
+                edit_factory.assert_not_called()
+                self.assertEqual(play.calls, [])
 
     def test_status_never_updates_or_commits(self):
         play = FakePlay()
@@ -219,25 +233,23 @@ class BrakeTests(unittest.TestCase):
         ]
         return play
 
-    def stage(self, play, code="1477", fraction="0.01", supersedes="1471", confirm="brake"):
-        return brake.run_brake(
-            "stage",
-            code,
-            confirm,
-            user_fraction=fraction,
-            supersedes=supersedes,
-            notes_line=f"  {FIX}  ",
-            edit_factory=lambda: (play, "original"),
-            quiescence_check=lambda: None,
-        )
+    def stage(self, play, code="1477", fraction="0.01", supersedes="1471", confirm="brake", held_mode=False):
+        with patch.object(brake.promote, "CHANGES_NOT_SENT_FOR_REVIEW", held_mode):
+            return brake.run_brake(
+                "stage",
+                code,
+                confirm,
+                user_fraction=fraction,
+                supersedes=supersedes,
+                notes_line=f"  {FIX}  ",
+                edit_factory=lambda: (play, "original"),
+                quiescence_check=lambda: None,
+            )
 
     def test_stage_replaces_only_halted_release_at_requested_fraction(self):
         play = self.halted_play()
         completed = copy.deepcopy(play.live["releases"][0])
-        # Pin held-changes mode explicitly so this commit contract stays clear
-        # if the operational default changes later.
-        with patch.object(brake.promote, "CHANGES_NOT_SENT_FOR_REVIEW", True):
-            result = self.stage(play)
+        result = self.stage(play)
         self.assertTrue(result.startswith("BRAKE_RESULT action=stage versionCode=1477 status_before=absent"))
         self.assertIn("userFraction=0.01 supersedes=1471 superseded_status=halted superseded_userFraction=0.1", result)
         self.assertEqual(play.live["releases"][0], completed)
@@ -261,8 +273,20 @@ class BrakeTests(unittest.TestCase):
         self.assertEqual(
             parse_qs(urlsplit(play.commit_request.uri).query)["changesInReviewBehavior"], ["ERROR_IF_IN_REVIEW"]
         )
-        self.assertEqual(parse_qs(urlsplit(play.commit_request.uri).query)["changesNotSentForReview"], ["true"])
+        self.assertNotIn("changesNotSentForReview", parse_qs(urlsplit(play.commit_request.uri).query))
         self.assertEqual([args["track"] for name, args in play.calls if name == "update"], ["production"])
+
+    def test_held_stage_commit_remains_pending_instead_of_changing_live_track(self):
+        play = self.halted_play()
+        live_before = copy.deepcopy(play.live)
+
+        with self.assertRaisesRegex(brake.BrakeError, "post-commit production readback mismatch"):
+            self.stage(play, held_mode=True)
+
+        self.assertEqual(play.live, live_before)
+        self.assertIsNotNone(play.held_pending)
+        self.assertEqual(play.held_pending["releases"][1]["versionCodes"], ["1477"])
+        self.assertEqual(play.held_pending["releases"][1]["status"], "inProgress")
 
     def test_stage_refuses_unless_superseded_release_is_halted(self):
         for status in ["inProgress", "completed", "draft"]:
@@ -317,16 +341,17 @@ class BrakeTests(unittest.TestCase):
         first = "a" * 320
         last = "b" * 150
         play.live["releases"][1]["releaseNotes"] = [{"language": "en-US", "text": f"{first}; {last}"}]
-        brake.run_brake(
-            "stage",
-            "1477",
-            "brake",
-            user_fraction="0.01",
-            supersedes="1471",
-            notes_line="Fixes audio loss when your Omi reconnects",
-            edit_factory=lambda: (play, "original"),
-            quiescence_check=lambda: None,
-        )
+        with patch.object(brake.promote, "CHANGES_NOT_SENT_FOR_REVIEW", False):
+            brake.run_brake(
+                "stage",
+                "1477",
+                "brake",
+                user_fraction="0.01",
+                supersedes="1471",
+                notes_line="Fixes audio loss when your Omi reconnects",
+                edit_factory=lambda: (play, "original"),
+                quiescence_check=lambda: None,
+            )
         self.assertEqual(
             play.live["releases"][1]["releaseNotes"],
             [{"language": "en-US", "text": f"{first}; Fixes audio loss when your Omi reconnects"}],

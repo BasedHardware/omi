@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "FC-commit-observation-bypassed-by-writer",
+  "violated_contract": "A rollout gate that measures committed content must observe every admitted writer through the commit boundary. Caller-owned logging and dedupe-owned timing omit successful writes through another ingestion path or policy, making an apparently clean gate unmeasured. W5 batch projection committed fresh speech into live rows without append or ordinary stamp-growth observations, and rejected explicit targets created rows without discovery. The fleet switch also bypassed the cohort incoming proof/lexical policy, while that proof helper asked a WAV-context validator to validate persisted transcript receipts without WAV context.",
+  "canonical_prevention": "Consume transient observations once at the shared post-commit assignment boundary, derive timing from the final successful plan independently of dedupe policy, and request bounded observation-only discovery when target rejection invalidates the original lookup decision. Exercise each writer entry point, policy, replay, failed commit and reroute fence; incomplete timing remains unknown. Give the cohort lineage policy precedence over weaker fuzzy policies and use the shared committed-transcript validator for its source-frame proof; retain the fleet path outside the cohort.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_batch_pipeline_projection_donor_dedupe.py",
+    "backend/tests/unit/test_sync_lineage_created.py",
+    "backend/tests/unit/test_sync_lineage_diagnostics.py",
+    "backend/tests/unit/test_sync_donor_live_dedupe.py",
+    "backend/tests/unit/test_capture_repeat_evidence.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/sync/",
+    "backend/utils/batch_pipeline/projection.py",
+    "backend/database/sync_assignment.py"
+  ],
+  "status": "open"
+}

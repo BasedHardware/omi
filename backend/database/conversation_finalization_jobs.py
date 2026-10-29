@@ -896,11 +896,19 @@ def _claim_finalization_job_txn(
     expected_conversation_id: str | None = None,
     projection_collection: Any | None = None,
     count_worker_claim: bool = False,
+    account_deletion_collection: Any | None = None,
 ) -> FinalizationClaim:
     snapshot = job_ref.get(transaction=transaction)
     if not getattr(snapshot, 'exists', False):
         return _claim_result('missing')
     job = snapshot.to_dict() or {}
+    if account_deletion_collection is not None and isinstance(job.get('uid'), str):
+        marker = account_deletion_collection.document(job['uid']).get(transaction=transaction)
+        deletion_status = normalize_account_deletion_status(
+            marker_exists=bool(marker.exists), raw_status=(marker.to_dict() or {}).get('wipe_status')
+        )
+        if account_deletion_blocks_access(deletion_status):
+            return _claim_result('account_pending_deletion')
     status = str(job.get('status') or '')
     if expected_uid is not None and job.get('uid') != expected_uid:
         return _claim_result('identity_mismatch')
@@ -985,6 +993,7 @@ def claim_finalization_job(
         expected_conversation_id,
         client.collection(FINALIZATION_PROJECTION_COLLECTION),
         count_worker_claim,
+        client.collection('account_deletions'),
     )
 
 

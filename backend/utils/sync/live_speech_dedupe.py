@@ -228,6 +228,20 @@ def bounded_span_seconds(segments: list[dict]) -> float:
     return min(max(total, 0.0), MAX_TOTAL_SPAN_SECONDS)
 
 
+def measured_speech_seconds(segments: list[dict]) -> Optional[float]:
+    """Unclamped append duration; invalid or over-budget timing is unknown."""
+    try:
+        total = 0.0
+        for segment in segments:
+            span = incoming_speech_span(segment)
+            if span is None:
+                return None
+            total += span[1] - span[0]
+        return total if math.isfinite(total) and total <= MAX_TOTAL_SPAN_SECONDS else None
+    except Exception:
+        return None
+
+
 def append_alignment_method(report: dict, exact_retries: int) -> str:
     """Telemetry method once the safe exact-retry pass has also run.
 

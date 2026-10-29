@@ -17,6 +17,8 @@ from utils.conversations.relevance_content import (
     owner_speech_seconds,
 )
 from utils.conversations.relevance_rules import deterministic_relevance
+from utils.speakers.evidence import build_evidence
+from utils.stt.conversation_speakers import resolve_conversation_speakers
 
 START = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
@@ -181,9 +183,6 @@ def test_owner_candidates_use_producer_bands_not_probabilities(band, source, exp
 
 @pytest.mark.parametrize('excerpt_seconds,kind', [(1, 'noise'), (6, 'conversation')])
 def test_manual_excerpt_counts_only_its_own_duration_in_real_evidence(excerpt_seconds, kind):
-    from utils.speakers.evidence import build_evidence
-    from utils.stt.conversation_speakers import resolve_conversation_speakers
-
     segments = [
         dict(segment(id='excerpt'), speaker_id=0, speaker_id_scope='live:1', start=0, end=excerpt_seconds),
         dict(segment(id='bystander-a'), speaker_id=0, speaker_id_scope='live:1', start=excerpt_seconds, end=600),
@@ -211,8 +210,6 @@ def test_older_unscoped_manual_evidence_abstains_instead_of_expanding_to_a_voice
 
 @pytest.mark.parametrize('first_excerpt_seconds', [1, 6])
 def test_surplus_merge_retains_every_manual_owner_excerpt(first_excerpt_seconds):
-    from utils.speakers.evidence import build_evidence
-
     durations = [first_excerpt_seconds, 7 - first_excerpt_seconds, 400, 400, 393]
     rows, offset = [], 0
     for index, duration in enumerate(durations):
@@ -246,8 +243,7 @@ def test_surplus_merge_retains_every_manual_owner_excerpt(first_excerpt_seconds)
 @pytest.mark.parametrize('manual_excerpt', [False, True])
 def test_likely_acoustic_owner_protects_capture_independently_of_manual_excerpt(manual_excerpt):
     from math import sqrt
-    from utils.speakers.evidence import build_evidence, project_labels
-    from utils.stt.conversation_speakers import resolve_conversation_speakers
+    from utils.speakers.evidence import project_labels
 
     rows = [
         dict(segment(id='excerpt'), speaker_id=0, speaker_id_scope='live:1', start=0, end=1),
@@ -361,6 +357,76 @@ def test_shadow_classifies_without_mutating_or_writing(monkeypatch):
     assert conversation.content_kind is None and not conversation.discarded
 
 
+def test_sampled_shadow_reports_reasons_without_serving_any_output(monkeypatch, caplog):
+    import logging
+
+    conversation = mock_inputs(monkeypatch)
+    monkeypatch.setenv(FLAG + '_SHADOW_PERCENT', '100')
+    monkeypatch.setenv(FLAG + '_SERVE_PERCENT', '0')
+    monkeypatch.setattr(adapter, '_record_boundaries', lambda *_: pytest.fail('shadow wrote boundaries'))
+    before = dict(vars(conversation))
+    with caplog.at_level(logging.INFO):
+        decision = adapter.classify_for_processing('synthetic-owner', conversation)
+    assert decision.reason == 'foreground_media'
+    assert vars(conversation) == before
+    assert 'reason=foreground_media serving=false' in caplog.text
+    assert 'Synthetic tutorial' not in caplog.text and 'synthetic-owner' not in caplog.text
+
+
+@pytest.mark.parametrize('protection', ['likely_owner', 'manual_excerpt', 'call', 'user_kept'])
+def test_real_speech_over_media_keeps_derived_eligibility(monkeypatch, protection):
+    conversation = mock_inputs(monkeypatch)
+    monkeypatch.setenv(FLAG, 'serve')
+    rows = conversation.transcript_segments
+    if protection in ('likely_owner', 'manual_excerpt'):
+        rows[0]['end'] = 6
+        ev = evidence(
+            rows,
+            owner=6,
+            band='likely' if protection == 'likely_owner' else 'confident',
+            source='voice' if protection == 'likely_owner' else 'manual',
+        )
+        if protection == 'manual_excerpt':
+            ev.clusters[0].candidates[0].segment_ids = [rows[0]['id']]
+        monkeypatch.setattr(adapter, '_speaker_evidence', lambda *_: ev)
+    elif protection == 'call':
+        monkeypatch.setattr(
+            adapter,
+            '_boundaries',
+            lambda *_: [BoundarySignal(kind='phone_call', started_at=START, ended_at=START + timedelta(seconds=120))],
+        )
+    assert adapter.minimum_for_processing('synthetic-owner', conversation, user_kept=protection == 'user_kept') is None
+    assert conversation.content_kind == 'conversation'
+    for consumer in ('memories', 'daily_summary', 'recap', 'action_items'):
+        assert not exclude_from_derived('synthetic-owner', conversation, consumer=consumer)
+
+
+def test_shadow_owner_media_conflict_counts_without_weakening_likely_owner(monkeypatch, caplog):
+    import logging
+
+    conversation = mock_inputs(monkeypatch)
+    monkeypatch.setenv(FLAG + '_SHADOW_PERCENT', '100')
+    monkeypatch.setattr(
+        adapter, '_speaker_evidence', lambda *_: evidence(conversation.transcript_segments, owner=10, band='likely')
+    )
+    with caplog.at_level(logging.INFO):
+        decision = adapter.classify_for_processing('synthetic-owner', conversation)
+    assert decision.content_kind == 'conversation' and decision.owner_seconds == 10
+    assert 'reason=owner_media_overlap serving=false' in caplog.text
+    assert conversation.content_kind is None
+
+
+def test_conflict_observation_failure_does_not_change_owner_protection(monkeypatch):
+    conversation = mock_inputs(monkeypatch)
+    monkeypatch.setenv(FLAG, 'serve')
+    monkeypatch.setattr(
+        adapter, '_speaker_evidence', lambda *_: evidence(conversation.transcript_segments, owner=10, band='likely')
+    )
+    monkeypatch.setattr(adapter, '_screen_rows', lambda *_: [None])
+    decision = adapter.classify_for_processing('synthetic-owner', conversation)
+    assert decision.content_kind == conversation.content_kind == 'conversation'
+
+
 def test_off_reads_nothing(monkeypatch):
     conversation = mock_inputs(monkeypatch)
     monkeypatch.setenv(FLAG, 'off')
@@ -401,6 +467,19 @@ def test_curation_restores_consumer_eligibility(monkeypatch):
     conversation.content_kind = 'noise'
     assert adapter.minimum_for_processing('', conversation, user_kept=True) is None
     assert conversation.content_kind == 'conversation'
+
+
+@pytest.mark.parametrize('mode', ['shadow', 'serve'])
+def test_photo_marker_protects_without_loading_photo_contents(monkeypatch, mode):
+    conversation = mock_inputs(monkeypatch)
+    conversation.transcript_segments = []
+    conversation.has_photos = True
+    conversation.content_kind = 'media'
+    monkeypatch.setenv(FLAG, mode)
+    monkeypatch.setenv(FLAG + '_SHADOW_PERCENT', '100')
+    monkeypatch.setattr(adapter, '_speaker_evidence', lambda *_: pytest.fail('photo protection read evidence'))
+    assert adapter.minimum_for_processing('synthetic-owner', conversation) is None
+    assert conversation.content_kind == ('conversation' if mode == 'serve' else 'media')
 
 
 def test_failed_inputs_abstain_without_logging_payload(monkeypatch, caplog):

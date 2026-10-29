@@ -15,7 +15,8 @@ one capture window's evidence.
   jobs, leases, smart merge and per-conversation processing keep their contracts.
 - **Moment**: a stretch of speech inside a conversation. It ends on a pause
   (`MOMENT_PAUSE_SECONDS`), a word-budget rollover (`MOMENT_MAX_WORDS`), a move to
-  another conversation, or the conversation's finalization.
+  another conversation's next moment (the buffer carries forward), or explicit
+  finalization / Wrap Up.
 - **Episode**: the moments and conversations of one occasion, with a compact
   state: topic, running bullets, people, open questions and provisional items.
 
@@ -31,9 +32,19 @@ one capture window's evidence.
      row instead of waiting for the first notes. An ambiguous gap joins
      provisionally (`pending_boundary`); the conversation's first moment asks Jev
      and, on a confident "moved on", splits it into the next episode.
-   - A moment also ends after `MOMENT_MAX_SECONDS` of steady speech (`interval`)
-     and when the pusher session closes (`session_end`), so continuous talk keeps
-     the notes current and a pod move or reconnect does not strand the buffer.
+   - A moment also ends after `MOMENT_MAX_SECONDS` of steady speech (`interval`).
+     A conversation rollover carries the buffered segments into the next moment
+     when both conversations belong to the same episode; a pusher session end
+     retains the buffer for one `MOMENT_PAUSE_SECONDS` reconnect window, then
+     flushes the tail if no reconnect arrives. Finalization and Wrap Up flush it
+     sooner when they run.
+   - The first episode moment is checked against the episode's original start
+     across every member conversation. At `MAX_EPISODE_SECONDS`, the old episode
+     closes and continued speech starts a new one at the cap boundary. Provisional
+     items for a continuing member transfer to the successor for finalization
+     reconciliation. While an episode is live, the Home row timer uses its
+     `started_at`; during rotation it holds the prior anchor until the successor
+     row is visible.
 2. When a moment ends, `service.record_moment` runs on `postprocess_executor` as
    a tracked background task:
    - **Boundary** (`policy.boundary`): the hard cap (`MAX_EPISODE_SECONDS`), a gap at
@@ -47,7 +58,12 @@ one capture window's evidence.
    - **One cheap update** (`incremental.run_incremental_update`, feature
      `episode_incremental`, gpt-5-nano): the previous compact state
      (`state.render_state`, at most `MAX_STATE_CHARS`) plus only this moment's
-     new text. The earlier transcript is never re-read. The fixed instruction
+     new text, including any carried segments from the same episode. The earlier
+     transcript is never re-read. Model bullets are rejected when at least ten
+     words have 80% ordered overlap with the transcript, or they start with a
+     speaker label; short quotations and concise summaries are allowed. One
+     bounded repair call is allowed, after which the moment is rejected as
+     `quality_error` and the previous “So far” remains visible. The fixed instruction
      prefix comes first and the clock, state and new speech come last.
      One output language is resolved for every moment (`output_language.py`,
      kill switch `EPISODE_OUTPUT_LANGUAGE_PIN`): the user's explicit preference,
@@ -62,8 +78,9 @@ one capture window's evidence.
      proactive-notification prompt changes.
    - **Compare-and-swap store** (`database/episodes.py`): speech-derived fields are
      sealed with the user's key. A lost race retries once.
-3. When a conversation's finalize starts, its live episode closes
-   (`service.close_on_finalize`, through `finalize.close_now`; see "Close and wrap-up").
+3. When a conversation's finalize starts, pending live speech flushes before its
+   episode closes (`service.close_on_finalize`, through `finalize.close_now`; see
+   "Close and wrap-up").
 4. A sync (WAL) conversation joins the episode covering its span the
    moment intake persisted it (`service.attach_synced_intake`, through
    `finalize.attach_synced_at_intake`, called from the sync pipeline's
@@ -166,8 +183,9 @@ The close reasons are `user`, `gap`, `idle`, `hard_cap`, `source_change`,
     the episode or opens or joins another: a late live moment is
     `skipped_closed`, and a re-attach is a no-op. A second close is a no-op.
 - `POST /v1/episodes/{id}/wrap-up` closes at once (`user`), recording the
-  conversation being finished as the closing one when given. An episode an older
-  server left live with `wrap_up_requested_at` is closed on its next read.
+  conversation being finished as the closing one when given, after flushing the
+  pending live buffer. An episode an older server left live with
+  `wrap_up_requested_at` is closed on its next read.
 - A read that finds an episode idle for `CLOSE_GAP_SECONDS` closes it lazily
   (`idle`), dated when the quiet reached the gap rather than when the read
   happened. No scheduler is involved.
@@ -230,3 +248,6 @@ builds, the desktop app and web never call any `/v1/episodes` route.
   active listen sessions with the marker
 - `omi_episode_client_requests_total{channel,outcome}`: episodes API calls by
   channel (`beta|store|unknown`) and outcome (`admitted|channel_closed|not_admitted`)
+
+The shared `utils.metrics` exporter imports these collectors, so the backend,
+listen and pusher `/metrics` routes expose the same bounded-label families.

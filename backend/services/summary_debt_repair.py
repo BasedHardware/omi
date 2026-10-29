@@ -20,6 +20,7 @@ from config.summary_guarantee import (
     REPAIR_ADMISSION_LIMIT,
 )
 from database._client import get_firestore_client
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from database.summary_debt_queries import due_conversations
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked
 from utils.conversations import summary_delivery as delivery
@@ -31,7 +32,7 @@ CURSOR = 'maintenance/summary_debt_repair_v1'
 
 def redrive(client: Any, uid: str, conversation_id: str, *, now: float) -> bool:
     """Reuse the same obligation; no new finalization generation is admitted."""
-    if not enabled(uid):
+    if account_deletion_blocks_user_work(uid) or not enabled(uid):
         return False
     admitted = False
     blocked_receipt: Row | None = None
@@ -131,6 +132,8 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
             continue
         parts = snapshot.reference.path.split('/')
         if len(parts) != 4 or parts[0] != 'users' or parts[2] != 'conversations' or not enabled(parts[1]):
+            continue
+        if account_deletion_blocks_user_work(parts[1]):
             continue
         overdue += 1
         oldest = max(oldest, current - row['summary_due_at'])

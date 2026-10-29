@@ -7,6 +7,7 @@ import time
 from typing import Any, TypedDict
 
 from database import cap_hold_redrive as store, users as users_db
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from utils.executors import db_executor, run_blocking, start_background_task, storage_executor
 from utils import funded_processing, processing_backlog_worker
 from config.stt_cap_dispatch import execution_admission_configured, recovery_cohort_admits
@@ -109,7 +110,12 @@ async def _paid_first(choices: list[Any]) -> list[Any]:
 
     async def is_paid(snap: Any) -> bool:
         uid = owner(snap, 'processing_backlog')
-        if uid is None or not recovery_cohort_admits(uid) or not funded_processing.enabled(uid):
+        if (
+            uid is None
+            or await run_blocking(db_executor, account_deletion_blocks_user_work, uid)
+            or not recovery_cohort_admits(uid)
+            or not funded_processing.enabled(uid)
+        ):
             return False
         try:
             subscription = await run_blocking(db_executor, users_db.get_user_valid_subscription, uid, provision=False)
@@ -177,6 +183,8 @@ async def sweep() -> dict:
         if uid is None:
             continue
         try:
+            if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
+                continue
             if await run_blocking(storage_executor, live_cap_staging.seal, uid, snap.id, expired_only=True):
                 counts['sealed'] += 1
         except Exception as error:
@@ -187,6 +195,8 @@ async def sweep() -> dict:
         if uid is None:
             continue
         try:
+            if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
+                continue
             await run_blocking(storage_executor, live_cap_staging.cleanup, uid, snap.reference)
         except Exception as error:
             logger.warning('event=cap_hold_redrive outcome=cleanup_deferred exception_type=%s', type(error).__name__)
@@ -205,7 +215,12 @@ async def sweep() -> dict:
 
     async def visit(snap: Any, turn: int):
         uid = owner(snap, 'processing_backlog')
-        if uid is None or not recovery_cohort_admits(uid) or not funded_processing.enabled(uid):
+        if (
+            uid is None
+            or await run_blocking(db_executor, account_deletion_blocks_user_work, uid)
+            or not recovery_cohort_admits(uid)
+            or not funded_processing.enabled(uid)
+        ):
             return None
         try:
             # One bounded candidate batch per owner per round. A fast owner

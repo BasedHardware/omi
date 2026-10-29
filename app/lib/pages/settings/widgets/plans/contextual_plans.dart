@@ -22,8 +22,9 @@ Future<bool> openContextualPlans(
   PlanStorefront? storefront,
 }) async {
   final provider = context.read<UsageProvider>();
-  if (!provider.showSubscriptionUI || !await PlanStorefrontGate.sheetEnabled()) return false;
-  if (!context.mounted || !provider.showSubscriptionUI) return false;
+  // Not gated on the storefront flag: PlansSheet shows the legacy plan list when it is off,
+  // so Upgrade always opens a working payment sheet.
+  if (!provider.showSubscriptionUI) return false;
   if (trigger.isEmpty && await PaywallRouter.openVariant(context, source: source)) return true;
   if (!context.mounted) return false;
   PlatformManager.instance.analytics

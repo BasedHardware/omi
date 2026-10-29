@@ -37,6 +37,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 if __package__ in (None, ''):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -45,7 +46,13 @@ from config.policy.guard import env_reads
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 BUDGET_PATH = BACKEND_DIR / 'config' / 'flag_budget.json'
+FEATURE_FLAGS_PATH = BACKEND_DIR.parent / 'config' / 'feature-flags.yaml'
 SEED_BUDGET = 170  # 2026-10-25 seed; lower it when the surface shrinks, never raise it.
+HELPER_KILL_SWITCHES = {
+    'EPISODE_CARRY_ON_SESSION_END',
+    'EPISODE_HARD_CAP_ACROSS_CONVERSATIONS',
+    'EPISODE_MOMENT_OUTPUT_VALIDATOR',
+}
 
 SCOPE = (
     'utils/batch_pipeline/**/*.py',
@@ -95,7 +102,7 @@ def problems(read: dict[str, list[str]], data: dict, today: datetime.date) -> li
     names: dict[str, dict] = data['names']
     retired: dict[str, dict] = data.get('retired', {})
     out = unlisted(read, names)
-    for name in sorted(set(names) - set(read)):
+    for name in sorted(name for name in set(names) - set(read) if not names[name].get('registry')):
         out.append(
             f'{name} is no longer read in scope: move it to "retired" as {{"on": "YYYY-MM-DD", "replaced_by": null}} '
             f'and lower "budget", or name its replacement, in the same change'
@@ -163,6 +170,28 @@ def test_budget_file_declares_scope_and_count():
     assert tuple(data['scope']) == SCOPE
     assert data['count'] == len(data['names'])
     assert isinstance(data['retired'], dict)
+
+
+def test_helper_kill_switch_budget_entries_match_the_default_on_registry():
+    data = _load()
+    names = data['names']
+    helper_names = {name for name, entry in names.items() if entry.get('registry')}
+    assert helper_names == HELPER_KILL_SWITCHES
+
+    registry = yaml.safe_load(FEATURE_FLAGS_PATH.read_text(encoding='utf-8'))
+    flags = {flag['key']: flag for flag in registry['flags']}
+    for name in sorted(helper_names):
+        entry = names[name]
+        flag = flags[name]
+        assert entry['registry'] == 'config/feature-flags.yaml'
+        assert entry['owner'] == 'rollout-meetings / occasion architecture'
+        assert flag['owner'] == 'dazheng'
+        assert entry['review_by'] == '2026-11-28'
+        assert flag['kind'] == 'env'
+        assert flag['lifecycle'] == 'ops_kill'
+        assert 'backend' in flag['surfaces']
+        assert flag['fail'] == 'open'
+        assert flag['summary'].startswith('Default on;')
 
 
 def _data(retired=None, **names):

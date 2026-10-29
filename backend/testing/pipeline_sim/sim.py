@@ -895,7 +895,7 @@ class Simulation:
         for index in range(self.config.gpu_pumps):
             worker = SimWorker(self, index)
             pump = Pump(
-                Scheduler(self.store, pool='batch'),
+                Scheduler(self.store, pool='batch', worker_id=f'worker-{index}'),
                 worker,
                 batch_size=self.config.pump_batch_size,
                 capacity=lambda: PoolCapacity(
