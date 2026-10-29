@@ -38,13 +38,15 @@ def client(monkeypatch):
     monkeypatch.setattr(router_module.client_gate, 'note_client_seen', lambda uid: False)
     monkeypatch.setattr(router_module.service, 'last_closed_episode', lambda uid, fresh=False: None)
     monkeypatch.setattr(
-        router_module.home_read.conversations,
-        'get_conversation_raw_snapshot',
-        lambda uid, cid, **kwargs: {
-            'structured': {'title': 'Member'},
-            'started_at': T0,
-            'discarded': False,
-            'status': 'completed',
+        router_module.home_read,
+        '_read_members',
+        lambda uid, rows, **kwargs: {
+            'c1': {
+                'structured': {'title': 'Member'},
+                'started_at': T0,
+                'discarded': False,
+                'status': 'completed',
+            }
         },
     )
     app = FastAPI()

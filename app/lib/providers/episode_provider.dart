@@ -67,7 +67,9 @@ class EpisodeProvider extends ChangeNotifier {
     // Every unrelated high-frequency notify returns before walking membership.
     if (identical(_homeVisibilityRows, provider.conversations) &&
         _homeVisibilityCount == provider.conversations.length &&
-        _homePendingCount == provider.memoriesToDelete.length) return;
+        _homePendingCount == provider.memoriesToDelete.length) {
+      return;
+    }
     _homeVisibilityRows = provider.conversations;
     _homeVisibilityCount = provider.conversations.length;
     _homePendingCount = provider.memoriesToDelete.length;
@@ -85,6 +87,12 @@ class EpisodeProvider extends ChangeNotifier {
   void invalidateHome() {
     _homeReadAt = null;
     _homeGeneration++;
+  }
+
+  void _closedOnHome(String episodeId) {
+    // Keep the just-closed row grouped while the authoritative read catches up.
+    _homeEpisodes = [for (final e in _homeEpisodes) e.id == episodeId ? e.copyWith(live: false) : e];
+    invalidateHome();
   }
 
   /// Load all pages atomically so partially loaded membership never splits an episode on Home.
@@ -112,7 +120,7 @@ class EpisodeProvider extends ChangeNotifier {
           return;
         }
         for (final episode in data.episodes) {
-          collected[episode.id] = episode;
+          collected[episode.id] = _ended.contains(episode.id) ? episode.copyWith(live: false) : episode;
         }
         cursor = data.nextCursor;
         if (cursor != null && !cursors.add(cursor)) return;
@@ -299,6 +307,7 @@ class EpisodeProvider extends ChangeNotifier {
     final old = _live;
     final next = episode != null && episode.live && !_ended.contains(episode.id) ? episode : null;
     if (old != null && old.id != next?.id) {
+      _closedOnHome(old.id);
       _remember(old);
       if (recover && old.conversationIds.isNotEmpty) unawaited(recoverPrevious(old.conversationIds.last));
     }
@@ -450,8 +459,8 @@ class EpisodeProvider extends ChangeNotifier {
       final result = await _wrapUp(episode.id, conversationId: conversationId);
       if (_disposed || uid != SharedPreferencesUtil().uid) return false;
       if (result case ApiSuccess(:final data)) {
+        _acceptLive(data.live && conversationId == null ? data : null, recover: false);
         _remember(data);
-        _live = data.live && conversationId == null ? data : null;
         return true;
       }
       return false;
@@ -472,6 +481,7 @@ class EpisodeProvider extends ChangeNotifier {
     if (episode != null) {
       _remember(episode);
       _ended.add(episode.id);
+      _closedOnHome(episode.id);
       _live = null;
       // Without a conversation id the server closes the episode immediately; a repeat is a no-op.
       unawaited(_wrapUp(episode.id));

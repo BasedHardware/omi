@@ -57,6 +57,47 @@ void main() {
     expect(cursorCalls.length, 2, reason: 'rebuilds coalesce within the poll interval');
   });
 
+  for (final close in ['poll', 'finalize', 'wrapUp']) {
+    test('Home refreshes immediately after close via $close and fences a stale in-flight read', () async {
+      var closed = false;
+      var reads = 0;
+      final stale = Completer<ApiResult<EpisodePageRead>>();
+      final provider = EpisodeProvider(
+        clock: () => _t0,
+        fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: closed ? null : _episode())),
+        lookup: (_) async => ApiSuccess(EpisodeRead(enabled: true, episode: _episode(live: false))),
+        wrapUp: (_, {conversationId}) async => ApiSuccess(_episode(live: false)),
+        fetchPage: (from, to, {cursor}) async {
+          reads++;
+          if (reads == 2) return stale.future;
+          return ApiSuccess(EpisodePageRead(enabled: true, episodes: [_episode(live: !closed)]));
+        },
+      );
+      addTearDown(provider.dispose);
+      await provider.refreshLive();
+      await provider.refreshHome(_t0, _t0);
+      expect(provider.homeEpisodes.single.live, isTrue);
+      final inFlight = provider.refreshHome(_t0, _t0, force: true);
+      await Future<void>.delayed(Duration.zero);
+      closed = true;
+      switch (close) {
+        case 'poll':
+          await provider.refreshLive();
+        case 'finalize':
+          provider.onLiveFinalized();
+        case 'wrapUp':
+          await provider.wrapUp();
+      }
+      expect(provider.homeEpisodes.single.live, isFalse, reason: 'no individual-row flash while revalidating');
+      await provider.refreshHome(_t0, _t0);
+      expect(reads, 3, reason: 'close bypasses the 30-second Home cache');
+      stale.complete(ApiSuccess(EpisodePageRead(enabled: true, episodes: [_episode()])));
+      await inFlight;
+      expect(provider.homeEpisodes.single.live, isFalse);
+      expect(provider.live, isNull);
+    });
+  }
+
   test('disabled episodes never request Home history', () async {
     final provider = EpisodeProvider(fetchPage: (from, to, {cursor}) async => throw StateError('not admitted'));
     addTearDown(provider.dispose);

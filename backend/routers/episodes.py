@@ -69,7 +69,7 @@ def list_episodes(
         raise HTTPException(status_code=422, detail=str(error)) from error
     return {
         'enabled': True,
-        'episodes': [projected for row in rows if (projected := home_read.project_episode(uid, row)) is not None],
+        'episodes': home_read.project_episodes(uid, rows),
         'next_cursor': next_cursor,
     }
 

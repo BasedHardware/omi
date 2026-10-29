@@ -220,6 +220,46 @@ void main() {
       debugDefaultTargetPlatformOverride = null;
     });
   }
+  testWidgets('a just-closed single processing member appears exactly once on Home', (tester) async {
+    VisibilityDetectorController.instance.updateInterval = Duration.zero;
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    final now = DateTime.now();
+    final member = ServerConversation(
+        id: 'single-processing',
+        createdAt: now,
+        startedAt: now,
+        structured: Structured('Wrapping up lunch', ''),
+        status: ConversationStatus.processing);
+    final closed = Episode(
+        id: 'closed-single',
+        live: false,
+        startedAt: now,
+        lastActivityAt: now,
+        conversationIds: [member.id],
+        members: [member]);
+    final history = ConversationProvider(isSignedIn: () => true)..processingConversations = [member];
+    final episodes = EpisodeProvider(
+        fetchLive: () async => const ApiSuccess(EpisodeRead(enabled: true)),
+        fetchPage: (from, to, {cursor}) async => ApiSuccess(EpisodePageRead(enabled: true, episodes: [closed])))
+      ..debugSetLive(null)
+      ..debugSetHomeEpisodes([closed]);
+    final capture = _IdleCapture();
+    addTearDown(history.dispose);
+    addTearDown(episodes.dispose);
+    addTearDown(capture.dispose);
+    addTearDown(AnalyticsManager.resetForTesting);
+    final screen = await buildTypedConversationScreen(history,
+        captureProvider: capture, episodes: episodes, initializePreferences: false);
+    await tester.pumpWidget(screen);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(ConversationListItem), findsOneWidget);
+    expect(find.byType(ProcessingConversationRow), findsNothing);
+    expect(find.text('Wrapping up lunch'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   for (final searching in [false, true]) {
     testWidgets('closed episode Home and search open the episode page (search=$searching)', (tester) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;

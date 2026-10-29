@@ -4,7 +4,8 @@ import 'package:omi/backend/schema/structured.dart';
 
 /// A display row only: neither episodes nor conversations are mutated or persisted.
 class HomeRow {
-  const HomeRow(this.conversation, {this.episode});
+  const HomeRow(this.conversation, {this.episode, this.episodeConversationIds = const {}});
+  final Set<String> episodeConversationIds;
   final ServerConversation conversation;
   final Episode? episode;
   DateTime get startedAt => conversation.startedAt ?? conversation.createdAt;
@@ -29,14 +30,19 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
     if (episode.live) continue;
     final metadata = {for (final c in episode.members) c.id: c};
     final members = <ServerConversation>[];
-    for (final id in episode.conversationIds.toSet()) {
+    hidden.addAll(episode.conversationIds);
+    // Server metadata is authoritative about retained membership. Full IDs also
+    // include discarded members for Delete and must not resurrect stale local rows.
+    final retainedIds = metadata.isEmpty ? episode.conversationIds.toSet() : metadata.keys;
+    for (final id in retainedIds) {
       final member = byId[id] ?? metadata[id];
-      hidden.add(id);
       if (member != null && !member.discarded && !member.deleted && !deletedIds.contains(id)) members.add(member);
     }
     if (members.isEmpty) continue;
     if (members.length == 1) {
-      if (singleIds.add(members.single.id)) rows.add(HomeRow(members.single));
+      if (singleIds.add(members.single.id)) {
+        rows.add(HomeRow(members.single, episodeConversationIds: episode.conversationIds.toSet()));
+      }
       continue;
     }
     final primary = members.first;
@@ -53,6 +59,7 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
           structured: Structured(episode.title.trim().isEmpty ? primary.structured.title : episode.title, '',
               emoji: episode.emoji.trim().isEmpty ? primary.structured.emoji : episode.emoji),
         ),
+        episodeConversationIds: episode.conversationIds.toSet(),
         episode: episode.copyWith(members: members)));
   }
   rows.addAll([

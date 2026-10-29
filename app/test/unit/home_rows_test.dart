@@ -41,6 +41,19 @@ void main() {
     final rows = buildHomeRows([conversation('b', discarded: true), a], [episode()], enabled: true);
     expect(rows.single.conversation, same(a));
     expect(rows.single.episode, isNull);
+    expect(rows.single.episodeConversationIds, {'a', 'b'}, reason: 'processing members remain represented');
+  });
+  test('full deletion membership does not resurrect a stale locally retained discarded member', () {
+    final a = conversation('a');
+    final staleB = conversation('b');
+    final rows = buildHomeRows([
+      a,
+      staleB
+    ], [
+      episode(members: [a])
+    ], enabled: true);
+    expect(rows.single.conversation, same(a));
+    expect(rows.single.episodeConversationIds, {'a', 'b'});
   });
   test('all-discarded members leave no row', () {
     expect(

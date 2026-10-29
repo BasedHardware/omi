@@ -41,11 +41,13 @@ def test_cross_midnight_overlap_and_live_use_the_same_started_at_window(store):
     assert cursor is None
 
 
-def test_shared_helper_filters_nonoverlapping_windows_before_pagination(store):
+def test_empty_filtered_page_advances_the_storage_cursor(store):
     put(store, 'non-overlap', START + timedelta(minutes=1), START + timedelta(minutes=2))
     put(store, 'overlap', START, START + timedelta(hours=3))
     window = (START + timedelta(hours=1), START + timedelta(hours=3))
     rows, cursor = home_read.list_episode_window('u', *window, limit=1, firestore_client=store)
+    assert rows == [] and cursor == 'non-overlap'
+    rows, cursor = home_read.list_episode_window('u', *window, limit=1, cursor=cursor, firestore_client=store)
     assert [row['id'] for row in rows] == ['overlap'] and cursor is None
 
 
@@ -85,25 +87,9 @@ def test_window_reuses_phase_a_ownership_and_ignores_merged_donors(store):
     assert cursor is None
 
 
-def test_page_uses_shared_episodes_between_helper(monkeypatch):
-    calls = []
-
-    def between(uid, start, end, **kwargs):
-        calls.append((uid, start, end))
-        return [{'id': 'a', 'started_at': START}, {'id': 'b', 'started_at': START}]
-
-    monkeypatch.setattr(home_read.service, 'episodes_between', between)
-    rows, cursor = home_read.list_episode_window('u', START, START + timedelta(hours=1), limit=1)
-    assert calls == [('u', START, START + timedelta(hours=1))]
-    assert [row['id'] for row in rows] == ['b']
-    assert cursor == 'b'
-
-
 def test_projection_removes_discarded_deleted_missing_members_and_their_content(monkeypatch):
     members = {'a': {'discarded': False}, 'b': {'discarded': True}, 'c': {'deleted': True}}
-    monkeypatch.setattr(
-        home_read.conversations, 'get_conversation_raw_snapshot', lambda uid, cid, **kw: members.get(cid)
-    )
+    monkeypatch.setattr(home_read, '_read_members', lambda uid, rows, **kw: members)
     monkeypatch.setattr(home_read.conversations, 'prepare_conversation_for_read', lambda row, uid: row)
     episode = {
         'id': 'e',
@@ -117,7 +103,8 @@ def test_projection_removes_discarded_deleted_missing_members_and_their_content(
         ],
     }
     projected = home_read.project_episode('u', episode)
-    assert projected['conversation_ids'] == ['a']
+    assert projected['conversation_ids'] == ['a', 'b']
+    assert [m['id'] for m in projected['members']] == ['a']
     assert [m['conversation_id'] for m in projected['moments']] == ['a']
     assert [i['conversation_id'] for i in projected['provisional_items']] == ['a']
     members['a']['discarded'] = True
@@ -132,3 +119,51 @@ def test_internal_close_reasons_preserve_the_released_nullable_enum_without_muta
     assert wire['close_reason'] is None
     assert stored['close_reason'] == 'boundary'
     assert Episode.model_validate(wire).close_reason is None
+
+
+def test_each_page_has_bounded_episode_reads_and_chunked_member_reads(store, monkeypatch):
+    from fake_firestore.query import FakeQuery
+
+    # A large history must not make either page scan or hydrate the entire window.
+    for index in range(250):
+        at = START + timedelta(seconds=index)
+        put(store, f'e{index:03}', at, at + timedelta(minutes=1))
+    yielded = []
+    stream = FakeQuery.stream
+
+    def counted(query, *args, **kwargs):
+        for snapshot in stream(query, *args, **kwargs):
+            yielded.append(snapshot.id)
+            yield snapshot
+
+    monkeypatch.setattr(FakeQuery, 'stream', counted)
+    rows, cursor = home_read.list_episode_window(
+        'u', START, START + timedelta(hours=1), limit=2, firestore_client=store
+    )
+    assert len(yielded) == 3
+    assert [row['id'] for row in rows] == ['e249', 'e248']
+    yielded.clear()
+    rows, cursor = home_read.list_episode_window(
+        'u', START, START + timedelta(hours=1), limit=2, cursor=cursor, firestore_client=store
+    )
+    assert len(yielded) == 3
+    assert [row['id'] for row in rows] == ['e247', 'e246']
+    ids = [f'c{i}' for i in range(121)]
+    root = store.collection('users').document('u').collection('conversations')
+    for cid in ids:
+        root.document(cid).set({'structured': {'title': cid}, 'started_at': START})
+    rows[0]['conversation_ids'] = ids
+    rows[1]['conversation_ids'] = ids[:10]  # Shared members are fetched once per page.
+    batches = []
+    get_all = store.get_all
+
+    def counted_batch(refs, **kwargs):
+        batches.append(len(refs))
+        assert kwargs['field_paths'] == home_read.MEMBER_FIELDS
+        return get_all(refs, **kwargs)
+
+    monkeypatch.setattr(store, 'get_all', counted_batch)
+    monkeypatch.setattr(home_read.conversations, 'prepare_conversation_for_read', lambda row, uid: row)
+    projected = home_read.project_episodes('u', rows, firestore_client=store)
+    assert batches == [50, 50, 21]
+    assert [len(row['members']) for row in projected] == [121, 10]

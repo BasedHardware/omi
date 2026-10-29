@@ -1,9 +1,15 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:pull_down_button/pull_down_button.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/pages/conversations/conversation_actions.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/episodes/episode_content.dart';
 import 'package:omi/ui/ui.dart';
@@ -14,6 +20,34 @@ import 'package:omi/utils/l10n_extensions.dart';
 class EpisodePage extends StatelessWidget {
   const EpisodePage({super.key, required this.episode});
   final Episode episode;
+
+  Future<void> _delete(BuildContext context) async {
+    final history = context.read<ConversationProvider>();
+    final l10n = context.l10n;
+    if (!context.read<ConnectivityProvider>().isConnected) {
+      await showOmiAlert(context,
+          title: l10n.unableToDeleteConversation, message: l10n.pleaseCheckInternetConnectionAndTryAgain);
+      return;
+    }
+    // conversationIds includes discarded members; the visible list intentionally does not.
+    final known = {for (final c in episode.members) c.id: c, for (final c in history.conversations) c.id: c};
+    final targets = [
+      for (final id in episode.conversationIds.toSet())
+        if (!history.memoriesToDelete.containsKey(id))
+          known[id] ??
+              ServerConversation(id: id, createdAt: episode.startedAt, discarded: true, structured: Structured('', '')),
+    ];
+    if (targets.isEmpty) return;
+    final confirmed = await showOmiConfirm(context,
+        title: l10n.deleteConversationsTitle(targets.length),
+        message: l10n.deleteConversationsMessage,
+        confirmLabel: l10n.delete,
+        destructive: true);
+    if (!confirmed || !context.mounted) return;
+    final listContext = Navigator.of(context).context;
+    Navigator.pop(context);
+    unawaited(deleteConversationsWithUndo(listContext, targets));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +76,24 @@ class EpisodePage extends StatelessWidget {
     return Scaffold(
       key: const Key('episode_page'),
       backgroundColor: OmiColors.surface0,
-      appBar: AppBar(leading: const OmiBackButton()),
+      appBar: AppBar(leading: const OmiBackButton(), actions: [
+        PullDownButton(
+          itemBuilder: (_) => [
+            PullDownMenuItem(
+              title: context.l10n.delete,
+              iconWidget: FaIcon(FontAwesomeIcons.trashCan, size: 16, color: OmiColors.danger),
+              isDestructive: true,
+              onTap: () => _delete(context),
+            )
+          ],
+          buttonBuilder: (_, showMenu) => OmiIconButton.filled(
+            key: const Key('episode_more'),
+            icon: const FaIcon(FontAwesomeIcons.ellipsisVertical, size: 16),
+            label: context.l10n.moreOptions,
+            onPressed: showMenu,
+          ),
+        ),
+      ]),
       body: ListView(
         padding: const EdgeInsets.all(OmiSpacing.md),
         children: [

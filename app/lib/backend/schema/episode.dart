@@ -134,6 +134,8 @@ class Episode {
   final List<String> people;
   final List<EpisodeItem> items;
   final List<EpisodeMoment> moments;
+
+  /// All extant members, including discarded ones for Delete. Use [members] for display/counts.
   final List<String> conversationIds;
   final List<String> sources;
   final DateTime? stateUpdatedAt;

@@ -600,6 +600,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   ]
               };
         final projectedEpisodes = <String, HomeRow>{};
+        final projectedMemberIds = <String>{};
         if (episodesOn && showRecordings && !convoProvider.isSelectionModeActive) {
           final today = DateTime.now();
           final days = conversationsByDate.keys;
@@ -621,6 +622,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           conversationsByDate = {};
           for (final row in projected) {
             (conversationsByDate[row.day] ??= []).add(row.conversation);
+            projectedMemberIds.addAll(row.episodeConversationIds);
             if (row.episode != null) projectedEpisodes[row.conversation.id] = row;
           }
         }
@@ -648,7 +650,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 withLive,
                 [
                   for (final c in snapshot.processingConversations)
-                    if (!projectedEpisodes.values.any((row) => row.episode!.conversationIds.contains(c.id))) c
+                    if (!projectedMemberIds.contains(c.id)) c
                 ],
                 DateTime.now())
             : withLive;

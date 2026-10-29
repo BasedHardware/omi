@@ -245,7 +245,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
     if (widget.openEpisodeFromSearch && provider.previousQuery.isNotEmpty && episodes?.enabled == true) {
       final episode = await episodes!.episodeFor(widget.conversation.id);
       if (!context.mounted) return;
-      if (episode != null && !episode.live && episode.conversationIds.length >= 2) {
+      if (episode != null && !episode.live && episode.members.length >= 2) {
         await routeToPage(context, EpisodePage(episode: episode));
         return;
       }

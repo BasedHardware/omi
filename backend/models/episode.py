@@ -73,6 +73,7 @@ class Episode(BaseModel):
     people: list[str] = Field(default_factory=list)
     provisional_items: list[EpisodeProvisionalItem] = Field(default_factory=list)
     moments: list[EpisodeMoment] = Field(default_factory=list)
+    # Complete extant membership for Delete, including discarded conversations; members is the visible list.
     conversation_ids: list[str] = Field(default_factory=list)
     sources: list[str] = Field(default_factory=list)
     state_updated_at: Optional[datetime] = None
