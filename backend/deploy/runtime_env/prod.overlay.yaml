@@ -456,6 +456,11 @@ overlay:
           # Lead train: listen -> pusher -> Cloud Run; do not enable additional monthly readers here.
           FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"deletion_marker_cache":100,"finjob_candidate_queries":5,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100,"usage_month_total":100}', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
+          # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
+          # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
+          # paid recovery keeps the shared base cap of 200. Base, dev and the GKE hosts stay
+          # 0/200; rollback is setting this back to 0.
+          BATCH_PIPELINE_SHADOW_PERCENT: {value: '25', category: rollout}
           # Enforce funded STT cap dispatch admission (cohort- and lane-gated); the cap cohort is runtime-doc driven.
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'true', category: rollout}
           FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
@@ -774,6 +779,11 @@ overlay:
           # Lead train: listen -> pusher -> Cloud Run; do not enable additional monthly readers here.
           FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"deletion_marker_cache":100,"finjob_candidate_queries":5,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100,"usage_month_total":100}', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
+          # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
+          # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
+          # paid recovery keeps the shared base cap of 200. Base, dev and the GKE hosts stay
+          # 0/200; rollback is setting this back to 0.
+          BATCH_PIPELINE_SHADOW_PERCENT: {value: '25', category: rollout}
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'true', category: rollout}
           FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
           SUMMARY_DEBT_REPAIR_ENABLED: {value: 'false', category: rollout}
@@ -1136,6 +1146,11 @@ overlay:
           # Lead train: listen -> pusher -> Cloud Run; do not enable additional monthly readers here.
           FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"deletion_marker_cache":100,"finjob_candidate_queries":5,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100,"usage_month_total":100}', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
+          # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
+          # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
+          # paid recovery keeps the shared base cap of 200. Base, dev and the GKE hosts stay
+          # 0/200; rollback is setting this back to 0.
+          BATCH_PIPELINE_SHADOW_PERCENT: {value: '25', category: rollout}
           FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
           # Explicit shared-speech rollback; GKE hosts remain off.
           CAPTURE_SHARED_SPEECH_MODE:
@@ -1470,6 +1485,11 @@ overlay:
           # Lead train: listen -> pusher -> Cloud Run; do not enable additional monthly readers here.
           FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"deletion_marker_cache":100,"finjob_candidate_queries":5,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100,"usage_month_total":100}', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
+          # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
+          # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
+          # paid recovery keeps the shared base cap of 200. Base, dev and the GKE hosts stay
+          # 0/200; rollback is setting this back to 0.
+          BATCH_PIPELINE_SHADOW_PERCENT: {value: '25', category: rollout}
           FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
           # Activated at runtime 2026-10-27 02:07Z (lead 5da7dc/ebc45a) after the 5% unsupported-language held
           # loop; declared here so a train carries the serving value instead of resetting it to false.
