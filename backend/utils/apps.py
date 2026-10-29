@@ -1203,20 +1203,22 @@ def normalize_app_numeric_fields(app_dict: Dict[str, Any]) -> Dict[str, Any]:
 
 def sort_apps_by_installs_only(apps: List[App]) -> List[App]:
     """Sort apps by install count only (no score calculation)."""
-    return sorted(apps, key=lambda a: a.installs, reverse=True)
+    return sorted(apps, key=lambda a: a.installs or 0, reverse=True)
 
 
 def sort_apps_by_installs(apps: List[App]) -> List[App]:
-    """Sort apps by computed score in descending order.
+    """Sort apps by computed score in descending order, with installs as tie-breaker.
 
     Score formula: ((rating_avg / 5) ** 2) * log(1 + rating_count) * sqrt(log(1 + installs))
     This balances review quality, review quantity, and popularity.
+    When scores tie (e.g. when include_reviews=False or for unreviewed apps where score=0.0),
+    apps rank by install count descending so catalog sections stay popularity-ordered (#22772).
     """
     # Compute and assign scores to each app
     for app in apps:
         app.score = compute_app_score(app)
 
-    return sorted(apps, key=lambda a: a.score or 0, reverse=True)
+    return sorted(apps, key=lambda a: (a.score or 0.0, a.installs or 0), reverse=True)
 
 
 def paginate_apps(apps: List[App], offset: int, limit: int) -> List[App]:
