@@ -4499,5 +4499,20 @@
     "activityAttentionSyncStalledTitle": "Omi synkroniserar inte",
     "activityAttentionSyncStalledSubtitle": "Inga inspelningar synkroniserade på mer än {hours} timmar",
     "dailyRecapsOnHome": "Dagliga sammanfattningar på Hem",
-    "dailyRecapsOnHomeDescription": "Visa dina senaste sammanfattningar högst upp på Hem."
+    "dailyRecapsOnHomeDescription": "Visa dina senaste sammanfattningar högst upp på Hem.",
+    "yearlySwitchTitle": "Byt till årsvis",
+    "yearlySwitchRowSavings": "Spara {amount} om året",
+    "yearlySwitchHomeTitle": "Spara {amount} om året med årsbetalning",
+    "yearlySwitchHomeSubtitle": "Samma abonnemang, betalas en gång om året",
+    "yearlySwitchPlanLabel": "Abonnemang",
+    "yearlySwitchPlanValue": "{plan}, {price} om året",
+    "yearlySwitchDueToday": "Att betala i dag",
+    "yearlySwitchRenews": "Förnyas",
+    "yearlySwitchCreditNote": "Inkluderar kredit för resten av månaden.",
+    "yearlySwitchDeclined": "Betalningen nekades. Du betalar fortfarande månadsvis.",
+    "yearlySwitchFailed": "Det gick inte att byta. Du betalar fortfarande månadsvis.",
+    "yearlySwitchPreviewFailed": "Det gick inte att läsa in priset.",
+    "yearlySwitchUnavailable": "Årsbetalning är inte tillgänglig för ditt abonnemang just nu.",
+    "yearlySwitchDoneTitle": "Du betalar nu årsvis",
+    "yearlySwitchDoneBody": "{amount} drogs i dag. Förnyas {date}."
 }
