@@ -37,7 +37,7 @@ def project_episode(uid: str, episode: dict | None) -> dict | None:
         if not raw:
             continue
         row = conversations.prepare_conversation_for_read(raw, uid)
-        if not conversations.is_visible_conversation(row) or row.get('sync_merged_into'):
+        if row is None or not conversations.is_visible_conversation(row) or row.get('sync_merged_into'):
             continue
         structured = row.get('structured') or {}
         members.append(
@@ -54,6 +54,7 @@ def project_episode(uid: str, episode: dict | None) -> dict | None:
         return None
     ids = {member['id'] for member in members}
     wire = wire_episode(episode)
+    assert wire is not None  # Non-null input always has a wire projection.
     wire.update(
         emoji=episode.get('emoji') or '',
         members=members,

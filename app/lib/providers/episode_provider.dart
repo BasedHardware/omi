@@ -43,6 +43,9 @@ class EpisodeProvider extends ChangeNotifier {
 
   ConversationProvider? _homeConversations;
   Set<String> _hiddenHomeMembers = {};
+  Object? _homeVisibilityRows;
+  int _homeVisibilityCount = -1;
+  int _homePendingCount = -1;
   Set<String> get hiddenHomeMembers => _ownerUid == SharedPreferencesUtil().uid ? _hiddenHomeMembers : const {};
 
   /// Retain the local delete fence after the conversation provider retires its in-flight
@@ -52,14 +55,23 @@ class EpisodeProvider extends ChangeNotifier {
     if (identical(provider, _homeConversations)) return;
     _homeConversations?.removeListener(_syncHomeVisibility);
     _homeConversations = provider;
+    _homeVisibilityRows = null;
     provider.addListener(_syncHomeVisibility);
     _syncHomeVisibility();
   }
 
   void _syncHomeVisibility() {
-    _ensureOwner();
     final provider = _homeConversations;
     if (provider == null || _disposed) return;
+    // Delete/settlement/Undo changes pending or loaded length; refreshes replace the list.
+    // Every unrelated high-frequency notify returns before walking membership.
+    if (identical(_homeVisibilityRows, provider.conversations) &&
+        _homeVisibilityCount == provider.conversations.length &&
+        _homePendingCount == provider.memoriesToDelete.length) return;
+    _homeVisibilityRows = provider.conversations;
+    _homeVisibilityCount = provider.conversations.length;
+    _homePendingCount = provider.memoriesToDelete.length;
+    _ensureOwner();
     if (_hiddenHomeMembers.isEmpty && provider.memoriesToDelete.isEmpty) return;
     final pending = provider.memoriesToDelete.keys.toSet();
     final restored = provider.conversations.map((c) => c.id).toSet();
@@ -179,6 +191,7 @@ class EpisodeProvider extends ChangeNotifier {
     _previousBeforeCapture = null;
     _homeEpisodes = const [];
     _hiddenHomeMembers = {};
+    _homeVisibilityRows = null;
     _homeKey = null;
     _homeReadAt = null;
     _homeGeneration++;
