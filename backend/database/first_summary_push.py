@@ -18,7 +18,6 @@ from typing import Any, Dict, List, Optional
 
 from google.api_core.exceptions import AlreadyExists
 from google.cloud import firestore
-from google.cloud.firestore_v1.base_query import FieldFilter
 
 from ._client import get_firestore_client
 
@@ -63,8 +62,8 @@ def oldest_conversation_summaries(uid: str, limit: int, *, firestore_client: Any
         client.collection('users')
         .document(uid)
         .collection('conversations')
-        .where(filter=FieldFilter('discarded', '==', False))
-        .where(filter=FieldFilter('status', '==', 'completed'))
+        .where(filter=firestore.FieldFilter('discarded', '==', False))
+        .where(filter=firestore.FieldFilter('status', '==', 'completed'))
         .order_by('created_at', direction=firestore.Query.ASCENDING)
         .select(['created_at', 'structured.overview', 'structured.sections'])
         .limit(limit)
