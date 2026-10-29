@@ -521,7 +521,7 @@ final class DeviceProvider: ObservableObject {
         manufacturerName: device.manufacturerName ?? "unknown"
       )
 
-      if let version = response.version, !version.isEmpty, version != device.firmwareRevision {
+      if let version = response.version, !version.isEmpty, version != (device.firmwareRevision ?? "0.0.0") {
         hasFirmwareUpdate = true
         latestFirmwareVersion = version
       } else {
