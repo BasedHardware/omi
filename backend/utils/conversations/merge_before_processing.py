@@ -8,17 +8,11 @@ import importlib
 from typing import Any
 
 from config.merge_before_processing import enabled
+from config.conversation_smart_merge import MIN_WORDS
+from utils.enrichment.admission import ConversationAbsorbed
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.summary_delivery import PROCESS_CONTEXT
 from utils.sync import processing_hold
-
-
-class ConversationAbsorbed(RuntimeError):
-    """The durable redirect owns this content; no donor processing may continue."""
-
-    def __init__(self, canonical_id: str):
-        super().__init__('conversation_absorbed')
-        self.canonical_id = canonical_id
 
 
 def before_notes(
@@ -37,6 +31,8 @@ def before_notes(
     if getattr(conversation, 'source', None) != 'omi' or not getattr(conversation, 'id', None):
         return
     if getattr(conversation, 'record_lane_owner', None) in {'batch_live_v1', 'batch_sync_v1'}:
+        return
+    if sum(len(str(s.text or '').split()) for s in conversation.transcript_segments or []) < MIN_WORDS:
         return
     worker = importlib.import_module('utils.conversations.smart_merge')
     context = PROCESS_CONTEXT.get()

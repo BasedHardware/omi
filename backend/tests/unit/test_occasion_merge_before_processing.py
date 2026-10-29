@@ -17,6 +17,7 @@ from utils.conversations.relevance import RelevanceDecision
 from utils.conversations.summary_delivery import PROCESS_CONTEXT
 from utils.sync import processing_hold as hold
 from utils.enrichment import outbox, callback
+from utils.enrichment.admission import ConversationAbsorbed
 from tests.unit.test_conversation_smart_merge import World, UID, _path
 from tests.unit.test_sync_reprocess_coalesce import state
 
@@ -38,11 +39,20 @@ def invoke(world, trigger=ProcessingTrigger.CAPTURE_END, **kwargs):
     boundary.before_notes(UID, deserialize_conversation(world.get(UID, 'n')), trigger, **kwargs)
 
 
+@pytest.mark.parametrize('words', [0, 1, 24])
+def test_ineligible_short_capture_never_loads_merge_worker(world, monkeypatch, words):
+    conversation = deserialize_conversation(world.get(UID, 'n'))
+    conversation.transcript_segments[0].text = ' '.join(['speech'] * words)
+    conversation.transcript_segments = conversation.transcript_segments[:1]
+    monkeypatch.setattr(boundary.importlib, 'import_module', Mock(side_effect=AssertionError('no merge read')))
+    boundary.before_notes(UID, conversation, ProcessingTrigger.CAPTURE_END)
+
+
 @pytest.mark.parametrize(
     'trigger', [ProcessingTrigger.CAPTURE_END, ProcessingTrigger.SYNC_UPDATE, ProcessingTrigger.SERVER_RECOVERY]
 )
 def test_each_raw_path_merges_before_full_notes_and_delegates_one_parent_refresh(world, trigger):
-    with pytest.raises(boundary.ConversationAbsorbed) as raised:
+    with pytest.raises(ConversationAbsorbed) as raised:
         invoke(world, trigger)
     assert raised.value.canonical_id == 'p'
     assert world.processed == [] and world.vectors == []
@@ -85,7 +95,7 @@ def test_real_structuring_gate_runs_relevance_before_merge_and_no_notes_for_dono
         assert discarded and order == ['relevance']
         assert not world.raw('n').get('deleted')
     else:
-        with pytest.raises(boundary.ConversationAbsorbed):
+        with pytest.raises(ConversationAbsorbed):
             pc._get_structured(UID, 'en', conversation)
         assert order == ['relevance', 'merge']
     notes.assert_not_called()
@@ -179,16 +189,16 @@ def test_current_live_job_can_absorb_without_fanout_or_paid_notes(world):
         'finalization_revision': 3,
         'lease_expires_at': datetime.now(timezone.utc) + timedelta(minutes=5),
     }
-    with pytest.raises(boundary.ConversationAbsorbed):
+    with pytest.raises(ConversationAbsorbed):
         invoke(world, finalization_fence=('job', 1, 2))
     assert world.processed == [] and world.raw('n')['deleted']
 
 
 def test_repeated_parent_absorbs_share_a_window_and_one_material_late_run(world):
-    with pytest.raises(boundary.ConversationAbsorbed):
+    with pytest.raises(ConversationAbsorbed):
         invoke(world)
     world.add('third', 30, 10, status='processing', structured={})
-    with pytest.raises(boundary.ConversationAbsorbed):
+    with pytest.raises(ConversationAbsorbed):
         boundary.before_notes(UID, deserialize_conversation(world.get(UID, 'third')), ProcessingTrigger.CAPTURE_END)
     parent = world.get(UID, 'p')
     pending = parent[hold.FIELD]['pending_since']
@@ -203,7 +213,7 @@ def test_repeated_parent_absorbs_share_a_window_and_one_material_late_run(world)
     )
     assert len(world.processed) == 1
     world.add('fourth', 45, 10, status='processing', structured={})
-    with pytest.raises(boundary.ConversationAbsorbed):
+    with pytest.raises(ConversationAbsorbed):
         boundary.before_notes(UID, deserialize_conversation(world.get(UID, 'fourth')), ProcessingTrigger.CAPTURE_END)
     latest = world.get(UID, 'p')
     assert hold.admission(latest, {'first_pending_at': 0}, now=1e12)[0] == 'late_cap'
@@ -279,7 +289,7 @@ async def test_real_finalizer_closes_absorbed_donor_without_any_fanout(world, mo
 
 def test_raw_survivor_first_processing_preserves_relevance_assessment(world, monkeypatch):
     world.add('p', 0, 10, structured={})
-    with pytest.raises(boundary.ConversationAbsorbed):
+    with pytest.raises(ConversationAbsorbed):
         invoke(world)
     seen = []
     real = world.process
@@ -294,7 +304,7 @@ def test_raw_survivor_first_processing_preserves_relevance_assessment(world, mon
 
 
 def test_immaterial_content_settles_ledger_without_notes_or_vector(world):
-    with pytest.raises(boundary.ConversationAbsorbed):
+    with pytest.raises(ConversationAbsorbed):
         invoke(world)
     row = world.get(UID, 'p')
     snapshot = hold.content_snapshot(row)
@@ -431,7 +441,7 @@ def test_proven_server_minimum_title_still_merges_before_first_notes(world):
     world.raw('n').update(
         structured={'title': 'Raw speech', 'title_provenance': 'server_minimum'}, summary_output_present=False
     )
-    with pytest.raises(boundary.ConversationAbsorbed):
+    with pytest.raises(ConversationAbsorbed):
         invoke(world)
     assert world.processed == [] and len(world.marks) == 1
 

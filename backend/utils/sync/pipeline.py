@@ -116,7 +116,7 @@ from utils.sync import processing_hold
 from utils.enrichment.smart_refresh import settle_survivor
 from utils.conversations.sync_hold_completion import complete_explicit
 from utils.conversations.smart_merge_policy import refresh_owed
-from utils.conversations.merge_before_processing import ConversationAbsorbed
+from utils.enrichment.admission import ConversationAbsorbed
 from utils.conversations.relevance import sync_intake_decision
 from utils.episodes.finalize import schedule_after_finalization, schedule_synced_intake_attach
 from utils.executors import (

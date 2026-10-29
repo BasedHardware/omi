@@ -20,3 +20,11 @@ def run_created_webhook(uid: str, conversation: Conversation) -> None:
     from utils.webhooks import conversation_created_webhook
 
     asyncio.run(conversation_created_webhook(uid, conversation))
+
+
+class ConversationAbsorbed(RuntimeError):
+    """The durable redirect owns this content; no donor processing may continue."""
+
+    def __init__(self, canonical_id: str):
+        super().__init__('conversation_absorbed')
+        self.canonical_id = canonical_id

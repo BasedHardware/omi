@@ -26,7 +26,7 @@ from utils.conversations.process_conversation import process_conversation
 from utils.sync import processing_hold
 from utils.enrichment.smart_refresh import settle_survivor
 from utils.conversations.smart_merge_policy import refresh_owed
-from utils.conversations.merge_before_processing import ConversationAbsorbed
+from utils.enrichment.admission import ConversationAbsorbed
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.silent_redrive import is_silent_redrive
 from utils.conversations.relevance import sync_intake_decision

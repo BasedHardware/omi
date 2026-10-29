@@ -15,7 +15,7 @@ from enum import Enum
 from fastapi import HTTPException
 from config.batch_pipeline import RecordOwnerContention
 from config.merge_before_processing import enabled as merge_before_processing_enabled
-from utils.conversations.merge_before_processing import ConversationAbsorbed
+from utils.enrichment.admission import ConversationAbsorbed
 from config.server_batch import owned as server_batch_owned
 from config.server_batch import has_audio as server_batch_has_audio
 from config.episodes import episodes_enabled_for
