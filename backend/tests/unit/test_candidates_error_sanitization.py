@@ -125,3 +125,15 @@ def test_accept_candidate_task_link_error_handling():
             accept_candidate(candidate_id="c-1", account_generation=1, uid="u-1")
         assert ctx.value.status_code == 409
         assert ctx.value.detail == "workstream and goal do not match"
+
+    # 3. Arbitrary/internal validation error is sanitized
+    with patch.object(candidates_router, "_require_candidate_write_control"), patch.object(
+        candidates_router.candidate_service,
+        "accept_candidate",
+        side_effect=TaskLinkValidationError("Traceback: DB query syntax error in link resolver"),
+    ):
+        with pytest.raises(HTTPException) as ctx:
+            accept_candidate(candidate_id="c-1", account_generation=1, uid="u-1")
+        assert ctx.value.status_code == 409
+        assert ctx.value.detail == "Task link validation failed"
+        assert "Traceback" not in ctx.value.detail

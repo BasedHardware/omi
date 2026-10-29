@@ -68,7 +68,30 @@ _KNOWN_CANDIDATE_CONFLICTS = {
     'Summary action item is linked to another task',
     'idempotency key was already used for a different proposal',
     'Candidate is not an active staged-task compatibility proposal',
+    'Conversation is locked',
+    'Summary action item is unavailable; refresh the conversation',
+    'Summary action item is already completed',
+    'Summary action item does not create a task',
+    'Summary action item has an invalid due date',
+    'Linked task is unavailable; refresh the conversation',
 }
+
+_KNOWN_TASK_LINK_VALIDATIONS = {
+    'goal does not exist',
+    'workstream does not exist',
+    'task goal_id must match workstream goal_id',
+    'workstream and goal do not match',
+    'Task link resolver is temporarily unavailable',
+}
+
+
+def _sanitize_task_link_validation_error(exc: Exception) -> str:
+    if isinstance(exc, TaskLinkResolverUnavailableError):
+        return _sanitize_candidate_error(exc, 'Task link resolver is temporarily unavailable')
+    msg = str(exc)
+    if msg in _KNOWN_TASK_LINK_VALIDATIONS:
+        return msg
+    return _sanitize_candidate_error(exc, 'Task link validation failed')
 
 
 def _sanitize_candidate_conflict(exc: Exception) -> str:
@@ -356,7 +379,7 @@ def prepare_conversation_task_candidate(
     except SummaryTaskNotFoundError as exc:
         raise HTTPException(status_code=404, detail='Summary action item not found') from exc
     except SummaryTaskConflictError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail=_sanitize_candidate_conflict(exc)) from exc
     except candidates_db.CandidateStoreError as exc:
         _raise_store_error(exc)
 
@@ -385,10 +408,8 @@ def accept_candidate(
             )
         return candidate_service.accept_candidate(uid, candidate_id, account_generation=account_generation)
     except TaskLinkValidationError as exc:
-        if isinstance(exc, TaskLinkResolverUnavailableError):
-            detail = _sanitize_candidate_error(exc, 'Task link resolver is temporarily unavailable')
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from exc
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        detail = _sanitize_task_link_validation_error(exc)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from exc
     except candidates_db.CandidateStoreError as exc:
         _raise_store_error(exc)
 
