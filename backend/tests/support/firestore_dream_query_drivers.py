@@ -178,7 +178,8 @@ registry_extension = SimpleNamespace(
             covered_by=('database.dream_scheduler.candidate_page',),
             reason='Discovery streams only through candidate_page (allowlist mode reads listed user documents by explicit ref instead); its chunked get_all calls read explicit document refs in bounded transactions that only initialize due rows and a cursor. SDK queue races are exercised in test_dream_queue_emulator.',
             expect_observed=False,
-            body_digest='3d93d04de0f8e275f39ec72d8546af67ff2d583fb061d7faa25db084460ae492',
+            # Re-reviewed: pending-deletion owners are skipped; query shape is unchanged.
+            body_digest='aa527730515a41f875712b46b2b1b7d7e36cc20564c1ad8178180e0b46b4fd14',
         )
     },
     SKIPS={},

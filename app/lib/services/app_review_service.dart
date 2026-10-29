@@ -78,6 +78,9 @@ class AppReviewService {
   bool _attemptedThisSession = false;
   bool _storageBroken = false;
 
+  /// A store review was requested in this app session (the native sheet may be up or just closed).
+  bool get requestedThisSession => _attemptedThisSession;
+
   /// Saves only the latest local timestamp for a user-visible bad experience.
   Future<void> recordBadExperience(AppReviewBadExperience category) async {
     // This is called from global error handlers. Keep even unexpected local

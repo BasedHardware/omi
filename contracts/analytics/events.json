@@ -3743,7 +3743,9 @@
             "screen_context_gate",
             "mcp_daily_cap",
             "budget_80",
-            "onboarding"
+            "onboarding",
+            "aha_first_summary",
+            "free_cap"
           ]
         },
         "currentPlan": {
@@ -3821,7 +3823,9 @@
             "screen_context_gate",
             "mcp_daily_cap",
             "budget_80",
-            "onboarding"
+            "onboarding",
+            "aha_first_summary",
+            "free_cap"
           ]
         }
       },
@@ -4045,6 +4049,148 @@
             "other",
             "none",
             "unknown"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionYearlySwitchShown",
+      "wire_name": "Subscription Yearly Switch Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "surface": {
+          "type": "enum",
+          "wire_name": "surface",
+          "values": [
+            "home",
+            "plans"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionYearlySwitchOpened",
+      "wire_name": "Subscription Yearly Switch Opened",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "surface": {
+          "type": "enum",
+          "wire_name": "surface",
+          "values": [
+            "home",
+            "plans"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionYearlySwitchConfirmed",
+      "wire_name": "Subscription Yearly Switch Confirmed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "surface": {
+          "type": "enum",
+          "wire_name": "surface",
+          "values": [
+            "home",
+            "plans"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionYearlySwitchSucceeded",
+      "wire_name": "Subscription Yearly Switch Succeeded",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "surface": {
+          "type": "enum",
+          "wire_name": "surface",
+          "values": [
+            "home",
+            "plans"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionYearlySwitchFailed",
+      "wire_name": "Subscription Yearly Switch Failed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "surface": {
+          "type": "enum",
+          "wire_name": "surface",
+          "values": [
+            "home",
+            "plans"
+          ]
+        },
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "declined",
+            "refused",
+            "preview_unavailable",
+            "error"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionYearlySwitchDismissed",
+      "wire_name": "Subscription Yearly Switch Dismissed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "surface": {
+          "type": "enum",
+          "wire_name": "surface",
+          "values": [
+            "home",
+            "plans"
           ]
         }
       },
@@ -4316,7 +4462,9 @@
             "screen_context_gate",
             "mcp_daily_cap",
             "budget_80",
-            "onboarding"
+            "onboarding",
+            "aha_first_summary",
+            "free_cap"
           ]
         }
       },

@@ -400,8 +400,10 @@ sole provider attempt; a denied prepared intent remains recoverable.
 
 Encrypted source audio lives under the existing private-cloud bucket's
 `chunks/{uid}/cap-held/` owner prefix; encrypted metadata and progress live under
-`users/{uid}/stt_cap_holds`. The checkpoint has no application TTL. Existing
-account deletion recursively removes the manifest and purges this chunk prefix.
+`users/{uid}/stt_cap_holds`. The checkpoint has no application TTL. Account
+deletion retains the manifest and this chunk prefix through its default 14-day
+grace window, then the existing recursive wipe removes both; `erase_now=true`
+and the grace kill switch preserve immediate erasure.
 A failed object upload cannot publish a successful manifest or acknowledgment.
 Concurrent identical uploads cannot overwrite a recovery checkpoint.
 

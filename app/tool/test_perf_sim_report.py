@@ -12,7 +12,7 @@ spec.loader.exec_module(reporter)
 
 
 def receipt(mode='profile'):
-    scenarios = {name: {metric: 10 for metric in reporter.METRICS} for name in reporter.SCENARIOS}
+    scenarios = {name: {metric: 10 for metric in reporter.METRICS + reporter.STALL_METRICS} for name in reporter.SCENARIOS}
     for metrics in scenarios.values():
         metrics.update(start_vm_us=1, end_vm_us=2)
     scenarios['cold_start']['restored_from_cache'] = True

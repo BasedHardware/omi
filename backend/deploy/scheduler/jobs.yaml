@@ -285,6 +285,26 @@ environments:
           min_backoff: 5s
         attempt_deadline: 1800s
         owner: .github/workflows/gcp_scheduler_reconcile.yml
+      - name: omi-admin-wall-warm
+        region: us-central1
+        schedule: "*/10 * * * *"
+        time_zone: Etc/UTC
+        state: ENABLED
+        target:
+          type: http
+          uri: https://admin.omi.me/api/internal/wall-warm
+          method: POST
+          headers:
+            x-cron-secret:
+              secret: WEB_ADMIN_CRON_SECRET
+              version: latest
+        retry:
+          max_backoff: 3600s
+          max_doublings: 5
+          max_retry: 0s
+          min_backoff: 5s
+        attempt_deadline: 1800s
+        owner: .github/workflows/gcp_scheduler_reconcile.yml
       - name: finops-unit-cost-daily
         region: us-central1
         schedule: "30 10 * * *"

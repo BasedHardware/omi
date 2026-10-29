@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from config.refactor_modes import cohort_configured, serving_for, shadow_or_serve
+from database.account_deletion_marker import account_deletion_blocks_user_work
 import database.conversations as conversations_db
 from utils.conversations.calls_metrics import observe
 from utils.daily_summary_validation import require_daily_summary
@@ -85,6 +86,9 @@ def _state(n, uid, date, existing, status, fingerprint=None):
 def generate(uid, date_str, start_date_utc, end_date_utc, *, legacy, prepare_delivery=None, user_initiated=False):
     # Imports stay lazy; tests can inject dependencies at the producer seam.
     from utils.other import notifications as n
+
+    if account_deletion_blocks_user_work(uid):
+        return None, False, 'account_pending_deletion'
 
     if not serving_for(FLAG, uid):
         return legacy(uid, date_str, start_date_utc, end_date_utc, prepare_delivery=prepare_delivery)

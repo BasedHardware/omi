@@ -1068,6 +1068,143 @@
       "expected_tile_names": [],
       "expected_agent_names": [],
       "expected_participant_names": []
+    },
+    {
+      "id": "incident_10_28_1",
+      "description": "Synthetic UI metadata using the exact incident participant list; no recorded content.",
+      "rows": [
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Decision Mill\nRobert Ream"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Decision Mill\nRobert Ream"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Decision Mill\nRobert Ream"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Decision Mill\nRobert Ream"
+        },
+        {
+          "appName": "Decision Mill",
+          "windowTitle": "Decision Mill",
+          "ocrText": ""
+        }
+      ],
+      "owner_names": [
+        "David Zhang"
+      ],
+      "owner_emails": [],
+      "expected_tile_names": [
+        "Robert Ream"
+      ],
+      "expected_participant_names": [
+        "Robert Ream"
+      ],
+      "expected_agent_names": [],
+      "must_exclude": [
+        "Decision Mill"
+      ]
+    },
+    {
+      "id": "incident_10_28_2",
+      "description": "Synthetic UI metadata using the exact incident participant list; no recorded content.",
+      "rows": [
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Robert Ream\nDecision Mill\nBest Trending Abliterated Mod\nDavid Zhang"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Robert Ream\nDecision Mill\nBest Trending Abliterated Mod\nDavid Zhang"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Robert Ream\nDecision Mill\nBest Trending Abliterated Mod\nDavid Zhang"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Robert Ream\nDecision Mill\nBest Trending Abliterated Mod\nDavid Zhang"
+        },
+        {
+          "appName": "Decision Mill",
+          "windowTitle": "Decision Mill",
+          "ocrText": ""
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Best Trending Abliterated Mod - Google Chrome",
+          "ocrText": ""
+        }
+      ],
+      "owner_names": [
+        "David Zhang"
+      ],
+      "owner_emails": [],
+      "expected_tile_names": [
+        "Robert Ream"
+      ],
+      "expected_participant_names": [
+        "Robert Ream"
+      ],
+      "expected_agent_names": [],
+      "must_exclude": [
+        "Decision Mill",
+        "Best Trending Abliterated Mod",
+        "David Zhang"
+      ]
+    },
+    {
+      "id": "meet_tab_strip_before_address_bar",
+      "description": "Names above the Meet address are tab/app chrome, even if repeated.",
+      "rows": [
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Decision Mill\nBest Trending Abliterated Mod\nmeet.google.com/abc-defg-hij\nRobert Ream\nDavid Zhang (You)"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Decision Mill\nBest Trending Abliterated Mod\nmeet.google.com/abc-defg-hij\nRobert Ream\nDavid Zhang (You)"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Decision Mill\nBest Trending Abliterated Mod\nmeet.google.com/abc-defg-hij\nRobert Ream\nDavid Zhang (You)"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Decision Mill\nBest Trending Abliterated Mod\nmeet.google.com/abc-defg-hij\nRobert Ream\nDavid Zhang (You)"
+        }
+      ],
+      "owner_names": [],
+      "owner_emails": [],
+      "expected_tile_names": [
+        "Robert Ream"
+      ],
+      "expected_participant_names": [
+        "Robert Ream"
+      ],
+      "expected_agent_names": [],
+      "must_exclude": [
+        "Decision Mill",
+        "Best Trending Abliterated Mod",
+        "David Zhang"
+      ]
     }
   ]
 }

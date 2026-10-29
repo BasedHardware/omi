@@ -84,6 +84,28 @@ async def test_heartbeat_renews_while_blocking_gpu_chain_runs(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_pump_error_log_adds_static_source_site_without_exception_payload(monkeypatch, caplog):
+    import logging
+
+    _, _, pump = setup()
+    stop = asyncio.Event()
+
+    async def fail_once(**_kwargs):
+        stop.set()
+        raise RuntimeError('sensitive provider payload')
+
+    monkeypatch.setattr(pump, 'run_once', fail_once)
+    with caplog.at_level(logging.ERROR):
+        await pump._lane(stop)
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert len(messages) == 1
+    assert 'event=batch_pump outcome=retry exception_type=RuntimeError' in messages[0]
+    assert 'site=test_batch_pipeline_pump.py:' in messages[0]
+    assert 'sensitive provider payload' not in messages[0]
+
+
+@pytest.mark.asyncio
 async def test_lost_lease_discards_late_result(monkeypatch):
     monkeypatch.setattr(module, 'HEARTBEAT_SECONDS', 0.01)
     release = threading.Event()

@@ -115,6 +115,8 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
     String previewText() => preview == null
         ? ''
         : _previewTail(LivePreviewCoverage.uncovered(preview.lines, capture.segments, capture.liveTranscriptStartedAt));
+    // Coverage walks every final segment; the spoken label reads it once per clock tick, not twice.
+    final spokenPreview = previewText();
     final status = noAudio
         ? l10n.captureNoAudioDetail
         : listening
@@ -161,7 +163,7 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
           label: [
             title,
             if (listening) (episode == null ? l10n.episodeCaptureFor : l10n.episodeLiveFor)(elapsed),
-            previewText().isNotEmpty ? previewText() : rest,
+            if (spokenPreview.isNotEmpty) spokenPreview else rest,
           ].join(', '),
           onTap: open,
           excludeSemantics: true,

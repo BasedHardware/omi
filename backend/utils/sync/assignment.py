@@ -8,6 +8,9 @@ no expiring lock that lets a late worker overwrite a newer transcript.
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import timedelta
+from utils.sync import processing_hold
+import time
+
 import logging
 from typing import TYPE_CHECKING, Any, Callable, NamedTuple, Optional, TypeVar
 from uuid import NAMESPACE_URL, uuid5
@@ -50,6 +53,7 @@ from utils.sync.live_speech_dedupe import (
     bounded_span_seconds,
     drop_covered_repeats,
     drop_proven_exact_retries,
+    measured_speech_seconds,
     pinned_audio_timeline,
     speech_overlap_seconds,
 )
@@ -76,7 +80,7 @@ _T = TypeVar('_T')
 
 
 class SyncAssignmentDiscoveryRequired(Exception):
-    """Restart read-only stamp-gap planning with bounded live metadata hints."""
+    """Restart read-only target rerouting with bounded live metadata hints."""
 
 
 # Firestore rejects any write that leaves a document above 1 MiB
@@ -192,6 +196,7 @@ class _Plan(NamedTuple):
     ancestor_updates: dict[str, dict]
     estimated_bytes: int
     bridge: dict | None
+    append_stats: dict | None = None
 
     @property
     def grows(self) -> bool:
@@ -214,7 +219,7 @@ def assign_in_transaction(
     absorbed: list[str] | None = None,
     live_lookup_complete: bool = False,
     live_lookup_incomplete_reason: str | None = None,
-    discover_on_stamp_gap: bool = False,
+    discover_on_reroute: bool = False,
 ) -> tuple[dict, bool, list[dict]]:
     """Production transaction body; injected codecs preserve encryption in adapters.
 
@@ -406,6 +411,14 @@ def assign_in_transaction(
         if target_id and target is None and tombstoned(target_id):
             raise SyncAssignmentSuperseded('sync target was deleted')
         target_id, target = None, None
+    if target_hint and not target_id and lineage_eligible and sync_lineage_resolve_enabled():
+        if discover_on_reroute:
+            # The explicit target was rejected. Restart outside the transaction
+            # for bounded metadata discovery, then recheck every caller fence.
+            raise SyncAssignmentDiscoveryRequired()
+        # Observation only: these hints never participate in target selection.
+        for cid in live_candidate_ids:
+            load(cid)
     stamp_fallback_live = bool(
         lineage_binding == 'stamp_fallback'
         and target_id
@@ -612,13 +625,13 @@ def assign_in_transaction(
         live_row = next((row for row in records if row['id'] == canonical), None)
         fleet_live_dedupe = bool(result['sync_live_target'] and sync_safety_wal_enabled())
         live_dedupe = bool(
-            not fleet_live_dedupe
-            and plan_target is not None
+            plan_target is not None
             and canonical == plan_target_id
             and live_row is not None
             and result['sync_live_target']
             and sync_live_dedupe_active_for(user_ref.id)
         )
+        survivors = new
         if live_dedupe and plan_target is not None and live_row is not None:
             verified = capture_covered_indices(
                 new,
@@ -653,11 +666,14 @@ def assign_in_transaction(
                 'exact_retries': exact_retries,
                 'sync_retry': sync_retry,
             }
-        else:
+        if fleet_live_dedupe or not live_dedupe:
+            # Compose the cohort contract with the shipped fleet matcher:
+            # capture-proven lexical drops and exact retries run first, then
+            # fleet fuzzy dedupe sees only their survivors.
             survivors = dedupe_segments_for_merge(
                 origin,
                 existing,
-                new,
+                survivors,
                 fuzzy_live_overlap=fleet_live_dedupe,
                 text_match_slop_seconds=(
                     60
@@ -673,24 +689,45 @@ def assign_in_transaction(
                 # broader clock-offset matches still require the batch gate.
                 single_match_slop_seconds=2 if plan_target and result['sync_live_target'] else 0,
             )
-        # refactor: superseded by utils.capture.dedupe when CAPTURE_COVERAGE_MODE=serve
-        survivors = choose_segments(
-            user_ref.id,
-            'incoming',
-            existing,
-            new,
-            survivors,
-            incoming_row=incoming,
-            reference_row=live_row or result,
-            conversation_rows=records,
-            proof=capture_covered_indices,
-        )
-        if live_dedupe and live_stats is not None and live_row is not None and plan_target is not None:
-            live_stats['appended_seconds_overlapping_live'] = speech_overlap_seconds(
+        if not live_dedupe:
+            # Capture-refactor serving proposals must not override the
+            # admitted lineage contract's lexical abstention.
+            survivors = choose_segments(
+                user_ref.id,
+                'incoming',
+                existing,
+                new,
+                survivors,
+                incoming_row=incoming,
+                reference_row=live_row or result,
+                conversation_rows=records,
+                proof=capture_covered_indices,
+            )
+        append_stats = None
+        if (
+            live_row is not None
+            and result['sync_live_target']
+            and (fleet_live_dedupe or live_dedupe or (lineage_eligible and sync_lineage_resolve_enabled()))
+        ):
+            # Observe the final survivors regardless of the dedupe policy.
+            # The reference predates both fresh speech and donor consolidation.
+            appended = measured_speech_seconds(survivors)
+            append_stats = {
+                'appended_seconds': appended,
+                'dropped_as_repeat_seconds': max(0.0, bounded_span_seconds(new) - bounded_span_seconds(survivors)),
+                'alignment_method': (
+                    append_alignment_method(live_stats['report'], live_stats['exact_retries'])
+                    if live_dedupe and live_stats is not None
+                    else 'none'
+                ),
+                'repeat_only': not survivors,
+                'lineage_admitted': bool(observe_bridge or (lineage_eligible and sync_lineage_resolve_enabled())),
+            }
+            append_stats['appended_seconds_overlapping_live'] = speech_overlap_seconds(
                 survivors,
                 live_row.get('transcript_segments') or [],
-                live_origin=plan_target['started_at'].timestamp(),
-                live_pinned=pinned_audio_timeline(plan_target.get('audio_timeline')),
+                live_origin=live_row['started_at'].timestamp(),
+                live_pinned=pinned_audio_timeline(live_row.get('audio_timeline')),
             )
         surviving = {id(segment) for segment in survivors}
         kept = tuple(i for i, segment in indexed_new if id(segment) in surviving)
@@ -732,6 +769,8 @@ def assign_in_transaction(
         persist_identity(user_ref.id, result, incoming, live_row)
         result['has_content'] = bool(segments)
         result['sync_content_revision'] = max([row.get('sync_content_revision') or 0 for row in records] + [0]) + 1
+        if processing_hold.enabled():
+            result[processing_hold.FIELD] = processing_hold.activity_patch(result, time.time())
         verdict, rule = fragment_rule(segments)
         curated = is_user_curated(result)
         result['sync_relevance'] = (
@@ -798,6 +837,10 @@ def assign_in_transaction(
                 for cid, patch in {**donor_updates, **ancestor_updates}.items()
             ]
         )
+        if append_stats is not None:
+            append_stats['span_delta_bucket'] = _lineage_span_delta_bucket(
+                stamp_fallback_live, plan_target_id, current, result
+            )
         return _Plan(
             canonical,
             matched,
@@ -811,6 +854,7 @@ def assign_in_transaction(
             ancestor_updates,
             _stored_document_bytes(collection.document(canonical), payload, current, invalidate),
             bridge,
+            append_stats,
         )
 
     # Every plan is read-only, so a full canonical can be dropped and the
@@ -892,6 +936,14 @@ def assign_in_transaction(
                 no_op['sync_live_target'] = True
             no_op['_sync_lineage_repeat_only'] = True
             no_op['_sync_lineage_stamp_gap_refused'] = True
+            if no_op['id'] == target_id and chosen.append_stats is not None:
+                no_op['_sync_lineage_dedupe'] = dict(
+                    chosen.append_stats,
+                    appended_seconds=0.0,
+                    appended_seconds_overlapping_live=0.0,
+                    repeat_only=True,
+                    span_delta_bucket='0',
+                )
             if no_op['id'] == target_id and live_stats is not None and live_stats['sync_retry']:
                 no_op['_sync_lineage_completion_pending'] = True
             no_op['_sync_projected_size_bucket'] = projected_size_bucket(
@@ -900,7 +952,7 @@ def assign_in_transaction(
                 )
             )
             return no_op, False, []
-        if discover_on_stamp_gap:
+        if discover_on_reroute:
             # No writes have happened. The adapter discovers outside this
             # transaction, then retries the target, deletion and lease fences
             # along with every candidate read before committing the reroute.
@@ -940,10 +992,13 @@ def assign_in_transaction(
             'dropped_as_repeat_seconds': bounded_span_seconds(incoming['transcript_segments']),
             'alignment_method': append_alignment_method(live_stats['report'], live_stats['exact_retries']),
             'repeat_only': True,
+            'lineage_admitted': bool(chosen.append_stats and chosen.append_stats['lineage_admitted']),
             'span_delta_bucket': _lineage_span_delta_bucket(
                 stamp_fallback_live, target_id, chosen.matched.get(chosen.canonical), no_op
             ),
         }
+        if stamp_fallback_live:
+            no_op['_sync_lineage_stamp_append'] = no_op['_sync_lineage_dedupe']['span_delta_bucket']
         no_op['_sync_projected_size_bucket'] = projected_size_bucket(
             projected_document_bytes(collection.document(chosen.canonical), {}, chosen.matched[chosen.canonical])
         )
@@ -1143,20 +1198,10 @@ def assign_in_transaction(
             lookup_incomplete_reason=live_lookup_incomplete_reason,
             candidates_read=candidates_read,
         )
-    if live_stats is not None:
+    if chosen.append_stats is not None:
         # Transient telemetry only: the encoded plan already committed above.
-        appended = bounded_span_seconds(survivors)
-        result['_sync_lineage_dedupe'] = {
-            'appended_seconds': appended,
-            'appended_seconds_overlapping_live': live_stats['appended_seconds_overlapping_live'],
-            'dropped_as_repeat_seconds': max(0.0, bounded_span_seconds(incoming['transcript_segments']) - appended),
-            'alignment_method': append_alignment_method(live_stats['report'], live_stats['exact_retries']),
-            'repeat_only': False,
-            'span_delta_bucket': _lineage_span_delta_bucket(
-                stamp_fallback_live, target_id, matched.get(canonical), result
-            ),
-        }
-    elif stamp_fallback_live and canonical == target_id and not created and result.get('sync_live_target'):
+        result['_sync_lineage_dedupe'] = chosen.append_stats
+    if stamp_fallback_live and canonical == target_id and not created and result.get('sync_live_target'):
         result['_sync_lineage_stamp_append'] = _lineage_span_delta_bucket(
             True, target_id, matched.get(canonical), result
         )

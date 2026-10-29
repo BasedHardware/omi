@@ -211,5 +211,6 @@ export const ROUTE_POLICIES: Record<string, RoutePolicy> = {
     open: "TV share-link capability token; issuer's finance:read re-checked",
   },
   "POST /api/internal/precompute": { open: "x-cron-secret scheduler header" },
+  "POST /api/internal/wall-warm": { open: "x-cron-secret scheduler header" },
   "GET /api/public/user-growth": { open: "public aggregate counts only" },
 };

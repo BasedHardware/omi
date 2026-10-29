@@ -186,7 +186,7 @@ def entries():
             covered_by=('database.batch_pipeline_store.control_candidate',),
             reason='thin store adapter forwards namespace and bounded query arguments unchanged',
             expect_observed=False,
-            body_digest='73808da191932dbe29ef2a4d06712add5c584fb0b6e93f980ff666c08df60288',
+            body_digest='d82ee8b1c03be61b104e25304d6a0a732a9b59453fd302f4e7794a75622d65ad',
         ),
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreStore.oldest_retry',
@@ -202,8 +202,16 @@ def entries():
         ),
         DriverEntry(
             'database.batch_pipeline_store.control_candidate',
-            domains={'namespace': namespaces, 'priority': [0, 1, 2], 'pool': ['batch', 'live']},
-            neutrals={'now': (1.0, 'eligibility timestamp operand only')},
+            domains={
+                'namespace': namespaces,
+                'priority': [0, 1, 2],
+                'pool': ['batch', 'live'],
+                'worker_id': ['', 'worker-a'],
+            },
+            neutrals={
+                'now': (1.0, 'eligibility timestamp operand only'),
+                'exclude': ((), 'in-memory exclusion only'),
+            },
         ),
         DriverEntry(
             'database.batch_pipeline_store.oldest_retry',

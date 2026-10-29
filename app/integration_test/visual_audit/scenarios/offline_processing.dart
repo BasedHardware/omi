@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/services/wals/wal_derived_sync_views.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart' show BtDevice, BleAudioCodec;
 import 'package:omi/backend/schema/conversation.dart';
@@ -16,6 +17,7 @@ import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/activity/activity_page.dart';
 import 'package:omi/pages/activity/activity_seen.dart';
 import 'package:omi/pages/conversations/on_the_way_page.dart';
+import 'package:omi/pages/home/widgets/home_daily_recaps_setting.dart';
 import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -30,7 +32,7 @@ import '../harness.dart';
 import 'capture.dart';
 
 /// A SyncProvider reporting one fixed offline-sync pipeline state.
-class _SyncAuditProvider extends ChangeNotifier implements SyncProvider {
+class _SyncAuditProvider extends ChangeNotifier with WalDerivedSyncViews implements SyncProvider {
   _SyncAuditProvider({this.wals = const [], this.phase = SyncPhase.idle});
 
   final List<Wal> wals;
@@ -219,7 +221,10 @@ final offlineProcessingScenarios = <AuditScenario>[
     id: 'home-offline-processing-ready',
     title: 'Home: catching up on a long backlog',
     page: 'lib/pages/conversations/conversations_page.dart (ConversationsPage) on Home',
-    state: 'Three hours of pendant audio waiting for its sync, one block downloading; the bell has a new recap',
+    state: 'Three hours of pendant audio waiting for its sync, one block downloading; Daily Recaps on Home is on and '
+        'the bell has a new recap',
+    // Home's recaps light the bell, and Home only loads them with the setting on.
+    prefs: const {HomeDailyRecapsSetting.prefKey: true},
     run: (a) async {
       final sync = _SyncAuditProvider(
         phase: SyncPhase.downloadingFromDevice,

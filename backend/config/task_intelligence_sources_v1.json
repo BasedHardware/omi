@@ -14,12 +14,13 @@
         "app/lib/pages/conversation_detail/widgets.dart",
         "app/lib/pages/conversations/widgets/goals_widget.dart",
         "backend/routers/action_items.py",
-        "backend/utils/open_loops/service.py"
+        "backend/utils/open_loops/service.py",
+        "backend/utils/retrieval/tool_services/action_items.py"
       ],
       "test_adapter": "direct_command_contract",
       "writer_anchors": [
         {
-          "path": "backend/routers/action_items.py",
+          "path": "backend/utils/retrieval/tool_services/action_items.py",
           "symbol": "action_items_db.create_action_item",
           "discover": true
         },
@@ -56,6 +57,11 @@
         {
           "path": "backend/utils/open_loops/service.py",
           "symbol": "action_items_db.mark_action_item_completed",
+          "discover": true
+        },
+        {
+          "path": "backend/utils/retrieval/tool_services/action_items.py",
+          "symbol": "action_items_db.create_action_items_batch",
           "discover": true
         }
       ]
@@ -134,11 +140,6 @@
         {
           "path": "backend/utils/retrieval/tool_services/action_items.py",
           "symbol": "action_items_db.update_action_item",
-          "discover": true
-        },
-        {
-          "path": "backend/utils/retrieval/tools/action_item_tools.py",
-          "symbol": "action_items_db.create_action_item",
           "discover": true
         },
         {
