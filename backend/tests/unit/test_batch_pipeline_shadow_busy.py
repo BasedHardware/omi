@@ -95,6 +95,19 @@ def test_other_hold_reasons_remain_busy():
     assert busy([retry(compute_decision={'outcome': 'held', 'reason': 'synthetic_other_hold'})])
 
 
+@pytest.mark.parametrize('state', ['ready', 'retry'])
+def test_unknown_nonempty_decision_overrides_stale_allowance_hold(state):
+    assert busy(
+        [
+            retry(
+                state=state,
+                compute_decision={'status': 'pending_review'},
+                last_policy_hold={'reason': 'allowance_exhausted'},
+            )
+        ]
+    )
+
+
 def test_held_prefix_does_not_hide_runnable_retry_at_attempt_cap():
     held = [retry(compute_decision={'outcome': 'held', 'reason': 'allowance_exhausted'}) for _ in range(168)]
     assert not busy(held)

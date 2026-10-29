@@ -56,7 +56,9 @@ def pool_busy(client, namespace, *, now=None):
     jobs = client.collection(f'{namespace}_jobs')
     if list(jobs.where('state', '==', 'leased').where('lease_until', '>', now).limit(1).stream()):
         return True
-    fields = ('compute_decision.outcome', 'compute_decision.reason', 'last_policy_hold.reason')
+    # Preserve nonempty unknown decisions: a subfield mask could turn one into
+    # an absent decision and incorrectly revive a stale allowance hold.
+    fields = ('compute_decision', 'last_policy_hold.reason')
     if _has_dispatchable(jobs.where('state', '==', 'ready').select(fields).limit(BUSY_HOLD_SCAN_LIMIT + 1).stream()):
         return True
     # Scheduler.recover promotes every due retry, including one whose attempt
