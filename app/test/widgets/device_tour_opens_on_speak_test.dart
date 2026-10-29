@@ -178,6 +178,19 @@ void main() {
     });
   }
 
+  for (final notSpeech in reviewedNonFinishers) {
+    testWidgets('"$notSpeech" shows in the card but does not finish the step', (tester) async {
+      await openTour(tester);
+      await speak(tester, notSpeech);
+
+      expect(find.text(notSpeech), findsOneWidget);
+      expect(find.text('Good job!'), findsNothing);
+      expect(find.text('Continue'), findsNothing);
+      expect(capture.deviceOnboardingProvider!.currentStep, DeviceOnboardingProvider.transcriptionStep);
+      expect(await tourEvents(tester), ['Device Onboarding Started']);
+    });
+  }
+
   testWidgets('largest text size: nothing is cut off and Continue is reachable', (tester) async {
     // iPhone 17 Pro at the largest accessibility size (body text 17 pt -> 53 pt).
     tester.view.physicalSize = const Size(1206, 2622);

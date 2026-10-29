@@ -28,6 +28,13 @@ void main() {
     });
   }
 
+  // Round-2 review: repeats, bare greetings and bracketed non-speech must not finish the step.
+  for (final notSpeech in reviewedNonFinishers) {
+    test('"$notSpeech" does not finish the speaking step', () {
+      expect(finishes(notSpeech), isFalse);
+    });
+  }
+
   test('a greeting is not enough, in any script', () {
     for (final greeting in ['Hello', 'Hi there', 'もしもし', '你好', '안녕하세요', 'สวัสดีครับ', 'Merhaba', 'مرحبا']) {
       expect(finishes(greeting), isFalse, reason: '"$greeting" is not enough speech');

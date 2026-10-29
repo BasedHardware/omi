@@ -7,3 +7,7 @@ String deviceTourExample(String subtitle) {
   expect(lines, hasLength(2), reason: 'the subtitle is a lead line, then the quoted example');
   return lines.last.replaceAll(RegExp(r'^[^\p{L}\p{N}]+|[^\p{L}\p{N}.。]+$', unicode: true), '');
 }
+
+/// Transcripts that must not finish the speaking step: one word repeated, a Japanese greeting, a Thai greeting
+/// with a full stop, and a speech-to-text non-speech marker.
+const reviewedNonFinishers = ['hello hello hello hello', 'おはようございます', 'สวัสดีครับ.', '[unintelligible speech]'];
