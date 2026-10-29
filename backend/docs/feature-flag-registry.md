@@ -439,6 +439,7 @@ and an explicit empty literal renders as `''`.
 
 | key | summary | surfaces | kind | fail | _base | dev | prod | PostHog row | decision | terminal | review_by | owner |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `ACCOUNT_DELETION_GRACE_ENABLED` | Default-on account deletion grace; explicit false restores immediate erasure | backend | env | open | — | — | — | — | keep | keep | — | unowned |
 | `ACTION_ITEMS_LIST_STALE_CLIENT_REFUSE` | Refuse stale action-items list clients | backend | env | open | — | — | 1 | — | keep | keep | — | unowned |
 | `ACTION_ITEM_SOURCE_LINKS_ENABLED` | Default on; shared app/tool create validates supplied conversation sources within the authenticated account | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `ADMIN_KEY_AUTH_ENABLED` | Allow administrator-key authentication | backend | env | open | — | — | — | — | keep | keep | — | unowned |
@@ -621,6 +622,7 @@ and an explicit empty literal renders as `''`.
 | key | summary | surfaces | kind | fail | _base | dev | prod | PostHog row | decision | terminal | review_by | owner |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `ACCOUNT_DELETION_DISPATCH_MODE` | Select Cloud Tasks for account deletion | backend | env | closed | — | — | cloud_tasks (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | keep | keep | — | unowned |
+| `ACCOUNT_DELETION_GRACE_WINDOW_DAYS` | Account deletion grace window in whole days; defaults to 14 and clamps to 0..365 | backend | env | open | — | — | — | — | keep | keep | — | unowned |
 | `ACTION_ITEM_VALIDITY_MODE_SERVE_PERCENT` | Consistent uid serving percentage for task validity shadow mode; default zero | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `ACTION_ITEM_VALIDITY_MODE_SERVE_UID_SHA256S` | Optional task validity serving uid digests; default empty | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `AUDIO_CLEANUP_HOLD_WINDOWS` | Inclusive capture preservation windows, comma-separated timezone-qualified start..end pairs; defaults to 2026-10-22T13:36:30Z..2026-10-24T07:16:00Z. Empty/malformed configuration holds cleanup | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
@@ -835,6 +837,8 @@ and an explicit empty literal renders as `''`.
 Env flags with no declaration in `runtime_env` or any chart; they run on
 their code default (`fail` tells you which way a missing value resolves).
 
+- `ACCOUNT_DELETION_GRACE_ENABLED` — Default-on account deletion grace; explicit false restores immediate erasure (fail: open)
+- `ACCOUNT_DELETION_GRACE_WINDOW_DAYS` — Account deletion grace window in whole days; defaults to 14 and clamps to 0..365 (fail: open)
 - `ACTION_ITEMS_V2_MODE` — Owner-involved commitments, social-intent admission and exact capture contradiction checks; default shadow (fail: closed)
 - `ACTION_ITEMS_V2_MODE_SERVE_PERCENT` — Serve cohort percentage; default zero (fail: closed)
 - `ACTION_ITEMS_V2_MODE_SERVE_UID_SHA256S` — Serve cohort digest selector; default empty (fail: closed)

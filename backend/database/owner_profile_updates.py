@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from google.cloud import firestore
 from database._client import get_data_plane_firestore_client as get_firestore_client
 from database.account_deletion_marker import account_deletion_document
+from database.account_deletion_policy import account_deletion_marker_blocks_access
 
 
 def get_user_speaker_embedding_recovery_state(uid: str):
@@ -28,7 +29,9 @@ def recover_user_speaker_embedding(uid: str, embedding: list, *, expected_update
         data = snapshot.to_dict() or {}
         if (
             not snapshot.exists
-            or deleting.exists
+            or account_deletion_marker_blocks_access(
+                marker_exists=deleting.exists, raw_status=(deleting.to_dict() or {}).get('wipe_status')
+            )
             or data.get('speaker_embedding')
             or data.get('speaker_embedding_updated_at') != expected_updated_at
         ):

@@ -503,6 +503,9 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite('utils/webhooks.py', '_build_conversation_webhook_payload_sync', 'conversation_to_dict'),
         DumpSite('utils/memory/developer_memory_list.py', '_validated_memories', 'model_dump'),
         DumpSite('utils/goals_response.py', 'list_developer_goals', 'model_dump'),
+        # Blank-session retry identity only: the request dump has an explicit
+        # field allowlist and feeds a hash, never a client or intelligence view.
+        DumpSite('routers/developer.py', '_derived_client_session_id', 'model_dump'),
         DumpSite('routers/developer.py', '_ingest_conversation_from_segments', 'model_dump'),
         # Blank-session retry identity hashes only fixed recording facts;
         # client_processing and other display projections are excluded. This

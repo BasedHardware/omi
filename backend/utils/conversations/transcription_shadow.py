@@ -25,6 +25,7 @@ from google.cloud import firestore
 from prometheus_client import Counter, Histogram
 
 from database import conversations as conversations_db
+from database.account_deletion_policy import account_deletion_marker_blocks_access
 from config.batch_pipeline import RecordOwnerContention
 from config.policy import resolve_batch_policy
 from utils.manual_speaker_assignments import manual_owner_reserved
@@ -612,7 +613,10 @@ def _store_result(uid: str, conversation_id: str, result: dict[str, Any], *, ver
         # Account deletion persists this marker before its recursive sweep.
         # Reading it in the same transaction fences a child commit after that
         # sweep has passed the conversation, even while the parent still exists.
-        if deletion_marker.get(transaction=transaction).exists:
+        deletion = deletion_marker.get(transaction=transaction)
+        if account_deletion_marker_blocks_access(
+            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('wipe_status')
+        ):
             return
         snapshot = parent.get(transaction=transaction)
         if not snapshot.exists or (snapshot.to_dict() or {}).get('deleted'):

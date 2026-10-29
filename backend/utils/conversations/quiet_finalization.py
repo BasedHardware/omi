@@ -9,6 +9,7 @@ from google.api_core.exceptions import InvalidArgument
 
 from config.listen_quiet_finalization import enabled
 from database import conversation_quiet_checks as checks_db
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from utils.account_cutover.access import should_skip_background_account_mutation
 from utils.cloud_tasks import (
     enqueue_listen_finalization_job,
@@ -74,6 +75,8 @@ def run(job_id: str, generation: int, *, firestore_client: Any = None) -> str:
     check = checks_db.evaluate_quiet_check(job_id, generation, firestore_client=firestore_client)
     if check['status'] not in {'ready', 'empty_ready', 'deferred'}:
         return check['status']
+    if account_deletion_blocks_user_work(check['uid'], firestore_client=firestore_client):
+        return 'account_pending_deletion'
     if should_skip_background_account_mutation(check['uid'], firestore_client=firestore_client):
         checks_db.stop_quiet_check(job_id, check['dispatch_generation'], firestore_client=firestore_client)
         return 'account_fenced'

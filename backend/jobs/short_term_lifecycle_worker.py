@@ -21,6 +21,7 @@ from database.firestore_index_registry import (
     POLICY_EXPIRED_SHORT_TERM_QUERY,
 )
 from database.memory_collections import MemoryCollections
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from models.memory_evidence import SourceState
 from models.product_memory import (
     DEFAULT_SHORT_TERM_TTL,
@@ -258,6 +259,8 @@ def fetch_expired_short_term_memory_items_firestore(
 
     if not uid or not uid.strip():
         raise ValueError('short-term lifecycle firestore fetch uid must be non-empty')
+    if account_deletion_blocks_user_work(uid):
+        return []
     if limit is not None and limit <= 0:
         raise ValueError('short-term lifecycle firestore fetch limit must be positive')
 
@@ -420,6 +423,9 @@ def run_short_term_lifecycle_firestore(
     dispositions: Optional[Mapping[str, ShortTermDisposition | str]] = None,
 ) -> ShortTermLifecycleWorkerReport:
     """Run lifecycle policy for one bounded expired, terminal-eligible query set."""
+
+    if account_deletion_blocks_user_work(uid):
+        return ShortTermLifecycleWorkerReport()
 
     current_time = _current_time(now)
     items = fetch_expired_short_term_memory_items_firestore(

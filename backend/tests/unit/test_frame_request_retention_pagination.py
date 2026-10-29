@@ -13,6 +13,11 @@ from services.frame_request_retention import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _allow_test_users_through_deletion_fence(monkeypatch):
+    monkeypatch.setattr(frame_request_retention, "account_deletion_blocks_user_work", lambda _uid: False)
+
+
 @dataclass
 class _User:
     id: str

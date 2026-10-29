@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any, Callable, Tuple
 from database import chat_edits
 from database.dream_dirty import after_write
+from database.account_deletion_policy import account_deletion_marker_blocks_access
 from google.api_core.exceptions import AlreadyExists, Conflict, FailedPrecondition, NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -4536,7 +4537,9 @@ def promote_final_pass_if_current(
         current = snapshot.to_dict() or {}
         if (
             not snapshot.exists
-            or deleting.exists
+            or account_deletion_marker_blocks_access(
+                marker_exists=deleting.exists, raw_status=(deleting.to_dict() or {}).get('wipe_status')
+            )
             or is_soft_deleted(current)
             or current.get('is_locked')
             or current.get('record_lane_owner') in {'batch_live_v1', 'batch_sync_v1'}
