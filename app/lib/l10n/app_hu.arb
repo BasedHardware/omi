@@ -4567,6 +4567,8 @@
     "homeNoiseFoldHidden": "{count, plural, =1{1 rövid felvétel elrejtve} other{{count} rövid felvétel elrejtve}}",
     "homeNoiseFoldShow": "Megjelenítés",
     "homeNoiseFoldHide": "{count, plural, =1{1 rövid felvétel elrejtése} other{{count} rövid felvétel elrejtése}}",
+    "dailyRecapsOnHome": "Napi összefoglalók a Kezdőlapon",
+    "dailyRecapsOnHomeDescription": "A legújabb összefoglalók megjelenítése a Kezdőlap tetején.",
     "yearlySwitchTitle": "Váltás éves fizetésre",
     "yearlySwitchRowSavings": "Évi {amount} megtakarítás",
     "yearlySwitchHomeTitle": "Évi {amount} megtakarítás éves fizetéssel",

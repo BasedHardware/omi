@@ -14761,6 +14761,12 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'Dnevni rezimei na početnoj';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Prikaži najnovije rezimee na vrhu početne.';
+
+  @override
   String get yearlySwitchTitle => 'Pređi na godišnje';
 
   @override

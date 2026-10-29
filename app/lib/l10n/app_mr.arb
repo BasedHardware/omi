@@ -11897,6 +11897,8 @@
     "homeNoiseFoldHidden": "{count, plural, =1{1 लहान क्लिप लपवले आहे} other{{count} लहान क्लिप्स लपवली आहेत}}",
     "homeNoiseFoldShow": "दाखवा",
     "homeNoiseFoldHide": "{count, plural, =1{1 लहान क्लिप लपवा} other{{count} लहान क्लिप्स लपवा}}",
+    "dailyRecapsOnHome": "मुख्यपृष्ठावर दैनिक रीकॅप्स",
+    "dailyRecapsOnHomeDescription": "मुख्यपृष्ठाच्या वर तुमचे नवीनतम रीकॅप्स दाखवा.",
     "yearlySwitchTitle": "वार्षिकवर स्विच करा",
     "yearlySwitchRowSavings": "वर्षाला {amount} वाचवा",
     "yearlySwitchHomeTitle": "वार्षिक पेमेंटने वर्षाला {amount} वाचवा",

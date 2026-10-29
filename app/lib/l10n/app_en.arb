@@ -18011,6 +18011,14 @@
             }
         }
     },
+    "dailyRecapsOnHome": "Daily Recaps on Home",
+    "@dailyRecapsOnHome": {
+        "description": "Developer Settings toggle title: show the Daily Recaps row on Home"
+    },
+    "dailyRecapsOnHomeDescription": "Show your latest recaps at the top of Home.",
+    "@dailyRecapsOnHomeDescription": {
+        "description": "Subtitle for the Daily Recaps on Home toggle in Developer Settings"
+    },
     "yearlySwitchTitle": "Switch to Yearly",
     "@yearlySwitchTitle": {
         "description": "Title of the sheet, row and button that switch a monthly subscription to the same plan billed yearly"

@@ -4471,6 +4471,8 @@
     "homeNoiseFoldHidden": "{count, plural, =1{Skrytá 1 krátká nahrávka} other{Skryto krátkých nahrávek: {count}}}",
     "homeNoiseFoldShow": "Zobrazit",
     "homeNoiseFoldHide": "{count, plural, =1{Skrýt 1 krátkou nahrávku} other{Skrýt krátké nahrávky: {count}}}",
+    "dailyRecapsOnHome": "Denní souhrny na domovské obrazovce",
+    "dailyRecapsOnHomeDescription": "Zobrazit nejnovější souhrny v horní části domovské obrazovky.",
     "yearlySwitchTitle": "Přejít na roční",
     "yearlySwitchRowSavings": "Ušetřete {amount} ročně",
     "yearlySwitchHomeTitle": "Ušetřete {amount} ročně s roční platbou",

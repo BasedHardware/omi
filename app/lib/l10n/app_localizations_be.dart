@@ -14767,6 +14767,12 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'Штодзённыя рэзюмэ на галоўнай';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Паказваць апошнія рэзюмэ ўверсе галоўнай.';
+
+  @override
   String get yearlySwitchTitle => 'Перайсці на гадавы';
 
   @override

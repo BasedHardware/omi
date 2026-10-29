@@ -14792,6 +14792,12 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'Napi összefoglalók a Kezdőlapon';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'A legújabb összefoglalók megjelenítése a Kezdőlap tetején.';
+
+  @override
   String get yearlySwitchTitle => 'Váltás éves fizetésre';
 
   @override

@@ -4471,6 +4471,8 @@
     "homeNoiseFoldHidden": "{count, plural, =1{Приховано 1 короткий запис} other{Приховано {count} коротких записів}}",
     "homeNoiseFoldShow": "Показати",
     "homeNoiseFoldHide": "{count, plural, =1{Приховати 1 короткий запис} other{Приховати {count} коротких записів}}",
+    "dailyRecapsOnHome": "Щоденні підсумки на головній",
+    "dailyRecapsOnHomeDescription": "Показувати останні підсумки вгорі головної.",
     "yearlySwitchTitle": "Перейти на річний",
     "yearlySwitchRowSavings": "Заощаджуйте {amount} на рік",
     "yearlySwitchHomeTitle": "Заощаджуйте {amount} на рік з річною оплатою",

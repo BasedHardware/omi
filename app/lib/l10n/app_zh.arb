@@ -4471,6 +4471,8 @@
     "homeNoiseFoldHidden": "{count, plural, =1{已隐藏 1 段短录音} other{已隐藏 {count} 段短录音}}",
     "homeNoiseFoldShow": "显示",
     "homeNoiseFoldHide": "{count, plural, =1{隐藏 1 段短录音} other{隐藏 {count} 段短录音}}",
+    "dailyRecapsOnHome": "首页每日回顾",
+    "dailyRecapsOnHomeDescription": "在首页顶部显示最新的回顾。",
     "yearlySwitchTitle": "改为按年付费",
     "yearlySwitchRowSavings": "每年节省 {amount}",
     "yearlySwitchHomeTitle": "按年付费，每年节省 {amount}",

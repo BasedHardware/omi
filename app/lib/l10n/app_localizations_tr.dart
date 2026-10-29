@@ -14746,6 +14746,12 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'Ana Sayfada Günlük Özetler';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'En son özetlerini Ana Sayfanın üstünde göster.';
+
+  @override
   String get yearlySwitchTitle => 'Yıllığa geçin';
 
   @override

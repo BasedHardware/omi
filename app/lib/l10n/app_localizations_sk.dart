@@ -14728,6 +14728,12 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'Denné súhrny na domovskej obrazovke';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Zobraziť najnovšie súhrny v hornej časti domovskej obrazovky.';
+
+  @override
   String get yearlySwitchTitle => 'Prejsť na ročné';
 
   @override

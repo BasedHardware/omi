@@ -153,7 +153,7 @@ BODY_DIGEST = {
     'database.batch_pipeline_store.FirestoreStore.projection_page': 'bc9fe5cd08a05748eaa118af15031abdcb1a68d91d7f0b74bf177a27eb980a94',
     'database.batch_pipeline_store.FirestoreStore.projection_successor': '96adabf372104327c5a8065ef2ff06621648ee242b3415d04b047d50ded9e6b1',
     'database.batch_pipeline_store.FirestoreTransaction.service_frontier': '74aa1993996cdc9ca93a1141de64dfc7e05a9d831a67860ddbb8a64d55520a02',
-    'database.batch_pipeline_store.FirestoreStore.control_candidate': '73808da191932dbe29ef2a4d06712add5c584fb0b6e93f980ff666c08df60288',
+    'database.batch_pipeline_store.FirestoreStore.control_candidate': 'd82ee8b1c03be61b104e25304d6a0a732a9b59453fd302f4e7794a75622d65ad',
     'database.batch_pipeline_store.FirestoreStore.oldest_retry': '8d77904364b37100b5816f0252831ef6cf8807930dba8671cdc56bf603340315',
     'database.batch_pipeline_staging.reap': '39b0e41ad13a7bc50bb8f987b6f78d11253663fd15baf39ca6663fb9f1fde377',
     'database.batch_pipeline_store.FirestoreStore.projection_pending': '351a3ea949d6033cf3f2003805681af4af223cd0db4a12dc2869e70fb2a74d59',

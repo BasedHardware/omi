@@ -4471,6 +4471,8 @@
     "homeNoiseFoldHidden": "{count, plural, =1{Paslėptas 1 trumpas įrašas} other{Paslėpta {count} trumpų įrašų}}",
     "homeNoiseFoldShow": "Rodyti",
     "homeNoiseFoldHide": "{count, plural, =1{Slėpti 1 trumpą įrašą} other{Slėpti {count} trumpus įrašus}}",
+    "dailyRecapsOnHome": "Dienos apžvalgos pradžios ekrane",
+    "dailyRecapsOnHomeDescription": "Rodyti naujausias apžvalgas pradžios ekrano viršuje.",
     "yearlySwitchTitle": "Pereiti prie metinio",
     "yearlySwitchRowSavings": "Sutaupykite {amount} per metus",
     "yearlySwitchHomeTitle": "Sutaupykite {amount} per metus mokėdami kas metus",

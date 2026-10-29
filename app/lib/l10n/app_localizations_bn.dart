@@ -14729,6 +14729,12 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'হোমে দৈনিক সংক্ষেপ';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'হোমের উপরে আপনার সাম্প্রতিক সংক্ষেপ দেখান।';
+
+  @override
   String get yearlySwitchTitle => 'বার্ষিকে যান';
 
   @override

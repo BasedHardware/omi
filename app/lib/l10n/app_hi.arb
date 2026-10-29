@@ -4471,6 +4471,8 @@
     "homeNoiseFoldHidden": "{count, plural, =1{1 छोटी क्लिप छिपाई गई} other{{count} छोटी क्लिप छिपाई गईं}}",
     "homeNoiseFoldShow": "दिखाएं",
     "homeNoiseFoldHide": "{count, plural, =1{1 छोटी क्लिप छिपाएं} other{{count} छोटी क्लिप छिपाएं}}",
+    "dailyRecapsOnHome": "होम पर दैनिक सारांश",
+    "dailyRecapsOnHomeDescription": "होम के ऊपर अपने नवीनतम सारांश दिखाएं।",
     "yearlySwitchTitle": "सालाना पर स्विच करें",
     "yearlySwitchRowSavings": "साल में {amount} बचाएं",
     "yearlySwitchHomeTitle": "सालाना भुगतान से साल में {amount} बचाएं",

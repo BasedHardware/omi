@@ -14732,6 +14732,12 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'Denní souhrny na domovské obrazovce';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Zobrazit nejnovější souhrny v horní části domovské obrazovky.';
+
+  @override
   String get yearlySwitchTitle => 'Přejít na roční';
 
   @override

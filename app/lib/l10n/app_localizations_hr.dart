@@ -14769,6 +14769,12 @@ class AppLocalizationsHr extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'Dnevni sažetci na početnoj';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Prikaži najnovije sažetke na vrhu početne.';
+
+  @override
   String get yearlySwitchTitle => 'Prijeđi na godišnje';
 
   @override

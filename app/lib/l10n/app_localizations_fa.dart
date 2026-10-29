@@ -14728,6 +14728,12 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'خلاصه‌های روزانه در خانه';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'نمایش جدیدترین خلاصه‌ها در بالای صفحه خانه.';
+
+  @override
   String get yearlySwitchTitle => 'تغییر به سالانه';
 
   @override

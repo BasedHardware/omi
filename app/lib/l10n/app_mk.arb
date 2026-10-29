@@ -11897,6 +11897,8 @@
     "homeNoiseFoldHidden": "{count, plural, =1{Скриен е 1 краток клип} other{Скриени се {count} кратки клипови}}",
     "homeNoiseFoldShow": "Прикажи",
     "homeNoiseFoldHide": "{count, plural, =1{Скрии 1 краток клип} other{Скрии {count} кратки клипови}}",
+    "dailyRecapsOnHome": "Дневни резимеа на Почетна",
+    "dailyRecapsOnHomeDescription": "Прикажи ги најновите резимеа на врвот на Почетна.",
     "yearlySwitchTitle": "Префрли на годишно",
     "yearlySwitchRowSavings": "Заштедете {amount} годишно",
     "yearlySwitchHomeTitle": "Заштедете {amount} годишно со годишно плаќање",

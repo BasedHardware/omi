@@ -14766,6 +14766,12 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'Dienas kopsavilkumi sākumā';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Rādīt jaunākos kopsavilkumus sākuma augšdaļā.';
+
+  @override
   String get yearlySwitchTitle => 'Pāriet uz gada maksu';
 
   @override

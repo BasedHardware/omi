@@ -14830,6 +14830,12 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'Ημερήσιες περιλήψεις στην Αρχική';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Εμφάνιση των πιο πρόσφατων περιλήψεων στην κορυφή της Αρχικής.';
+
+  @override
   String get yearlySwitchTitle => 'Μετάβαση σε ετήσιο';
 
   @override

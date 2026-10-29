@@ -14781,6 +14781,12 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'Ежедневные сводки на главной';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Показывать последние сводки вверху главной.';
+
+  @override
   String get yearlySwitchTitle => 'Перейти на годовой';
 
   @override

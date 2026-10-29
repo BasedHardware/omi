@@ -4506,6 +4506,8 @@
     "homeNoiseFoldHidden": "{count, plural, =1{1 extrait court masqué} other{{count} extraits courts masqués}}",
     "homeNoiseFoldShow": "Afficher",
     "homeNoiseFoldHide": "{count, plural, =1{Masquer 1 extrait court} other{Masquer {count} extraits courts}}",
+    "dailyRecapsOnHome": "Récapitulatifs quotidiens sur l'Accueil",
+    "dailyRecapsOnHomeDescription": "Affiche vos derniers récapitulatifs en haut de l'Accueil.",
     "yearlySwitchTitle": "Passer à l'annuel",
     "yearlySwitchRowSavings": "Économisez {amount} par an",
     "yearlySwitchHomeTitle": "Économisez {amount} par an avec l'annuel",

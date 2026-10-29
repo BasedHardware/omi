@@ -14661,6 +14661,12 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'สรุปรายวันในหน้าหลัก';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'แสดงสรุปล่าสุดของคุณที่ด้านบนของหน้าหลัก';
+
+  @override
   String get yearlySwitchTitle => 'เปลี่ยนเป็นรายปี';
 
   @override

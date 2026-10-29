@@ -4471,6 +4471,8 @@
     "homeNoiseFoldHidden": "{count, plural, =1{1 clip curt amagat} other{{count} clips curts amagats}}",
     "homeNoiseFoldShow": "Mostrar",
     "homeNoiseFoldHide": "{count, plural, =1{Amagar 1 clip curt} other{Amagar {count} clips curts}}",
+    "dailyRecapsOnHome": "Resums diaris a l'Inici",
+    "dailyRecapsOnHomeDescription": "Mostra els teus resums més recents a dalt de l'Inici.",
     "yearlySwitchTitle": "Canvia a anual",
     "yearlySwitchRowSavings": "Estalvia {amount} l'any",
     "yearlySwitchHomeTitle": "Estalvia {amount} l'any amb el pagament anual",

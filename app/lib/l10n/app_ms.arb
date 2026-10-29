@@ -4471,6 +4471,8 @@
     "homeNoiseFoldHidden": "{count, plural, =1{1 klip pendek disembunyikan} other{{count} klip pendek disembunyikan}}",
     "homeNoiseFoldShow": "Tunjukkan",
     "homeNoiseFoldHide": "{count, plural, =1{Sembunyikan 1 klip pendek} other{Sembunyikan {count} klip pendek}}",
+    "dailyRecapsOnHome": "Ringkasan Harian di Utama",
+    "dailyRecapsOnHomeDescription": "Tunjukkan ringkasan terkini anda di bahagian atas Utama.",
     "yearlySwitchTitle": "Tukar ke Tahunan",
     "yearlySwitchRowSavings": "Jimat {amount} setahun",
     "yearlySwitchHomeTitle": "Jimat {amount} setahun dengan bayaran tahunan",

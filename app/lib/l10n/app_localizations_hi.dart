@@ -14718,6 +14718,12 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'होम पर दैनिक सारांश';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'होम के ऊपर अपने नवीनतम सारांश दिखाएं।';
+
+  @override
   String get yearlySwitchTitle => 'सालाना पर स्विच करें';
 
   @override

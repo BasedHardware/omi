@@ -14843,6 +14843,12 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'Tägliche Zusammenfassungen auf Start';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Zeige deine neuesten Zusammenfassungen oben auf Start.';
+
+  @override
   String get yearlySwitchTitle => 'Zu jährlich wechseln';
 
   @override

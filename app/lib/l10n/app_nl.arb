@@ -4471,6 +4471,8 @@
     "homeNoiseFoldHidden": "{count, plural, =1{1 korte clip verborgen} other{{count} korte clips verborgen}}",
     "homeNoiseFoldShow": "Tonen",
     "homeNoiseFoldHide": "{count, plural, =1{Verberg 1 korte clip} other{Verberg {count} korte clips}}",
+    "dailyRecapsOnHome": "Dagelijkse samenvattingen op Home",
+    "dailyRecapsOnHomeDescription": "Toon je nieuwste samenvattingen bovenaan Home.",
     "yearlySwitchTitle": "Overstappen naar jaarlijks",
     "yearlySwitchRowSavings": "Bespaar {amount} per jaar",
     "yearlySwitchHomeTitle": "Bespaar {amount} per jaar met jaarlijks betalen",

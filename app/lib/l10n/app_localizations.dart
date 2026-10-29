@@ -26013,6 +26013,18 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}'**
   String homeNoiseFoldHide(int count);
 
+  /// Developer Settings toggle title: show the Daily Recaps row on Home
+  ///
+  /// In en, this message translates to:
+  /// **'Daily Recaps on Home'**
+  String get dailyRecapsOnHome;
+
+  /// Subtitle for the Daily Recaps on Home toggle in Developer Settings
+  ///
+  /// In en, this message translates to:
+  /// **'Show your latest recaps at the top of Home.'**
+  String get dailyRecapsOnHomeDescription;
+
   /// Title of the sheet, row and button that switch a monthly subscription to the same plan billed yearly
   ///
   /// In en, this message translates to:

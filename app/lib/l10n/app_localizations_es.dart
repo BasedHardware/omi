@@ -14778,6 +14778,12 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'Resúmenes diarios en Inicio';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Muestra tus resúmenes más recientes arriba en Inicio.';
+
+  @override
   String get yearlySwitchTitle => 'Cambiar a anual';
 
   @override

@@ -14506,6 +14506,12 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => '首页每日回顾';
+
+  @override
+  String get dailyRecapsOnHomeDescription => '在首页顶部显示最新的回顾。';
+
+  @override
   String get yearlySwitchTitle => '改为按年付费';
 
   @override

@@ -14784,6 +14784,12 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'Дневни резюмета в Начало';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Показвай последните резюмета в горната част на Начало.';
+
+  @override
   String get yearlySwitchTitle => 'Преминете към годишен';
 
   @override

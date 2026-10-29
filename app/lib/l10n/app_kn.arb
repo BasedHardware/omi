@@ -11897,6 +11897,8 @@
     "homeNoiseFoldHidden": "{count, plural, =1{1 ಸಣ್ಣ ಕ್ಲಿಪ್ ಮರೆಮಾಡಲಾಗಿದೆ} other{{count} ಸಣ್ಣ ಕ್ಲಿಪ್‌ಗಳನ್ನು ಮರೆಮಾಡಲಾಗಿದೆ}}",
     "homeNoiseFoldShow": "ತೋರಿಸಿ",
     "homeNoiseFoldHide": "{count, plural, =1{1 ಸಣ್ಣ ಕ್ಲಿಪ್ ಮರೆಮಾಡಿ} other{{count} ಸಣ್ಣ ಕ್ಲಿಪ್‌ಗಳನ್ನು ಮರೆಮಾಡಿ}}",
+    "dailyRecapsOnHome": "ಮುಖಪುಟದಲ್ಲಿ ದೈನಿಕ ಸಾರಾಂಶಗಳು",
+    "dailyRecapsOnHomeDescription": "ಮುಖಪುಟದ ಮೇಲ್ಭಾಗದಲ್ಲಿ ನಿಮ್ಮ ಇತ್ತೀಚಿನ ಸಾರಾಂಶಗಳನ್ನು ತೋರಿಸಿ.",
     "yearlySwitchTitle": "ವಾರ್ಷಿಕಕ್ಕೆ ಬದಲಿಸಿ",
     "yearlySwitchRowSavings": "ವರ್ಷಕ್ಕೆ {amount} ಉಳಿಸಿ",
     "yearlySwitchHomeTitle": "ವಾರ್ಷಿಕ ಪಾವತಿಯಿಂದ ವರ್ಷಕ್ಕೆ {amount} ಉಳಿಸಿ",

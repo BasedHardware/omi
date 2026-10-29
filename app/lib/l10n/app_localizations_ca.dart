@@ -14808,6 +14808,12 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'Resums diaris a l\'Inici';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Mostra els teus resums més recents a dalt de l\'Inici.';
+
+  @override
   String get yearlySwitchTitle => 'Canvia a anual';
 
   @override

@@ -14782,6 +14782,12 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'ಮುಖಪುಟದಲ್ಲಿ ದೈನಿಕ ಸಾರಾಂಶಗಳು';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'ಮುಖಪುಟದ ಮೇಲ್ಭಾಗದಲ್ಲಿ ನಿಮ್ಮ ಇತ್ತೀಚಿನ ಸಾರಾಂಶಗಳನ್ನು ತೋರಿಸಿ.';
+
+  @override
   String get yearlySwitchTitle => 'ವಾರ್ಷಿಕಕ್ಕೆ ಬದಲಿಸಿ';
 
   @override

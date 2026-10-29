@@ -14756,6 +14756,12 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'Dienos apžvalgos pradžios ekrane';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Rodyti naujausias apžvalgas pradžios ekrano viršuje.';
+
+  @override
   String get yearlySwitchTitle => 'Pereiti prie metinio';
 
   @override

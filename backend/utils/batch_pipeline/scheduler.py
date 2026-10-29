@@ -9,10 +9,10 @@ from threading import Lock
 import uuid
 from time import monotonic
 
-from database.batch_pipeline_store import Store, Transaction
+from database.batch_pipeline_store import Store, Transaction, pull_operation
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.firestore_transaction_retry import FirestoreContentionExhausted
-from config.batch_pipeline import FRESH_CAPTURE_LAG_SECONDS, scheduler_control_key
+from config.batch_pipeline import FRESH_CAPTURE_LAG_SECONDS, scheduler_control_key, shard_spread_enabled
 from config.policy import resolve_batch_policy
 from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
 from database.batch_pipeline_policy import stage_in_transaction, record_policy_observations
@@ -30,6 +30,7 @@ MAX_ACTIVE_OWNERS = 1024
 MAX_VISITS = 128
 HEAD_OWNER_BUDGET = 64
 CONTENTION_BACKOFF_CAP_SECONDS = 30.0
+PULL_CLAIM_SECONDS = 30.0
 logger = logging.getLogger(__name__)
 
 
@@ -152,12 +153,13 @@ def _defer(job: dict, now: float, reason: str) -> None:
 
 
 class Scheduler:
-    def __init__(self, store: Store, *, metrics: QueueMetrics | None = None, pool: str = 'batch'):
+    def __init__(self, store: Store, *, metrics: QueueMetrics | None = None, pool: str = 'batch', worker_id: str = ''):
         if pool not in {'batch', 'live'}:
             raise ValueError('pool must be batch or live')
         self.store = store
         self.metrics = metrics
         self.pool = pool
+        self.worker_id = worker_id or uuid.uuid4().hex
         self._contention_failures = 0
         self._contention_backoff_until = 0.0
         self._contention_generation = 0
@@ -308,8 +310,16 @@ class Scheduler:
         for priority in Priority:
             if priority != Priority.FRESH and not allow_backfill:
                 break
+            spread = shard_spread_enabled()
+            excluded = set()
+            busy = False
             for _ in range(128):
-                shard = self.store.control_candidate(int(priority), self.pool, now)
+                if spread:
+                    shard = self.store.control_candidate(
+                        int(priority), self.pool, now, worker_id=self.worker_id, exclude=excluded
+                    )
+                else:
+                    shard = self.store.control_candidate(int(priority), self.pool, now)
                 if shard is None:
                     break
                 receipt, eligible = self._pull_shard(now, shard, priority, max_seconds, shared_gpu_id)
@@ -323,19 +333,46 @@ class Scheduler:
                     return lease
                 if eligible == 'reserved':
                     return None
+                if eligible == 'busy':
+                    excluded.add(shard)
+                    busy = True
+                    continue
                 if eligible:
                     # Bounded deficit accrual must not bypass eligible fresh work.
                     continue
             else:
+                return None
+            if busy:
+                # Busy higher-priority work is still pending. Do not borrow
+                # backfill capacity while another puller owns its shard.
                 return None
         return None
 
     def _pull_shard(self, now, shard, priority, max_seconds, shared_gpu_id):
         token = uuid.uuid4().hex
         candidates = {}
+        started = monotonic()
+        spread = shard_spread_enabled()
+        claim_token = uuid.uuid4().hex
+
+        def current_time():
+            return now + max(0.0, monotonic() - started)
+
+        if spread:
+            # Hint reads take no transaction locks and never authorize writes.
+            # A loser does not join the expensive control/queue/job read set.
+            if not self.store.acquire_pull_claim(shard, claim_token, current_time(), PULL_CLAIM_SECONDS):
+                return None, 'busy'
 
         def commit(tx):
             observations = []
+            if spread:
+                claim = tx.get('pull_claims', shard)
+                if claim.get('token') != claim_token or claim.get('expires_at', 0) <= current_time():
+                    return None, 'busy', observations
+                # Buffered release commits atomically with the pull. Reading
+                # this fence also invalidates a paused holder after takeover.
+                tx.put('pull_claims', shard, {'token': '', 'expires_at': 0.0})
             gpu_key = owner_key(shared_gpu_id) if shared_gpu_id is not None else ''
             gpu = tx.get('gpus', gpu_key) if gpu_key else {}
             if gpu.get('token'):
@@ -463,7 +500,8 @@ class Scheduler:
             tx.put('control', shard, control)
             return None, bool(eligible_queues), observations
 
-        receipt, eligible, observations = self.store.run(commit)
+        with pull_operation('pull', shard):
+            receipt, eligible, observations = self.store.run(commit)
         try:
             record_policy_observations(observations)
         except Exception:

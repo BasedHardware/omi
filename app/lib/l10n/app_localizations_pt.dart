@@ -14761,6 +14761,12 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'Resumos diários no Início';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Mostre seus resumos mais recentes no topo do Início.';
+
+  @override
   String get yearlySwitchTitle => 'Mudar para anual';
 
   @override

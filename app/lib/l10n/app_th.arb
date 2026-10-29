@@ -4471,6 +4471,8 @@
     "homeNoiseFoldHidden": "{count, plural, =1{ซ่อนคลิปสั้นไว้ 1 รายการ} other{ซ่อนคลิปสั้นไว้ {count} รายการ}}",
     "homeNoiseFoldShow": "แสดง",
     "homeNoiseFoldHide": "{count, plural, =1{ซ่อนคลิปสั้น 1 รายการ} other{ซ่อนคลิปสั้น {count} รายการ}}",
+    "dailyRecapsOnHome": "สรุปรายวันในหน้าหลัก",
+    "dailyRecapsOnHomeDescription": "แสดงสรุปล่าสุดของคุณที่ด้านบนของหน้าหลัก",
     "yearlySwitchTitle": "เปลี่ยนเป็นรายปี",
     "yearlySwitchRowSavings": "ประหยัด {amount} ต่อปี",
     "yearlySwitchHomeTitle": "ประหยัด {amount} ต่อปีเมื่อจ่ายรายปี",

@@ -14747,6 +14747,12 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'Ringkasan Harian di Beranda';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Tampilkan ringkasan terbaru di bagian atas Beranda.';
+
+  @override
   String get yearlySwitchTitle => 'Beralih ke Tahunan';
 
   @override

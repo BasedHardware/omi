@@ -14770,6 +14770,12 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'Ringkasan Harian di Utama';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Tunjukkan ringkasan terkini anda di bahagian atas Utama.';
+
+  @override
   String get yearlySwitchTitle => 'Tukar ke Tahunan';
 
   @override

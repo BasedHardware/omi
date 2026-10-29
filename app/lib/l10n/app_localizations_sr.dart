@@ -14740,6 +14740,12 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'Дневни резимеи на почетној';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Прикажи најновије резимее на врху почетне.';
+
+  @override
   String get yearlySwitchTitle => 'Пређите на годишње';
 
   @override

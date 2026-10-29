@@ -26,6 +26,8 @@ tolerations:
     value: present
     effect: NoSchedule
 worker:
+  # Fenced per-shard pulls and worker affinity; false restores legacy selection.
+  shardSpreadEnabled: true
   # Ship-on bounded Firestore transaction retry; false restores legacy behavior.
   contentionRetryEnabled: true
   # null preserves the runtime's stage-dependent profiling default.

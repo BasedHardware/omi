@@ -5,13 +5,18 @@ The transaction callback must be pure; it may be retried by Firestore.
 """
 
 from copy import deepcopy
+from contextlib import contextmanager
+from contextvars import ContextVar
+import hashlib
+import logging
 import os
 import re
 from typing import Any, Callable, Protocol, TypeVar
 
 from google.cloud import firestore
+from google.api_core.exceptions import AlreadyExists, FailedPrecondition, Aborted
 
-from config.batch_pipeline import contention_retry_enabled
+from config.batch_pipeline import contention_retry_enabled, SCHEDULER_SHARDS
 from config.firestore_read_levers import lever_enabled
 from database._client import get_data_plane_firestore_client
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyMemo
@@ -27,6 +32,19 @@ PROJECTION_ASSIGNMENT_STATES = ('pending',)
 PROJECTION_FINISH_STATES = ('persisted', 'ready')
 
 T = TypeVar('T')
+_pull_operation = ContextVar('batch_pull_operation', default='batch_pipeline_store')
+logger = logging.getLogger(__name__)
+
+
+@contextmanager
+def pull_operation(operation: str, shard: str):
+    if operation not in {'claim', 'pull'} or shard not in {f'scheduler_{n:02d}' for n in range(SCHEDULER_SHARDS)}:
+        raise ValueError('static pull operation and scheduler shard required')
+    token = _pull_operation.set(f'batch_{operation} shard={shard}')
+    try:
+        yield
+    finally:
+        _pull_operation.reset(token)
 
 
 class Transaction(Protocol):
@@ -46,7 +64,10 @@ class Store(Protocol):
     def oldest(self, priority: int, *, ready_only: bool) -> float | None: ...
     def oldest_retry(self, priority: int) -> float | None: ...
     def ready_for_capacity(self, priority: int, now: float) -> int: ...
-    def control_candidate(self, priority: int, pool: str, now: float) -> str | None: ...
+    def control_candidate(
+        self, priority: int, pool: str, now: float, *, worker_id: str = '', exclude=()
+    ) -> str | None: ...
+    def acquire_pull_claim(self, shard: str, token: str, now: float, ttl: float) -> bool: ...
     def quarantine_fenced(self, segment_id: str, now: float) -> bool: ...
     def longest_ready_pending(self, owner_key: str) -> dict | None: ...
     def fresh_pending(self, owner_key: str, limit: int) -> list[dict]: ...
@@ -193,7 +214,7 @@ class FirestoreStore:
         return run_with_transaction_contention_retry(
             lambda: client.transaction(max_attempts=1),
             commit,
-            operation_name='batch_pipeline_store',
+            operation_name=_pull_operation.get(),
         )
 
     def due(self, state: str, now: float, limit: int = 100) -> list[str]:
@@ -205,8 +226,27 @@ class FirestoreStore:
     def ready_for_capacity(self, priority: int, now: float) -> int:
         return ready_for_capacity(self.client, self.namespace, priority, now)
 
-    def control_candidate(self, priority: int, pool: str, now: float) -> str | None:
-        return control_candidate(self.client, self.namespace, priority, pool, now)
+    def control_candidate(self, priority: int, pool: str, now: float, *, worker_id: str = '', exclude=()) -> str | None:
+        return control_candidate(self.client, self.namespace, priority, pool, now, worker_id=worker_id, exclude=exclude)
+
+    def acquire_pull_claim(self, shard: str, token: str, now: float, ttl: float) -> bool:
+        # One conditional write, no transaction or retrying read set. A stale
+        # hint can only lose the CAS, never authorize two simultaneous owners.
+        with pull_operation('claim', shard):
+            ref = self.client.collection(f'{self.namespace}_pull_claims').document(shard)
+            snapshot = ref.get()
+            if (snapshot.to_dict() or {}).get('expires_at', 0) > now:
+                return False
+            value = {'token': token, 'expires_at': now + ttl}
+            try:
+                if snapshot.exists:
+                    ref.update(value, option=firestore.LastUpdateOption(snapshot.update_time), retry=None)
+                else:
+                    ref.create(value, retry=None)
+            except (AlreadyExists, FailedPrecondition, Aborted):
+                logger.info('event=batch_shard_contention operation=batch_claim shard=%s outcome=busy', shard)
+                return False
+            return True
 
     def oldest_retry(self, priority: int) -> float | None:
         return oldest_retry(self.client, self.namespace, priority)
@@ -497,7 +537,9 @@ def oldest(client: Any, namespace: str, priority: int, *, ready_only: bool = Fal
     return None
 
 
-def control_candidate(client: Any, namespace: str, priority: int, pool: str, now: float) -> str | None:
+def control_candidate(
+    client: Any, namespace: str, priority: int, pool: str, now: float, *, worker_id: str = '', exclude=()
+) -> str | None:
     if priority not in (0, 1, 2) or pool not in {'batch', 'live'}:
         raise ValueError('bounded priority and pool required')
     prefix = f'p{priority}_'
@@ -509,9 +551,14 @@ def control_candidate(client: Any, namespace: str, priority: int, pool: str, now
         .where(available, '<=', now)
         .order_by(service)
         .order_by(available)
-        .limit(1)
+        .limit(SCHEDULER_SHARDS if worker_id else 1)
         .stream()
     )
+    if worker_id:
+        # Service remains the primary fairness key. Only equal-service shards
+        # use worker affinity, and a busy shard can be skipped without writes.
+        docs = [doc for doc in docs if doc.id not in exclude]
+        docs.sort(key=lambda doc: (doc.to_dict()[service], hashlib.sha256(f'{worker_id}:{doc.id}'.encode()).digest()))
     return docs[0].id if docs else None
 
 

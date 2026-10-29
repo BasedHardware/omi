@@ -4471,6 +4471,8 @@
     "homeNoiseFoldHidden": "{count, plural, =1{Κρύφτηκε 1 σύντομο απόσπασμα} other{Κρύφτηκαν {count} σύντομα αποσπάσματα}}",
     "homeNoiseFoldShow": "Εμφάνιση",
     "homeNoiseFoldHide": "{count, plural, =1{Απόκρυψη 1 σύντομου αποσπάσματος} other{Απόκρυψη {count} σύντομων αποσπασμάτων}}",
+    "dailyRecapsOnHome": "Ημερήσιες περιλήψεις στην Αρχική",
+    "dailyRecapsOnHomeDescription": "Εμφάνιση των πιο πρόσφατων περιλήψεων στην κορυφή της Αρχικής.",
     "yearlySwitchTitle": "Μετάβαση σε ετήσιο",
     "yearlySwitchRowSavings": "Εξοικονομήστε {amount} τον χρόνο",
     "yearlySwitchHomeTitle": "Εξοικονομήστε {amount} τον χρόνο με ετήσια χρέωση",

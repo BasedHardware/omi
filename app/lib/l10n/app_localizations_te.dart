@@ -14795,6 +14795,12 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'హోమ్‌లో రోజువారీ రీక్యాప్‌లు';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'హోమ్ పైభాగంలో మీ తాజా రీక్యాప్‌లను చూపించు.';
+
+  @override
   String get yearlySwitchTitle => 'వార్షికానికి మారండి';
 
   @override

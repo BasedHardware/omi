@@ -14776,6 +14776,12 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'Podsumowania dnia na Głównej';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Pokazuj najnowsze podsumowania na górze Głównej.';
+
+  @override
   String get yearlySwitchTitle => 'Przejdź na roczny';
 
   @override

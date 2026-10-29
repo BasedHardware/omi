@@ -4471,6 +4471,8 @@
     "homeNoiseFoldHidden": "{count, plural, =1{1 lyhyt leike piilotettu} other{{count} lyhyttä leikettä piilotettu}}",
     "homeNoiseFoldShow": "Näytä",
     "homeNoiseFoldHide": "{count, plural, =1{Piilota 1 lyhyt leike} other{Piilota {count} lyhyttä leikettä}}",
+    "dailyRecapsOnHome": "Päivittäiset yhteenvedot Koti-näkymässä",
+    "dailyRecapsOnHomeDescription": "Näytä uusimmat yhteenvedot Koti-näkymän yläosassa.",
     "yearlySwitchTitle": "Vaihda vuosimaksuun",
     "yearlySwitchRowSavings": "Säästä {amount} vuodessa",
     "yearlySwitchHomeTitle": "Säästä {amount} vuodessa vuosimaksulla",

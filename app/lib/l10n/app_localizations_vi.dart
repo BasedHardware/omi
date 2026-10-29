@@ -14734,6 +14734,12 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'Tóm tắt hàng ngày trên Trang chủ';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Hiển thị các tóm tắt mới nhất ở đầu Trang chủ.';
+
+  @override
   String get yearlySwitchTitle => 'Chuyển sang gói năm';
 
   @override

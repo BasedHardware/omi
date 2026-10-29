@@ -14746,6 +14746,12 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'ہوم پر روزانہ خلاصے';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'ہوم کے اوپر اپنے تازہ ترین خلاصے دکھائیں۔';
+
+  @override
   String get yearlySwitchTitle => 'سالانہ پر منتقل کریں';
 
   @override

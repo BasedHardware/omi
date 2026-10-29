@@ -14719,6 +14719,12 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'Daily Recaps on Home';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Show your latest recaps at the top of Home.';
+
+  @override
   String get yearlySwitchTitle => 'Switch to Yearly';
 
   @override

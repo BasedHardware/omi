@@ -4471,6 +4471,8 @@
     "homeNoiseFoldHidden": "{count, plural, =1{تم إخفاء مقطع صوتي قصير واحد} other{تم إخفاء {count} من المقاطع الصوتية القصيرة}}",
     "homeNoiseFoldShow": "إظهار",
     "homeNoiseFoldHide": "{count, plural, =1{إخفاء مقطع صوتي قصير واحد} other{إخفاء {count} من المقاطع الصوتية القصيرة}}",
+    "dailyRecapsOnHome": "الملخصات اليومية في الرئيسية",
+    "dailyRecapsOnHomeDescription": "اعرض أحدث ملخصاتك أعلى الشاشة الرئيسية.",
     "yearlySwitchTitle": "التبديل إلى الاشتراك السنوي",
     "yearlySwitchRowSavings": "وفّر {amount} سنويًا",
     "yearlySwitchHomeTitle": "وفّر {amount} سنويًا مع الدفع السنوي",

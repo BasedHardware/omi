@@ -14797,6 +14797,12 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'Дневни резимеа на Почетна';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Прикажи ги најновите резимеа на врвот на Почетна.';
+
+  @override
   String get yearlySwitchTitle => 'Префрли на годишно';
 
   @override

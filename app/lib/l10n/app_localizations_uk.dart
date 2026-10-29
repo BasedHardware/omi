@@ -14764,6 +14764,12 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'Щоденні підсумки на головній';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Показувати останні підсумки вгорі головної.';
+
+  @override
   String get yearlySwitchTitle => 'Перейти на річний';
 
   @override

@@ -14725,6 +14725,12 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'Daglige opsummeringer på Hjem';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Vis dine seneste opsummeringer øverst på Hjem.';
+
+  @override
   String get yearlySwitchTitle => 'Skift til årlig';
 
   @override

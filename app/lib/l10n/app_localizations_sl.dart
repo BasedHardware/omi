@@ -14761,6 +14761,12 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'Dnevni povzetki na začetnem zaslonu';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Prikaži najnovejše povzetke na vrhu začetnega zaslona.';
+
+  @override
   String get yearlySwitchTitle => 'Preklopi na letno';
 
   @override

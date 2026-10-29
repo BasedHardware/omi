@@ -11897,6 +11897,8 @@
     "homeNoiseFoldHidden": "{count, plural, =1{1টি ছোট ক্লিপ লুকানো হয়েছে} other{{count}টি ছোট ক্লিপ লুকানো হয়েছে}}",
     "homeNoiseFoldShow": "দেখান",
     "homeNoiseFoldHide": "{count, plural, =1{1টি ছোট ক্লিপ লুকান} other{{count}টি ছোট ক্লিপ লুকান}}",
+    "dailyRecapsOnHome": "হোমে দৈনিক সংক্ষেপ",
+    "dailyRecapsOnHomeDescription": "হোমের উপরে আপনার সাম্প্রতিক সংক্ষেপ দেখান।",
     "yearlySwitchTitle": "বার্ষিকে যান",
     "yearlySwitchRowSavings": "বছরে {amount} সাশ্রয় করুন",
     "yearlySwitchHomeTitle": "বার্ষিক পেমেন্টে বছরে {amount} সাশ্রয় করুন",

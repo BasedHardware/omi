@@ -11897,6 +11897,8 @@
     "homeNoiseFoldHidden": "{count, plural, =1{1 кароткі запіс схаваны} other{Схаваныя кароткія запісы: {count}}}",
     "homeNoiseFoldShow": "Паказаць",
     "homeNoiseFoldHide": "{count, plural, =1{Схаваць 1 кароткі запіс} other{Схаваць кароткія запісы: {count}}}",
+    "dailyRecapsOnHome": "Штодзённыя рэзюмэ на галоўнай",
+    "dailyRecapsOnHomeDescription": "Паказваць апошнія рэзюмэ ўверсе галоўнай.",
     "yearlySwitchTitle": "Перайсці на гадавы",
     "yearlySwitchRowSavings": "Зэканомце {amount} за год",
     "yearlySwitchHomeTitle": "Зэканомце {amount} за год з гадавой аплатай",

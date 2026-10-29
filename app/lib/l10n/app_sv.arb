@@ -4471,6 +4471,8 @@
     "homeNoiseFoldHidden": "{count, plural, =1{1 kort klipp dolt} other{{count} korta klipp dolda}}",
     "homeNoiseFoldShow": "Visa",
     "homeNoiseFoldHide": "{count, plural, =1{Dölj 1 kort klipp} other{Dölj {count} korta klipp}}",
+    "dailyRecapsOnHome": "Dagliga sammanfattningar på Hem",
+    "dailyRecapsOnHomeDescription": "Visa dina senaste sammanfattningar högst upp på Hem.",
     "yearlySwitchTitle": "Byt till årsvis",
     "yearlySwitchRowSavings": "Spara {amount} om året",
     "yearlySwitchHomeTitle": "Spara {amount} om året med årsbetalning",

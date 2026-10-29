@@ -11897,6 +11897,8 @@
     "homeNoiseFoldHidden": "{count, plural, =1{1 kratek posnetek skrit} other{{count} kratkih posnetkov skritih}}",
     "homeNoiseFoldShow": "Prikaži",
     "homeNoiseFoldHide": "{count, plural, =1{Skrij 1 kratek posnetek} other{Skrij {count} kratkih posnetkov}}",
+    "dailyRecapsOnHome": "Dnevni povzetki na začetnem zaslonu",
+    "dailyRecapsOnHomeDescription": "Prikaži najnovejše povzetke na vrhu začetnega zaslona.",
     "yearlySwitchTitle": "Preklopi na letno",
     "yearlySwitchRowSavings": "Prihranite {amount} na leto",
     "yearlySwitchHomeTitle": "Prihranite {amount} na leto z letnim plačilom",

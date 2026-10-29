@@ -14726,6 +14726,12 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'Päevased kokkuvõtted avalehel';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Näita viimaseid kokkuvõtteid avalehe ülaosas.';
+
+  @override
   String get yearlySwitchTitle => 'Mine üle aastasele';
 
   @override

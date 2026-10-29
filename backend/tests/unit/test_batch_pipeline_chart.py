@@ -73,6 +73,7 @@ def test_default_chart_has_no_resources_or_admission():
     assert values['autoscaling']['enabled'] is False
     assert values['podMonitoring']['enabled'] is True
     assert values['worker']['batchSize'] == 8
+    assert values['worker']['shardSpreadEnabled'] is True
     assert values['worker']['workerSilenceDispositionEnabled'] is False
     assert values['worker']['workerValidationDispositionEnabled'] is True
     assert values['worker']['diarizeSpeechOnlyEnabled'] is True
@@ -462,6 +463,15 @@ def test_worker_validation_disposition_kill_switch_renders_false():
     deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
     env = {v['name']: v.get('value') for v in deployment['spec']['template']['spec']['containers'][0]['env']}
     assert env['BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED'] == 'false'
+
+
+@pytest.mark.parametrize('arguments,expected', [((), 'true'), (('--set', 'worker.shardSpreadEnabled=false'), 'false')])
+def test_shard_spread_ships_on_with_helm_kill_switch(arguments, expected):
+    result = render(*enabled_arguments(), *arguments)
+    assert result.returncode == 0, result.stderr
+    deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
+    env = {v['name']: v.get('value') for v in deployment['spec']['template']['spec']['containers'][0]['env']}
+    assert env['BATCH_SHARD_SPREAD_ENABLED'] == expected
 
 
 @pytest.mark.parametrize('arguments,expected', [((), '2'), (('--set', 'worker.pipelineDepth=1'), '1')])

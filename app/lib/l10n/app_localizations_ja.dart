@@ -14525,6 +14525,12 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'ホームの日次の要約';
+
+  @override
+  String get dailyRecapsOnHomeDescription => '最新の要約をホームの上部に表示します。';
+
+  @override
   String get yearlySwitchTitle => '年払いに切り替える';
 
   @override

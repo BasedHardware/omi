@@ -4471,6 +4471,8 @@
     "homeNoiseFoldHidden": "{count, plural, =1{1 clip scurt ascuns} other{{count} clipuri scurte ascunse}}",
     "homeNoiseFoldShow": "Afișează",
     "homeNoiseFoldHide": "{count, plural, =1{Ascunde 1 clip scurt} other{Ascunde {count} clipuri scurte}}",
+    "dailyRecapsOnHome": "Recapitulări zilnice pe Acasă",
+    "dailyRecapsOnHomeDescription": "Afișează cele mai noi recapitulări în partea de sus a ecranului Acasă.",
     "yearlySwitchTitle": "Treci la anual",
     "yearlySwitchRowSavings": "Economisește {amount} pe an",
     "yearlySwitchHomeTitle": "Economisește {amount} pe an cu plata anuală",

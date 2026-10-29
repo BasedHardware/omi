@@ -14808,6 +14808,12 @@ class AppLocalizationsIt extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'Riepiloghi giornalieri nella Home';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Mostra i riepiloghi più recenti in cima alla Home.';
+
+  @override
   String get yearlySwitchTitle => 'Passa all\'annuale';
 
   @override

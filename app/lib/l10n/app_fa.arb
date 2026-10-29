@@ -11897,6 +11897,8 @@
     "homeNoiseFoldHidden": "{count, plural, =1{۱ کلیپ کوتاه مخفی شده} other{{count} کلیپ کوتاه مخفی شده‌اند}}",
     "homeNoiseFoldShow": "نمایش",
     "homeNoiseFoldHide": "{count, plural, =1{مخفی‌کردن ۱ کلیپ کوتاه} other{مخفی‌کردن {count} کلیپ کوتاه}}",
+    "dailyRecapsOnHome": "خلاصه‌های روزانه در خانه",
+    "dailyRecapsOnHomeDescription": "نمایش جدیدترین خلاصه‌ها در بالای صفحه خانه.",
     "yearlySwitchTitle": "تغییر به سالانه",
     "yearlySwitchRowSavings": "سالانه {amount} صرفه‌جویی کنید",
     "yearlySwitchHomeTitle": "با پرداخت سالانه، {amount} در سال صرفه‌جویی کنید",

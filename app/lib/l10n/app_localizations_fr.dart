@@ -14852,6 +14852,12 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'Récapitulatifs quotidiens sur l\'Accueil';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Affiche vos derniers récapitulatifs en haut de l\'Accueil.';
+
+  @override
   String get yearlySwitchTitle => 'Passer à l\'annuel';
 
   @override

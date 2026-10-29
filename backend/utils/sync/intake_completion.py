@@ -53,12 +53,32 @@ def log_sync_lineage_created(observation: dict) -> None:
 
 def log_assignment_observations(conversation: dict, *, lineage_eligible: bool) -> None:
     """Consume only the successful assignment result, before external effects."""
+    for row, _ in conversation.get('_sync_size_rollover_rows', []):
+        log_assignment_observations(row, lineage_eligible=lineage_eligible)
+    log_append_observations(conversation)
     bridge = conversation.pop('_sync_lineage_bridge', None)
     if bridge is not None:
         log_bridge_observation(bridge)
     created = conversation.pop('_sync_lineage_created', None)
     if lineage_eligible and created is not None:
         log_sync_lineage_created(created)
+
+
+def log_append_observations(conversation: dict) -> None:
+    """Consume transient append/stamp markers once, only after commit."""
+    stats = conversation.pop('_sync_lineage_dedupe', None)
+    if stats is not None:
+        log_sync_lineage_append(
+            stats,
+            existing_completion=bool(
+                conversation.get('_sync_lineage_completion_pending') and conversation.get('_sync_lineage_repeat_only')
+            ),
+        )
+    stamp_bucket = conversation.pop('_sync_lineage_stamp_append', None)
+    if stamp_bucket is not None:
+        log_sync_lineage_stamp_append(stamp_bucket)
+    if conversation.pop('_sync_lineage_stamp_gap_refused', False):
+        log_sync_lineage_stamp_gap_refused()
 
 
 def acknowledge_processed_segment(
@@ -128,13 +148,13 @@ def record_capture_evidence_metric(incoming: dict) -> None:
 
 
 def log_sync_lineage_append(stats: dict, existing_completion: bool = False) -> None:
-    """One bounded, id-free telemetry line per dedupe-evaluated intake."""
+    """One bounded, id-free line per observed live append or repeat ack."""
     try:
         logger.info(
-            'event=sync_lineage_append appended_seconds=%.2f dropped_as_repeat_seconds=%.2f '
+            'event=sync_lineage_append appended_seconds=%s dropped_as_repeat_seconds=%.2f '
             'alignment_method=%s repeat_only=%s existing_completion=%s span_delta_bucket=%s '
-            'appended_seconds_overlapping_live=%s',
-            stats['appended_seconds'],
+            'appended_seconds_overlapping_live=%s lineage_admitted=%s',
+            f"{stats['appended_seconds']:.2f}" if stats.get('appended_seconds') is not None else 'unknown',
             stats['dropped_as_repeat_seconds'],
             stats['alignment_method'],
             stats['repeat_only'],
@@ -145,6 +165,7 @@ def log_sync_lineage_append(stats: dict, existing_completion: bool = False) -> N
                 if stats.get('appended_seconds_overlapping_live') is not None
                 else 'unknown'
             ),
+            str(stats.get('lineage_admitted', False)).lower(),
         )
     except Exception:
         pass
@@ -217,11 +238,9 @@ def complete_sync_intake(
             acknowledge=lambda: None,
             attach_episode=attach_episode,
         )
+    log_append_observations(assigned)
     repeat_only = bool(assigned.pop('_sync_lineage_repeat_only', False))
     completion_pending = bool(assigned.pop('_sync_lineage_completion_pending', False))
-    stats = assigned.pop('_sync_lineage_dedupe', None)
-    stamp_bucket = assigned.pop('_sync_lineage_stamp_append', None)
-    stamp_gap_refused = assigned.pop('_sync_lineage_stamp_gap_refused', False)
     # An exact sync-scoped retry may owe enrichment from an earlier partial
     # run. That existing debt still enrolls and finishes even though this
     # upload wrote nothing; pristine live repeats invent no new debt.
@@ -235,12 +254,6 @@ def complete_sync_intake(
                 response.setdefault('_merged', {})[conversation_id] = language
         elif existing_completion:
             response.setdefault('_merged', {})[conversation_id] = language
-    if stats is not None:
-        log_sync_lineage_append(stats, existing_completion=existing_completion and repeat_only)
-    if stamp_bucket is not None:
-        log_sync_lineage_stamp_append(stamp_bucket)
-    if stamp_gap_refused:
-        log_sync_lineage_stamp_gap_refused()
     if attach_episode is not None and (not repeat_only or existing_completion):
         # The row is visible in Home from this moment; fold it under the live
         # episode before audio storage or enrichment can stall behind it.

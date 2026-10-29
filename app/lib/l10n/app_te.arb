@@ -11897,6 +11897,8 @@
     "homeNoiseFoldHidden": "{count, plural, =1{1 చిన్న క్లిప్ దాచబడింది} other{{count} చిన్న క్లిప్‌లు దాచబడ్డాయి}}",
     "homeNoiseFoldShow": "చూపండి",
     "homeNoiseFoldHide": "{count, plural, =1{1 చిన్న క్లిప్‌ను దాచండి} other{{count} చిన్న క్లిప్‌లను దాచండి}}",
+    "dailyRecapsOnHome": "హోమ్‌లో రోజువారీ రీక్యాప్‌లు",
+    "dailyRecapsOnHomeDescription": "హోమ్ పైభాగంలో మీ తాజా రీక్యాప్‌లను చూపించు.",
     "yearlySwitchTitle": "వార్షికానికి మారండి",
     "yearlySwitchRowSavings": "ఏడాదికి {amount} ఆదా చేయండి",
     "yearlySwitchHomeTitle": "వార్షిక చెల్లింపుతో ఏడాదికి {amount} ఆదా చేయండి",

@@ -14772,6 +14772,12 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'Dagelijkse samenvattingen op Home';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Toon je nieuwste samenvattingen bovenaan Home.';
+
+  @override
   String get yearlySwitchTitle => 'Overstappen naar jaarlijks';
 
   @override

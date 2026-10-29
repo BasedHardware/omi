@@ -4506,6 +4506,8 @@
     "homeNoiseFoldHidden": "{count, plural, =1{1 clipe curto ocultado} other{{count} clipes curtos ocultados}}",
     "homeNoiseFoldShow": "Mostrar",
     "homeNoiseFoldHide": "{count, plural, =1{Ocultar 1 clipe curto} other{Ocultar {count} clipes curtos}}",
+    "dailyRecapsOnHome": "Resumos diários no Início",
+    "dailyRecapsOnHomeDescription": "Mostre seus resumos mais recentes no topo do Início.",
     "yearlySwitchTitle": "Mudar para anual",
     "yearlySwitchRowSavings": "Economize {amount} por ano",
     "yearlySwitchHomeTitle": "Economize {amount} por ano com o plano anual",

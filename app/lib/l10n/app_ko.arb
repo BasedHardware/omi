@@ -4471,6 +4471,8 @@
     "homeNoiseFoldHidden": "{count, plural, =1{짧은 클립 1개 숨겨짐} other{짧은 클립 {count}개 숨겨짐}}",
     "homeNoiseFoldShow": "표시",
     "homeNoiseFoldHide": "{count, plural, =1{짧은 클립 1개 숨기기} other{짧은 클립 {count}개 숨기기}}",
+    "dailyRecapsOnHome": "홈의 일일 요약",
+    "dailyRecapsOnHomeDescription": "홈 상단에 최근 요약을 표시합니다.",
     "yearlySwitchTitle": "연간 결제로 전환",
     "yearlySwitchRowSavings": "연간 {amount} 절약",
     "yearlySwitchHomeTitle": "연간 결제로 1년에 {amount} 절약",

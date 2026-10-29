@@ -14743,6 +14743,12 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'मुख्यपृष्ठावर दैनिक रीकॅप्स';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'मुख्यपृष्ठाच्या वर तुमचे नवीनतम रीकॅप्स दाखवा.';
+
+  @override
   String get yearlySwitchTitle => 'वार्षिकवर स्विच करा';
 
   @override

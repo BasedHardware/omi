@@ -4471,6 +4471,8 @@
     "homeNoiseFoldHidden": "{count, plural, =1{1 kurzer Clip ausgeblendet} other{{count} kurze Clips ausgeblendet}}",
     "homeNoiseFoldShow": "Anzeigen",
     "homeNoiseFoldHide": "{count, plural, =1{1 kurzen Clip ausblenden} other{{count} kurze Clips ausblenden}}",
+    "dailyRecapsOnHome": "Tägliche Zusammenfassungen auf Start",
+    "dailyRecapsOnHomeDescription": "Zeige deine neuesten Zusammenfassungen oben auf Start.",
     "yearlySwitchTitle": "Zu jährlich wechseln",
     "yearlySwitchRowSavings": "Sparen Sie {amount} pro Jahr",
     "yearlySwitchHomeTitle": "Sparen Sie {amount} pro Jahr mit jährlicher Zahlung",

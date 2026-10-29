@@ -170,6 +170,32 @@ async def test_failed_followup_stays_durable_and_resumes_with_same_receipt(follo
 
 
 @pytest.mark.asyncio
+async def test_real_claim_released_across_run_blocking_leaves_never_fails_the_task(followup, monkeypatch):
+    # The follow-up enters the real advisory claim in one run_blocking leaf and
+    # releases it in a later leaf; each leaf runs in its own contextvars copy,
+    # so the claim's retry-deadline scope created its ContextVar token in a
+    # different Context than the one resetting it. Before the scope learned to
+    # tolerate that split, every release raised "Token was created in a
+    # different Context" and the background task was reported failed after its
+    # work had already committed. The stubbed owner_claim fixture hides this
+    # seam, so this test restores the real claim against a fake Redis.
+    import fakeredis
+
+    from database import batch_pipeline_projection_claim as claims
+
+    redis = fakeredis.FakeRedis()
+    redis.eval('return 1', 0)  # Load the Lua emulator for the token-fenced release.
+    monkeypatch.setattr(claims, '_redis_client', lambda: redis)
+    monkeypatch.setattr(projection_followup, 'projection_claim', claims.projection_claim)
+
+    f = followup
+    await asyncio.wait_for(f.runner.run('head'), 5)
+    f.projector.complete_content.assert_called_once_with('head', f.binding)
+    # The release ran to completion: the advisory lease is gone, not left to its TTL.
+    assert not redis.keys('batch_projection:*')
+
+
+@pytest.mark.asyncio
 async def test_privacy_fence_prevents_every_followup_effect(followup):
     f = followup
     from database.batch_pipeline_privacy import BatchPrivacyBlocked

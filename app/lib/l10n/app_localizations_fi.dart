@@ -14738,6 +14738,12 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'Päivittäiset yhteenvedot Koti-näkymässä';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Näytä uusimmat yhteenvedot Koti-näkymän yläosassa.';
+
+  @override
   String get yearlySwitchTitle => 'Vaihda vuosimaksuun';
 
   @override

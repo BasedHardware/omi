@@ -14650,6 +14650,12 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'الملخصات اليومية في الرئيسية';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'اعرض أحدث ملخصاتك أعلى الشاشة الرئيسية.';
+
+  @override
   String get yearlySwitchTitle => 'التبديل إلى الاشتراك السنوي';
 
   @override

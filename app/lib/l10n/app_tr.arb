@@ -4506,6 +4506,8 @@
     "homeNoiseFoldHidden": "{count, plural, =1{1 kısa kayıt gizlendi} other{{count} kısa kayıt gizlendi}}",
     "homeNoiseFoldShow": "Göster",
     "homeNoiseFoldHide": "{count, plural, =1{1 kısa kaydı gizle} other{{count} kısa kaydı gizle}}",
+    "dailyRecapsOnHome": "Ana Sayfada Günlük Özetler",
+    "dailyRecapsOnHomeDescription": "En son özetlerini Ana Sayfanın üstünde göster.",
     "yearlySwitchTitle": "Yıllığa geçin",
     "yearlySwitchRowSavings": "Yılda {amount} tasarruf edin",
     "yearlySwitchHomeTitle": "Yıllık ödemeyle yılda {amount} tasarruf edin",

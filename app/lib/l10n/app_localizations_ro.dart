@@ -14795,6 +14795,12 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'Recapitulări zilnice pe Acasă';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Afișează cele mai noi recapitulări în partea de sus a ecranului Acasă.';
+
+  @override
   String get yearlySwitchTitle => 'Treci la anual';
 
   @override

@@ -14627,6 +14627,12 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
+  String get dailyRecapsOnHome => 'סיכומים יומיים במסך הבית';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'הצג את הסיכומים האחרונים שלך בראש מסך הבית.';
+
+  @override
   String get yearlySwitchTitle => 'מעבר לתשלום שנתי';
 
   @override
