@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
@@ -18,16 +19,25 @@ class EpisodePage extends StatelessWidget {
   Widget build(BuildContext context) {
     final dates = OmiDateFormat.of(context);
     final history = context.watch<ConversationProvider?>();
+    final hidden = context.watch<EpisodeProvider?>()?.hiddenHomeMembers ?? const <String>{};
     final known = {for (final c in history?.conversations ?? const <ServerConversation>[]) c.id: c};
     final members = [for (final member in episode.members) known[member.id] ?? member]
-        .where((m) => !m.discarded && !m.deleted && !(history?.memoriesToDelete.containsKey(m.id) ?? false))
+        .where((m) =>
+            !m.discarded &&
+            !m.deleted &&
+            !hidden.contains(m.id) &&
+            !(history?.memoriesToDelete.containsKey(m.id) ?? false))
         .toList();
     final memberIds = members.map((m) => m.id).toSet();
     final items =
         episode.visibleItems.where((i) => i.conversationId == null || memberIds.contains(i.conversationId)).toList();
     final moments = episode.moments.where((m) => memberIds.contains(m.conversationId)).toList();
     final primary = members.firstOrNull;
-    final title = episode.title.trim().isNotEmpty ? episode.title : primary?.structured.title ?? '';
+    final title = episode.title.trim().isNotEmpty
+        ? episode.title
+        : primary == null
+            ? context.l10n.conversationTab
+            : conversationRowTitle(context, primary);
     final duration = episode.lastActivityAt.difference(episode.startedAt).inSeconds.clamp(0, 2147483647);
     return Scaffold(
       key: const Key('episode_page'),

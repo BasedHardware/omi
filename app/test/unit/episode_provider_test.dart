@@ -6,6 +6,9 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/providers/episode_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/structured.dart';
 
 final _t0 = DateTime.utc(2026, 10, 20, 12);
 
@@ -20,6 +23,11 @@ Episode _episode({String id = 'ep1', bool live = true, List<EpisodeItem> items =
     );
 
 EpisodeItem _item(String id) => EpisodeItem(id: id, text: 'Book the table', createdAt: _t0);
+
+class _HomeHistory extends ConversationProvider {
+  _HomeHistory() : super(isSignedIn: () => false);
+  void changed() => notifyListeners();
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -82,6 +90,25 @@ void main() {
     addTearDown(provider.dispose);
     await provider.refreshHome(_t0, _t0);
     expect(provider.homeEpisodes.single.id, 'complete');
+  });
+
+  test('local member deletion stays hidden after DELETE settles, while Undo restores it', () async {
+    final member = ServerConversation(id: 'c1', createdAt: _t0, structured: Structured('Member', ''));
+    final history = _HomeHistory()..conversations = [member];
+    final episodes = EpisodeProvider()..debugSetLive(null);
+    addTearDown(history.dispose);
+    addTearDown(episodes.dispose);
+    episodes.observeHomeConversations(history);
+    history.memoriesToDelete['c1'] = member;
+    history.conversations = [];
+    history.changed();
+    expect(episodes.hiddenHomeMembers, {'c1'});
+    history.memoriesToDelete.clear();
+    history.changed();
+    expect(episodes.hiddenHomeMembers, {'c1'}, reason: 'stale episode metadata cannot resurrect a deleted member');
+    history.conversations = [member];
+    history.changed();
+    expect(episodes.hiddenHomeMembers, isEmpty, reason: 'Undo or a refused DELETE restores membership');
   });
 
   test('cold launch recovers an idle-closed episode from the account-scoped live pointer', () async {

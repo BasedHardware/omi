@@ -7,6 +7,7 @@ import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/live_start_anchor.dart';
+import 'package:omi/providers/conversation_provider.dart';
 
 typedef EpisodeLiveFetcher = Future<ApiResult<EpisodeRead>> Function();
 typedef EpisodeLookupFetcher = Future<ApiResult<EpisodeRead>> Function(String conversationId);
@@ -39,6 +40,35 @@ class EpisodeProvider extends ChangeNotifier {
   String? _homeKey;
   DateTime? _homeReadAt;
   int _homeGeneration = 0;
+
+  ConversationProvider? _homeConversations;
+  Set<String> _hiddenHomeMembers = {};
+  Set<String> get hiddenHomeMembers => _ownerUid == SharedPreferencesUtil().uid ? _hiddenHomeMembers : const {};
+
+  /// Retain the local delete fence after the conversation provider retires its in-flight
+  /// tombstone. An older episode snapshot must not resurrect that member. Undo/failure
+  /// restores it to the conversation list, which releases this projection-only fence.
+  void observeHomeConversations(ConversationProvider provider) {
+    if (identical(provider, _homeConversations)) return;
+    _homeConversations?.removeListener(_syncHomeVisibility);
+    _homeConversations = provider;
+    provider.addListener(_syncHomeVisibility);
+    _syncHomeVisibility();
+  }
+
+  void _syncHomeVisibility() {
+    _ensureOwner();
+    final provider = _homeConversations;
+    if (provider == null || _disposed) return;
+    if (_hiddenHomeMembers.isEmpty && provider.memoriesToDelete.isEmpty) return;
+    final pending = provider.memoriesToDelete.keys.toSet();
+    final restored = provider.conversations.map((c) => c.id).toSet();
+    final hidden = {..._hiddenHomeMembers, ...pending}
+      ..removeWhere((id) => !pending.contains(id) && restored.contains(id));
+    if (setEquals(hidden, _hiddenHomeMembers)) return;
+    _hiddenHomeMembers = hidden;
+    notifyListeners();
+  }
 
   void invalidateHome() {
     _homeReadAt = null;
@@ -148,6 +178,7 @@ class EpisodeProvider extends ChangeNotifier {
     _captureId = null;
     _previousBeforeCapture = null;
     _homeEpisodes = const [];
+    _hiddenHomeMembers = {};
     _homeKey = null;
     _homeReadAt = null;
     _homeGeneration++;
@@ -473,6 +504,7 @@ class EpisodeProvider extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _homeConversations?.removeListener(_syncHomeVisibility);
     _poll?.cancel();
     super.dispose();
   }

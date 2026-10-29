@@ -361,6 +361,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
       final episodes = context.read<EpisodeProvider?>();
       if (episodes != null) unawaited(episodes.refreshLive());
       final conversationProvider = context.read<ConversationProvider>();
+      episodes?.observeHomeConversations(conversationProvider);
       try {
         if (widget.requestInitialLoad && conversationProvider.conversations.isEmpty) {
           await conversationProvider.getInitialConversations();
@@ -614,7 +615,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             episodes!.homeEpisodes,
             enabled: true,
             liveConversationIds: hiddenByLive,
-            deletedIds: convoProvider.memoriesToDelete.keys.toSet(),
+            deletedIds: {...convoProvider.memoriesToDelete.keys, ...episodes.hiddenHomeMembers},
             knownConversations: snapshot.conversations,
           );
           conversationsByDate = {};
