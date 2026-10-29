@@ -30,7 +30,7 @@
     "test": "jest --config jest.config.issue12979.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint \"**/*.{js,ts,tsx}\"",
-    "build": "bob build",
+    "build": "node init && bob build",
     "prepare": "npm run build",
     "release": "release-it",
     "example": "yarn --cwd example",

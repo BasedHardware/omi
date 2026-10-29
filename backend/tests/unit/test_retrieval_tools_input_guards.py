@@ -258,3 +258,28 @@ def test_update_calendar_event_tool_handles_titleless_events(calendar_tools_mod)
         })
     )
     assert "Successfully updated calendar event: Updated Team Sync" in res
+
+
+def test_create_calendar_event_tool_happy_path(calendar_tools_mod):
+    # Happy path: valid title, start_time, end_time succeeds and returns confirmation
+    created_event = {
+        "id": "new-ev-1",
+        "summary": "Weekly Planning",
+        "start": {"dateTime": "2026-10-28T10:00:00Z"},
+        "end": {"dateTime": "2026-10-28T11:00:00Z"},
+        "htmlLink": "https://calendar.google.com/event?eid=123",
+    }
+
+    async def _mock_create_event(*_args, **_kwargs):
+        return created_event
+
+    calendar_tools_mod.create_google_calendar_event = _mock_create_event
+
+    res = asyncio.run(
+        calendar_tools_mod.create_calendar_event_tool.ainvoke({
+            "title": "Weekly Planning",
+            "start_time": "2026-10-28T10:00:00Z",
+            "end_time": "2026-10-28T11:00:00Z",
+        })
+    )
+    assert "Successfully created calendar event: Weekly Planning" in res
