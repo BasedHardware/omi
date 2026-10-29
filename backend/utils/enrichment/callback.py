@@ -8,7 +8,10 @@ direct path until pipeline.py is unfrozen (#21932/#20662) or deleted (C11);
 
 from __future__ import annotations
 
-import asyncio
+from utils.enrichment.admission import SyncConversationPersistenceFenced
+from utils.enrichment.admission import require_current_persistence as _require_current_conversation_persistence
+from utils.enrichment.admission import run_created_webhook as _run_conversation_created_webhook
+
 import logging
 import time
 
@@ -47,23 +50,6 @@ logger = logging.getLogger(__name__)
 
 # Shared with legacy sync's lineage retry intents; the stored row's language wins.
 _LINEAGE_RETRY_LANGUAGE = '__stored_conversation_language__'
-
-
-class SyncConversationPersistenceFenced(RuntimeError):
-    """Conversation lifecycle rejected this worker's stale processing result."""
-
-
-def _require_current_conversation_persistence(persisted: bool) -> None:
-    """Turn a lifecycle fence into the worker's terminal supersession signal."""
-    if not persisted:
-        raise SyncConversationPersistenceFenced('sync conversation persistence fenced')
-
-
-def _run_conversation_created_webhook(uid: str, conversation: Conversation) -> None:
-    """Load the webhook surface only in the post-processing worker that uses it."""
-    from utils.webhooks import conversation_created_webhook
-
-    asyncio.run(conversation_created_webhook(uid, conversation))
 
 
 def enrich_conversation(uid: str, conversation_id: str, language: str):

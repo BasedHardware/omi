@@ -7,6 +7,10 @@ Extracted from routers/sync.py so the router stays thin and utils never imports 
 
 from __future__ import annotations
 
+from utils.enrichment.admission import SyncConversationPersistenceFenced
+from utils.enrichment.admission import require_current_persistence as _require_current_conversation_persistence
+from utils.enrichment.admission import run_created_webhook as _run_conversation_created_webhook
+
 from utils.conversations.silent_redrive import is_silent_redrive
 from utils.observability.sync_phases import sync_phase, sync_attempt
 from database.sync_snapshot_resolve_cache import sync_snapshot_resolve_job
@@ -673,16 +677,6 @@ async def _record_sync_segment_failure_async(
         errors.append(failure.error_code)
 
 
-class SyncConversationPersistenceFenced(RuntimeError):
-    """Conversation lifecycle rejected this worker's stale processing result."""
-
-
-def _require_current_conversation_persistence(persisted: bool) -> None:
-    """Turn a lifecycle fence into the worker's terminal supersession signal."""
-    if not persisted:
-        raise SyncConversationPersistenceFenced('sync conversation persistence fenced')
-
-
 def _raise_sync_terminal_result(result: object) -> None:
     """Preserve lifecycle fences across ``asyncio.gather`` exception fan-in."""
     if isinstance(result, SyncConversationPersistenceFenced):
@@ -1043,13 +1037,6 @@ def retrieve_vad_segments(
     finally:
         # Explicitly delete main audio to free memory
         del aseg
-
-
-def _run_conversation_created_webhook(uid: str, conversation: Conversation) -> None:
-    """Load the webhook surface only in the post-processing worker that uses it."""
-    from utils.webhooks import conversation_created_webhook
-
-    asyncio.run(conversation_created_webhook(uid, conversation))
 
 
 def _reprocess_conversation_after_update(uid: str, conversation_id: str, language: str):
