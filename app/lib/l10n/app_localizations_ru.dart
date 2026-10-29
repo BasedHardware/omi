@@ -13513,6 +13513,25 @@ class AppLocalizationsRu extends AppLocalizations {
   String get paywallTrialCancelNote => 'Отменить в любое время. Без комиссий и штрафов.';
 
   @override
+  String get paywallMonthlyFallbackTitle => 'Пока не готовы на целый год?';
+
+  @override
+  String paywallMonthlyFallbackTrialBody(int days, String price) {
+    return 'Начните с месячного плана. Те же $days дней бесплатно, затем $price в месяц. Отменить можно в любой момент.';
+  }
+
+  @override
+  String paywallMonthlyFallbackBody(String price) {
+    return 'Начните с месячного плана. $price в месяц. Отменить можно в любой момент.';
+  }
+
+  @override
+  String get paywallMonthlyFallbackTrialCta => 'Попробовать месячный бесплатно';
+
+  @override
+  String get paywallMonthlyFallbackCta => 'Выбрать месячный';
+
+  @override
   String paywallTrialStarted(int days) {
     return 'Ваша $days-дневная бесплатная пробная версия Omi Pro началась.';
   }

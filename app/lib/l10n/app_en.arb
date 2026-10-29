@@ -16201,6 +16201,39 @@
     "@paywallTrialCancelNote": {
         "description": "Paywall footnote"
     },
+    "paywallMonthlyFallbackTitle": "Not ready for a year?",
+    "@paywallMonthlyFallbackTitle": {
+        "description": "Title of the sheet shown on the trial paywall after the reader left the yearly checkout without buying."
+    },
+    "paywallMonthlyFallbackTrialBody": "Start monthly instead. Same {days} days free, then {price} a month. Cancel anytime.",
+    "@paywallMonthlyFallbackTrialBody": {
+        "description": "Body of that sheet when the reader can still get the free trial. days is the trial length, price is the monthly price with currency, e.g. US$29.99.",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            },
+            "price": {
+                "type": "String"
+            }
+        }
+    },
+    "paywallMonthlyFallbackBody": "Start monthly instead. {price} a month. Cancel anytime.",
+    "@paywallMonthlyFallbackBody": {
+        "description": "Body of that sheet when the reader gets no free trial. price is the monthly price with currency, e.g. US$29.99.",
+        "placeholders": {
+            "price": {
+                "type": "String"
+            }
+        }
+    },
+    "paywallMonthlyFallbackTrialCta": "Try monthly free",
+    "@paywallMonthlyFallbackTrialCta": {
+        "description": "Button on that sheet: opens the monthly checkout with the free trial."
+    },
+    "paywallMonthlyFallbackCta": "Choose monthly",
+    "@paywallMonthlyFallbackCta": {
+        "description": "Button on that sheet when there is no free trial: opens the monthly checkout."
+    },
     "paywallTrialStarted": "Your {days}-day free trial of Omi Pro has started.",
     "@paywallTrialStarted": {
         "description": "Toast after a trial checkout completes; days is the trial length",

@@ -13528,6 +13528,25 @@ class AppLocalizationsMk extends AppLocalizations {
   String get paywallTrialCancelNote => 'Откажете во секое време. Без надоместоци, без казни.';
 
   @override
+  String get paywallMonthlyFallbackTitle => 'Сè уште не сте подготвени за цела година?';
+
+  @override
+  String paywallMonthlyFallbackTrialBody(int days, String price) {
+    return 'Почнете со месечен план. Истите $days дена бесплатно, потоа $price месечно. Откажете кога сакате.';
+  }
+
+  @override
+  String paywallMonthlyFallbackBody(String price) {
+    return 'Почнете со месечен план. $price месечно. Откажете кога сакате.';
+  }
+
+  @override
+  String get paywallMonthlyFallbackTrialCta => 'Пробајте месечен бесплатно';
+
+  @override
+  String get paywallMonthlyFallbackCta => 'Изберете месечен';
+
+  @override
   String paywallTrialStarted(int days) {
     return 'Вашиот $days-дневен бесплатен пробен период на Omi Pro започна.';
   }

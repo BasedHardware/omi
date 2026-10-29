@@ -6,6 +6,8 @@ import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/paywall/paywall_checkout.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
+import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/billing_price.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -41,6 +43,7 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
   bool _yearly = true;
   bool _busy = false;
   bool _dismissed = false;
+  bool _monthlyOffered = false;
 
   @override
   void initState() {
@@ -91,13 +94,25 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
     }
   }
 
-  Future<void> _purchase(PaywallOffer offer) async {
+  /// Every button here promises a free trial, so a checkout opens only for a reader the backend
+  /// still offers one. The [TrialPaywallPage.checkout] test seam stands in for the backend.
+  bool get _canCheckout => widget.checkout != null || context.read<UsageProvider>().subscription?.trialEligible == true;
+
+  /// The CTA. A reader back from the yearly checkout without buying is offered monthly, once.
+  Future<void> _checkout(PaywallOffer offer) async {
+    final yearly = _yearly && offer.yearly != null;
+    final outcome = await _purchase(offer);
+    if (yearly && outcome == PaywallCheckoutOutcome.cancelled) await _offerMonthly(offer);
+  }
+
+  /// The selected plan's checkout; null when none opened.
+  Future<PaywallCheckoutOutcome?> _purchase(PaywallOffer offer) async {
     final price = _yearly ? (offer.yearly ?? offer.monthly) : (offer.monthly ?? offer.yearly);
-    if (price == null || _locked) return;
+    if (price == null || _locked) return null;
     // Never open a checkout that would charge at once under a free-trial button.
-    if (widget.checkout == null && context.read<UsageProvider>().subscription?.trialEligible != true) {
+    if (!_canCheckout) {
       OmiFeedback.error(context, context.l10n.couldNotProcessSubscription);
-      return;
+      return null;
     }
     setState(() => _busy = true);
     try {
@@ -111,14 +126,57 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
                 trialDays: TrialPaywallPage.trialDays,
               );
       final outcome = await start(context, price, offer.tierId);
-      if (!mounted || _dismissed) return;
-      if (outcome == PaywallCheckoutOutcome.purchased) {
+      if (mounted && !_dismissed && outcome == PaywallCheckoutOutcome.purchased) {
         _dismissed = true;
         Navigator.of(context).pop(true);
       }
+      return outcome;
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// "Not ready for a year?", once per page. Its button runs the Monthly card's checkout.
+  Future<void> _offerMonthly(PaywallOffer offer) async {
+    final monthly = offer.monthly;
+    if (_monthlyOffered || monthly == null || !mounted || _locked) return;
+    _monthlyOffered = true;
+    // Leaving before the success page does not prove nothing was bought: ask the server first.
+    final usage = context.read<UsageProvider>();
+    setState(() => _busy = true);
+    await usage.fetchSubscription().timeout(const Duration(seconds: 4), onTimeout: () {});
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (_dismissed || usage.subscription?.subscription.plan.isPaid == true || !_canCheckout) return;
+    final trial = usage.subscription?.trialEligible == true;
+    const TypedEvents().emit(PaywallMonthlyFallbackShown(trial: trial));
+    final accepted = await showOmiSurfaceSheet<bool>(
+      context: context,
+      surface: () => _Paper.card,
+      builder: (_) => OmiSheetScaffold(
+        showCloseButton: false,
+        padding: EdgeInsets.zero,
+        child: _MonthlyOffer(price: monthly, trialDays: trial ? TrialPaywallPage.trialDays : null),
+      ),
+    );
+    if (accepted != true) {
+      const TypedEvents().emit(PaywallMonthlyFallbackDismissed(trial: trial));
+      return;
+    }
+    PaywallCheckoutOutcome? outcome;
+    if (mounted && !_locked) {
+      setState(() => _yearly = false);
+      outcome = await _purchase(offer);
+    }
+    // After the checkout settles, so the event carries what happened, not just the tap.
+    const TypedEvents().emit(PaywallMonthlyFallbackAccepted(
+      trial: trial,
+      outcome: switch (outcome) {
+        PaywallCheckoutOutcome.purchased => PaywallMonthlyFallbackAcceptedOutcome.purchased,
+        PaywallCheckoutOutcome.cancelled => PaywallMonthlyFallbackAcceptedOutcome.cancelled,
+        PaywallCheckoutOutcome.failed || null => PaywallMonthlyFallbackAcceptedOutcome.failed,
+      },
+    ));
   }
 
   @override
@@ -299,7 +357,7 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
                         key: const Key('trial_paywall_cta'),
                         label: l10n.paywallTrialCta(zero),
                         busy: _busy,
-                        onPressed: offer == null || _busy ? null : () => _purchase(offer),
+                        onPressed: offer == null || _busy ? null : () => _checkout(offer),
                       ),
                       const SizedBox(height: 10),
                       Text(
@@ -927,18 +985,68 @@ class _Button extends StatelessWidget {
         child: InkWell(
           borderRadius: radius,
           onTap: onPressed,
-          child: SizedBox(
-            height: 56,
-            child: Center(
-              child: busy
-                  ? const OmiSpinner(size: OmiSpinnerSize.small, color: _Paper.onAccent)
-                  : Text(
-                      label,
-                      style: _Paper.label(size: 17, color: _Paper.onAccent, weight: FontWeight.w600),
-                    ),
+          // A minimum, not a fixed height: at large text sizes the label grows instead of clipping.
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 56),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.xs),
+              child: Center(
+                child: busy
+                    ? const OmiSpinner(size: OmiSpinnerSize.small, color: _Paper.onAccent)
+                    : Text(
+                        label,
+                        textAlign: TextAlign.center,
+                        style: _Paper.label(size: 17, color: _Paper.onAccent, weight: FontWeight.w600),
+                      ),
+              ),
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// The sheet for a reader who left the yearly checkout: the monthly plan at its catalog price, with
+/// the free trial only when [trialDays] is set (null means the backend offers no trial).
+class _MonthlyOffer extends StatelessWidget {
+  const _MonthlyOffer({required this.price, required this.trialDays});
+
+  final PaywallPrice price;
+  final int? trialDays;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final days = trialDays;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, 0, OmiSpacing.xl, OmiSpacing.xl),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(l10n.paywallMonthlyFallbackTitle, style: _Paper.headline(26)),
+          const SizedBox(height: OmiSpacing.xs),
+          Text(
+            days == null
+                ? l10n.paywallMonthlyFallbackBody(price.formatted)
+                : l10n.paywallMonthlyFallbackTrialBody(days, price.formatted),
+            key: const Key('trial_paywall_monthly_offer_terms'),
+            style: _Paper.body(size: 17, height: 1.3),
+          ),
+          const SizedBox(height: OmiSpacing.xxl),
+          _Button(
+            key: const Key('trial_paywall_monthly_offer_accept'),
+            label: days == null ? l10n.paywallMonthlyFallbackCta : l10n.paywallMonthlyFallbackTrialCta,
+            onPressed: () => Navigator.of(context).pop(true),
+          ),
+          const SizedBox(height: OmiSpacing.xs),
+          TextButton(
+            key: const Key('trial_paywall_monthly_offer_decline'),
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(l10n.paywallNotNow, style: _Paper.label(size: 17, weight: FontWeight.w600)),
+          ),
+        ],
       ),
     );
   }

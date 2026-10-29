@@ -13520,6 +13520,25 @@ class AppLocalizationsTe extends AppLocalizations {
   String get paywallTrialCancelNote => 'ఎప్పుడైనా రద్దు చేయండి. ఎటువంటి రుసుములు, జరిమానాలు లేవు.';
 
   @override
+  String get paywallMonthlyFallbackTitle => 'పూర్తి సంవత్సరానికి ఇంకా సిద్ధంగా లేరా?';
+
+  @override
+  String paywallMonthlyFallbackTrialBody(int days, String price) {
+    return 'బదులుగా నెలవారీతో ప్రారంభించండి. అవే $days రోజులు ఉచితం, ఆపై నెలకు $price. ఎప్పుడైనా రద్దు చేయండి.';
+  }
+
+  @override
+  String paywallMonthlyFallbackBody(String price) {
+    return 'బదులుగా నెలవారీతో ప్రారంభించండి. నెలకు $price. ఎప్పుడైనా రద్దు చేయండి.';
+  }
+
+  @override
+  String get paywallMonthlyFallbackTrialCta => 'నెలవారీని ఉచితంగా ప్రయత్నించండి';
+
+  @override
+  String get paywallMonthlyFallbackCta => 'నెలవారీని ఎంచుకోండి';
+
+  @override
   String paywallTrialStarted(int days) {
     return 'మీ $days-రోజుల Omi Pro ఉచిత ట్రయల్ ప్రారంభమైంది.';
   }

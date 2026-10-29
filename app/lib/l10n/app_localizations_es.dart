@@ -13506,6 +13506,25 @@ class AppLocalizationsEs extends AppLocalizations {
   String get paywallTrialCancelNote => 'Cancela en cualquier momento. Sin cargos ni penalizaciones.';
 
   @override
+  String get paywallMonthlyFallbackTitle => '¿Aún no te decides por un año?';
+
+  @override
+  String paywallMonthlyFallbackTrialBody(int days, String price) {
+    return 'Empieza con el plan mensual. Los mismos $days días gratis, después $price al mes. Cancela cuando quieras.';
+  }
+
+  @override
+  String paywallMonthlyFallbackBody(String price) {
+    return 'Empieza con el plan mensual. $price al mes. Cancela cuando quieras.';
+  }
+
+  @override
+  String get paywallMonthlyFallbackTrialCta => 'Prueba el mensual gratis';
+
+  @override
+  String get paywallMonthlyFallbackCta => 'Elegir mensual';
+
+  @override
   String paywallTrialStarted(int days) {
     return 'Tu prueba gratuita de $days días de Omi Pro ha comenzado.';
   }

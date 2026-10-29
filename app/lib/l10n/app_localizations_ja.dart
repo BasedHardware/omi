@@ -13278,6 +13278,25 @@ class AppLocalizationsJa extends AppLocalizations {
   String get paywallTrialCancelNote => 'いつでもキャンセル可能。手数料や違約金なし。';
 
   @override
+  String get paywallMonthlyFallbackTitle => '1年はまだ早いですか？';
+
+  @override
+  String paywallMonthlyFallbackTrialBody(int days, String price) {
+    return '代わりに月額プランで始めましょう。同じく$days日間無料、その後は月額$price。いつでもキャンセルできます。';
+  }
+
+  @override
+  String paywallMonthlyFallbackBody(String price) {
+    return '代わりに月額プランで始めましょう。月額$price。いつでもキャンセルできます。';
+  }
+
+  @override
+  String get paywallMonthlyFallbackTrialCta => '月額プランを無料で試す';
+
+  @override
+  String get paywallMonthlyFallbackCta => '月額プランを選ぶ';
+
+  @override
   String paywallTrialStarted(int days) {
     return 'Omi Proの$days日間無料トライアルが開始されました。';
   }

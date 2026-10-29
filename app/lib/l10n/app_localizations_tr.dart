@@ -13481,6 +13481,25 @@ class AppLocalizationsTr extends AppLocalizations {
   String get paywallTrialCancelNote => 'İstediğiniz zaman iptal edin. Ücret yok, ceza yok.';
 
   @override
+  String get paywallMonthlyFallbackTitle => 'Tam bir yıla henüz hazır değil misin?';
+
+  @override
+  String paywallMonthlyFallbackTrialBody(int days, String price) {
+    return 'Bunun yerine aylıkla başla. Yine $days gün ücretsiz, ardından ayda $price. İstediğin zaman iptal et.';
+  }
+
+  @override
+  String paywallMonthlyFallbackBody(String price) {
+    return 'Bunun yerine aylıkla başla. Ayda $price. İstediğin zaman iptal et.';
+  }
+
+  @override
+  String get paywallMonthlyFallbackTrialCta => 'Aylığı ücretsiz dene';
+
+  @override
+  String get paywallMonthlyFallbackCta => 'Aylığı seç';
+
+  @override
   String paywallTrialStarted(int days) {
     return 'Omi Pro\'nun $days günlük ücretsiz deneme süreniz başladı.';
   }

@@ -13524,6 +13524,25 @@ class AppLocalizationsRo extends AppLocalizations {
   String get paywallTrialCancelNote => 'Anulează oricând. Fără taxe, fără penalități.';
 
   @override
+  String get paywallMonthlyFallbackTitle => 'Încă nu ești gata pentru un an întreg?';
+
+  @override
+  String paywallMonthlyFallbackTrialBody(int days, String price) {
+    return 'Începe cu planul lunar. Aceleași $days zile gratuite, apoi $price pe lună. Anulezi oricând.';
+  }
+
+  @override
+  String paywallMonthlyFallbackBody(String price) {
+    return 'Începe cu planul lunar. $price pe lună. Anulezi oricând.';
+  }
+
+  @override
+  String get paywallMonthlyFallbackTrialCta => 'Încearcă lunar gratuit';
+
+  @override
+  String get paywallMonthlyFallbackCta => 'Alege lunar';
+
+  @override
   String paywallTrialStarted(int days) {
     return 'Perioada ta de încercare gratuită de $days zile pentru Omi Pro a început.';
   }

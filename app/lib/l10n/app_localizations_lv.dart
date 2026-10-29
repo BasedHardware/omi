@@ -13499,6 +13499,25 @@ class AppLocalizationsLv extends AppLocalizations {
   String get paywallTrialCancelNote => 'Atcelt jebkurā laikā. Bez maksas, bez soda sankcijām.';
 
   @override
+  String get paywallMonthlyFallbackTitle => 'Vesels gads pagaidām par daudz?';
+
+  @override
+  String paywallMonthlyFallbackTrialBody(int days, String price) {
+    return 'Sāciet ar mēneša plānu. Tās pašas $days dienas bez maksas, pēc tam $price mēnesī. Atceliet jebkurā brīdī.';
+  }
+
+  @override
+  String paywallMonthlyFallbackBody(String price) {
+    return 'Sāciet ar mēneša plānu. $price mēnesī. Atceliet jebkurā brīdī.';
+  }
+
+  @override
+  String get paywallMonthlyFallbackTrialCta => 'Izmēģināt mēneša plānu bez maksas';
+
+  @override
+  String get paywallMonthlyFallbackCta => 'Izvēlēties mēneša plānu';
+
+  @override
   String paywallTrialStarted(int days) {
     return 'Jūsu $days dienu bezmaksas Omi Pro izmēģinājuma periods ir sācies.';
   }

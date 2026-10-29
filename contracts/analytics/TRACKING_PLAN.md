@@ -190,6 +190,9 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | onboardingStepCompleted | Onboarding Step Completed | step, index, elapsed_ms, skipped, platform, exit_reason | active | mobile-instrumentation-presence |
 | paywallVariantShown | Paywall Variant Shown | variant, source | active | mobile-instrumentation-presence |
 | paywallVariantFallback | Paywall Variant Fallback | variant, reason | active | mobile-instrumentation-presence |
+| paywallMonthlyFallbackShown | Paywall Monthly Fallback Shown | trial | active | mobile-instrumentation-presence |
+| paywallMonthlyFallbackAccepted | Paywall Monthly Fallback Accepted | trial, outcome | active | mobile-instrumentation-presence |
+| paywallMonthlyFallbackDismissed | Paywall Monthly Fallback Dismissed | trial | active | mobile-instrumentation-presence |
 | onboardingWebviewShown | Onboarding Webview Shown | none | active | mobile-instrumentation-presence |
 | onboardingWebviewCompleted | Onboarding Webview Completed | none | active | mobile-instrumentation-presence |
 | onboardingWebviewFallback | Onboarding Webview Fallback | reason | active | mobile-instrumentation-presence |

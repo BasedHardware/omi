@@ -143,6 +143,9 @@ WHERE app_namespace = :app_namespace AND build_number = :build_number
     'Pendant Voice Question Dropped',
     'Paywall Variant Shown',
     'Paywall Variant Fallback',
+    'Paywall Monthly Fallback Shown',
+    'Paywall Monthly Fallback Accepted',
+    'Paywall Monthly Fallback Dismissed',
     'Onboarding Webview Shown',
     'Onboarding Webview Completed',
     'Onboarding Webview Fallback'

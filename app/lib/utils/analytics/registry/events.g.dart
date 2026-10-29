@@ -2907,6 +2907,42 @@ final class PaywallVariantFallback extends RegisteredEvent {
   Map<String, Object> get properties => {"variant": variant.wireName, "reason": reason.wireName};
 }
 
+final class PaywallMonthlyFallbackShown extends RegisteredEvent {
+  const PaywallMonthlyFallbackShown({required this.trial});
+  final bool trial;
+  @override
+  String get wireName => "Paywall Monthly Fallback Shown";
+  @override
+  Map<String, Object> get properties => {"trial": trial};
+}
+
+enum PaywallMonthlyFallbackAcceptedOutcome {
+  purchased("purchased"),
+  cancelled("cancelled"),
+  failed("failed");
+  const PaywallMonthlyFallbackAcceptedOutcome(this.wireName);
+  final String wireName;
+}
+
+final class PaywallMonthlyFallbackAccepted extends RegisteredEvent {
+  const PaywallMonthlyFallbackAccepted({required this.trial, required this.outcome});
+  final bool trial;
+  final PaywallMonthlyFallbackAcceptedOutcome outcome;
+  @override
+  String get wireName => "Paywall Monthly Fallback Accepted";
+  @override
+  Map<String, Object> get properties => {"trial": trial, "outcome": outcome.wireName};
+}
+
+final class PaywallMonthlyFallbackDismissed extends RegisteredEvent {
+  const PaywallMonthlyFallbackDismissed({required this.trial});
+  final bool trial;
+  @override
+  String get wireName => "Paywall Monthly Fallback Dismissed";
+  @override
+  Map<String, Object> get properties => {"trial": trial};
+}
+
 final class OnboardingWebviewShown extends RegisteredEvent {
   const OnboardingWebviewShown();
   @override

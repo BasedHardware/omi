@@ -13481,6 +13481,25 @@ class AppLocalizationsUr extends AppLocalizations {
   String get paywallTrialCancelNote => 'کسی بھی وقت منسوخ کریں۔ کوئی فیس نہیں، کوئی جرمانہ نہیں۔';
 
   @override
+  String get paywallMonthlyFallbackTitle => 'پورے سال کے لیے ابھی تیار نہیں؟';
+
+  @override
+  String paywallMonthlyFallbackTrialBody(int days, String price) {
+    return 'اس کے بجائے ماہانہ سے شروع کریں۔ وہی $days دن مفت، پھر $price ماہانہ۔ کسی بھی وقت منسوخ کریں۔';
+  }
+
+  @override
+  String paywallMonthlyFallbackBody(String price) {
+    return 'اس کے بجائے ماہانہ سے شروع کریں۔ $price ماہانہ۔ کسی بھی وقت منسوخ کریں۔';
+  }
+
+  @override
+  String get paywallMonthlyFallbackTrialCta => 'ماہانہ مفت آزمائیں';
+
+  @override
+  String get paywallMonthlyFallbackCta => 'ماہانہ منتخب کریں';
+
+  @override
   String paywallTrialStarted(int days) {
     return 'Omi Pro کا آپ کا $days روزہ مفت ٹرائل شروع ہو گیا ہے۔';
   }

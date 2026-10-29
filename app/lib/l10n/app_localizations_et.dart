@@ -13461,6 +13461,25 @@ class AppLocalizationsEt extends AppLocalizations {
   String get paywallTrialCancelNote => 'Tühista igal ajal. Ei mingeid tasusid ega trahve.';
 
   @override
+  String get paywallMonthlyFallbackTitle => 'Pole veel terveks aastaks valmis?';
+
+  @override
+  String paywallMonthlyFallbackTrialBody(int days, String price) {
+    return 'Alusta hoopis kuupaketiga. Samad $days päeva tasuta, seejärel $price kuus. Tühista igal ajal.';
+  }
+
+  @override
+  String paywallMonthlyFallbackBody(String price) {
+    return 'Alusta hoopis kuupaketiga. $price kuus. Tühista igal ajal.';
+  }
+
+  @override
+  String get paywallMonthlyFallbackTrialCta => 'Proovi kuupaketti tasuta';
+
+  @override
+  String get paywallMonthlyFallbackCta => 'Vali kuupakett';
+
+  @override
   String paywallTrialStarted(int days) {
     return 'Sinu $days-päevane Omi Pro tasuta prooviperiood on alanud.';
   }

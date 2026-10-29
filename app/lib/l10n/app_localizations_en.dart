@@ -13452,6 +13452,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get paywallTrialCancelNote => 'Cancel anytime. No fees, no penalties.';
 
   @override
+  String get paywallMonthlyFallbackTitle => 'Not ready for a year?';
+
+  @override
+  String paywallMonthlyFallbackTrialBody(int days, String price) {
+    return 'Start monthly instead. Same $days days free, then $price a month. Cancel anytime.';
+  }
+
+  @override
+  String paywallMonthlyFallbackBody(String price) {
+    return 'Start monthly instead. $price a month. Cancel anytime.';
+  }
+
+  @override
+  String get paywallMonthlyFallbackTrialCta => 'Try monthly free';
+
+  @override
+  String get paywallMonthlyFallbackCta => 'Choose monthly';
+
+  @override
   String paywallTrialStarted(int days) {
     return 'Your $days-day free trial of Omi Pro has started.';
   }

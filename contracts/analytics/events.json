@@ -4358,6 +4358,69 @@
       "correlation": null
     },
     {
+      "id": "paywallMonthlyFallbackShown",
+      "wire_name": "Paywall Monthly Fallback Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "trial": {
+          "type": "bool",
+          "wire_name": "trial"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "paywallMonthlyFallbackAccepted",
+      "wire_name": "Paywall Monthly Fallback Accepted",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "trial": {
+          "type": "bool",
+          "wire_name": "trial"
+        },
+        "outcome": {
+          "type": "enum",
+          "wire_name": "outcome",
+          "values": [
+            "purchased",
+            "cancelled",
+            "failed"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "paywallMonthlyFallbackDismissed",
+      "wire_name": "Paywall Monthly Fallback Dismissed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "trial": {
+          "type": "bool",
+          "wire_name": "trial"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
       "id": "onboardingWebviewShown",
       "wire_name": "Onboarding Webview Shown",
       "status": "active",

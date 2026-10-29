@@ -13519,6 +13519,25 @@ class AppLocalizationsHu extends AppLocalizations {
   String get paywallTrialCancelNote => 'Bármikor lemondható. Nincsenek díjak, nincsenek büntetések.';
 
   @override
+  String get paywallMonthlyFallbackTitle => 'Még nem állsz készen egy egész évre?';
+
+  @override
+  String paywallMonthlyFallbackTrialBody(int days, String price) {
+    return 'Kezdd inkább havi csomaggal. Ugyanúgy $days nap ingyen, utána havi $price. Bármikor lemondható.';
+  }
+
+  @override
+  String paywallMonthlyFallbackBody(String price) {
+    return 'Kezdd inkább havi csomaggal. Havi $price. Bármikor lemondható.';
+  }
+
+  @override
+  String get paywallMonthlyFallbackTrialCta => 'Havi csomag kipróbálása ingyen';
+
+  @override
+  String get paywallMonthlyFallbackCta => 'Havi csomag választása';
+
+  @override
   String paywallTrialStarted(int days) {
     return 'Elindult az Omi Pro $days napos ingyenes próbaverziója.';
   }
