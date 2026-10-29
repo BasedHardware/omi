@@ -24,6 +24,8 @@ from utils.batch_pipeline.contracts import (
 from utils.batch_pipeline.shadow_metrics import OUTCOMES, PAID, PAID_AUDIO, record
 
 MAX_OFFERS = 4
+BUSY_RETRY_SCAN_LIMIT = 100
+RECORD_PENDING_BUSY_SECONDS = 120.0
 OFFER_SECONDS = 6
 STAGING_SECONDS = 120
 logger = logging.getLogger(__name__)
@@ -33,11 +35,41 @@ def identity(uid, content_id):
     return 'sh_' + hashlib.sha256(f'{uid}\0{content_id}'.encode()).hexdigest()
 
 
-def pool_busy(client, namespace):
+def pool_busy(client, namespace, *, now=None):
+    """Yield to runnable ordinary work, rather than durable parked obligations.
+
+    A future retry, expired lease or old recording placeholder cannot occupy a
+    GPU now. Use the scheduler's existing state/time indexes; no age-based
+    exclusion of due retries. Local GPU/normal-flight checks remain mandatory.
+    """
+    now = time.time() if now is None else now
+    jobs = client.collection(f'{namespace}_jobs')
+    if list(jobs.where('state', '==', 'ready').limit(1).stream()):
+        return True
+    if list(jobs.where('state', '==', 'leased').where('lease_until', '>', now).limit(1).stream()):
+        return True
+    retries = (
+        jobs.where('state', '==', 'retry')
+        .where('available_at', '<=', now)
+        .order_by('available_at')
+        .select(('attempt', 'policy_parts.scheduler.max_attempts'))
+        .limit(BUSY_RETRY_SCAN_LIMIT + 1)
+        .stream()
+    )
+    for index, document in enumerate(retries):
+        if index >= BUSY_RETRY_SCAN_LIMIT:
+            return True  # An unmeasured tail cannot certify an idle pool.
+        row = document.to_dict()
+        attempt = row.get('attempt')
+        maximum = ((row.get('policy_parts') or {}).get('scheduler') or {}).get('max_attempts')
+        if type(attempt) is not int or attempt < 0 or type(maximum) is not int or not 1 <= maximum <= 20:
+            return True  # Missing pinned authority is not permission to use capacity.
+        if attempt < maximum:
+            return True
     return bool(
         list(
-            client.collection(f'{namespace}_jobs')
-            .where('state', 'in', ['ready', 'leased', 'retry', 'record_pending'])
+            jobs.where('state', '==', 'record_pending')
+            .where('enqueued_at', '>', now - RECORD_PENDING_BUSY_SECONDS)
             .limit(1)
             .stream()
         )
@@ -54,9 +86,9 @@ class ShadowStore:
         self.busy = busy or self._busy
 
     def _busy(self):
-        # Single-field index, no new production index or scan. Any admitted
+        # Existing scheduler indexes; bounded retry-authority reads. Runnable
         # ordinary GPU work wins, including a flight prefetched by another lane.
-        return pool_busy(self.store.client, self.store.namespace)
+        return pool_busy(self.store.client, self.store.namespace, now=self.clock())
 
     def _finish(self, tx, segment, outcome, *, speech=0.0, vad='unknown', recognizers=None, projection_status=None):
         job = tx.get('shadow_jobs', segment)
