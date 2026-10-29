@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/services/live_preview/live_preview_word_budget.dart';
 
 enum PowerCycleSubState { waitingForOff, deviceOff, waitingForReconnect, reconnected }
 
@@ -16,7 +17,13 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   static const int doublePressStep = 4;
   static const int allSetStep = 5;
   static const int totalSteps = 6;
+  // Enough speech to see live transcription work, in any language: five words, counted the way the
+  // live preview counts them (Chinese, Japanese, Korean and Thai, written without spaces, count one
+  // word per two characters), or 20 letters for languages that say it in a few long words (Turkish,
+  // Arabic, Tamil).
   static const int _wordThreshold = 5;
+  static const int _letterThreshold = 20;
+  static final RegExp _letter = RegExp(r'[\p{L}\p{M}\p{N}]', unicode: true);
 
   int currentStep = 0;
   bool isOnboardingActive = false;
@@ -135,13 +142,9 @@ class DeviceOnboardingProvider extends ChangeNotifier {
     if (currentStep != transcriptionStep || transcriptionComplete) return;
 
     demoSegments = segments;
-    int count = 0;
-    for (final seg in segments) {
-      count += seg.text.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length;
-    }
-    wordCount = count;
-
-    if (wordCount >= _wordThreshold && !transcriptionComplete) {
+    final text = segments.map((s) => s.text).join(' ');
+    wordCount = LivePreviewWordBudget.count(text);
+    if (wordCount >= _wordThreshold || _letter.allMatches(text).length >= _letterThreshold) {
       transcriptionComplete = true;
     }
     notifyListeners();

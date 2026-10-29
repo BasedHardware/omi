@@ -18,6 +18,7 @@ import 'package:omi/services/auth_service.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 
+import '../support/device_tour_example.dart';
 import '../support/recording_analytics.dart';
 
 /// The tour's whole capture boundary: it attaches itself, pauses Transcribe Later while open, and on exit
@@ -52,6 +53,7 @@ class _Env implements EnvFields {
 }
 
 const _speakTitle = 'Speak Into Your Omi';
+
 const _speakSubtitle = 'Say something like\n“Remind me to call Sam tomorrow.”';
 
 void main() {
@@ -88,11 +90,12 @@ void main() {
     }
   }
 
-  Future<void> openTour(WidgetTester tester) async {
+  Future<void> openTour(WidgetTester tester, {Locale locale = const Locale('en')}) async {
     await tester.pumpWidget(ChangeNotifierProvider<CaptureProvider>.value(
       value: capture,
       child: MaterialApp(
         navigatorKey: navigator,
+        locale: locale,
         theme: buildOmiTheme(),
         localizationsDelegates: const [
           AppLocalizations.delegate,
@@ -153,20 +156,51 @@ void main() {
     analytics.expectSingle('Device Onboarding Started', {'source': 'auto'});
   });
 
-  testWidgets('spoken words fill the transcript card, then Continue opens the question step', (tester) async {
-    await openTour(tester);
-    await speak(tester, 'Remind me to call Sam tomorrow.');
+  // The owner says the example the step shows, in their app language. Chinese, Japanese and Thai are written
+  // without spaces, so a sentence there is one space-separated "word"; it still has to finish the step.
+  for (final code in ['en', 'ja', 'zh', 'ko', 'th']) {
+    testWidgets('$code: saying the example fills the card, then Continue opens the question step', (tester) async {
+      final l10n = lookupAppLocalizations(Locale(code));
+      final example = deviceTourExample(l10n.deviceOnboardingTranscriptionSubtitle);
+      await openTour(tester, locale: Locale(code));
+      await speak(tester, example);
 
-    expect(find.text('Remind me to call Sam tomorrow.'), findsOneWidget);
-    expect(find.text('Good job!'), findsOneWidget);
+      expect(find.text(example), findsOneWidget);
+      expect(find.text(l10n.deviceOnboardingGoodJob), findsOneWidget);
+      await tester.tap(find.text(l10n.deviceOnboardingContinue));
+      await frames(tester);
+
+      expect(capture.deviceOnboardingProvider!.currentStep, DeviceOnboardingProvider.askQuestionStep);
+      expect(find.text(l10n.deviceOnboardingPressButtonTitle), findsOneWidget);
+      expect(dot(tester), 1);
+      expect(await tourEvents(tester), ['Device Onboarding Started', 'Device Onboarding Step Completed']);
+      analytics.expectSingle('Device Onboarding Step Completed', {'step': 'transcription_demo'});
+    });
+  }
+
+  testWidgets('largest text size: nothing is cut off and Continue is reachable', (tester) async {
+    // iPhone 17 Pro at the largest accessibility size (body text 17 pt -> 53 pt).
+    tester.view.physicalSize = const Size(1206, 2622);
+    tester.view.devicePixelRatio = 3;
+    tester.platformDispatcher.textScaleFactorTestValue = 3.12;
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    await openTour(tester);
+    expect(tester.takeException(), isNull, reason: 'the first step must not overflow');
+    expect(find.text(_speakSubtitle), findsOneWidget);
+    await tester.ensureVisible(find.text(_speakSubtitle));
+
+    await speak(tester, 'Remind me to call Sam tomorrow.');
+    expect(tester.takeException(), isNull, reason: 'the transcript state must not overflow');
+    await tester.ensureVisible(find.text('Continue'));
+    await frames(tester, 2);
     await tester.tap(find.text('Continue'));
     await frames(tester);
 
     expect(capture.deviceOnboardingProvider!.currentStep, DeviceOnboardingProvider.askQuestionStep);
     expect(find.text('Press the button on your Omi'), findsOneWidget);
-    expect(dot(tester), 1);
-    expect(await tourEvents(tester), ['Device Onboarding Started', 'Device Onboarding Step Completed']);
-    analytics.expectSingle('Device Onboarding Step Completed', {'step': 'transcription_demo'});
+    expect(tester.takeException(), isNull, reason: 'the next step must not overflow either');
   });
 
   // One test on purpose: the completion save goes through a process-wide queue, so every close in this file
