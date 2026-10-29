@@ -68,7 +68,7 @@ def load_pyannote_pair(model_batch_size):
         _set_batch_size(diarizer, 'segmentation_batch_size', model_batch_size, 'pyannote segmentation')
         _set_batch_size(diarizer, 'embedding_batch_size', model_batch_size, 'pyannote embedding')
     # Never apply BF16 autocast to segmentation: the quality lane rejected it.
-    segmentation = diarizer._segmentation.model.float().eval()
+    segmentation = diarizer._segmentation.model.float().train(False)
     vad = VoiceActivityDetection(segmentation=segmentation)
     # Community-1 powerset segmentation fixes onset/offset at 0.5; they are
     # constants, not tunable pipeline parameters.
@@ -91,7 +91,7 @@ def load_worker(artifacts):
     if not torch.cuda.is_bf16_supported():
         raise RuntimeError('batch worker requires BF16 ASR support')
     checkpoint = hf_hub_download('nvidia/parakeet-tdt-0.6b-v3', 'parakeet-tdt-0.6b-v3.nemo', revision=ASR_REVISION)
-    asr = nemo_asr.models.ASRModel.restore_from(checkpoint, map_location='cuda:0').to(torch.bfloat16).eval()
+    asr = nemo_asr.models.ASRModel.restore_from(checkpoint, map_location='cuda:0').to(torch.bfloat16).train(False)
     diarizer, vad = load_pyannote_pair(model_batch_size)
     return create_local_worker(
         fetch_audio=artifacts.fetch_audio,
