@@ -34,7 +34,7 @@ def test_concurrent_lease_probe_holds_stt_instead_of_deferred_full_processing():
     namespace = {
         'Any': object,
         'os': SimpleNamespace(getenv=lambda name, default: default),
-        '_wait_for_process_gate': lambda job_id: events.append(('gate', job_id)),
+        '_wait_for_stt_gate': lambda job_id: events.append(('gate', job_id)),
         'write_event': lambda channel, row: events.append((row['event'], row['job_id'])),
     }
     exec(compile(ast.Module(body=[provider], type_ignores=[]), str(source), 'exec'), namespace)
@@ -44,7 +44,7 @@ def test_concurrent_lease_probe_holds_stt_instead_of_deferred_full_processing():
         n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == '_local_process_conversation'
     )
     assert not any(
-        isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == '_wait_for_process_gate'
+        isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == '_wait_for_stt_gate'
         for n in ast.walk(processor)
     )
 
