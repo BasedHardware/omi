@@ -2869,7 +2869,7 @@ environments:
             VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
             BATCH_PIPELINE_SHADOW_PERCENT: {value: '25', category: rollout}
             BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR:
-              value: '0'
+              value: '200'
               category: ops_kill
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
@@ -3224,7 +3224,7 @@ environments:
             VAD_CACHE_TTL_SECONDS: {value: '7200', category: rollout}
             BATCH_PIPELINE_SHADOW_PERCENT: {value: '25', category: rollout}
             BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR:
-              value: '0'
+              value: '200'
               category: ops_kill
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'true', category: rollout}
@@ -3600,7 +3600,7 @@ environments:
             VAD_CACHE_TTL_SECONDS: {value: '7200', category: rollout}
             BATCH_PIPELINE_SHADOW_PERCENT: {value: '25', category: rollout}
             BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR:
-              value: '0'
+              value: '200'
               category: ops_kill
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'true', category: rollout}
@@ -3956,7 +3956,7 @@ environments:
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_SHADOW_PERCENT: {value: '25', category: rollout}
             BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR:
-              value: '0'
+              value: '200'
               category: ops_kill
             BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
             FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'true', category: rollout}
