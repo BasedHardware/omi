@@ -13,6 +13,7 @@ import time
 from config.batch_pipeline_shadow import paid_recovery_limit, shadow_percent
 from config.policy import resolve_stage_policy
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.batch_pipeline_store import is_allowance_policy_hold
 from utils.batch_pipeline.contracts import (
     WorkItem,
     RecoveryWork,
@@ -24,6 +25,7 @@ from utils.batch_pipeline.contracts import (
 from utils.batch_pipeline.shadow_metrics import OUTCOMES, PAID, PAID_AUDIO, record
 
 MAX_OFFERS = 4
+BUSY_HOLD_SCAN_LIMIT = 500
 RECORD_PENDING_BUSY_SECONDS = 120.0
 OFFER_SECONDS = 6
 STAGING_SECONDS = 120
@@ -32,6 +34,15 @@ logger = logging.getLogger(__name__)
 
 def identity(uid, content_id):
     return 'sh_' + hashlib.sha256(f'{uid}\0{content_id}'.encode()).hexdigest()
+
+
+def _has_dispatchable(rows):
+    for index, document in enumerate(rows):
+        if index >= BUSY_HOLD_SCAN_LIMIT:
+            return True  # A held prefix cannot certify an unmeasured tail idle.
+        if not is_allowance_policy_hold(document.to_dict()):
+            return True  # Missing/unknown authority remains ordinary-work priority.
+    return False
 
 
 def pool_busy(client, namespace, *, now=None):
@@ -43,14 +54,23 @@ def pool_busy(client, namespace, *, now=None):
     """
     now = time.time() if now is None else now
     jobs = client.collection(f'{namespace}_jobs')
-    if list(jobs.where('state', '==', 'ready').limit(1).stream()):
-        return True
     if list(jobs.where('state', '==', 'leased').where('lease_until', '>', now).limit(1).stream()):
+        return True
+    # Preserve nonempty unknown decisions: a subfield mask could turn one into
+    # an absent decision and incorrectly revive a stale allowance hold.
+    fields = ('compute_decision', 'last_policy_hold.reason')
+    if _has_dispatchable(jobs.where('state', '==', 'ready').select(fields).limit(BUSY_HOLD_SCAN_LIMIT + 1).stream()):
         return True
     # Scheduler.recover promotes every due retry, including one whose attempt
     # counter reached the cap outside the serving retry-cap cohort. Only the
     # authoritative terminal state releases its ordinary-work priority.
-    if list(jobs.where('state', '==', 'retry').where('available_at', '<=', now).limit(1).stream()):
+    if _has_dispatchable(
+        jobs.where('state', '==', 'retry')
+        .where('available_at', '<=', now)
+        .select(fields)
+        .limit(BUSY_HOLD_SCAN_LIMIT + 1)
+        .stream()
+    ):
         return True
     return bool(
         list(
@@ -72,7 +92,7 @@ class ShadowStore:
         self.busy = busy or self._busy
 
     def _busy(self):
-        # Existing scheduler indexes; at most four document reads. Runnable
+        # Existing scheduler indexes; bounded held-prefix scans. Runnable
         # ordinary GPU work wins, including a flight prefetched by another lane.
         return pool_busy(self.store.client, self.store.namespace, now=self.clock())
 

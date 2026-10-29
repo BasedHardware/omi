@@ -33,6 +33,14 @@ tolerations:
 worker:
   apiUrl: https://backend-sync-staging-1031333818730.us-central1.run.app
   audience: https://backend-sync-staging-1031333818730.us-central1.run.app
+  # Staging composes the prod manifest, so it inherits the shadow 25 pin; the
+  # worker must offer the same capacity or shadow work is dropped unqualified
+  # (review r1). Paid recovery mirrors prod's 200/h base cap; the recovery URL
+  # is the staging integration service (review r2 / lead ruling f35bc4) so the
+  # paid recovery path is actually exercised.
+  shadowPercent: 25
+  shadowPaidRecoveryPerHour: 200
+  shadowRecoveryApiUrl: https://backend-integration-staging-1031333818730.us-central1.run.app
   emptyAsrRecoveryEnabled: true
   emptyAsrDispositionEnabled: true
   headPriorityEnabled: true
