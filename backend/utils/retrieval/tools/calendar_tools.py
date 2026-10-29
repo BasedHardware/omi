@@ -831,16 +831,16 @@ async def create_calendar_event_tool(
             if start_dt.tzinfo is None:
                 return f"Error: start_time must include timezone in format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-20T14:00:00-08:00'): {start_time}"
             logger.info("Parsed calendar start_time")
-        except ValueError as e:
-            return f"Error: Invalid start_time format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM: {start_time} - {str(e)}"
+        except ValueError:
+            return f"Error: Invalid start_time format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM: {start_time}"
 
         try:
             end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
             if end_dt.tzinfo is None:
                 return f"Error: end_time must include timezone in format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-20T15:00:00-08:00'): {end_time}"
             logger.info("Parsed calendar end_time")
-        except ValueError as e:
-            return f"Error: Invalid end_time format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM: {end_time} - {str(e)}"
+        except ValueError:
+            return f"Error: Invalid end_time format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM: {end_time}"
 
         # Validate that end_time is after start_time
         if end_dt <= start_dt:
@@ -1120,9 +1120,12 @@ async def delete_calendar_event_tool(
                     await delete_google_calendar_event(access_token, event_id_val)
                     mutation_result.succeeded.append(event)
                 except Exception as e:
-                    error_msg = str(e)
-                    logger.error(f"❌ Failed to delete {event_title_found}: {error_msg}")
-                    mutation_result.failed.append((event_title_found, error_msg))
+                    logger.error(
+                        "Failed to delete calendar event (%s)",
+                        type(e).__name__,
+                        exc_info=True,
+                    )
+                    mutation_result.failed.append((event_title_found, "could not delete this event"))
 
             return format_deleted_calendar_events(mutation_result)
 
@@ -1169,7 +1172,12 @@ async def delete_calendar_event_tool(
                                     await delete_google_calendar_event(new_token, event_id_val)
                                     mutation_result.succeeded.append(event)
                                 except Exception as delete_error:
-                                    mutation_result.failed.append((event_title_found, str(delete_error)))
+                                    logger.error(
+                                        "Failed to delete calendar event after token refresh (%s)",
+                                        type(delete_error).__name__,
+                                        exc_info=True,
+                                    )
+                                    mutation_result.failed.append((event_title_found, "could not delete this event"))
 
                         return format_deleted_calendar_events(mutation_result)
                     except Exception as retry_error:
@@ -1314,9 +1322,12 @@ async def update_calendar_event_tool(
 
                 logger.info(f"📅 Found event ID: {target_event_id}")
             except Exception as e:
-                error_msg = str(e)
-                logger.error(f"❌ Error searching for event: {error_msg}")
-                return f"Error searching for calendar event: {error_msg}"
+                logger.error(
+                    "Error searching for calendar event (%s)",
+                    type(e).__name__,
+                    exc_info=True,
+                )
+                return "Error searching for calendar event. Please try again."
 
         # Get current event to preserve existing data
         try:
