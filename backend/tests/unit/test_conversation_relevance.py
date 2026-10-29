@@ -69,6 +69,10 @@ def test_every_trigger_has_a_mode():
 
 
 def test_only_user_actions_skip_assessment():
+    """
+    SERVER_RECOVERY: Recovered from legacy storage; bypass model/calendar.
+    SMART_MERGE: User-initiated merge of fragments; bypass assessment.
+    """
     keep = {trigger for trigger, mode in PROCESSING_MODES.items() if mode.relevance is RelevancePolicy.KEEP}
     assert keep == {
         ProcessingTrigger.FIRST_OPEN,
