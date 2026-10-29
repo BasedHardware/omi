@@ -93,6 +93,18 @@ def _tunable(key, default):
         return default
 
 
+def cap_tail(staged, capped, outcomes):
+    """B5 shadow: work staged after the pass crossed the would-be cap, and how much of it applied."""
+    late = set() if capped is None else {key for key in staged if key not in capped}
+    return {
+        'crossed': capped is not None,
+        'staged_after_cap': len(late),
+        'applied_after_cap': sum(
+            1 for row in outcomes if isinstance(row, dict) and row.get('key') in late and row.get('status') == 'applied'
+        ),
+    }
+
+
 def material_tokens(material, current):
     """Token ceiling by new material, never above today's size ceiling nor below the light budget."""
     tier = (
@@ -919,15 +931,7 @@ async def run_session(
                     tokens_after=max(0, report['price_weighted_tokens'] - fired['tokens']),
                 )
         if budget_probe:
-            capped = progress['capped']
-            late = set() if capped is None else {key for key in session.staged if key not in capped}
-            levers['material_budget'] = {
-                'crossed': capped is not None,
-                'staged_after_cap': len(late),
-                'applied_after_cap': sum(
-                    1 for row in report['outcomes'] if row.get('key') in late and row.get('status') == 'applied'
-                ),
-            }
+            levers['material_budget'] = cap_tail(session.staged, progress['capped'], report['outcomes'])
         if compact_arm != 'off':
             levers['history_compact'] = dict(compaction)
     except Exception as error:
@@ -1034,7 +1038,7 @@ async def run_pass(
         else None
     )
     if not dry_run and slot is None:
-        report = {'status': 'waiting', 'reason': 'reserved_capacity'}
+        report = {'status': 'waiting', 'reason': 'reserved_capacity', 'wait_cause': 'gateway'}
         record_pass(report)
         return report
     lease = None

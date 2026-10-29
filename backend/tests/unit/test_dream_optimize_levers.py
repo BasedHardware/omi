@@ -480,6 +480,26 @@ def test_material_budget_shadow_counts_the_tail_a_cap_would_cut(runtime, monkeyp
     }
 
 
+def test_cap_tail_counts_only_work_staged_after_the_crossing():
+    staged = {'early': 1, 'late-applied': 2, 'late-rejected': 3}
+    outcomes = [
+        {'key': 'early', 'status': 'applied'},
+        {'key': 'late-applied', 'status': 'applied'},
+        {'key': 'late-rejected', 'status': 'verifier_disagree'},
+        'malformed',
+    ]
+    assert dream_agent.cap_tail(staged, {'early'}, outcomes) == {
+        'crossed': True,
+        'staged_after_cap': 2,
+        'applied_after_cap': 1,
+    }
+    assert dream_agent.cap_tail(staged, None, outcomes) == {
+        'crossed': False,
+        'staged_after_cap': 0,
+        'applied_after_cap': 0,
+    }
+
+
 # --- admission, parking and ordering (Firestore fake) -------------------------------------------
 
 from datetime import datetime, timedelta, timezone  # noqa: E402

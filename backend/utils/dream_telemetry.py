@@ -11,6 +11,7 @@ import logging
 import uuid
 from collections import Counter
 from contextvars import ContextVar
+from datetime import datetime, timezone
 from typing import Any, Iterable
 
 from prometheus_client import Counter as PromCounter
@@ -46,11 +47,7 @@ def _uuid(value: Any) -> str:
 
 def _timestamp(value: Any) -> str | None:
     """An RFC 3339 instant from the Scheduler header, or None."""
-    from datetime import datetime
-
     try:
-        from datetime import timezone
-
         instant = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
         return (instant.astimezone(timezone.utc) if instant.tzinfo else instant).isoformat()
     except (TypeError, ValueError):
