@@ -649,7 +649,7 @@ async def tool_list_issues(request: Request):
         if error:
             return ChatToolResponse(error=error)
 
-        result = github_client.list_issues(
+        result = await github_client.list_issues(
             access_token=user["access_token"],
             repo_full_name=repo_full_name,
             state=state,
