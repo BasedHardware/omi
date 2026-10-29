@@ -430,13 +430,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get autoSync => 'Automatikus szinkronizálás';
 
   @override
-  String get syncHealthAlerts => 'Szinkronizálási állapotriasztások';
-
-  @override
-  String get syncHealthAlertsDescription =>
-      'Figyelmeztetés, ha az Omi több mint egy napja nem szinkronizált felvételeket';
-
-  @override
   String get autoSyncDescription => 'Offline felvételek automatikus szinkronizálása az eszköz csatlakozásakor';
 
   @override
@@ -8766,6 +8759,28 @@ class AppLocalizationsHu extends AppLocalizations {
   String get deleteReasonOther => 'Egyéb';
 
   @override
+  String get deletePauseInsteadTitle => 'Inkább szünetelteted az Omi használatát?';
+
+  @override
+  String get deletePauseInsteadSubtitle => 'Állítsd le a felvételt, és őrizz meg mindent. Bármikor visszatérhetsz.';
+
+  @override
+  String get deletePauseRecordingLine => 'A felvétel leáll. Amíg távol vagy, semmi új nem kerül rögzítésre.';
+
+  @override
+  String get deletePauseKeepLine => 'Emlékeid, beszélgetéseid és alkalmazásaid pontosan úgy maradnak, ahogy vannak.';
+
+  @override
+  String get deletePauseReturnLine =>
+      'Bejelentkezve maradsz. Bármikor folytathatod a felvételt. Az előfizetésed változatlanul folytatódik.';
+
+  @override
+  String get pauseOmiButton => 'Omi szüneteltetése';
+
+  @override
+  String get continueDeletingButton => 'Törlés folytatása';
+
+  @override
   String get deleteFlowFeedbackTitle => 'Mesélj többet';
 
   @override
@@ -8785,6 +8800,28 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get deleteConsequenceNoRecovery => 'A fiókod nem állítható vissza — még az ügyfélszolgálat által sem.';
+
+  @override
+  String deletePendingRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count felvétel feldolgozása még folyamatban van. Ha most törlöd őket, elveszíted őket.',
+      one: '1 felvétel feldolgozása még folyamatban van. Ha most törlöd, elveszíted.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteGracePeriodNotice(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'A fiókod visszaállításához $days napon belül jelentkezz be újra.',
+      one: 'A fiókod visszaállításához 1 napon belül jelentkezz be újra.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get deleteTypeToConfirm => 'Írd be a DELETE szót a megerősítéshez';
@@ -9089,14 +9126,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'Internetkapcsolatra várva';
-
-  @override
-  String get syncStallAlertTitle => 'Az Omi nem szinkronizál';
-
-  @override
-  String syncStallAlertBody(int hours) {
-    return 'Több mint $hours órája nem szinkronizálódott felvétel az Omidról. Nyisd meg az Omit az eszköz kapcsolatának ellenőrzéséhez.';
-  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13743,14 +13772,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get activityAttentionStorageSubtitle => 'A felvételek szünetelnek';
 
   @override
-  String get activityAttentionSyncStalledTitle => 'Az Omi nem szinkronizál';
-
-  @override
-  String activityAttentionSyncStalledSubtitle(int hours) {
-    return 'Több mint $hours órája nem szinkronizálódott felvétel';
-  }
-
-  @override
   String get activityAttentionUploadStalledTitle => 'A feltöltés elakadt';
 
   @override
@@ -14789,5 +14810,183 @@ class AppLocalizationsHu extends AppLocalizations {
       one: '1 rövid felvétel elrejtése',
     );
     return '$_temp0';
+  }
+
+  @override
+  String deleteLocalRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count felvétel még nincs feltöltve. Ha most törlöd őket, elveszíted őket — hagyd nyitva az alkalmazást a feltöltés befejezéséig.',
+      one:
+          '1 felvétel még nincs feltöltve. Ha most törlöd, elveszíted — hagyd nyitva az alkalmazást a feltöltés befejezéséig.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConfirmGraceSubtitle => 'Mielőtt távozol, nézd meg, mi történik az adataiddal.';
+
+  @override
+  String get deletePauseConfirmation => 'Az Omi szünetel. Bármikor folytathatod a felvételt.';
+
+  @override
+  String deleteProcessingKept(int count, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count felvétel feldolgozása még folyamatban van. A fiókodban maradnak még ',
+      one: '1 felvétel feldolgozása még folyamatban van. A fiókodban marad még ',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days napig.',
+      one: '1 napig.',
+    );
+    return '$_temp0$_temp1';
+  }
+
+  @override
+  String deleteDataErasedAfterDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Emlékeid és beszélgetéseid $days nap múlva törlődnek.',
+      one: 'Emlékeid és beszélgetéseid 1 nap múlva törlődnek.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteAppsDisconnectImmediately => 'Az alkalmazásaid és integrációid azonnal lecsatlakoznak.';
+
+  @override
+  String get deleteSubscriptionImmediately => 'Az előfizetésed azonnal lemondásra kerül.';
+
+  @override
+  String get deleteRestoreTitle => 'A fiókod törlése folyamatban van';
+
+  @override
+  String get deleteRestoreSubtitle => 'Meggondoltad magad? Állítsd vissza a fiókodat, mielőtt töröljük.';
+
+  @override
+  String get deleteRestoreKeepData => 'Állítsd vissza emlékeidet és beszélgetéseidet.';
+
+  @override
+  String get deleteRestoreBillingNotice =>
+      'Az előfizetésed továbbra is lemondott marad. A visszaállítás után csatlakoztasd újra az alkalmazásokat és integrációkat.';
+
+  @override
+  String deleteRestoreDaysRemaining(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days napod maradt a fiókod visszaállítására.',
+      one: '1 napod maradt a fiókod visszaállítására.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteRestoreButton => 'Fiókom visszaállítása';
+
+  @override
+  String get deleteFinishButton => 'Törlés befejezése';
+
+  @override
+  String get deleteFinishNowButton => 'Fiókom törlése most';
+
+  @override
+  String get deleteFinishNowWarning =>
+      'Ezzel véget ér a visszaállítási időszak. Fiókodat és a hozzá tartozó felvételeket véglegesen töröljük.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Kevesebb mint egy napod maradt a fiókod visszaállítására.';
+
+  @override
+  String get deleteFinishNowTitle => 'Törlöd a fiókodat?';
+
+  @override
+  String get syncHealthAlerts => 'Szinkronizálási állapotriasztások';
+
+  @override
+  String get syncHealthAlertsDescription =>
+      'Figyelmeztetés, ha az Omi több mint egy napja nem szinkronizált felvételeket';
+
+  @override
+  String get syncStallAlertTitle => 'Az Omi nem szinkronizál';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Több mint $hours órája nem szinkronizálódott felvétel az Omidról. Nyisd meg az Omit az eszköz kapcsolatának ellenőrzéséhez.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Az Omi nem szinkronizál';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Több mint $hours órája nem szinkronizálódott felvétel';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Napi összefoglalók a Kezdőlapon';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'A legújabb összefoglalók megjelenítése a Kezdőlap tetején.';
+
+  @override
+  String get yearlySwitchTitle => 'Váltás éves fizetésre';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Évi $amount megtakarítás';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Évi $amount megtakarítás éves fizetéssel';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Ugyanaz a csomag, évente egyszer fizetve';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Csomag';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, évi $price';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Ma fizetendő';
+
+  @override
+  String get yearlySwitchRenews => 'Megújul';
+
+  @override
+  String get yearlySwitchCreditNote => 'Tartalmazza a hónap hátralévő részének jóváírását.';
+
+  @override
+  String get yearlySwitchDeclined => 'A fizetést elutasították. Továbbra is havonta fizet.';
+
+  @override
+  String get yearlySwitchFailed => 'A váltás nem sikerült. Továbbra is havonta fizet.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Nem sikerült betölteni az árat.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Az éves fizetés jelenleg nem érhető el az Ön csomagjához.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Mostantól évente fizet';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Ma terhelve: $amount. Megújul: $date.';
   }
 }

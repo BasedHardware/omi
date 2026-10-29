@@ -1,7 +1,14 @@
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
+import pytest
+
 from services import conversation_keyframes
+
+
+@pytest.fixture(autouse=True)
+def _allow_test_users_through_deletion_fence(monkeypatch):
+    monkeypatch.setattr(conversation_keyframes, "account_deletion_blocks_user_work", lambda _uid: False)
 
 
 class _Screen:
@@ -132,6 +139,36 @@ def test_finalization_retry_cannot_regress_requested_job(monkeypatch):
     ref.data["state"] = "requested"
     assert conversation_keyframes.ensure_conversation_keyframe_job("uid", conversation, firestore_client=Client())
     assert ref.data["state"] == "requested"
+
+
+def test_pending_deletion_fences_capture_reconcile_and_cleanup(monkeypatch):
+    monkeypatch.setattr(conversation_keyframes, "account_deletion_blocks_user_work", lambda _uid: True)
+    conversation = SimpleNamespace(
+        id="conversation-1",
+        source=SimpleNamespace(value="desktop"),
+        started_at=datetime.now(timezone.utc) - timedelta(minutes=2),
+        finished_at=datetime.now(timezone.utc),
+        client_device_id="mac-1",
+    )
+
+    class NoReadsClient:
+        def collection(self, _name):
+            raise AssertionError("pending deletion must be fenced before any work")
+
+    client = NoReadsClient()
+    assert (
+        conversation_keyframes.ensure_conversation_keyframe_job("uid", conversation, firestore_client=client) is False
+    )
+    assert (
+        conversation_keyframes.reconcile_conversation_keyframe_jobs(
+            "uid",
+            device_id="mac-1",
+            account_generation=1,
+            firestore_client=client,
+        )
+        == 0
+    )
+    assert conversation_keyframes.prune_expired_conversation_keyframe_jobs("uid", firestore_client=client) == 0
 
 
 def test_expired_keyframe_cleanup_deletes_only_bounded_operational_jobs():

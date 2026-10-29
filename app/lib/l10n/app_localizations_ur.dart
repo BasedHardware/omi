@@ -427,12 +427,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get autoSync => 'خودکار مطابقت';
 
   @override
-  String get syncHealthAlerts => 'سنک ہیلتھ الرٹس';
-
-  @override
-  String get syncHealthAlertsDescription => 'اگر Omi ایک دن سے زیادہ ریکارڈنگز سنک نہ کرے تو الرٹ دیں';
-
-  @override
   String get autoSyncDescription => 'جب آپ کا آلہ منسلک ہو تو آف لائن ریکارڈنگز کو خودکار طور پر سنک کریں';
 
   @override
@@ -8743,6 +8737,28 @@ class AppLocalizationsUr extends AppLocalizations {
   String get deleteReasonOther => 'دیگر';
 
   @override
+  String get deletePauseInsteadTitle => 'اس کے بجائے Omi کو روک دیں؟';
+
+  @override
+  String get deletePauseInsteadSubtitle => 'ریکارڈنگ روکیں اور سب کچھ محفوظ رکھیں۔ جب چاہیں واپس آئیں۔';
+
+  @override
+  String get deletePauseRecordingLine => 'ریکارڈنگ رک جائے گی۔ آپ کی غیر موجودگی میں کچھ نیا ریکارڈ نہیں ہوگا۔';
+
+  @override
+  String get deletePauseKeepLine => 'آپ کی یادیں، گفتگوئیں اور ایپس بالکل ویسی ہی رہیں گی۔';
+
+  @override
+  String get deletePauseReturnLine =>
+      'آپ سائن اِن رہیں گے۔ جب چاہیں ریکارڈنگ دوبارہ شروع کریں۔ آپ کی سبسکرپشن میں کوئی تبدیلی نہیں ہوگی۔';
+
+  @override
+  String get pauseOmiButton => 'Omi روک دیں';
+
+  @override
+  String get continueDeletingButton => 'حذف کرنا جاری رکھیں';
+
+  @override
   String get deleteFlowFeedbackTitle => 'مزید بتائیں';
 
   @override
@@ -8762,6 +8778,28 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get deleteConsequenceNoRecovery => 'آپ کا اکاؤنٹ بحال نہیں ہو سکتا — سپورٹ بھی نہیں کر سکتی۔';
+
+  @override
+  String deletePendingRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'آپ کی $count ریکارڈنگز ابھی پراسیس ہو رہی ہیں۔ اب حذف کرنے سے یہ ضائع ہو جائیں گی۔',
+      one: 'آپ کی 1 ریکارڈنگ ابھی پراسیس ہو رہی ہے۔ اب حذف کرنے سے یہ ضائع ہو جائے گی۔',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteGracePeriodNotice(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'اپنا اکاؤنٹ بحال کرنے کے لیے $days دن کے اندر دوبارہ سائن اِن کریں۔',
+      one: 'اپنا اکاؤنٹ بحال کرنے کے لیے 1 دن کے اندر دوبارہ سائن اِن کریں۔',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get deleteTypeToConfirm => 'تصدیق کے لیے DELETE ٹائپ کریں';
@@ -9066,14 +9104,6 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'انٹرنیٹ کا انتظار';
-
-  @override
-  String get syncStallAlertTitle => 'Omi سنک نہیں ہو رہا';
-
-  @override
-  String syncStallAlertBody(int hours) {
-    return 'آپ کے Omi سے $hours گھنٹوں سے زیادہ کوئی ریکارڈنگ سنک نہیں ہوئی۔ اپنے ڈیوائس کا کنکشن چیک کرنے کے لیے Omi کھولیں۔';
-  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13704,14 +13734,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get activityAttentionStorageSubtitle => 'ریکارڈنگز روک دی گئی ہیں';
 
   @override
-  String get activityAttentionSyncStalledTitle => 'Omi سنک نہیں ہو رہا';
-
-  @override
-  String activityAttentionSyncStalledSubtitle(int hours) {
-    return '$hours گھنٹوں سے زیادہ کوئی ریکارڈنگ سنک نہیں ہوئی';
-  }
-
-  @override
   String get activityAttentionUploadStalledTitle => 'اپ لوڈ رک گیا ہے';
 
   @override
@@ -14743,5 +14765,181 @@ class AppLocalizationsUr extends AppLocalizations {
       one: '1 مختصر کلپ چھپائیں',
     );
     return '$_temp0';
+  }
+
+  @override
+  String deleteLocalRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count ریکارڈنگز ابھی اپ لوڈ نہیں ہوئیں۔ اب حذف کرنے سے یہ ضائع ہو جائیں گی — اپ لوڈ مکمل ہونے تک ایپ کھلی رکھیں۔',
+      one: '1 ریکارڈنگ ابھی اپ لوڈ نہیں ہوئی۔ اب حذف کرنے سے یہ ضائع ہو جائے گی — اپ لوڈ مکمل ہونے تک ایپ کھلی رکھیں۔',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConfirmGraceSubtitle => 'جانے سے پہلے دیکھیں کہ آپ کے ڈیٹا کے ساتھ کیا ہوگا۔';
+
+  @override
+  String get deletePauseConfirmation => 'Omi روک دیا گیا ہے۔ جب چاہیں ریکارڈنگ دوبارہ شروع کریں۔';
+
+  @override
+  String deleteProcessingKept(int count, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ریکارڈنگز پر ابھی کارروائی جاری ہے۔ یہ آپ کے اکاؤنٹ میں مزید ',
+      one: '1 ریکارڈنگ پر ابھی کارروائی جاری ہے۔ یہ آپ کے اکاؤنٹ میں مزید ',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days دن.',
+      one: '1 دن.',
+    );
+    return '$_temp0$_temp1';
+  }
+
+  @override
+  String deleteDataErasedAfterDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'آپ کی یادیں اور گفتگوئیں $days دن بعد مٹا دی جائیں گی۔',
+      one: 'آپ کی یادیں اور گفتگوئیں 1 دن بعد مٹا دی جائیں گی۔',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteAppsDisconnectImmediately => 'آپ کی ایپس اور انٹیگریشنز فوراً منقطع ہو جائیں گی۔';
+
+  @override
+  String get deleteSubscriptionImmediately => 'آپ کی سبسکرپشن فوراً منسوخ ہو جائے گی۔';
+
+  @override
+  String get deleteRestoreTitle => 'آپ کا اکاؤنٹ حذف ہونے کا منتظر ہے';
+
+  @override
+  String get deleteRestoreSubtitle => 'ارادہ بدل گیا؟ مٹائے جانے سے پہلے اپنا اکاؤنٹ بحال کریں۔';
+
+  @override
+  String get deleteRestoreKeepData => 'اپنی یادیں اور گفتگوئیں بحال کریں۔';
+
+  @override
+  String get deleteRestoreBillingNotice =>
+      'آپ کی سبسکرپشن منسوخ ہی رہے گی۔ بحالی کے بعد ایپس اور انٹیگریشنز دوبارہ منسلک کریں۔';
+
+  @override
+  String deleteRestoreDaysRemaining(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'اپنا اکاؤنٹ بحال کرنے کے لیے آپ کے پاس $days دن باقی ہیں۔',
+      one: 'اپنا اکاؤنٹ بحال کرنے کے لیے آپ کے پاس 1 دن باقی ہے۔',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteRestoreButton => 'میرا اکاؤنٹ بحال کریں';
+
+  @override
+  String get deleteFinishButton => 'حذف کرنا مکمل کریں';
+
+  @override
+  String get deleteFinishNowButton => 'میرا اکاؤنٹ ابھی مٹا دیں';
+
+  @override
+  String get deleteFinishNowWarning =>
+      'اس سے بحالی کی مہلت ختم ہو جائے گی۔ آپ کا اکاؤنٹ اور اس کی ریکارڈنگز مستقل طور پر مٹا دی جائیں گی۔';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'اپنا اکاؤنٹ بحال کرنے کے لیے آپ کے پاس ایک دن سے کم وقت باقی ہے۔';
+
+  @override
+  String get deleteFinishNowTitle => 'اپنا اکاؤنٹ حذف کریں؟';
+
+  @override
+  String get syncHealthAlerts => 'سنک ہیلتھ الرٹس';
+
+  @override
+  String get syncHealthAlertsDescription => 'اگر Omi ایک دن سے زیادہ ریکارڈنگز سنک نہ کرے تو الرٹ دیں';
+
+  @override
+  String get syncStallAlertTitle => 'Omi سنک نہیں ہو رہا';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'آپ کے Omi سے $hours گھنٹوں سے زیادہ کوئی ریکارڈنگ سنک نہیں ہوئی۔ اپنے ڈیوائس کا کنکشن چیک کرنے کے لیے Omi کھولیں۔';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi سنک نہیں ہو رہا';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return '$hours گھنٹوں سے زیادہ کوئی ریکارڈنگ سنک نہیں ہوئی';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'ہوم پر روزانہ خلاصے';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'ہوم کے اوپر اپنے تازہ ترین خلاصے دکھائیں۔';
+
+  @override
+  String get yearlySwitchTitle => 'سالانہ پر منتقل کریں';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'سال میں $amount بچائیں';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'سالانہ ادائیگی سے سال میں $amount بچائیں';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'وہی پلان، سال میں ایک بار ادائیگی';
+
+  @override
+  String get yearlySwitchPlanLabel => 'پلان';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan، سالانہ $price';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'آج واجب الادا';
+
+  @override
+  String get yearlySwitchRenews => 'تجدید';
+
+  @override
+  String get yearlySwitchCreditNote => 'اس مہینے کے باقی دنوں کا کریڈٹ شامل ہے۔';
+
+  @override
+  String get yearlySwitchDeclined => 'ادائیگی مسترد ہو گئی۔ آپ اب بھی ماہانہ پلان پر ہیں۔';
+
+  @override
+  String get yearlySwitchFailed => 'تبدیلی نہیں ہو سکی۔ آپ اب بھی ماہانہ پلان پر ہیں۔';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'آپ کی قیمت لوڈ نہیں ہو سکی۔';
+
+  @override
+  String get yearlySwitchUnavailable => 'اس وقت آپ کے پلان کے لیے سالانہ بلنگ دستیاب نہیں ہے۔';
+
+  @override
+  String get yearlySwitchDoneTitle => 'اب آپ سالانہ پلان پر ہیں';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'آج $amount وصول کیے گئے۔ تجدید $date کو۔';
   }
 }

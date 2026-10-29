@@ -5,22 +5,22 @@
 
 - a pause: the next batch arrives at least ``MOMENT_PAUSE_SECONDS`` after the
   previous one;
-- a rollover: the buffer reaches ``MOMENT_MAX_WORDS``, or the stream moves to
-  another conversation;
+- a rollover: the buffer reaches ``MOMENT_MAX_WORDS``. A conversation change
+  carries its buffered speech into the next moment rather than spending a call;
 - an interval: the buffer has spanned ``MOMENT_MAX_SECONDS`` of steady speech, or,
   for the first moment of a live stretch, ``FIRST_MOMENT_MIN_SECONDS`` and
   ``FIRST_MOMENT_MIN_WORDS`` (so the episode has a title within a minute);
-- a session end: the pusher session closes (``on_session_end``), so a pod move or
-  a reconnect does not strand what was buffered. Only the ending session's own
-  conversation is flushed: a parallel capture on the same pod keeps its buffer.
-  (The listen fallback, used only when pusher is unavailable, still relies on
-  finalization for what it buffered.)
+- a session end: the pusher session closes, and the buffer stays available for a
+  reconnect during one ``MOMENT_PAUSE_SECONDS`` window. If none arrives, the
+  remaining tail is flushed as a moment. Finalization and wrap-up consume any
+  buffer that remains.
 
 A moment shorter than ``MOMENT_MIN_WORDS``, or one inside
 ``MOMENT_MIN_INTERVAL_SECONDS`` of the last flush, keeps accumulating instead
-of costing a call. The buffer is in-process and bounded (TTL plus a size cap):
-losing it on a crash loses nothing durable, because finalization applies
-every segment the live stream did not (``service.on_conversation_finalized``).
+of costing a call; the bounded session-end flush can send a short terminal
+tail. The buffer is in-process and bounded (TTL plus a size cap). If the process
+crashes before a flush, finalization can apply every segment the live stream did
+not (``service.on_conversation_finalized``).
 
 Structure does not wait for a moment. The first speech of each conversation
 attaches it to the live episode (``service.attach_conversation``, no model
@@ -36,6 +36,7 @@ when no capable client was seen.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import threading
 import time
@@ -51,10 +52,11 @@ from config.episodes import (
     MOMENT_MIN_INTERVAL_SECONDS,
     MOMENT_MIN_WORDS,
     MOMENT_PAUSE_SECONDS,
+    episode_carry_on_session_end_enabled,
     episodes_enabled_for,
 )
 from utils.episodes import client_gate, metrics
-from utils.episodes.moment import MomentInput
+from utils.episodes.moment import MomentFragment, MomentInput
 from utils import executors
 
 logger = logging.getLogger(__name__)
@@ -72,8 +74,12 @@ class _Buffer:
     first_wall: float
     last_wall: float
     segments: list[dict[str, Any]] = field(default_factory=list)
+    carried: list[MomentFragment] = field(default_factory=list)
     words: int = 0
     last_flush_wall: float = 0.0
+    current_first_wall: Optional[float] = None
+    session_ended: bool = False
+    session_end_generation: int = 0
 
 
 class MomentTracker:
@@ -93,14 +99,45 @@ class MomentTracker:
 
     @staticmethod
     def _moment(buf: _Buffer, trigger: str) -> MomentInput:
+        current_started = buf.current_first_wall if buf.current_first_wall is not None else buf.first_wall
+        carried_start = min((fragment.started_at.timestamp() for fragment in buf.carried), default=current_started)
         return MomentInput(
             conversation_id=buf.conversation_id,
             source=buf.source,
             segments=list(buf.segments),
-            started_at=datetime.fromtimestamp(buf.first_wall, timezone.utc),
+            started_at=datetime.fromtimestamp(min(carried_start, current_started), timezone.utc),
             ended_at=datetime.fromtimestamp(buf.last_wall, timezone.utc),
             trigger=trigger,
+            carried=tuple(buf.carried),
+            current_started_at=datetime.fromtimestamp(current_started, timezone.utc),
+            current_ended_at=datetime.fromtimestamp(buf.last_wall, timezone.utc),
         )
+
+    @staticmethod
+    def _trim(buf: _Buffer) -> None:
+        """Keep carried plus current segments within the existing per-user bound."""
+        total = sum(len(fragment.segments) for fragment in buf.carried) + len(buf.segments)
+        overflow = total - MAX_BUFFERED_SEGMENTS
+        while overflow > 0 and buf.carried:
+            fragment = buf.carried[0]
+            remove = min(overflow, len(fragment.segments))
+            buf.words -= sum(len(str(segment.get('text') or '').split()) for segment in fragment.segments[:remove])
+            overflow -= remove
+            remaining = fragment.segments[remove:]
+            if remaining:
+                buf.carried[0] = MomentFragment(
+                    conversation_id=fragment.conversation_id,
+                    source=fragment.source,
+                    segments=remaining,
+                    started_at=fragment.started_at,
+                    ended_at=fragment.ended_at,
+                )
+            else:
+                del buf.carried[0]
+        if overflow > 0:
+            removed = buf.segments[:overflow]
+            buf.words -= sum(len(str(segment.get('text') or '').split()) for segment in removed)
+            del buf.segments[:overflow]
 
     def observe(
         self,
@@ -116,28 +153,61 @@ class MomentTracker:
             return []
         wall = time.time() if now is None else now
         fresh = [dict(s) for s in segments if str(s.get('text') or '').strip()]
+        if not fresh:
+            return []
         ended: list[MomentInput] = []
         with self._lock:
             self._evict(wall)
             buf = self._buffers.get(uid)
             if buf is not None and buf.segments:
                 moved = buf.conversation_id != conversation_id
-                paused = wall - buf.last_wall >= MOMENT_PAUSE_SECONDS
+                resumed = buf.session_ended and not moved
+                paused = not moved and not resumed and wall - buf.last_wall >= MOMENT_PAUSE_SECONDS
                 spaced = wall - buf.last_flush_wall >= MOMENT_MIN_INTERVAL_SECONDS
-                if moved or (paused and buf.words >= MOMENT_MIN_WORDS and spaced):
-                    ended.append(self._moment(buf, 'rollover' if moved else 'pause'))
+                if paused and buf.words >= MOMENT_MIN_WORDS and spaced:
+                    ended.append(self._moment(buf, 'pause'))
                     buf = _Buffer(conversation_id, source, wall, wall, last_flush_wall=wall)
                     self._buffers[uid] = buf
-            if buf is None or (buf.conversation_id != conversation_id and not buf.segments):
-                buf = _Buffer(conversation_id, source, wall, wall, last_flush_wall=buf.last_flush_wall if buf else 0.0)
+                elif moved:
+                    buf.carried.append(
+                        MomentFragment(
+                            conversation_id=buf.conversation_id,
+                            source=buf.source,
+                            segments=tuple(dict(segment) for segment in buf.segments),
+                            started_at=datetime.fromtimestamp(
+                                buf.current_first_wall if buf.current_first_wall is not None else buf.first_wall,
+                                timezone.utc,
+                            ),
+                            ended_at=datetime.fromtimestamp(buf.last_wall, timezone.utc),
+                        )
+                    )
+                    buf.segments.clear()
+                    buf.conversation_id = conversation_id
+                    buf.source = source
+                    buf.current_first_wall = None
+                    buf.session_ended = False
+                    self._trim(buf)
+                else:
+                    buf.session_ended = False
+            if buf is None:
+                buf = _Buffer(conversation_id, source, wall, wall)
                 self._buffers[uid] = buf
+            elif buf.conversation_id != conversation_id:
+                # A carried-only buffer can move again before the next moment ends.
+                buf.conversation_id = conversation_id
+                buf.source = source
+                buf.current_first_wall = None
+                buf.session_ended = False
             if fresh:
                 if not buf.segments:
-                    buf.first_wall = wall
+                    buf.current_first_wall = wall
+                    if not buf.carried:
+                        buf.first_wall = wall
                 buf.segments.extend(fresh)
-                del buf.segments[:-MAX_BUFFERED_SEGMENTS]
                 buf.words += sum(len(str(s.get('text') or '').split()) for s in fresh)
                 buf.last_wall = wall
+                buf.session_ended = False
+                self._trim(buf)
                 if buf.words >= MOMENT_MAX_WORDS:
                     ended.append(self._moment(buf, 'rollover'))
                     self._buffers[uid] = _Buffer(conversation_id, source, wall, wall, last_flush_wall=wall)
@@ -149,22 +219,72 @@ class MomentTracker:
                     # Nothing flushed yet in this live stretch: give the episode its first notes early.
                     buf.last_flush_wall == 0.0
                     and buf.words >= FIRST_MOMENT_MIN_WORDS
-                    and wall - buf.first_wall >= FIRST_MOMENT_MIN_SECONDS
+                    and wall - (buf.current_first_wall if buf.current_first_wall is not None else buf.first_wall)
+                    >= FIRST_MOMENT_MIN_SECONDS
                 ):
                     ended.append(self._moment(buf, 'interval'))
                     self._buffers[uid] = _Buffer(conversation_id, source, wall, wall, last_flush_wall=wall)
         return ended
 
-    def flush(self, uid: str, conversation_id: Optional[str]) -> Optional[MomentInput]:
-        """The session for ``conversation_id`` ended: hand over its buffer (the service drops it when too short)."""
+    def flush(
+        self, uid: str, conversation_id: Optional[str] = None, *, trigger: str = 'finalize'
+    ) -> Optional[MomentInput]:
+        """Hand a pending buffer to finalization or wrap-up; session ends never call this."""
+        with self._lock:
+            buf = self._buffers.get(uid)
+            if buf is None:
+                return None
+            if conversation_id is None or (buf.conversation_id == conversation_id and buf.segments):
+                del self._buffers[uid]
+                return self._moment(buf, trigger)
+            matching = [fragment for fragment in buf.carried if fragment.conversation_id == conversation_id]
+            if not matching:
+                return None
+            buf.carried = [fragment for fragment in buf.carried if fragment.conversation_id != conversation_id]
+            buf.words -= sum(
+                len(str(segment.get('text') or '').split()) for fragment in matching for segment in fragment.segments
+            )
+            segments = [dict(segment) for fragment in matching for segment in fragment.segments]
+            start = min(fragment.started_at for fragment in matching)
+            end = max(fragment.ended_at for fragment in matching)
+            source = matching[-1].source
+            return MomentInput(
+                conversation_id=conversation_id,
+                source=source,
+                segments=segments,
+                started_at=start,
+                ended_at=end,
+                trigger=trigger,
+                current_started_at=start,
+                current_ended_at=end,
+            )
+
+    def mark_session_end(self, uid: str, conversation_id: Optional[str]) -> Optional[int]:
+        """Remember a session close and return its fence for the bounded carry timer."""
         if not conversation_id:
             return None
         with self._lock:
             buf = self._buffers.get(uid)
-            if buf is None or buf.conversation_id != conversation_id or not buf.segments:
+            if buf is not None and buf.conversation_id == conversation_id and (buf.segments or buf.carried):
+                buf.session_ended = True
+                buf.session_end_generation += 1
+                return buf.session_end_generation
+        return None
+
+    def flush_session_end(self, uid: str, conversation_id: Optional[str], generation: int) -> Optional[MomentInput]:
+        """Flush only the still-ended buffer named by this timer, after reconnect time has elapsed."""
+        with self._lock:
+            buf = self._buffers.get(uid)
+            if (
+                buf is None
+                or not conversation_id
+                or buf.conversation_id != conversation_id
+                or not buf.session_ended
+                or buf.session_end_generation != generation
+            ):
                 return None
             del self._buffers[uid]
-        return self._moment(buf, 'session_end')
+            return self._moment(buf, 'session_end')
 
     def clear(self) -> None:
         with self._lock:
@@ -255,6 +375,16 @@ async def _moment_if_client_seen(uid: str, moment: MomentInput) -> str:
     return await executors.run_blocking(executors.lifecycle_executor(uid), record_moment, uid, moment)
 
 
+async def _flush_session_end_after_timeout(uid: str, conversation_id: str, generation: int) -> None:
+    """Let same-session reconnects reuse the buffer, then commit an unclaimed tail as a moment."""
+    await asyncio.sleep(MOMENT_PAUSE_SECONDS)
+    if not episodes_enabled_for(uid) or not episode_carry_on_session_end_enabled():
+        return
+    moment = tracker.flush_session_end(uid, conversation_id, generation)
+    if moment is not None:
+        await _moment_if_client_seen(uid, moment)
+
+
 async def on_realtime_segments(
     uid: str, segments: Sequence[Mapping[str, Any]], conversation_id: Optional[str], source: Optional[str] = None
 ) -> None:
@@ -280,12 +410,15 @@ async def on_realtime_segments(
 
 
 async def on_session_end(uid: str, conversation_id: Optional[str]) -> None:
-    """The pusher session for ``conversation_id`` closed: flush its buffered moment. Never raises."""
+    """Carry speech across reconnects, then flush it if the session is gone for good."""
     try:
         if not episodes_enabled_for(uid):
             return
-        moment = tracker.flush(uid, conversation_id)
-        if moment is not None:
-            executors.start_background_task(_moment_if_client_seen(uid, moment), name='episode_moment')
+        generation = tracker.mark_session_end(uid, conversation_id)
+        if generation is not None and episode_carry_on_session_end_enabled():
+            executors.start_background_task(
+                _flush_session_end_after_timeout(uid, str(conversation_id), generation),
+                name='episode_session_end_flush',
+            )
     except Exception as error:
         logger.warning('event=episode_live outcome=session_end_error exception_type=%s', type(error).__name__)

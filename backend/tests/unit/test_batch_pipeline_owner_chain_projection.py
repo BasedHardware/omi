@@ -39,6 +39,7 @@ class ResultLog:
     """Durable rows; ``ProjectionStore`` and ``FirestoreStore`` facades over them."""
 
     namespace = 'batch_pipeline_test_chain'
+    client = None
 
     def __init__(self, *, async_projection=True):
         self.results: dict[str, dict] = {}
@@ -53,7 +54,19 @@ class ResultLog:
         self.store = self  # Projector.store.store is the FirestoreStore facade.
 
     # --- writers ---------------------------------------------------------
-    def commit(self, owner, content, segment, siblings, *, state='pending', erased=False):
+    def commit(
+        self,
+        owner,
+        content,
+        segment,
+        siblings,
+        *,
+        state='pending',
+        erased=False,
+        record=False,
+        fresh_capture=None,
+        outcome='silence',
+    ):
         """OrderedMerge.commit_next: append at this owner's log tail."""
         key = owner_key(owner)
         self.clock += 1
@@ -63,17 +76,22 @@ class ResultLog:
             'previous_segment_id': self.tails.get(key),
             'committed_at': self.clock,
             'projection_state': 'erased' if erased else state,
-            'result': {'outcome': 'silence'},
+            'result': (
+                {'outcome': outcome, 'result_uri': f'gs://synthetic/results/{segment}'}
+                if outcome != 'silence'
+                else {'outcome': 'silence'}
+            ),
         }
         if state != 'pending' and not erased:
             self.results[segment]['projection'] = {'state': state}
             self.owners.setdefault(key, {})['projection_watermark'] = segment
         self.tails[key] = segment
-        binding = ProjectionBinding(owner, f'job-{content}', content, tuple(siblings))
+        binding = ProjectionBinding(owner, f'job-{content}', content, tuple(siblings), record_origin=record)
         self.bindings[segment] = binding
         self.jobs[segment] = {
             **asdict(WorkItem(segment, owner, self.clock, 'gs://synthetic/audio', 1, Priority.DEEP)),
             'policy_parts': {'projection': self.policy},
+            **({} if fresh_capture is None else {'fresh_capture': fresh_capture}),
         }
 
     # --- FirestoreStore facade --------------------------------------------
@@ -114,17 +132,44 @@ class ResultLog:
         log = self
 
         class Session:
-            def persist_empty(self, **_):
+            policy = SimpleNamespace(projection_contention=False, projection_timing=False)
+
+            def prepare(self, transaction, **_):
                 log.check(self)
-                receipt = {'state': 'persisted'}
-                log.results[sid].update(projection=receipt, projection_state='persisted')
+
+            def validate_plan(self, transaction, planned):
+                pass
+
+            def persist(self, transaction, planned=None, **_):
+                return self.persist_empty()
+
+            def persist_empty(self, *, superseded=False, quarantined=False, privacy_deleted=False):
+                log.check(self)
+                receipt = {
+                    'state': 'quarantined' if quarantined else 'superseded' if superseded else 'persisted',
+                    'conversation_id': None,
+                    'enrichment_required': False,
+                    'audio_required': False,
+                }
+                log.results[sid].update(
+                    projection=receipt,
+                    projection_state='quarantine_held' if quarantined else 'persisted',
+                )
                 log.owners.setdefault(owner_key(binding.owner_id), {})['projection_watermark'] = sid
+                if quarantined:
+                    # Same transaction as the receipt: recovery owns the unit.
+                    log.jobs[sid]['recovery_state'] = 'held'
                 log.persist_order.append(sid)
                 return receipt
 
         session = Session()
         session.segment_id, session.binding = sid, binding
         return session
+
+    def ready(self, sid, binding, now, *, part_index=None, policy=None):
+        receipt = {**(self.results[sid].get('projection') or {}), 'state': 'ready'}
+        self.results[sid].update(projection=receipt, projection_state='ready')
+        return receipt
 
     def check(self, session):
         row = self.results[session.segment_id]
@@ -161,8 +206,8 @@ def advisory_claim(monkeypatch):
     monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED', raising=False)
 
 
-def projector_for(log):
-    projector = projection.Projector(log, Mock())
+def projector_for(log, load_result=None):
+    projector = projection.Projector(log, load_result or Mock())
     projector.store = log
     return projector
 
@@ -233,6 +278,129 @@ def test_walk_stops_at_first_fenced_row_and_never_skips_it():
     log.session = real
     # The touched content's earlier persisted sibling is still owed a follow-up.
     assert projector.project_owner(BURST) == ids
+
+
+# --- record-target conflicts cannot wedge the owner chain ------------------------
+
+
+SUCCESS_PAYLOAD = {
+    'audio_seconds': 1.0,
+    'speech_seconds': 0.5,
+    'speech_spans': [{'start': 0.0, 'end': 0.5}],
+    'diarization': {'turns': [{'start': 0.0, 'end': 0.5, 'speaker': 'a'}]},
+    'words': [{'word': 'Hello.', 'timestamp': [0.0, 0.5]}],
+}
+
+
+def patch_conversation_assignment(monkeypatch, subtype, *, fail_first_n):
+    """``database.conversations`` fakes: the first ``fail_first_n`` assignment
+    calls raise the record-target conflict; the rest assign through the
+    projection session exactly as the real seam does."""
+    from utils.sync.assignment_errors import SyncAssignmentConflict
+
+    calls = {'n': 0}
+
+    def assign_sync_conversation(
+        uid,
+        incoming,
+        *,
+        target_id=None,
+        candidate_id=None,
+        before_assign=None,
+        validate_plan=None,
+        after_assign=None,
+        **_,
+    ):
+        calls['n'] += 1
+        if calls['n'] <= fail_first_n:
+            raise SyncAssignmentConflict('record target discarded', subtype=subtype)
+        transaction = object()
+        if before_assign is not None:
+            before_assign(transaction)
+        planned = ({**incoming}, False, [])
+        if validate_plan is not None:
+            validate_plan(transaction, planned[0])
+        if after_assign is not None:
+            after_assign(transaction, planned)
+        return planned
+
+    monkeypatch.setattr('database.conversations.assign_sync_conversation', assign_sync_conversation)
+    monkeypatch.setattr('database.conversations.get_closest_conversation_to_timestamps', lambda *args, **_: None)
+    return calls
+
+
+def test_discarded_record_target_cannot_wedge_the_owner_chain(monkeypatch):
+    """reentry29 10-29: a discarded record conversation raised at the chain head
+    on every sweep (live_projection.py), so every later capture for the owner
+    stayed pending behind it. The strike rule must take the held disposition
+    and let the chain advance."""
+    from utils.sync.assignment_errors import SyncAssignmentConflictReason
+
+    log = ResultLog()
+    ids = [f'w-{n}' for n in range(3)]
+    for sid in ids:
+        log.commit(BURST, 'w', sid, ids, record=True, fresh_capture=False, outcome='success')
+    patch_conversation_assignment(monkeypatch, SyncAssignmentConflictReason.RECORD_TARGET_DISCARDED, fail_first_n=1)
+    projector = projector_for(log, lambda item, uri: dict(SUCCESS_PAYLOAD))
+    projector.project_owner(BURST)
+    assert log.persist_order == ids
+    assert log.results[ids[0]]['projection_state'] == 'quarantine_held'
+    assert log.results[ids[0]]['projection']['state'] == 'quarantined'
+    # The job lands in the held scan in the same transaction, so the upload
+    # can complete as a client partial and the redrive queue owns the unit.
+    assert log.jobs[ids[0]]['recovery_state'] == 'held'
+    assert log.projection_watermark(owner_key(BURST)) == ids[-1]
+    # A later pass neither reassigns nor drops the held receipt: recovery owns it.
+    projector.project_owner(BURST)
+    assert log.persist_order == ids
+    assert log.results[ids[0]]['projection_state'] == 'quarantine_held'
+    assert log.jobs[ids[0]]['recovery_state'] == 'held'
+
+
+def test_discarded_record_silence_head_quarantines_and_advances(monkeypatch):
+    from utils.sync.assignment_errors import SyncAssignmentConflictReason
+
+    log = ResultLog()
+    ids = [f's-{n}' for n in range(2)]
+    for sid in ids:
+        log.commit(BURST, 's', sid, ids, record=True, fresh_capture=False)
+    patch_conversation_assignment(monkeypatch, SyncAssignmentConflictReason.RECORD_TARGET_DISCARDED, fail_first_n=1)
+    projector_for(log).project_owner(BURST)
+    assert log.persist_order == ids
+    assert log.results[ids[0]]['projection_state'] == 'quarantine_held'
+    assert log.projection_watermark(owner_key(BURST)) == ids[-1]
+
+
+def test_fresh_discarded_record_target_keeps_waiting(monkeypatch):
+    """Awaiting-writer conflicts on fresh rows keep waiting: the record may be
+    restored from discard, so the head stays pending and nothing quarantines."""
+    from utils.sync.assignment_errors import SyncAssignmentConflictReason
+
+    log = ResultLog()
+    ids = [f'f-{n}' for n in range(2)]
+    for sid in ids:
+        log.commit(BURST, 'f', sid, ids, record=True, fresh_capture=True, outcome='success')
+    patch_conversation_assignment(monkeypatch, SyncAssignmentConflictReason.RECORD_TARGET_DISCARDED, fail_first_n=10)
+    projector = projector_for(log, lambda item, uri: dict(SUCCESS_PAYLOAD))
+    assert projector.project_owner(BURST) == []
+    assert log.persist_order == []
+    assert log.results[ids[0]]['projection_state'] == 'pending'
+
+
+def test_retired_record_target_quarantines_even_on_fresh_rows(monkeypatch):
+    """Structural conflicts strike on every lane: no writer will ever resolve them."""
+    from utils.sync.assignment_errors import SyncAssignmentConflictReason
+
+    log = ResultLog()
+    ids = [f'r-{n}' for n in range(2)]
+    for sid in ids:
+        log.commit(BURST, 'r', sid, ids, record=True, fresh_capture=True, outcome='success')
+    patch_conversation_assignment(monkeypatch, SyncAssignmentConflictReason.RECORD_TARGET_RETIRED, fail_first_n=1)
+    projector = projector_for(log, lambda item, uri: dict(SUCCESS_PAYLOAD))
+    projector.project_owner(BURST)
+    assert log.persist_order == ids
+    assert log.results[ids[0]]['projection_state'] == 'quarantine_held'
+    assert log.projection_watermark(owner_key(BURST)) == ids[-1]
 
 
 def test_walk_stops_when_watermark_does_not_advance():

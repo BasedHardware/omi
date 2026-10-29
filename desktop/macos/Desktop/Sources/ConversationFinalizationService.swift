@@ -872,7 +872,11 @@ actor ConversationFinalizationService {
 
   static func localClientConversationId(session: TranscriptionSessionRecord, sessionId: Int64) -> String {
     let startedAtMs = Int64((session.startedAt.timeIntervalSince1970 * 1000).rounded())
-    return session.clientConversationId ?? "macos-local-\(sessionId)-\(startedAtMs)"
+    // A blank persisted id must never reach the wire: the chunked upload requires
+    // a real session id, and a blank one is a 422 that strands the only copy of
+    // the transcript on every retry (BasedHardware/omi#15500).
+    let stored = session.clientConversationId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return stored.isEmpty ? "macos-local-\(sessionId)-\(startedAtMs)" : stored
   }
 
   /// Meeting completion is a post-sync signal. Persisted max-duration

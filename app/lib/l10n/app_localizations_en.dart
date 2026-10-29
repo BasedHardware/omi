@@ -427,12 +427,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get autoSync => 'Auto-Sync';
 
   @override
-  String get syncHealthAlerts => 'Sync Health Alerts';
-
-  @override
-  String get syncHealthAlertsDescription => 'Alert if Omi hasn\'t synced recordings for over a day';
-
-  @override
   String get autoSyncDescription => 'Automatically sync offline recordings when your device connects';
 
   @override
@@ -8722,6 +8716,28 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deleteReasonOther => 'Other';
 
   @override
+  String get deletePauseInsteadTitle => 'Pause Omi Instead?';
+
+  @override
+  String get deletePauseInsteadSubtitle => 'Stop recording and keep everything. Come back anytime.';
+
+  @override
+  String get deletePauseRecordingLine => 'Recording stops. Nothing new is captured while you are away.';
+
+  @override
+  String get deletePauseKeepLine => 'Your memories, conversations and apps are kept exactly as they are.';
+
+  @override
+  String get deletePauseReturnLine =>
+      'You stay signed in. Resume recording anytime. Your subscription continues unchanged.';
+
+  @override
+  String get pauseOmiButton => 'Pause Omi';
+
+  @override
+  String get continueDeletingButton => 'Continue Deleting';
+
+  @override
   String get deleteFlowFeedbackTitle => 'Tell us more';
 
   @override
@@ -8741,6 +8757,28 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deleteConsequenceNoRecovery => 'Your account cannot be restored — not even by support.';
+
+  @override
+  String deletePendingRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'You have $count recordings still processing. Deleting now loses them.',
+      one: 'You have 1 recording still processing. Deleting now loses it.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteGracePeriodNotice(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Sign in again within $days days to restore your account.',
+      one: 'Sign in again within 1 day to restore your account.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get deleteTypeToConfirm => 'Type DELETE to confirm';
@@ -9045,14 +9083,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'Waiting for internet';
-
-  @override
-  String get syncStallAlertTitle => 'Omi Not Syncing';
-
-  @override
-  String syncStallAlertBody(int hours) {
-    return 'No recordings have synced from your Omi in over $hours hours. Open Omi to check your device connection.';
-  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13675,14 +13705,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get activityAttentionStorageSubtitle => 'Recordings paused';
 
   @override
-  String get activityAttentionSyncStalledTitle => 'Omi isn\'t syncing';
-
-  @override
-  String activityAttentionSyncStalledSubtitle(int hours) {
-    return 'No recordings synced for over $hours hours';
-  }
-
-  @override
   String get activityAttentionUploadStalledTitle => 'Upload stalled';
 
   @override
@@ -14716,5 +14738,181 @@ class AppLocalizationsEn extends AppLocalizations {
       one: 'Hide 1 short clip',
     );
     return '$_temp0';
+  }
+
+  @override
+  String deleteLocalRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count recordings haven\'t uploaded yet. Deleting now loses them — keep the app open to finish uploading.',
+      one: '1 recording hasn\'t uploaded yet. Deleting now loses it — keep the app open to finish uploading.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConfirmGraceSubtitle => 'Review what happens to your data before you leave.';
+
+  @override
+  String get deletePauseConfirmation => 'Omi is paused. Resume recording anytime.';
+
+  @override
+  String deleteProcessingKept(int count, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count recordings are still processing. They’re kept with your account for ',
+      one: '1 recording is still processing. It is kept with your account for ',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days days.',
+      one: '1 day.',
+    );
+    return '$_temp0$_temp1';
+  }
+
+  @override
+  String deleteDataErasedAfterDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Your memories and conversations will be erased after $days days.',
+      one: 'Your memories and conversations will be erased after 1 day.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteAppsDisconnectImmediately => 'Your apps and integrations disconnect immediately.';
+
+  @override
+  String get deleteSubscriptionImmediately => 'Your subscription is cancelled immediately.';
+
+  @override
+  String get deleteRestoreTitle => 'Your account is pending deletion';
+
+  @override
+  String get deleteRestoreSubtitle => 'Changed your mind? Restore your account before it is erased.';
+
+  @override
+  String get deleteRestoreKeepData => 'Restore your memories and conversations.';
+
+  @override
+  String get deleteRestoreBillingNotice =>
+      'Your subscription stays cancelled. Reconnect apps and integrations after restoring.';
+
+  @override
+  String deleteRestoreDaysRemaining(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'You have $days days left to restore your account.',
+      one: 'You have 1 day left to restore your account.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteRestoreButton => 'Restore my account';
+
+  @override
+  String get deleteFinishButton => 'Finish deleting';
+
+  @override
+  String get deleteFinishNowButton => 'Erase my account now';
+
+  @override
+  String get deleteFinishNowWarning =>
+      'This ends the restore window. Your account and its recordings will be permanently erased.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'You have less than a day left to restore your account.';
+
+  @override
+  String get deleteFinishNowTitle => 'Erase Your Account?';
+
+  @override
+  String get syncHealthAlerts => 'Sync Health Alerts';
+
+  @override
+  String get syncHealthAlertsDescription => 'Alert if Omi hasn\'t synced recordings for over a day';
+
+  @override
+  String get syncStallAlertTitle => 'Omi Not Syncing';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'No recordings have synced from your Omi in over $hours hours. Open Omi to check your device connection.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi isn\'t syncing';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'No recordings synced for over $hours hours';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Daily Recaps on Home';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Show your latest recaps at the top of Home.';
+
+  @override
+  String get yearlySwitchTitle => 'Switch to Yearly';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Save $amount a year';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Save $amount a year with yearly';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Same plan, billed once a year';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Plan';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price a year';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Due today';
+
+  @override
+  String get yearlySwitchRenews => 'Renews';
+
+  @override
+  String get yearlySwitchCreditNote => 'Includes credit for the rest of this month.';
+
+  @override
+  String get yearlySwitchDeclined => 'Payment declined. You\'re still on monthly.';
+
+  @override
+  String get yearlySwitchFailed => 'Couldn\'t switch. You\'re still on monthly.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Couldn\'t load your price.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Yearly billing isn\'t available for your plan right now.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'You\'re on yearly';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return '$amount charged today. Renews $date.';
   }
 }

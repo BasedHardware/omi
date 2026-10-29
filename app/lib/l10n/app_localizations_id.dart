@@ -428,13 +428,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get autoSync => 'Sinkronisasi otomatis';
 
   @override
-  String get syncHealthAlerts => 'Peringatan kesehatan sinkronisasi';
-
-  @override
-  String get syncHealthAlertsDescription =>
-      'Beri tahu saya jika Omi tidak menyinkronkan rekaman selama lebih dari sehari';
-
-  @override
   String get autoSyncDescription => 'Sinkronkan rekaman offline secara otomatis saat perangkat Anda terhubung';
 
   @override
@@ -8730,6 +8723,28 @@ class AppLocalizationsId extends AppLocalizations {
   String get deleteReasonOther => 'Lainnya';
 
   @override
+  String get deletePauseInsteadTitle => 'Jeda Omi saja?';
+
+  @override
+  String get deletePauseInsteadSubtitle => 'Hentikan perekaman dan simpan semuanya. Kembali kapan saja.';
+
+  @override
+  String get deletePauseRecordingLine => 'Perekaman akan berhenti. Tidak ada rekaman baru saat Anda pergi.';
+
+  @override
+  String get deletePauseKeepLine => 'Kenangan, percakapan, dan aplikasi Anda tetap seperti semula.';
+
+  @override
+  String get deletePauseReturnLine =>
+      'Anda tetap masuk. Lanjutkan perekaman kapan saja. Langganan Anda tetap berjalan seperti biasa.';
+
+  @override
+  String get pauseOmiButton => 'Jeda Omi';
+
+  @override
+  String get continueDeletingButton => 'Lanjutkan Penghapusan';
+
+  @override
   String get deleteFlowFeedbackTitle => 'Beri tahu kami lebih banyak';
 
   @override
@@ -8749,6 +8764,28 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get deleteConsequenceNoRecovery => 'Akun Anda tidak dapat dipulihkan — bahkan oleh tim dukungan.';
+
+  @override
+  String deletePendingRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rekaman masih diproses. Jika dihapus sekarang, rekaman ini akan hilang.',
+      one: '1 rekaman masih diproses. Jika dihapus sekarang, rekaman ini akan hilang.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteGracePeriodNotice(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Masuk lagi dalam $days hari untuk memulihkan akun Anda.',
+      one: 'Masuk lagi dalam 1 hari untuk memulihkan akun Anda.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get deleteTypeToConfirm => 'Ketik DELETE untuk konfirmasi';
@@ -9052,14 +9089,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'Menunggu internet';
-
-  @override
-  String get syncStallAlertTitle => 'Omi tidak tersinkronisasi';
-
-  @override
-  String syncStallAlertBody(int hours) {
-    return 'Tidak ada rekaman dari Omi Anda yang tersinkronisasi selama lebih dari $hours jam. Buka Omi untuk memeriksa koneksi perangkat Anda.';
-  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13701,14 +13730,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get activityAttentionStorageSubtitle => 'Rekaman dijeda';
 
   @override
-  String get activityAttentionSyncStalledTitle => 'Omi tidak tersinkronisasi';
-
-  @override
-  String activityAttentionSyncStalledSubtitle(int hours) {
-    return 'Tidak ada rekaman yang tersinkronisasi selama lebih dari $hours jam';
-  }
-
-  @override
   String get activityAttentionUploadStalledTitle => 'Unggahan terhenti';
 
   @override
@@ -14744,5 +14765,184 @@ class AppLocalizationsId extends AppLocalizations {
       one: 'Sembunyikan 1 klip pendek',
     );
     return '$_temp0';
+  }
+
+  @override
+  String deleteLocalRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count rekaman belum diunggah. Jika dihapus sekarang, rekaman ini akan hilang — biarkan aplikasi tetap terbuka hingga pengunggahan selesai.',
+      one:
+          '1 rekaman belum diunggah. Jika dihapus sekarang, rekaman ini akan hilang — biarkan aplikasi tetap terbuka hingga pengunggahan selesai.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConfirmGraceSubtitle => 'Tinjau dampaknya pada data Anda sebelum pergi.';
+
+  @override
+  String get deletePauseConfirmation => 'Omi dijeda. Lanjutkan perekaman kapan saja.';
+
+  @override
+  String deleteProcessingKept(int count, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rekaman masih diproses. Rekaman tersebut akan disimpan di akun Anda selama ',
+      one: '1 rekaman masih diproses. Rekaman ini akan disimpan di akun Anda selama ',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days hari.',
+      one: '1 hari.',
+    );
+    return '$_temp0$_temp1';
+  }
+
+  @override
+  String deleteDataErasedAfterDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Kenangan dan percakapan Anda akan dihapus setelah $days hari.',
+      one: 'Kenangan dan percakapan Anda akan dihapus setelah 1 hari.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteAppsDisconnectImmediately => 'Aplikasi dan integrasi Anda akan langsung terputus.';
+
+  @override
+  String get deleteSubscriptionImmediately => 'Langganan Anda langsung dibatalkan.';
+
+  @override
+  String get deleteRestoreTitle => 'Akun Anda menunggu penghapusan';
+
+  @override
+  String get deleteRestoreSubtitle => 'Berubah pikiran? Pulihkan akun Anda sebelum dihapus.';
+
+  @override
+  String get deleteRestoreKeepData => 'Pulihkan kenangan dan percakapan Anda.';
+
+  @override
+  String get deleteRestoreBillingNotice =>
+      'Langganan Anda tetap dibatalkan. Hubungkan kembali aplikasi dan integrasi setelah memulihkan akun.';
+
+  @override
+  String deleteRestoreDaysRemaining(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Anda memiliki $days hari lagi untuk memulihkan akun Anda.',
+      one: 'Anda memiliki 1 hari lagi untuk memulihkan akun Anda.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteRestoreButton => 'Pulihkan akun saya';
+
+  @override
+  String get deleteFinishButton => 'Selesaikan penghapusan';
+
+  @override
+  String get deleteFinishNowButton => 'Hapus akun saya sekarang';
+
+  @override
+  String get deleteFinishNowWarning =>
+      'Ini akan mengakhiri masa pemulihan. Akun dan rekaman Anda akan dihapus secara permanen.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining =>
+      'Anda memiliki waktu kurang dari satu hari untuk memulihkan akun Anda.';
+
+  @override
+  String get deleteFinishNowTitle => 'Hapus Akun Anda?';
+
+  @override
+  String get syncHealthAlerts => 'Peringatan kesehatan sinkronisasi';
+
+  @override
+  String get syncHealthAlertsDescription =>
+      'Beri tahu saya jika Omi tidak menyinkronkan rekaman selama lebih dari sehari';
+
+  @override
+  String get syncStallAlertTitle => 'Omi tidak tersinkronisasi';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Tidak ada rekaman dari Omi Anda yang tersinkronisasi selama lebih dari $hours jam. Buka Omi untuk memeriksa koneksi perangkat Anda.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi tidak tersinkronisasi';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Tidak ada rekaman yang tersinkronisasi selama lebih dari $hours jam';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Ringkasan Harian di Beranda';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Tampilkan ringkasan terbaru di bagian atas Beranda.';
+
+  @override
+  String get yearlySwitchTitle => 'Beralih ke Tahunan';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Hemat $amount per tahun';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Hemat $amount per tahun dengan bayar tahunan';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Paket yang sama, dibayar setahun sekali';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Paket';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price per tahun';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Dibayar hari ini';
+
+  @override
+  String get yearlySwitchRenews => 'Diperpanjang';
+
+  @override
+  String get yearlySwitchCreditNote => 'Termasuk kredit untuk sisa bulan ini.';
+
+  @override
+  String get yearlySwitchDeclined => 'Pembayaran ditolak. Anda tetap bayar bulanan.';
+
+  @override
+  String get yearlySwitchFailed => 'Tidak dapat beralih. Anda tetap bayar bulanan.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Tidak dapat memuat harga Anda.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Pembayaran tahunan belum tersedia untuk paket Anda saat ini.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Anda sekarang bayar tahunan';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return '$amount ditagih hari ini. Diperpanjang $date.';
   }
 }

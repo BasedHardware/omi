@@ -4,6 +4,7 @@ from copy import deepcopy
 from dataclasses import asdict
 from datetime import timedelta
 import logging
+import threading
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -18,7 +19,7 @@ from utils.batch_pipeline import projection
 from utils.batch_pipeline.audio import audio_unit, with_context
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
 from utils.batch_pipeline.scheduler import owner_key
-from utils.sync import recording_lineage, recording_session_target
+from utils.sync import intake_completion, recording_lineage, recording_session_target
 
 
 @pytest.fixture
@@ -255,3 +256,221 @@ def test_record_projection_replacement_rolls_over_before_staging_oversized_live_
         'u', stored['transcript_segments'], stored.get('transcript_segments_compressed', False)
     )
     assert any(s['text'] == 'Fresh projected speech is also preserved.' for s in segments)
+
+
+def append_lines(caplog):
+    return [r.message for r in caplog.records if 'event=sync_lineage_append ' in r.message]
+
+
+@pytest.mark.parametrize('fleet_dedupe,lineage_dedupe', [(False, True), (True, True), (True, False)])
+@pytest.mark.parametrize('binding_reason', ['bound', 'stamp_fallback'])
+def test_batch_fresh_append_measures_final_speech_once_and_replay_is_silent(
+    batch_projection, monkeypatch, caplog, fleet_dedupe, lineage_dedupe, binding_reason
+):
+    lane = batch_projection
+    monkeypatch.setenv('SYNC_SAFETY_WAL_DEDUPE_ENABLED', str(fleet_dedupe).lower())
+    monkeypatch.setenv('SYNC_LINEAGE_LIVE_DEDUPE_ENABLED', str(lineage_dedupe).lower())
+    live = lane.client.rows[('users', 'u', 'conversations', 'live')]
+    live['finished_at'] = live['started_at'] + timedelta(seconds=23)
+    # Overlapping original-live windows count once. Stored sync speech cannot
+    # enlarge that union. Fresh speech is [1020,1024), overlap is [1021,1023).
+    live['transcript_segments'] = [
+        dict(start=21, end=23, text=WORDS, speaker_id=0),
+        dict(start=22, end=23, text=WORDS, speaker_id=0),
+        dict(start=20, end=24, text='Earlier sync contribution', speaker_id_scope='sync:older', speaker_id=0),
+    ]
+
+    def targets(ids, *args):
+        args[-1].update({ids[0]: binding_reason})
+        return {ids[0]: 'live'}
+
+    lane.planned.side_effect = targets
+    transaction = lane.client.transaction()
+    commit = transaction._commit
+
+    def checked_commit():
+        assert not append_lines(caplog)
+        assert 'event=sync_lineage_stamp_append' not in caplog.text
+        commit()
+
+    monkeypatch.setattr(transaction, '_commit', checked_commit)
+    monkeypatch.setattr(lane.client, 'transaction', lambda: transaction)
+    with caplog.at_level(logging.INFO):
+        lane.projector.project('segment')
+    lines = append_lines(caplog)
+    assert len(lines) == 1
+    assert 'appended_seconds=4.00 ' in lines[0]
+    assert 'appended_seconds_overlapping_live=2.0' in lines[0]
+    assert 'repeat_only=False' in lines[0]
+    stamp = [r.message for r in caplog.records if 'event=sync_lineage_stamp_append' in r.message]
+    # The existing live-dedupe gate still controls stamp-fallback telemetry.
+    assert len(stamp) == int(binding_reason == 'stamp_fallback' and lineage_dedupe)
+    if stamp:
+        assert stamp == ['event=sync_lineage_stamp_append span_delta_bucket=0_60']
+    for line in [*lines, *stamp]:
+        assert all(secret not in line for secret in ('Fresh projected', 'Earlier sync', 'uid=', 'conversation_id='))
+    stored = deepcopy(lane.client.rows[('users', 'u', 'conversations', 'live')])
+    assert not any(key.startswith('_sync_lineage_') for key in stored)
+    monkeypatch.setattr(lane.client, 'transaction', lambda: StrictFirestore.transaction(lane.client))
+    # Materialize the fixture's known ArrayUnion outputs for receipt replay.
+    lane.client.rows[(f'{lane.namespace}_jobs', 'segment')]['conversation_ids'] = ['live']
+    lane.client.rows[(f'{lane.namespace}_results', 'segment')]['conversation_ids'] = ['live']
+    with caplog.at_level(logging.INFO):
+        lane.projector.project('segment')
+    assert append_lines(caplog) == lines
+    assert lane.client.rows[('users', 'u', 'conversations', 'live')] == stored
+
+
+def test_batch_failed_commit_emits_no_append_or_stamp(batch_projection, monkeypatch, caplog):
+    lane = batch_projection
+    new_transaction = lane.client.transaction
+    attempted = []
+
+    def transaction_factory():
+        transaction = new_transaction()
+        commit = transaction._commit
+
+        def checked_commit():
+            if any(path == ('users', 'u', 'conversations', 'live') for path, _ in transaction.updates):
+                attempted.append(True)
+                raise RuntimeError('synthetic commit failure')
+            commit()
+
+        monkeypatch.setattr(transaction, '_commit', checked_commit)
+        return transaction
+
+    monkeypatch.setattr(lane.client, 'transaction', transaction_factory)
+    with caplog.at_level(logging.INFO), pytest.raises(RuntimeError, match='synthetic commit failure'):
+        lane.projector.project('segment')
+    assert attempted == [True]
+    assert not append_lines(caplog)
+    assert 'event=sync_lineage_stamp_append' not in caplog.text
+
+
+def test_batch_repeat_reports_zero_and_completion_does_not_reemit(batch_projection, monkeypatch, caplog):
+    lane = batch_projection
+    monkeypatch.setenv('SYNC_SAFETY_WAL_DEDUPE_ENABLED', 'false')
+    monkeypatch.setenv('SYNC_LINEAGE_LIVE_DEDUPE_ENABLED', 'false')
+    live = lane.client.rows[('users', 'u', 'conversations', 'live')]
+    live['finished_at'] = live['started_at'] + timedelta(seconds=24)
+    live['transcript_segments'] = [
+        dict(start=20, end=24, text='Fresh projected speech is also preserved.', speaker_id=0)
+    ]
+    outputs = []
+    assign = db.assign_sync_conversation
+
+    def assigned(*args, **kwargs):
+        result = assign(*args, **kwargs)
+        outputs.append(result)
+        return result
+
+    monkeypatch.setattr(db, 'assign_sync_conversation', assigned)
+    with caplog.at_level(logging.INFO):
+        lane.projector.project('segment')
+    lines = append_lines(caplog)
+    assert len(lines) == 1
+    assert 'appended_seconds=0.00 ' in lines[0] and 'appended_seconds_overlapping_live=0.0' in lines[0]
+    assert 'repeat_only=True' in lines[0]
+    assert 'dropped_as_repeat_seconds=4.00' in lines[0]
+    # A second consumer (including legacy completion) sees no marker to emit.
+    with caplog.at_level(logging.INFO):
+        row, created, survivors = outputs[0]
+        intake_completion.complete_sync_intake(
+            uid='u',
+            assigned=row,
+            created=created,
+            survivors=survivors,
+            response={'new_memories': set(), 'updated_memories': set()},
+            lock=threading.Lock(),
+            language=None,
+            audio_enabled=False,
+            store_audio=lambda _: None,
+            finish=lambda *a, **kw: None,
+            mark_finalize=lambda: None,
+            acknowledge=lambda: None,
+        )
+    assert append_lines(caplog) == lines
+
+
+def test_stamp_gap_reroute_reports_lineage_telemetry_after_batch_commit(batch_projection, monkeypatch, caplog):
+    lane = batch_projection
+    live = lane.client.rows[('users', 'u', 'conversations', 'live')]
+    live['started_at'] -= timedelta(seconds=1000)
+    live['finished_at'] -= timedelta(seconds=1000)
+    before = deepcopy(live)
+
+    def targets(ids, *args):
+        args[-1].update({ids[0]: 'stamp_fallback'})
+        return {ids[0]: 'live'}
+
+    lane.planned.side_effect = targets
+    with caplog.at_level(logging.INFO):
+        lane.projector.project('segment')
+    assert lane.client.rows[('users', 'u', 'conversations', 'live')] == before
+    stamp = [r.message for r in caplog.records if 'event=sync_lineage_stamp_append' in r.message]
+    assert stamp == ['event=sync_lineage_stamp_append outcome=stamp_gap_refused span_delta_bucket=0']
+    assert not append_lines(caplog)
+
+
+def test_batch_invalid_live_timing_is_unknown_on_fleet_path(batch_projection, monkeypatch, caplog):
+    lane = batch_projection
+    monkeypatch.setenv('SYNC_SAFETY_WAL_DEDUPE_ENABLED', 'true')
+    live = lane.client.rows[('users', 'u', 'conversations', 'live')]
+    live['transcript_segments'][0]['end'] = live['transcript_segments'][0]['start']
+    with caplog.at_level(logging.INFO):
+        lane.projector.project('segment')
+    lines = append_lines(caplog)
+    assert len(lines) == 1
+    assert 'appended_seconds=4.00 ' in lines[0]
+    assert 'appended_seconds_overlapping_live=unknown' in lines[0]
+
+
+@pytest.mark.parametrize('overlap', [False, True])
+def test_batch_rejected_device_target_discovers_without_adopting_candidates(
+    batch_projection, monkeypatch, caplog, overlap
+):
+    lane = batch_projection
+    rejected = lane.client.rows[('users', 'u', 'conversations', 'live')]
+    rejected['client_device_id'] = 'other-device'
+    candidate = deepcopy(rejected)
+    candidate.update(id='candidate', client_device_id='pendant', sync_content_revision=None, has_content=True)
+    candidate['started_at'] += timedelta(seconds=20 if overlap else 1000)
+    candidate['finished_at'] = candidate['started_at'] + timedelta(seconds=10)
+    lane.client.rows[('users', 'u', 'conversations', 'candidate')] = candidate
+    # Isolate creation from the fixture's independently committed donor.
+    lane.client.rows.pop(('users', 'u', 'conversations', 'donor'))
+    calls, fences = [], []
+
+    def discover(user, incoming, *, diagnostics):
+        calls.append(True)
+        diagnostics['lookup_complete'] = True
+        return ('candidate',)
+
+    monkeypatch.setattr(db, 'find_sync_live_overlap_candidates', discover)
+    assign = db.assign_sync_conversation
+
+    def checked_assign(uid, incoming, **kwargs):
+        prepare = kwargs['before_assign']
+
+        def checked_prepare(transaction):
+            fences.append(transaction)
+            return prepare(transaction)
+
+        kwargs['before_assign'] = checked_prepare
+        return assign(uid, incoming, **kwargs)
+
+    monkeypatch.setattr(db, 'assign_sync_conversation', checked_assign)
+    before = deepcopy((rejected, candidate))
+    with caplog.at_level(logging.INFO):
+        lane.projector.project('segment')
+    receipt = lane.client.rows[(f'{lane.namespace}_results', 'segment')]['projection']
+    assert receipt['conversation_id'] not in {'live', 'candidate'}
+    assert calls == [True]
+    assert len(fences) == 2 and fences[0] is not fences[1]
+    assert (rejected, candidate) == before
+    lines = [r.message for r in caplog.records if 'stage=assignment' in r.message]
+    assert len(lines) == 1
+    assert f"outcome=created_{'overlap' if overlap else 'clear'}" in lines[0]
+    assert 'lookup_complete=true' in lines[0]
+    assert 'discovery_skipped' not in lines[0]
+    assert not append_lines(caplog)

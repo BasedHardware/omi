@@ -430,12 +430,6 @@ class AppLocalizationsIt extends AppLocalizations {
   String get autoSync => 'Sincronizzazione automatica';
 
   @override
-  String get syncHealthAlerts => 'Avvisi sullo stato di sincronizzazione';
-
-  @override
-  String get syncHealthAlertsDescription => 'Avvisa se Omi non sincronizza registrazioni da più di un giorno';
-
-  @override
   String get autoSyncDescription =>
       'Sincronizza automaticamente le registrazioni offline quando il dispositivo si connette';
 
@@ -8777,6 +8771,29 @@ class AppLocalizationsIt extends AppLocalizations {
   String get deleteReasonOther => 'Altro';
 
   @override
+  String get deletePauseInsteadTitle => 'Mettere in pausa Omi invece?';
+
+  @override
+  String get deletePauseInsteadSubtitle => 'Interrompi la registrazione e conserva tutto. Torna quando vuoi.';
+
+  @override
+  String get deletePauseRecordingLine =>
+      'La registrazione si interrompe. Mentre non ci sei, non viene acquisito nulla di nuovo.';
+
+  @override
+  String get deletePauseKeepLine => 'I tuoi ricordi, le conversazioni e le app restano esattamente come sono.';
+
+  @override
+  String get deletePauseReturnLine =>
+      'Resterai connesso. Puoi riprendere la registrazione quando vuoi. Il tuo abbonamento continua senza modifiche.';
+
+  @override
+  String get pauseOmiButton => 'Metti in pausa Omi';
+
+  @override
+  String get continueDeletingButton => 'Continua l’eliminazione';
+
+  @override
   String get deleteFlowFeedbackTitle => 'Raccontaci di più';
 
   @override
@@ -8796,6 +8813,28 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get deleteConsequenceNoRecovery => 'Il tuo account non può essere ripristinato — nemmeno dall\'assistenza.';
+
+  @override
+  String deletePendingRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count registrazioni sono ancora in elaborazione. Se le elimini ora, le perderai.',
+      one: '1 registrazione è ancora in elaborazione. Se la elimini ora, la perderai.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteGracePeriodNotice(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Accedi di nuovo entro $days giorni per ripristinare il tuo account.',
+      one: 'Accedi di nuovo entro 1 giorno per ripristinare il tuo account.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get deleteTypeToConfirm => 'Digita DELETE per confermare';
@@ -9100,14 +9139,6 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'In attesa di connessione';
-
-  @override
-  String get syncStallAlertTitle => 'Omi non si sta sincronizzando';
-
-  @override
-  String syncStallAlertBody(int hours) {
-    return 'Nessuna registrazione del tuo Omi è stata sincronizzata da più di $hours ore. Apri Omi per controllare la connessione del dispositivo.';
-  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13761,14 +13792,6 @@ class AppLocalizationsIt extends AppLocalizations {
   String get activityAttentionStorageSubtitle => 'Registrazioni in pausa';
 
   @override
-  String get activityAttentionSyncStalledTitle => 'Omi non si sta sincronizzando';
-
-  @override
-  String activityAttentionSyncStalledSubtitle(int hours) {
-    return 'Nessuna registrazione sincronizzata da più di $hours ore';
-  }
-
-  @override
   String get activityAttentionUploadStalledTitle => 'Caricamento bloccato';
 
   @override
@@ -14805,5 +14828,182 @@ class AppLocalizationsIt extends AppLocalizations {
       one: 'Nascondi 1 clip breve',
     );
     return '$_temp0';
+  }
+
+  @override
+  String deleteLocalRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count registrazioni non sono ancora state caricate. Se le elimini ora, le perderai — lascia l’app aperta fino al termine del caricamento.',
+      one:
+          '1 registrazione non è ancora stata caricata. Se la elimini ora, la perderai — lascia l’app aperta fino al termine del caricamento.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConfirmGraceSubtitle => 'Prima di andare, controlla cosa succederà ai tuoi dati.';
+
+  @override
+  String get deletePauseConfirmation => 'Omi è in pausa. Puoi riprendere la registrazione quando vuoi.';
+
+  @override
+  String deleteProcessingKept(int count, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count registrazioni sono ancora in elaborazione. Restano associate al tuo account per ',
+      one: '1 registrazione è ancora in elaborazione. Resta associata al tuo account per ',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days giorni.',
+      one: '1 giorno.',
+    );
+    return '$_temp0$_temp1';
+  }
+
+  @override
+  String deleteDataErasedAfterDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'I tuoi ricordi e le conversazioni verranno cancellati dopo $days giorni.',
+      one: 'I tuoi ricordi e le conversazioni verranno cancellati dopo 1 giorno.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteAppsDisconnectImmediately => 'Le tue app e integrazioni vengono disconnesse immediatamente.';
+
+  @override
+  String get deleteSubscriptionImmediately => 'Il tuo abbonamento viene annullato immediatamente.';
+
+  @override
+  String get deleteRestoreTitle => 'Il tuo account è in attesa di eliminazione';
+
+  @override
+  String get deleteRestoreSubtitle => 'Hai cambiato idea? Ripristina il tuo account prima che venga cancellato.';
+
+  @override
+  String get deleteRestoreKeepData => 'Ripristina i tuoi ricordi e le conversazioni.';
+
+  @override
+  String get deleteRestoreBillingNotice =>
+      'Il tuo abbonamento resta annullato. Ricollega app e integrazioni dopo aver ripristinato l’account.';
+
+  @override
+  String deleteRestoreDaysRemaining(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Hai ancora $days giorni per recuperare il tuo account.',
+      one: 'Hai ancora 1 giorno per recuperare il tuo account.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteRestoreButton => 'Ripristina il mio account';
+
+  @override
+  String get deleteFinishButton => 'Completa l’eliminazione';
+
+  @override
+  String get deleteFinishNowButton => 'Elimina subito il mio account';
+
+  @override
+  String get deleteFinishNowWarning =>
+      'Così terminerà il periodo di ripristino. Il tuo account e le sue registrazioni verranno eliminati definitivamente.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Hai meno di un giorno per recuperare il tuo account.';
+
+  @override
+  String get deleteFinishNowTitle => 'Eliminare il tuo account?';
+
+  @override
+  String get syncHealthAlerts => 'Avvisi sullo stato di sincronizzazione';
+
+  @override
+  String get syncHealthAlertsDescription => 'Avvisa se Omi non sincronizza registrazioni da più di un giorno';
+
+  @override
+  String get syncStallAlertTitle => 'Omi non si sta sincronizzando';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Nessuna registrazione del tuo Omi è stata sincronizzata da più di $hours ore. Apri Omi per controllare la connessione del dispositivo.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi non si sta sincronizzando';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Nessuna registrazione sincronizzata da più di $hours ore';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Riepiloghi giornalieri nella Home';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Mostra i riepiloghi più recenti in cima alla Home.';
+
+  @override
+  String get yearlySwitchTitle => 'Passa all\'annuale';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Risparmia $amount all\'anno';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Risparmia $amount all\'anno con l\'annuale';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Stesso piano, pagato una volta all\'anno';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Piano';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price all\'anno';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Da pagare oggi';
+
+  @override
+  String get yearlySwitchRenews => 'Rinnovo';
+
+  @override
+  String get yearlySwitchCreditNote => 'Include un credito per il resto di questo mese.';
+
+  @override
+  String get yearlySwitchDeclined => 'Pagamento rifiutato. Resti sul mensile.';
+
+  @override
+  String get yearlySwitchFailed => 'Impossibile cambiare. Resti sul mensile.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Impossibile caricare il prezzo.';
+
+  @override
+  String get yearlySwitchUnavailable => 'La fatturazione annuale non è disponibile per il tuo piano in questo momento.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Ora sei sull\'annuale';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Addebitati $amount oggi. Rinnovo il $date.';
   }
 }

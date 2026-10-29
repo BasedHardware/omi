@@ -114,12 +114,24 @@ def transaction_retry_deadline_scope(deadline: float | None) -> Iterator[None]:
     ``run_with_transaction_contention_retry`` inherits it; ``None`` restores
     the default attempt-only bound.  Scopes nest by token, and a ``None``
     scope inside a bounded one opts a subregion back out.
+
+    A caller may enter this scope in one Context and exit it in another: the
+    batch projection follow-up enters its advisory claim in one
+    ``run_blocking`` leaf and releases it in a later leaf, and each leaf runs
+    in its own context copy.  The exit context never observed this scope's
+    ``set`` — the scoped value lived and died with the entry context — so a
+    token mismatch leaves nothing to undo and must not raise.
     """
     token = _retry_deadline.set(deadline)
     try:
         yield
     finally:
-        _retry_deadline.reset(token)
+        try:
+            _retry_deadline.reset(token)
+        except ValueError:
+            # ``reset`` refuses tokens created in another Context; that
+            # context is already gone and this one was never modified.
+            pass
 
 
 def equal_jitter_delay(attempt: int, random_value: Callable[[], float] = random.random) -> float:

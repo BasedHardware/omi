@@ -69,7 +69,7 @@ from config.refactor_modes import serving_for
 from config.open_loops import open_loops_enabled
 from utils.llm.notes_packet import PACKET_RULES, select_notes_packet, _local_started_at_iso
 from utils.llm.notes_output_contract import finish_notes_contract, OUTPUT_RULES
-from utils.llm.notes_identity import notes_identity
+from utils.llm.notes_identity import notes_identity, screen_speaker_bindings
 from utils.llm.notes_output import NotesOutput, OpenLoopNotesOutput
 from utils.llm.notes_observability import current_run, observe_notes
 from utils.llm.notes_effort import bind_notes_effort
@@ -537,6 +537,11 @@ def _get_shaped_conversation_notes(
             words=words,
             inputs=kwargs,
         )
+    # An agent may discover screen evidence before falling back. Use the final
+    # identity authority for both the prompt and output repair.
+    one_shot_packet = packet if serving_for('NOTES_PACKET_V2_MODE', uid) else legacy_packet
+    one_shot_packet['screen_speaker_bindings'] = screen_speaker_bindings(kwargs['notes_identity'])
+    evidence[0]['content'] = json.dumps(one_shot_packet, ensure_ascii=False, default=str)
     extraction_parser = PydanticOutputParser(pydantic_object=_notes_output_schema(uid))
     format_instructions = extraction_parser.get_format_instructions()
     static_instructions = mount.instructions + '\n\n' + format_instructions

@@ -429,12 +429,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get autoSync => 'Tự động đồng bộ';
 
   @override
-  String get syncHealthAlerts => 'Cảnh báo tình trạng đồng bộ';
-
-  @override
-  String get syncHealthAlertsDescription => 'Cảnh báo nếu Omi không đồng bộ bản ghi hơn một ngày';
-
-  @override
   String get autoSyncDescription => 'Tự động đồng bộ các bản ghi ngoại tuyến khi thiết bị của bạn kết nối';
 
   @override
@@ -8730,6 +8724,29 @@ class AppLocalizationsVi extends AppLocalizations {
   String get deleteReasonOther => 'Khác';
 
   @override
+  String get deletePauseInsteadTitle => 'Tạm dừng Omi thay vì xóa?';
+
+  @override
+  String get deletePauseInsteadSubtitle => 'Dừng ghi âm và giữ nguyên mọi thứ. Bạn có thể quay lại bất cứ lúc nào.';
+
+  @override
+  String get deletePauseRecordingLine =>
+      'Việc ghi âm sẽ dừng. Sẽ không có nội dung mới nào được ghi lại khi bạn vắng mặt.';
+
+  @override
+  String get deletePauseKeepLine => 'Kỷ niệm, cuộc trò chuyện và ứng dụng của bạn vẫn được giữ nguyên.';
+
+  @override
+  String get deletePauseReturnLine =>
+      'Bạn vẫn đăng nhập. Tiếp tục ghi âm bất cứ lúc nào. Gói đăng ký của bạn không thay đổi.';
+
+  @override
+  String get pauseOmiButton => 'Tạm dừng Omi';
+
+  @override
+  String get continueDeletingButton => 'Tiếp tục xóa';
+
+  @override
   String get deleteFlowFeedbackTitle => 'Hãy chia sẻ thêm';
 
   @override
@@ -8749,6 +8766,28 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get deleteConsequenceNoRecovery => 'Tài khoản của bạn không thể khôi phục — ngay cả bộ phận hỗ trợ.';
+
+  @override
+  String deletePendingRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Bạn có $count bản ghi vẫn đang xử lý. Xóa bây giờ sẽ làm mất những bản ghi đó.',
+      one: 'Bạn có 1 bản ghi vẫn đang xử lý. Xóa bây giờ sẽ làm mất bản ghi đó.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteGracePeriodNotice(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Đăng nhập lại trong vòng $days ngày để khôi phục tài khoản.',
+      one: 'Đăng nhập lại trong vòng 1 ngày để khôi phục tài khoản.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get deleteTypeToConfirm => 'Nhập DELETE để xác nhận';
@@ -9052,14 +9091,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'Đang chờ kết nối Internet';
-
-  @override
-  String get syncStallAlertTitle => 'Omi không đồng bộ';
-
-  @override
-  String syncStallAlertBody(int hours) {
-    return 'Không có bản ghi nào từ Omi của bạn được đồng bộ trong hơn $hours giờ. Mở Omi để kiểm tra kết nối thiết bị.';
-  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13688,14 +13719,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get activityAttentionStorageSubtitle => 'Bản ghi đã tạm dừng';
 
   @override
-  String get activityAttentionSyncStalledTitle => 'Omi không đồng bộ';
-
-  @override
-  String activityAttentionSyncStalledSubtitle(int hours) {
-    return 'Không có bản ghi nào được đồng bộ hơn $hours giờ';
-  }
-
-  @override
   String get activityAttentionUploadStalledTitle => 'Tải lên bị đình trệ';
 
   @override
@@ -14731,5 +14754,182 @@ class AppLocalizationsVi extends AppLocalizations {
       one: 'Ẩn 1 clip ngắn',
     );
     return '$_temp0';
+  }
+
+  @override
+  String deleteLocalRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count bản ghi chưa được tải lên. Xóa bây giờ sẽ làm mất những bản ghi đó — hãy mở ứng dụng để quá trình tải lên hoàn tất.',
+      one:
+          '1 bản ghi chưa được tải lên. Xóa bây giờ sẽ làm mất bản ghi đó — hãy mở ứng dụng để quá trình tải lên hoàn tất.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConfirmGraceSubtitle => 'Xem lại những gì sẽ xảy ra với dữ liệu của bạn trước khi rời đi.';
+
+  @override
+  String get deletePauseConfirmation => 'Omi đã tạm dừng. Tiếp tục ghi âm bất cứ lúc nào.';
+
+  @override
+  String deleteProcessingKept(int count, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count bản ghi âm vẫn đang được xử lý. Các bản ghi sẽ được giữ trong tài khoản của bạn thêm ',
+      one: '1 bản ghi âm vẫn đang được xử lý. Bản ghi sẽ được giữ trong tài khoản của bạn thêm ',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days ngày.',
+      one: '1 ngày.',
+    );
+    return '$_temp0$_temp1';
+  }
+
+  @override
+  String deleteDataErasedAfterDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Kỷ niệm và cuộc trò chuyện của bạn sẽ bị xóa sau $days ngày.',
+      one: 'Kỷ niệm và cuộc trò chuyện của bạn sẽ bị xóa sau 1 ngày.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteAppsDisconnectImmediately => 'Các ứng dụng và tích hợp của bạn sẽ bị ngắt kết nối ngay lập tức.';
+
+  @override
+  String get deleteSubscriptionImmediately => 'Gói đăng ký của bạn sẽ bị hủy ngay lập tức.';
+
+  @override
+  String get deleteRestoreTitle => 'Tài khoản của bạn đang chờ xóa';
+
+  @override
+  String get deleteRestoreSubtitle => 'Bạn đổi ý? Khôi phục tài khoản trước khi tài khoản bị xóa.';
+
+  @override
+  String get deleteRestoreKeepData => 'Khôi phục kỷ niệm và cuộc trò chuyện của bạn.';
+
+  @override
+  String get deleteRestoreBillingNotice =>
+      'Gói đăng ký vẫn bị hủy. Kết nối lại ứng dụng và tích hợp sau khi khôi phục.';
+
+  @override
+  String deleteRestoreDaysRemaining(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Bạn còn $days ngày để khôi phục tài khoản của mình.',
+      one: 'Bạn còn 1 ngày để khôi phục tài khoản của mình.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteRestoreButton => 'Khôi phục tài khoản của tôi';
+
+  @override
+  String get deleteFinishButton => 'Hoàn tất xóa';
+
+  @override
+  String get deleteFinishNowButton => 'Xóa tài khoản của tôi ngay';
+
+  @override
+  String get deleteFinishNowWarning =>
+      'Thao tác này sẽ kết thúc thời hạn khôi phục. Tài khoản và các bản ghi của bạn sẽ bị xóa vĩnh viễn.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Bạn còn chưa đến 1 ngày để khôi phục tài khoản của mình.';
+
+  @override
+  String get deleteFinishNowTitle => 'Xóa tài khoản của bạn?';
+
+  @override
+  String get syncHealthAlerts => 'Cảnh báo tình trạng đồng bộ';
+
+  @override
+  String get syncHealthAlertsDescription => 'Cảnh báo nếu Omi không đồng bộ bản ghi hơn một ngày';
+
+  @override
+  String get syncStallAlertTitle => 'Omi không đồng bộ';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Không có bản ghi nào từ Omi của bạn được đồng bộ trong hơn $hours giờ. Mở Omi để kiểm tra kết nối thiết bị.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi không đồng bộ';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Không có bản ghi nào được đồng bộ hơn $hours giờ';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Tóm tắt hàng ngày trên Trang chủ';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Hiển thị các tóm tắt mới nhất ở đầu Trang chủ.';
+
+  @override
+  String get yearlySwitchTitle => 'Chuyển sang gói năm';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Tiết kiệm $amount mỗi năm';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Tiết kiệm $amount mỗi năm khi trả theo năm';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Cùng gói, thanh toán mỗi năm một lần';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Gói';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price mỗi năm';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Thanh toán hôm nay';
+
+  @override
+  String get yearlySwitchRenews => 'Gia hạn';
+
+  @override
+  String get yearlySwitchCreditNote => 'Đã gồm khoản tín dụng cho phần còn lại của tháng này.';
+
+  @override
+  String get yearlySwitchDeclined => 'Thanh toán bị từ chối. Bạn vẫn trả theo tháng.';
+
+  @override
+  String get yearlySwitchFailed => 'Không thể chuyển. Bạn vẫn trả theo tháng.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Không tải được giá của bạn.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Hiện chưa thể trả theo năm cho gói của bạn.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Bạn đã chuyển sang trả theo năm';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Đã thu $amount hôm nay. Gia hạn vào $date.';
   }
 }

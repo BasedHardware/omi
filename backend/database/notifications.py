@@ -20,6 +20,7 @@ from google.cloud import firestore
 from google.cloud.firestore import DELETE_FIELD
 from config.daily_summary_depth import VALID_DAILY_SUMMARY_DEPTHS, normalize_daily_summary_depth
 from ._client import db, get_firestore_client
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from .cache import get_memory_cache
 from .firestore_index_registry import DAILY_SUMMARY_RECIPIENTS_QUERY
 from .firestore_transaction_retry import run_with_transaction_contention_retry
@@ -438,11 +439,14 @@ def get_users_for_daily_summary_indexed(
                 field_filter_factory=FieldFilter,
             )
             for user_doc in query.stream():
+                uid = str(user_doc.id)
+                if account_deletion_blocks_user_work(uid):
+                    continue
                 user_data = _typed_doc(user_doc)
                 legacy_value = user_data.get('fcm_token')
                 users.append(
                     (
-                        str(user_doc.id),
+                        uid,
                         DeferredTokens(str(legacy_value) if legacy_value else None),
                         user_data.get('time_zone'),
                     )
@@ -475,6 +479,8 @@ def _get_users_in_timezones(timezones: list[str], filter: str) -> List[Any]:
 
             for user_doc in query.stream():
                 uid = str(user_doc.id)
+                if account_deletion_blocks_user_work(uid):
+                    continue
                 user_data = _typed_doc(user_doc)
 
                 # Collect tokens from subcollection

@@ -430,6 +430,12 @@ class ProjectionSession:
             )
         if not privacy_replay:
             transaction.update(self.owner_ref, {'projection_watermark': self.segment_id})
+        if held and not privacy_replay:
+            # A quarantined receipt is replay-fenced: nothing automatic will
+            # change this unit again. Hold the job in the same transaction so
+            # the held-partial scan and a reviewed redrive (for example after a
+            # discarded record is restored) own it; audio and result stay.
+            transaction.update(self.store.ref('jobs', self.segment_id), {'recovery_state': 'held'})
         for reference in self.erased_predecessors:
             transaction.update(
                 reference,

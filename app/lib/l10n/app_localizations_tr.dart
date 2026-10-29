@@ -429,12 +429,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get autoSync => 'Otomatik eşitleme';
 
   @override
-  String get syncHealthAlerts => 'Eşitleme durumu uyarıları';
-
-  @override
-  String get syncHealthAlertsDescription => 'Omi bir günden uzun süre kayıt eşitlemezse uyar';
-
-  @override
   String get autoSyncDescription => 'Cihazınız bağlandığında çevrimdışı kayıtları otomatik olarak eşitleyin';
 
   @override
@@ -8738,6 +8732,28 @@ class AppLocalizationsTr extends AppLocalizations {
   String get deleteReasonOther => 'Diğer';
 
   @override
+  String get deletePauseInsteadTitle => 'Omi\'yi Duraklatmak İster misiniz?';
+
+  @override
+  String get deletePauseInsteadSubtitle => 'Kaydı durdurun ve her şeyi koruyun. İstediğiniz zaman geri dönün.';
+
+  @override
+  String get deletePauseRecordingLine => 'Kayıt durur. Siz yokken yeni bir şey kaydedilmez.';
+
+  @override
+  String get deletePauseKeepLine => 'Anılarınız, konuşmalarınız ve uygulamalarınız olduğu gibi korunur.';
+
+  @override
+  String get deletePauseReturnLine =>
+      'Oturumunuz açık kalır. İstediğiniz zaman kayda devam edin. Aboneliğiniz değişmeden sürer.';
+
+  @override
+  String get pauseOmiButton => 'Omi\'yi duraklat';
+
+  @override
+  String get continueDeletingButton => 'Silmeye devam et';
+
+  @override
   String get deleteFlowFeedbackTitle => 'Daha fazlasını anlat';
 
   @override
@@ -8757,6 +8773,28 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get deleteConsequenceNoRecovery => 'Hesabınız geri yüklenemez — destek ekibi bile yapamaz.';
+
+  @override
+  String deletePendingRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'İşlenmekte olan $count kaydınız var. Şimdi silerseniz kayıtları kaybedersiniz.',
+      one: 'İşlenmekte olan 1 kaydınız var. Şimdi silerseniz kaydı kaybedersiniz.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteGracePeriodNotice(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Hesabınızı geri yüklemek için $days gün içinde tekrar giriş yapın.',
+      one: 'Hesabınızı geri yüklemek için 1 gün içinde tekrar giriş yapın.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get deleteTypeToConfirm => 'Onaylamak için DELETE yazın';
@@ -9060,14 +9098,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'İnternet bekleniyor';
-
-  @override
-  String get syncStallAlertTitle => 'Omi eşitlemiyor';
-
-  @override
-  String syncStallAlertBody(int hours) {
-    return 'Omi cihazınızdan $hours saatten uzun süredir hiçbir kayıt eşitlenmedi. Cihaz bağlantınızı kontrol etmek için Omi\'yu açın.';
-  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13704,14 +13734,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get activityAttentionStorageSubtitle => 'Kayıtlar duraklatıldı';
 
   @override
-  String get activityAttentionSyncStalledTitle => 'Omi eşitlemiyor';
-
-  @override
-  String activityAttentionSyncStalledSubtitle(int hours) {
-    return '$hours saatten uzun süredir eşitlenmiş kayıt yok';
-  }
-
-  @override
   String get activityAttentionUploadStalledTitle => 'Yükleme durdu';
 
   @override
@@ -14743,5 +14765,182 @@ class AppLocalizationsTr extends AppLocalizations {
       one: '1 kısa kaydı gizle',
     );
     return '$_temp0';
+  }
+
+  @override
+  String deleteLocalRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count kayıt henüz yüklenmedi. Şimdi silerseniz kayıtları kaybedersiniz — yüklemenin tamamlanması için uygulamayı açık tutun.',
+      one:
+          '1 kayıt henüz yüklenmedi. Şimdi silerseniz kaydı kaybedersiniz — yüklemenin tamamlanması için uygulamayı açık tutun.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConfirmGraceSubtitle => 'Ayrılmadan önce verilerinize ne olacağını inceleyin.';
+
+  @override
+  String get deletePauseConfirmation => 'Omi duraklatıldı. İstediğiniz zaman kayda devam edin.';
+
+  @override
+  String deleteProcessingKept(int count, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kayıt hâlâ işleniyor. Hesabınızda ',
+      one: '1 kayıt hâlâ işleniyor. Hesabınızda ',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days gün boyunca saklanacak.',
+      one: '1 gün boyunca saklanacak.',
+    );
+    return '$_temp0$_temp1';
+  }
+
+  @override
+  String deleteDataErasedAfterDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Anılarınız ve konuşmalarınız $days gün sonra silinecek.',
+      one: 'Anılarınız ve konuşmalarınız 1 gün sonra silinecek.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteAppsDisconnectImmediately => 'Uygulamalarınız ve entegrasyonlarınız hemen bağlantıyı keser.';
+
+  @override
+  String get deleteSubscriptionImmediately => 'Aboneliğiniz hemen iptal edilir.';
+
+  @override
+  String get deleteRestoreTitle => 'Hesabınız silinmek üzere';
+
+  @override
+  String get deleteRestoreSubtitle => 'Fikriniz mi değişti? Silinmeden önce hesabınızı geri yükleyin.';
+
+  @override
+  String get deleteRestoreKeepData => 'Anılarınızı ve konuşmalarınızı geri yükleyin.';
+
+  @override
+  String get deleteRestoreBillingNotice =>
+      'Aboneliğiniz iptal edilmiş olarak kalır. Geri yükledikten sonra uygulama ve entegrasyonları yeniden bağlayın.';
+
+  @override
+  String deleteRestoreDaysRemaining(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Hesabınızı geri yüklemek için $days gününüz kaldı.',
+      one: 'Hesabınızı geri yüklemek için 1 gününüz kaldı.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteRestoreButton => 'Hesabımı geri yükle';
+
+  @override
+  String get deleteFinishButton => 'Silmeyi tamamla';
+
+  @override
+  String get deleteFinishNowButton => 'Hesabımı şimdi sil';
+
+  @override
+  String get deleteFinishNowWarning =>
+      'Bu işlem geri yükleme süresini sona erdirir. Hesabınız ve kayıtları kalıcı olarak silinir.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Hesabınızı geri yüklemek için bir günden az süreniz kaldı.';
+
+  @override
+  String get deleteFinishNowTitle => 'Hesabınız Silinsin mi?';
+
+  @override
+  String get syncHealthAlerts => 'Eşitleme durumu uyarıları';
+
+  @override
+  String get syncHealthAlertsDescription => 'Omi bir günden uzun süre kayıt eşitlemezse uyar';
+
+  @override
+  String get syncStallAlertTitle => 'Omi eşitlemiyor';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Omi cihazınızdan $hours saatten uzun süredir hiçbir kayıt eşitlenmedi. Cihaz bağlantınızı kontrol etmek için Omi\'yu açın.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi eşitlemiyor';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return '$hours saatten uzun süredir eşitlenmiş kayıt yok';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Ana Sayfada Günlük Özetler';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'En son özetlerini Ana Sayfanın üstünde göster.';
+
+  @override
+  String get yearlySwitchTitle => 'Yıllığa geçin';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Yılda $amount tasarruf edin';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Yıllık ödemeyle yılda $amount tasarruf edin';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Aynı plan, yılda bir kez ödenir';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Plan';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, yıllık $price';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Bugün ödenecek';
+
+  @override
+  String get yearlySwitchRenews => 'Yenilenme';
+
+  @override
+  String get yearlySwitchCreditNote => 'Bu ayın kalan kısmı için kredi içerir.';
+
+  @override
+  String get yearlySwitchDeclined => 'Ödeme reddedildi. Aylık ödemeye devam ediyorsunuz.';
+
+  @override
+  String get yearlySwitchFailed => 'Geçiş yapılamadı. Aylık ödemeye devam ediyorsunuz.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Fiyatınız yüklenemedi.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Yıllık ödeme şu anda planınız için kullanılamıyor.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Artık yıllık ödüyorsunuz';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Bugün $amount tahsil edildi. Yenilenme: $date.';
   }
 }

@@ -290,7 +290,7 @@ def test_account_deletion_fences_recovery_admission(store, monkeypatch):
     quiet.arm('synthetic', 'old', 120, firestore_client=store)
     store.rows[('account_deletions', 'synthetic')] = {'wipe_status': 'running'}
     _advance(monkeypatch, 361)
-    assert quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store) == 'refused_account_deleting'
+    assert quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store) == 'account_pending_deletion'
     assert 'finalization_job_id' not in store.rows[ROW]
 
 

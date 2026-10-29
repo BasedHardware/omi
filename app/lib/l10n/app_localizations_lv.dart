@@ -429,12 +429,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get autoSync => 'Automātiska sinhronizācija';
 
   @override
-  String get syncHealthAlerts => 'Sinhronizācijas stāvokļa brīdinājumi';
-
-  @override
-  String get syncHealthAlertsDescription => 'Brīdināt, ja Omi vairāk nekā dienu nav sinhronizējis ierakstus';
-
-  @override
   String get autoSyncDescription => 'Automātiski sinhronizēt bezsaistes ierakstus, kad ierīce tiek savienota';
 
   @override
@@ -8747,6 +8741,29 @@ class AppLocalizationsLv extends AppLocalizations {
   String get deleteReasonOther => 'Cits';
 
   @override
+  String get deletePauseInsteadTitle => 'Pauzēt Omi?';
+
+  @override
+  String get deletePauseInsteadSubtitle => 'Pārtrauciet ierakstīšanu un saglabājiet visu. Atgriezieties jebkurā laikā.';
+
+  @override
+  String get deletePauseRecordingLine =>
+      'Ierakstīšana tiks apturēta. Kamēr nebūsiet klāt, nekas jauns netiks ierakstīts.';
+
+  @override
+  String get deletePauseKeepLine => 'Jūsu atmiņas, sarunas un lietotnes paliks tieši tādas, kādas tās ir.';
+
+  @override
+  String get deletePauseReturnLine =>
+      'Jūs paliksiet pierakstījies. Atsāciet ierakstīšanu jebkurā laikā. Jūsu abonements nemainīsies.';
+
+  @override
+  String get pauseOmiButton => 'Pauzēt Omi';
+
+  @override
+  String get continueDeletingButton => 'Turpināt dzēšanu';
+
+  @override
   String get deleteFlowFeedbackTitle => 'Pastāsti vairāk';
 
   @override
@@ -8766,6 +8783,28 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get deleteConsequenceNoRecovery => 'Tavu kontu nevar atjaunot — pat ne atbalsts.';
+
+  @override
+  String deletePendingRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Vēl tiek apstrādāti $count ieraksti. Dzēšot tagad, tie tiks zaudēti.',
+      one: 'Vēl tiek apstrādāts 1 ieraksts. Dzēšot tagad, tas tiks zaudēts.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteGracePeriodNotice(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Pierakstieties vēlreiz $days dienu laikā, lai atjaunotu savu kontu.',
+      one: 'Pierakstieties vēlreiz 1 dienas laikā, lai atjaunotu savu kontu.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get deleteTypeToConfirm => 'Lai apstiprinātu, ieraksti DELETE';
@@ -9071,14 +9110,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'Gaida internetu';
-
-  @override
-  String get syncStallAlertTitle => 'Omi nesinhronizējas';
-
-  @override
-  String syncStallAlertBody(int hours) {
-    return 'Vairāk nekā $hours stundas no jūsu Omi nav sinhronizēts neviens ieraksts. Atveriet Omi, lai pārbaudītu ierīces savienojumu.';
-  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13721,14 +13752,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get activityAttentionStorageSubtitle => 'Ieraksti apturēti';
 
   @override
-  String get activityAttentionSyncStalledTitle => 'Omi nesinhronizējas';
-
-  @override
-  String activityAttentionSyncStalledSubtitle(int hours) {
-    return 'Vairāk nekā $hours stundas nav sinhronizēts neviens ieraksts';
-  }
-
-  @override
   String get activityAttentionUploadStalledTitle => 'Augšupielāde apstājusies';
 
   @override
@@ -14763,5 +14786,182 @@ class AppLocalizationsLv extends AppLocalizations {
       one: 'Slēpt 1 īsu ierakstu',
     );
     return '$_temp0';
+  }
+
+  @override
+  String deleteLocalRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count ieraksti vēl nav augšupielādēti. Dzēšot tagad, tie tiks zaudēti — turiet lietotni atvērtu, līdz augšupielāde ir pabeigta.',
+      one:
+          '1 ieraksts vēl nav augšupielādēts. Dzēšot tagad, tas tiks zaudēts — turiet lietotni atvērtu, līdz augšupielāde ir pabeigta.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConfirmGraceSubtitle => 'Pirms aiziešanas pārskatiet, kas notiks ar jūsu datiem.';
+
+  @override
+  String get deletePauseConfirmation => 'Omi ir pauzēts. Atsāciet ierakstīšanu jebkurā laikā.';
+
+  @override
+  String deleteProcessingKept(int count, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Joprojām tiek apstrādāti $count ieraksti. Tie jūsu kontā tiks glabāti vēl ',
+      one: '1 ieraksts joprojām tiek apstrādāts. Tas jūsu kontā tiks glabāts vēl ',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days dienas.',
+      one: '1 dienu.',
+    );
+    return '$_temp0$_temp1';
+  }
+
+  @override
+  String deleteDataErasedAfterDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Jūsu atmiņas un sarunas tiks dzēstas pēc $days dienām.',
+      one: 'Jūsu atmiņas un sarunas tiks dzēstas pēc 1 dienas.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteAppsDisconnectImmediately => 'Jūsu lietotnes un integrācijas tiks nekavējoties atvienotas.';
+
+  @override
+  String get deleteSubscriptionImmediately => 'Jūsu abonements tiks nekavējoties atcelts.';
+
+  @override
+  String get deleteRestoreTitle => 'Jūsu kontu gaida dzēšana';
+
+  @override
+  String get deleteRestoreSubtitle => 'Pārdomājāt? Atjaunojiet savu kontu, pirms tas tiek dzēsts.';
+
+  @override
+  String get deleteRestoreKeepData => 'Atjaunojiet savas atmiņas un sarunas.';
+
+  @override
+  String get deleteRestoreBillingNotice =>
+      'Jūsu abonements paliks atcelts. Pēc konta atjaunošanas no jauna pievienojiet lietotnes un integrācijas.';
+
+  @override
+  String deleteRestoreDaysRemaining(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Jums ir atlikušas $days dienas, lai atjaunotu savu kontu.',
+      one: 'Jums ir atlikusi 1 diena, lai atjaunotu savu kontu.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteRestoreButton => 'Atjaunot manu kontu';
+
+  @override
+  String get deleteFinishButton => 'Pabeigt dzēšanu';
+
+  @override
+  String get deleteFinishNowButton => 'Dzēst manu kontu tagad';
+
+  @override
+  String get deleteFinishNowWarning =>
+      'Tādējādi beigsies konta atjaunošanas periods. Jūsu konts un tajā esošie ieraksti tiks neatgriezeniski dzēsti.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Jums ir atlikusi mazāk nekā diena, lai atjaunotu savu kontu.';
+
+  @override
+  String get deleteFinishNowTitle => 'Dzēst jūsu kontu?';
+
+  @override
+  String get syncHealthAlerts => 'Sinhronizācijas stāvokļa brīdinājumi';
+
+  @override
+  String get syncHealthAlertsDescription => 'Brīdināt, ja Omi vairāk nekā dienu nav sinhronizējis ierakstus';
+
+  @override
+  String get syncStallAlertTitle => 'Omi nesinhronizējas';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Vairāk nekā $hours stundas no jūsu Omi nav sinhronizēts neviens ieraksts. Atveriet Omi, lai pārbaudītu ierīces savienojumu.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi nesinhronizējas';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Vairāk nekā $hours stundas nav sinhronizēts neviens ieraksts';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Dienas kopsavilkumi sākumā';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Rādīt jaunākos kopsavilkumus sākuma augšdaļā.';
+
+  @override
+  String get yearlySwitchTitle => 'Pāriet uz gada maksu';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Ietaupiet $amount gadā';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Ietaupiet $amount gadā, maksājot par gadu';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Tas pats plāns, maksa reizi gadā';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Plāns';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price gadā';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Maksājams šodien';
+
+  @override
+  String get yearlySwitchRenews => 'Atjaunojas';
+
+  @override
+  String get yearlySwitchCreditNote => 'Ietver kredītu par atlikušo šī mēneša daļu.';
+
+  @override
+  String get yearlySwitchDeclined => 'Maksājums noraidīts. Jūs joprojām maksājat katru mēnesi.';
+
+  @override
+  String get yearlySwitchFailed => 'Neizdevās pāriet. Jūs joprojām maksājat katru mēnesi.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Neizdevās ielādēt cenu.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Gada maksa jūsu plānam pašlaik nav pieejama.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Tagad jūs maksājat par gadu';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Šodien iekasēti $amount. Atjaunojas $date.';
   }
 }

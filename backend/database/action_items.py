@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta, tzinfo
 import logging
 import os
-from typing import Any, Dict, Iterable, List, Optional, Protocol, cast
+from typing import Any, Dict, Iterable, List, Optional, Protocol, cast, overload
 from database import chat_edits
 from database.dream_dirty import after_write
 from google.api_core.exceptions import (
@@ -512,13 +512,37 @@ def _list_scan_budget(row_budget: int) -> int:
     return min(_ACTION_ITEMS_LIST_HARD_MAX, int(row_budget) + _ACTION_ITEMS_LIST_DELETED_SLACK)
 
 
+@overload
+def _coerce_item_datetime(val: Any, default: datetime) -> datetime: ...
+
+
+@overload
+def _coerce_item_datetime(val: Any, default: None) -> Optional[datetime]: ...
+
+
+def _coerce_item_datetime(val: Any, default: Optional[datetime]) -> Optional[datetime]:
+    if val is None:
+        return default
+    if isinstance(val, datetime):
+        return val if val.tzinfo is not None else val.replace(tzinfo=timezone.utc)
+    if isinstance(val, str):
+        try:
+            dt = datetime.fromisoformat(val.replace("Z", "+00:00"))
+            return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            return default
+    return default
+
+
 def _action_item_list_sort_key(item: Dict[str, Any]) -> tuple:
     """Active-first product order (see get_action_items)."""
+    due = _coerce_item_datetime(item.get('due_at'), datetime.max.replace(tzinfo=timezone.utc))
+    created = _coerce_item_datetime(item.get('created_at'), datetime.min.replace(tzinfo=timezone.utc))
     return (
         bool(item.get('completed')),
         item.get('due_at') is None,
-        item.get('due_at') or datetime.max.replace(tzinfo=timezone.utc),
-        -((item.get('created_at') or datetime.min.replace(tzinfo=timezone.utc)).timestamp()),
+        due,
+        -(created.timestamp()),
     )
 
 
@@ -1475,7 +1499,10 @@ def get_pending_apple_reminders_sync(uid: str) -> Dict[str, Any]:
         data['id'] = doc.id
         synced_items.append(prepare_action_item_for_read(data))
     # Sort by updated_at desc in Python instead of Firestore (avoids composite index)
-    synced_items.sort(key=lambda x: x.get('updated_at') or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+    synced_items.sort(
+        key=lambda x: _coerce_item_datetime(x.get('updated_at'), datetime.min.replace(tzinfo=timezone.utc)),
+        reverse=True,
+    )
 
     return {"pending_export": pending_export, "synced_items": synced_items}
 
@@ -1655,12 +1682,12 @@ def get_scores(
 
     for data in deleted_items:
         completed = data.get('completed') is True
-        due_at = data.get('due_at')
-        if isinstance(due_at, datetime) and day_start <= due_at < day_end:
+        due_at = _coerce_item_datetime(data.get('due_at'), None)
+        if due_at is not None and day_start <= due_at < day_end:
             daily_total -= 1
             daily_completed -= int(completed)
-        created_at = data.get('created_at')
-        if isinstance(created_at, datetime) and week_start <= created_at < day_end:
+        created_at = _coerce_item_datetime(data.get('created_at'), None)
+        if created_at is not None and week_start <= created_at < day_end:
             weekly_total -= 1
             weekly_completed -= int(completed)
         overall_total -= 1

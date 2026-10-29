@@ -427,12 +427,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get autoSync => 'Sincronização automática';
 
   @override
-  String get syncHealthAlerts => 'Alertas de estado da sincronização';
-
-  @override
-  String get syncHealthAlertsDescription => 'Avisar se o Omi não sincronizar gravações há mais de um dia';
-
-  @override
   String get autoSyncDescription =>
       'Sincronizar automaticamente as gravações offline quando o seu dispositivo se conectar';
 
@@ -8736,6 +8730,28 @@ class AppLocalizationsPt extends AppLocalizations {
   String get deleteReasonOther => 'Outro';
 
   @override
+  String get deletePauseInsteadTitle => 'Pausar o Omi em vez de excluir?';
+
+  @override
+  String get deletePauseInsteadSubtitle => 'Pare de gravar e mantenha tudo. Volte quando quiser.';
+
+  @override
+  String get deletePauseRecordingLine => 'A gravação será interrompida. Nada será gravado enquanto você estiver fora.';
+
+  @override
+  String get deletePauseKeepLine => 'Suas memórias, conversas e apps serão mantidos como estão.';
+
+  @override
+  String get deletePauseReturnLine =>
+      'Você continuará conectado. Retome a gravação quando quiser. Sua assinatura continuará igual.';
+
+  @override
+  String get pauseOmiButton => 'Pausar Omi';
+
+  @override
+  String get continueDeletingButton => 'Continuar excluindo';
+
+  @override
   String get deleteFlowFeedbackTitle => 'Conte-nos mais';
 
   @override
@@ -8755,6 +8771,28 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get deleteConsequenceNoRecovery => 'Sua conta não pode ser restaurada — nem pelo suporte.';
+
+  @override
+  String deletePendingRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Você tem $count gravações ainda em processamento. Se excluir agora, vai perdê-las.',
+      one: 'Você tem 1 gravação ainda em processamento. Se excluir agora, vai perdê-la.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteGracePeriodNotice(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Entre novamente em até $days dias para restaurar sua conta.',
+      one: 'Entre novamente em até 1 dia para restaurar sua conta.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get deleteTypeToConfirm => 'Digite DELETE para confirmar';
@@ -9059,14 +9097,6 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'Aguardando conexão';
-
-  @override
-  String get syncStallAlertTitle => 'O Omi não está sincronizando';
-
-  @override
-  String syncStallAlertBody(int hours) {
-    return 'Nenhuma gravação do seu Omi foi sincronizada há mais de $hours horas. Abra o Omi para verificar a conexão do seu dispositivo.';
-  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13714,14 +13744,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get activityAttentionStorageSubtitle => 'Gravações pausadas';
 
   @override
-  String get activityAttentionSyncStalledTitle => 'O Omi não está sincronizando';
-
-  @override
-  String activityAttentionSyncStalledSubtitle(int hours) {
-    return 'Nenhuma gravação sincronizada há mais de $hours horas';
-  }
-
-  @override
   String get activityAttentionUploadStalledTitle => 'Envio parado';
 
   @override
@@ -14758,5 +14780,182 @@ class AppLocalizationsPt extends AppLocalizations {
       one: 'Ocultar 1 clipe curto',
     );
     return '$_temp0';
+  }
+
+  @override
+  String deleteLocalRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count gravações ainda não foram enviadas. Se excluir agora, você vai perdê-las — mantenha o app aberto para concluir o envio.',
+      one:
+          '1 gravação ainda não foi enviada. Se excluir agora, você vai perdê-la — mantenha o app aberto para concluir o envio.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConfirmGraceSubtitle => 'Confira o que acontecerá com seus dados antes de sair.';
+
+  @override
+  String get deletePauseConfirmation => 'O Omi está pausado. Retome a gravação quando quiser.';
+
+  @override
+  String deleteProcessingKept(int count, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gravações ainda estão sendo processadas. Elas serão mantidas na sua conta por ',
+      one: '1 gravação ainda está sendo processada. Ela será mantida na sua conta por ',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days dias.',
+      one: '1 dia.',
+    );
+    return '$_temp0$_temp1';
+  }
+
+  @override
+  String deleteDataErasedAfterDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Suas memórias e conversas serão apagadas após $days dias.',
+      one: 'Suas memórias e conversas serão apagadas após 1 dia.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteAppsDisconnectImmediately => 'Seus apps e integrações serão desconectados imediatamente.';
+
+  @override
+  String get deleteSubscriptionImmediately => 'Sua assinatura será cancelada imediatamente.';
+
+  @override
+  String get deleteRestoreTitle => 'Sua conta está aguardando exclusão';
+
+  @override
+  String get deleteRestoreSubtitle => 'Mudou de ideia? Restaure sua conta antes que ela seja apagada.';
+
+  @override
+  String get deleteRestoreKeepData => 'Restaure suas memórias e conversas.';
+
+  @override
+  String get deleteRestoreBillingNotice =>
+      'Sua assinatura continuará cancelada. Reconecte os apps e as integrações depois de restaurar a conta.';
+
+  @override
+  String deleteRestoreDaysRemaining(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Você tem $days dias restantes para restaurar sua conta.',
+      one: 'Você tem 1 dia restante para restaurar sua conta.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteRestoreButton => 'Restaurar minha conta';
+
+  @override
+  String get deleteFinishButton => 'Concluir exclusão';
+
+  @override
+  String get deleteFinishNowButton => 'Apagar minha conta agora';
+
+  @override
+  String get deleteFinishNowWarning =>
+      'Isso encerra o prazo para restauração. Sua conta e suas gravações serão apagadas permanentemente.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Você tem menos de um dia para restaurar sua conta.';
+
+  @override
+  String get deleteFinishNowTitle => 'Apagar sua conta?';
+
+  @override
+  String get syncHealthAlerts => 'Alertas de estado da sincronização';
+
+  @override
+  String get syncHealthAlertsDescription => 'Avisar se o Omi não sincronizar gravações há mais de um dia';
+
+  @override
+  String get syncStallAlertTitle => 'O Omi não está sincronizando';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Nenhuma gravação do seu Omi foi sincronizada há mais de $hours horas. Abra o Omi para verificar a conexão do seu dispositivo.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'O Omi não está sincronizando';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Nenhuma gravação sincronizada há mais de $hours horas';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Resumos diários no Início';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Mostre seus resumos mais recentes no topo do Início.';
+
+  @override
+  String get yearlySwitchTitle => 'Mudar para anual';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Economize $amount por ano';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Economize $amount por ano com o plano anual';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'O mesmo plano, pago uma vez por ano';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Plano';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price por ano';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'A pagar hoje';
+
+  @override
+  String get yearlySwitchRenews => 'Renova em';
+
+  @override
+  String get yearlySwitchCreditNote => 'Inclui crédito pelo restante deste mês.';
+
+  @override
+  String get yearlySwitchDeclined => 'Pagamento recusado. Você continua no plano mensal.';
+
+  @override
+  String get yearlySwitchFailed => 'Não foi possível mudar. Você continua no plano mensal.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Não foi possível carregar seu preço.';
+
+  @override
+  String get yearlySwitchUnavailable => 'A cobrança anual não está disponível para seu plano no momento.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Agora você está no plano anual';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return '$amount cobrados hoje. Renova em $date.';
   }
 }

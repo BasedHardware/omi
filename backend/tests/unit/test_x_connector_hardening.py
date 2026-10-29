@@ -11,6 +11,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 import pytest
+from unittest.mock import Mock
 
 import routers.x_connector as x_router
 from utils.x_connector import sanitize_redirect_url
@@ -76,3 +77,22 @@ def test_build_authorize_url_fails_closed_on_bad_redirect(monkeypatch):
     monkeypatch.setattr(xc, 'is_oauth_configured', lambda: True)
     with pytest.raises(ValueError):
         xc.build_authorize_url('u1', success_redirect_url='javascript:alert(1)')
+
+
+@pytest.mark.asyncio
+async def test_pending_deletion_x_sync_skips_before_loading_integration_credentials(monkeypatch):
+    import utils.x_connector as xc
+
+    get_integration = Mock()
+    monkeypatch.setattr(xc, 'account_deletion_blocks_user_work', lambda _uid: True)
+    monkeypatch.setattr(xc.users_db, 'get_integration', get_integration)
+
+    result = await xc.sync_x_for_user('pending-owner')
+
+    assert result == {
+        'success': False,
+        'skipped': 'account_deletion',
+        'new_posts': 0,
+        'memories_created': 0,
+    }
+    get_integration.assert_not_called()

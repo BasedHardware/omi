@@ -426,12 +426,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get autoSync => 'ซิงค์อัตโนมัติ';
 
   @override
-  String get syncHealthAlerts => 'การแจ้งเตือนสถานะการซิงค์';
-
-  @override
-  String get syncHealthAlertsDescription => 'แจ้งเตือนหาก Omi ไม่ได้ซิงค์การบันทึกเป็นเวลาเกินหนึ่งวัน';
-
-  @override
   String get autoSyncDescription => 'ซิงค์การบันทึกแบบออฟไลน์โดยอัตโนมัติเมื่ออุปกรณ์ของคุณเชื่อมต่อ';
 
   @override
@@ -8681,6 +8675,28 @@ class AppLocalizationsTh extends AppLocalizations {
   String get deleteReasonOther => 'อื่นๆ';
 
   @override
+  String get deletePauseInsteadTitle => 'พัก Omi แทนไหม?';
+
+  @override
+  String get deletePauseInsteadSubtitle => 'หยุดบันทึกและเก็บทุกอย่างไว้ กลับมาเมื่อไรก็ได้';
+
+  @override
+  String get deletePauseRecordingLine => 'การบันทึกจะหยุดลง ระหว่างที่คุณไม่อยู่จะไม่มีการบันทึกข้อมูลใหม่';
+
+  @override
+  String get deletePauseKeepLine => 'ความทรงจำ บทสนทนา และแอปของคุณจะคงเดิมทุกประการ';
+
+  @override
+  String get deletePauseReturnLine =>
+      'คุณยังคงลงชื่อเข้าใช้ไว้ กลับมาบันทึกต่อเมื่อไรก็ได้ การสมัครสมาชิกจะไม่เปลี่ยนแปลง';
+
+  @override
+  String get pauseOmiButton => 'พัก Omi';
+
+  @override
+  String get continueDeletingButton => 'ลบต่อไป';
+
+  @override
   String get deleteFlowFeedbackTitle => 'บอกเราเพิ่มเติม';
 
   @override
@@ -8700,6 +8716,28 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get deleteConsequenceNoRecovery => 'บัญชีของคุณไม่สามารถกู้คืนได้ — แม้แต่ทีมสนับสนุนก็ไม่สามารถทำได้';
+
+  @override
+  String deletePendingRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'มี $count รายการบันทึกที่ยังประมวลผลอยู่ หากลบตอนนี้ รายการเหล่านี้จะหายไป',
+      one: 'มี 1 รายการบันทึกที่ยังประมวลผลอยู่ หากลบตอนนี้ รายการนี้จะหายไป',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteGracePeriodNotice(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'ลงชื่อเข้าใช้อีกครั้งภายใน $days วันเพื่อกู้คืนบัญชี',
+      one: 'ลงชื่อเข้าใช้อีกครั้งภายใน 1 วันเพื่อกู้คืนบัญชี',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get deleteTypeToConfirm => 'พิมพ์ DELETE เพื่อยืนยัน';
@@ -9001,14 +9039,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'รออินเทอร์เน็ต';
-
-  @override
-  String get syncStallAlertTitle => 'Omi ไม่ได้ซิงค์';
-
-  @override
-  String syncStallAlertBody(int hours) {
-    return 'ไม่มีการบันทึกจาก Omi ของคุณถูกซิงค์เป็นเวลาเกิน $hours ชั่วโมง เปิด Omi เพื่อตรวจสอบการเชื่อมต่อของอุปกรณ์';
-  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13623,14 +13653,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get activityAttentionStorageSubtitle => 'การบันทึกหยุดชั่วคราว';
 
   @override
-  String get activityAttentionSyncStalledTitle => 'Omi ไม่ได้ซิงค์';
-
-  @override
-  String activityAttentionSyncStalledSubtitle(int hours) {
-    return 'ไม่มีการบันทึกที่ซิงค์เป็นเวลาเกิน $hours ชั่วโมง';
-  }
-
-  @override
   String get activityAttentionUploadStalledTitle => 'การอัปโหลดหยุดชะงัก';
 
   @override
@@ -14658,5 +14680,181 @@ class AppLocalizationsTh extends AppLocalizations {
       one: 'ซ่อนคลิปสั้น 1 รายการ',
     );
     return '$_temp0';
+  }
+
+  @override
+  String deleteLocalRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'ยังไม่ได้อัปโหลด $count รายการบันทึก หากลบตอนนี้ รายการเหล่านี้จะหายไป — เปิดแอปค้างไว้เพื่ออัปโหลดให้เสร็จ',
+      one: 'ยังไม่ได้อัปโหลด 1 รายการบันทึก หากลบตอนนี้ รายการนี้จะหายไป — เปิดแอปค้างไว้เพื่ออัปโหลดให้เสร็จ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConfirmGraceSubtitle => 'ตรวจสอบว่าจะเกิดอะไรขึ้นกับข้อมูลของคุณก่อนออกจากระบบ';
+
+  @override
+  String get deletePauseConfirmation => 'พัก Omi แล้ว กลับมาบันทึกต่อเมื่อไรก็ได้';
+
+  @override
+  String deleteProcessingKept(int count, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'การบันทึก $count รายการยังประมวลผลอยู่ โดยจะเก็บไว้ในบัญชีของคุณอีก ',
+      one: 'การบันทึก 1 รายการยังประมวลผลอยู่ โดยจะเก็บไว้ในบัญชีของคุณอีก ',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days วัน.',
+      one: '1 วัน.',
+    );
+    return '$_temp0$_temp1';
+  }
+
+  @override
+  String deleteDataErasedAfterDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'ความทรงจำและบทสนทนาของคุณจะถูกลบหลังจาก $days วัน',
+      one: 'ความทรงจำและบทสนทนาของคุณจะถูกลบหลังจาก 1 วัน',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteAppsDisconnectImmediately => 'แอปและการเชื่อมต่อของคุณจะถูกยกเลิกทันที';
+
+  @override
+  String get deleteSubscriptionImmediately => 'การสมัครสมาชิกของคุณจะถูกยกเลิกทันที';
+
+  @override
+  String get deleteRestoreTitle => 'บัญชีของคุณอยู่ระหว่างรอลบ';
+
+  @override
+  String get deleteRestoreSubtitle => 'เปลี่ยนใจแล้วหรือไม่? กู้คืนบัญชีก่อนที่ข้อมูลจะถูกลบ';
+
+  @override
+  String get deleteRestoreKeepData => 'กู้คืนความทรงจำและบทสนทนาของคุณ';
+
+  @override
+  String get deleteRestoreBillingNotice =>
+      'การสมัครสมาชิกของคุณยังคงถูกยกเลิก หลังจากกู้คืนแล้ว ให้เชื่อมต่อแอปและการเชื่อมต่ออีกครั้ง';
+
+  @override
+  String deleteRestoreDaysRemaining(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'คุณเหลือเวลาอีก $days วันในการกู้คืนบัญชีของคุณ',
+      one: 'คุณเหลือเวลาอีก 1 วันในการกู้คืนบัญชีของคุณ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteRestoreButton => 'กู้คืนบัญชีของฉัน';
+
+  @override
+  String get deleteFinishButton => 'ลบให้เสร็จ';
+
+  @override
+  String get deleteFinishNowButton => 'ลบบัญชีของฉันทันที';
+
+  @override
+  String get deleteFinishNowWarning =>
+      'การดำเนินการนี้จะสิ้นสุดช่วงเวลากู้คืน บัญชีและรายการบันทึกทั้งหมดจะถูกลบอย่างถาวร';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'คุณเหลือเวลาไม่ถึง 1 วันในการกู้คืนบัญชีของคุณ';
+
+  @override
+  String get deleteFinishNowTitle => 'ลบบัญชีของคุณ?';
+
+  @override
+  String get syncHealthAlerts => 'การแจ้งเตือนสถานะการซิงค์';
+
+  @override
+  String get syncHealthAlertsDescription => 'แจ้งเตือนหาก Omi ไม่ได้ซิงค์การบันทึกเป็นเวลาเกินหนึ่งวัน';
+
+  @override
+  String get syncStallAlertTitle => 'Omi ไม่ได้ซิงค์';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'ไม่มีการบันทึกจาก Omi ของคุณถูกซิงค์เป็นเวลาเกิน $hours ชั่วโมง เปิด Omi เพื่อตรวจสอบการเชื่อมต่อของอุปกรณ์';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi ไม่ได้ซิงค์';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'ไม่มีการบันทึกที่ซิงค์เป็นเวลาเกิน $hours ชั่วโมง';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'สรุปรายวันในหน้าหลัก';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'แสดงสรุปล่าสุดของคุณที่ด้านบนของหน้าหลัก';
+
+  @override
+  String get yearlySwitchTitle => 'เปลี่ยนเป็นรายปี';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'ประหยัด $amount ต่อปี';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'ประหยัด $amount ต่อปีเมื่อจ่ายรายปี';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'แพ็กเกจเดิม จ่ายปีละครั้ง';
+
+  @override
+  String get yearlySwitchPlanLabel => 'แพ็กเกจ';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan $price ต่อปี';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'ชำระวันนี้';
+
+  @override
+  String get yearlySwitchRenews => 'ต่ออายุ';
+
+  @override
+  String get yearlySwitchCreditNote => 'รวมเครดิตสำหรับช่วงที่เหลือของเดือนนี้แล้ว';
+
+  @override
+  String get yearlySwitchDeclined => 'การชำระเงินถูกปฏิเสธ คุณยังจ่ายแบบรายเดือนอยู่';
+
+  @override
+  String get yearlySwitchFailed => 'เปลี่ยนไม่สำเร็จ คุณยังจ่ายแบบรายเดือนอยู่';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'โหลดราคาไม่ได้';
+
+  @override
+  String get yearlySwitchUnavailable => 'ตอนนี้แพ็กเกจของคุณยังจ่ายรายปีไม่ได้';
+
+  @override
+  String get yearlySwitchDoneTitle => 'ตอนนี้คุณจ่ายแบบรายปีแล้ว';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'เรียกเก็บ $amount วันนี้ ต่ออายุ $date';
   }
 }

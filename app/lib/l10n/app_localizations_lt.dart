@@ -428,12 +428,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get autoSync => 'Automatinis sinchronizavimas';
 
   @override
-  String get syncHealthAlerts => 'Sinchronizavimo būsenos įspėjimai';
-
-  @override
-  String get syncHealthAlertsDescription => 'Įspėti, jei Omi daugiau nei parą nesinchronizavo įrašų';
-
-  @override
   String get autoSyncDescription =>
       'Automatiškai sinchronizuoti neprisijungus įrašytus įrašus, kai prijungiamas įrenginys';
 
@@ -8734,6 +8728,27 @@ class AppLocalizationsLt extends AppLocalizations {
   String get deleteReasonOther => 'Kita';
 
   @override
+  String get deletePauseInsteadTitle => 'Gal pristabdyti Omi?';
+
+  @override
+  String get deletePauseInsteadSubtitle => 'Sustabdykite įrašymą ir išsaugokite viską. Grįžkite bet kada.';
+
+  @override
+  String get deletePauseRecordingLine => 'Įrašymas sustabdomas. Kol jūsų nėra, nieko naujo neįrašoma.';
+
+  @override
+  String get deletePauseKeepLine => 'Jūsų prisiminimai, pokalbiai ir programėlės išsaugomi tokie, kokie yra.';
+
+  @override
+  String get deletePauseReturnLine => 'Liksite prisijungę. Galite bet kada tęsti įrašymą. Jūsų prenumerata nesikeis.';
+
+  @override
+  String get pauseOmiButton => 'Pristabdyti Omi';
+
+  @override
+  String get continueDeletingButton => 'Tęsti trynimą';
+
+  @override
   String get deleteFlowFeedbackTitle => 'Papasakok daugiau';
 
   @override
@@ -8753,6 +8768,28 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get deleteConsequenceNoRecovery => 'Tavo paskyros negalima atkurti — net ir palaikymo komandai.';
+
+  @override
+  String deletePendingRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Vis dar apdorojama $count įrašų. Ištrynus dabar jie bus prarasti.',
+      one: 'Vis dar apdorojamas 1 įrašas. Ištrynus dabar jis bus prarastas.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteGracePeriodNotice(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Prisijunkite dar kartą per $days dienų, kad atkurtumėte paskyrą.',
+      one: 'Prisijunkite dar kartą per 1 dieną, kad atkurtumėte paskyrą.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get deleteTypeToConfirm => 'Norėdami patvirtinti, įveskite DELETE';
@@ -9059,14 +9096,6 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'Laukiama interneto';
-
-  @override
-  String get syncStallAlertTitle => 'Omi nesinchronizuojama';
-
-  @override
-  String syncStallAlertBody(int hours) {
-    return 'Dažiau nei $hours val. iš jūsų Omi nesinchronizuotas nė vienas įrašas. Atidarykite Omi ir patikrinkite įrenginio ryšį.';
-  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13714,14 +13743,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get activityAttentionStorageSubtitle => 'Įrašai pristabdyti';
 
   @override
-  String get activityAttentionSyncStalledTitle => 'Omi nesinchronizuojama';
-
-  @override
-  String activityAttentionSyncStalledSubtitle(int hours) {
-    return 'Dažiau nei $hours val. nesinchronizuotas nė vienas įrašas';
-  }
-
-  @override
   String get activityAttentionUploadStalledTitle => 'Įkėlimas sustojo';
 
   @override
@@ -14753,5 +14774,182 @@ class AppLocalizationsLt extends AppLocalizations {
       one: 'Slėpti 1 trumpą įrašą',
     );
     return '$_temp0';
+  }
+
+  @override
+  String deleteLocalRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count įrašų dar neįkelta. Ištrynus dabar jie bus prarasti — palikite programėlę atidarytą, kol įkėlimas bus baigtas.',
+      one:
+          '1 įrašas dar neįkeltas. Ištrynus dabar jis bus prarastas — palikite programėlę atidarytą, kol įkėlimas bus baigtas.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConfirmGraceSubtitle => 'Prieš išeidami peržiūrėkite, kas nutiks jūsų duomenims.';
+
+  @override
+  String get deletePauseConfirmation => 'Omi pristabdytas. Galite bet kada tęsti įrašymą.';
+
+  @override
+  String deleteProcessingKept(int count, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Dar apdorojama $count įrašų. Jie jūsų paskyroje bus saugomi dar ',
+      one: '1 įrašas vis dar apdorojamas. Jis jūsų paskyroje bus saugomas dar ',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days dienas.',
+      one: '1 dieną.',
+    );
+    return '$_temp0$_temp1';
+  }
+
+  @override
+  String deleteDataErasedAfterDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Jūsų prisiminimai ir pokalbiai bus ištrinti po $days dienų.',
+      one: 'Jūsų prisiminimai ir pokalbiai bus ištrinti po 1 dienos.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteAppsDisconnectImmediately => 'Jūsų programėlės ir integracijos bus išjungtos iš karto.';
+
+  @override
+  String get deleteSubscriptionImmediately => 'Jūsų prenumerata bus atšaukta iš karto.';
+
+  @override
+  String get deleteRestoreTitle => 'Jūsų paskyra laukia ištrynimo';
+
+  @override
+  String get deleteRestoreSubtitle => 'Persigalvojote? Atkurkite paskyrą, kol ji dar neištrinta.';
+
+  @override
+  String get deleteRestoreKeepData => 'Atkurkite savo prisiminimus ir pokalbius.';
+
+  @override
+  String get deleteRestoreBillingNotice =>
+      'Jūsų prenumerata liks atšaukta. Atkūrę paskyrą iš naujo prijunkite programėles ir integracijas.';
+
+  @override
+  String deleteRestoreDaysRemaining(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Paskyrai atkurti liko $days dienų.',
+      one: 'Paskyrai atkurti liko 1 diena.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteRestoreButton => 'Atkurti mano paskyrą';
+
+  @override
+  String get deleteFinishButton => 'Baigti ištrynimą';
+
+  @override
+  String get deleteFinishNowButton => 'Ištrinti mano paskyrą dabar';
+
+  @override
+  String get deleteFinishNowWarning =>
+      'Taip baigsis paskyros atkūrimo laikotarpis. Jūsų paskyra ir joje esantys įrašai bus ištrinti visam laikui.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Paskyrai atkurti liko mažiau nei viena diena.';
+
+  @override
+  String get deleteFinishNowTitle => 'Ištrinti jūsų paskyrą?';
+
+  @override
+  String get syncHealthAlerts => 'Sinchronizavimo būsenos įspėjimai';
+
+  @override
+  String get syncHealthAlertsDescription => 'Įspėti, jei Omi daugiau nei parą nesinchronizavo įrašų';
+
+  @override
+  String get syncStallAlertTitle => 'Omi nesinchronizuojama';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Dažiau nei $hours val. iš jūsų Omi nesinchronizuotas nė vienas įrašas. Atidarykite Omi ir patikrinkite įrenginio ryšį.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi nesinchronizuojama';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Dažiau nei $hours val. nesinchronizuotas nė vienas įrašas';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Dienos apžvalgos pradžios ekrane';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Rodyti naujausias apžvalgas pradžios ekrano viršuje.';
+
+  @override
+  String get yearlySwitchTitle => 'Pereiti prie metinio';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Sutaupykite $amount per metus';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Sutaupykite $amount per metus mokėdami kas metus';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Tas pats planas, mokama kartą per metus';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Planas';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price per metus';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Mokėti šiandien';
+
+  @override
+  String get yearlySwitchRenews => 'Atnaujinama';
+
+  @override
+  String get yearlySwitchCreditNote => 'Įskaičiuotas kreditas už likusią šio mėnesio dalį.';
+
+  @override
+  String get yearlySwitchDeclined => 'Mokėjimas atmestas. Toliau mokate kas mėnesį.';
+
+  @override
+  String get yearlySwitchFailed => 'Nepavyko pereiti. Toliau mokate kas mėnesį.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Nepavyko įkelti kainos.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Metinis mokėjimas jūsų planui šiuo metu negalimas.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Dabar mokate kas metus';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Šiandien nuskaičiuota $amount. Atnaujinama $date.';
   }
 }

@@ -37,6 +37,8 @@ import 'package:omi/pages/conversations/widgets/noise_fold_line.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
 import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
+import 'package:omi/pages/home/widgets/home_daily_recaps_setting.dart';
+import 'package:omi/pages/settings/widgets/yearly_switch.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -294,7 +296,7 @@ List<ServerConversation>? _lockedRunAt(List<_ConversationListRow> rows, int inde
   return [for (var i = index; i < end; i++) rows[i].conversation!];
 }
 
-/// Home: the live capture row, the Daily Recaps row, then every conversation, newest first, loading
+/// Home: the live capture row, the Daily Recaps row (when on), then every conversation, newest first, loading
 /// more as it scrolls. Search, folders, starred and places live in the search overlay the header's
 /// search button opens, so this list is never filtered in place.
 class ConversationsPage extends StatefulWidget {
@@ -348,6 +350,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   @override
   void initState() {
     super.initState();
+    HomeDailyRecapsSetting.reload();
     _scheduleDayRollover();
     _pendingWork.addListener(_onPendingWorkChanged);
     unawaited(_pendingWork.refresh());
@@ -650,14 +653,21 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
               // Review absorbs the voice prompts; the old card shows only while Review is off.
               const SliverToBoxAdapter(child: ReviewEntryCard()),
+              // Opt-in from Developer Settings. Hidden, the row is not mounted, so nothing is fetched.
               SliverToBoxAdapter(
-                child: widget.loadRecaps == null
-                    ? HomeDailyRecaps(key: _recapsKey)
-                    : HomeDailyRecaps(key: _recapsKey, load: widget.loadRecaps!),
+                child: ValueListenableBuilder<bool>(
+                  valueListenable: HomeDailyRecapsSetting.listenable,
+                  builder: (context, shown, _) => !shown
+                      ? const SizedBox.shrink()
+                      : widget.loadRecaps == null
+                          ? HomeDailyRecaps(key: _recapsKey)
+                          : HomeDailyRecaps(key: _recapsKey, load: widget.loadRecaps!),
+                ),
               ),
               // Phone-local recordings stay with their conversations. Device catch-up lives on Device.
               const SliverToBoxAdapter(child: OnDeviceQueueBanner()),
               const SliverToBoxAdapter(child: HeldAudioHomeSection()),
+              const SliverToBoxAdapter(child: YearlySwitchHomeRow()),
               // With no list yet, the live episode opens Today itself.
               if (episodeLive && builtRows.isEmpty)
                 SliverToBoxAdapter(

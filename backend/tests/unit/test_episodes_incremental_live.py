@@ -1,7 +1,9 @@
 """The cheap per-moment call, the Jev boundary question, and live moment detection."""
 
 import asyncio
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -59,6 +61,94 @@ def test_run_incremental_update_reports_tokens_and_parses():
     assert seen[0][0] == 'uid'
 
 
+def test_synthetic_moment_quality_replays():
+    fixture = Path(__file__).parent / 'fixtures' / 'episodes' / 'moment_quality_replays.json'
+    for replay in json.loads(fixture.read_text()):
+        update = incremental.parse_update(json.dumps({'bullets': replay['bullets']}), known_item_ids=[])
+        assert incremental.validate_moment_output(update, replay['transcript']) == tuple(replay['issues']), replay[
+            'name'
+        ]
+
+
+def test_quality_validator_retries_once_and_counts_both_model_calls():
+    seen = []
+
+    def invoke(uid, messages):
+        seen.append(messages)
+        bullet = (
+            'No, do not send us again. Okay, where should I send?'
+            if len(seen) == 1
+            else 'The group reconsidered the invitation destination.'
+        )
+        return SimpleNamespace(
+            content=json.dumps({'title': 'Invitation', 'bullets': [bullet]}),
+            usage_metadata={'input_tokens': 100, 'output_tokens': 20},
+        )
+
+    result = incremental.run_incremental_update(
+        'uid',
+        '{}',
+        'Others: No, do not send us again. Okay, where should I send?',
+        known_item_ids=[],
+        now=NOW,
+        tz_name='UTC',
+        invoke=invoke,
+    )
+    assert len(seen) == 2
+    assert 'Quality correction required' in seen[1][1][1]
+    assert result.update.bullets == ['The group reconsidered the invitation destination.']
+    assert (result.model_calls, result.input_tokens, result.output_tokens) == (2, 200, 40)
+
+
+def test_quality_validator_rejects_after_one_bounded_retry():
+    seen = []
+
+    def invoke(uid, messages):
+        seen.append(messages)
+        return SimpleNamespace(
+            content=json.dumps({'bullets': ['No, do not send us again. Okay, where should I send?']}),
+            usage_metadata={'input_tokens': 100, 'output_tokens': 20},
+        )
+
+    with pytest.raises(incremental.ModelCallFailed) as raised:
+        incremental.run_incremental_update(
+            'uid',
+            '{}',
+            'Others: No, do not send us again. Okay, where should I send?',
+            known_item_ids=[],
+            now=NOW,
+            tz_name='UTC',
+            invoke=invoke,
+        )
+    assert raised.value.outcome == 'quality_error'
+    assert (raised.value.model_calls, raised.value.input_tokens, raised.value.output_tokens) == (2, 200, 40)
+    assert len(seen) == 2
+
+
+def test_validator_kill_switch_restores_single_call_output(monkeypatch):
+    monkeypatch.setenv(config.EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV, 'off')
+    seen = []
+
+    def invoke(uid, messages):
+        seen.append(messages)
+        return SimpleNamespace(
+            content=json.dumps({'bullets': ['No, do not send us again. Okay, where should I send?']}),
+            usage_metadata={'input_tokens': 100, 'output_tokens': 20},
+        )
+
+    result = incremental.run_incremental_update(
+        'uid',
+        '{}',
+        'Others: No, do not send us again. Okay, where should I send?',
+        known_item_ids=[],
+        now=NOW,
+        tz_name='UTC',
+        invoke=invoke,
+    )
+    assert len(seen) == 1
+    assert result.update.bullets == ['No, do not send us again. Okay, where should I send?']
+
+
 @pytest.mark.parametrize(
     'invoke,outcome',
     [
@@ -109,7 +199,7 @@ def _segs(words, *, text='word'):
     return [{'text': ' '.join([text] * words)}]
 
 
-def test_tracker_flushes_on_pause_rollover_and_conversation_change():
+def test_tracker_flushes_on_pause_and_word_budget_but_carries_conversation_changes():
     tracker = MomentTracker()
     assert tracker.observe('u', _segs(30), 'c1', 'omi', now=1000) == []
     # A short gap keeps accumulating.
@@ -118,9 +208,11 @@ def test_tracker_flushes_on_pause_rollover_and_conversation_change():
     assert [m.trigger for m in paused] == ['pause'] and len(paused[0].segments) == 2
     # The new batch starts the next moment.
     moved = tracker.observe('u', _segs(5), 'c2', 'omi', now=1100)
-    assert [(m.trigger, m.conversation_id) for m in moved] == [('rollover', 'c1')]
+    assert moved == []
     big = tracker.observe('u', _segs(config.MOMENT_MAX_WORDS), 'c2', 'omi', now=1110)
     assert [m.trigger for m in big] == ['rollover'] and big[0].conversation_id == 'c2'
+    assert [fragment.conversation_id for fragment in big[0].carried] == ['c1']
+    assert len(big[0].segments) == 2 and len(big[0].carried[0].segments) == 1
     assert tracker.observe('u', [], None, 'omi', now=1120) == []
 
 
@@ -160,7 +252,7 @@ def test_on_realtime_segments_schedules_a_background_update(monkeypatch):
     monkeypatch.setattr(live.time, 'time', lambda: 1000.0)
     monkeypatch.setattr(live.time, 'monotonic', lambda: 1000.0)
     asyncio.run(live.on_realtime_segments('u', _segs(3), 'c2', 'omi'))
-    # The new conversation attaches at its first words; the old one's moment ends.
+    # The new conversation attaches at its first words; the old buffer folds into this moment.
     assert scheduled == ['episode_attach', 'episode_moment']
     asyncio.run(live.on_realtime_segments('u', _segs(3), 'c2', 'omi'))
     # Activity is independent of the word budget, coalesced to one write a minute.
@@ -197,25 +289,77 @@ def test_steady_talk_ends_a_moment_on_the_interval():
     assert (ended[0].ended_at - ended[0].started_at).total_seconds() >= config.MOMENT_MAX_SECONDS
 
 
-def test_session_end_flushes_the_buffer(monkeypatch):
+def test_session_end_retains_the_buffer_until_next_moment_or_finalization(monkeypatch):
     tracker = MomentTracker()
     tracker.observe('u', _segs(30), 'c1', 'omi', now=0)
     # Another session's conversation (a parallel capture on this pod) keeps its buffer.
     assert tracker.flush('u', 'c-other') is None
-    moment = tracker.flush('u', 'c1')
-    assert moment.trigger == 'session_end' and moment.conversation_id == 'c1'
-    assert tracker.flush('u', 'c1') is None and tracker.flush('u', None) is None
 
     scheduled = []
     monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
+    monkeypatch.setenv(config.EPISODE_CARRY_ON_SESSION_END_ENV, 'off')
     monkeypatch.setattr(live, 'tracker', tracker)
     monkeypatch.setattr(
         live.executors, 'start_background_task', lambda coro, *, name: scheduled.append(name) or coro.close()
     )
-    tracker.observe('u', _segs(30), 'c1', 'omi', now=0)
     asyncio.run(live.on_session_end('u', 'c1'))
     asyncio.run(live.on_session_end('u', 'c1'))
-    assert scheduled == ['episode_moment']
+    assert scheduled == [] and tracker._buffers['u'].session_ended
+    resumed = tracker.observe('u', _segs(30), 'c1', 'omi', now=config.MOMENT_MAX_SECONDS)
+    assert [moment.trigger for moment in resumed] == ['interval']
+    assert len(resumed[0].segments) == 2 and resumed[0].carried == ()
+
+    tracker.observe('u', _segs(10), 'c1', 'omi', now=500)
+    pending = tracker.flush('u', 'c1')
+    assert pending is not None and pending.trigger == 'finalize' and pending.conversation_id == 'c1'
+    assert tracker.flush('u', 'c1') is None and tracker.flush('u', None) is None
+
+
+def test_session_end_flushes_after_app_kill_when_the_session_is_gone(monkeypatch):
+    tracker = MomentTracker()
+    tracker.observe('u', _segs(3), 'c1', 'omi', now=100)
+    scheduled = []
+    delivered = []
+    monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
+    monkeypatch.delenv(config.EPISODE_CARRY_ON_SESSION_END_ENV, raising=False)
+    monkeypatch.setattr(live, 'tracker', tracker)
+
+    async def no_wait(_seconds):
+        return None
+
+    def fake_moment(uid, moment):
+        delivered.append(moment)
+
+        async def finish():
+            return 'applied'
+
+        return finish()
+
+    monkeypatch.setattr(live.asyncio, 'sleep', no_wait)
+    monkeypatch.setattr(live, '_moment_if_client_seen', fake_moment)
+    monkeypatch.setattr(live.executors, 'start_background_task', lambda coro, *, name: scheduled.append((name, coro)))
+
+    asyncio.run(live.on_session_end('u', 'c1'))
+    assert [name for name, _ in scheduled] == ['episode_session_end_flush']
+    asyncio.run(scheduled.pop()[1])
+    assert len(delivered) == 1
+    assert delivered[0].trigger == 'session_end' and len(delivered[0].segments) == 1
+    assert 'u' not in tracker._buffers
+    assert scheduled == []
+
+
+def test_session_end_timeout_is_fenced_by_reconnect_and_later_end(monkeypatch):
+    tracker = MomentTracker()
+    tracker.observe('u', _segs(3), 'c1', 'omi', now=100)
+    first = tracker.mark_session_end('u', 'c1')
+    assert first is not None
+    tracker.observe('u', _segs(3), 'c1', 'omi', now=110)
+    assert tracker.flush_session_end('u', 'c1', first) is None
+    second = tracker.mark_session_end('u', 'c1')
+    assert second is not None and second != first
+    pending = tracker.flush_session_end('u', 'c1', second)
+    assert pending is not None and pending.trigger == 'session_end'
+    assert len(pending.segments) == 2
 
 
 def test_alternating_devices_attach_each_conversation_once():

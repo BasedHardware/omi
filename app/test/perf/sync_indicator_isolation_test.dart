@@ -103,6 +103,12 @@ class _Sync extends ChangeNotifier implements SyncProvider {
     return wals;
   }
 
+  @override
+  List<Wal> get pendingWorkWals {
+    inventoryReads++;
+    return wals;
+  }
+
   int inventoryReads = 0;
   final wals = <Wal>[];
   @override

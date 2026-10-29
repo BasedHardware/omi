@@ -21,6 +21,16 @@ LivePreviewLine line(String id, int start, int end, {String text = 'same words'}
     LivePreviewLine(id: id, text: text, isFinal: true, startedAt: at(start), endedAt: at(end), firstSeenAt: at(start));
 
 void main() {
+  test('prepared coverage reuses a final snapshot across preview revisions', () {
+    final finals = [finalAt(0, 4)];
+    final coverage = LivePreviewCoverage.forFinals(finals, origin);
+    expect(coverage.excludeCovered([line('covered', 0, 4), line('tail', 4, 8)]).map((l) => l.id), ['tail']);
+    finals.clear(); // No further final-history reads are needed by the prepared snapshot.
+    expect(coverage.excludeCovered([line('covered', 0, 4), line('revised-tail', 4, 10)]).map((l) => l.id),
+        ['revised-tail']);
+    expect(LivePreviewCoverage.forFinals(finals, origin).excludeCovered([line('covered', 0, 4)]), hasLength(1));
+  });
+
   test('coverage uses audio time, preserving repeated words at a different time', () {
     final lines = [line('earlier', 0, 4), line('repeat', 8, 12)];
     expect(LivePreviewCoverage.uncovered(lines, [finalAt(0, 4)], origin).map((l) => l.id), ['repeat']);

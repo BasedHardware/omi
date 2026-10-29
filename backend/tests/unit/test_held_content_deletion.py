@@ -134,6 +134,8 @@ def test_account_wipe_enumerates_custody_and_choice_subcollections_even_without_
     client.collection.return_value.document.return_value = user
     monkeypatch.setattr(batch_pipeline_purge, 'purge_batch_owner', lambda uid: None)
     monkeypatch.setattr(user_data_deletion, 'get_data_plane_firestore_client', lambda: Mock())
+    monkeypatch.setattr(user_data_deletion, 'search_apps_db', lambda _uid, my_apps: [])
+    monkeypatch.setattr(user_data_deletion, 'delete_generic_cache', lambda _key: None)
     recursive = Mock()
     retirements = []
     monkeypatch.setattr(

@@ -428,13 +428,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get autoSync => 'ಸ್ವಯಂಚಾಲಿತ ಸಿಂಕ್';
 
   @override
-  String get syncHealthAlerts => 'ಸಿಂಕ್ ಆರೋಗ್ಯ ಎಚ್ಚರಿಕೆಗಳು';
-
-  @override
-  String get syncHealthAlertsDescription =>
-      'Omi ಒಂದು ದಿನಕ್ಕಿಂತ ಹೆಚ್ಚು ಕಾಲ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಸಿಂಕ್ ಮಾಡದಿದ್ದರೆ ಎಚ್ಚರಿಸಿ';
-
-  @override
   String get autoSyncDescription => 'ನಿಮ್ಮ ಸಾಧನ ಸಂಪರ್ಕಗೊಂಡಾಗ ಆಫ್‌ಲೈನ್ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಸಿಂಕ್ ಮಾಡಿ';
 
   @override
@@ -8759,6 +8752,28 @@ class AppLocalizationsKn extends AppLocalizations {
   String get deleteReasonOther => 'ಇತರೆ';
 
   @override
+  String get deletePauseInsteadTitle => 'ಬದಲಿಗೆ Omi ಅನ್ನು ವಿರಾಮಗೊಳಿಸಬೇಕೇ?';
+
+  @override
+  String get deletePauseInsteadSubtitle => 'ರೆಕಾರ್ಡಿಂಗ್ ನಿಲ್ಲಿಸಿ, ಎಲ್ಲವನ್ನೂ ಹಾಗೆಯೇ ಉಳಿಸಿ. ಯಾವಾಗ ಬೇಕಾದರೂ ಹಿಂತಿರುಗಿ.';
+
+  @override
+  String get deletePauseRecordingLine => 'ರೆಕಾರ್ಡಿಂಗ್ ನಿಲ್ಲುತ್ತದೆ. ನೀವು ದೂರವಿರುವಾಗ ಹೊಸದನ್ನು ಯಾವುದನ್ನೂ ದಾಖಲಿಸುವುದಿಲ್ಲ.';
+
+  @override
+  String get deletePauseKeepLine => 'ನಿಮ್ಮ ನೆನಪುಗಳು, ಸಂವಾದಗಳು ಮತ್ತು ಆ್ಯಪ್‌ಗಳು ಇದ್ದಂತೆಯೇ ಉಳಿಯುತ್ತವೆ.';
+
+  @override
+  String get deletePauseReturnLine =>
+      'ನೀವು ಸೈನ್ ಇನ್ ಆಗಿಯೇ ಇರುತ್ತೀರಿ. ಯಾವಾಗ ಬೇಕಾದರೂ ರೆಕಾರ್ಡಿಂಗ್ ಮುಂದುವರಿಸಿ. ನಿಮ್ಮ ಚಂದಾದಾರಿಕೆ ಬದಲಾಗದೆ ಮುಂದುವರಿಯುತ್ತದೆ.';
+
+  @override
+  String get pauseOmiButton => 'Omi ಅನ್ನು ವಿರಾಮಗೊಳಿಸಿ';
+
+  @override
+  String get continueDeletingButton => 'ಅಳಿಸುವುದನ್ನು ಮುಂದುವರಿಸಿ';
+
+  @override
   String get deleteFlowFeedbackTitle => 'ಹೆಚ್ಚು ಹೇಳಿ';
 
   @override
@@ -8778,6 +8793,28 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get deleteConsequenceNoRecovery => 'ನಿಮ್ಮ ಖಾತೆಯನ್ನು ಮರುಸ್ಥಾಪಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ — ಬೆಂಬಲದಿಂದಲೂ ಸಾಧ್ಯವಿಲ್ಲ.';
+
+  @override
+  String deletePendingRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆಯಲ್ಲಿವೆ. ಈಗ ಅಳಿಸಿದರೆ ಅವು ಕಳೆದುಹೋಗುತ್ತವೆ.',
+      one: '1 ರೆಕಾರ್ಡಿಂಗ್ ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆಯಲ್ಲಿದೆ. ಈಗ ಅಳಿಸಿದರೆ ಅದು ಕಳೆದುಹೋಗುತ್ತದೆ.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteGracePeriodNotice(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'ನಿಮ್ಮ ಖಾತೆಯನ್ನು ಮರುಸ್ಥಾಪಿಸಲು $days ದಿನಗಳೊಳಗೆ ಮತ್ತೆ ಸೈನ್ ಇನ್ ಮಾಡಿ.',
+      one: 'ನಿಮ್ಮ ಖಾತೆಯನ್ನು ಮರುಸ್ಥಾಪಿಸಲು 1 ದಿನದೊಳಗೆ ಮತ್ತೆ ಸೈನ್ ಇನ್ ಮಾಡಿ.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get deleteTypeToConfirm => 'ದೃಢೀಕರಿಸಲು DELETE ಟೈಪ್ ಮಾಡಿ';
@@ -9082,14 +9119,6 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'ಇಂಟರ್ನೆಟ್‌ಗಾಗಿ ಕಾಯುತ್ತಿದೆ';
-
-  @override
-  String get syncStallAlertTitle => 'Omi ಸಿಂಕ್ ಆಗುತ್ತಿಲ್ಲ';
-
-  @override
-  String syncStallAlertBody(int hours) {
-    return '$hours ಗಂಟೆಗಳಿಗಿಂತ ಹೆಚ್ಚು ಕಾಲ ನಿಮ್ಮ Omi ಇಂದ ಯಾವುದೇ ರೆಕಾರ್ಡಿಂಗ್ ಸಿಂಕ್ ಆಗಿಲ್ಲ. ನಿಮ್ಮ ಸಾಧನದ ಸಂಪರ್ಕವನ್ನು ಪರಿಶೀಲಿಸಲು Omi ತೆರೆಯಿರಿ.';
-  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13731,14 +13760,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get activityAttentionStorageSubtitle => 'ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ವಿರಾಮದಲ್ಲಿವೆ';
 
   @override
-  String get activityAttentionSyncStalledTitle => 'Omi ಸಿಂಕ್ ಆಗುತ್ತಿಲ್ಲ';
-
-  @override
-  String activityAttentionSyncStalledSubtitle(int hours) {
-    return '$hours ಗಂಟೆಗಳಿಗಿಂತ ಹೆಚ್ಚು ಕಾಲ ಯಾವುದೇ ರೆಕಾರ್ಡಿಂಗ್ ಸಿಂಕ್ ಆಗಿಲ್ಲ';
-  }
-
-  @override
   String get activityAttentionUploadStalledTitle => 'ಅಪ್‌ಲೋಡ್ ನಿಂತಿದೆ';
 
   @override
@@ -14779,5 +14800,183 @@ class AppLocalizationsKn extends AppLocalizations {
       one: '1 ಸಣ್ಣ ಕ್ಲಿಪ್ ಮರೆಮಾಡಿ',
     );
     return '$_temp0';
+  }
+
+  @override
+  String deleteLocalRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಇನ್ನೂ ಅಪ್‌ಲೋಡ್ ಆಗಿಲ್ಲ. ಈಗ ಅಳಿಸಿದರೆ ಅವು ಕಳೆದುಹೋಗುತ್ತವೆ — ಅಪ್‌ಲೋಡ್ ಪೂರ್ಣಗೊಳ್ಳುವವರೆಗೆ ಆ್ಯಪ್ ತೆರೆಯೇ ಇರಲಿ.',
+      one:
+          '1 ರೆಕಾರ್ಡಿಂಗ್ ಇನ್ನೂ ಅಪ್‌ಲೋಡ್ ಆಗಿಲ್ಲ. ಈಗ ಅಳಿಸಿದರೆ ಅದು ಕಳೆದುಹೋಗುತ್ತದೆ — ಅಪ್‌ಲೋಡ್ ಪೂರ್ಣಗೊಳ್ಳುವವರೆಗೆ ಆ್ಯಪ್ ತೆರೆಯೇ ಇರಲಿ.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConfirmGraceSubtitle => 'ನಿರ್ಗಮಿಸುವ ಮೊದಲು ನಿಮ್ಮ ಡೇಟಾಕ್ಕೆ ಏನಾಗುತ್ತದೆ ಎಂಬುದನ್ನು ಪರಿಶೀಲಿಸಿ.';
+
+  @override
+  String get deletePauseConfirmation => 'Omi ವಿರಾಮದಲ್ಲಿದೆ. ಯಾವಾಗ ಬೇಕಾದರೂ ರೆಕಾರ್ಡಿಂಗ್ ಮುಂದುವರಿಸಿ.';
+
+  @override
+  String deleteProcessingKept(int count, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆಯಲ್ಲಿವೆ. ನಿಮ್ಮ ಖಾತೆಯಲ್ಲಿ ಇಡುವ ಅವಧಿ: ',
+      one: '1 ರೆಕಾರ್ಡಿಂಗ್ ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆಯಲ್ಲಿದೆ. ನಿಮ್ಮ ಖಾತೆಯಲ್ಲಿ ಇಡುವ ಅವಧಿ: ',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days ದಿನಗಳು.',
+      one: '1 ದಿನ.',
+    );
+    return '$_temp0$_temp1';
+  }
+
+  @override
+  String deleteDataErasedAfterDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'ನಿಮ್ಮ ನೆನಪುಗಳು ಮತ್ತು ಸಂವಾದಗಳನ್ನು $days ದಿನಗಳ ನಂತರ ಅಳಿಸಲಾಗುತ್ತದೆ.',
+      one: 'ನಿಮ್ಮ ನೆನಪುಗಳು ಮತ್ತು ಸಂವಾದಗಳನ್ನು 1 ದಿನದ ನಂತರ ಅಳಿಸಲಾಗುತ್ತದೆ.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteAppsDisconnectImmediately => 'ನಿಮ್ಮ ಆ್ಯಪ್‌ಗಳು ಮತ್ತು ಇಂಟಿಗ್ರೇಷನ್‌ಗಳ ಸಂಪರ್ಕ ತಕ್ಷಣ ಕಡಿತಗೊಳ್ಳುತ್ತದೆ.';
+
+  @override
+  String get deleteSubscriptionImmediately => 'ನಿಮ್ಮ ಚಂದಾದಾರಿಕೆಯನ್ನು ತಕ್ಷಣ ರದ್ದುಗೊಳಿಸಲಾಗುತ್ತದೆ.';
+
+  @override
+  String get deleteRestoreTitle => 'ನಿಮ್ಮ ಖಾತೆ ಅಳಿಸುವಿಕೆಗಾಗಿ ಬಾಕಿಯಿದೆ';
+
+  @override
+  String get deleteRestoreSubtitle => 'ಮನಸ್ಸು ಬದಲಾಯಿಸಿದ್ದೀರಾ? ಅಳಿಸುವ ಮೊದಲು ನಿಮ್ಮ ಖಾತೆಯನ್ನು ಮರುಸ್ಥಾಪಿಸಿ.';
+
+  @override
+  String get deleteRestoreKeepData => 'ನಿಮ್ಮ ನೆನಪುಗಳು ಮತ್ತು ಸಂವಾದಗಳನ್ನು ಮರುಸ್ಥಾಪಿಸಿ.';
+
+  @override
+  String get deleteRestoreBillingNotice =>
+      'ನಿಮ್ಮ ಚಂದಾದಾರಿಕೆ ರದ್ದಾಗಿಯೇ ಇರುತ್ತದೆ. ಮರುಸ್ಥಾಪಿಸಿದ ನಂತರ ಆ್ಯಪ್‌ಗಳು ಮತ್ತು ಇಂಟಿಗ್ರೇಷನ್‌ಗಳನ್ನು ಮತ್ತೆ ಸಂಪರ್ಕಿಸಿ.';
+
+  @override
+  String deleteRestoreDaysRemaining(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'ನಿಮ್ಮ ಖಾತೆಯನ್ನು ಮರುಪಡೆಯಲು $days ದಿನಗಳು ಬಾಕಿ ಉಳಿದಿವೆ.',
+      one: 'ನಿಮ್ಮ ಖಾತೆಯನ್ನು ಮರುಪಡೆಯಲು 1 ದಿನ ಬಾಕಿ ಉಳಿದಿದೆ.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteRestoreButton => 'ನನ್ನ ಖಾತೆಯನ್ನು ಮರುಸ್ಥಾಪಿಸಿ';
+
+  @override
+  String get deleteFinishButton => 'ಅಳಿಸುವುದನ್ನು ಪೂರ್ಣಗೊಳಿಸಿ';
+
+  @override
+  String get deleteFinishNowButton => 'ನನ್ನ ಖಾತೆಯನ್ನು ಈಗಲೇ ಅಳಿಸಿ';
+
+  @override
+  String get deleteFinishNowWarning =>
+      'ಇದರಿಂದ ಮರುಸ್ಥಾಪನೆಯ ಅವಧಿ ಮುಗಿಯುತ್ತದೆ. ನಿಮ್ಮ ಖಾತೆ ಮತ್ತು ಅದರ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಶಾಶ್ವತವಾಗಿ ಅಳಿಸಲಾಗುತ್ತದೆ.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'ನಿಮ್ಮ ಖಾತೆಯನ್ನು ಮರುಪಡೆಯಲು ಒಂದು ದಿನಕ್ಕಿಂತ ಕಡಿಮೆ ಸಮಯ ಬಾಕಿ ಉಳಿದಿದೆ.';
+
+  @override
+  String get deleteFinishNowTitle => 'ನಿಮ್ಮ ಖಾತೆಯನ್ನು ಅಳಿಸಬೇಕೆ?';
+
+  @override
+  String get syncHealthAlerts => 'ಸಿಂಕ್ ಆರೋಗ್ಯ ಎಚ್ಚರಿಕೆಗಳು';
+
+  @override
+  String get syncHealthAlertsDescription =>
+      'Omi ಒಂದು ದಿನಕ್ಕಿಂತ ಹೆಚ್ಚು ಕಾಲ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಸಿಂಕ್ ಮಾಡದಿದ್ದರೆ ಎಚ್ಚರಿಸಿ';
+
+  @override
+  String get syncStallAlertTitle => 'Omi ಸಿಂಕ್ ಆಗುತ್ತಿಲ್ಲ';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return '$hours ಗಂಟೆಗಳಿಗಿಂತ ಹೆಚ್ಚು ಕಾಲ ನಿಮ್ಮ Omi ಇಂದ ಯಾವುದೇ ರೆಕಾರ್ಡಿಂಗ್ ಸಿಂಕ್ ಆಗಿಲ್ಲ. ನಿಮ್ಮ ಸಾಧನದ ಸಂಪರ್ಕವನ್ನು ಪರಿಶೀಲಿಸಲು Omi ತೆರೆಯಿರಿ.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi ಸಿಂಕ್ ಆಗುತ್ತಿಲ್ಲ';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return '$hours ಗಂಟೆಗಳಿಗಿಂತ ಹೆಚ್ಚು ಕಾಲ ಯಾವುದೇ ರೆಕಾರ್ಡಿಂಗ್ ಸಿಂಕ್ ಆಗಿಲ್ಲ';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'ಮುಖಪುಟದಲ್ಲಿ ದೈನಿಕ ಸಾರಾಂಶಗಳು';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'ಮುಖಪುಟದ ಮೇಲ್ಭಾಗದಲ್ಲಿ ನಿಮ್ಮ ಇತ್ತೀಚಿನ ಸಾರಾಂಶಗಳನ್ನು ತೋರಿಸಿ.';
+
+  @override
+  String get yearlySwitchTitle => 'ವಾರ್ಷಿಕಕ್ಕೆ ಬದಲಿಸಿ';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'ವರ್ಷಕ್ಕೆ $amount ಉಳಿಸಿ';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'ವಾರ್ಷಿಕ ಪಾವತಿಯಿಂದ ವರ್ಷಕ್ಕೆ $amount ಉಳಿಸಿ';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'ಅದೇ ಯೋಜನೆ, ವರ್ಷಕ್ಕೊಮ್ಮೆ ಪಾವತಿ';
+
+  @override
+  String get yearlySwitchPlanLabel => 'ಯೋಜನೆ';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, ವರ್ಷಕ್ಕೆ $price';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'ಇಂದು ಪಾವತಿ';
+
+  @override
+  String get yearlySwitchRenews => 'ನವೀಕರಣ';
+
+  @override
+  String get yearlySwitchCreditNote => 'ಈ ತಿಂಗಳ ಉಳಿದ ಅವಧಿಯ ಕ್ರೆಡಿಟ್ ಒಳಗೊಂಡಿದೆ.';
+
+  @override
+  String get yearlySwitchDeclined => 'ಪಾವತಿ ನಿರಾಕರಿಸಲಾಗಿದೆ. ನೀವು ಇನ್ನೂ ಮಾಸಿಕ ಯೋಜನೆಯಲ್ಲಿದ್ದೀರಿ.';
+
+  @override
+  String get yearlySwitchFailed => 'ಬದಲಿಸಲು ಆಗಲಿಲ್ಲ. ನೀವು ಇನ್ನೂ ಮಾಸಿಕ ಯೋಜನೆಯಲ್ಲಿದ್ದೀರಿ.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'ನಿಮ್ಮ ಬೆಲೆಯನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ.';
+
+  @override
+  String get yearlySwitchUnavailable => 'ಈಗ ನಿಮ್ಮ ಯೋಜನೆಗೆ ವಾರ್ಷಿಕ ಪಾವತಿ ಲಭ್ಯವಿಲ್ಲ.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'ನೀವು ಈಗ ವಾರ್ಷಿಕ ಯೋಜನೆಯಲ್ಲಿದ್ದೀರಿ';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'ಇಂದು $amount ಶುಲ್ಕ ವಿಧಿಸಲಾಗಿದೆ. ನವೀಕರಣ $date.';
   }
 }

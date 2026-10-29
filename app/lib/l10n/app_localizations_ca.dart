@@ -429,12 +429,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get autoSync => 'Sincronització automàtica';
 
   @override
-  String get syncHealthAlerts => 'Alertes d\'estat de sincronització';
-
-  @override
-  String get syncHealthAlertsDescription => 'Avisa si l\'Omi no ha sincronitzat enregistraments durant més d\'un dia';
-
-  @override
   String get autoSyncDescription =>
       'Sincronitza automàticament els enregistraments fora de línia quan el dispositiu es connecti';
 
@@ -8776,6 +8770,28 @@ class AppLocalizationsCa extends AppLocalizations {
   String get deleteReasonOther => 'Altres';
 
   @override
+  String get deletePauseInsteadTitle => 'Posar Omi en pausa?';
+
+  @override
+  String get deletePauseInsteadSubtitle => 'Atureu la gravació i conserveu-ho tot. Podeu tornar quan vulgueu.';
+
+  @override
+  String get deletePauseRecordingLine => 'La gravació s\'aturarà. Mentre no hi sigueu, no es gravarà res de nou.';
+
+  @override
+  String get deletePauseKeepLine => 'Els vostres records, converses i aplicacions es conservaran tal com estan.';
+
+  @override
+  String get deletePauseReturnLine =>
+      'La sessió continuarà iniciada. Podeu reprendre la gravació quan vulgueu. La subscripció continuarà sense canvis.';
+
+  @override
+  String get pauseOmiButton => 'Posa Omi en pausa';
+
+  @override
+  String get continueDeletingButton => 'Continua eliminant';
+
+  @override
   String get deleteFlowFeedbackTitle => 'Explica\'ns més';
 
   @override
@@ -8795,6 +8811,28 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get deleteConsequenceNoRecovery => 'El teu compte no es pot restaurar — ni tan sols pel suport.';
+
+  @override
+  String deletePendingRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Encara s\'estan processant $count enregistraments. Si els elimineu ara, els perdreu.',
+      one: 'Encara s\'està processant un enregistrament. Si l\'elimineu ara, el perdreu.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteGracePeriodNotice(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Torneu a iniciar la sessió en un termini de $days dies per restaurar el compte.',
+      one: 'Torneu a iniciar la sessió en un dia per restaurar el compte.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get deleteTypeToConfirm => 'Escriu DELETE per confirmar';
@@ -9099,14 +9137,6 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'Esperant connexió';
-
-  @override
-  String get syncStallAlertTitle => 'Omi no se sincronitza';
-
-  @override
-  String syncStallAlertBody(int hours) {
-    return 'Fa més de $hours hores que no se sincronitza cap enregistrament del teu Omi. Obre Omi per comprovar la connexió del dispositiu.';
-  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13759,14 +13789,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get activityAttentionStorageSubtitle => 'Enregistraments en pausa';
 
   @override
-  String get activityAttentionSyncStalledTitle => 'Omi no se sincronitza';
-
-  @override
-  String activityAttentionSyncStalledSubtitle(int hours) {
-    return 'Cap enregistrament sincronitzat fa més de $hours hores';
-  }
-
-  @override
   String get activityAttentionUploadStalledTitle => 'La pujada s\'ha aturat';
 
   @override
@@ -14805,5 +14827,182 @@ class AppLocalizationsCa extends AppLocalizations {
       one: 'Amagar 1 clip curt',
     );
     return '$_temp0';
+  }
+
+  @override
+  String deleteLocalRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Encara no s\'han pujat $count enregistraments. Si els elimineu ara, els perdreu — deixeu l\'aplicació oberta perquè s\'acabin de pujar.',
+      one:
+          'Encara no s\'ha pujat un enregistrament. Si l\'elimineu ara, el perdreu — deixeu l\'aplicació oberta perquè s\'acabi de pujar.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConfirmGraceSubtitle => 'Reviseu què passarà amb les vostres dades abans de marxar.';
+
+  @override
+  String get deletePauseConfirmation => 'Omi està en pausa. Podeu reprendre la gravació quan vulgueu.';
+
+  @override
+  String deleteProcessingKept(int count, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count enregistraments encara s\'estan processant. Es conserven al vostre compte durant ',
+      one: '1 enregistrament encara s\'està processant. Es conserva al vostre compte durant ',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days dies.',
+      one: '1 dia.',
+    );
+    return '$_temp0$_temp1';
+  }
+
+  @override
+  String deleteDataErasedAfterDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Els vostres records i converses s\'esborraran al cap de $days dies.',
+      one: 'Els vostres records i converses s\'esborraran al cap d\'un dia.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteAppsDisconnectImmediately => 'Les aplicacions i integracions es desconnectaran immediatament.';
+
+  @override
+  String get deleteSubscriptionImmediately => 'La subscripció es cancel·larà immediatament.';
+
+  @override
+  String get deleteRestoreTitle => 'El vostre compte està pendent d\'eliminació';
+
+  @override
+  String get deleteRestoreSubtitle => 'Heu canviat d\'opinió? Restaureu el compte abans que s\'esborri.';
+
+  @override
+  String get deleteRestoreKeepData => 'Restaureu els vostres records i converses.';
+
+  @override
+  String get deleteRestoreBillingNotice =>
+      'La subscripció continuarà cancel·lada. Torneu a connectar les aplicacions i integracions després de restaurar el compte.';
+
+  @override
+  String deleteRestoreDaysRemaining(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Teniu $days dies per recuperar el vostre compte.',
+      one: 'Teniu 1 dia per recuperar el vostre compte.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteRestoreButton => 'Restaura el meu compte';
+
+  @override
+  String get deleteFinishButton => 'Acaba d\'eliminar';
+
+  @override
+  String get deleteFinishNowButton => 'Esborra el meu compte ara';
+
+  @override
+  String get deleteFinishNowWarning =>
+      'Això posa fi al període de restauració. El compte i els seus enregistraments s\'esborraran definitivament.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Teniu menys d\'un dia per recuperar el vostre compte.';
+
+  @override
+  String get deleteFinishNowTitle => 'Voleu eliminar el vostre compte?';
+
+  @override
+  String get syncHealthAlerts => 'Alertes d\'estat de sincronització';
+
+  @override
+  String get syncHealthAlertsDescription => 'Avisa si l\'Omi no ha sincronitzat enregistraments durant més d\'un dia';
+
+  @override
+  String get syncStallAlertTitle => 'Omi no se sincronitza';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Fa més de $hours hores que no se sincronitza cap enregistrament del teu Omi. Obre Omi per comprovar la connexió del dispositiu.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi no se sincronitza';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Cap enregistrament sincronitzat fa més de $hours hores';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Resums diaris a l\'Inici';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Mostra els teus resums més recents a dalt de l\'Inici.';
+
+  @override
+  String get yearlySwitchTitle => 'Canvia a anual';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Estalvia $amount l\'any';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Estalvia $amount l\'any amb el pagament anual';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'El mateix pla, un sol pagament l\'any';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Pla';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price l\'any';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'A pagar avui';
+
+  @override
+  String get yearlySwitchRenews => 'Es renova';
+
+  @override
+  String get yearlySwitchCreditNote => 'Inclou crèdit per a la resta d\'aquest mes.';
+
+  @override
+  String get yearlySwitchDeclined => 'Pagament rebutjat. Continues amb el pagament mensual.';
+
+  @override
+  String get yearlySwitchFailed => 'No s\'ha pogut canviar. Continues amb el pagament mensual.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'No s\'ha pogut carregar el preu.';
+
+  @override
+  String get yearlySwitchUnavailable => 'El pagament anual no està disponible per al teu pla ara mateix.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Ara pagues anualment';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Avui s\'han cobrat $amount. Es renova el $date.';
   }
 }

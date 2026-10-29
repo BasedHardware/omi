@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from config.refactor_modes import default_on
+from utils.conversations.meeting_participants import looks_like_ai_agent_name
 
 IDENTITY_REPAIR_ENV = 'SPEAKER_IDENTITY_REPAIR_ENABLED'
 
@@ -35,11 +36,12 @@ class NotesIdentity:
     owner_names: tuple[str, ...] = ()
     transcript: str = ''
     corrections: tuple[str, ...] = ()
+    screen_bindings: tuple[tuple[str, str], ...] = ()
 
     def supported(self, name: str, speaker: str | None = None) -> bool:
         owners = {value.casefold() for value in self.owner_names if value}
         owners.update(token for value in tuple(owners) for token in value.split())
-        named = {key: value.casefold() for key, value in self.speaker_names if value}
+        named = {key: value.casefold() for key, value in (*self.speaker_names, *self.screen_bindings) if value}
         # Profile identity and attendance are context, not proof of which voice
         # spoke. Preserve owner aliases only for an actually bound owner voice.
         if speaker is not None and speaker in named:
@@ -69,6 +71,71 @@ def notes_identity(prefix: Any, inputs: Mapping[str, Any], packet: Mapping[str, 
         for row in packet.get('people_on_screen') or ()
         if row.get('call_seen_during_conversation') and row.get('name')
     )
+    # Only filtered call-tile provenance (stored by the extractor or read from
+    # this conversation window) can authorize the notes-only exception. Calendar/People/model-written evidence cannot.
+    speakers = dict(getattr(prefix, 'speaker_names', ()))
+    owner_key = getattr(prefix, 'owner_call_speaker', None)
+    tiles = tuple(dict.fromkeys((*getattr(prefix, 'call_tile_names', ()), *(packet.get('call_tile_names') or ()))))
+    owners = tuple(
+        name.casefold().split()
+        for name in (getattr(prefix, 'account_owner_name', None), *getattr(prefix, 'owner_names', ()))
+        if name and name.strip()
+    )
+    credible_names = tuple(
+        {
+            name.casefold(): name
+            for name in tiles
+            if name.strip()
+            and not looks_like_ai_agent_name(name)
+            and not any(name.casefold().split()[0] == owner[0] for owner in owners)
+        }.values()
+    )
+
+    def is_remote(name: str | None) -> bool:
+        return (
+            not name
+            or not name.strip()
+            or (
+                not looks_like_ai_agent_name(name)
+                and name.strip().casefold() not in {' '.join(owner) for owner in owners}
+            )
+        )
+
+    # Each source is counted independently before deduplication. In addition,
+    # conflicting source names make the channel ambiguous even if each lists one.
+    remote_sets = [
+        [entry.display_name for entry in getattr(roster, 'entries', ()) if entry.kind == 'human'],
+        [row.get('name') for row in packet.get('listed_participants') or () if row.get('kind') == 'human'],
+        *[event.get('participants') or () for event in packet.get('calendar_overlap') or ()],
+    ]
+    ambiguous = (
+        getattr(prefix, 'call_identity_ambiguous', False)
+        or any(
+            len(names) != len(set(name.casefold() for name in names))
+            for names in (getattr(prefix, 'call_tile_names', ()), packet.get('call_tile_names') or ())
+        )
+        or len(remote_sets[0]) > 1
+        or len(remote_sets[1]) > 1
+        or any(sum(is_remote(name) for name in names) > 1 for names in remote_sets)
+        or len({name.casefold() for name in (*meeting, *tiles) if name and is_remote(name)}) > 1
+    )
+    remote = [key for key in speakers if key != owner_key]
+    bindings = ()
+    if (
+        owner_key in speakers
+        and not ambiguous
+        and len(speakers) == 2
+        and len(remote) == 1
+        and not speakers[remote[0]]
+        and len(credible_names) == 1
+        and not packet.get('call_tile_agent_names')
+        and not getattr(prefix, 'call_tile_agent_names', ())
+        and not any(looks_like_ai_agent_name(name) for name in tiles)
+    ):
+        bindings = ((remote[0], credible_names[0]),)
+        meeting.extend(credible_names)
+    else:
+        meeting = [name for name in meeting if name not in tiles]
     return NotesIdentity(
         speaker_names=getattr(prefix, 'speaker_names', ()),
         meeting_names=tuple(dict.fromkeys(meeting)),
@@ -76,6 +143,7 @@ def notes_identity(prefix: Any, inputs: Mapping[str, Any], packet: Mapping[str, 
             name for name in (getattr(prefix, 'account_owner_name', None), *getattr(prefix, 'owner_names', ())) if name
         ),
         transcript=getattr(prefix, 'transcript_body', ''),
+        screen_bindings=bindings,
         corrections=tuple(
             str(row.get('note') or '') for row in inputs.get('user_corrections') or () if isinstance(row, Mapping)
         ),
@@ -186,3 +254,17 @@ def repair_identity(submission: Mapping[str, Any], identity: NotesIdentity) -> t
     ]
     repaired = scrub({**submission, 'participants': kept})
     return repaired, ['unsupported_speaker_identity'] if changed or len(kept) != len(people) else []
+
+
+def screen_speaker_bindings(identity: NotesIdentity) -> list[dict[str, str]]:
+    """Shared evidence for agentic and one-shot notes, including legacy packets."""
+    return [
+        {
+            'speaker': speaker,
+            'name': name,
+            'evidence_kind': 'screen',
+            'evidence': f'Meeting UI call tile: {name}; server-filtered screen sightings. '
+            'Two captured speakers; the other is the owner.',
+        }
+        for speaker, name in identity.screen_bindings
+    ]

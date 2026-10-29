@@ -156,7 +156,8 @@ def _moment(conversation_id='c2', *, start_minutes=11.0, end_minutes=12.0, sourc
     )
 
 
-def test_boundary_rules():
+def test_boundary_rules(monkeypatch):
+    monkeypatch.delenv(config.EPISODE_HARD_CAP_ACROSS_CONVERSATIONS_ENV, raising=False)
     assert policy.boundary(None, _moment()).action == 'new'
     assert policy.boundary(_episode(status='closed'), _moment()).action == 'new'
     assert policy.boundary(_episode(), _moment('c1', start_minutes=10.5)).action == 'continue'
@@ -173,9 +174,20 @@ def test_boundary_rules():
     assert parallel.action == 'continue' and parallel.parallel
     assert policy.boundary(_episode(), _moment(start_minutes=41)).reason == 'gap'
     assert policy.boundary(_episode(calendar_identity='evt-a'), _moment(calendar='evt-b')).reason == 'calendar_boundary'
+    assert policy.boundary(_episode(), _moment(start_minutes=180, end_minutes=180)).reason == 'hard_cap'
     assert policy.boundary(_episode(), _moment(start_minutes=170, end_minutes=181)).reason == 'hard_cap'
     full = _episode(moments=[{'id': str(i)} for i in range(config.MAX_MOMENTS)])
     assert policy.boundary(full, _moment()).reason == 'hard_cap'
+
+
+def test_hard_cap_kill_switch_restores_the_legacy_moment_end_boundary(monkeypatch):
+    episode = _episode(last_activity_at=T0 + timedelta(minutes=179))
+    at_cap = _moment('c1', start_minutes=179, end_minutes=180)
+    assert policy.boundary(episode, at_cap).reason == 'hard_cap'
+    monkeypatch.setenv(config.EPISODE_HARD_CAP_ACROSS_CONVERSATIONS_ENV, 'off')
+    assert policy.boundary(episode, at_cap).action == 'continue'
+    after_cap = _moment('c1', start_minutes=179, end_minutes=180.1)
+    assert policy.boundary(episode, after_cap).reason == 'hard_cap'
 
 
 def test_resolve_ask_with_and_without_jev():

@@ -17,7 +17,7 @@ import redis as redis_pkg
 from database.redis_db import check_rate_limit, try_acquire_listen_lock
 from database import users as users_db
 from database.firestore_tier_context import bind_request_owner
-from database.account_deletion_policy import account_deletion_blocks_access
+from database.account_deletion_policy import ACCOUNT_DELETION_GRACE_STATUS, account_deletion_blocks_access
 from database.users import record_client_device, record_user_platform
 from utils.account_cutover.access import (
     cutover_enforcement_enabled,
@@ -81,14 +81,16 @@ def _account_deletion_status(uid: str) -> str | None:
         ) from error
 
 
-def enforce_account_deletion_http_access(uid: str) -> None:
+def enforce_account_deletion_http_access(uid: str, *, allow_grace_erase_now: bool = False) -> None:
     bind_request_owner(uid)
     status = _account_deletion_status(uid)
+    if allow_grace_erase_now and status == ACCOUNT_DELETION_GRACE_STATUS:
+        return
     if account_deletion_blocks_access(status):
         raise HTTPException(
             status_code=403,
             detail={
-                'code': 'account_deletion_in_progress',
+                'code': 'account_pending_deletion' if status == 'pending_deletion' else 'account_deletion_in_progress',
                 'status': status,
                 'retryable': False,
             },
@@ -172,6 +174,36 @@ def verify_token(token: str) -> str:
         if os.getenv('LOCAL_DEVELOPMENT') == 'true' and no_real_credential:
             return '123'
         raise
+
+
+def get_current_user_uid_for_deletion_status(
+    authorization: str = Header(None),
+    _x_app_platform: str = Header(None, alias='X-App-Platform'),
+    _x_device_id_hash: str = Header(None, alias='X-Device-Id-Hash'),
+    _x_app_version: str = Header(None, alias='X-App-Version'),
+    _read_scope: Any = Depends(request_read_scope),
+) -> str:
+    """Authenticate the owner without opening ordinary account access.
+
+    Used by the account-deletion status, restore, and erase-now endpoints,
+    which must remain reachable while the normal auth fence blocks a
+    pending-deletion account. The optional client headers preserve the
+    released delete-account contract without running registration, device,
+    BYOK, or content-recovery side effects.
+    """
+    if not authorization:
+        raise HTTPException(status_code=401, detail='Authorization header not found')
+    if len(str(authorization).split(' ')) != 2:
+        raise HTTPException(status_code=401, detail='Invalid authorization token')
+    token = authorization.split(' ')[1]
+    key_family_mismatch = wrong_key_family_detail(token, FIREBASE_FAMILY)
+    if key_family_mismatch:
+        raise HTTPException(status_code=401, detail=key_family_mismatch)
+    try:
+        return verify_token(token)
+    except InvalidIdTokenError as error:
+        logger.error(error)
+        raise HTTPException(status_code=401, detail='Invalid authorization token') from error
 
 
 def _enforce_cutover_http_if_request(uid: str, request: Request | None) -> None:

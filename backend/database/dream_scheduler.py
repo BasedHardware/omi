@@ -6,6 +6,7 @@ from datetime import datetime, timezone, timedelta
 from google.cloud import firestore
 from database import firestore_transaction_retry
 from database._client import get_firestore_client
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from config.dream_agent import allowlist_uids, eligibility, eligible, enabled, hunt_interval
 from config import dream_levers
 from utils.observability.fallback import record_fallback
@@ -134,7 +135,14 @@ def discover(database, now, *, pages=20, budget_seconds=DISCOVERY_BUDGET_SECONDS
                     )
                     if snapshot.exists
                 }
-                eligible_owners = {row.id: eligible(row.id, row.to_dict() or {}) for row in chunk}
+                # The account-deletion marker is pinned to the customer data
+                # plane, which may differ from this queue's compute database.
+                # Read it through the shared authority outside this transaction;
+                # the worker repeats the check immediately before execution.
+                deletion_blocked = {row.id: account_deletion_blocks_user_work(row.id) for row in chunk}
+                eligible_owners = {
+                    row.id: eligible(row.id, row.to_dict() or {}) and not deletion_blocked[row.id] for row in chunk
+                }
                 # dream_users state only feeds due_time() for owners this chunk
                 # is about to enqueue; skip the bulk read when none qualify.
                 state_refs = [
@@ -253,8 +261,18 @@ def candidates(*, limit=5000, now=None, firestore_client=None, with_due=False):
         .stream(timeout=3)
     )
     if with_due:
-        return [(row.id, (row.to_dict() or {}).get('due_at')) for row in rows]
-    return [row.id for row in rows]
+        selected = [(row.id, (row.to_dict() or {}).get('due_at')) for row in rows]
+    else:
+        selected = [(row.id, None) for row in rows]
+    eligible_rows = []
+    for uid, due_at in selected:
+        if account_deletion_blocks_user_work(uid):
+            remove_due(uid, firestore_client=database)
+            continue
+        eligible_rows.append((uid, due_at))
+    if with_due:
+        return eligible_rows
+    return [uid for uid, _due_at in eligible_rows]
 
 
 def required_retry_page(*, limit=4990, firestore_client=None):
@@ -274,7 +292,7 @@ def required_retry_page(*, limit=4990, firestore_client=None):
         rows = candidate_page(after=after, limit=min(499, budget - len(owners)), firestore_client=database)
         if not rows:
             break
-        owners.extend(row.id for row in rows)
+        owners.extend(row.id for row in rows if not account_deletion_blocks_user_work(row.id))
         after = rows[-1].id
     return owners, before
 

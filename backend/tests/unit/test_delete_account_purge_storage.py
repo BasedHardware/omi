@@ -47,6 +47,8 @@ def users_service():
         "database.messaging": AutoMockModule("database.messaging"),
         "services.users.agent_vm_account_cleanup": AutoMockModule("services.users.agent_vm_account_cleanup"),
         "utils": _pkg("utils"),
+        "utils.sync": _pkg("utils.sync"),
+        "utils.sync.cap_hold": AutoMockModule("utils.sync.cap_hold"),
         "utils.cloud_tasks": AutoMockModule("utils.cloud_tasks"),
         "utils.stripe": AutoMockModule("utils.stripe"),
         "utils.executors": AutoMockModule("utils.executors"),
@@ -98,8 +100,28 @@ def _purge_patches(users_service, **overrides):
         "delete_user_caller_ids",
     ):
         patchers[name] = patch.object(users_service, name, create=True, **(overrides.get(name) or {}))
+    patchers['purge_user_conversation_index'] = patch.object(
+        users_service,
+        'purge_user_conversation_index',
+        create=True,
+        **(overrides.get('purge_user_conversation_index') or {}),
+    )
     patchers["delete_user_data"] = patch.object(
-        users_service.users_db, "delete_user_data", create=True, **(overrides.get("delete_user_data") or {})
+        users_service.users_db,
+        "delete_user_data",
+        create=True,
+        **(overrides.get("delete_user_data") or {"return_value": {"status": "ok"}}),
+    )
+    patchers['cancel_subscription_for_account_deletion'] = patch.object(
+        users_service,
+        '_cancel_subscription_for_account_deletion',
+        **(overrides.get('cancel_subscription_for_account_deletion') or {}),
+    )
+    patchers['mark_user_deletion_wipe_completed'] = patch.object(
+        users_service.users_db,
+        'mark_user_deletion_wipe_completed',
+        create=True,
+        **(overrides.get('mark_user_deletion_wipe_completed') or {}),
     )
     started = {name: p.start() for name, p in patchers.items()}
     return patchers, started
@@ -125,6 +147,58 @@ def test_purge_runs_all_backends_before_firestore_wipe(users_service):
     # GCS + Firestore
     m["delete_all_conversation_recordings"].assert_called_once_with("uid1")
     m["delete_user_data"].assert_called_once_with("uid1")
+    m['purge_user_conversation_index'].assert_called_once_with('uid1')
+    m['cancel_subscription_for_account_deletion'].assert_called_once_with('uid1')
+
+
+def test_grace_admission_receipt_does_not_skip_final_billing_verification(users_service):
+    users_service.deletion_marker_db.read_account_deletion_marker.return_value = {'grace_actions_complete': True}
+    patchers, m = _purge_patches(users_service)
+    try:
+        users_service.background_wipe_user_data('uid1')
+    finally:
+        _stop(patchers)
+
+    users_service.deletion_marker_db.read_account_deletion_marker.assert_not_called()
+    m['cancel_subscription_for_account_deletion'].assert_called_once_with('uid1')
+
+
+def test_typesense_failure_keeps_wipe_incomplete_and_retryable(users_service):
+    patchers, m = _purge_patches(
+        users_service, purge_user_conversation_index={'side_effect': RuntimeError('typesense down')}
+    )
+    try:
+        result = users_service.background_wipe_user_data('uid1')
+    finally:
+        _stop(patchers)
+
+    assert result is False
+    m['delete_user_data'].assert_called_once_with('uid1')
+    users_service.users_db.mark_user_deletion_wipe_completed.assert_not_called()
+    users_service.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
+
+
+def test_typesense_wrapper_requires_verified_purge(users_service, monkeypatch):
+    calls = []
+
+    def fail_if_unverified(uid, *, raise_on_failure=False):
+        calls.append((uid, raise_on_failure))
+        if raise_on_failure:
+            raise RuntimeError('typesense down')
+        return 0
+
+    fake_typesense = AutoMockModule('utils.conversations.typesense_index')
+    fake_typesense.purge_user_conversation_index = fail_if_unverified
+    with stub_modules(
+        {
+            'utils.conversations': _pkg('utils.conversations'),
+            'utils.conversations.typesense_index': fake_typesense,
+        }
+    ):
+        with pytest.raises(RuntimeError, match='typesense down'):
+            users_service.purge_user_conversation_index('uid1')
+
+    assert calls == [('uid1', True)]
 
 
 def test_id_enumeration_happens_before_firestore_wipe(users_service):

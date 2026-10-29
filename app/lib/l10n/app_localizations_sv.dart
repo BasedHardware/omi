@@ -428,12 +428,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get autoSync => 'Automatisk synkronisering';
 
   @override
-  String get syncHealthAlerts => 'Synkroniseringsvarningar';
-
-  @override
-  String get syncHealthAlertsDescription => 'Varna om Omi inte har synkroniserat inspelningar på mer än ett dygn';
-
-  @override
   String get autoSyncDescription => 'Synkronisera offlineinspelningar automatiskt när din enhet ansluter';
 
   @override
@@ -8730,6 +8724,28 @@ class AppLocalizationsSv extends AppLocalizations {
   String get deleteReasonOther => 'Annat';
 
   @override
+  String get deletePauseInsteadTitle => 'Pausa Omi i stället?';
+
+  @override
+  String get deletePauseInsteadSubtitle => 'Sluta spela in och behåll allt. Kom tillbaka när du vill.';
+
+  @override
+  String get deletePauseRecordingLine => 'Inspelningen stoppas. Inget nytt spelas in medan du är borta.';
+
+  @override
+  String get deletePauseKeepLine => 'Dina minnen, konversationer och appar behålls precis som de är.';
+
+  @override
+  String get deletePauseReturnLine =>
+      'Du förblir inloggad. Återuppta inspelningen när du vill. Din prenumeration fortsätter som vanligt.';
+
+  @override
+  String get pauseOmiButton => 'Pausa Omi';
+
+  @override
+  String get continueDeletingButton => 'Fortsätt radera';
+
+  @override
   String get deleteFlowFeedbackTitle => 'Berätta mer';
 
   @override
@@ -8749,6 +8765,28 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get deleteConsequenceNoRecovery => 'Ditt konto kan inte återställas — inte ens av supporten.';
+
+  @override
+  String deletePendingRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Du har $count inspelningar som fortfarande bearbetas. Om du raderar nu förlorar du dem.',
+      one: 'Du har 1 inspelning som fortfarande bearbetas. Om du raderar nu förlorar du den.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteGracePeriodNotice(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Logga in igen inom $days dagar för att återställa ditt konto.',
+      one: 'Logga in igen inom 1 dag för att återställa ditt konto.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get deleteTypeToConfirm => 'Skriv DELETE för att bekräfta';
@@ -9053,14 +9091,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'Väntar på internet';
-
-  @override
-  String get syncStallAlertTitle => 'Omi synkroniserar inte';
-
-  @override
-  String syncStallAlertBody(int hours) {
-    return 'Inga inspelningar från din Omi har synkroniserats på mer än $hours timmar. Öppna Omi för att kontrollera enhetens anslutning.';
-  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13696,14 +13726,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get activityAttentionStorageSubtitle => 'Inspelningar pausade';
 
   @override
-  String get activityAttentionSyncStalledTitle => 'Omi synkroniserar inte';
-
-  @override
-  String activityAttentionSyncStalledSubtitle(int hours) {
-    return 'Inga inspelningar synkroniserade på mer än $hours timmar';
-  }
-
-  @override
   String get activityAttentionUploadStalledTitle => 'Uppladdningen har stannat';
 
   @override
@@ -14739,5 +14761,182 @@ class AppLocalizationsSv extends AppLocalizations {
       one: 'Dölj 1 kort klipp',
     );
     return '$_temp0';
+  }
+
+  @override
+  String deleteLocalRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count inspelningar har inte laddats upp än. Om du raderar nu förlorar du dem — håll appen öppen så att uppladdningen slutförs.',
+      one:
+          '1 inspelning har inte laddats upp än. Om du raderar nu förlorar du den — håll appen öppen så att uppladdningen slutförs.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConfirmGraceSubtitle => 'Se vad som händer med dina data innan du lämnar.';
+
+  @override
+  String get deletePauseConfirmation => 'Omi är pausad. Du kan återuppta inspelningen när du vill.';
+
+  @override
+  String deleteProcessingKept(int count, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count inspelningar bearbetas fortfarande. De sparas på ditt konto i ytterligare ',
+      one: '1 inspelning bearbetas fortfarande. Den sparas på ditt konto i ytterligare ',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days dagar.',
+      one: '1 dag.',
+    );
+    return '$_temp0$_temp1';
+  }
+
+  @override
+  String deleteDataErasedAfterDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Dina minnen och konversationer raderas efter $days dagar.',
+      one: 'Dina minnen och konversationer raderas efter 1 dag.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteAppsDisconnectImmediately => 'Dina appar och integrationer kopplas från direkt.';
+
+  @override
+  String get deleteSubscriptionImmediately => 'Din prenumeration sägs upp direkt.';
+
+  @override
+  String get deleteRestoreTitle => 'Ditt konto väntar på att raderas';
+
+  @override
+  String get deleteRestoreSubtitle => 'Har du ändrat dig? Återställ kontot innan det raderas.';
+
+  @override
+  String get deleteRestoreKeepData => 'Återställ dina minnen och konversationer.';
+
+  @override
+  String get deleteRestoreBillingNotice =>
+      'Din prenumeration förblir uppsagd. Anslut appar och integrationer igen efter återställningen.';
+
+  @override
+  String deleteRestoreDaysRemaining(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Du har $days dagar kvar för att återställa ditt konto.',
+      one: 'Du har 1 dag kvar för att återställa ditt konto.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteRestoreButton => 'Återställ mitt konto';
+
+  @override
+  String get deleteFinishButton => 'Slutför raderingen';
+
+  @override
+  String get deleteFinishNowButton => 'Radera mitt konto nu';
+
+  @override
+  String get deleteFinishNowWarning =>
+      'Detta avslutar perioden då du kan återställa kontot. Ditt konto och dina inspelningar raderas permanent.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Du har mindre än en dag kvar för att återställa ditt konto.';
+
+  @override
+  String get deleteFinishNowTitle => 'Ta bort ditt konto?';
+
+  @override
+  String get syncHealthAlerts => 'Synkroniseringsvarningar';
+
+  @override
+  String get syncHealthAlertsDescription => 'Varna om Omi inte har synkroniserat inspelningar på mer än ett dygn';
+
+  @override
+  String get syncStallAlertTitle => 'Omi synkroniserar inte';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Inga inspelningar från din Omi har synkroniserats på mer än $hours timmar. Öppna Omi för att kontrollera enhetens anslutning.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi synkroniserar inte';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Inga inspelningar synkroniserade på mer än $hours timmar';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Dagliga sammanfattningar på Hem';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Visa dina senaste sammanfattningar högst upp på Hem.';
+
+  @override
+  String get yearlySwitchTitle => 'Byt till årsvis';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Spara $amount om året';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Spara $amount om året med årsbetalning';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Samma abonnemang, betalas en gång om året';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Abonnemang';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price om året';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Att betala i dag';
+
+  @override
+  String get yearlySwitchRenews => 'Förnyas';
+
+  @override
+  String get yearlySwitchCreditNote => 'Inkluderar kredit för resten av månaden.';
+
+  @override
+  String get yearlySwitchDeclined => 'Betalningen nekades. Du betalar fortfarande månadsvis.';
+
+  @override
+  String get yearlySwitchFailed => 'Det gick inte att byta. Du betalar fortfarande månadsvis.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Det gick inte att läsa in priset.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Årsbetalning är inte tillgänglig för ditt abonnemang just nu.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Du betalar nu årsvis';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return '$amount drogs i dag. Förnyas $date.';
   }
 }
