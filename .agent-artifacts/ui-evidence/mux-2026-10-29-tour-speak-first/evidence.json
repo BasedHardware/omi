@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-tour-first-screen-before-after.png",
+      "platform": "mobile-ios",
+      "description": "The device tour right after an Omi CV1 connects. Left: main opens on the Get to Know Your Omi intro (About 1 minute, Get Started, Skip). Right: this change opens on Speak Into Your Omi with the example sentence and the close X. iPhone 17 Pro simulator, iOS 26.2. The Omi CV1 connection is simulated (no Bluetooth on a simulator).",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-tour-speak-words-and-close.png",
+      "platform": "mobile-ios",
+      "description": "This change. Left: words in the step's transcript card (injected through the step's own transcript seam; no audio). Right: the close X leaves the tour to Home; reconnecting a 2nd and 3rd time and relaunching do not reopen it. iPhone 17 Pro simulator, iOS 26.2. The Omi CV1 connection is simulated (no Bluetooth on a simulator).",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-tour-first-screen-dark.png",
+      "platform": "mobile-ios",
+      "description": "Dark appearance. Left: main's intro. Right: this change's first screen. iPhone 17 Pro simulator, iOS 26.2. The Omi CV1 connection is simulated (no Bluetooth on a simulator).",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-mobile-ios-tour-first-screen-large-text.png",
+      "platform": "mobile-ios",
+      "description": "Largest accessibility text size (about 312%): main's intro overflows by 598 px and pushes Get Started and Skip off screen; this change's first step overflows by 120 px and keeps the close X. Right: this change at 200% text fits. iPhone 17 Pro simulator, iOS 26.2. The Omi CV1 connection is simulated (no Bluetooth on a simulator).",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "005-mobile-ios-tour-first-screen-locales.png",
+      "platform": "mobile-ios",
+      "description": "This change's first screen in German, Japanese and Spanish (app language set as in Settings > Language). iPhone 17 Pro simulator, iOS 26.2. The Omi CV1 connection is simulated (no Bluetooth on a simulator).",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}
