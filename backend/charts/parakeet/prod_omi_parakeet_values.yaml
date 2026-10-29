@@ -196,11 +196,14 @@ autoscaling:
   # P77r retry proposal: install the relative-refusal guard before activating.
   # Rollback: restore minReplicas=12 and workloadOnly=false together.
   workloadOnly: true
-  # The ratified 2 active requests / 35% GPU targets trigger scale-out;
-  # they are not hard per-pod capacity. Five to seven pods carry the 7-day peak.
-  # Floor 8 retains warm headroom; cap 12 bounds burst scale-out.
-  minReplicas: 8
-  maxReplicas: 12
+  # 2026-10-29 retire100: batch at 100% moves consented mobile to the batch
+  # lane and the residual live leg (opt-outs + desktop) to Soniox built-in
+  # labels, so live windows stop; one warm replica stays as the failover /
+  # burst spare (PARAKEET_BATCH_PRESSURE overflow can still scale it up;
+  # raise the floor to 3 if batch pressure demands it).
+  # Supersedes the P77r floor-8 warm-headroom sizing. Rollback: 8/12.
+  minReplicas: 1
+  maxReplicas: 6
   behavior:
     scaleUp:
       stabilizationWindowSeconds: 0

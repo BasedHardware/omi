@@ -179,8 +179,10 @@ def test_prod_pool_placement_preserves_current_cpu_pools(chart):
 def test_parakeet_scales_conservatively_without_relaxing_admission():
     objects = render('parakeet')
     hpa = objects['HorizontalPodAutoscaler']['spec']
-    assert hpa['minReplicas'] == 8
-    assert hpa['maxReplicas'] == 12
+    # 2026-10-29 retire100: live windows stop at batch-100%; one warm failover
+    # spare remains (batch-pressure overflow can still scale it out).
+    assert hpa['minReplicas'] == 1
+    assert hpa['maxReplicas'] == 6
     assert hpa['behavior']['scaleUp'] == {
         'stabilizationWindowSeconds': 0,
         'selectPolicy': 'Max',

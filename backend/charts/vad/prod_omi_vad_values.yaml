@@ -122,13 +122,13 @@ startupProbe:
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
-  # Two warm replicas: the p99-latency HPA crossed its 2s target ~23x/day
-  # (7d, 2026-10-19..26), and every 1->2 scale-up booted a fresh T4 node
-  # (~4-6 min cold start, 32-57 distinct VMs/day billed on vad-pool-v2).
-  # A floor of 2 keeps burst headroom warm, removes the 1<->2 flap and
-  # measured slightly CHEAPER (node-hours 59.8/day -> ~53/day floor 48).
-  # Rollback: minReplicas back to 1 and redeploy.
-  minReplicas: 2
+  # 2026-10-29 retire100 (David 10-28 ruling): with batch at 100% the live leg
+  # moves to Soniox built-ins and the live VAD gate is local ONNX, so the only
+  # remaining callers are async sync-path VAD requests, which tolerate
+  # scale-from-zero cold starts. Supersedes the #23672 two-warm-replica anti-
+  # flap floor (flap source is gone with the live consumers).
+  # Rollback: minReplicas back to 1 (2 if latency flapping returns) and redeploy.
+  minReplicas: 0
   maxReplicas: 10
   behavior:
     scaleDown:
