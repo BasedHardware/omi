@@ -1,6 +1,6 @@
 """Reported live/batch shapes enforce one recorded timeline and one owner per capture."""
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 import json
 
@@ -13,7 +13,9 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.episodes import service, policy, timeline
 from utils.episodes.moment import MomentInput
 from utils.episodes.visibility import visible_episode
-from tests.unit.test_late_audio_recorded_time import T0, NOW
+
+T0 = datetime(2026, 10, 29, 1, 4, tzinfo=timezone.utc)
+NOW = T0 + timedelta(hours=4)
 
 
 @pytest.fixture
@@ -281,3 +283,17 @@ def test_stale_notes_cannot_restore_discarded_activity(lane):
     )
     assert stored['last_activity_at'] == T0
     assert 'noise' not in stored['member_activity']
+
+
+def test_new_capture_inside_explicit_close_window_cannot_open_an_overlapping_episode(lane):
+    store, c, _ = lane
+    service.attach_conversation('u', 'first', 'omi', started_at=T0, collaborators=c)
+    owner = episodes.get_current_episode('u', firestore_client=store)
+    c.now = lambda: T0 + timedelta(minutes=2)
+    service.close_on_finalize('u', 'first', trigger='client_finalize', collaborators=c)
+    at = T0 + timedelta(minutes=1)
+    service.attach_conversation('u', 'before-close', 'desktop', started_at=at, collaborators=c)
+    assert episodes.get_episode_for_conversation('u', 'before-close', firestore_client=store)['id'] == owner['id']
+    assert len(all_episodes(store)) == 1
+    closed = episodes.get_episode('u', owner['id'], firestore_client=store)
+    assert closed['closed_at'] == T0 + timedelta(minutes=2)

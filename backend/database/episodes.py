@@ -181,7 +181,7 @@ def _bounded_activity(episode, at):
     if isinstance(start, datetime):
         at = min(at, start + timedelta(seconds=MAX_EPISODE_SECONDS))
     if episode.get('status') == 'closed' and episode.get('close_reason') not in {'gap', 'idle'}:
-        end = episode.get('last_activity_at')
+        end = episode.get('closed_at') or episode.get('last_activity_at')
         if isinstance(end, datetime):
             at = min(at, end)
     return at
@@ -191,6 +191,8 @@ def _bounded_activity(episode, at):
 def _record_activity(
     transaction: Any, client: Any, uid: str, episode_id: str, conversation_id: str, at: datetime
 ) -> Optional[datetime]:
+    if recorded_episodes_enabled():
+        _links(client, uid).document('recorded_timeline').get(transaction=transaction)
     ref = _episodes(client, uid).document(episode_id)
     raw = ref.get(transaction=transaction).to_dict() or {}
     if raw.get('status') != 'live' or conversation_id not in (raw.get('conversation_ids') or []):
@@ -291,10 +293,10 @@ def _commit(
     segment_receipts: Optional[Mapping[str, Sequence[str]]] = None,
 ) -> dict[str, Any]:
     pointer = _links(client, uid).document(CURRENT)
-    current_id = _link_target(client, uid, CURRENT, transaction)
     timeline_ref = _links(client, uid).document('recorded_timeline')
     timeline_enabled = recorded_episodes_enabled()
     timeline_row = (timeline_ref.get(transaction=transaction).to_dict() or {}) if timeline_enabled else {}
+    current_id = _link_target(client, uid, CURRENT, transaction)
     current_ref = _episodes(client, uid).document(current_id) if current_id else None
     current_raw = None
     if current_ref is not None:
@@ -307,6 +309,8 @@ def _commit(
         if not current_raw or current_raw.get('state_version') != expected_version:
             raise EpisodeConflict('state_version_changed')
     now = datetime.now(timezone.utc)
+    if new_episode is None and (current_ref is None or current_raw is None):
+        raise EpisodeConflict('no_open_episode')
     target = (
         _merge_state({}, new_episode)
         if new_episode is not None
@@ -388,6 +392,8 @@ def _reopen(
     updates: Mapping[str, Any],
     link_conversation_ids: Sequence[str],
 ) -> Optional[dict[str, Any]]:
+    if recorded_episodes_enabled():
+        _links(client, uid).document('recorded_timeline').get(transaction=transaction)
     ref = _episodes(client, uid).document(episode_id)
     snapshot = ref.get(transaction=transaction)
     raw = snapshot.to_dict() if snapshot.exists else None
@@ -468,6 +474,8 @@ def _close(
     extra: Mapping[str, Any],
     expected_activity_at: Optional[datetime],
 ) -> Optional[dict[str, Any]]:
+    if recorded_episodes_enabled():
+        _links(client, uid).document('recorded_timeline').get(transaction=transaction)
     ref = _episodes(client, uid).document(episode_id)
     snapshot = ref.get(transaction=transaction)
     raw = snapshot.to_dict() if snapshot.exists else None
@@ -521,6 +529,8 @@ def _update(
     link_conversation_ids: Sequence[str],
     segment_receipts: Optional[Mapping[str, Sequence[str]]] = None,
 ) -> dict[str, Any]:
+    if recorded_episodes_enabled():
+        _links(client, uid).document('recorded_timeline').get(transaction=transaction)
     ref = _episodes(client, uid).document(episode_id)
     snapshot = ref.get(transaction=transaction)
     raw = snapshot.to_dict() if snapshot.exists else None

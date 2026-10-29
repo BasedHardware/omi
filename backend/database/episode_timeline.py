@@ -12,7 +12,7 @@ from database._client import get_firestore_client, run_transactional
 from database import episodes
 
 PAGE_LIMIT = 128
-FIELDS = ('started_at', 'last_activity_at', 'status', 'close_reason', 'state_version')
+FIELDS = ('started_at', 'last_activity_at', 'closed_at', 'status', 'close_reason', 'state_version')
 
 
 def recorded_candidates(
@@ -38,9 +38,16 @@ def recorded_candidates(
     return rows
 
 
+def recorded_end(episode):
+    """Explicit closes own their recorded window; quiet padding is not speech."""
+    if episode.get('status') == 'closed' and episode.get('close_reason') not in {'gap', 'idle'}:
+        return episode.get('closed_at') or episode.get('last_activity_at')
+    return episode.get('last_activity_at')
+
+
 def check_window(transaction, client, uid, episode, *, rows=None):
     """Serialize live writes with recorded attachment; reject overlapping windows."""
-    lo, hi = episode.get('started_at'), episode.get('last_activity_at')
+    lo, hi = episode.get('started_at'), recorded_end(episode)
     if not isinstance(lo, datetime) or not isinstance(hi, datetime):
         return
     fence = client.collection('users').document(uid).collection('episode_links').document('recorded_timeline')
@@ -48,7 +55,7 @@ def check_window(transaction, client, uid, episode, *, rows=None):
     if rows is None:
         rows = recorded_candidates(uid, lo, hi, firestore_client=client, transaction=transaction)
     for row in rows:
-        a, b = row.get('started_at'), row.get('last_activity_at')
+        a, b = row.get('started_at'), recorded_end(row)
         if row['id'] != episode['id'] and isinstance(a, datetime) and isinstance(b, datetime):
             if lo == a or (lo < b and a < hi) or (lo == hi and a <= lo < b):
                 raise episodes.EpisodeConflict('recorded_window_overlap')
@@ -94,7 +101,7 @@ def _attach_recorded_window(
         lo = min(existing['started_at'], started) if existing else started
         window_end = min(finished, lo + timedelta(seconds=MAX_EPISODE_SECONDS))
         if existing and existing.get('status') != 'live' and existing.get('close_reason') not in {'gap', 'idle'}:
-            window_end = min(window_end, existing['last_activity_at'])
+            window_end = min(window_end, recorded_end(existing))
         if existing is None or existing.get('status') == 'live' or existing.get('close_reason') in {'gap', 'idle'}:
             # A late prefix that would overflow an existing capped occasion
             # ends at that occasion; it must not create an overlapping 4h row.
@@ -118,7 +125,8 @@ def _attach_recorded_window(
             result['last_activity_at'] = max(existing['last_activity_at'], window_end)
             result['member_activity'] = {**(existing.get('member_activity') or {}), conversation_id: window_end}
             if result.get('status') != 'live':
-                result['closed_at'] = result['last_activity_at']
+                if result.get('close_reason') in {'gap', 'idle'}:
+                    result['closed_at'] = result['last_activity_at']
                 if window_end < finished and result.get('close_reason') in {'gap', 'idle'}:
                     result['close_reason'] = (
                         'hard_cap' if window_end == lo + timedelta(seconds=MAX_EPISODE_SECONDS) else 'boundary'

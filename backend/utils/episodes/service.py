@@ -76,7 +76,7 @@ from utils.episodes import client_gate, incremental, metrics, policy, recovery
 from utils.episodes.recovery import segment_end as _segment_end, segment_start as _segment_start
 from utils.episodes.moment import MomentInput
 from utils.episodes.state import apply_update, clean_text, provisional_items, render_state
-from utils.episodes.visibility import visible_episode
+from utils.episodes.visibility import visible_episode, hidden_conversation
 from utils.episodes.recorded_recovery import record_windows
 
 logger = logging.getLogger(__name__)
@@ -297,16 +297,6 @@ def _carry_hard_cap_state(
     successor['provisional_items'] = [dict(item) for item in carried_items]
 
 
-def _hidden_conversation(uid: str, conversation_id: str, c: Collaborators) -> bool:
-    row = conversations_db.get_conversation_raw_snapshot(
-        uid,
-        conversation_id,
-        field_paths=['discarded', 'deleted', 'sync_merged_into'],
-        firestore_client=c.firestore_client,
-    )
-    return bool(row and any(row.get(key) for key in ('discarded', 'deleted', 'sync_merged_into')))
-
-
 def _retain_activity(
     uid: str, episode: Optional[dict[str, Any]], conversation_id: str, at: datetime, c: Collaborators
 ) -> Optional[dict[str, Any]]:
@@ -395,6 +385,10 @@ def _close(
     if detach:
         extra['conversation_ids'] = [cid for cid in episode.get('conversation_ids') or [] if cid != detach]
         extra['provisional_items'] = [item for item in items if item.get('conversation_id') != detach]
+        activity = {cid: at for cid, at in (episode.get('member_activity') or {}).items() if cid != detach}
+        extra.update(
+            member_activity=activity, last_activity_at=min(now, max(activity.values(), default=episode['started_at']))
+        )
     closed_at = _idle_closed_at(episode, now) if reason == 'idle' else now
     if reason == 'hard_cap' and (start := policy.utc(episode.get('started_at'))) is not None:
         closed_at = start + timedelta(seconds=MAX_EPISODE_SECONDS)
@@ -461,12 +455,7 @@ def _close_pending_wrap_up(uid: str, episode: Optional[Mapping[str, Any]], c: Co
 def _closed_owner(
     uid: str, episode: Optional[Mapping[str, Any]], moment: MomentInput, c: Collaborators
 ) -> Optional[dict[str, Any]]:
-    """The closed episode a conversation stays with, when it may not feed the live one.
-
-    A conversation whose end closed its episode, and any conversation's
-    finalization tail, belong to the episode they were in: they never reopen it
-    and never open or join another by themselves. The next live words do that.
-    """
+    """Every closed member stays with its original owner; only a new conversation opens the successor."""
     if episode and moment.conversation_id in (episode.get('conversation_ids') or []):
         return None
     owner = episodes_db.get_episode_for_conversation(uid, moment.conversation_id, firestore_client=c.firestore_client)
@@ -564,7 +553,7 @@ def _attach_once(
     ended_at: Optional[datetime] = None,
 ) -> str:
     now = _now(c)
-    if _hidden_conversation(uid, conversation_id, c):
+    if hidden_conversation(uid, conversation_id, firestore_client=c.firestore_client):
         return 'skipped_discarded'
     owner = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
     if owner:
@@ -692,11 +681,7 @@ def _settle_boundary(
     c: Collaborators,
     now: datetime,
 ):
-    """Whether this moment continues, splits from or runs parallel to the live episode.
-
-    Returns the successor episode inputs for the moment to apply, or the outcome label when the
-    moment is already handled. A hard-cap split carries its running summary and unresolved items.
-    """
+    """Settle provisional joins and keep continuing members with their original owner."""
     decision = boundary_runtime.decision(
         uid, episode, facts, policy.boundary(episode, facts), firestore_client=c.firestore_client
     )
@@ -779,7 +764,7 @@ def _record_moment_once(
     uid: str, moment: MomentInput, c: Collaborators, *, member_episode_id: Optional[str] = None
 ) -> str:
     now = _now(c)
-    if _hidden_conversation(uid, moment.conversation_id, c):
+    if hidden_conversation(uid, moment.conversation_id, firestore_client=c.firestore_client):
         return 'skipped_discarded'
     recovered = moment.trigger == 'sync_recovery'
     episode = (
@@ -1428,22 +1413,14 @@ def _attach_recorded(uid, conversation_id, row, started, finished, c) -> dict[st
         new_episode=template,
         firestore_client=c.firestore_client,
     )
-    c.extras['recorded_window_conversation_id'] = conversation_id
-    c.extras['recorded_windows'] = placed.pop('_recorded_windows', [placed])
+    placed.pop('_recorded_windows', None)
     return placed
 
 
 def _record_recovered(uid: str, episode_id: str, conversation_id: str, row: Mapping[str, Any], c: Collaborators) -> str:
-    windows = (
-        (c.extras.get('recorded_windows') or [])
-        if c.extras.get('recorded_window_conversation_id') == conversation_id
-        else []
-    )
     if recorded_episodes_enabled():
-        if not windows:
-            owner = episodes_db.get_episode(uid, episode_id, firestore_client=c.firestore_client)
-            windows = [owner] if owner else []
-        return record_windows(uid, conversation_id, row, windows, c, record_moment, now=_now(c))
+        owner = episodes_db.get_episode(uid, episode_id, firestore_client=c.firestore_client)
+        return record_windows(uid, conversation_id, row, [owner] if owner else [], c, record_moment, now=_now(c))
     outcome = 'skipped_applied'
     for moment in recovery.moments(conversation_id, row, now=_now(c), calendar_identity=_calendar_identity(row)):
         outcome = record_moment(uid, moment, c, member_episode_id=episode_id)
@@ -1609,11 +1586,6 @@ def _on_finalized(
         # The close at finalize start failed or never ran: close now, before reconciling.
         if _close_for_finalize(uid, episode, conversation_id, trigger, c, _now(c)) == 'closed':
             episode = episodes_db.get_episode(uid, str(episode['id']), firestore_client=c.firestore_client) or episode
-    if recorded_episodes_enabled() and c.extras.get('recorded_window_conversation_id') == conversation_id:
-        for window in (c.extras.get('recorded_windows') or [])[:-1]:
-            prior = episodes_db.get_episode(uid, str(window['id']), firestore_client=c.firestore_client)
-            if prior is not None:
-                _reconcile(uid, prior, conversation_id, absorbed_from, row, c)
     return _reconcile(uid, episode, conversation_id, absorbed_from, row, c)
 
 
