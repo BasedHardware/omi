@@ -122,23 +122,23 @@ jobs:
           # fails mid-diff; a failed diff must never yield empty -> applies=false.
           changed_files="$(git diff --name-only "$base_sha"...HEAD)"
           printf '%s\n' "$changed_files"
+          hermetic_applies=false
           if grep -Eq '^(backend/|package\.json$|package-lock\.json$|\.github/workflows/backend-hermetic-e2e\.yml$)' <<<"$changed_files"; then
+            hermetic_applies=true
             echo "applies=true" >> "$GITHUB_OUTPUT"
           else
             echo "applies=false" >> "$GITHUB_OUTPUT"
           fi
-          # Integration owners and their shared runner/dependencies wake the
-          # respective gauntlet on PRs. Unknown backend paths retain E2E.
-          if [[ "$EVENT_NAME" == 'merge_group' || "$EVENT_NAME" == 'push' ]] || grep -Eq '^(backend/(utils/.*(listen|pusher)|routers/(listen/|pusher\.py)|database/listen_|pusher/|charts/(pusher|backend-listen)/|testing/e2e/|scripts/.*(listen|pusher|transcription)|pylock)|package(-lock)?\.json$|\.github/workflows/backend-hermetic-e2e\.yml$)' <<<"$changed_files"; then
-            echo "run_listen=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "run_listen=false" >> "$GITHUB_OUTPUT"
-          fi
-          if [[ "$EVENT_NAME" == 'merge_group' || "$EVENT_NAME" == 'push' ]] || grep -Eq '^(backend/(utils/cloud_tasks|utils/batch_pipeline/|diarizer/|routers/.*(task|sync)|testing/(e2e|sync_cloud_tasks_stack)/|scripts/.*(cloud_tasks|sync)|pylock)|package(-lock)?\.json$|\.github/workflows/backend-hermetic-e2e\.yml$)' <<<"$changed_files"; then
-            echo "run_sync=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "run_sync=false" >> "$GITHUB_OUTPUT"
-          fi
+          # Both contract gauntlets follow the full hermetic scope: every PR the
+          # scope admits runs both suites. The previous per-suite path filters
+          # matched only selected integration owners, so #23919 (sync
+          # processing under backend/utils/sync/**, backend/database/) skipped
+          # the Sync Cloud Tasks gauntlet and the break reached main unseen
+          # behind a green "skipped" verdict in the merge gate. Cost: the two
+          # gauntlets add ~8.3 + ~7.0 runner-minutes to a backend PR that
+          # previously matched neither (see .github/ci-budget.yaml).
+          echo "run_listen=$hermetic_applies" >> "$GITHUB_OUTPUT"
+          echo "run_sync=$hermetic_applies" >> "$GITHUB_OUTPUT"
 
   hermetic-e2e:
     name: Hermetic Backend E2E
