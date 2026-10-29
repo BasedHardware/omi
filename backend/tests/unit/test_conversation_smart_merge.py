@@ -911,6 +911,7 @@ async def test_stale_or_terminal_donor_delivery_is_read_only(world, monkeypatch,
 
 @pytest.mark.asyncio
 async def test_permanently_failed_donor_dead_letters_without_mutating_conversations(world, monkeypatch):
+    monkeypatch.setenv('CONVERSATION_MERGE_BEFORE_PROCESSING', 'false')
     world.add('p', 0, 10)
     world.add('n', 15, 10, finalization_job_id=JOB, finalization_revision=1)
     monkeypatch.setenv(config.SMART_MERGE_MODE_ENV, 'merge')
@@ -921,6 +922,7 @@ async def test_permanently_failed_donor_dead_letters_without_mutating_conversati
             await jobs.attempt()
     claim = jobs_db.claim_finalization_job(JOB, 1)
     donor, survivor = world.get(UID, 'n'), world.get(UID, 'p')
+    assert donor['smart_merge']['role'] == 'donor' and donor['discarded']
     assert jobs_db.mark_finalization_dead_letter(JOB, 1, claim['lease_epoch'], 3)
     assert jobs.job['status'] == 'dead_letter'
     assert world.get(UID, 'n') == donor and world.get(UID, 'p') == survivor
