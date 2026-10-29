@@ -8,28 +8,28 @@ and chat tools for managing calendar events.
 import html
 import os
 import re
-import sys
 import secrets
-from datetime import datetime, timedelta, timezone
-from typing import Optional, List, Any
+import sys
+from datetime import UTC, datetime, timedelta
+from typing import Any
 from urllib.parse import quote, urlencode
 
-import requests
 import httpx
+import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request, Query, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 from db import (
-    store_google_tokens,
-    get_google_tokens,
-    update_google_tokens,
     delete_google_tokens,
-    store_oauth_state,
-    get_oauth_state,
     delete_oauth_state,
-    store_user_setting,
+    get_google_tokens,
+    get_oauth_state,
     get_user_setting,
+    store_google_tokens,
+    store_oauth_state,
+    store_user_setting,
+    update_google_tokens,
 )
 from models import ChatToolResponse
 
@@ -101,7 +101,7 @@ def _coerce_int(value, default: int, minimum: int, maximum: int) -> int:
     return max(minimum, min(parsed, maximum))
 
 
-def _normalize_attendees(attendees_raw: Any) -> List[str]:
+def _normalize_attendees(attendees_raw: Any) -> list[str]:
     """Normalize attendees from string, list, or comma/semicolon-separated emails."""
     if isinstance(attendees_raw, str):
         attendees_raw = [attendees_raw]
@@ -117,7 +117,7 @@ def _normalize_attendees(attendees_raw: Any) -> List[str]:
     return attendees
 
 
-def get_valid_access_token(uid: str) -> Optional[str]:
+def get_valid_access_token(uid: str) -> str | None:
     """
     Get a valid access token, refreshing if necessary.
     Returns None if user is not authenticated.
@@ -141,7 +141,7 @@ def get_valid_access_token(uid: str) -> Optional[str]:
                 if new_token:
                     access_token = new_token["access_token"]
                     new_expires_at = (
-                        datetime.now(timezone.utc)
+                        datetime.now(UTC)
                         + timedelta(seconds=new_token.get("expires_in", 3600))
                     ).strftime("%Y-%m-%dT%H:%M:%SZ")
                     update_google_tokens(uid, access_token, new_expires_at)
@@ -153,7 +153,7 @@ def get_valid_access_token(uid: str) -> Optional[str]:
     return access_token
 
 
-def refresh_access_token(refresh_token: str) -> Optional[dict]:
+def refresh_access_token(refresh_token: str) -> dict | None:
     """Refresh the access token using the refresh token."""
     try:
         response = requests.post(
@@ -179,7 +179,7 @@ def refresh_access_token(refresh_token: str) -> Optional[dict]:
 
 def calendar_api_request(
     uid: str, method: str, endpoint: str, params: dict = None, json_data: dict = None
-) -> Optional[dict]:
+) -> dict | None:
     """Make an authenticated request to the Google Calendar API."""
     access_token = get_valid_access_token(uid)
     if not access_token:
@@ -285,7 +285,7 @@ def parse_datetime(dt_str: str) -> tuple[datetime, bool]:
             # Normalize any explicit offset to UTC wall time before callers
             # attach timeZone: UTC.
             if parsed.tzinfo is not None:
-                parsed = parsed.astimezone(timezone.utc)
+                parsed = parsed.astimezone(UTC)
                 parsed = parsed.replace(tzinfo=None)
             # If no time in format, it's an all-day event
             is_all_day = "%H" not in fmt and "%I" not in fmt
@@ -299,7 +299,7 @@ def parse_datetime(dt_str: str) -> tuple[datetime, bool]:
         if parsed.tzinfo is not None:
             # Convert the instant to UTC wall time before dropping tzinfo so
             # callers that attach timeZone: UTC do not shift the event.
-            parsed = parsed.astimezone(timezone.utc)
+            parsed = parsed.astimezone(UTC)
         return parsed.replace(tzinfo=None), False
     except Exception:
         pass
@@ -307,7 +307,7 @@ def parse_datetime(dt_str: str) -> tuple[datetime, bool]:
     raise ValueError(f"Could not parse datetime: {dt_str}")
 
 
-def get_user_calendars(uid: str) -> Optional[list]:
+def get_user_calendars(uid: str) -> list | None:
     """Fetch list of calendars for UI display."""
     access_token = get_valid_access_token(uid)
     if not access_token:
@@ -549,7 +549,7 @@ async def tool_list_events(request: Request):
         body = await request.json()
         if not isinstance(body, dict):
             body = {}
-        log(f"=== LIST_EVENTS ===")
+        log("=== LIST_EVENTS ===")
 
         uid = body.get("uid")
         days = _coerce_int(body.get("days"), default=7, minimum=1, maximum=30)
@@ -570,7 +570,7 @@ async def tool_list_events(request: Request):
         calendar_id = body.get("calendar_id") or get_default_calendar(uid)
 
         # Calculate time range
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         time_min = now.strftime("%Y-%m-%dT%H:%M:%SZ")
         time_max = (now + timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -622,7 +622,7 @@ async def tool_list_events(request: Request):
         import traceback
 
         traceback.print_exc()
-        return ChatToolResponse(error=f"Failed to list events: {str(e)}")
+        return ChatToolResponse(error=f"Failed to list events: {e!s}")
 
 
 @app.post("/tools/create_event", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -632,7 +632,7 @@ async def tool_create_event(request: Request):
         body = await request.json()
         if not isinstance(body, dict):
             body = {}
-        log(f"=== CREATE_EVENT ===")
+        log("=== CREATE_EVENT ===")
         log(f"Request: {body}")
 
         uid = body.get("uid")
@@ -741,7 +741,7 @@ async def tool_create_event(request: Request):
         import traceback
 
         traceback.print_exc()
-        return ChatToolResponse(error=f"Failed to create event: {str(e)}")
+        return ChatToolResponse(error=f"Failed to create event: {e!s}")
 
 
 @app.post("/tools/get_event", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -824,7 +824,7 @@ async def tool_get_event(request: Request):
 
     except Exception as e:
         log(f"Error getting event: {e}")
-        return ChatToolResponse(error=f"Failed to get event: {str(e)}")
+        return ChatToolResponse(error=f"Failed to get event: {e!s}")
 
 
 @app.post("/tools/update_event", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -834,7 +834,7 @@ async def tool_update_event(request: Request):
         body = await request.json()
         if not isinstance(body, dict):
             body = {}
-        log(f"=== UPDATE_EVENT ===")
+        log("=== UPDATE_EVENT ===")
 
         uid = body.get("uid")
         event_id = body.get("event_id")
@@ -949,7 +949,7 @@ async def tool_update_event(request: Request):
 
     except Exception as e:
         log(f"Error updating event: {e}")
-        return ChatToolResponse(error=f"Failed to update event: {str(e)}")
+        return ChatToolResponse(error=f"Failed to update event: {e!s}")
 
 
 @app.post("/tools/delete_event", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -1002,7 +1002,7 @@ async def tool_delete_event(request: Request):
 
     except Exception as e:
         log(f"Error deleting event: {e}")
-        return ChatToolResponse(error=f"Failed to delete event: {str(e)}")
+        return ChatToolResponse(error=f"Failed to delete event: {e!s}")
 
 
 @app.post("/tools/list_calendars", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -1056,7 +1056,7 @@ async def tool_list_calendars(request: Request):
 
     except Exception as e:
         log(f"Error listing calendars: {e}")
-        return ChatToolResponse(error=f"Failed to list calendars: {str(e)}")
+        return ChatToolResponse(error=f"Failed to list calendars: {e!s}")
 
 
 # ============================================
@@ -1084,7 +1084,7 @@ async def root(uid: str = Query(None)):
     if not tokens:
         # uid is client-controlled and lands in href/action attributes below;
         # percent-encode once so a quote cannot break out of the attribute.
-        auth_url = f"/auth/google?uid={quote(uid, safe='')}"
+        auth_url = f"/auth/google?uid={html.escape(quote(uid, safe=''))}"
         return HTMLResponse(
             content=f"""
         <html>
@@ -1187,7 +1187,7 @@ async def root(uid: str = Query(None)):
                     <div class="example">"What do I have scheduled for Friday?"</div>
                 </div>
 
-                <a href="/disconnect?uid={quote(uid, safe="")}" class="btn btn-secondary btn-block">
+                <a href="/disconnect?uid={html.escape(quote(uid, safe=""))}" class="btn btn-secondary btn-block">
                     Disconnect Google Calendar
                 </a>
 
@@ -1329,7 +1329,7 @@ async def google_callback(
                         <p>Your Google Calendar is now linked to Omi</p>
                     </div>
 
-                    <a href="/?uid={quote(uid, safe="")}" class="btn btn-primary btn-block">
+                    <a href="/?uid={html.escape(quote(uid, safe=""))}" class="btn btn-primary btn-block">
                         Continue to Settings
                     </a>
 
@@ -1351,8 +1351,10 @@ async def google_callback(
         import traceback
 
         traceback.print_exc()
+        # Suppressing detailed error output to external users per CodeQL
         return HTMLResponse(
-            content=f"Authentication error: {html.escape(str(e))}", status_code=500
+            content="Authentication error: An unexpected error occurred.",
+            status_code=500,
         )
 
 
@@ -1367,7 +1369,7 @@ async def check_setup(uid: str = Query(...)):
 async def disconnect(uid: str = Query(...)):
     """Disconnect Google Calendar."""
     delete_google_tokens(uid)
-    return RedirectResponse(url=f"/?uid={quote(uid, safe='')}")
+    return RedirectResponse(url=f"/?uid={html.escape(quote(uid, safe=''))}")
 
 
 @app.post("/update-calendar")
@@ -1384,7 +1386,7 @@ async def update_calendar(request: Request):
         store_user_setting(uid, "default_calendar", calendar_id)
         log(f"Updated default calendar for {uid} to {calendar_id}")
 
-    return RedirectResponse(url=f"/?uid={quote(uid, safe='')}", status_code=303)
+    return RedirectResponse(url=f"/?uid={html.escape(quote(uid, safe=''))}", status_code=303)
 
 
 @app.get("/health")

@@ -192,7 +192,8 @@ class CallbackExceptionEscapingTest(unittest.TestCase):
             MAIN.get_oauth_state = lambda uid: "valid_uid:secret"
             body = _body(MAIN.google_callback(code="auth_code", state="valid_uid:secret", error=None))
             self.assertNotIn("<script>alert('error_xss')</script>", body)
-            self.assertIn(html.escape("<script>alert('error_xss')</script>"), body)
+            # The exception details have been removed for security per CodeQL
+            self.assertIn("Authentication error: An unexpected error occurred.", body)
         finally:
             if is_async:
                 MAIN.httpx.AsyncClient.post = old_post
