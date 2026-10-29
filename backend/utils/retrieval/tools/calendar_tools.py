@@ -703,7 +703,7 @@ async def get_calendar_events_tool(
                 return "Google Calendar access denied. Please reconnect your Google Calendar from settings with proper permissions."
             else:
                 emit_sync_failed(telemetry_context, e)
-                return f"Error fetching calendar events: {e.message}"
+                return f"Error fetching calendar events (Google Calendar status {e.status_code}). Please try again."
         except (httpx.TimeoutException, httpx.ConnectError) as e:
             logger.error(f"❌ Network error fetching calendar events: {e}")
             emit_sync_failed(telemetry_context, e)
@@ -941,7 +941,7 @@ async def create_calendar_event_tool(
             elif e.is_permission_error:
                 return "Google Calendar write access is not available. Please reconnect your Google Calendar from settings with proper permissions."
             else:
-                return f"Error creating calendar event: {e.message}"
+                return f"Error creating calendar event (Google Calendar status {e.status_code}). Please try again."
         except (httpx.TimeoutException, httpx.ConnectError) as e:
             logger.error(f"❌ Network error creating calendar event: {e}")
             return "Unable to reach Google Calendar right now. Please try again in a moment."
@@ -1032,7 +1032,7 @@ async def delete_calendar_event_tool(
                 elif e.is_permission_error:
                     return "Google Calendar write access is not available. Please reconnect your Google Calendar from settings with proper permissions."
                 else:
-                    return f"Error deleting calendar event: {e.message}"
+                    return f"Error deleting calendar event (Google Calendar status {e.status_code}). Please try again."
             except (httpx.TimeoutException, httpx.ConnectError) as e:
                 logger.error(f"❌ Network error deleting event by ID: {e}")
                 return "Unable to reach Google Calendar right now. Please try again in a moment."
@@ -1190,7 +1190,9 @@ async def delete_calendar_event_tool(
             elif e.is_permission_error:
                 return "Google Calendar write access is not available. Please reconnect your Google Calendar from settings with proper permissions."
             else:
-                return f"Error searching for calendar events: {e.message}"
+                return (
+                    f"Error searching for calendar events (Google Calendar status {e.status_code}). Please try again."
+                )
         except (httpx.TimeoutException, httpx.ConnectError) as e:
             logger.error(f"❌ Network error searching events to delete: {e}")
             return "Unable to reach Google Calendar right now. Please try again in a moment."
@@ -1352,7 +1354,7 @@ async def update_calendar_event_tool(
             elif e.is_permission_error:
                 return "Google Calendar access denied. Please reconnect your Google Calendar from settings with proper permissions."
             else:
-                return f"Error getting calendar event: {e.message}"
+                return f"Error getting calendar event (Google Calendar status {e.status_code}). Please try again."
         except (httpx.TimeoutException, httpx.ConnectError) as e:
             logger.error(f"❌ Network error getting event: {e}")
             return "Unable to reach Google Calendar right now. Please try again in a moment."
@@ -1477,7 +1479,7 @@ async def update_calendar_event_tool(
             elif e.is_permission_error:
                 return "Google Calendar write access is not available. Please reconnect your Google Calendar from settings with proper permissions."
             else:
-                return f"Error updating calendar event: {e.message}"
+                return f"Error updating calendar event (Google Calendar status {e.status_code}). Please try again."
         except (httpx.TimeoutException, httpx.ConnectError) as e:
             logger.error(f"❌ Network error updating calendar event: {e}")
             return "Unable to reach Google Calendar right now. Please try again in a moment."
