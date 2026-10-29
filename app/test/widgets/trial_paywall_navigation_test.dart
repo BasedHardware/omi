@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/paywall/paywall_checkout.dart';
 import 'package:omi/pages/paywall/trial_paywall_page.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -19,6 +20,19 @@ const _offer = PaywallOffer(
 );
 
 class _Usage extends UsageProvider {
+  @override
+  UserSubscriptionResponse get subscription => UserSubscriptionResponse(
+        trialEligible: true,
+        subscription: Subscription(plan: PlanType.basic, status: SubscriptionStatus.active),
+        transcriptionSecondsUsed: 0,
+        transcriptionSecondsLimit: 18000,
+        wordsTranscribedUsed: 0,
+        wordsTranscribedLimit: 0,
+        insightsGainedUsed: 0,
+        insightsGainedLimit: 0,
+        showSubscriptionUi: true,
+      );
+
   int restores = 0;
 
   @override

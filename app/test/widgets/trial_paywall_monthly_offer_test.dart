@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -46,10 +48,16 @@ class _Usage extends UsageProvider {
 
   UserSubscriptionResponse server;
   int fetches = 0;
+  Future<void>? refresh;
+
+  @override
+  String? get error => refreshError;
+  String? refreshError;
 
   @override
   Future<void> fetchSubscription() async {
     fetches++;
+    await refresh;
     debugSetSubscription(server);
   }
 }
@@ -282,7 +290,8 @@ void main() {
   });
 
   testWidgets('without a trial the sheet promises none', (tester) async {
-    final usage = _Usage(_subscription(trialEligible: false));
+    final usage = _Usage(_subscription());
+    usage.server = _subscription(trialEligible: false);
     final checkout = _Checkout([PaywallCheckoutOutcome.cancelled, PaywallCheckoutOutcome.cancelled]);
     await _open(tester, usage, checkout);
 
@@ -300,6 +309,41 @@ void main() {
     final events = await offerEvents(tester);
     expect(events.first.$2, {'trial': false});
     expect(events.last.$2, {'trial': false, 'outcome': 'cancelled'});
+  });
+
+  testWidgets('a reader without a trial cannot open checkout under the free-trial button', (tester) async {
+    final checkout = _Checkout([PaywallCheckoutOutcome.cancelled]);
+    await _open(tester, _Usage(_subscription(trialEligible: false)), checkout);
+    await _tapCta(tester);
+    expect(checkout.opened, isEmpty);
+    expect(find.text(_title), findsNothing);
+    expect(await offerEvents(tester), isEmpty);
+  });
+
+  testWidgets('a failed subscription refresh does not offer another checkout', (tester) async {
+    final usage = _Usage(_subscription())..refreshError = 'offline';
+    final checkout = _Checkout([PaywallCheckoutOutcome.cancelled]);
+    await _open(tester, usage, checkout);
+    await _tapCta(tester);
+    expect(find.text(_title), findsNothing);
+    expect(await offerEvents(tester), isEmpty);
+    expect(checkout.opened, [_offer.yearly]);
+  });
+
+  testWidgets('a timed-out subscription refresh does not offer another checkout', (tester) async {
+    final refresh = Completer<void>();
+    final usage = _Usage(_subscription())..refresh = refresh.future;
+    final checkout = _Checkout([PaywallCheckoutOutcome.cancelled]);
+    await _open(tester, usage, checkout);
+    await tester.tap(find.byKey(const Key('trial_paywall_cta')));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    expect(find.text(_title), findsNothing);
+    expect(await offerEvents(tester), isEmpty);
+    refresh.complete();
+    await tester.pumpAndSettle();
+    expect(find.text(_title), findsNothing, reason: 'a late refresh cannot reopen the offer');
   });
 
   testWidgets('the price is the catalog price, in its own currency', (tester) async {

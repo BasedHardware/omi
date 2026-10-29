@@ -96,9 +96,8 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
     }
   }
 
-  /// Every button here promises a free trial, so a checkout opens only for a reader the backend
-  /// still offers one. The [TrialPaywallPage.checkout] test seam stands in for the backend.
-  bool get _canCheckout => widget.checkout != null || context.read<UsageProvider>().subscription?.trialEligible == true;
+  /// A free-trial button may only open checkout while the backend still offers that trial.
+  bool get _canCheckout => context.read<UsageProvider>().subscription?.trialEligible == true;
 
   /// The CTA. A reader back from the yearly checkout without buying is offered monthly, once.
   Future<void> _checkout(PaywallOffer offer) async {
@@ -108,11 +107,11 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
   }
 
   /// The selected plan's checkout; null when none opened.
-  Future<PaywallCheckoutOutcome?> _purchase(PaywallOffer offer) async {
+  Future<PaywallCheckoutOutcome?> _purchase(PaywallOffer offer, {bool requireTrial = true}) async {
     final price = _yearly ? (offer.yearly ?? offer.monthly) : (offer.monthly ?? offer.yearly);
     if (price == null || _locked) return null;
     // Never open a checkout that would charge at once under a free-trial button.
-    if (!_canCheckout) {
+    if (requireTrial && !_canCheckout) {
       OmiFeedback.error(context, context.l10n.couldNotProcessSubscription);
       return null;
     }
@@ -125,7 +124,7 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
                 plan: tierId,
                 interval: price.interval,
                 source: widget.source,
-                trialDays: TrialPaywallPage.trialDays,
+                trialDays: requireTrial ? TrialPaywallPage.trialDays : null,
               );
       final outcome = await start(context, price, offer.tierId);
       if (mounted && !_dismissed && outcome == PaywallCheckoutOutcome.purchased) {
@@ -146,10 +145,19 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
     // Leaving before the success page does not prove nothing was bought: ask the server first.
     final usage = context.read<UsageProvider>();
     setState(() => _busy = true);
-    await usage.fetchSubscription().timeout(const Duration(seconds: 4), onTimeout: () {});
-    if (!mounted) return;
-    setState(() => _busy = false);
-    if (_dismissed || usage.subscription?.subscription.plan.isPaid == true || !_canCheckout) return;
+    try {
+      await usage.fetchSubscription().timeout(const Duration(seconds: 4));
+    } catch (_) {
+      return;
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+    if (!mounted ||
+        _dismissed ||
+        usage.error != null ||
+        usage.subscription == null ||
+        usage.subscription!.subscription.plan.isPaid ||
+        !usage.showSubscriptionUI) return;
     final trial = usage.subscription?.trialEligible == true;
     const TypedEvents().emit(PaywallMonthlyFallbackShown(trial: trial));
     final accepted = await showOmiSurfaceSheet<bool>(
@@ -168,7 +176,7 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
     PaywallCheckoutOutcome? outcome;
     if (mounted && !_locked) {
       setState(() => _yearly = false);
-      outcome = await _purchase(offer);
+      outcome = await _purchase(offer, requireTrial: trial);
     }
     // After the checkout settles, so the event carries what happened, not just the tap.
     const TypedEvents().emit(PaywallMonthlyFallbackAccepted(
