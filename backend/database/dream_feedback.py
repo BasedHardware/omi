@@ -32,8 +32,27 @@ def strings(value):
             yield from strings(item)
 
 
+# Looser gate (David 2026-10-28): verbatim input must span this many words, an
+# input string must be at least WHOLE_STRING_WORDS long to block on its own, and
+# only multi-word capitalized runs (plus explicit vocabulary terms) count as names.
+OVERLAP_WORDS = 8
+WHOLE_STRING_WORDS = 4
+# Whole-input and name checks run per sentence, so a copied sentence inside a
+# long field still blocks and a name run never spans a sentence boundary.
+SENTENCE = re.compile(r'[.!?;:。！？；：\n]+')
+
+
+def segments(text):
+    return [part for part in SENTENCE.split(unicodedata.normalize('NFC', text)) if part.strip()]
+
+
+def uncased(text):
+    # Scripts without case or spaces (CJK, Thai...) make one "word" of a whole run; any copied run is content.
+    return any(char.isalpha() and char.lower() == char.upper() for char in text)
+
+
 def _name_terms(inputs, vocabulary):
-    """Conservatively collect capitalized words and adjacent proper-noun runs."""
+    """Explicit vocabulary terms and adjacent capitalized runs of two or more words."""
     names = set()
 
     def add_name(value):
@@ -52,22 +71,26 @@ def _name_terms(inputs, vocabulary):
                     add_name(name)
 
     token_pattern = re.compile(r"[^\W\d_]+(?:['’][^\W\d_]+)*", re.UNICODE)
+
+    def add_runs(run):
+        # Every contiguous sub-run of two or more capitalized words is a possible name.
+        for start in range(len(run)):
+            for end in range(start + 2, len(run) + 1):
+                names.add(tuple(run[start:end]))
+
     for text in strings(inputs):
-        tokens = token_pattern.findall(unicodedata.normalize('NFC', text))
-        run = []
-        for token in tokens:
-            normalized = words(token)
-            if token.casefold().endswith(("'s", '’s')):
-                normalized = words(token[:-2])
-            if token[:1].isupper() and normalized:
-                add_name(token)
-                run.extend(normalized)
-            else:
-                if len(run) > 1:
-                    names.add(tuple(run))
-                run = []
-        if len(run) > 1:
-            names.add(tuple(run))
+        for sentence in segments(text):
+            run = []
+            for token in token_pattern.findall(sentence):
+                normalized = words(token)
+                if token.casefold().endswith(("'s", '’s')):
+                    normalized = words(token[:-2])
+                if token[:1].isupper() and normalized:
+                    run.extend(normalized)
+                else:
+                    add_runs(run)
+                    run = []
+            add_runs(run)
     return names
 
 
@@ -113,13 +136,19 @@ def validate(report: Feedback, inputs, vocabulary, *, uid='') -> None:
             )
         ):
             raise ValueError('feedback_input_overlap')
-    for needle in source_words:
-        if needle and any(output[i : i + len(needle)] == needle for i in range(len(output) - len(needle) + 1)):
-            raise ValueError('feedback_input_overlap')
-    grams = {tuple(output[i : i + 4]) for i in range(max(0, len(output) - 3))}
+    for source_text in source_texts:
+        for sentence in segments(source_text):
+            needle = words(sentence)
+            # Short cased labels ('completed', 'memory') are vocabulary, not owner content.
+            if not needle or (len(needle) < WHOLE_STRING_WORDS and not uncased(sentence)):
+                continue
+            if any(output[i : i + len(needle)] == needle for i in range(len(output) - len(needle) + 1)):
+                raise ValueError('feedback_input_overlap')
+    span = OVERLAP_WORDS
+    grams = {tuple(output[i : i + span]) for i in range(max(0, len(output) - span + 1))}
     # Also check across field boundaries: concatenation cannot evade the gate.
     source = words(' '.join(source_texts))
-    if any(tuple(source[i : i + 4]) in grams for i in range(max(0, len(source) - 3))):
+    if any(tuple(source[i : i + span]) in grams for i in range(max(0, len(source) - span + 1))):
         raise ValueError('feedback_input_overlap')
     names = _name_terms(inputs, vocabulary)
     if uid:

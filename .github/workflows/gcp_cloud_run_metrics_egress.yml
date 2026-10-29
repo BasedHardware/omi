@@ -9,7 +9,9 @@ on:
       - 'backend/charts/monitoring/alerts/live-stt.json'
       - 'backend/charts/monitoring/alerts/resilience.json'
       - 'backend/charts/monitoring/live-alert-gate.json'
+      - 'backend/charts/monitoring/mute-timings.json'
       - 'backend/charts/monitoring/gmp/frontend-values.prod.yaml'
+      - 'backend/scripts/verify_pusher_live_alert_route.py'
       - '.github/workflows/gcp_cloud_run_metrics_egress.yml'
   workflow_dispatch:
     inputs:
@@ -30,6 +32,12 @@ concurrency:
 
 permissions:
   contents: read
+
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
 
 jobs:
   deploy:

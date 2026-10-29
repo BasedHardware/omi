@@ -123,8 +123,8 @@ final class SharedCaptureSourceRecoveryTests: XCTestCase {
   func testLocalMicrophoneRecoveryPreservesBothTranscriptionSinks() async throws {
     guard #available(macOS 14.4, *) else { throw XCTSkip("Core Audio taps require macOS 14.4") }
     let state = AppState()
-    let micSTT = LocalTranscriptionService(language: "en", isUser: true)
-    let systemSTT = LocalTranscriptionService(language: "en", isUser: false)
+    let micSTT = LocalTranscriptionService(language: .english, isUser: true)
+    let systemSTT = LocalTranscriptionService(language: .english, isUser: false)
     let tap = RecoverySystemAudio()
     state.isTranscribing = true
     state.sttSession.activeMode = .local

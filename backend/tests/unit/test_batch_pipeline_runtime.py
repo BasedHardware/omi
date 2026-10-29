@@ -256,12 +256,14 @@ def test_startup_pins_precision_reuses_segmentation_and_owns_one_gpu(monkeypatch
 
 def test_process_composes_a_pump_with_fresh_dedicated_capacity(monkeypatch):
     captured = {}
-    model_worker = object()
+    model_worker = SimpleNamespace()
     monkeypatch.setattr(runtime, 'load_worker', lambda artifacts: model_worker)
     monkeypatch.setenv('BATCH_PIPELINE_POOL_KIND', 'dedicated_batch')
     monkeypatch.setenv('BATCH_PIPELINE_MODEL_BATCH_SIZE', '4')
     monkeypatch.setenv('BATCH_PIPELINE_UNIT_SECONDS', '3600')
     monkeypatch.delenv('BATCH_PIPELINE_WORKER_PIPELINE_DEPTH', raising=False)
+    monkeypatch.delenv('BATCH_PIPELINE_STAGE_PROFILING_ENABLED', raising=False)
+    monkeypatch.delenv('OMI_ENV_STAGE', raising=False)
 
     class Pump:
         def __init__(self, scheduler, worker, **kwargs):
@@ -270,6 +272,7 @@ def test_process_composes_a_pump_with_fresh_dedicated_capacity(monkeypatch):
         async def run(self, stop):
             assert captured['scheduler'].pool == 'batch'
             assert captured['worker'].worker is model_worker
+            assert captured['timings'] is model_worker.timings is captured['worker'].timings
             snapshot = captured['capacity']()
             assert snapshot.available_slots == 4 and snapshot.max_item_seconds == 3600
             assert (
@@ -280,9 +283,35 @@ def test_process_composes_a_pump_with_fresh_dedicated_capacity(monkeypatch):
 
     monkeypatch.setattr(runtime, 'Pump', Pump)
     state = runtime.RuntimeState()
-    asyncio.run(runtime.run_process(object(), object(), CollectorRegistry(), state))
+    registry = CollectorRegistry()
+    asyncio.run(runtime.run_process(object(), object(), registry, state))
     assert not state.ready and captured['batch_size'] == 4
     assert captured['flights'] == 2
+    # Profiling defaults off outside the dev stage: no histogram is registered.
+    assert 'omi_batch_pipeline_stage_seconds' not in [metric.name for metric in registry.collect()]
+
+
+def test_process_stage_profiling_flag_shares_one_timings_instance_on_the_registry(monkeypatch):
+    captured = {}
+    model_worker = SimpleNamespace()
+    monkeypatch.setattr(runtime, 'load_worker', lambda artifacts: model_worker)
+    monkeypatch.setenv('BATCH_PIPELINE_POOL_KIND', 'dedicated_batch')
+    monkeypatch.setenv('BATCH_PIPELINE_MODEL_BATCH_SIZE', '4')
+    monkeypatch.setenv('BATCH_PIPELINE_STAGE_PROFILING_ENABLED', 'true')
+
+    class Pump:
+        def __init__(self, scheduler, worker, **kwargs):
+            captured.update(scheduler=scheduler, worker=worker, **kwargs)
+
+        async def run(self, stop):
+            assert captured['timings'] is model_worker.timings is captured['worker'].timings
+            stop.set()
+
+    monkeypatch.setattr(runtime, 'Pump', Pump)
+    state = runtime.RuntimeState()
+    registry = CollectorRegistry()
+    asyncio.run(runtime.run_process(object(), object(), registry, state))
+    assert 'omi_batch_pipeline_stage_seconds' in [metric.name for metric in registry.collect()]
 
 
 @pytest.mark.parametrize('raw,expected', [(None, 2), ('1', 1), ('4', 4), ('0', 2), ('9', 2), ('two', 2)])
@@ -355,3 +384,49 @@ def test_cap_audio_counter_is_exported_by_the_worker_metrics_registry(monkeypatc
     finally:
         server.shutdown()
         server.server_close()
+
+
+@pytest.mark.parametrize('mode', ['shadow', 'firestore'])
+def test_a2_shadow_parity_counter_is_exported_by_the_worker_metrics_registry(monkeypatch, mode):
+    # The A2 sample gate reads omi_jobstore_shadow_parity_total; the worker serves a private registry.
+    monkeypatch.setenv('BATCH_JOBSTORE_MODE', mode)
+    state = runtime.RuntimeState()
+    registry = CollectorRegistry()
+    server = runtime.health_server(state, registry, 0)
+    try:
+        if mode == 'shadow':
+            from database.jobstore.dual_store import SHADOW_PARITY_TOTAL
+
+            SHADOW_PARITY_TOTAL.labels(table='jobs', op='read', outcome='match').inc()
+            from database.jobstore.dual_store import SHADOW_CONVERGENCE_SECONDS, SHADOW_CONVERGENCE_TOTAL
+
+            SHADOW_CONVERGENCE_TOTAL.labels(table='control', outcome='converged').inc()
+            SHADOW_CONVERGENCE_SECONDS.labels(table='control').observe(0.3)
+        body = urllib.request.urlopen(f'http://127.0.0.1:{server.server_port}/metrics').read().decode()
+        assert ('omi_jobstore_shadow_parity_total' in body) is (mode == 'shadow')
+        if mode == 'shadow':
+            assert 'op="read"' in body and 'outcome="match"' in body
+            assert (
+                'omi_jobstore_shadow_convergence_total' in body
+                and 'omi_jobstore_shadow_convergence_seconds_bucket' in body
+            )
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_a2_parity_collector_failure_keeps_the_worker_metrics(monkeypatch):
+    import builtins
+
+    real_import = builtins.__import__
+
+    def refuse(name, *args, **kwargs):
+        if name == 'database.jobstore.dual_store':
+            raise ImportError('driver_missing')
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'shadow')
+    monkeypatch.setattr(builtins, '__import__', refuse)
+    from database.batch_pipeline_shadow_hook import shadow_parity_collectors
+
+    assert shadow_parity_collectors() == ()

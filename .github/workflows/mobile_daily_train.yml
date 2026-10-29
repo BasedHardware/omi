@@ -34,6 +34,10 @@ on:
         description: "Audited Android candidate (X.Y.Z/build, or none = audited no-candidate) from the operator release gate; empty = no pin"
         type: string
         default: ""
+      capture_health_override:
+        description: "Reason to let THIS run's rollout hops past a capture-health HOLD (mobile_capture_health.py); empty = no override"
+        type: string
+        default: ""
 
 concurrency:
   group: mobile-daily-train
@@ -41,6 +45,12 @@ concurrency:
 
 permissions:
   contents: read
+
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
 
 jobs:
   dispatch:
@@ -57,6 +67,7 @@ jobs:
           TRAIN_DRY_RUN: ${{ inputs.dry_run == true && 'true' || 'false' }}
           TRAIN_PIN_IOS: ${{ inputs.pin_ios }}
           TRAIN_PIN_ANDROID: ${{ inputs.pin_android }}
+          TRAIN_CAPTURE_HEALTH_OVERRIDE: ${{ inputs.capture_health_override }}
         run: |
           set -euo pipefail
           PIN_IOS_FLAG=""
@@ -71,7 +82,8 @@ jobs:
             --app-id "$CODEMAGIC_APP_ID" \
             --dry-run "$TRAIN_DRY_RUN" \
             $PIN_IOS_FLAG \
-            $PIN_ANDROID_FLAG | tee "$RUNNER_TEMP/dispatch.txt"
+            $PIN_ANDROID_FLAG \
+            --capture-health-override "$TRAIN_CAPTURE_HEALTH_OVERRIDE" | tee "$RUNNER_TEMP/dispatch.txt"
           {
             echo "### Mobile daily train"
             echo

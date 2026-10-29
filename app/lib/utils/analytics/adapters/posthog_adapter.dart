@@ -7,10 +7,12 @@ import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/utils/analytics/analytics_adapter.dart';
+import 'package:omi/utils/analytics/session_replay.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
 class PostHogAnalyticsAdapter
     implements
+        AnalyticsResolvedFlagAdapter,
         AnalyticsAdapter,
         AnalyticsDeliveryAdapter,
         AnalyticsIdentityAdapter,
@@ -104,6 +106,7 @@ class PostHogAnalyticsAdapter
     config.debug = debug;
     config.sendFeatureFlagEvents = false;
     config.preloadFeatureFlags = false;
+    SessionReplay.configure(config);
     await Posthog().setup(config);
     _initialized = true;
   }
@@ -191,6 +194,17 @@ class PostHogAnalyticsAdapter
     if (verified != null) return verified.flags[key] == true;
     final result = await Posthog().getFeatureFlagResult(key);
     return result?.enabled == true && result?.variant == null;
+  }
+
+  @override
+  Future<bool?> resolvedFeatureEnabled(String key) async {
+    final verified = _fresh;
+    if (verified != null) {
+      final value = verified.flags[key];
+      return value is bool ? value : null;
+    }
+    final result = await Posthog().getFeatureFlagResult(key);
+    return result?.enabled;
   }
 
   @override

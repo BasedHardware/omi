@@ -3,10 +3,14 @@
 import asyncio
 from datetime import datetime, timezone
 
+import pytest
+
 from config.dream_agent import Caps
 from database import dream_store, dream_turns
 from tests.unit.test_dream_harness_runtime import runtime, scripted, store, UID
+from tests.unit.test_dream_session import call
 from utils import dream_agent
+from utils import dream_harness_transport
 from utils.dream_cost import minute_burndown_tokens, price_weighted_tokens
 from utils.llm.shaped_agent import Turn
 
@@ -48,6 +52,67 @@ def test_minute_hold_and_settlement_use_burndown_without_leaks(runtime):
     dream_turns.settle(UID, lease['run_id'], unweighted)
     # A missing weight keeps the raw charge (never drops tokens) plus the output top-up.
     assert _minute_total(runtime) == 46000 + 4 * 8000 + 900 + 4 * 100
+
+
+def test_max_context_uncached_hold_fits_default_minute_ceiling(runtime):
+    caps = Caps()
+    lease = dream_store.acquire(UID, caps, now=NOW)
+    hold = minute_burndown_tokens(
+        'gemini',
+        'gemini-3.8-flash',
+        weighted_tokens=1048576 + 32768,
+        completion_tokens=32768,
+        prompt_tokens=1048576,
+    )
+    assert hold == 1212416 < caps.tokens_per_minute == 2000000
+    dream_turns.reserve(UID, lease['run_id'], hold, caps, now=NOW)
+    assert _minute_total(runtime) == hold
+    with pytest.raises(ValueError, match='dream_minute_headroom'):
+        dream_turns.reserve(UID, lease['run_id'], caps.tokens_per_minute + 1, caps, now=NOW)
+    assert _minute_total(runtime) == hold
+
+
+def test_prior_cache_hit_cannot_admit_a_cache_miss_over_shared_minute(runtime, monkeypatch):
+    caps = Caps(tokens_per_minute=600000)
+    competitor = dream_store.acquire('synthetic-competing-owner', caps, now=NOW)
+    reserve = dream_turns.reserve
+    holds, cache_estimates, calls = [], [], []
+
+    def attempt_room(*args, **kwargs):
+        cache_estimates.append(kwargs['cached_tokens_estimate'])
+        return 200000, 32768
+
+    def hold(uid, run_id, tokens, caps, **kwargs):
+        holds.append(tokens)
+        if len(holds) == 2:
+            reserve('synthetic-competing-owner', competitor['run_id'], 300000, caps, now=NOW)
+        return reserve(uid, run_id, tokens, caps, now=NOW, **kwargs)
+
+    async def no_sleep(_seconds):
+        pass
+
+    async def model(uid, lane, mount, messages):
+        assert lane == dream_harness_transport.MAIN_LANE
+        calls.append(None)
+        assert len(calls) == 1, 'a cache miss must not be admitted beyond the shared ceiling'
+        tool = call('read', {'refs': ['conversations/one']})
+        return Turn(
+            tokens=200000,
+            prompt_tokens=200000,
+            completion_tokens=0,
+            cached_tokens=180000,
+            tool_calls=(tool,),
+            messages=({'role': 'assistant', 'content': None, 'tool_calls': [tool]},),
+        )
+
+    monkeypatch.setattr(dream_harness_transport, 'attempt_room', attempt_room)
+    monkeypatch.setattr(dream_turns, 'reserve', hold)
+    monkeypatch.setattr(dream_agent.asyncio, 'sleep', no_sleep)
+    report = asyncio.run(dream_agent.run_pass(UID, caps=caps, turn=model))
+    assert report['status'] == 'waiting', report
+    assert cache_estimates == [None, 180000]
+    assert holds == [363840] * 5
+    assert _minute_total(runtime) == 338000 <= caps.tokens_per_minute
 
 
 def test_minute_headroom_pauses_then_continues_the_pass(runtime, monkeypatch):

@@ -23,13 +23,20 @@ DURATION = Histogram(
     'omi_sync_phase_duration_seconds',
     'Sync phase operation latency including failures; overlapping operations are not job wall time',
     ['lane', 'phase'],
-    buckets=(0.01, 0.05, 0.1, 0.5, 1, 5, 15, 60, 180, 600),
+    # 7 finite buckets, not 10: every lane/phase combination is exported once
+    # per backend-sync instance (both the custom-metric write and the GMP
+    # sidecar), and instance ids churn ~1,300 distinct values per 6h, so each
+    # bucket is re-created that often. Consumers are p50/p95 quantile queries;
+    # no rule reads an explicit le= boundary here.
+    buckets=(0.05, 0.5, 1, 5, 15, 60, 600),
 )
 CALLS = Histogram(
     'omi_sync_phase_calls_per_job',
     'Phase operation calls per sync pipeline attempt including zero calls and retries',
     ['lane', 'phase'],
-    buckets=(0, 1, 2, 4, 8, 16, 32, 64, 128, 512),
+    # Keep the 0 and 1 buckets as a pair: le=0 isolates the documented
+    # zero-call attempts (empty-result retries) from single-call ones.
+    buckets=(0, 1, 4, 16, 64, 512),
 )
 
 _logger = logging.getLogger(__name__)
@@ -331,6 +338,12 @@ def sync_phase_timer(phase: str) -> Iterator[None]:
     finally:
         if attempt is not None:
             attempt.record(phase, time.monotonic() - started)
+
+
+def current_sync_lane() -> str | None:
+    """The lane of the sync attempt in this context, or None outside one."""
+    attempt = _attempt.get()
+    return None if attempt is None else attempt.lane
 
 
 def set_sync_metrics_lane(lane: str) -> None:

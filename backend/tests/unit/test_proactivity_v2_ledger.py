@@ -5,6 +5,7 @@ import pytest
 from config.proactivity_v2 import ProactivityDenied
 from database import proactivity as ledger
 from tests.unit.test_proactivity_v2_budget import NOW, claim, store
+from tests.support.synthetic_proactivity_producers import synthetic_producers  # noqa: F401
 
 
 def ready(store, producer='commitment_followup'):
@@ -108,6 +109,13 @@ def test_source_deleted_blocks_outcome(store):
     del store.rows[('users', 'u', 'action_items', 'a')]
     with pytest.raises(ProactivityDenied, match='not_found'):
         outcome(store, item, 'opened')
+
+
+def test_pending_deletion_owner_cannot_admit_proactive_work(store):
+    store.rows[('account_deletions', 'u')] = {'wipe_status': 'pending_deletion'}
+
+    with pytest.raises(ProactivityDenied, match='not_found'):
+        ready(store)
 
 
 def test_server_reply_window_is_anchored_to_persisted_message(store):

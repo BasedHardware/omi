@@ -1,3 +1,8 @@
+import 'package:omi/providers/auth_provider.dart';
+import 'package:omi/backend/http/api/account_deletion.dart';
+import 'package:omi/backend/http/api_result.dart';
+import 'dart:async';
+
 import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'onboarding_step_telemetry.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -20,7 +25,9 @@ import 'package:omi/pages/onboarding/permissions/permissions_checker.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
 import 'package:omi/pages/onboarding/primary_language/primary_language_widget.dart';
 import 'package:omi/pages/onboarding/complete_screen.dart';
+import 'package:omi/pages/onboarding/variants/pocket/pocket_onboarding_flow.dart';
 import 'package:omi/pages/onboarding/variants/yinka/yinka_onboarding_flow.dart';
+import 'package:omi/pages/paywall/trial_upsell_sheet.dart';
 import 'package:omi/pages/onboarding/web_onboarding_page.dart';
 import 'package:omi/pages/paywall/paywall_router.dart';
 import 'package:omi/services/experiments/onboarding_variant_gate.dart';
@@ -167,7 +174,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       // Precache next image for smoother transitions
       _precacheNextImage(_controller!.index);
       if (_controller!.index == kSpeechProfilePage && _knowledgeGraphPrebuildFuture == null) {
-        _knowledgeGraphPrebuildFuture = _prebuildKnowledgeGraph().catchError((_) {});
+        _knowledgeGraphPrebuildFuture = KnowledgeGraphApi.prebuildForOnboarding().catchError((_) {});
       }
       // Read the flag two steps ahead so the decision is ready when the reader taps Continue.
       if (_controller!.index == kSpeechProfilePage) {
@@ -270,6 +277,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     PaintingBinding.instance.imageCache.clear();
     if (!paywallShown) await _maybeShowOnboardingPaywall();
     if (!mounted) return true;
+    // Sign-in happened inside onboarding, after the app shell's launch-time fetch, so Home and
+    // Settings (Upgrade row, first-tap trial paywall) would otherwise have no subscription.
+    unawaited(context.read<UsageProvider>().fetchSubscription());
     routeToPage(context, const HomePageWrapper(), replace: true);
     return true;
   }
@@ -285,7 +295,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   }
 
   /// The `trial` arm's placement: once, right after sign-up and consent, before the first step.
-  /// Dismissing it ("Continue with the free plan") just continues onboarding.
+  /// Dismissing it (close button) just continues onboarding.
+  bool _signupPaywallPurchased = false;
+
   Future<void> _maybeShowSignupPaywall() async {
     if (_signupPaywallShown) return;
     final config = await PaywallExperiment.resolve();
@@ -295,7 +307,12 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     final usage = context.read<UsageProvider>();
     if (usage.subscription == null) await usage.fetchSubscription();
     if (!mounted) return;
-    await PaywallRouter.openVariant(context, source: 'onboarding', config: config);
+    await PaywallRouter.openVariant(
+      context,
+      source: 'onboarding',
+      config: config,
+      onResult: (result) => _signupPaywallPurchased = result == true,
+    );
   }
 
   /// Enters the steps after sign-in and consent: the arm of `onboarding-variant` for this reader
@@ -311,6 +328,20 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       '\$feature/${OnboardingVariantGate.enabledFlag}': arm.variant.wireName,
     });
     switch (arm.variant) {
+      case OnboardingVariant.pocket:
+        // Closing the sign-up trial paywall earns the 30-day downsell, once.
+        if (_signupPaywallShown && !_signupPaywallPurchased) {
+          await TrialUpsellSheet.show(context, source: 'onboarding');
+          if (!mounted) return;
+        }
+        // The flow offers no plan itself: skip the end placement only when sign-up already showed one.
+        await routeToPage(
+          context,
+          PocketOnboardingFlow(
+              onComplete: ({required bool paywallShown}) =>
+                  _finishOnboarding(paywallShown: paywallShown || _signupPaywallShown)),
+        );
+        return;
       case OnboardingVariant.yinka:
         await routeToPage(context, YinkaOnboardingFlow(onComplete: _finishOnboarding));
         return;
@@ -475,32 +506,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     navigator.pushAndRemoveUntil(omiPageRoute(builder: (_) => const AppShell()), (_) => false);
   }
 
-  Future<void> _prebuildKnowledgeGraph() async {
-    try {
-      final current = await KnowledgeGraphApi.getKnowledgeGraph();
-      // Canonical graphs are derived on read, even when no relationships exist.
-      // Do not schedule the legacy mutation rejected by the canonical fence.
-      if (current['canonical'] == true) return;
-      final nodes = current['nodes'] as List<dynamic>? ?? const [];
-      final hasGraph = nodes.any((node) => (node['id'] ?? '') != 'user-node');
-      if (hasGraph) return;
-    } catch (_) {
-      // Continue to rebuild below.
-    }
-
-    final rebuildResult = await KnowledgeGraphApi.rebuildKnowledgeGraph();
-    final status = rebuildResult['status'];
-    // 'canonical_up_to_date' is the synthetic client status returned on HTTP 409.
-    if (status == 'canonical_up_to_date') {
-      return;
-    }
-    await KnowledgeGraphApi.waitForGraphStability(
-      timeout: const Duration(seconds: 25),
-      interval: const Duration(seconds: 2),
-      stabilityChecks: 1,
-    );
-  }
-
   void _updateBackgroundImage(int pageIndex) {
     final newImage = _getBackgroundImageForIndex(pageIndex) ?? Assets.images.onboardingBg1.path;
     if (_currentBackgroundImage != newImage) {
@@ -577,6 +582,12 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       AuthComponent(
         onSignIn: () async {
           if (!mounted) return;
+          final deletion = await context.read<AuthenticationProvider>().checkAccountDeletion();
+          if (!context.mounted) return;
+          if (deletion is! ApiSuccess<AccountDeletionStatus> || deletion.data.pendingDeletion) {
+            Navigator.of(context).pushAndRemoveUntil(omiPageRoute(builder: (_) => const AppShell()), (_) => false);
+            return;
+          }
           PlatformManager.instance.analytics.onboardingStepCompleted('Auth');
           context.read<HomeProvider>().setupHasSpeakerProfile();
           // Refresh subscription on sign-in: AppShell only fetches it on mount,

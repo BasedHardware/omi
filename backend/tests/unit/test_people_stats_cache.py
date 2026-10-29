@@ -878,11 +878,11 @@ def test_assign_sync_conversation_invalidates_once_after_size_limit_retry(writer
 
 
 def _allow_unlocked_data_plane(monkeypatch):
-    import database.account_deletion_marker as marker
+    from database import _client
 
     miss = SimpleNamespace(exists=False, to_dict=lambda: None)
     monkeypatch.setattr(
-        marker,
+        _client,
         'get_data_plane_firestore_client',
         lambda: SimpleNamespace(document=lambda path: SimpleNamespace(get=lambda *args, **kwargs: miss)),
     )
@@ -897,7 +897,8 @@ def test_unlock_all_conversations_invalidates_after_every_batch_commit(writer_en
     assert invalidated == ['u1', 'u1']
 
 
-def test_smart_merge_absorb_invalidates_after_absorbed_commit(writer_env, monkeypatch):
+def test_smart_merge_absorb_invalidates_after_absorbed_commit(writer_env, monkeypatch, caplog):
+    caplog.set_level('INFO')
     store, invalidated = writer_env
     monkeypatch.setattr(smart_merge_db, 'invalidate_people_stats_cache', lambda uid: invalidated.append(uid))
     store.seed_conv(
@@ -921,6 +922,7 @@ def test_smart_merge_absorb_invalidates_after_absorbed_commit(writer_env, monkey
     )
     assert result.outcome == 'absorbed'
     assert invalidated == ['u1']
+    assert not any('stage=bridge' in record.message for record in caplog.records)
 
 
 @pytest.mark.parametrize('deleted', [True, False])

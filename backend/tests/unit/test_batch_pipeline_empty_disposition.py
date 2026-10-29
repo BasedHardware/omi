@@ -4,6 +4,7 @@ from copy import deepcopy
 from dataclasses import fields, replace
 import importlib.util
 import io
+import os
 from pathlib import Path
 from unittest.mock import Mock
 import wave
@@ -12,7 +13,7 @@ import pytest
 
 from tests.unit.test_batch_pipeline_quarantine_recovery import setup, legacy_dependencies, row
 from utils.batch_pipeline.contracts import WorkItem, RecoveryWork
-from utils.batch_pipeline.quarantine_recovery import transcribe
+from utils.batch_pipeline.recovery_recognizers import transcribe
 from utils.batch_pipeline.recovery_disposition import inspect_audio, RecoveryFailure, silence_payload
 from database.batch_pipeline_quarantine_recovery import SilenceDispositionStore
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -21,6 +22,10 @@ from tests.unit.test_batch_pipeline_worker import setup_worker, item
 from diarizer import batch_pipeline
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.scheduler import owner_key
+
+# Operator stores take the serving role's settings explicitly. These tests model
+# them with the fixtures' synthetic env (a live mapping, so per-test edits apply).
+SERVING_ENV = os.environ
 
 
 @pytest.fixture(scope='module', autouse=True)
@@ -166,12 +171,14 @@ def test_operator_silence_preserves_paid_intent_and_replay_is_once(setup, monkey
     client, store, binding, _, stt, _ = setup
     enable(monkeypatch, legacy_dependencies)
     old = spent(client)
-    protocol = SilenceDispositionStore(store)
+    protocol = SilenceDispositionStore(store, server_flags=SERVING_ENV)
     job = protocol.prepare_silence('bad', binding.owner_id, 'plan', 100)
     token = job['silence_disposition']['token']
     assert token != old['token'] and row(client)['recovery'] == old
     assert protocol.prepare_silence('bad', binding.owner_id, 'plan', 101)['silence_disposition']['token'] == token
-    assert protocol.complete_silence('bad', token, 'plan', 'gs://synthetic/silence', 102)
+    assert protocol.complete_silence(
+        'bad', token, 'plan', 'gs://synthetic/silence', 102, measured_held_vad_speech_seconds=0
+    )
     assert row(client)['recovery'] == old and row(client)['result']['outcome'] == 'silence'
     revision = client.rows[
         (
@@ -179,7 +186,9 @@ def test_operator_silence_preserves_paid_intent_and_replay_is_once(setup, monkey
             owner_key(binding.owner_id),
         )
     ]['revision']
-    assert protocol.complete_silence('bad', token, 'plan', 'gs://synthetic/silence', 103)
+    assert protocol.complete_silence(
+        'bad', token, 'plan', 'gs://synthetic/silence', 103, measured_held_vad_speech_seconds=0
+    )
     assert (
         client.rows[
             (
@@ -217,7 +226,7 @@ def test_operator_fences_refuse_mutation(setup, monkeypatch, legacy_dependencies
         row(client)['silence_disposition'] = {'plan_digest': 'another'}
     before = deepcopy(client.rows)
     with pytest.raises((ProjectionBlocked, BatchPrivacyBlocked)):
-        SilenceDispositionStore(store).prepare_silence('bad', binding.owner_id, 'plan', 100)
+        SilenceDispositionStore(store, server_flags=SERVING_ENV).prepare_silence('bad', binding.owner_id, 'plan', 100)
     assert client.rows == before
 
 
@@ -247,14 +256,18 @@ def test_operator_replay_after_durable_upload_completion_does_not_need_live_run(
     client, store, binding, _, _, _ = setup
     enable(monkeypatch, legacy_dependencies)
     spent(client)
-    protocol = SilenceDispositionStore(store)
+    protocol = SilenceDispositionStore(store, server_flags=SERVING_ENV)
     job = protocol.prepare_silence('bad', binding.owner_id, 'plan', 100)
     token = job['silence_disposition']['token']
-    assert protocol.complete_silence('bad', token, 'plan', 'gs://synthetic/silence', 102)
+    assert protocol.complete_silence(
+        'bad', token, 'plan', 'gs://synthetic/silence', 102, measured_held_vad_speech_seconds=0
+    )
     ledger = client.rows[('users', binding.owner_id, 'sync_content_ledger', binding.content_id)]
     ledger['status'] = 'completed'
     snapshot = deepcopy(client.rows)
-    assert protocol.complete_silence('bad', token, 'plan', 'gs://synthetic/silence', 103)
+    assert protocol.complete_silence(
+        'bad', token, 'plan', 'gs://synthetic/silence', 103, measured_held_vad_speech_seconds=0
+    )
     assert protocol.prepare_silence('bad', binding.owner_id, 'plan', 104)['silence_disposition']['token'] == token
     assert client.rows == snapshot
 
@@ -332,7 +345,7 @@ def test_payload_validation_has_closed_failure_stage(setup, monkeypatch, legacy_
     artifacts.fetch_audio.return_value = wav()
     recovery.stt = transcribe
     monkeypatch.setattr(
-        'utils.batch_pipeline.quarantine_recovery.projection_speech_spans',
+        'utils.batch_pipeline.recovery_recognizers.projection_speech_spans',
         Mock(side_effect=ValueError('PRIVATE_SENTINEL')),
     )
     assert recovery.recover('bad', binding.owner_id) == 'failed_held'
@@ -365,15 +378,21 @@ def test_operator_lost_upload_reply_reconciles_without_touching_paid_intent(setu
     key = module.fingerprint(row(client))
     artifacts.persist_recovery_result.side_effect = TimeoutError('PRIVATE_SENTINEL')
     with pytest.raises(TimeoutError):
-        module.apply_silent(store, artifacts, 'bad', binding.owner_id, key, 'plan')
+        module.apply_silent(store, artifacts, 'bad', binding.owner_id, key, 'plan', server_flags=SERVING_ENV)
     token = row(client)['silence_disposition']['token']
     assert row(client)['recovery'] == old and row(client)['state'] == 'quarantined'
     artifacts.find_recovery_result.return_value = 'gs://synthetic/silence'
     artifacts.load_result.return_value = silence_payload(5)
-    assert module.apply_silent(store, artifacts, 'bad', binding.owner_id, key, 'plan') == 'applied_silence'
+    assert (
+        module.apply_silent(store, artifacts, 'bad', binding.owner_id, key, 'plan', server_flags=SERVING_ENV)
+        == 'applied_silence'
+    )
     assert row(client)['silence_disposition']['token'] == token
     assert module.fingerprint(row(client)) == key and row(client)['recovery'] == old
-    assert module.apply_silent(store, artifacts, 'bad', binding.owner_id, key, 'plan') == 'already_applied'
+    assert (
+        module.apply_silent(store, artifacts, 'bad', binding.owner_id, key, 'plan', server_flags=SERVING_ENV)
+        == 'already_applied'
+    )
     assert artifacts.persist_recovery_result.call_count == 1
     stt.assert_not_called()
     provider.assert_not_called()
@@ -385,7 +404,9 @@ def test_operator_artifact_registration_accepts_only_its_new_token(setup, monkey
     client, store, binding, _, _, _ = setup
     enable(monkeypatch, legacy_dependencies)
     old = spent(client)
-    prepared = SilenceDispositionStore(store).prepare_silence('bad', binding.owner_id, 'plan', 100)
+    prepared = SilenceDispositionStore(store, server_flags=SERVING_ENV).prepare_silence(
+        'bad', binding.owner_id, 'plan', 100
+    )
     token = prepared['silence_disposition']['token']
     uri = f'gs://synthetic/results/bad/{token}.enc'
     register_batch_artifact(store, binding.owner_id, 'bad', uri, 'results', 0)
@@ -408,5 +429,5 @@ def test_operator_respects_deleted_deterministic_candidate(setup, monkeypatch, l
     client.rows[('users', binding.owner_id, 'deleted_conversations', target)] = {'deleted': True}
     before = deepcopy(client.rows)
     with pytest.raises(BatchPrivacyBlocked):
-        SilenceDispositionStore(store).prepare_silence('bad', binding.owner_id, 'plan', 100)
+        SilenceDispositionStore(store, server_flags=SERVING_ENV).prepare_silence('bad', binding.owner_id, 'plan', 100)
     assert client.rows == before

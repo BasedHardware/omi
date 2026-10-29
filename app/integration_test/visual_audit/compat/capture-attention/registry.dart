@@ -6,10 +6,11 @@
 // See ../README.md.
 import 'package:omi/ui/ui.dart';
 
-import '../../../fakes.dart';
-import '../../../harness.dart';
+import '../../fakes.dart';
+import '../../harness.dart';
 import 'scenarios/apps.dart';
 import 'scenarios/auth.dart';
+import 'scenarios/capture.dart';
 import 'scenarios/chat_apps.dart';
 import 'scenarios/chat.dart';
 import 'scenarios/conversation_detail.dart';
@@ -25,7 +26,6 @@ import 'scenarios/search.dart';
 import 'scenarios/settings.dart';
 import 'scenarios/settings_pages.dart';
 import 'scenarios/speaker_labels.dart';
-import 'scenarios/speaker_prompts.dart';
 import 'scenarios/tasks.dart';
 
 final auditSuite = AuditSuite(
@@ -41,7 +41,6 @@ final auditSuite = AuditSuite(
     ...deviceScenarios,
     ...conversationsScenarios,
     ...offlineProcessingScenarios,
-    ...speakerPromptScenarios,
     ...speakerLabelScenarios,
     ...reviewScenarios,
     ...conversationDetailScenarios,

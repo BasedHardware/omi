@@ -25,6 +25,7 @@ from google.cloud import firestore
 from prometheus_client import Counter, Histogram
 
 from database import conversations as conversations_db
+from database.account_deletion_policy import account_deletion_marker_blocks_access
 from config.batch_pipeline import RecordOwnerContention
 from config.policy import resolve_batch_policy
 from utils.manual_speaker_assignments import manual_owner_reserved
@@ -47,12 +48,20 @@ from utils.stt.conversation_speakers import resolve_conversation_speakers
 from utils.stt.local_vad import offline_pcm_speech_segments
 from utils.stt.vad_compaction import transcribe_with_speech_compaction
 from utils.stt.pre_recorded import parakeet_prerecorded_from_bytes, postprocess_words
+from utils.stt.parakeet_request_metrics import parakeet_caller
 from utils.stt.speaker_embedding import extract_embedding_from_bytes, speaker_embedding_configured
 from utils.sync.speaker_identity import build_person_embeddings_cache, identify_speakers_for_segments
 
 logger = logging.getLogger(__name__)
 _pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix='transcription-shadow')
 _slots = threading.BoundedSemaphore(2)
+
+
+def _shadow_parakeet(speech_pcm: bytes) -> Any:
+    with parakeet_caller('shadow'):
+        return parakeet_prerecorded_from_bytes(speech_pcm, diarize=True, attempts=1, encoding='linear16')
+
+
 _OUTCOMES = {'ok', 'failed', 'timeout', 'partial_audio', 'no_audio', 'skipped_budget'}
 _PCM_BYTES_PER_SECOND = 32000
 _SILENCE_FRAME_BYTES = 3200  # 100 ms of 16 kHz mono PCM16
@@ -317,9 +326,7 @@ def _make_pass(
             part_start = chunk_start + offset / 32000
             words = transcribe_with_speech_compaction(
                 part,
-                lambda speech_pcm: parakeet_prerecorded_from_bytes(
-                    speech_pcm, diarize=True, attempts=1, encoding='linear16'
-                ),
+                _shadow_parakeet,
                 offline_pcm_speech_segments,
             )
             if isinstance(words, tuple):
@@ -461,13 +468,27 @@ def _record_comparison_metrics(result: dict[str, Any], outcome: str) -> None:
     SHADOW_REMAP_SAFE.labels(outcome=outcome, safe='true' if result['remap_safe'] else 'false').inc()
 
 
+def _legacy_final_pass_allowed() -> bool:
+    """Blocking (the pass runs on its own executor): new legacy final-pass work only at ``on``."""
+    from utils.sync import legacy_dark
+
+    return legacy_dark.legacy_admission_allowed()
+
+
 def _claim_shadow_owner(uid: str, conversation_id: str, raw: dict, *, policy=None) -> dict | None:
     policy = policy or resolve_batch_policy(uid)
     for _ in range(3):
         owner = raw.get('record_lane_owner')
         if owner in {'batch_live_v1', 'batch_sync_v1'}:
             return None
-        if owner == 'legacy_final_pass_v1' or not policy.live_admission_enabled:
+        if owner == 'legacy_final_pass_v1':
+            return raw
+        # Once legacy sync is draining/dark no new legacy final-pass owner (and no new
+        # final pass) may start: the conversation stays unowned for batch admission to
+        # claim (M3 re-review; final_pass_rehome moves the owners that already exist).
+        if not _legacy_final_pass_allowed():
+            return None
+        if not policy.live_admission_enabled:
             return raw
         revision = conversations_db.claim_record_lane_owner(
             uid, conversation_id, 'legacy_final_pass_v1', raw.get('updated_at')
@@ -592,7 +613,10 @@ def _store_result(uid: str, conversation_id: str, result: dict[str, Any], *, ver
         # Account deletion persists this marker before its recursive sweep.
         # Reading it in the same transaction fences a child commit after that
         # sweep has passed the conversation, even while the parent still exists.
-        if deletion_marker.get(transaction=transaction).exists:
+        deletion = deletion_marker.get(transaction=transaction)
+        if account_deletion_marker_blocks_access(
+            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('wipe_status')
+        ):
             return
         snapshot = parent.get(transaction=transaction)
         if not snapshot.exists or (snapshot.to_dict() or {}).get('deleted'):

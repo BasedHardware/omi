@@ -101,8 +101,14 @@ _TWO_TIER_MODEL_PROFILE: Dict[str, Tuple[str, str]] = {
     'memory_category': ('gpt-5-nano', 'openai'),
     'smart_glasses': ('gpt-5-nano', 'openai'),
     'persona_chat': ('gpt-5-nano', 'openai'),
+    # Open-loop review cards: one optional template-polish call per surfaced card.
+    'open_loop_card': ('gpt-5-nano', 'openai'),
+    # Open-loop daily pass: one structured status/ranking call per user per day.
+    'open_loop_daily': (LUNA_MODEL, 'openai'),
     # Operator minimal sync redrive: one title + short overview per new row.
     'sync_redrive_title': ('gpt-5-nano', 'openai'),
+    # Live episodes: one small call per moment over a few-hundred-token state.
+    'episode_incremental': ('gpt-5-nano', 'openai'),
     # Backend utility Gemini generation moves to Luna. Desktop reserved-capacity
     # generation is governed separately by vertex_pt_routing.
     # The gateway owns Luna dispatch for these features, even when its optional

@@ -172,32 +172,6 @@ describe('decodeUidFromIdToken', () => {
     expect(decodeUidFromIdToken(fakeJwt({ user_id: 'uid-A', sub: 'uid-B' }))).toBe('uid-A')
   })
 
-  it('prefers uid over sub for Firebase custom tokens (sub is service account)', () => {
-    // Exact shape minted by backend/routers/auth.py via firebase_admin.auth.create_custom_token(uid):
-    // { aud: '...', iss: '...', sub: '<service-account email>', uid: '<target user uid>' }
-    expect(
-      decodeUidFromIdToken(
-        fakeJwt({
-          iss: 'firebase-adminsdk-xxx@project.iam.gserviceaccount.com',
-          sub: 'firebase-adminsdk-xxx@project.iam.gserviceaccount.com',
-          uid: 'user-firebase-uid-123'
-        })
-      )
-    ).toBe('user-firebase-uid-123')
-  })
-
-  it('prefers uid over user_id and sub when present', () => {
-    expect(
-      decodeUidFromIdToken(
-        fakeJwt({
-          uid: 'uid-custom',
-          user_id: 'uid-userid',
-          sub: 'uid-sub'
-        })
-      )
-    ).toBe('uid-custom')
-  })
-
   it('returns "" for an undecodable / forged token — never guesses an identity', () => {
     expect(decodeUidFromIdToken('not-a-jwt')).toBe('')
     expect(decodeUidFromIdToken('a.!!!.c')).toBe('')

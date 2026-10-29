@@ -45,6 +45,7 @@ from config.conversation_smart_merge import (
     QUESTION_VERSION,
     REFRESH_LEASE_SECONDS,
     SmartMergeMode,
+    smart_merge_flatten_chain_repair_enabled,
     smart_merge_flatten_enabled,
     smart_merge_mode,
 )
@@ -56,7 +57,10 @@ from database.firestore_read_metrics import FirestoreReadSite
 from database.legal_holds import DestructiveOperationInProgress, LegalHoldActive, LegalHoldAuthorityUnavailable
 from database.sync_bridges import mark_sync_bridge_cleaned
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
+from utils.episodes.boundaries import merge_allowed
 from utils.conversations.action_item_refresh import transfer_donor
+from utils.sync import processing_hold
+from utils.enrichment import outbox as enrichment_outbox
 from utils.conversations.factory import deserialize_conversation
 from config.merge_ancestry import flatten_updates
 from utils.conversations.merge_conversations import copy_sync_bridge_audio, retract_sync_bridge_source
@@ -85,7 +89,7 @@ from utils.conversations.smart_merge_policy import (
     valid_fragment_id,
 )
 from utils.conversations.smart_merge_state import QUESTION_NAME, QUESTIONS, build_state, state_sha256
-from utils.executors import postprocess_executor, run_blocking
+from utils.executors import lifecycle_executor, run_blocking
 from utils.llm.jev_client import ask_jev
 from utils.metrics import (
     record_conversation_smart_merge,
@@ -129,13 +133,13 @@ async def smart_merge_step(
     if initial_row.get('record_lane_owner') in {'batch_live_v1', 'batch_sync_v1'}:
         return False
     if is_donor(initial_row):
-        await run_blocking(postprocess_executor, finish_absorb, uid, conversation_id, owner=owner, resumed=True)
+        await run_blocking(lifecycle_executor(uid), finish_absorb, uid, conversation_id, owner=owner, resumed=True)
         return True
     mode = smart_merge_mode()
     if mode is SmartMergeMode.OFF:
         return False
     return await run_blocking(
-        postprocess_executor, decide_and_apply, uid, conversation_id, mode=mode, trigger=trigger, owner=owner
+        lifecycle_executor(uid), decide_and_apply, uid, conversation_id, mode=mode, trigger=trigger, owner=owner
     )
 
 
@@ -358,6 +362,9 @@ def _decide(
         return None
     survivor = dict(survivor, id=survivor_id)
     survivor_segments = _segments(survivor)
+    if not merge_allowed(uid, survivor, new_row):
+        _skip(mode, 'boundary', uid, conversation_id)
+        return None
     if smart_merge_db.has_intervening_discarded(uid, survivor, new_row):
         _skip(mode, SkipReason.INTERVENING_DISCARDED, uid, conversation_id)
         return None
@@ -487,6 +494,7 @@ def _decide(
 def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMergeMode, owner: str) -> bool:
     merged_at = datetime.now(timezone.utc)
     flattened_count = 0
+    size_suffix = ''
     admission_path = plan.admission_path
 
     def payloads(
@@ -519,7 +527,11 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
         if not smart_merge_flatten_enabled():
             return None, survivor_update, donor_update, {}
         flat_reason, union, ancestor_updates = flatten_updates(
-            survivor, {str(donor['id']): donor}, ancestor_rows, user_managed=user_managed
+            survivor,
+            {str(donor['id']): donor},
+            ancestor_rows,
+            user_managed=user_managed,
+            chain_repair=smart_merge_flatten_chain_repair_enabled(),
         )
         if flat_reason is not None:
             return flat_reason, None, None, {}
@@ -539,6 +551,8 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
         )
         outcome, reason, audit = result.outcome, result.reason, result.audit
         flattened_count = result.flattened_ancestor_count
+        if result.projected_size_bucket is not None:
+            size_suffix = f' projected_size_bucket={result.projected_size_bucket}'
         if smart_merge_flatten_enabled():
             if outcome == 'absorbed':
                 record_smart_merge_flatten('absorbed', 'none')
@@ -575,7 +589,7 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
             conversation_id,
             plan.survivor_id,
             flattened_count,
-            f' gap_path={admission_path}' if admission_path else '',
+            (f' gap_path={admission_path}' if admission_path else '') + size_suffix,
         )
         return False
 
@@ -601,7 +615,7 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
         conversation_id,
         plan.survivor_id,
         flattened_count,
-        f' gap_path={admission_path}' if admission_path else '',
+        (f' gap_path={admission_path}' if admission_path else '') + size_suffix,
     )
     finish_absorb(uid, conversation_id, owner=owner)
     return True
@@ -740,8 +754,19 @@ def _cleanup_flattened_ancestors(uid: str, donor_id: str, donor: Mapping[str, An
         _cleanup_donor(uid, source_id, source, survivor_id)
 
 
-def refresh_survivor(uid: str, survivor_id: str, *, owner: str) -> None:
+def refresh_survivor(uid: str, survivor_id: str, *, owner: str, settled: bool = False) -> None:
     """Regenerate the survivor once for its current revision, under a short lease."""
+    if processing_hold.scheduling_enabled() and not settled:
+        row = conversations_db.get_conversation(uid, survivor_id, read_site=FirestoreReadSite.SMART_MERGE)
+        if row and not row.get('deleted') and processing_hold.sync_sourced(row):
+            if not refresh_owed(row) or int(smart_merge_state(row).get('delegated_revision') or 0) >= revision(row):
+                return
+            # Persist the obligation before acknowledging the merge. Further
+            # absorbs may proceed while this durable worker waits for quiet.
+            enrichment_outbox.mark(uid, survivor_id, row.get('language') or 'en', sync_hold=True)
+            if not smart_merge_db.delegate_survivor_refresh(uid, survivor_id, revision=revision(row)):
+                raise SmartMergeIncomplete('refresh_handoff_changed')
+            return
     # Job ids survive lease expiry and redelivery. Each invocation needs its own
     # token so a late failure cannot release a newer delivery of the same job.
     owner = f'{owner}:{uuid4().hex}'

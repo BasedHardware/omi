@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { Memory } from '../hooks/useMemories'
+import { advanceAuthSessionGeneration, getAuthSessionGeneration } from './authSessionScope'
 
 const omiApiGet = vi.fn()
 const omiApiDelete = vi.fn()
@@ -50,13 +51,26 @@ describe('fetchAllMemories', () => {
 
     expect(all).toHaveLength(1200)
     expect(all.some((m) => m.id === 'm1199')).toBe(true)
-    expect(omiApiGet).toHaveBeenCalledWith('/v3/memories', { params: { limit: 500, offset: 0 } })
     expect(omiApiGet).toHaveBeenCalledWith('/v3/memories', {
-      params: { limit: 500, offset: 500 }
+      params: { limit: 500, offset: 0 },
+      __authGeneration: getAuthSessionGeneration()
     })
     expect(omiApiGet).toHaveBeenCalledWith('/v3/memories', {
-      params: { limit: 500, offset: 1000 }
+      params: { limit: 500, offset: 500 },
+      __authGeneration: getAuthSessionGeneration()
     })
+    expect(omiApiGet).toHaveBeenCalledWith('/v3/memories', {
+      params: { limit: 500, offset: 1000 },
+      __authGeneration: getAuthSessionGeneration()
+    })
+  })
+
+  it('never starts another page after the originating session is revoked', async () => {
+    omiApiGet.mockResolvedValueOnce(page(['old-session']))
+    await expect(fetchAllMemoriesPaged(() => advanceAuthSessionGeneration())).rejects.toThrow(
+      'Your sign-in changed'
+    )
+    expect(omiApiGet).toHaveBeenCalledTimes(1)
   })
 
   it('pages a large account without small hops', async () => {
@@ -67,7 +81,8 @@ describe('fetchAllMemories', () => {
     expect(all).toHaveLength(2500)
     expect(omiApiGet.mock.calls.length).toBeLessThan(8)
     expect(omiApiGet).toHaveBeenCalledWith('/v3/memories', {
-      params: { limit: 500, offset: 2000 }
+      params: { limit: 500, offset: 2000 },
+      __authGeneration: getAuthSessionGeneration()
     })
   })
 

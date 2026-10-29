@@ -12,6 +12,7 @@ import os
 import sys
 import unittest
 from datetime import datetime
+from contextlib import ExitStack
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -237,12 +238,18 @@ class TestUnavailableContract:
         missing = handler[handler.index('except FileNotFoundError') : handler.index("'chunks_missing'}")]
         assert 'mark_playback_unavailable' in missing
 
-    def test_urls_reports_unavailable_without_enqueue(self):
-        src = _read_source(os.path.join('utils', 'sync', 'playback.py'))
-        fn = src[src.index('def _get_audio_urls_via_artifacts') : src.index('def get_audio_signed_urls')]
-        unavailable = fn[fn.index('is_playback_unavailable') : fn.index('else:')]
-        assert '"unavailable"' in unavailable
-        assert 'to_enqueue.append' not in unavailable
+    def test_urls_reports_unavailable_without_enqueue(self, monkeypatch):
+        playback = routers_sync.sync_playback
+        monkeypatch.setattr(playback, 'get_playback_artifact_signed_url', lambda *_: None)
+        monkeypatch.setattr(playback, 'get_merged_audio_signed_url', lambda *_: None)
+        monkeypatch.setattr(playback, 'is_playback_unavailable', lambda *_: True)
+        monkeypatch.setattr(playback, 'get_playback_failure_retry_epoch', lambda *_: None)
+        monkeypatch.setattr(playback, '_conversation_audio_urls_entry', lambda *_: {'status': 'unavailable'})
+        enqueue = MagicMock()
+        monkeypatch.setattr(playback, 'enqueue_conversation_audio_merge', enqueue)
+        result = playback._get_audio_urls_via_artifacts('u', 'c', [{'id': 'file'}])
+        assert result['audio_files'][0]['status'] == 'unavailable'
+        enqueue.assert_not_called()
 
     def test_storage_marker_helpers(self):
         src = _read_source(os.path.join('utils', 'other', 'storage.py'))
@@ -262,7 +269,7 @@ class TestStorageArtifactHelpers:
         assert 'def get_playback_artifact_signed_url' in src
         assert 'def download_playback_artifact' in src
         assert 'def upload_playback_artifact' in src
-        assert "content_type='audio/mpeg'" in src
+        assert "content_type='audio/mpeg'" in _read_source(os.path.join('utils', 'other', 'playback_cache.py'))
 
     def test_precache_gates_to_enqueue(self):
         src = _read_source(os.path.join('utils', 'other', 'storage.py'))
@@ -322,9 +329,10 @@ class TestConversationMergeStartedAtCoercion:
             patch.object(routers_sync.conversations_db, 'get_conversation', return_value=conversation),
             patch.object(routers_sync, 'compute_audio_files_fingerprint', return_value='fp1'),
             patch.object(
-                routers_sync.sync_playback, 'build_conversation_playback_artifact', side_effect=build_side_effect
+                routers_sync.playback_build, 'build_conversation_playback_artifact', side_effect=build_side_effect
             ),
-            patch.object(routers_sync, 'upload_conversation_playback_artifact'),
+            patch.object(routers_sync.playback_build, 'upload_conversation_playback_artifact'),
+            patch.object(routers_sync.playback_build, 'get_conversation_playback_manifest', return_value=None),
             patch.object(routers_sync.conversations_db, 'update_conversation'),
         )
 
@@ -336,12 +344,14 @@ class TestConversationMergeStartedAtCoercion:
         payload = {'uid': 'u1', 'conversation_id': 'c1', 'fingerprint': 'fp1'}
         captured = {}
 
-        def fake_build(uid, conversation_id, audio_files, started_at_ts):
+        def fake_build(uid, conversation_id, audio_files, started_at_ts, *, strict_sources=False):
             captured['started_at_ts'] = started_at_ts
             return b'mp3', [{'len': 1.0, 'wall_offset': 0.0}]
 
         patches = self._patched(conversation, fake_build)
-        with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6], patches[7]:
+        with ExitStack() as stack:
+            for patcher in patches:
+                stack.enter_context(patcher)
             result = await routers_sync._run_conversation_merge_job(payload, task_retry_count=0)
 
         assert result.status_code == 200
@@ -355,12 +365,14 @@ class TestConversationMergeStartedAtCoercion:
         payload = {'uid': 'u1', 'conversation_id': 'c1', 'fingerprint': 'fp1'}
         captured = {}
 
-        def fake_build(uid, conversation_id, audio_files, started_at_ts):
+        def fake_build(uid, conversation_id, audio_files, started_at_ts, *, strict_sources=False):
             captured['started_at_ts'] = started_at_ts
             return b'mp3', [{'len': 1.0, 'wall_offset': 0.0}]
 
         patches = self._patched(conversation, fake_build)
-        with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6], patches[7]:
+        with ExitStack() as stack:
+            for patcher in patches:
+                stack.enter_context(patcher)
             result = await routers_sync._run_conversation_merge_job(payload, task_retry_count=0)
 
         assert result.status_code == 200

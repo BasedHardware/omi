@@ -38,6 +38,9 @@ let overflow = 0;
 const collections = new Set([
   "users",
   "adminData",
+  "adminAuditLog",
+  "adminProposals",
+  "adminProposalLocks",
   "csat_ratings",
   "desktop_prompts",
   "plugins_data",

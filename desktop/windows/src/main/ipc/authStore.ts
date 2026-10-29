@@ -14,8 +14,6 @@
 import { app, ipcMain, webContents, safeStorage } from 'electron'
 import { existsSync, readFileSync, writeFileSync, rmSync } from 'fs'
 import { join } from 'path'
-import { decodeUidFromIdToken } from '../auth/omiAuth'
-import { setAssistantSettingsOwner } from './assistantSettings'
 
 /** On-disk shape: firebase key → base64-encoded safeStorage ciphertext. */
 type StoredFile = Record<string, string>
@@ -108,52 +106,16 @@ function broadcastChanged(key: string): void {
   }
 }
 
-function extractUidFromAuthPayload(value: string): string | null {
-  try {
-    const parsed = JSON.parse(value)
-    if (parsed && typeof parsed === 'object') {
-      if (typeof parsed.uid === 'string' && parsed.uid.trim()) {
-        return parsed.uid.trim()
-      }
-      if (parsed.stsTokenManager && typeof parsed.stsTokenManager.accessToken === 'string') {
-        const uid = decodeUidFromIdToken(parsed.stsTokenManager.accessToken)
-        if (uid) return uid
-      }
-      if (typeof parsed.idToken === 'string') {
-        const uid = decodeUidFromIdToken(parsed.idToken)
-        if (uid) return uid
-      }
-      if (typeof parsed.customToken === 'string') {
-        const uid = decodeUidFromIdToken(parsed.customToken)
-        if (uid) return uid
-      }
-    }
-  } catch {
-    const uid = decodeUidFromIdToken(value)
-    if (uid) return uid
-  }
-  return null
-}
-
 /** Registers the `authStore:*` IPC handlers backing the AuthTokenStore. */
 export function registerAuthStoreHandlers(): void {
   ipcMain.handle('authStore:isAvailable', (): boolean => getStore().isAvailable())
   ipcMain.handle('authStore:get', (_e, key: string): string | null => getStore().get(key))
   ipcMain.handle('authStore:set', (_e, key: string, value: string): void => {
     getStore().set(key, value)
-    const uid = extractUidFromAuthPayload(value)
-    if (uid) {
-      setAssistantSettingsOwner(uid)
-    }
     broadcastChanged(key)
   })
   ipcMain.handle('authStore:remove', (_e, key: string): void => {
     getStore().remove(key)
-    setAssistantSettingsOwner(null)
     broadcastChanged(key)
   })
-}
-
-export function _resetAuthStoreForTests(): void {
-  store = null
 }

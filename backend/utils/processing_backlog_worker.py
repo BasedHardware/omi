@@ -1,23 +1,26 @@
 """Bounded, fenced explicit-choice worker; reuses the held-audio receipt machinery."""
 
 import asyncio
+from functools import partial
 from datetime import datetime, timezone
 from enum import Enum
 import logging
+import math
 import time
 from typing import Any
 
 from google.cloud import firestore
 from database import processing_backlog as store, conversations as conversations_db
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from models.conversation import Conversation
 from utils import funded_processing
 from utils.processing_backlog import choose, is_active
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.executors import db_executor, postprocess_executor, storage_executor, run_blocking
-from utils.sync import cap_hold, cap_hold_recovery, cap_work_budget
+from utils.sync import cap_hold, cap_hold_recovery, cap_hold_reservations, cap_work_budget
 from config.rate_card import recording_units_per_hour
-from config.stt_cap_dispatch import hold_lane
+from config.stt_cap_dispatch import hold_lane, recovery_cohort_admits
 
 logger = logging.getLogger(__name__)
 PAGE = 10
@@ -29,7 +32,44 @@ class AttemptOutcome(Enum):
     RETRY = 'retry'
 
 
+def _cursor_problem(cursor) -> str | None:
+    """Why a stored cursor cannot seed ``start_after``; None when absent or usable.
+
+    Firestore rejects some cursor shapes with ``InvalidArgument`` on every visit
+    (an empty ``id`` builds a document name with a trailing slash), and a null
+    ``at`` compares below every number, permanently hiding the whole queue.
+    """
+    if cursor is None:
+        return None
+    if not isinstance(cursor, dict):
+        return 'not_a_map'
+    at = cursor.get('at')
+    numeric = not isinstance(at, bool) and isinstance(at, (int, float)) and math.isfinite(at)
+    if not numeric and not isinstance(at, datetime):
+        return 'at_type'
+    identity = cursor.get('id')
+    if not isinstance(identity, str) or not identity or '/' in identity:
+        return 'id_shape'
+    return None
+
+
 def _page(uid, kind, cursor):
+    problem = _cursor_problem(cursor)
+    if problem:
+        stored_at = cursor.get('at') if isinstance(cursor, dict) else None
+        stored_id = cursor.get('id') if isinstance(cursor, dict) else None
+        logger.warning(
+            'event=processing_backlog outcome=cursor_invalid uid=%s kind=%s reason=%s at_type=%s id_type=%s id_len=%s',
+            uid,
+            kind,
+            problem,
+            type(stored_at).__name__,
+            type(stored_id).__name__,
+            len(stored_id) if isinstance(stored_id, str) else -1,
+        )
+        # Rewind to newest like the scope-skip rewind in finish(): rebuilding the
+        # same rejected query every visit strands the owner's whole choice.
+        cursor = None
     if kind == 'audio':
         collection = cap_hold.holds(uid)
         query = collection.where('state', 'in', ['held', 'staging', 'sealing']).order_by(
@@ -135,8 +175,13 @@ async def _process(uid, item) -> AttemptOutcome:
     return AttemptOutcome.COMPLETE if recovered else AttemptOutcome.RETRY
 
 
-async def run(uid: str, *, continuation: bool = False, max_items: int = PAGE, time_budget: float | None = None):
-    if not funded_processing.enabled(uid):
+async def run(
+    uid: str, *, continuation: bool = False, max_items: int = PAGE, time_budget: float | None = None
+) -> bool | None:
+    """True permits another round; false/None parks a blocked or inactive owner."""
+    if not recovery_cohort_admits(uid) or not funded_processing.enabled(uid):
+        return
+    if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
         return
     max_items = max(1, min(max_items, 100))
     if not continuation and not await run_blocking(db_executor, cap_hold.recovery_cooldown, uid):
@@ -165,6 +210,8 @@ async def run(uid: str, *, continuation: bool = False, max_items: int = PAGE, ti
             return False
 
     async def attempt(item):
+        if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
+            return False
         # Executors and spawned callbacks inherit this UID/month grant. Later
         # model/STT dispatches must not silently adopt a reset allowance.
         with funded_processing.backlog_consent(uid, job['period']):
@@ -211,6 +258,8 @@ async def run(uid: str, *, continuation: bool = False, max_items: int = PAGE, ti
                 job.update(released)
             elif not await attempt(reserved):
                 return False
+            elif limit == 1:
+                return True  # Resuming a reservation consumes this owner's turn.
         pages = await run_blocking(db_executor, _page, uid, 'audio', job.get('cursor_audio'))
         pages += await run_blocking(db_executor, _page, uid, 'text', job.get('cursor_text'))
         candidates = sorted(
@@ -249,6 +298,27 @@ async def run(uid: str, *, continuation: bool = False, max_items: int = PAGE, ti
             if item.get('state') in {'staging', 'sealing'}:
                 return False
             actual_remaining, _ = funded_processing.capacity(current)
+            if actual_remaining is not None:
+                # Cap-hold units handed to batch are debited only at projection; their open
+                # reservations stand in for that spend until the batch outcome is known.
+                reserved_units = await run_blocking(
+                    db_executor,
+                    partial(
+                        cap_hold_reservations.open_units,
+                        uid,
+                        job['period'],
+                        status_reader=cap_hold_reservations.batch_status,
+                    ),
+                )
+                # Re-read after settling: a projection that commits between the first allowance read
+                # and open_units drops its reservation, so only a later read sees its usage. A commit
+                # after open_units is counted twice, which under-admits (safe).
+                current = await run_blocking(db_executor, funded_processing.allowance, uid)
+                if not current.managed:
+                    return await finish()
+                actual_remaining, _ = funded_processing.capacity(current)
+                if actual_remaining is not None:
+                    actual_remaining = max(0.0, actual_remaining - reserved_units)
             if actual_remaining is not None and item['units'] > actual_remaining:
                 if not await save(updates):
                     return False
@@ -271,7 +341,15 @@ async def run(uid: str, *, continuation: bool = False, max_items: int = PAGE, ti
                 if not continuation or cap_work_budget.exhausted():
                     break
     except Exception as exc:
-        logger.warning('event=processing_backlog outcome=deferred exception_type=%s', type(exc).__name__)
+        # The traceback names the failing call and, for a rejected query, the
+        # server's reason; the type alone could not type the InvalidArgument
+        # deferrals that parked paid owners (#23827).
+        logger.warning(
+            'event=processing_backlog outcome=deferred uid=%s exception_type=%s',
+            uid,
+            type(exc).__name__,
+            exc_info=True,
+        )
         continuation = await finish()
     finally:
         heartbeat.cancel()
@@ -282,6 +360,7 @@ async def run(uid: str, *, continuation: bool = False, max_items: int = PAGE, ti
             logger.warning('event=processing_backlog outcome=release_deferred exception_type=%s', type(exc).__name__)
     # A productive page remains state=processing. The periodic durable sweep
     # owns continuation, including an authorized pending upgrade consumed above.
+    return continuation
 
 
 def upgrade(uid: str, request_key: str, *, intent_at):

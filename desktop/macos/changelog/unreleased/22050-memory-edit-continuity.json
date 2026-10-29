@@ -1,5 +1,5 @@
 {
   "changes": [
-    "Keep edited memories open when saving fails and select the canonical memory returned after a successful edit."
+    "Keep failed memory-edit drafts, show the saved canonical record immediately and prevent settings sync from crossing sign-in sessions"
   ]
 }

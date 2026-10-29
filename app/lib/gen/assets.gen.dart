@@ -22,51 +22,6 @@ class $AssetsCompetitorLogosGen {
   List<AssetGenImage> get values => [limitlessLogo];
 }
 
-class $AssetsFontsGen {
-  const $AssetsFontsGen();
-
-  /// File path: assets/fonts/SFPRODISPLAYBLACKITALIC.OTF
-  String get sfprodisplayblackitalic =>
-      'assets/fonts/SFPRODISPLAYBLACKITALIC.OTF';
-
-  /// File path: assets/fonts/SFPRODISPLAYBOLD.OTF
-  String get sfprodisplaybold => 'assets/fonts/SFPRODISPLAYBOLD.OTF';
-
-  /// File path: assets/fonts/SFPRODISPLAYHEAVYITALIC.OTF
-  String get sfprodisplayheavyitalic =>
-      'assets/fonts/SFPRODISPLAYHEAVYITALIC.OTF';
-
-  /// File path: assets/fonts/SFPRODISPLAYLIGHTITALIC.OTF
-  String get sfprodisplaylightitalic =>
-      'assets/fonts/SFPRODISPLAYLIGHTITALIC.OTF';
-
-  /// File path: assets/fonts/SFPRODISPLAYMEDIUM.OTF
-  String get sfprodisplaymedium => 'assets/fonts/SFPRODISPLAYMEDIUM.OTF';
-
-  /// File path: assets/fonts/SFPRODISPLAYREGULAR.OTF
-  String get sfprodisplayregular => 'assets/fonts/SFPRODISPLAYREGULAR.OTF';
-
-  /// File path: assets/fonts/SFPRODISPLAYSEMIBOLDITALIC.OTF
-  String get sfprodisplaysemibolditalic =>
-      'assets/fonts/SFPRODISPLAYSEMIBOLDITALIC.OTF';
-
-  /// File path: assets/fonts/SFPRODISPLAYTHINITALIC.OTF
-  String get sfprodisplaythinitalic =>
-      'assets/fonts/SFPRODISPLAYTHINITALIC.OTF';
-
-  /// List of all assets
-  List<String> get values => [
-        sfprodisplayblackitalic,
-        sfprodisplaybold,
-        sfprodisplayheavyitalic,
-        sfprodisplaylightitalic,
-        sfprodisplaymedium,
-        sfprodisplayregular,
-        sfprodisplaysemibolditalic,
-        sfprodisplaythinitalic
-      ];
-}
-
 class $AssetsImagesGen {
   const $AssetsImagesGen();
 
@@ -508,7 +463,6 @@ class $AssetsTestGen {
 abstract final class Assets {
   static const $AssetsCompetitorLogosGen competitorLogos =
       $AssetsCompetitorLogosGen();
-  static const $AssetsFontsGen fonts = $AssetsFontsGen();
   static const $AssetsImagesGen images = $AssetsImagesGen();
   static const $AssetsIntegrationAppLogosGen integrationAppLogos =
       $AssetsIntegrationAppLogosGen();

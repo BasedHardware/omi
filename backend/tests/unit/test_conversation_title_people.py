@@ -56,6 +56,7 @@ def _seg(segment_id, text, *, speaker='SPEAKER_00', is_user=True, person_id=None
         text=text,
         speaker=speaker,
         is_user=is_user,
+        speaker_match_source='conversation_voice' if is_user else None,
         person_id=person_id,
         speaker_id_scope=scope,
         start=0.0,
@@ -185,8 +186,9 @@ def test_speaker_map_keeps_scoped_hard_identity_evidence(monkeypatch):
     )
 
     # Still the plain cluster -> name mapping every existing caller reads.
-    assert speaker_map == {0: 'David', 1: 'Sarah Chen', 2: 'Lee'}
+    assert speaker_map == {'c0': 'David', 'c1': 'Sarah Chen', 'c2': 'Lee'}
     assert speaker_map.owner_name == 'David'
+    assert [cluster.prompt_key for cluster in speaker_map.clusters] == ['c0', 'c1', 'c2']
     assert [
         (cluster.speaker_id, cluster.scope, cluster.owner, cluster.names, cluster.speech_seconds, cluster.words)
         for cluster in speaker_map.clusters
@@ -205,8 +207,8 @@ def test_speaker_map_owner_name_is_the_real_profile_name_only(monkeypatch):
         'uid-1', _three_party_conversation(), _people()
     )
 
-    # The rendered map keeps its 'User' label; the owner line needs a real name.
-    assert speaker_map[0] == 'User'
+    # The rendered map keeps its 'You' label; the owner line needs a real name.
+    assert speaker_map['c0'] == 'You'
     assert speaker_map.owner_name is None
 
 
@@ -262,7 +264,7 @@ def test_unresolved_and_owner_only_conversations_have_no_title_people(monkeypatc
 
 def test_reused_speaker_id_bound_to_different_people_names_nobody(monkeypatch):
     # Id 1 is Lee (who only said hi) in source A and Sarah (who carried the talk) in
-    # source B. ``spk 1 Lee`` would credit Sarah's words to Lee, so name nobody.
+    # source B. ``spk c1 Lee`` would credit Sarah's words to Lee, so name nobody.
     merged = SimpleNamespace(
         transcript_segments=[
             _seg('a1', 'hey so where are we on the budget for next quarter', scope='conv-a'),
@@ -274,7 +276,7 @@ def test_reused_speaker_id_bound_to_different_people_names_nobody(monkeypatch):
 
     prefix = _prefix_for(merged, monkeypatch)
 
-    assert 'spk 1 Lee' in prefix.context  # rendered map bytes are unchanged
+    assert 'spk c1 Lee' in prefix.context  # rendered map bytes are unchanged
     assert prefix.title_people == ()
     assert prefix.owner_names == ('David',)
 
@@ -386,7 +388,8 @@ def test_calendar_guessed_owner_cluster_is_never_a_title_person(monkeypatch):
     )
     structured, _ = _notes(prefix, monkeypatch, title='Weekly plan')
 
-    assert 'spk 0 David Miller' in prefix.context
+    assert 'spk c0 ?' in prefix.context
+    assert 'spk c0 David Miller' not in prefix.context
     assert prefix.title_people == ('Bob',)
     assert structured.title == 'Bob: Weekly plan'
 
@@ -617,7 +620,8 @@ def test_calendar_guessed_owner_split_cluster_is_never_a_title_person(monkeypatc
         conversation, monkeypatch, people=[_person('p-bob', 'Bob')], calendar_context=_calendar('David Miller', 'Bob')
     )
 
-    assert 'spk 2 David Miller' in prefix.context
+    assert 'spk c2 ?' in prefix.context
+    assert 'spk c2 David Miller' not in prefix.context
     assert prefix.title_people == ('Bob',)
     assert prefix.owner_names == ('David',)
 
@@ -642,6 +646,9 @@ def test_title_rules_are_static_while_names_stay_volatile(monkeypatch):
 
 
 def test_shaped_title_prompt_bytes_are_pinned_to_the_literal_fixture(monkeypatch):
+    # The fixture pins the flag-off base prompt; OPEN_LOOPS_ENABLED appends its
+    # rules only while on, so pin the bytes this fixture actually represents.
+    monkeypatch.setenv('OPEN_LOOPS_ENABLED', 'off')
     from langchain_core.output_parsers import PydanticOutputParser
     from models.structured_extraction import StructuredExtraction
     from utils.llm.conversation_processing import notes_mount

@@ -2,6 +2,331 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.554",
+      "date": "2026-10-28",
+      "changes": [
+        "Improved meeting-note attribution from call participant names while excluding app titles, browser tabs, and your own name."
+      ]
+    },
+    {
+      "version": "0.12.553",
+      "date": "2026-10-28",
+      "changes": [
+        "Fixed recordings failing to upload forever when their stored session id was blank: uploads now always carry a real session id"
+      ]
+    },
+    {
+      "version": "0.12.552",
+      "date": "2026-10-28",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.551",
+      "date": "2026-10-28",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.550",
+      "date": "2026-10-28",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.549",
+      "date": "2026-10-28",
+      "changes": [
+        "Kept Google Meet calls in one conversation when the same meeting resumes within 15 minutes"
+      ]
+    },
+    {
+      "version": "0.12.548",
+      "date": "2026-10-28",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.547",
+      "date": "2026-10-27",
+      "changes": [
+        "Omi Pro is now the only plan offered in Plans & Billing, and buying it from the Mac works"
+      ]
+    },
+    {
+      "version": "0.12.546",
+      "date": "2026-10-27",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.545",
+      "date": "2026-10-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.544",
+      "date": "2026-10-26",
+      "changes": [
+        "Fixed a stale conversation staying in search results after restoring it changed the text that matched your search"
+      ]
+    },
+    {
+      "version": "0.12.543",
+      "date": "2026-10-26",
+      "changes": [
+        "Fixed browser control failing with \"unsupported protocol version\" by updating the bundled Playwright MCP server"
+      ]
+    },
+    {
+      "version": "0.12.542",
+      "date": "2026-10-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.541",
+      "date": "2026-10-26",
+      "changes": [
+        "Added Show discarded and Restore Conversation so you can recover hidden audio and transcripts"
+      ]
+    },
+    {
+      "version": "0.12.540",
+      "date": "2026-10-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.539",
+      "date": "2026-10-26",
+      "changes": [
+        "Keep individual utterance timestamps when uploading local transcripts instead of collapsing one speaker's recording into a single long segment."
+      ]
+    },
+    {
+      "version": "0.12.538",
+      "date": "2026-10-25",
+      "changes": [
+        "Removed the proactive \"For you\" suggestion cards and their notifications"
+      ]
+    },
+    {
+      "version": "0.12.537",
+      "date": "2026-10-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.536",
+      "date": "2026-10-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.535",
+      "date": "2026-10-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.534",
+      "date": "2026-10-25",
+      "changes": [
+        "Opening app settings or retrying an integration setup now uses a fresh sign-in link instead of an expired or already-used link"
+      ]
+    },
+    {
+      "version": "0.12.533",
+      "date": "2026-10-24",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.532",
+      "date": "2026-10-24",
+      "changes": [
+        "Conversations summarized on-device no longer show the 🧠 placeholder when no emoji was chosen; they show the category emoji or 💬"
+      ]
+    },
+    {
+      "version": "0.12.531",
+      "date": "2026-10-24",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.530",
+      "date": "2026-10-24",
+      "changes": [
+        "Fixed calls splitting into multiple conversations after brief audio interruptions or an app relaunch during a scheduled meeting, while bounding recording in idle messaging voice channels"
+      ]
+    },
+    {
+      "version": "0.12.529",
+      "date": "2026-10-23",
+      "changes": [
+        "Starting a new checkout while you already have a subscription now says so, instead of telling you to resubscribe",
+        "Fixed \"Load older conversations\" skipping a conversation after deleting or unstarring a loaded row"
+      ]
+    },
+    {
+      "version": "0.12.528",
+      "date": "2026-10-23",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.527",
+      "date": "2026-10-23",
+      "changes": [
+        "Fixed Japanese meetings being transcribed in the wrong language: Japanese now uses an on-device Japanese model, and languages without an on-device model use cloud transcription"
+      ]
+    },
+    {
+      "version": "0.12.526",
+      "date": "2026-10-23",
+      "changes": [
+        "Keep non-Omi chat message saves from consuming Omi question allowance and count multi-round Omi tool turns once per prompt."
+      ]
+    },
+    {
+      "version": "0.12.525",
+      "date": "2026-10-23",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.524",
+      "date": "2026-10-22",
+      "changes": [
+        "Improved recognition of your voice, speaker labels after transcript updates, and long local recording uploads",
+        "Fixed open messaging chats being mistaken for meeting participants"
+      ]
+    },
+    {
+      "version": "0.12.523",
+      "date": "2026-10-22",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.522",
+      "date": "2026-10-22",
+      "changes": [
+        "Removed the Sentry crash/error reporter; Report an Issue now saves your note plus redacted diagnostics locally on this Mac instead of sending anything"
+      ]
+    },
+    {
+      "version": "0.12.521",
+      "date": "2026-10-21",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.520",
+      "date": "2026-10-21",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.519",
+      "date": "2026-10-21",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.518",
+      "date": "2026-10-21",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.517",
+      "date": "2026-10-21",
+      "changes": [
+        "Added opt-in, source-linked meeting briefs and editable follow-up drafts on Mac"
+      ]
+    },
+    {
+      "version": "0.12.516",
+      "date": "2026-10-20",
+      "changes": [
+        "Fixed custom vocabulary saves looking failed and reverting when the confirmation read failed, even though the account had already stored the change"
+      ]
+    },
+    {
+      "version": "0.12.515",
+      "date": "2026-10-20",
+      "changes": [
+        "Reduced false meeting detections from browser dictation, parked Meet tabs, voice notes, and brief microphone activity"
+      ]
+    },
+    {
+      "version": "0.12.514",
+      "date": "2026-10-20",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.513",
+      "date": "2026-10-20",
+      "changes": [
+        "Conversation titles from older notes no longer show stray transcript reference codes"
+      ]
+    },
+    {
+      "version": "0.12.512",
+      "date": "2026-10-20",
+      "changes": [
+        "Attach videos in chat: Omi reads the key frames and what was said, without uploading the whole clip",
+        "Restored the standard desktop experience for everyone by retiring the identity experiment"
+      ]
+    },
+    {
+      "version": "0.12.511",
+      "date": "2026-10-20",
+      "changes": [
+        "Action items in older conversation notes no longer show stray transcript reference codes"
+      ]
+    },
+    {
+      "version": "0.12.510",
+      "date": "2026-10-20",
+      "changes": [
+        "The Claude sign-in upgrade sheet no longer shows a price"
+      ]
+    },
+    {
+      "version": "0.12.509",
+      "date": "2026-10-20",
+      "changes": [
+        "Fixed Daily Summary, Store Recordings, and Private Cloud Sync switches staying flipped and silently reverting later when the account refused the save"
+      ]
+    },
+    {
       "version": "0.12.508",
       "date": "2026-10-19",
       "changes": [

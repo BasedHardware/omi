@@ -1,11 +1,9 @@
+import 'package:omi/services/wals/local_wal_sync.dart';
 import 'dart:async';
-import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/models/sync_state.dart';
@@ -255,40 +253,110 @@ class StorageSyncImpl implements StorageSync {
   @override
   Future deleteWal(Wal wal) async {
     if (wal.storage != WalStorage.sdcard || !_wals.any((w) => w.id == wal.id)) return;
-    if (wal.device == _device?.id) await _deleteWalsOnDevice([wal]);
+    if (_device != null && wal.device != _device!.id) {
+      // Not this device's recording (e.g. left by a device this phone no
+      // longer pairs with): drop the stale local row, nothing to delete.
+      _wals = _wals.where((w) => w.id != wal.id).toList();
+      listener.onWalUpdated();
+      return;
+    }
+    // A delete that was attempted drops the row whatever the reply said: the
+    // positional file index is potentially burned (FC-deleted-device-file-
+    // stays-addressable) and the next listing re-adds a file that survived.
+    // Only a delete that never reached the device — no connection — keeps the
+    // row, so it cannot resurrect as "new" on the next listing (#14688).
+    final attempted = await _deleteWalsOnDevice([wal]);
+    if (!attempted.contains(wal.id)) {
+      Logger.debug('StorageSync.deleteWal: delete of ${wal.id} never reached the device, keeping WAL');
+      listener.onWalUpdated();
+      return;
+    }
     _wals = _wals.where((w) => w.id != wal.id).toList();
     listener.onWalUpdated();
   }
 
+  /// Cached rows of [status] recorded by a device other than the connected
+  /// one. setDevice swaps the device without clearing cached rows, and a
+  /// refresh that fails before listing keeps them, so after a pendant switch
+  /// these rows' file indexes name the NEW pendant's files. Deletes must
+  /// never see them; the rows drop locally instead (their audio still lives
+  /// on their own device and re-lists when that device reconnects).
+  Set<String> _previousDeviceWalIds(WalStatus status) {
+    final device = _device;
+    if (device == null) return const {};
+    return _wals.where((w) => w.status == status && w.device != device.id).map((w) => w.id).toSet();
+  }
+
   @override
   Future<void> deleteAllSyncedWals() async {
-    final toDelete = _wals.where((w) => w.status == WalStatus.synced).toList();
-    await _deleteWalsOnDevice(toDelete);
-    _wals = _wals.where((w) => w.status != WalStatus.synced).toList();
+    // Stale previous-device rows get the same drop-only handling as the
+    // single-row path: sending their fileNums would delete the current
+    // pendant's files at those indexes (#14688). Only the status this clear
+    // covers drops; the other device's pending rows keep their local rows.
+    final stale = _previousDeviceWalIds(WalStatus.synced);
+    final toDelete = _wals.where((w) => w.status == WalStatus.synced && !stale.contains(w.id)).toList();
+    final attempted = await _deleteWalsOnDevice(toDelete);
+    _wals = _wals
+        .where((w) => !stale.contains(w.id) && (w.status != WalStatus.synced || !attempted.contains(w.id)))
+        .toList();
+    _logStaleRowsDropped('synced', stale.length);
+    _logNeverAttemptedClear('storage_synced_clear_kept', toDelete, attempted);
     listener.onWalUpdated();
   }
 
   @override
   Future<void> deleteAllPendingWals() async {
-    final toDelete = _wals.where((w) => w.status == WalStatus.miss).toList();
-    await _deleteWalsOnDevice(toDelete);
-    _wals = _wals.where((w) => w.status != WalStatus.miss).toList();
+    // Stale previous-device rows never reach the device delete (see
+    // deleteAllSyncedWals); they drop locally like the single-row path.
+    final stale = _previousDeviceWalIds(WalStatus.miss);
+    final toDelete = _wals.where((w) => w.status == WalStatus.miss && !stale.contains(w.id)).toList();
+    final attempted = await _deleteWalsOnDevice(toDelete);
+    // Attempted deletes drop their rows whatever the reply said (a positional
+    // index a delete may have removed is burned; the listing re-adds
+    // survivors). Rows the clear never attempted — no device, no connection —
+    // stay listed, so a clear run with the pendant away does not remove rows
+    // whose audio is still on the device and resurrect them as "new"
+    // recordings on the next scan (#14688).
+    _wals =
+        _wals.where((w) => !stale.contains(w.id) && (w.status != WalStatus.miss || !attempted.contains(w.id))).toList();
+    _logStaleRowsDropped('miss', stale.length);
+    _logNeverAttemptedClear('storage_pending_clear_kept', toDelete, attempted);
     listener.onWalUpdated();
+  }
+
+  void _logStaleRowsDropped(String cleared, int count) {
+    if (count == 0) return;
+    DebugLogManager.logEvent('storage_clear_stale_rows_dropped', {'cleared': cleared, 'stale': count});
+  }
+
+  void _logNeverAttemptedClear(String event, List<Wal> intended, Set<String> attempted) {
+    final kept = intended.where((w) => !attempted.contains(w.id)).length;
+    if (kept == 0) return;
+    DebugLogManager.logEvent(event, {
+      'intended': intended.length,
+      'attempted': attempted.length,
+      'kept': kept,
+      'deviceConnected': _device != null,
+    });
   }
 
   /// Deletes files on the device via CMD_DELETE_FILE. Firmware re-indexes files
   /// after each delete (higher indices shift down by 1), so delete highest index
-  /// first to keep remaining fileNums valid.
-  Future<void> _deleteWalsOnDevice(List<Wal> wals) async {
-    if (wals.isEmpty || _device == null) return;
+  /// first to keep remaining fileNums valid. Returns the ids whose delete was
+  /// sent to the device; a delete that never left the phone (no device, no
+  /// connection) attempts nothing and confirms nothing.
+  Future<Set<String>> _deleteWalsOnDevice(List<Wal> wals) async {
+    final attempted = <String>{};
+    if (wals.isEmpty || _device == null) return attempted;
     final connection = await ServiceManager.instance().device.ensureConnection(_device!.id);
     if (connection == null) {
       Logger.debug('StorageSync._deleteWalsOnDevice: no connection, skipping firmware delete');
-      return;
+      return attempted;
     }
     final targets = wals.where((w) => w.fileNum >= 0).toList()..sort((a, b) => b.fileNum.compareTo(a.fileNum));
     final deletedIds = targets.map((w) => w.id).toSet();
     for (final wal in targets) {
+      attempted.add(wal.id);
       try {
         final ok = await connection.deleteStorageFile(wal.fileNum);
         Logger.debug('StorageSync._deleteWalsOnDevice: deleted fileNum=${wal.fileNum} ok=$ok');
@@ -305,6 +373,7 @@ class StorageSyncImpl implements StorageSync {
         Logger.debug('StorageSync._deleteWalsOnDevice: failed fileNum=${wal.fileNum}: $e');
       }
     }
+    return attempted;
   }
 
   @override
@@ -700,19 +769,21 @@ class StorageSyncImpl implements StorageSync {
     int accurateDuration = totalFrames ~/ wal.codec.getFramesPerSecond();
     int timerStart =
         wal.timerStart > 0 ? wal.timerStart : DateTime.now().millisecondsSinceEpoch ~/ 1000 - accurateDuration;
+    // A file without a device timestamp gets an estimated start: one run per file.
+    final clockRun = wal.timerStart > 0 ? null : (wal.clockRun ?? Wal.newClockRun());
     int bytesLeft = 0;
 
     try {
       while (bytesData.length - bytesLeft >= chunkSize) {
         var chunk = bytesData.sublist(bytesLeft, bytesLeft + chunkSize);
         bytesLeft += chunkSize;
-        await _writeChunkDurably(wal, chunk, timerStart, admittedGeneration);
+        await _writeChunkDurably(wal, chunk, timerStart, admittedGeneration, clockRun: clockRun);
         timerStart += chunk.length ~/ wal.codec.getFramesPerSecond();
       }
 
       if (bytesLeft < bytesData.length) {
         var chunk = bytesData.sublist(bytesLeft);
-        await _writeChunkDurably(wal, chunk, timerStart, admittedGeneration);
+        await _writeChunkDurably(wal, chunk, timerStart, admittedGeneration, clockRun: clockRun);
       }
     } catch (e) {
       Logger.debug('StorageSync: durable write failed for file ${wal.fileNum}: $e');
@@ -725,100 +796,18 @@ class StorageSyncImpl implements StorageSync {
     return transferComplete;
   }
 
-  /// Write opus frames to disk in WAL format: [frame_length_u32_le][frame_data]...
-  /// This format is compatible with /v2/sync-local-files backend endpoint.
-  /// Uses same ByteData conversion as SDCardWalSync._flushToDisk for consistency.
   int _storageFileSeq = 0;
 
-  Future<File> _flushToDisk(Wal wal, List<List<int>> frames, int timerStart) async {
-    final directory = await getApplicationDocumentsDirectory();
-    var fileName = wal.getFileNameByTimeStarts(timerStart);
-    if (await File('${directory.path}/$fileName').exists()) {
-      final dot = fileName.lastIndexOf('.');
-      final stem = dot > 0 ? fileName.substring(0, dot) : fileName;
-      final ext = dot > 0 ? fileName.substring(dot) : '';
-      do {
-        fileName = '${stem}_u${_storageFileSeq++}$ext';
-      } while (await File('${directory.path}/$fileName').exists());
-    }
-    String filePath = '${directory.path}/$fileName';
-
-    List<int> data = [];
-    for (int i = 0; i < frames.length; i++) {
-      var frame = frames[i];
-
-      final byteFrame = ByteData(frame.length);
-      for (int j = 0; j < frame.length; j++) {
-        byteFrame.setUint8(j, frame[j]);
-      }
-      data.addAll(Uint32List.fromList([frame.length]).buffer.asUint8List());
-      data.addAll(byteFrame.buffer.asUint8List());
-    }
-
-    final file = File(filePath);
-    await file.writeAsBytes(data, flush: true);
-
-    Logger.debug('StorageSync: Wrote ${data.length} bytes (${frames.length} frames) to $filePath');
-    return file;
-  }
-
-  /// Register a downloaded chunk with LocalWalSync so it gets uploaded to backend.
-  Future<void> _writeChunkDurably(Wal wal, List<List<int>> chunk, int timerStart, int admittedGeneration) async {
+  Future<void> _writeChunkDurably(Wal wal, List<List<int>> chunk, int timerStart, int admittedGeneration,
+      {String? clockRun}) async {
     final localSync = _localSync;
-    if (localSync == null) {
-      throw StateError('LocalWalSync unavailable; chunk cannot be proven durable');
-    }
-    var bytes = 0;
-    for (final f in chunk) {
-      bytes += 4 + f.length;
-    }
-    if (!await localSync.ensureStorageAdmission(bytes: bytes, admittedGeneration: admittedGeneration)) {
-      throw StateError('storage admission refused (cap/disk reserve)');
-    }
-    try {
-      var file = await _flushToDisk(wal, chunk, timerStart);
-      await _registerWithLocalSync(wal, file, timerStart, chunk.length, admittedGeneration);
-    } catch (e) {
-      localSync.releaseStorageAdmission(bytes);
-      rethrow;
-    }
-  }
-
-  Future<void> _registerWithLocalSync(
-    Wal wal,
-    File file,
-    int timerStart,
-    int frameCount,
-    int admittedGeneration,
-  ) async {
-    final localSync = _localSync;
-    if (localSync == null) {
-      throw StateError('LocalWalSync unavailable; chunk cannot be proven durable');
-    }
-
-    int fps = wal.codec.getFramesPerSecond();
-    int seconds = fps > 0 ? frameCount ~/ fps : 0;
-
-    Wal localWal = Wal(
-      codec: wal.codec,
-      channel: wal.channel,
-      sampleRate: wal.sampleRate,
-      timerStart: timerStart,
-      filePath: file.path.split('/').last,
-      storage: WalStorage.disk,
-      status: WalStatus.miss,
-      device: wal.device,
-      deviceModel: wal.deviceModel,
-      seconds: seconds,
-      totalFrames: frameCount,
-      syncedFrameOffset: 0,
-      originalStorage: WalStorage.sdcard,
-    );
-
-    await localSync.addExternalWal(localWal, admittedGeneration: admittedGeneration);
-    if (!await localSync.hasDurableWal(localWal, admittedGeneration: admittedGeneration)) {
-      throw StateError('WAL not durable after registration');
-    }
-    Logger.debug('StorageSync: Registered chunk (ts=$timerStart, ${seconds}s, $frameCount frames) with LocalWalSync');
+    if (localSync == null) throw StateError('LocalWalSync unavailable; chunk cannot be proven durable');
+    await localSync.persistDeviceChunk(
+        source: wal,
+        frames: chunk,
+        timerStart: timerStart,
+        admittedGeneration: admittedGeneration,
+        clockRun: clockRun,
+        nextCollisionSequence: () => _storageFileSeq++);
   }
 }

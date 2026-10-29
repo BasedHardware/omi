@@ -50,7 +50,7 @@ import XCTest
           direction: "cloud_grant_status_inferred",
           subject: "chatgpt"))
 
-      let signals = diagnostics.currentSnapshotsForSentry().filter {
+      let signals = diagnostics.currentSnapshots().filter {
         $0["seam"] as? String == DesktopStateAuthoritySeam.connectorStatus.rawValue
       }
       XCTAssertEqual(signals.count, 3)
@@ -556,8 +556,8 @@ import XCTest
     @MainActor
     func testPTTAttemptLifecycleSnapshotIsBoundedInDiagnosticsAttachment() throws {
       // End-to-end: the recorder's default emit routes through the diagnostics
-      // manager, so the lifecycle event must land in the Sentry attachment with
-      // its bounded causal keys and no raw device identity.
+      // manager, so the lifecycle event must land in the diagnostics attachment
+      // with its bounded causal keys and no raw device identity.
       let recorder = PTTAttemptLifecycleRecorder()
       recorder.beginAttempt(mode: "hold", hubActive: true, micPermissionGranted: true)
       recorder.captureStartRequested()

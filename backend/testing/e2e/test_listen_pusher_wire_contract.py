@@ -127,6 +127,20 @@ def _assert_durable_finalization_identity(payload: dict[str, Any], conversation_
     assert payload['dispatch_generation'] == 1
 
 
+def _split_finalization_jobs(store: Any, uid: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Check custody is distinct from admitted processing/fanout ownership."""
+    rows = finalization_jobs_for_uid(store, uid)
+    checks = [row for row in rows if row.get('kind') == 'listen_quiet_check']
+    processing = [row for row in rows if row.get('kind') != 'listen_quiet_check']
+    assert len(checks) == len({row['conversation_id'] for row in checks})
+    for check in checks:
+        assert check['job_id'].startswith('quiet-')
+        assert check['status'] in {'waiting_quiet', 'quiet_done'}
+        assert not check.get('finalization_revision')
+        assert not check.get('fanout_key')
+    return processing, checks
+
+
 def test_listen_pusher_wire_contract_native_happy_path_and_explicit_parakeet_route(
     client, test_uid, monkeypatch, fake_firestore
 ):
@@ -156,6 +170,7 @@ def test_listen_pusher_wire_contract_native_happy_path_and_explicit_parakeet_rou
         assert pusher.paths[0].startswith('/v1/trigger/listen?')
         assert 'uid=123' in pusher.paths[0]
         assert 'sample_rate=8000' in pusher.paths[0]
+        assert 'audio_timeline=2' in pusher.paths[0]
         assert transcript.connection == 1
         assert transcript.payload['memory_id'] == session['conversation_id']
         assert transcript.payload['segments'][0]['id'] == 'parakeet-wire-1'
@@ -253,7 +268,12 @@ def test_listen_pusher_wire_contract_reconnect_replays_one_durable_finalization(
                 _assert_durable_finalization_identity(first.payload, session['conversation_id'])
                 assert replay.connection == 2
                 assert replay.payload == first.payload
-                jobs = finalization_jobs_for_uid(fake_firestore, test_uid)
+                jobs, checks = _split_finalization_jobs(fake_firestore, test_uid)
+                assert any(check['conversation_id'] == session['conversation_id'] for check in checks)
+                owner_checks = [check for check in checks if check['conversation_id'] == session['conversation_id']]
+                assert all(
+                    check['status'] == 'quiet_done' and 'reconcile_after_at' not in check for check in owner_checks
+                )
                 assert len(jobs) == 1
                 assert jobs[0]['job_id'] == first.payload['finalization_job_id']
                 assert jobs[0]['dispatch_generation'] == first.payload['dispatch_generation']
@@ -263,7 +283,7 @@ def test_listen_pusher_wire_contract_reconnect_replays_one_durable_finalization(
 
         assert pusher.connection_count == 2
         assert len(pusher.frames_of_type(PUSHER_PROCESS_CONVERSATION)) == 2
-        jobs_after_teardown = finalization_jobs_for_uid(fake_firestore, test_uid)
+        jobs_after_teardown, _checks = _split_finalization_jobs(fake_firestore, test_uid)
         assert len(jobs_after_teardown) == 1
         assert jobs_after_teardown[0]['status'] == 'completed'
     finally:
@@ -315,6 +335,12 @@ def test_listen_pusher_wire_contract_terminal_or_fenced_response_is_not_replayed
 
                 pusher.wait_for_frames(PUSHER_PROCESS_CONVERSATION, 1)
                 pusher.wait_for_finalization_actions(1)
+                _jobs, checks = _split_finalization_jobs(fake_firestore, test_uid)
+                owner_checks = [check for check in checks if check['conversation_id'] == session['conversation_id']]
+                assert owner_checks
+                assert all(
+                    check['status'] == 'quiet_done' and 'reconcile_after_at' not in check for check in owner_checks
+                )
 
                 # The closed peer forces the real pusher receiver through its
                 # production reconnect path.  A terminal 201 must have removed
@@ -404,7 +430,7 @@ def test_listen_pusher_wire_contract_provider_send_failure_is_terminal_after_pus
         seed_listen_user(test_uid, uses_custom_stt=False, single_language_mode=True)
 
         with client.websocket_connect(NATIVE_LISTEN_URL, headers=NATIVE_AUTH_HEADERS) as websocket:
-            _open_native_listen(websocket)
+            session = _open_native_listen(websocket)
             pusher.wait_for_connections(1)
             websocket.send_bytes(PCM8_AUDIO_FRAME)
             parakeet.wait_for_audio(1)
@@ -426,7 +452,9 @@ def test_listen_pusher_wire_contract_provider_send_failure_is_terminal_after_pus
 
         assert pusher.connection_count == 1
         assert pusher.frames == []
-        assert finalization_jobs_for_uid(fake_firestore, test_uid) == []
+        processing, checks = _split_finalization_jobs(fake_firestore, test_uid)
+        assert processing == []
+        assert any(check['conversation_id'] == session['conversation_id'] for check in checks)
     finally:
         clear_finalization_jobs(fake_firestore, test_uid)
         pusher.close()

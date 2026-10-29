@@ -1,0 +1,13 @@
+{
+  "id": "native-custody-health",
+  "kind": "question",
+  "owner": "dazheng",
+  "events": [
+    "nativeCustodyObserved"
+  ],
+  "namespace_property": "$app_namespace",
+  "question": "For a mobile build, count Native Custody Observed by outcome: watch_deleted vs watch_deferred vs watch_uploaded; investigate sustained deferral beyond 30 minutes or unexpected deletion/upload ratios before expanding release.",
+  "zero_policy": "No observations is unknown, never proof of safety.",
+  "query": "contracts/analytics/consumers/native-custody-health.sql",
+  "posthog_query": "SELECT properties['outcome'] AS outcome, count() AS observations FROM events WHERE event = 'Native Custody Observed' AND properties['$app_namespace'] = '{app_namespace}' AND properties['build_number'] = '{build_number}' GROUP BY outcome"
+}

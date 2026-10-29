@@ -87,7 +87,8 @@ def test_notes_routing_calls_only_shaped_entrypoint(monkeypatch, mode, uid):
 
     monkeypatch.setattr(notes, '_get_shaped_conversation_notes', write)
     assert notes.get_conversation_notes(prefix, uid=uid, language_code='en') is result
-    assert calls == [(prefix, {'language_code': 'en'})]
+    # The owner uid reaches the writer so the agentic notes tools can be bound to that owner.
+    assert calls == [(prefix, {'uid': uid, 'open_loop_out': None, 'language_code': 'en'})]
 
 
 @pytest.mark.parametrize('route', ['off', 'cohort', 'on'])
@@ -166,9 +167,9 @@ def test_notes_evidence_after_breakpoint_and_roster_unbound(monkeypatch):
         transcript_segment_ids=['s1'],
         uid='anyone',
     )
-    assert 'spk 0 Expected Alice' in prefix.context  # Legacy behavior still intact.
+    assert 'spk c0 Expected Alice' in prefix.context  # Legacy behavior still intact.
     packet = json.loads(prefix.shaped_context.split('\nFULL TRANSCRIPT\n')[0])
-    assert packet['speaker_map'] == {'0': None}
+    assert packet['speaker_map'] == {'c0': None}
     assert packet['expected_calendar']['participants'][0]['name'] == 'Expected Alice'
     assert packet['observed_screen_listing'] is None
     messages = notes_mount().messages([{'role': 'user', 'content': prefix.shaped_context}], explicit_cache=True)
@@ -213,6 +214,34 @@ def test_loop_enforces_budgets(budget, expected, tool_count):
     result = asyncio.run(shaped.run_loop(shaped.Mount(tools=('tool',), budget=budget), [], model, execute))
     assert result.reason == expected
     assert execute.await_count == tool_count
+
+
+def test_cached_tool_calls_can_be_free_without_loosening_the_default_budget():
+    execute = AsyncMock(side_effect=[[], shaped.LoopStop('submitted')])
+    model = AsyncMock(
+        side_effect=[
+            shaped.Turn(tool_calls=('cached',) * 30, charged_tool_calls=0),
+            shaped.Turn(tool_calls=('submit',), charged_tool_calls=1),
+        ]
+    )
+    result = asyncio.run(
+        shaped.run_loop(shaped.Mount(tools=('tool',), budget=shaped.Budget(turns=3, tool_calls=1)), [], model, execute)
+    )
+    assert result.reason == 'finished' and result.value == 'submitted' and result.tool_calls == 1
+    assert execute.await_count == 2
+
+
+@pytest.mark.parametrize('charge', [-1, 2, True, 0.5])
+def test_loop_rejects_invalid_tool_call_charges(charge):
+    execute = AsyncMock()
+    model = AsyncMock(return_value=shaped.Turn(tool_calls=('call',), charged_tool_calls=charge))
+    with pytest.raises(ValueError, match='tool-call charge'):
+        asyncio.run(
+            shaped.run_loop(
+                shaped.Mount(tools=('tool',), budget=shaped.Budget(turns=3, tool_calls=3)), [], model, execute
+            )
+        )
+    execute.assert_not_awaited()
 
 
 def test_loop_stops_without_tool_calls():
@@ -658,4 +687,4 @@ def test_merged_notes_keep_calendar_and_screen_participants_separate(monkeypatch
     packet = json.loads(prefix.shaped_context.split('\nFULL TRANSCRIPT\n')[0])
     assert [p['name'] for p in packet['expected_calendar']['participants']] == ['Expected Alice', 'Shared Sam']
     assert [p['name'] for p in packet['observed_screen_listing']['participants']] == ['Observed Bob', 'Shared Sam']
-    assert packet['speaker_map'] == {'0': None}
+    assert packet['speaker_map'] == {'c0': None}

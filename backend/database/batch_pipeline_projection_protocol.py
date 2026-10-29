@@ -9,6 +9,14 @@ class ProjectionBlocked(RuntimeError):
     """A predecessor, immutable binding, or ledger owner is not ready."""
 
 
+class ProjectionPredecessorPending(ProjectionBlocked):
+    """The owner chain must replay an earlier committed row before this one."""
+
+
+class ProjectionGenerationAmbiguous(ProjectionBlocked):
+    """Validated intake reached the unresolved generation fence; never assign text."""
+
+
 class ProjectionReplay(Exception):
     def __init__(self, receipt: dict):
         self.receipt = receipt

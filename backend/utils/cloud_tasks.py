@@ -74,7 +74,9 @@ SYNC_JOB_SEQUENCED_TASK_PAYLOAD_KEYS = SYNC_JOB_TASK_PAYLOAD_KEYS | {'sequencer_
 # of whole-budget attempts the job has already spent (routers/sync.py).
 # ``redrive_mode`` rides only on operator-built redrive payloads and must survive
 # budget replacements and sequencer re-dispatch (utils/sync/minimal_redrive.py).
-SYNC_JOB_OPTIONAL_TASK_PAYLOAD_KEYS = frozenset({'capture_evidence_claims', 'budget_deferrals', 'redrive_mode'})
+SYNC_JOB_OPTIONAL_TASK_PAYLOAD_KEYS = frozenset(
+    {'capture_evidence_claims', 'budget_deferrals', 'redrive_mode', 'raw_capture_paths'}
+)
 
 
 def sync_job_payload_keys_valid(keys: Iterable[str], *, allow_sequenced: bool = True) -> bool:
@@ -446,6 +448,10 @@ def _audio_merge_task_id(payload: Dict[str, Any]) -> str:
     suffix = f"-d{int(payload['requested_at'] // 3600)}" if payload.get('on_demand') else ''
     if not payload.get('on_demand') and payload.get('playback_epoch'):
         suffix = f"-r{payload['playback_epoch']}"
+    if payload.get('recovery_epoch'):
+        # The failed marker generation is stable across polls and hour changes.
+        # One failed retry rewrites the marker and starts a fresh cooldown.
+        suffix = f"-r{payload['recovery_epoch']}"
     if payload.get('schema_version') == 2:
         return f"amc-{payload['conversation_id']}-{payload['fingerprint']}{suffix}"
     return f"am-{payload['conversation_id']}-{payload['audio_file_id']}{suffix}"
@@ -511,7 +517,9 @@ def listen_finalization_binding() -> dict[str, str]:
     }
 
 
-def enqueue_listen_finalization_job(job_id: str, dispatch_generation: int) -> None:
+def enqueue_listen_finalization_job(
+    job_id: str, dispatch_generation: int, *, schedule_at: Optional[int] = None
+) -> None:
     """Wake the finalizer with opaque routing data only.
 
     The Firestore job is canonical.  The task intentionally contains neither a
@@ -525,6 +533,7 @@ def enqueue_listen_finalization_job(job_id: str, dispatch_generation: int) -> No
         {'job_id': job_id, 'dispatch_generation': dispatch_generation},
         audience=_listen_finalization_audience(),
         invoker_sa=_listen_finalization_invoker_sa(),
+        schedule_at=schedule_at,
     )
 
 

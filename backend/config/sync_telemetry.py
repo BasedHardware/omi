@@ -7,7 +7,28 @@ token and can never carry caller-controlled text into structured logs.
 
 from __future__ import annotations
 
+import hashlib
 import uuid
+from enum import StrEnum
+
+from utils.sync.assignment_errors import SYNC_ASSIGNMENT_CONFLICT_AWAITING_WRITER, SYNC_ASSIGNMENT_CONFLICT_STRUCTURAL
+
+# Metric/log outcome for a sync failure that never reached an STT vendor. It is
+# deliberately not a TranscriptionOutcome member: that enum is an API contract.
+SYNC_INTERNAL_ERROR_OUTCOME = 'internal_error'
+
+
+class SyncFailureReason(StrEnum):
+    """Internal cause of a persistence/finalize failure (``utils.sync.failure_reason``)."""
+
+    NONE = 'none'
+    STORAGE_RATE_LIMITED = 'storage_rate_limited'
+    QUOTA_EXHAUSTED = 'quota_exhausted'
+    FIRESTORE_CONTENTION = 'firestore_contention'
+    ASSIGNMENT_CONFLICT = 'assignment_conflict'
+    PERSISTENCE_ERROR = 'persistence_error'
+    FINALIZE_ERROR = 'finalize_error'
+
 
 SYNC_PHASE_TOKENS = frozenset(
     {
@@ -80,6 +101,7 @@ SYNC_EXCEPTION_CLASSES = frozenset(
         'NotFound',
         'PermissionDenied',
         'ResourceExhausted',
+        'TooManyRequests',
         'RetryError',
         'ServiceUnavailable',
         'Unauthenticated',
@@ -127,7 +149,14 @@ SYNC_REPEAT_FAILURE_PERSISTENCE_FINGERPRINTS = frozenset(
         'persistence:document_size_limit',
         'persistence:mixed',
     }
-) | frozenset(f'persistence:{name}' for name in SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS)
+) | frozenset(
+    f'persistence:{name}'
+    for name in (
+        SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS
+        | SYNC_ASSIGNMENT_CONFLICT_STRUCTURAL
+        | SYNC_ASSIGNMENT_CONFLICT_AWAITING_WRITER
+    )
+)
 
 
 def bounded_sync_phase(phase: object) -> str:
@@ -146,14 +175,14 @@ def bounded_exception_class(error: object) -> str:
 
 
 def bounded_correlation_ref(value: object) -> str:
-    """Opaque correlation is allowed only for UUIDv4 identifiers (hex form)."""
+    """Hash only UUIDv4 identifiers; arbitrary IDs and text collapse to none."""
     if not isinstance(value, str):
         return 'none'
     try:
         parsed = uuid.UUID(value)
     except (ValueError, AttributeError, TypeError):
         return 'none'
-    return parsed.hex if parsed.version == 4 else 'none'
+    return hashlib.sha256(parsed.hex.encode('ascii')).hexdigest()[:32] if parsed.version == 4 else 'none'
 
 
 def new_attempt_ref() -> str:

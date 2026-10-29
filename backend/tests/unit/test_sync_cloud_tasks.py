@@ -7,8 +7,9 @@ utils/cloud_tasks.py, and the structural contract of the /v2/sync-jobs/run
 handler in routers/sync.py.
 """
 
+from utils.sync import size_telemetry  # noqa: F401 - retain real scoped telemetry across legacy package stubs
 from utils.other import owned_paths  # noqa: F401 - retain real scratch guard across legacy package stubs
-from utils import conversation_continuity  # noqa: F401 - retain pure policy across legacy package stubs
+from models import conversation_continuity  # noqa: F401 - retain pure policy across legacy package stubs
 from utils import dream_vocabulary  # noqa: F401 - retain shared keyterms across legacy package stubs
 from utils import firestore_document_size  # noqa: F401 - retain pure size estimate across legacy package stubs
 from utils import manual_speaker_assignments  # noqa: F401 - retain pure policy across legacy package stubs
@@ -17,6 +18,7 @@ from utils.stt import sync_speaker_evidence  # noqa: F401 - retain pure evidence
 from utils.stt import voiceprints  # noqa: F401 - retain pure voiceprint policy across legacy package stubs
 from utils.observability import speaker_identification  # noqa: F401 - retain telemetry across legacy package stubs
 from utils.observability import sync_phases  # noqa: F401 - retain aggregate telemetry across legacy package stubs
+from config.sync_telemetry import SyncFailureReason
 
 import asyncio
 import hashlib
@@ -685,8 +687,8 @@ class TestFinalizationDiagnostics:
             )
 
         records = [r.getMessage() for r in caplog.records if 'event=sync_transcription_job_finalized' in r.getMessage()]
-        assert f'job_ref={uuid.UUID(job_id).hex}' in records[0]
-        assert f'attempt_ref={attempt_ref}' in records[0]
+        assert f'job_ref={sync_jobs.bounded_correlation_ref(job_id)}' in records[0]
+        assert f'attempt_ref={sync_jobs.bounded_correlation_ref(attempt_ref)}' in records[0]
         assert 'failure_phase=provider_call' in records[0]
         assert 'failure_class=TimeoutError' in records[0]
         assert 'failure_subtype=provenance_mismatch' in records[0]
@@ -1201,9 +1203,13 @@ def _load_sync_router_for_fast_path():
     from models.geolocation import geolocation_from_private_header as actual_geolocation_from_private_header
     from pydantic import BaseModel
     from database.sync_jobs import SyncLedgerFenceMode
+    from database.legal_holds import DestructiveOperationInProgress as actual_destructive_operation_in_progress
     from utils.stt import outcomes as actual_outcomes
+    from utils.stt import prerecorded_health as actual_prerecorded_health
     from utils.stt import speaker_match as actual_speaker_match
     from utils.stt import speaker_identity as actual_speaker_identity
+    from utils.stt import transcript_admission as actual_transcript_admission
+    from utils.stt import vendor_guard as actual_vendor_guard
     from utils import manual_speaker_assignments as actual_manual_assignments
     from utils.sync import lanes as actual_sync_lanes, rate_limit as actual_rl
     from utils import capture_evidence as actual_capture_evidence
@@ -1222,6 +1228,7 @@ def _load_sync_router_for_fast_path():
         'database.users',
         'database.user_usage',
         'database.sync_ledger',
+        'database.legal_holds',
         'database.sync_empty_recovery',
         'database.sync_backfill_sequencer',
         'database.firestore_read_metrics',
@@ -1291,6 +1298,8 @@ def _load_sync_router_for_fast_path():
     for mod_name in heavy_deps:
         saved_modules[mod_name] = sys.modules.get(mod_name)
         sys.modules[mod_name] = MagicMock()
+
+    sys.modules['database.legal_holds'].DestructiveOperationInProgress = actual_destructive_operation_in_progress
 
     # utils.conversations is a namespace package on disk (no __init__.py), so the
     # sync pipeline's submodule imports resolve only through a real __path__.
@@ -1441,22 +1450,43 @@ def _load_sync_router_for_fast_path():
     journeys_mod.record_journey_accepted = MagicMock()
     shape_mod = types.ModuleType('utils.conversation_shape')
     shape_mod.observe_completed_conversation_shape = MagicMock()
-    saved_modules['utils.observability.transcription'] = sys.modules.get('utils.observability.transcription')
-    saved_modules['utils.observability.journeys'] = sys.modules.get('utils.observability.journeys')
     saved_modules['utils.conversation_shape'] = sys.modules.get('utils.conversation_shape')
     saved_modules['utils.stt.outcomes'] = sys.modules.get('utils.stt.outcomes')
     saved_modules['utils.stt.speaker_match'] = sys.modules.get('utils.stt.speaker_match')
     saved_modules['utils.stt.speaker_identity'] = sys.modules.get('utils.stt.speaker_identity')
+    saved_modules['utils.stt.transcript_admission'] = sys.modules.get('utils.stt.transcript_admission')
     saved_modules['utils.manual_speaker_assignments'] = sys.modules.get('utils.manual_speaker_assignments')
     sys.modules['utils.observability'] = obs_pkg
-    sys.modules['utils.observability.fallback'] = fallback_mod
-    sys.modules['utils.observability.transcription'] = transcription_mod
-    sys.modules['utils.observability.journeys'] = journeys_mod
+    # Empty __path__ hides new observability modules. Derive the rest from disk
+    # so held_content (and the next sibling) resolve; spies above stay in place.
+    from testing.import_isolation import install_package_submodule_stubs
+
+    install_package_submodule_stubs(
+        'utils.observability',
+        saved_modules,
+        overrides={
+            'utils.observability.fallback': fallback_mod,
+            'utils.observability.transcription': transcription_mod,
+            'utils.observability.journeys': journeys_mod,
+        },
+    )
+    # The pipeline schedules the episodes finalize hook at module scope; the
+    # fire-and-forget hook is no sync-coordinator concern, so the whole package
+    # stubs like observability above (MagicMock('utils') is not a package).
+    saved_modules.setdefault('utils.episodes', sys.modules.get('utils.episodes'))
+    episodes_pkg = types.ModuleType('utils.episodes')
+    episodes_pkg.__path__ = []  # type: ignore[attr-defined]
+    sys.modules['utils.episodes'] = episodes_pkg
+    install_package_submodule_stubs('utils.episodes', saved_modules)
     sys.modules['utils.conversation_shape'] = shape_mod
-    obs_pkg.fallback = fallback_mod
-    obs_pkg.transcription = transcription_mod
-    obs_pkg.journeys = journeys_mod
     sys.modules['utils.stt.outcomes'] = actual_outcomes
+    # Keep the empty-success guard's vendor-state reads real (stdlib+prometheus
+    # only): the guard resolves them lazily at call time, and a MagicMock
+    # parent for utils.stt is not a package.
+    saved_modules['utils.stt.prerecorded_health'] = sys.modules.get('utils.stt.prerecorded_health')
+    saved_modules['utils.stt.vendor_guard'] = sys.modules.get('utils.stt.vendor_guard')
+    sys.modules['utils.stt.prerecorded_health'] = actual_prerecorded_health
+    sys.modules['utils.stt.vendor_guard'] = actual_vendor_guard
     # Keep the decision policy real (pure, dependency-free): the sync pipeline now
     # calls select_speaker_match(), and a MagicMock stand-in would return a MagicMock
     # decision whose fields blow up the %.3f log formatting even on an empty match set.
@@ -1464,6 +1494,7 @@ def _load_sync_router_for_fast_path():
     # Keep allocator + receipt policy real: assignment.py imports both at module
     # scope, and MagicMock parents for utils / utils.stt are not packages.
     sys.modules['utils.stt.speaker_identity'] = actual_speaker_identity
+    sys.modules['utils.stt.transcript_admission'] = actual_transcript_admission
     sys.modules['utils.manual_speaker_assignments'] = actual_manual_assignments
     # Keep the S1 evidence envelope builder real (pure, stdlib-only): the sync
     # pipeline imports unknown_envelope at module scope, and a MagicMock parent
@@ -2435,7 +2466,9 @@ async def test_sync_task_final_attempt_converges_a_ledger_completed_by_the_faili
         module._run_full_pipeline_background_async.assert_awaited_once()
         module._finalize_sync_job_failure.assert_not_awaited()
         module.fenced_mark_job_queued_for_retry.assert_not_called()
-        module._delete_staged_blobs_async.assert_awaited_once_with(['staged/audio.opus'])
+        module._delete_staged_blobs_async.assert_awaited_once_with(
+            ['staged/audio.opus'], uid='test-uid', content_id='content-1', job_id='job-1'
+        )
         module.release_job_run_lock.assert_called_once_with('job-1', '1:lock-token')
     finally:
         sys.modules.pop('routers.sync', None)
@@ -2520,10 +2553,45 @@ async def test_sync_task_final_attempt_publishes_one_bounded_terminal_failure():
             model='nova-3',
             lane='fresh',
             run_lock_token='1:lock-token',
+            failure_phase=None,
+            failure_class='TimeoutError',
+            failure_reason=SyncFailureReason.NONE,
         )
         module.fenced_mark_job_queued_for_retry.assert_not_called()
         module._delete_staged_blobs_async.assert_awaited_once_with(['staged/audio.opus'])
         module.release_job_run_lock.assert_called_once_with('job-1', '1:lock-token')
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sync_task_final_attempt_keeps_the_pipeline_internal_cause():
+    """A storage 429 re-raised from task mode must not be published as upstream_error."""
+
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    error = RuntimeError('bridge copy rate limited')
+    setattr(error, 'sync_failure_reason', SyncFailureReason.STORAGE_RATE_LIMITED)
+    setattr(error, 'sync_failure_phase', 'finalize')
+    request = _configure_task_handler(
+        module,
+        pipeline_error=error,
+        latest_job={'job_id': 'job-1', 'status': 'processing', 'stt_provider': 'deepgram', 'stt_model': 'nova-3'},
+    )
+
+    try:
+        response = await module.run_sync_job(request, task_retry_count=2)
+
+        assert json.loads(response.body) == {'status': 'failed_final'}
+        kwargs = module._finalize_sync_job_failure.await_args.kwargs
+        assert kwargs['failure_reason'] is SyncFailureReason.STORAGE_RATE_LIMITED
+        assert kwargs['failure_phase'] == 'finalize'
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
@@ -2993,6 +3061,10 @@ async def test_sync_dispatch_staging_failure_can_terminalize_and_release_for_wal
 
         assert response.status_code == 503
         assert json.loads(response.body)['code'] == 'sync_dispatch_unavailable'
+        assert response.headers['retry-after'] == '30'
+        assert 'x-omi-rate-limit-reason' not in response.headers
+        assert 'gcs unavailable' not in response.body.decode()
+        module._stage_files_to_gcs.assert_called_once()
         module.enqueue_sync_job.assert_not_called()
         module.start_background_task.assert_not_called()
         module._delete_staged_blobs_async.assert_awaited_once()
@@ -3006,7 +3078,112 @@ async def test_sync_dispatch_staging_failure_can_terminalize_and_release_for_wal
             model='unknown',
             lane='fresh',
         )
+        module.OMI_SYNC_DISPATCH_FAILURES_TOTAL.labels.assert_called_once_with(reason='staging_failed')
         assert fallback_calls == []
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sync_dispatch_hold_returns_scoped_retry_after_recheck_without_gate_detail_leakage(monkeypatch):
+    from database.legal_holds import DestructiveOperationInProgress
+    from starlette.datastructures import UploadFile
+
+    module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    monkeypatch.setattr(module, 'SYNC_DISPATCH_HOLD_RECHECK_SECONDS', 0.02)
+    monkeypatch.setattr(module, 'SYNC_DISPATCH_HOLD_RECHECK_INTERVAL_SECONDS', 0.005)
+    module.start_background_task = MagicMock()
+    module._stage_files_to_gcs = MagicMock(
+        side_effect=DestructiveOperationInProgress('account deletion internal marker secret')
+    )
+    module._delete_staged_blobs_async = AsyncMock()
+    module._finalize_sync_job_failure = AsyncMock()
+    module.classify_sync_lane = MagicMock(
+        return_value=types.SimpleNamespace(
+            lane=module.SyncLane.FRESH,
+            trust=types.SimpleNamespace(value='device_bound'),
+            reason='recent_capture',
+            maximum_age_seconds=60,
+            automatic_recovery_allowed=True,
+        )
+    )
+
+    try:
+        upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
+        response = await module.sync_local_files_v2(files=[upload], uid='test-uid')
+
+        assert response.status_code == 503
+        assert response.headers['retry-after'] == '60'
+        assert response.headers['x-omi-rate-limit-reason'] == 'dispatch_hold'
+        assert json.loads(response.body) == {
+            'code': 'dispatch_hold',
+            'detail': 'Sync dispatch is temporarily paused; local audio was not consumed',
+        }
+        assert 'internal marker secret' not in response.body.decode()
+        assert 'test-uid' not in response.body.decode()
+        module.enqueue_sync_job.assert_not_called()
+        module.start_background_task.assert_not_called()
+        module._delete_staged_blobs_async.assert_awaited_once()
+        module._finalize_sync_job_failure.assert_awaited_once_with(
+            job_id=module.create_sync_job.call_args.kwargs['job_id'],
+            uid='test-uid',
+            content_id='content-1',
+            error_code='dispatch_hold',
+            outcome=module.TranscriptionOutcome.UPSTREAM_ERROR,
+            provider='unknown',
+            model='unknown',
+            lane='fresh',
+        )
+        module.OMI_SYNC_DISPATCH_FAILURES_TOTAL.labels.assert_called_once_with(reason='dispatch_hold')
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sync_dispatch_hold_that_clears_during_recheck_stages_successfully(monkeypatch):
+    from database.legal_holds import DestructiveOperationInProgress
+    from starlette.datastructures import UploadFile
+
+    module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    monkeypatch.setattr(module, 'SYNC_DISPATCH_HOLD_RECHECK_SECONDS', 0.05)
+    monkeypatch.setattr(module, 'SYNC_DISPATCH_HOLD_RECHECK_INTERVAL_SECONDS', 0.001)
+    module.start_background_task = MagicMock()
+    module._stage_files_to_gcs = MagicMock(side_effect=[DestructiveOperationInProgress('internal hold marker'), None])
+    module._delete_staged_blobs_async = AsyncMock()
+    module._finalize_sync_job_failure = AsyncMock()
+    module.classify_sync_lane = MagicMock(
+        return_value=types.SimpleNamespace(
+            lane=module.SyncLane.FRESH,
+            trust=types.SimpleNamespace(value='device_bound'),
+            reason='recent_capture',
+            maximum_age_seconds=60,
+            automatic_recovery_allowed=True,
+        )
+    )
+
+    try:
+        upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
+        response = await module.sync_local_files_v2(files=[upload], uid='test-uid')
+
+        assert response.status_code == 202
+        assert module._stage_files_to_gcs.call_count == 2
+        module.enqueue_sync_job.assert_called_once()
+        module._delete_staged_blobs_async.assert_not_awaited()
+        module._finalize_sync_job_failure.assert_not_awaited()
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
@@ -3663,7 +3840,11 @@ async def test_oversized_backfill_upload_is_rejected_before_staging_or_custody_t
         )
     )
     try:
-        uploads = [UploadFile(filename='test.opus', file=BytesIO(b'')) for _ in range(MAX_BACKFILL_FILES + 1)]
+        # Admission limits apply to audio payloads; empty clips now complete as no-ops.
+        uploads = [
+            UploadFile(filename='test.opus', file=BytesIO(b'\x01\x00\x00\x00\x42'))
+            for _ in range(MAX_BACKFILL_FILES + 1)
+        ]
         with pytest.raises(module.HTTPException) as error:
             await module.sync_local_files_v2(files=uploads, uid='test-uid')
         assert error.value.status_code == 413
@@ -3721,7 +3902,11 @@ async def test_over_cap_upload_in_the_final_fresh_lane_is_not_rejected_by_the_ba
         module.classify_sync_lane = MagicMock(return_value=_decision(module, module.SyncLane.FRESH))
     module.validate_backfill_uploads = MagicMock()
     try:
-        uploads = [UploadFile(filename='test.opus', file=BytesIO(b'')) for _ in range(MAX_BACKFILL_FILES + 1)]
+        # Admission limits apply to audio payloads; empty clips now complete as no-ops.
+        uploads = [
+            UploadFile(filename='test.opus', file=BytesIO(b'\x01\x00\x00\x00\x42'))
+            for _ in range(MAX_BACKFILL_FILES + 1)
+        ]
         try:
             await module.sync_local_files_v2(files=uploads, uid='test-uid')
         except module.HTTPException as error:
@@ -3746,7 +3931,11 @@ async def test_v1_over_limit_backfill_upload_keeps_the_retryable_503_not_a_413()
     )
     module.get_sync_ledger_fence_mode = MagicMock(return_value=module.SyncLedgerFenceMode.ACTIVE)
     try:
-        uploads = [UploadFile(filename='test.opus', file=BytesIO(b'')) for _ in range(MAX_BACKFILL_FILES + 1)]
+        # Admission limits apply to audio payloads; empty clips now complete as no-ops.
+        uploads = [
+            UploadFile(filename='test.opus', file=BytesIO(b'\x01\x00\x00\x00\x42'))
+            for _ in range(MAX_BACKFILL_FILES + 1)
+        ]
         request = MagicMock()
         request.headers = {}
         response = await module.sync_local_files(
@@ -3923,7 +4112,9 @@ def test_legacy_fresh_http_multipart_measures_bytes_and_returns_lane(monkeypatch
         async def upload(files: list[UploadFile] = File(...)):
             return await module.sync_local_files_v2(files=files, uid='test-uid')
 
-        response = TestClient(app).post('/v2/sync-local-files', files={'files': ('recent.bin', b'abc', 'audio/opus')})
+        response = TestClient(app).post(
+            '/v2/sync-local-files', files={'files': ('recent.bin', b'\x01\x00\x00\x00\x42', 'audio/opus')}
+        )
         assert response.status_code == 202
         assert response.json()['lane'] == expected
         assert module.enqueue_sync_job.call_args.args[0]['lane'] == expected
@@ -3969,7 +4160,7 @@ async def test_fresh_only_refusal_demotes_legacy_but_keeps_device_bound_429(monk
     module.logger = MagicMock()
     module.start_background_task = MagicMock()
     try:
-        upload = UploadFile(filename='recent.bin', file=BytesIO(b'abc'), size=3)
+        upload = UploadFile(filename='recent.bin', file=BytesIO(b'\x01\x00\x00\x00\x42'), size=5)
         response = await module.sync_local_files_v2(files=[upload], uid='test-uid')
         if trust == 'legacy':
             assert response.status_code == 202
@@ -4039,7 +4230,7 @@ async def test_legacy_fresh_refusal_preserves_backfill_pause_instead_of_429(monk
     module._fair_use_restriction_response = AsyncMock()
     try:
         response = await module.sync_local_files_v2(
-            files=[UploadFile(filename='recent.bin', file=BytesIO(b'abc'), size=3)], uid='test-uid'
+            files=[UploadFile(filename='recent.bin', file=BytesIO(b'\x01\x00\x00\x00\x42'), size=5)], uid='test-uid'
         )
         assert response.status_code == 503
         assert json.loads(response.body)['code'] == 'backfill_capacity'
@@ -4059,7 +4250,8 @@ async def test_legacy_fresh_refusal_preserves_backfill_pause_instead_of_429(monk
 
 
 @pytest.mark.asyncio
-async def test_dark_unowned_allowlisted_byok_upload_keeps_batch_intake_hold(monkeypatch):
+async def test_byok_upload_enters_batch_admission_like_any_upload(monkeypatch):
+    """David 10-19: no special BYOK path; the request keys are never needed by the batch stages."""
     monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '0')
@@ -4070,6 +4262,8 @@ async def test_dark_unowned_allowlisted_byok_upload_keeps_batch_intake_hold(monk
     store.run.side_effect = lambda body: body(transaction)
     monkeypatch.setattr(_batch_intake, 'FirestoreStore', lambda *_: store)
     module.has_byok_keys = MagicMock(return_value=True)
+    authorize = MagicMock(side_effect=RuntimeError('synthetic staging stop'))
+    monkeypatch.setattr(_batch_intake, 'batch_artifact_authorize', authorize)
     accepted = AsyncMock(wraps=_batch_intake.accept_upload)
     module.accept_batch_upload = accepted
     try:
@@ -4078,12 +4272,12 @@ async def test_dark_unowned_allowlisted_byok_upload_keeps_batch_intake_hold(monk
             uid='test-uid',
             conversation_id='unowned-record',
         )
+        # The synthetic stop inside batch admission answers the ordinary batch retry, not a BYOK hold.
         assert response.status_code == 503
-        assert json.loads(response.body)['code'] == 'sync_batch_byok_unavailable'
-        assert response.headers['Retry-After'] == '30'
+        assert json.loads(response.body)['code'] == 'sync_batch_unavailable'
         accepted.assert_awaited_once()
         assert accepted.call_args.kwargs['byok_enabled'] is True
-        assert transaction.get.call_count == 1  # Existing content-ledger read only.
+        authorize.assert_called_once()
         transaction.put.assert_not_called()
         module.create_sync_job.assert_not_called()
         module.claim_sync_content.assert_not_called()
@@ -5148,9 +5342,12 @@ async def test_sequenced_attempt_heartbeat_drain_is_bounded():
     module.sync_backfill_sequencer.renew_job = MagicMock(return_value=True)
     module.get_sync_job = MagicMock(return_value={'status': 'processing', 'attempt': 1})
 
+    renewal_started = asyncio.Event()
+
     async def _body_returns_after_renewal_started(_request, _task_retry_count, *_args, **_kwargs):
-        # Let the heartbeat reach its first renewal before the response exists.
-        await asyncio.sleep(0.05)
+        # Synchronize with the blocked renewal instead of assuming a sleep
+        # gives the heartbeat enough scheduler time on a loaded runner.
+        await asyncio.wait_for(renewal_started.wait(), timeout=2)
         return module.JSONResponse(status_code=200, content={'status': module.SYNC_JOB_HANDLER_BUDGET_DEFERRED_STATUS})
 
     passthrough_run_blocking = module.run_blocking
@@ -5160,6 +5357,7 @@ async def test_sequenced_attempt_heartbeat_drain_is_bounded():
         nonlocal renewal_reached
         if fn is module.sync_backfill_sequencer.renew_job:
             renewal_reached = True
+            renewal_started.set()
             await asyncio.sleep(10)
         return await passthrough_run_blocking(_executor, fn, *args, **kwargs)
 
@@ -5833,6 +6031,38 @@ async def test_sync_task_budget_deferral_timeout_during_enqueue_keeps_deferred_m
                 sys.modules[name] = original
 
 
+def _pipeline_expiring_the_handler_budget(module):
+    """Pipeline stub that expires the attempt's handler budget from inside the
+    pipeline, then never returns.
+
+    A tiny real budget (0.05s) also races the attempt's pre-pipeline awaits
+    (thread-pool job reads, lock acquire): on a loaded runner it can expire
+    before the pipeline starts, so the recovery's job read lands on a
+    nonterminal read and the handler takes the preserved-lock branch instead.
+    Capturing the budget's timeout context and rescheduling it to now once the
+    pipeline runs places the expiry deterministically, independent of runner
+    speed; the budget itself keeps the module's production-sized default.
+    """
+    budgets = []
+
+    class _BudgetCapturingAsyncio:
+        def __getattr__(self, name):
+            return getattr(asyncio, name)
+
+        def timeout(self, delay):
+            budget = asyncio.timeout(delay)
+            budgets.append(budget)
+            return budget
+
+    module.asyncio = _BudgetCapturingAsyncio()
+
+    async def _pipeline(*args, **kwargs):
+        budgets[-1].reschedule(asyncio.get_running_loop().time())
+        await asyncio.Event().wait()
+
+    return _pipeline
+
+
 @pytest.mark.asyncio
 async def test_budget_expiry_after_terminal_transition_returns_terminal_cleanup_retry():
     """A pipeline that published a terminal result and then hit the budget
@@ -5855,11 +6085,9 @@ async def test_budget_expiry_after_terminal_transition_returns_terminal_cleanup_
         },
     )
 
-    async def _pipeline_never_returns_then_terminal(*args, **kwargs):
-        await asyncio.sleep(30)
+    _pipeline_never_returns_then_terminal = _pipeline_expiring_the_handler_budget(module)
 
     try:
-        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
         module._run_full_pipeline_background_async = _pipeline_never_returns_then_terminal
         reads = {'n': 0}
 
@@ -6268,8 +6496,7 @@ async def test_terminal_cleanup_retry_requires_a_confirmed_lock_release():
         },
     )
 
-    async def _pipeline_never_returns_then_terminal(*args, **kwargs):
-        await asyncio.sleep(30)
+    _pipeline_never_returns_then_terminal = _pipeline_expiring_the_handler_budget(module)
 
     strict_calls = []
 
@@ -6278,7 +6505,6 @@ async def test_terminal_cleanup_retry_requires_a_confirmed_lock_release():
         return 0  # EVAL: token no longer owns the key
 
     try:
-        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
         module._run_full_pipeline_background_async = _pipeline_never_returns_then_terminal
         module.release_job_run_lock_strict = MagicMock(side_effect=_strict_release)
         reads = {'n': 0}
@@ -6337,11 +6563,9 @@ async def test_terminal_cleanup_retry_returns_500_only_after_confirmed_release()
         },
     )
 
-    async def _pipeline_never_returns_then_terminal(*args, **kwargs):
-        await asyncio.sleep(30)
+    _pipeline_never_returns_then_terminal = _pipeline_expiring_the_handler_budget(module)
 
     try:
-        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
         module._run_full_pipeline_background_async = _pipeline_never_returns_then_terminal
         module.release_job_run_lock_strict = MagicMock(return_value=1)
         reads = {'n': 0}
@@ -6404,8 +6628,7 @@ async def test_terminal_cleanup_retry_unconfirmed_release_skips_impossible_marke
         },
     )
 
-    async def _pipeline_never_returns_then_terminal(*args, **kwargs):
-        await asyncio.sleep(30)
+    _pipeline_never_returns_then_terminal = _pipeline_expiring_the_handler_budget(module)
 
     strict_calls = []
 
@@ -6414,7 +6637,6 @@ async def test_terminal_cleanup_retry_unconfirmed_release_skips_impossible_marke
         return 0  # EVAL: token no longer owns the key — release unconfirmed
 
     try:
-        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
         module._run_full_pipeline_background_async = _pipeline_never_returns_then_terminal
         module.release_job_run_lock_strict = MagicMock(side_effect=_strict_release)
         # Production contract: update_sync_job returns None for terminal
@@ -6488,14 +6710,12 @@ async def test_terminal_cleanup_replacement_survives_the_attempt_cap():
     base_payload = await request.json()
     request.json = AsyncMock(return_value={**base_payload, module.SYNC_JOB_BUDGET_DEFERRALS_PAYLOAD_KEY: 2})
 
-    async def _pipeline_never_returns_then_terminal(*args, **kwargs):
-        await asyncio.sleep(30)
+    _pipeline_never_returns_then_terminal = _pipeline_expiring_the_handler_budget(module)
 
     def _strict_release(job_id, token):
         return 0  # EVAL: token no longer owns the key — release unconfirmed
 
     try:
-        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
         module._run_full_pipeline_background_async = _pipeline_never_returns_then_terminal
         module.release_job_run_lock_strict = MagicMock(side_effect=_strict_release)
         module.update_sync_job = MagicMock(return_value=None)
@@ -6641,8 +6861,7 @@ async def test_terminal_cleanup_deferral_inherits_the_recovery_deadline():
     base_payload = await request.json()
     request.json = AsyncMock(return_value={**base_payload, 'sequencer_epoch': 1})
 
-    async def _pipeline_never_returns_then_terminal(*args, **kwargs):
-        await asyncio.sleep(30)
+    _pipeline_never_returns_then_terminal = _pipeline_expiring_the_handler_budget(module)
 
     def _strict_release(job_id, token):
         return 0
@@ -6658,7 +6877,8 @@ async def test_terminal_cleanup_deferral_inherits_the_recovery_deadline():
         await asyncio.sleep(30)
 
     try:
-        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        # The recovery's deadline (now + cleanup timeout) is what the deferral inherits; the attempt's budget keeps
+        # its production size and expires inside the pipeline stub, so runner speed can't move the expiry.
         module.SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS = 0.2
         module._run_full_pipeline_background_async = _pipeline_never_returns_then_terminal
         module.release_job_run_lock_strict = MagicMock(side_effect=_strict_release)

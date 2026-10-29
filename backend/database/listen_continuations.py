@@ -11,7 +11,7 @@ from google.cloud import firestore
 from database._client import get_firestore_client
 from database.document_ids import calendar_meeting_doc_id
 from utils.observability.fallback import record_fallback
-from utils.conversation_continuity import (
+from models.conversation_continuity import (
     calendar_continuity_identity,
     calendar_continuity_window,
     continuation_timeout,
@@ -106,6 +106,8 @@ def resolve_live_continuation(
     timeout: int,
     proposed: Mapping[str, str] | None = None,
     firestore_client: Any = None,
+    language: str | None = None,
+    allow_server_batch: bool = True,
 ) -> tuple[dict[str, str] | None, dict[str, str] | None]:
     """Read or atomically adopt a persisted continuation without rebinding its origin.
 
@@ -140,7 +142,15 @@ def resolve_live_continuation(
                 ref = user.collection('conversations').document(cid)
                 row = ref.get(transaction=transaction).to_dict() or {}
                 row = hydrate(ref, row)
-                if resumable_continuation(row, source=source, device_id=device_id, now=now, timeout=timeout):
+                if resumable_continuation(
+                    row,
+                    source=source,
+                    device_id=device_id,
+                    now=now,
+                    timeout=timeout,
+                    language=language,
+                    allow_server_batch=allow_server_batch,
+                ):
                     return {'conversation_id': cid, 'recording_session_id': sid}, None
                 finish = row.get('finished_at')
                 if (
@@ -161,7 +171,15 @@ def resolve_live_continuation(
                 or {}
             )
             candidate = hydrate(user.collection('conversations').document(proposed['conversation_id']), candidate)
-            if not resumable_continuation(candidate, source=source, device_id=device_id, now=now, timeout=timeout):
+            if not resumable_continuation(
+                candidate,
+                source=source,
+                device_id=device_id,
+                now=now,
+                timeout=timeout,
+                language=language,
+                allow_server_batch=allow_server_batch,
+            ):
                 return None, None
             adopted = dict(proposed)
             transaction.update(root, {'live_continuation': adopted})

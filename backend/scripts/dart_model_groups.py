@@ -25,6 +25,17 @@ SCHEMA_GROUPS = {
         'output': DEFAULT_OUTPUT_DIR / 'budget_choice_wire.g.dart',
         'schemas': ('BudgetChoiceRequest', 'BudgetChoiceRecord', 'BudgetChoiceResponse', 'BudgetChoiceWriteResponse'),
     },
+    'episodes': {
+        'output': DEFAULT_OUTPUT_DIR / 'episodes_wire.g.dart',
+        'schemas': (
+            'EpisodeMoment',
+            'EpisodeProvisionalItem',
+            'Episode',
+            'EpisodeLiveResponse',
+            'EpisodeLookupResponse',
+            'EpisodeWrapUpRequest',
+        ),
+    },
     'messaging': {
         'output': DEFAULT_OUTPUT_DIR / 'messaging_wire.g.dart',
         'schemas': (
@@ -85,6 +96,10 @@ SCHEMA_GROUPS = {
             'ReviewChange',
             'ReviewChangeDiff',
             'ReviewChangesResponse',
+            'OpenLoopCard',
+            'OpenLoopCardsResponse',
+            'OpenLoopAnswerRequest',
+            'OpenLoopAnswerResponse',
         ),
     },
     'entity_pages': {
@@ -109,16 +124,6 @@ SCHEMA_GROUPS = {
             'EntityPage',
             'EntityCorrection',
             'EntitiesResponse',
-        ),
-    },
-    'proactivity': {
-        'output': DEFAULT_OUTPUT_DIR / 'proactivity_wire.g.dart',
-        'schemas': (
-            'ProactivityTarget',
-            'ProactivityFeedItem',
-            'ProactivityFeedResponse',
-            'ProactivityOutcomeRequest',
-            'ProactivityOutcomeResponse',
         ),
     },
     'frame_requests': {
@@ -210,6 +215,7 @@ SCHEMA_GROUPS = {
             'UndoChatReceiptResponse',
             'MessageConversationStructured',
             'MessageConversation',
+            'ChatFileVideo',
             'FileChat',
             'ChartDataPoint',
             'ChartDataset',
@@ -435,6 +441,7 @@ SCHEMA_GROUPS = {
             'AppCreateResponse',
             'AppMigrationResponse',
             'McpAddServerResponse',
+            'McpAuthorizeResponse',
             'AppDescriptionGenerationResponse',
             'AppDescriptionEmojiGenerationResponse',
             'AppPromptsGenerationResponse',
@@ -566,6 +573,7 @@ SCHEMA_GROUPS = {
             'PaymentCheckoutSessionResponse',
             'PaymentUpgradeSubscriptionResponse',
             'CustomerPortalSessionResponse',
+            'RetentionOfferResponse',
             'PlanLimits',
             'routers__payment__PricingOption',
             'AvailablePlansResponse',

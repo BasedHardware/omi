@@ -10,6 +10,7 @@ const omiApiGet = vi.fn()
 const omiApiPost = vi.fn()
 const omiApiPatch = vi.fn()
 const omiApiDelete = vi.fn()
+let authGeneration = 0
 
 vi.mock('../lib/apiClient', () => ({
   omiApi: {
@@ -18,6 +19,11 @@ vi.mock('../lib/apiClient', () => ({
     patch: (...args: unknown[]) => omiApiPatch(...args),
     delete: (...args: unknown[]) => omiApiDelete(...args)
   }
+}))
+
+vi.mock('../lib/authSessionScope', () => ({
+  getAuthSessionGeneration: () => authGeneration,
+  captureAuthRequestScope: (generation: number) => ({ __authGeneration: generation })
 }))
 
 import { useMemories, type Memory } from './useMemories'
@@ -32,6 +38,7 @@ const memory = (id: string, content: string, visibility?: string): unknown => ({
 })
 
 beforeEach(() => {
+  authGeneration = 0
   omiApiGet.mockReset().mockResolvedValue({ data: [memory('m1', 'Original content', 'private')] })
   omiApiPost.mockReset()
   omiApiPatch.mockReset().mockResolvedValue({ data: { status: 'ok' } })
@@ -77,10 +84,11 @@ describe('useMemories — edit/visibility query-param contract (C9)', () => {
     await act(async () => {
       await result.current.createMemory('Added memory', { category: 'manual' })
     })
-    expect(omiApiPost).toHaveBeenCalledWith('/v3/memories', {
-      content: 'Added memory',
-      category: 'manual'
-    })
+    expect(omiApiPost).toHaveBeenCalledWith(
+      '/v3/memories',
+      { content: 'Added memory', category: 'manual' },
+      { __authGeneration: 0 }
+    )
   })
 
   it('editMemory preserves the required query param alongside the JSON body', async () => {
@@ -97,7 +105,7 @@ describe('useMemories — edit/visibility query-param contract (C9)', () => {
     const [path, body, config] = omiApiPatch.mock.calls[0]
     expect(path).toBe('/v3/memories/m1')
     expect(body).toEqual({ value: 'Updated content' })
-    expect(config).toEqual({ params: { value: 'Updated content' } })
+    expect(config).toEqual({ params: { value: 'Updated content' }, __authGeneration: 0 })
   })
 
   it('setMemoryVisibility sends the new value as a query param on the /visibility route', async () => {
@@ -114,7 +122,7 @@ describe('useMemories — edit/visibility query-param contract (C9)', () => {
     const [path, body, config] = omiApiPatch.mock.calls[0]
     expect(path).toBe('/v3/memories/m1/visibility')
     expect(body).toEqual({ value: 'public' })
-    expect(config).toEqual({ params: { value: 'public' } })
+    expect(config).toEqual({ params: { value: 'public' }, __authGeneration: 0 })
   })
 
   it('publishes the canonical replacement returned by a successful edit', async () => {
@@ -133,6 +141,60 @@ describe('useMemories — edit/visibility query-param contract (C9)', () => {
     expect(result.current.memories.find((m) => m.id === 'canonical-id')?.content).toBe(
       'Canonical content'
     )
+  })
+
+  it('rejects an old edit after same-account reauthentication without replacing the new cache', async () => {
+    const { result } = renderHook(() => useMemories())
+    await act(async () => {
+      await result.current.refresh()
+    })
+    let finish = (_value: unknown): void => {
+      throw new Error('request not started')
+    }
+    omiApiPatch.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    )
+    await act(async () => {
+      const old = result.current.editMemory('m1', 'old session draft')
+      authGeneration += 1
+      omiApiGet.mockResolvedValue({ data: [memory('m1', 'new session content', 'private')] })
+      await result.current.refresh()
+      finish({
+        data: { status: 'ok', memory: memory('old-replacement', 'stale result', 'private') }
+      })
+      await expect(old).rejects.toThrow('sign-in changed')
+    })
+    expect(result.current.memories.map((m) => [m.id, m.content])).toEqual([
+      ['m1', 'new session content']
+    ])
+  })
+
+  it('does not roll back an unrelated successful edit when an earlier edit fails', async () => {
+    omiApiGet.mockResolvedValue({ data: [memory('m1', 'first'), memory('m2', 'second')] })
+    const { result } = renderHook(() => useMemories())
+    await act(async () => {
+      await result.current.refresh()
+    })
+    let fail = (_error: Error): void => {
+      throw new Error('request not started')
+    }
+    omiApiPatch.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          fail = reject
+        })
+    )
+    await act(async () => {
+      const first = result.current.editMemory('m1', 'failed draft')
+      await result.current.editMemory('m2', 'saved second')
+      fail(new Error('first failed'))
+      await expect(first).rejects.toThrow('first failed')
+    })
+    expect(result.current.memories.find((m) => m.id === 'm1')?.content).toBe('first')
+    expect(result.current.memories.find((m) => m.id === 'm2')?.content).toBe('saved second')
   })
 
   it('reverts the local cache and rethrows when the edit request fails', async () => {
@@ -266,7 +328,8 @@ describe('useMemories — pagination and delete', () => {
     expect(result.current.memories).toHaveLength(1200)
     expect(result.current.memories.some((m) => m.id === 'm1199')).toBe(true)
     expect(omiApiGet).toHaveBeenCalledWith('/v3/memories', {
-      params: { limit: 500, offset: 500 }
+      params: { limit: 500, offset: 500 },
+      __authGeneration: authGeneration
     })
   })
 
@@ -320,7 +383,7 @@ describe('useMemories — pagination and delete', () => {
     await act(async () => {
       await result.current.deleteMemory('m1')
     })
-    expect(omiApiDelete).toHaveBeenCalledWith('/v3/memories/m1')
+    expect(omiApiDelete).toHaveBeenCalledWith('/v3/memories/m1', { __authGeneration: 0 })
     expect(result.current.memories.some((m) => m.id === 'm1')).toBe(false)
 
     omiApiDelete.mockRejectedValueOnce(new Error('offline'))

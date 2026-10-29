@@ -30,5 +30,4 @@ nllb_translation/       # Subservice: self-hosted NLLB translation (separate Doc
 modal/                  # Serverless GPU services (deployed on Modal) + Cloud Run Jobs
                         #   - VAD: voice activity detection (pyannote/voice-activity-detection)
                         #   - notifications-job: hourly push notifications + X sync (Cloud Run Job)
-                        #   - memory-maintenance-job: canonical ST→LT maintenance (Cloud Run Job)
 ```

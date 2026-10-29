@@ -15,6 +15,9 @@ from database.sync_jobs import get_sync_job
 from utils.sync import stage as sync_stage
 
 LEDGER_RETENTION_DAYS = 45
+# Terminal batch_v1 ledger state: every failed unit is held with no recovery
+# path left; projected siblings are published, the held span is counted.
+BATCH_PARTIAL_STATUS = 'partial'
 CLAIM_STALE_SECONDS = 2 * 24 * 60 * 60
 REPEAT_FAILURE_LIMIT = 3
 REPEAT_FAILURE_WINDOW = timedelta(hours=24)
@@ -118,7 +121,10 @@ def _ledger_owner_matches(
     """
     if existing.get('dispatch_protocol') == 'batch_v1' and not allow_batch:
         return False
-    if existing.get('status') != 'processing' or existing.get('job_id') != job_id:
+    # A batch partial is terminal for the client but still owned by its batch
+    # job: recovery, operator redrive and the ordinary completion upgrade it.
+    owned = {'processing', BATCH_PARTIAL_STATUS} if allow_batch else {'processing'}
+    if existing.get('status') not in owned or existing.get('job_id') != job_id:
         return False
     bound_token = existing.get('ledger_run_token')
     bound_epoch = existing.get('ledger_run_epoch')
@@ -169,6 +175,35 @@ def is_valid_completed_sync_content_result(result: Any) -> bool:
         # zero-segment records predate the silence-vs-decode-failure contract.
         return total_segments > 0
     return outcome in {'success', 'expected_silence'}
+
+
+def is_valid_partial_sync_content_result(result: Any) -> bool:
+    """A batch partial: every failed segment is a held unit, none is an error.
+
+    Never an all-success result, so no legacy path converges Redis from it.
+    """
+    if not isinstance(result, dict) or result.get('outcome') != 'partial' or result.get('held_audio') is True:
+        return False
+    failed, held, total = result.get('failed_segments'), result.get('held_segments'), result.get('total_segments')
+    if not all(isinstance(value, int) and not isinstance(value, bool) for value in (failed, held, total)):
+        return False
+    assert isinstance(failed, int) and isinstance(held, int) and isinstance(total, int)
+    return (
+        0 < held == failed <= total
+        and result.get('errors') == []
+        and all(isinstance(result.get(key), list) for key in ('new_memories', 'updated_memories'))
+    )
+
+
+def batch_ledger_owes_held_units(ledger: Dict[str, Any]) -> bool:
+    """Operator redrive precondition: nothing is charged yet, or a partial still counts held units.
+
+    A partial charged only its projected siblings, so a reviewed redrive of a
+    held unit stays allowed; its ordinary completion charges the remainder.
+    """
+    if ledger.get('status') == BATCH_PARTIAL_STATUS:
+        return is_valid_partial_sync_content_result(ledger.get('result'))
+    return ledger.get('status') != 'completed' and ledger.get('usage_committed_at') is None
 
 
 def is_valid_held_sync_content_result(result: Any) -> bool:
@@ -603,6 +638,7 @@ def _mark_completed_transaction(
     now: datetime,
     run_token: str | None = None,
     run_epoch: int | None = None,
+    staging_custody: Dict[str, Any] | None = None,
 ) -> bool:
     """Publish completion only while ``job_id`` still owns the ledger entry."""
     # The caller-side pipeline checks this too, but completion is a durable
@@ -620,6 +656,7 @@ def _mark_completed_transaction(
         {
             'status': 'completed',
             'result': result,
+            **({'staging_custody': staging_custody} if staging_custody else {}),
             'updated_at': now,
             'expires_at': now + timedelta(days=LEDGER_RETENTION_DAYS),
         },
@@ -637,6 +674,7 @@ def mark_sync_content_completed(
     run_token: str | None = None,
     run_epoch: int | None = None,
     firestore_client: Any = None,
+    staging_custody: Dict[str, Any] | None = None,
 ) -> bool:
     """Atomically publish a completed result for the matching ledger owner."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
@@ -650,6 +688,7 @@ def mark_sync_content_completed(
         now,
         run_token,
         run_epoch,
+        staging_custody,
     )
 
 
@@ -807,6 +846,35 @@ def complete_batch_projection_in_transaction(
         ref,
         {
             'status': 'completed',
+            'result': result,
+            'updated_at': now,
+            'expires_at': now + timedelta(days=LEDGER_RETENTION_DAYS),
+        },
+    )
+
+
+def complete_batch_partial_in_transaction(
+    transaction: Any,
+    ref: Any,
+    existing: Dict[str, Any],
+    job_id: str,
+    result: Dict[str, Any],
+    now: datetime,
+    *,
+    run_token: str | None = None,
+    run_epoch: int | None = None,
+) -> None:
+    """Write-only partial completion; the batch owner keeps the row for an upgrade."""
+    if (
+        existing.get('dispatch_protocol') != 'batch_v1'
+        or not is_valid_partial_sync_content_result(result)
+        or not _ledger_owner_matches(existing, job_id, run_token, run_epoch, allow_batch=True)
+    ):
+        raise RuntimeError('batch partial lost content ledger ownership')
+    transaction.update(
+        ref,
+        {
+            'status': BATCH_PARTIAL_STATUS,
             'result': result,
             'updated_at': now,
             'expires_at': now + timedelta(days=LEDGER_RETENTION_DAYS),

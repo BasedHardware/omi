@@ -1,7 +1,7 @@
 """Render conversation transcripts for LLM prompts with the configured user name.
 
 #5319: ``TranscriptSegment.segments_as_string`` defaults missing ``user_name`` to
-``"User"``. Callers that feed transcripts into summary / summarization-app LLMs
+``"You"``. Callers that feed transcripts into summary / summarization-app LLMs
 must pass the profile name from ``get_user_name`` so the model never sees the
 generic label when the user has configured one.
 
@@ -20,11 +20,21 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any, Iterable, List, Optional, Protocol, Sequence
 
+from config.refactor_modes import serving_for
 from database.auth import get_user_name
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
-from utils.conversations.owner_attribution import OwnerAttributionEvidence, may_attribute_to_owner
+from utils.conversations.owner_attribution import (
+    OwnerAttributionEvidence,
+    may_attribute_to_owner,
+    confident_owner_segments,
+    speaker_role_projection,
+    speaker_cluster_key,
+    UNKNOWN_ROLE,
+    SpeakerRoleMap,
+)
 from utils.conversations.wake_word import WAKE_WORD_MARKER, escape_spoken_wake_word_marker, find_wake_word_segment_ids
+from utils.speakers.display import DisplayParticipants, display_participants
 
 
 class _TranscriptSource(Protocol):
@@ -33,21 +43,11 @@ class _TranscriptSource(Protocol):
     ) -> str: ...
 
 
-def _speaker_label(segment: Any, user_name: str, people_map: dict[str, str]) -> str:
-    if segment.is_user:
-        return user_name
-    speaker_name = people_map.get(segment.person_id) if segment.person_id else None
-    if speaker_name:
-        return speaker_name
-    speaker_id = getattr(segment, 'speaker_id', None)
-    return f'Speaker {speaker_id}' if speaker_id is not None else 'Unknown speaker'
-
-
 @dataclass(frozen=True)
 class SpeakerCluster:
     """Hard identity evidence for one ``(speaker_id_scope, speaker_id)`` cluster (#3602).
 
-    ``speaker_id`` is the key the rendered ``spk`` line uses; ``scope`` is the
+    ``speaker_id`` is storage-only evidence, never the rendered prompt key; ``scope`` is the
     segment's ``speaker_id_scope``. Merged and multi-source transcripts reuse
     ids across scopes, so evidence is tallied per scope and never pooled.
     ``owner`` is set when a segment is ``is_user``; ``names`` are the stripped,
@@ -62,14 +62,15 @@ class SpeakerCluster:
     names: tuple[str, ...]
     speech_seconds: float
     words: int
+    prompt_key: Optional[str] = None
 
 
-class SpeakerMap(dict[int, Optional[str]]):
+class SpeakerMap(dict[str, Optional[str]]):
     """``cluster -> bound name`` mapping that also carries owner-aware identity evidence.
 
     It is the plain mapping every caller already reads, and the rendered ``spk``
     lines are unchanged. ``owner_name`` is the account owner's real profile name
-    (``None`` when only the ``'User'`` fallback is known) and ``clusters`` the
+    (``None`` when only the ``'You'`` fallback is known) and ``clusters`` the
     per-scope ``SpeakerCluster`` evidence in first-appearance order, so title
     naming (#3602) uses only voice/tag bindings and can tell the account owner
     from the people worth naming.
@@ -84,6 +85,8 @@ class SpeakerMap(dict[int, Optional[str]]):
     ) -> None:
         super().__init__(*args, **kwargs)
         self.owner_name = owner_name
+        self.source_segment_ids: Optional[frozenset[str]] = None
+        self.role_evidence_authoritative = False
         self.clusters: tuple[SpeakerCluster, ...] = tuple(clusters)
 
 
@@ -96,7 +99,13 @@ def _speech_seconds(segment: Any) -> float:
 
 
 def _speaker_map(
-    segments: List[Any], user_name: str, people_map: dict[str, str], *, owner_name: Optional[str] = None
+    segments: List[Any],
+    user_name: str,
+    people_map: dict[str, str],
+    *,
+    owner_name: Optional[str] = None,
+    display: DisplayParticipants | None = None,
+    roles: Optional[SpeakerRoleMap] = None,
 ) -> SpeakerMap:
     """Cluster -> bound display name (None = unresolved), ordered by first appearance.
 
@@ -104,36 +113,68 @@ def _speaker_map(
     matched ``person_id`` (person name). Names are never invented.
     """
     speaker_map = SpeakerMap(owner_name=owner_name)
+    display = display or display_participants(segments, names=people_map, owner_name=user_name)
+    roles = roles if roles is not None else speaker_role_projection(segments)
+    speaker_map.role_evidence_authoritative = roles is not None
+    cluster_bindings: dict[tuple[Optional[str], int], set[Optional[str]]] = {}
     tallies: dict[tuple[Optional[str], int], tuple[bool, list[str], float, int]] = {}
+    prompt_keys: dict[tuple[Optional[str], int], set[str]] = {}
     for segment in segments:
         speaker_id = getattr(segment, 'speaker_id', None)
         if speaker_id is None:
             continue
-        person_name = people_map.get(segment.person_id) if segment.person_id else None
+        person_name = display.for_segment(segment).name
+        if person_name and person_name.startswith('likely '):
+            person_name = None
+        prompt_key = display.for_segment(segment).key
         key = (getattr(segment, 'speaker_id_scope', None), speaker_id)
+        prompt_keys.setdefault(key, set()).add(prompt_key)
         owner, names, seconds, words = tallies.get(key, (False, [], 0.0, 0))
         tagged = (person_name or '').strip()
-        if not segment.is_user and tagged and tagged not in names:
+        if not getattr(segment, 'is_user', False) and tagged and tagged not in names:
             names.append(tagged)
         tallies[key] = (
-            owner or segment.is_user,
+            owner or getattr(segment, 'is_user', False),
             names,
             seconds + _speech_seconds(segment),
-            words + len((segment.text or '').split()),
+            words + len((getattr(segment, 'text', '') or '').split()),
         )
-        if speaker_id not in speaker_map:
-            speaker_map[speaker_id] = user_name if segment.is_user else person_name
-    speaker_map.clusters = tuple(
-        SpeakerCluster(
-            speaker_id=speaker_id,
-            scope=scope,
-            owner=owner,
-            names=tuple(names),
-            speech_seconds=seconds,
-            words=words,
+        name = display.for_segment(segment).name
+        if roles is not None:
+            cluster_key = speaker_cluster_key(segment)
+            role = roles.clusters.get(cluster_key, UNKNOWN_ROLE) if cluster_key is not None else UNKNOWN_ROLE
+            expected_name = role.name(user_name, people_map)
+            # Reuse the display policy's name qualification without widening
+            # identity authority or importing its private formatting helper.
+            name = expected_name if name and ' '.join(name.split()) == expected_name else None
+            cluster_bindings.setdefault(key, set()).add(name)
+        if prompt_key not in speaker_map:
+            speaker_map[prompt_key] = name
+        elif roles is not None and speaker_map[prompt_key] != name:
+            speaker_map[prompt_key] = None
+    clusters = []
+    for (scope, speaker_id), (owner, names, seconds, words) in tallies.items():
+        if roles is not None:
+            role = roles.clusters.get((scope, speaker_id), UNKNOWN_ROLE)
+            owner = role.role == 'primary_user'
+            bindings = cluster_bindings.get((scope, speaker_id), set())
+            name = role.name(user_name, people_map) if role.person_id else None
+            name = name if name and bindings == {name} else None
+            names = [name] if name else []
+        clusters.append(
+            SpeakerCluster(
+                speaker_id=speaker_id,
+                scope=scope,
+                owner=owner,
+                names=tuple(names),
+                speech_seconds=seconds,
+                words=words,
+                prompt_key=(
+                    next(iter(prompt_keys[(scope, speaker_id)])) if len(prompt_keys[(scope, speaker_id)]) == 1 else None
+                ),
+            )
         )
-        for (scope, speaker_id), (owner, names, seconds, words) in tallies.items()
-    )
+    speaker_map.clusters = tuple(clusters)
     return speaker_map
 
 
@@ -144,17 +185,25 @@ def conversation_action_item_speaker_labels(
 ) -> list[dict[str, str]]:
     """Return the same stable labels rendered into the action-item transcript."""
 
-    user_name = get_user_name(uid, use_default=False) or 'User'
+    user_name = get_user_name(uid, use_default=False) or 'You'
     people_map = {person.id: person.name for person in people} if people else {}
+    segments = getattr(conversation, 'transcript_segments', None) or []
+    roles = speaker_role_projection(segments)
+    rendered = owner_safe_transcript_segments(segments)[0] if roles is not None else segments
+    display = display_participants(rendered, names=people_map, owner_name=user_name)
     labels: list[dict[str, str]] = []
-    for segment in getattr(conversation, 'transcript_segments', None) or []:
+    for segment, prompt_row in zip(segments, rendered):
         if not getattr(segment, 'id', None):
             continue
         labels.append(
             {
                 'segment_id': str(segment.id),
-                'speaker_label': _speaker_label(segment, user_name, people_map),
-                'speaker_role': 'primary_user' if segment.is_user else 'other',
+                'speaker_label': display.label(prompt_row),
+                'speaker_role': (
+                    roles.for_segment(segment).role
+                    if roles is not None
+                    else 'primary_user' if segment.is_user else 'other'
+                ),
             }
         )
     return labels
@@ -203,6 +252,15 @@ def _clear_owner_claim(segment: Any) -> Any:
     return copied
 
 
+def _with_role(segment: Any, role: Any) -> Any:
+    updates = {'is_user': role.role == 'primary_user', 'person_id': role.person_id}
+    if isinstance(segment, Mapping):
+        return {**segment, **updates}
+    if hasattr(segment, 'model_copy'):
+        return segment.model_copy(update=updates)
+    return SimpleNamespace(**{**vars(segment), **updates})
+
+
 def owner_safe_transcript_segments(
     segments: Sequence[Any], *, evidence_segments: Optional[Sequence[Any]] = None
 ) -> tuple[list[Any], str]:
@@ -214,6 +272,21 @@ def owner_safe_transcript_segments(
     selected = list(segments)
     evidence_rows = list(evidence_segments) if evidence_segments is not None else selected
     evidence = OwnerAttributionEvidence.from_segments([_owner_evidence_view(row) for row in evidence_rows])
+    roles = speaker_role_projection(evidence_rows)
+    if roles is not None:
+        rendered = [_with_role(row, roles.for_segment(row)) for row in selected]
+        if any(_owner_evidence_view(row).is_user for row in rendered):
+            return rendered, ''
+        if any(
+            str(row.get('text', '') if isinstance(row, Mapping) else getattr(row, 'text', '')).strip()
+            for row in rendered
+        ):
+            return rendered, (
+                f'[Diarization marked {evidence.owner_speaker_ids} of {evidence.distinct_speaker_ids} speaker clusters '
+                'as the account owner; owner identity is UNTRUSTED in this transcript — '
+                'treat first-person statements as unattributed]'
+            )
+        return rendered, ''
     rendered = [
         (
             _clear_owner_claim(segment)
@@ -249,6 +322,13 @@ def conversation_transcript_for_llm(
 ) -> str:
     """Build a transcript string for LLM prompts using the user's configured name."""
     user_name = get_user_name(uid, use_default=False)
+    segments = getattr(conversation, 'transcript_segments', None)
+    if segments and speaker_role_projection(segments) is not None:
+        safe, note = owner_safe_transcript_segments(segments)
+        text = TranscriptSegment.segments_as_string(
+            safe, include_timestamps=include_timestamps, people=people, user_name=user_name
+        )
+        return f'{note}\n{text}' if note else text
     return conversation.get_transcript(include_timestamps, people=people, user_name=user_name)
 
 
@@ -261,7 +341,7 @@ def conversation_transcript_and_speaker_map(
     people: Optional[List[Person]] = None,
     *,
     mark_wake_words: bool = False,
-) -> tuple[str, dict[int, Optional[str]]]:
+) -> tuple[str, dict[str, Optional[str]]]:
     """Render the compact cluster-key transcript plus its ``spk`` map (SCA-454).
 
     Turns are ``[<segment-id> <cluster>] text``; consecutive turns by the same
@@ -278,7 +358,30 @@ def conversation_transcript_and_speaker_map(
 
     profile_name = get_user_name(uid, use_default=False)
     people_map = {person.id: person.name for person in people} if people else {}
-    speaker_map = _speaker_map(segments, profile_name or 'User', people_map, owner_name=profile_name)
+    if serving_for('NOTES_PACKET_V2_MODE', uid):
+        from utils.llm.notes_packet import get_evidence
+        from utils.llm.notes_language_inputs import in_profile_segments
+
+        return render_cluster_transcript(
+            in_profile_segments(segments),
+            names=people_map,
+            owner_name=profile_name,
+            evidence=get_evidence(uid, getattr(conversation, 'id', None)),
+            mark_wake_words=mark_wake_words,
+            resolution_available=getattr(getattr(conversation, 'speaker_resolution', None), 'status', None)
+            != 'unavailable',
+        )
+    # refactor: superseded by render_cluster_transcript when NOTES_PACKET_V2_MODE=serve
+    segments, _ = (
+        owner_safe_transcript_segments(segments) if speaker_role_projection(segments) is not None else (segments, '')
+    )
+    display = display_participants(
+        segments,
+        names=people_map,
+        owner_name=profile_name or 'You',
+        resolution=getattr(conversation, 'speaker_resolution', None),
+    )
+    speaker_map = _speaker_map(segments, profile_name or 'You', people_map, owner_name=profile_name, display=display)
     wake_word_segment_ids = find_wake_word_segment_ids(segments) if mark_wake_words else frozenset()
     lines: list[str] = []
     previous_speaker: Any = _UNSET
@@ -292,7 +395,7 @@ def conversation_transcript_and_speaker_map(
         if mark_wake_words:
             segment_id = escape_spoken_wake_word_marker(segment_id)
             segment_text = escape_spoken_wake_word_marker(segment_text)
-        speaker_key = segment.speaker_id
+        speaker_key = display.for_segment(segment).key
         header = f'[{segment_id}]' if speaker_key == previous_speaker else f'[{segment_id} {speaker_key}]'
         lines.append(f'{header} {marker}{segment_text}')
         previous_speaker = speaker_key
@@ -314,7 +417,7 @@ def conversation_transcripts_for_llm(
     uid: str,
     conversation: Any,
     people: Optional[List[Person]] = None,
-) -> tuple[str, str, dict[int, Optional[str]]]:
+) -> tuple[str, str, dict[str, Optional[str]]]:
     """Return the normal transcript, the compact task transcript, and its speaker map."""
     normal_transcript = conversation_transcript_for_llm(uid, conversation, people)
     compact_transcript, speaker_map = conversation_transcript_and_speaker_map(
@@ -334,3 +437,70 @@ __all__ = [
     'conversation_transcript_for_llm',
     'conversation_transcripts_for_llm',
 ]
+
+
+def render_cluster_transcript(
+    segments: Sequence[Any],
+    *,
+    names: Mapping[str, str],
+    owner_name: Optional[str] = None,
+    evidence: Any = None,
+    mark_wake_words: bool = False,
+    resolution_available: bool = True,
+) -> tuple[str, SpeakerMap]:
+    """The notes/moments renderer: scoped voice keys, one owner gate and evidence bands.
+
+    Copies are prompt-only. It never rewrites stored segment labels or infers an
+    identity from calendar, contacts, story content or a numeric speaker key.
+    """
+    rows = [SimpleNamespace(**{'is_user': False, **dict(row)}) if isinstance(row, Mapping) else row for row in segments]
+    roles = speaker_role_projection(rows, evidence=evidence, resolution_available=resolution_available)
+    if roles is None:
+        trusted_owner_rows = {id(row) for row in confident_owner_segments(rows)}
+        rows = [
+            _clear_owner_claim(row) if getattr(row, 'is_user', False) and id(row) not in trusted_owner_rows else row
+            for row in rows
+        ]
+    else:
+        rows = [_with_role(row, roles.for_segment(row)) for row in rows]
+    rows, owner_note = owner_safe_transcript_segments(rows)
+    display = display_participants(
+        rows,
+        names=names,
+        owner_name=owner_name or 'You',
+        evidence=evidence,
+        resolution={'status': 'resolved' if resolution_available else 'unavailable'},
+        allow_automatic_names=resolution_available,
+    )
+    labels = SpeakerMap(owner_name=owner_name)
+    bindings = _speaker_map(rows, owner_name or 'You', dict(names), display=display, roles=roles)
+    labels.role_evidence_authoritative = bindings.role_evidence_authoritative
+    labels.clusters = bindings.clusters
+    labels.source_segment_ids = frozenset(str(row.id) for row in rows if getattr(row, 'id', None))
+    turns = []
+    wake_ids = find_wake_word_segment_ids(rows) if mark_wake_words else frozenset()
+    for index, row in enumerate(rows):
+        text = str(getattr(row, 'text', '') or '').strip()
+        if not text:
+            continue
+        segment_id = str(getattr(row, 'id', None) or f'moment-{index}')
+        participant = display.for_segment(row)
+        key, name = participant.key, participant.name
+        if roles is not None:
+            name = bindings.get(key)
+        if name and name.startswith('likely '):
+            # Suggestions remain useful on speaker-review surfaces, but do not
+            # become a named speaker binding in summaries.
+            name = None
+        # If a fallback cluster has contradictory labels, retain no named claim.
+        if key in labels and labels[key] != name:
+            labels[key] = None
+        elif key not in labels:
+            labels[key] = name
+        marker = f'{WAKE_WORD_MARKER} ' if segment_id in wake_ids else ''
+        if mark_wake_words:
+            text = escape_spoken_wake_word_marker(text)
+            segment_id = escape_spoken_wake_word_marker(segment_id)
+        turns.append(f'[{segment_id} {key}] {marker}{text}')
+    metadata = '\n'.join(f'spk {key} {name or "?"}' for key, name in labels.items())
+    return '\n'.join(part for part in (owner_note, metadata, '\n\n'.join(turns)) if part), labels

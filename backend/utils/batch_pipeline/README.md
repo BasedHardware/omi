@@ -17,8 +17,9 @@ operator settings, RPCs and index readiness are in
 | Encrypted artifacts | `artifacts.py`, `artifact_policy.py` | Authenticated object IO, immutable generations and privacy-fenced object registration. |
 | Conversation projection | `context.py`, `projection.py`, `projection_parts.py`, `projection_followup.py` | Validated encrypted metadata, legacy VAD/assignment grouping and resumable per-part receipts. |
 | Enrichment | `enrichment.py` | Privacy-aware adapter to the existing coalesced sync reprocess outbox. |
-| Quarantine recovery | `quarantine_recovery.py` | Default-off owner-gated per-unit legacy sync STT, single dispatch and encrypted result reconciliation; original batch claim retained. |
+| Quarantine recovery | `quarantine_recovery.py`, `recovery_recognizers.py`, `recovery_steps.py` | Owner-gated per-unit STT, bounded independent language recovery, single dispatch and encrypted result reconciliation; async provider waits release the shared executor and retain the original batch claim. |
 | Cleanup | `retention.py` | Durable erasure outboxes and bounded object/metadata cleanup. |
+| Real-upload shadow | `shadow_intake.py`, `shadow_worker.py`, `shadow_recovery.py`, `shadow_metrics.py` | Idle-only isolated GPU handoff, capped recovery and hashed outcomes; [contract](../../docs/batch-pipeline-shadow.md). |
 | Backend supervisor | `serving.py`, `metrics.py` | Recovery, ordered projection, retention and queue-age export independent of upload admission. |
 
 Firestore transaction/query adapters live in `database/batch_pipeline_*.py`.
@@ -44,6 +45,8 @@ the minimal upload/status hooks. GPU runtime/model implementations live under
   flight; lease expiry never proves non-preemptible CUDA idle.
 - Only complete multipart projection advances the owner publication cursor.
   Durable privacy checks apply before reads/writes and object publication.
-- All switches default off; production index/GPU/live acceptance belongs to the
-  lead. Tests use synthetic identities, fakes and explicitly bound loopback
+- Switch defaults and kill switches are recorded in the
+  [feature-flag registry](../../docs/feature-flag-registry.md);
+  production index/GPU/live acceptance belongs to the lead.
+  Tests use synthetic identities, fakes and explicitly bound loopback
   Firestore, through `backend/test.sh`.

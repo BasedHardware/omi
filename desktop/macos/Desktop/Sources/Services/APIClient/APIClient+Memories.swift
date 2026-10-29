@@ -1126,7 +1126,9 @@ extension APIClient {
   /// Edits a memory's content. Canonical knowledge_ledger.v1 corrections may return
   /// a replacement `ServerMemory` (potentially with a new replacement `id`).
   @discardableResult
-  func editMemory(id: String, content: String) async throws -> ServerMemory? {
+  func editMemory(
+    id: String, content: String, authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> ServerMemory? {
     struct EditRequest: Encodable {
       let value: String
     }
@@ -1135,7 +1137,14 @@ extension APIClient {
       let memory: ServerMemory?
     }
     let body = EditRequest(value: content)
-    let response: MemoryEditResponse = try await patch("v3/memories/\(id)", body: body)
+    let response: MemoryEditResponse = try await patch(
+      "v3/memories/\(id)", body: body, authorizationSnapshot: authorizationSnapshot)
+    guard response.status == "ok" else { throw APIError.invalidResponse }
+    if let replacement = response.memory,
+      replacement.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    {
+      throw APIError.invalidResponse
+    }
     return response.memory
   }
 

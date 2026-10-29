@@ -45,7 +45,7 @@ export function MemoryDetailSheet({
   onToggleVisibility,
   onDelete,
   onOpenConversation,
-  togglingVisibility,
+  togglingVisibility
 }: MemoryDetailSheetProps): React.JSX.Element {
   // State initializes from the memory; the sheet is mounted with a `key` of the
   // memory id at the call site, so switching memories remounts it fresh rather
@@ -78,12 +78,14 @@ export function MemoryDetailSheet({
   }
 
   return (
-    <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
+    <Dialog.Root open onOpenChange={(o) => !o && !saving && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-[100] bg-black/50 data-[state=open]:animate-modal-overlay-in" />
         <div className="pointer-events-none fixed inset-0 z-[100] flex items-center justify-center p-6">
           <Dialog.Content
             aria-describedby={undefined}
+            onEscapeKeyDown={(event) => saving && event.preventDefault()}
+            onPointerDownOutside={(event) => saving && event.preventDefault()}
             className="pointer-events-auto flex max-h-[85vh] w-full max-w-[450px] flex-col rounded-[var(--radius-card)] border border-white/10 bg-[var(--bg-secondary)] shadow-[0_16px_48px_rgba(0,0,0,0.5)] data-[state=open]:animate-modal-in"
           >
             <Dialog.Title className="sr-only">Memory details</Dialog.Title>
@@ -103,7 +105,7 @@ export function MemoryDetailSheet({
                   <span>{isPublic ? 'Public' : 'Private'}</span>
                   <Toggle
                     checked={isPublic}
-                    disabled={togglingVisibility}
+                    disabled={togglingVisibility || saving}
                     onChange={() => void onToggleVisibility(memory)}
                     ariaLabel="Toggle public visibility"
                   />
@@ -111,6 +113,7 @@ export function MemoryDetailSheet({
                 <button
                   type="button"
                   onClick={() => onDelete(memory)}
+                  disabled={saving}
                   className="rounded-md p-1.5 text-white/40 transition-colors hover:bg-white/5 hover:text-error"
                   aria-label="Delete memory"
                   title="Delete memory"
@@ -118,6 +121,7 @@ export function MemoryDetailSheet({
                   <Trash2 className="h-4 w-4" />
                 </button>
                 <Dialog.Close
+                  disabled={saving}
                   className="rounded-md p-1.5 text-white/40 transition-colors hover:bg-white/5 hover:text-white/80"
                   aria-label="Close"
                 >
@@ -132,6 +136,7 @@ export function MemoryDetailSheet({
                 <div className="space-y-2">
                   <textarea
                     autoFocus
+                    disabled={saving}
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
                     onKeyDown={(e) => {
@@ -140,6 +145,7 @@ export function MemoryDetailSheet({
                         void saveEdit()
                       } else if (e.key === 'Escape') {
                         e.stopPropagation()
+                        if (saving) return
                         setEditing(false)
                         setDraft(memory.content)
                       }

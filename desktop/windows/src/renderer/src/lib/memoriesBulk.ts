@@ -1,4 +1,5 @@
 import { omiApi } from './apiClient'
+import { captureAuthRequestScope, getAuthSessionGeneration } from './authSessionScope'
 import type { Memory } from '../hooks/useMemories'
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
@@ -71,6 +72,12 @@ export async function fetchAllMemoriesPaged(
   onResponse?: (res: MemoriesResponse) => void,
   options: FetchMemoriesOptions = {}
 ): Promise<Memory[]> {
+  const originGeneration = getAuthSessionGeneration()
+  const scope = captureAuthRequestScope(originGeneration)
+  const requireCurrent = (): void => {
+    if (getAuthSessionGeneration() !== originGeneration)
+      throw new Error('Your sign-in changed. Please try again.')
+  }
   const byId = new Map<string, Memory>()
   const path = options.path ?? '/v3/memories'
   let offset = 0
@@ -80,7 +87,9 @@ export async function fetchAllMemoriesPaged(
     const params: Record<string, string | number> = { limit: MEMORIES_PAGE_LIMIT }
     if (cursor) params.cursor = cursor
     else params.offset = offset
-    const r = await omiApi.get(path, { params })
+    requireCurrent()
+    const r = await omiApi.get(path, { params, ...scope })
+    requireCurrent()
     onResponse?.(r)
     const nextCursor = nextMemoryCursor(r)
     const lastTruncated = listTruncatedFromResponse(r)
@@ -119,6 +128,7 @@ export async function fetchAllMemoriesPaged(
       'Memory pagination exceeded the client safety bound; resume with a server cursor'
     )
   }
+  requireCurrent()
   return [...byId.values()]
 }
 

@@ -7,8 +7,11 @@ disconnecting.
 
 from __future__ import annotations
 
+import ast
 import json
 from pathlib import Path
+from types import SimpleNamespace
+import pytest
 
 from google.cloud import tasks_v2
 from google.protobuf import duration_pb2
@@ -20,6 +23,30 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 # Keep in lockstep with test_listen_pusher_stack_ci_wiring._BOUNDED_APT_GET:
 # unbounded apt-get is the hang that previously burned this job's timeout.
 _BOUNDED_APT_GET = 'sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10'
+
+
+def test_concurrent_lease_probe_holds_stt_instead_of_deferred_full_processing():
+    """Execute the provider leaf: hold policy may defer the full note processor."""
+    source = _REPO_ROOT / 'backend/testing/sync_cloud_tasks_stack/app.py'
+    tree = ast.parse(source.read_text())
+    provider = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == '_local_prerecorded')
+    events = []
+    namespace = {
+        'Any': object,
+        'os': SimpleNamespace(getenv=lambda name, default: default),
+        '_wait_for_process_gate': lambda job_id: events.append(('gate', job_id)),
+        'write_event': lambda channel, row: events.append((row['event'], row['job_id'])),
+    }
+    exec(compile(ast.Module(body=[provider], type_ignores=[]), str(source), 'exec'), namespace)
+    namespace['_local_prerecorded']('http://local/opaque-job')
+    assert events == [('gate', 'opaque-job'), ('stt_completed', 'opaque-job')]
+    processor = next(
+        n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == '_local_process_conversation'
+    )
+    assert not any(
+        isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == '_wait_for_process_gate'
+        for n in ast.walk(processor)
+    )
 
 
 def test_sync_cloud_tasks_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> None:
@@ -55,6 +82,9 @@ def test_sync_cloud_tasks_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -
     assert 'websocketPort' in run_script
     run_py = (_REPO_ROOT / 'backend' / 'testing' / 'sync_cloud_tasks_stack' / 'run.py').read_text(encoding='utf-8')
     assert 'def _free_ports(count: int) -> list[int]:' in run_py
+    # SO_REUSEADDR on a probe waives the exclusive bind that makes the
+    # reservation meaningful; a probe must hold the port alone.
+    assert 'SO_REUSEADDR' not in run_py
     assert 'ports = _free_ports(3)' in run_py
     assert 'self.redis_port = ports[0]' in run_py
     assert 'self.admission_port = ports[1]' in run_py
@@ -65,7 +95,8 @@ def test_sync_cloud_tasks_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -
     assert 'tests/unit/test_sync_cloud_tasks_stack_ci_wiring.py' in sync_contract['tests']
 
 
-def test_gauntlet_recorder_shares_the_production_task_payload_schema(monkeypatch, tmp_path) -> None:
+@pytest.mark.parametrize('archived', [False, True])
+def test_gauntlet_recorder_shares_the_production_task_payload_schema(monkeypatch, tmp_path, archived) -> None:
     """The recorder must accept every durable field admission can enqueue."""
     handler_url = 'http://127.0.0.1:39123/v2/sync-jobs/run'
     monkeypatch.setenv('SYNC_TASKS_PROJECT', 'test-project')
@@ -84,6 +115,8 @@ def test_gauntlet_recorder_shares_the_production_task_payload_schema(monkeypatch
             'raw_blob_paths': ['gs://sync/job-1.opus'],
         }
     )
+    if archived:
+        payload['raw_capture_paths'] = ['raw-sync/synthetic/source/digest.bin.enc']
     recorder = CloudTasksRecorder()
     task = tasks_v2.Task(
         name=recorder.task_path('test-project', 'us-central1', 'sync-jobs', 'job-1'),
@@ -115,7 +148,6 @@ def test_sync_cloud_tasks_stack_free_ports_are_strictly_distinct_and_bindable() 
         try:
             for _ in range(count):
                 probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 probe.bind(('127.0.0.1', 0))
                 probes.append(probe)
                 ports.append(int(probe.getsockname()[1]))

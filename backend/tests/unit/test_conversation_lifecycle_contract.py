@@ -121,7 +121,7 @@ def test_ingest_sync_conversation_records_created_versus_merged(monkeypatch):
 
     created_result = lifecycle_service.ingest_sync_conversation('uid', {'status': ConversationStatus.completed.value})
     assert created_result == ({'id': 'created-row'}, True, [])
-    assert recorded == [{'created': True}]
+    assert recorded == [{'created': True, 'projected_size_bucket': None}]
 
     recorded.clear()
     monkeypatch.setattr(
@@ -133,7 +133,7 @@ def test_ingest_sync_conversation_records_created_versus_merged(monkeypatch):
         'uid', {'status': ConversationStatus.completed.value}, candidate_id='hint'
     )
     assert merged_result == ({'id': 'merged-row'}, False, [])
-    assert recorded == [{'created': False}]
+    assert recorded == [{'created': False, 'projected_size_bucket': None}]
 
 
 def test_lifecycle_service_allows_only_declared_transitions(lifecycle_store):
@@ -143,8 +143,7 @@ def test_lifecycle_service_allows_only_declared_transitions(lifecycle_store):
 
     assert lifecycle_service.admit_processing('uid', 'conversation') is True
     # processing -> merging stays undeclared: merge only ever admits completed conversations.
-    with pytest.raises(lifecycle_service.LifecycleTransitionError, match='invalid lifecycle transition'):
-        lifecycle_service.begin_merge('uid', 'conversation')
+    assert lifecycle_service.begin_merge('uid', 'conversation') is False
     assert lifecycle_service.complete('uid', 'conversation') is True
     assert lifecycle_store.conversation('uid', 'conversation')['status'] == ConversationStatus.completed
 
@@ -566,3 +565,39 @@ def test_import_observes_once_on_first_create(monkeypatch, lifecycle_store):
     assert observed == ['imported']
     assert lifecycle_service.persist_imported_conversation('uid', payload) is False
     assert observed == ['imported']
+
+
+def test_transition_requires_expected_and_cas_fences_a_racing_writer(monkeypatch):
+    monkeypatch.setattr(conversations_db, 'get_conversation', lambda *a: {'status': 'completed'})
+    claims = []
+
+    def race(*args, **kwargs):
+        claims.append(args[2:])
+        return False
+
+    monkeypatch.setattr(conversations_db, 'claim_conversation_status', race)
+    with pytest.raises(TypeError, match='expected'):
+        lifecycle_service.transition('uid', 'conversation', ConversationStatus.merging)
+    assert lifecycle_service.begin_merge('uid', 'conversation') is False
+    assert claims == [(ConversationStatus.completed, ConversationStatus.merging)]
+
+
+@pytest.mark.parametrize('guard', ['deleted', 'is_locked'])
+def test_merge_cas_rechecks_privacy_guards(lifecycle_store, guard):
+    lifecycle_store.put_conversation('uid', 'conversation', status='completed', **{guard: True})
+    assert lifecycle_service.begin_merge('uid', 'conversation') is False
+    assert lifecycle_store.conversation('uid', 'conversation')['status'] == 'completed'
+
+
+def test_explicit_merge_can_include_a_discarded_completed_source(lifecycle_store):
+    lifecycle_store.put_conversation('uid', 'conversation', status='completed', discarded=True)
+    assert lifecycle_service.begin_merge('uid', 'conversation') is True
+    assert lifecycle_store.conversation('uid', 'conversation')['discarded'] is True
+
+
+def test_failed_merge_restores_a_discarded_source_without_restoring_visibility(lifecycle_store):
+    lifecycle_store.put_conversation('uid', 'conversation', status='completed', discarded=True)
+    assert lifecycle_service.begin_merge('uid', 'conversation')
+    assert lifecycle_service.complete('uid', 'conversation')
+    row = lifecycle_store.conversation('uid', 'conversation')
+    assert row['status'] == 'completed' and row['discarded'] is True

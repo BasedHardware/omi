@@ -6,6 +6,7 @@ Handles AI-powered goal suggestions, advice generation, and progress extraction.
 from utils.generated_compute import generated_compute_allowed
 
 import json
+import math
 import re
 import traceback
 from datetime import datetime, timezone, timedelta
@@ -16,6 +17,7 @@ import database.conversations as conversations_db
 import database.chat as chat_db
 from database._client import db as firestore_db
 from database.vector_db import query_vectors as vector_search
+from models.goal import sanitize_suggestion_dict
 from utils.llm.clients import get_llm
 from utils.llm.usage_tracker import track_usage, Features
 from utils.memory.memory_service import MemoryService
@@ -109,27 +111,64 @@ def _get_goal_context(uid: str, goal_title: str) -> Dict[str, str]:
     }
 
 
+def _safe_float(val: Any, default: float) -> float:
+    if val is None or isinstance(val, bool) or val == "":
+        return default
+    try:
+        f = float(val)
+        return f if math.isfinite(f) else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_optional_float(val: Any) -> Optional[float]:
+    if val is None or isinstance(val, bool) or val == "":
+        return None
+    try:
+        f = float(val)
+        return f if math.isfinite(f) else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _safe_float_field(value: Any, default: float) -> float:
+    """Coerce an individual suggestion numeric field to float, falling back per-field."""
+    if value is None or isinstance(value, bool):
+        return float(default)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+safe_float = _safe_float
+safe_optional_float = _safe_optional_float
+
+sanitize_goal_suggestion = sanitize_suggestion_dict
+
+
 def suggest_goal(uid: str) -> Dict[str, Any]:
     """Generate an AI-suggested goal based on user's memories and conversations."""
     try:
         # Get user's memories for context
         memories = [m.dict() for m in MemoryService(db_client=firestore_db).read(uid, limit=100, offset=0)]
 
-        if not memories:
-            # Default suggestion when no memories
-            return {
-                'suggested_title': 'Learn something new every day',
-                'suggested_type': 'scale',
-                'suggested_target': 10,
-                'suggested_min': 0,
-                'suggested_max': 10,
-                'reasoning': 'Start tracking your daily learning progress!',
-            }
-
         # Prepare memory context for AI — exclude locked memories
         memory_texts = [
             cast(str, m.get('content', '')) for m in memories[:50] if m.get('content') and not m.get('is_locked')
         ]
+
+        if not memories or not memory_texts:
+            # Default suggestion when no unlocked memories are available
+            return sanitize_goal_suggestion({
+                'suggested_title': 'Learn something new every day',
+                'suggested_type': 'scale',
+                'suggested_target': 10.0,
+                'suggested_min': 0.0,
+                'suggested_max': 10.0,
+                'reasoning': 'Start tracking your daily learning progress!',
+            })
+
         memory_context = '\n'.join(memory_texts[:20])  # Limit context size
 
         prompt = f"""Based on the user's memories and interests, suggest ONE meaningful personal goal they could track.
@@ -160,32 +199,43 @@ Make the goal specific, measurable, and relevant to their interests."""
         # Find JSON in response
         json_match = re.search(r'\{[^{}]*\}', response, re.DOTALL)
         if json_match:
-            suggestion = json.loads(json_match.group())
-            # Ensure min/max are present, default if not
-            suggestion['suggested_min'] = suggestion.get('suggested_min', 0)
-            suggestion['suggested_max'] = suggestion.get('suggested_max', suggestion.get('suggested_target', 10))
-            return suggestion
+            try:
+                suggestion = json.loads(json_match.group())
+                suggestion['suggested_target'] = _safe_float_field(suggestion.get('suggested_target'), 10.0)
+                suggestion['suggested_min'] = _safe_float_field(suggestion.get('suggested_min'), 0.0)
+                suggestion['suggested_max'] = _safe_float_field(
+                    suggestion.get('suggested_max'), suggestion['suggested_target']
+                )
+                if not suggestion.get('suggested_title'):
+                    suggestion['suggested_title'] = 'Track your daily progress'
+                if suggestion.get('suggested_type') not in ('boolean', 'scale', 'numeric'):
+                    suggestion['suggested_type'] = 'scale'
+                if not suggestion.get('reasoning'):
+                    suggestion['reasoning'] = 'A simple goal to get you started!'
+                return sanitize_goal_suggestion(suggestion)
+            except Exception:
+                pass
 
         # Fallback if parsing fails
-        return {
+        return sanitize_goal_suggestion({
             'suggested_title': 'Track your daily progress',
             'suggested_type': 'scale',
-            'suggested_target': 10,
-            'suggested_min': 0,
-            'suggested_max': 10,
+            'suggested_target': 10.0,
+            'suggested_min': 0.0,
+            'suggested_max': 10.0,
             'reasoning': 'A simple goal to get you started!',
-        }
+        })
 
     except Exception as e:
         logger.error(f"Error generating goal suggestion: {e}")
-        return {
+        return sanitize_goal_suggestion({
             'suggested_title': 'Make progress every day',
             'suggested_type': 'scale',
-            'suggested_target': 10,
-            'suggested_min': 0,
-            'suggested_max': 10,
-            'reasoning': 'Start with a simple daily progress goal!',
-        }
+            'suggested_target': 10.0,
+            'suggested_min': 0.0,
+            'suggested_max': 10.0,
+            'reasoning': 'Start tracking your daily progress!',
+        })
 
 
 def get_goal_advice(uid: str, goal_id: str) -> str:
@@ -193,17 +243,30 @@ def get_goal_advice(uid: str, goal_id: str) -> str:
     Get AI-generated actionable advice for achieving a goal.
     Uses hybrid retrieval: vector search + recent context + chat history.
     """
-    try:
-        # Get the goal
-        goal = goals_db.get_goal_by_id(uid, goal_id)
-        if not goal or not goal.get('is_active'):
-            raise ValueError("Goal not found")
+    # Get the goal - raise ValueError for missing/inactive goals to let the router return 404
+    goal = goals_db.get_goal_by_id(uid, goal_id)
+    if not goal or not goal.get('is_active'):
+        raise ValueError("Goal not found")
 
-        goal_title = goal.get('title') or 'Unknown'
-        raw_curr, raw_targ = goal.get('current_value'), goal.get('target_value')
-        current_value = float(raw_curr) if raw_curr is not None else 0.0
-        target_value = float(raw_targ) if raw_targ is not None else 10.0
-        progress_pct = (current_value / target_value) * 100 if target_value > 0 else 0
+    try:
+        goal_title = str(goal.get('title') or 'Unknown')
+
+        # Safely parse numeric current and target values if present
+        current_val = _safe_optional_float(goal.get('current_value'))
+        target_val = _safe_optional_float(goal.get('target_value'))
+
+        # Build progress description safely supporting numeric and qualitative goals
+        if current_val is not None and target_val is not None and target_val > 0:
+            progress_pct = (current_val / target_val) * 100
+            progress_line = f"PROGRESS: {current_val:,.0f} / {target_val:,.0f} ({progress_pct:.1f}%)"
+        elif current_val is not None and target_val is not None:
+            progress_line = f"PROGRESS: {current_val:,.0f} / {target_val:,.0f}"
+        elif current_val is not None:
+            progress_line = f"PROGRESS: {current_val:,.0f} (no numeric target set)"
+        elif target_val is not None:
+            progress_line = f"PROGRESS: Target {target_val:,.0f} (current progress not tracked numerically)"
+        else:
+            progress_line = "PROGRESS: Qualitative goal (no numeric metric set)"
 
         # Get rich context using hybrid retrieval
         context = _get_goal_context(uid, goal_title)
@@ -212,7 +275,7 @@ def get_goal_advice(uid: str, goal_id: str) -> str:
         prompt = f"""You are a strategic advisor. Based on the user's goal and their context, give ONE specific actionable step they should take THIS WEEK.
 
 GOAL: "{goal_title}"
-PROGRESS: {current_value:,.0f} / {target_value:,.0f} ({progress_pct:.1f}%)
+{progress_line}
 
 RECENT CONVERSATIONS (what they've been discussing/working on):
 {context['conversation_context'][:1500] if context['conversation_context'] else 'No recent conversations'}
@@ -269,12 +332,20 @@ def extract_and_update_goal_progress(
             goal_id = goal.get('id', '')
             if not goal_id:
                 continue
+            # Purely qualitative goals (no target and no metric) cannot receive numeric progress.
+            # Skip them from the prompt to avoid burning LLM tokens and prevent LLM hallucination
+            # from corrupting qualitative goals into a half-numeric state.
+            if goal.get('target_value') is None and goal.get('metric') is None and goal.get('current_value') is None:
+                continue
+
             goal_title = goal.get('title', '')
-            current_value = goal.get('current_value', 0)
-            target_value = goal.get('target_value', 10)
+            current_value = goal.get('current_value')
+            target_value = goal.get('target_value')
             goal_type = goal.get('goal_type', 'numeric')
+            curr_str = f"{current_value}" if current_value is not None else "not set"
+            target_str = f"{target_value}" if target_value is not None else "not set"
             goals_list.append(
-                f'- id: "{goal_id}", title: "{goal_title}", type: {goal_type}, progress: {current_value}/{target_value}'
+                f'- id: "{goal_id}", title: "{goal_title}", type: {goal_type}, progress: {curr_str}/{target_str}'
             )
             goals_by_id[cast(str, goal_id)] = goal
 
@@ -323,12 +394,15 @@ Only include a goal if you're confident the message is about that SPECIFIC goal.
                 goal = goals_by_id.get(goal_id)
                 if not goal:
                     continue
-                new_value = float(result_dict['value'])
-                # Validate: reject NaN, inf, and negative values
-                if new_value != new_value or new_value == float('inf') or new_value == float('-inf') or new_value < 0:
+                # Double-guard: never write numeric progress to a purely qualitative goal
+                if goal.get('target_value') is None and goal.get('metric') is None and goal.get('current_value') is None:
                     continue
-                old_value = goal.get('current_value', 0)
-                if new_value != old_value:
+                parsed_val = _safe_optional_float(result_dict.get('value'))
+                if parsed_val is None or parsed_val < 0:
+                    continue
+                new_value = parsed_val
+                old_value = _safe_optional_float(goal.get('current_value'))
+                if old_value is None or new_value != old_value:
                     if idempotency_key_prefix is None:
                         goals_db.update_goal_progress(uid, goal_id, new_value)
                     else:

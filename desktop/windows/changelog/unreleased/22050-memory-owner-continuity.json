@@ -1,5 +1,5 @@
 {
   "changes": [
-    "Keep memory details on the saved canonical record and reject stale assistant-settings writes after account changes or sign-out."
+    "Preserve failed memory edits and canonical replacements while preventing stale sign-in responses from replacing current memories or settings"
   ]
 }

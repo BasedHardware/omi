@@ -15,7 +15,7 @@ from testing.import_isolation import AutoMockModule, load_module_fresh, package_
 
 BACKEND = Path(__file__).resolve().parents[2]
 DUE = datetime(2030, 1, 1, 12, tzinfo=timezone.utc)
-PUBLIC_KEYS = {'id', 'description', 'completed', 'created_at', 'due_at', 'completed_at', 'conversation_id'}
+PUBLIC_KEYS = {'id', 'description', 'completed', 'created_at', 'due_at', 'completed_at', 'conversation_id', 'source'}
 
 
 @pytest.fixture
@@ -42,9 +42,11 @@ def world(monkeypatch):
     monkeypatch.delenv('COMMITMENT_FOLLOWUP_TASKS_QUEUE', raising=False)
     with stub_modules(fakes):
         notifications = load_module_fresh('utils.notifications', str(BACKEND / 'utils/notifications.py'))
+        monkeypatch.setattr(notifications, 'account_deletion_blocks_user_work', lambda _uid: False)
         load_module_fresh('utils.mcp_data', str(BACKEND / 'utils/mcp_data.py'))
         actions = load_module_fresh('utils.mcp_action_items', str(BACKEND / 'utils/mcp_action_items.py'))
         dispatcher = load_module_fresh('utils.notification_dispatch', str(BACKEND / 'utils/notification_dispatch.py'))
+        monkeypatch.setattr(dispatcher, 'account_deletion_blocks_user_work', lambda _uid: False)
         refresh = load_module_fresh(
             'utils.conversations.action_item_refresh', str(BACKEND / 'utils/conversations/action_item_refresh.py')
         )
@@ -90,6 +92,7 @@ def test_mcp_due_update_cancels_using_raw_status_but_keeps_public_response_uncha
     assert world.sent == [('synthetic-owner', {'type': 'action_item_delete', 'action_item_id': 'task-1'})]
     assert set(result) == PUBLIC_KEYS
     assert result['completed'] is False
+    assert result['source'] == 'conversation'
     assert result['due_at'] == DUE
     assert 'status' not in result and 'private_metadata' not in result
 

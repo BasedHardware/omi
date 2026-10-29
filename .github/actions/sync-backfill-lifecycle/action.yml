@@ -87,17 +87,45 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Resolve ops-owned backfill queues
+      if: ${{ inputs.mode == 'worker' }}
+      id: ops-queues
+      shell: bash
+      env:
+        BACKFILL_ENV: ${{ inputs.backfill_env_vars }}
+      run: |
+        set -euo pipefail
+        # B4: the live backfill queue is an ops value (backend/deploy/ops/prod.yaml), read from the
+        # reviewed deploy-control source, so a train never re-points backfill at a queue an operator
+        # retired (10-19 04:52Z sync-backfill stall). Prod fails closed if the ops file has no value.
+        # Non-prod: the manifest's values win (main #22460), sync-backfill only when it declares none.
+        backfill_queue="$(sed -n 's/^SYNC_BACKFILL_TASKS_QUEUE=//p' <<<"${BACKFILL_ENV:-}" | tail -n 1)"
+        worker_queue="$(sed -n 's/^SYNC_TASKS_QUEUE=//p' <<<"${BACKFILL_ENV:-}" | tail -n 1)"
+        backfill_queue="${backfill_queue:-sync-backfill}"
+        worker_queue="${worker_queue:-sync-backfill}"
+        if [[ '${{ inputs.project_id }}' == 'based-hardware' ]]; then
+          python3 -m pip install -q PyYAML==6.0.1
+          DEPLOY_CONTROL_SCRIPT_DIR="${DEPLOY_CONTROL_SCRIPTS:-backend/scripts}"
+          ops_env="$(python3 "$DEPLOY_CONTROL_SCRIPT_DIR/ops_train.py" render-env --env prod \
+            --service '${{ inputs.service }}-sync-backfill')"
+          backfill_queue="$(sed -n 's/^SYNC_BACKFILL_TASKS_QUEUE=//p' <<<"$ops_env")"
+          worker_queue="$(sed -n 's/^SYNC_TASKS_QUEUE=//p' <<<"$ops_env")"
+          if [[ -z "$backfill_queue" || -z "$worker_queue" ]]; then
+            echo "ops file declares no backfill queues for ${{ inputs.service }}-sync-backfill" >&2
+            exit 1
+          fi
+        fi
+        echo "Backfill queues: SYNC_BACKFILL_TASKS_QUEUE=$backfill_queue SYNC_TASKS_QUEUE=$worker_queue"
+        echo "backfill_queue=$backfill_queue" >> "$GITHUB_OUTPUT"
+        echo "worker_queue=$worker_queue" >> "$GITHUB_OUTPUT"
+
     - name: Resolve backfill service URL
       if: ${{ inputs.mode == 'worker' }}
       id: backfill-service
       shell: bash
       env:
-        BACKFILL_ENV: ${{ inputs.backfill_env_vars }}
+        BACKFILL_QUEUE: ${{ steps.ops-queues.outputs.backfill_queue }}
       run: |
-        # The manifest owns the live backfill queue (prod: sync-backfill-fresh since the 10-19
-        # 04:52Z stall); sync-backfill is only the default when the manifest declares none.
-        BACKFILL_QUEUE="$(sed -n 's/^SYNC_BACKFILL_TASKS_QUEUE=//p' <<<"${BACKFILL_ENV:-}" | tail -n 1)"
-        BACKFILL_QUEUE="${BACKFILL_QUEUE:-sync-backfill}"
         PROJECT_NUMBER="$(gcloud projects describe "${{ inputs.project_id }}" --format='value(projectNumber)')"
         URL="https://${{ inputs.service }}-sync-backfill-${PROJECT_NUMBER}.${{ inputs.region }}.run.app"
         echo "url=${URL}" >> "$GITHUB_OUTPUT"
@@ -115,8 +143,8 @@ runs:
       shell: bash
       env:
         ENV_OVERLAY: |-
-          SYNC_TASKS_QUEUE=sync-backfill
           ${{ inputs.backfill_env_vars }}
+          SYNC_TASKS_QUEUE=${{ steps.ops-queues.outputs.worker_queue }}
           SYNC_TASKS_HANDLER_URL=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run
           SYNC_TASKS_OIDC_AUDIENCE=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run
         SECRET_OVERLAY: ${{ inputs.backfill_secrets }}
@@ -206,12 +234,12 @@ runs:
         flags: >-
           --revision-suffix=${{ inputs.revision_suffix }}-base
           ${{ steps.candidate-tag.outputs.flag }}
-          --min-instances=3
+          --min-instances=0
           --max-instances=${{ steps.live-max-scale.outputs.max_scale }}
           --max=${{ steps.live-max-scale.outputs.max_scale }}
           --concurrency=6
           --cpu=2
-          --memory=8Gi
+          --memory=${{ inputs.project_id == 'based-hardware' && '4Gi' || '8Gi' }}
           --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST,CONVERSATION_RELEVANCE_JEV_ENABLED,CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT,CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP,CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT,CONVERSATION_RELEVANCE_JEV_RESCUE,MEMORY_OWNER_JEV_FLIP_ENABLED,MEMORY_OWNER_JEV_FLIP_PERCENT,MEMORY_OWNER_JEV_SHADOW_PERCENT,MEMORY_OWNER_JEV_SHADOW_DAILY_CAP,CONVERSATION_SMART_MERGE_UID_ALLOWLIST,CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE,DESKTOP_PENDANT_CALL_LINK_MODE,DESKTOP_PENDANT_CALL_LINK_PERCENT,MEETING_NOTES_EPISODE_SELECTION,MEETING_NOTES_EPISODE_JEV_THRESHOLD,MEETING_NOTES_EPISODE_SELECTION_EFFORT,MEETING_NOTES_EPISODE_SELECTION_TIMEOUT_SECONDS,CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED,CONVERSATION_OCR_CONTEXT_ENABLED,MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED,SCREEN_FRAME_EGRESS_ENABLED,MEMORY_BELIEF_MODEL_ENABLED,FREE_TIER_MEMORY_SUPPRESSION,FREE_TIER_MEMORY_SUPPRESSION_COHORT,KNOWLEDGE_LEDGER_DRAIN_ENABLED,KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST,MEMORY_DAILY_MEMORY_SWEEP_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH,MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD,MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG,MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME,MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS,MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS,DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL${{ inputs.remove_env_extra }}
           ${{ inputs.cloud_run_flags }}
           ${{ inputs.identity_flags }}
@@ -252,15 +280,22 @@ runs:
         BACKFILL_ENV: ${{ inputs.backfill_env_vars }}
       run: |
         set -euo pipefail
-        # Reconcile the queue the manifest routes backfill to (prod: sync-backfill-fresh); the
-        # retired sync-backfill queue is left as it is.
+        # B4: in prod the live backfill queue's name and rates are ops values
+        # (backend/deploy/ops/prod.yaml cloud_tasks), applied and verified only by the
+        # config-train, so a train never rewrites them (one source, not train + ops file).
+        if [[ '${{ inputs.project_id }}' == 'based-hardware' ]]; then
+          echo "prod backfill queue is owned by the ops file and config-train; train does not reconcile it"
+          exit 0
+        fi
+        # Elsewhere reconcile the queue the manifest routes backfill to, defaulting to sync-backfill.
         BACKFILL_QUEUE="$(sed -n 's/^SYNC_BACKFILL_TASKS_QUEUE=//p' <<<"${BACKFILL_ENV:-}" | tail -n 1)"
         BACKFILL_QUEUE="${BACKFILL_QUEUE:-sync-backfill}"
         # Keep the train ceiling of 90, bounded by the live worker cap x concurrency 6.
         # The 15/s rate caps starts, not in-flight work; the concurrency limit below
         # independently prevents dispatch beyond worker capacity, including bursts.
-        # Retain 8 GiB and one owner per UID. Later operator steps require
-        # latency/retry/GPU/Firestore/Redis gates and a follow-up config train.
+        # One owner per UID. 2026-10-24 right-sizing: prod worker 8->4 GiB and
+        # min-instances 3->0 (live 06:06Z); dev keeps 8 GiB. Later operator steps
+        # require latency/retry/GPU/Firestore/Redis gates and a follow-up config train.
         # Dispatch concurrency must not exceed the worker's capacity:
         # --max-instances x --concurrency (service-level --max above; the
         # service cap wins when it is lower).

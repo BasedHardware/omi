@@ -47,8 +47,18 @@ def admission_state(client, args, trial):
     client.documents['dream_users/' + UID] = {'score': 1}
 
 
+def required_retry_cursor(client, args, trial):
+    client.documents['dream_scheduler/required_intake'] = {'after': 'one'} if trial else {}
+
+
 def entries():
     return (
+        DriverEntry(
+            'database.dream_scheduler.required_retry_page',
+            domains={'limit': [1, 4990]},
+            setup=required_retry_cursor,
+            trials=2,
+        ),
         DriverEntry(
             'utils.dream_seed.load',
             base={'uid': UID},
@@ -80,7 +90,10 @@ def entries():
             'database.dream_scheduler.candidates',
             patchers=(producer_mode,),
             domains={'limit': [1, 100]},
-            neutrals={'now': (datetime(2026, 10, 12, tzinfo=timezone.utc), 'post-query priority only')},
+            neutrals={
+                'now': (datetime(2026, 10, 12, tzinfo=timezone.utc), 'post-query priority only'),
+                'with_due': (False, 'projection of returned rows only'),
+            },
         ),
         DriverEntry(
             'database.dream_scheduler.candidate_page',
@@ -91,17 +104,19 @@ def entries():
         DriverEntry(
             'database.dream_store.acquire',
             base={'uid': UID},
-            domains={'trigger': ['schedule', 'manual']},
             neutrals={
                 'caps': (Caps(), 'admission policy only'),
                 'rng': (None, 'coin does not alter query shape'),
                 'reclaim_sink': (None, 'count-only output after commit does not alter query shape'),
                 'canary': (False, 'cohort gate only'),
                 'now': (datetime(2026, 10, 9, tzinfo=timezone.utc), 'UTC accounting day only'),
+                'denial_sink': (None, 'count-only denial reason after commit does not alter query shape'),
             },
+            domains={'trigger': ['schedule', 'manual'], 'skip_idle': [False, True]},
             setup=admission_state,
             patchers=(producer_mode,),
         ),
+        DriverEntry('database.dream_store.park_if_idle', base={'uid': UID}),
         DriverEntry(
             'database.dream_store.dirty_count',
             base={'uid': UID},
@@ -136,6 +151,7 @@ def entries():
                 'consumed': ([], 'settlement metadata; watermark uses the separately driven dirty_refs builder'),
                 'unavailable': ([], 'settlement metadata; watermark uses the separately driven dirty_refs builder'),
                 'release': (True, 'post-query lease policy'),
+                'park_when_idle': (False, 'chooses delete vs set of the due row; no query shape change'),
             },
             setup=finish_state,
         ),
@@ -160,9 +176,10 @@ registry_extension = SimpleNamespace(
         'database.dream_scheduler.discover': CoveredByEntry(
             'database.dream_scheduler.discover',
             covered_by=('database.dream_scheduler.candidate_page',),
-            reason='Discovery streams only through candidate_page (allowlist mode reads listed user documents by explicit ref instead); its get_all calls read explicit document refs and its transaction only initializes due rows and a cursor. SDK queue races are exercised in test_dream_queue_emulator.',
+            reason='Discovery streams only through candidate_page (allowlist mode reads listed user documents by explicit ref instead); its chunked get_all calls read explicit document refs in bounded transactions that only initialize due rows and a cursor. SDK queue races are exercised in test_dream_queue_emulator.',
             expect_observed=False,
-            body_digest='925cc08b93ece7ff9e68c75a87aaf0437b80575a4794325b5153dfa30d875d16',
+            # Re-reviewed: pending-deletion owners are skipped; query shape is unchanged.
+            body_digest='aa527730515a41f875712b46b2b1b7d7e36cc20564c1ad8178180e0b46b4fd14',
         )
     },
     SKIPS={},

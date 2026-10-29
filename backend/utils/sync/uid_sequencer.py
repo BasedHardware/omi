@@ -31,7 +31,7 @@ from database.sync_jobs import (
 )
 from database.sync_ledger import release_sync_content_claim_after_job_retired
 from utils.cloud_tasks import enqueue_sync_job, get_sync_tasks_max_attempts
-from utils.sync import backfill_cutover, stage as sync_stage
+from utils.sync import backfill_cutover, legacy_dark, stage as sync_stage
 from utils.sync.backfill import release_backfill_slot
 from utils.sync.backfill_order import newest_first
 from utils.sync.ledger_completion import bind_or_converge_sync_ledger_completion
@@ -149,7 +149,7 @@ def _dispatch(claim: dict[str, Any]) -> None:
     payload = {**claim['payload'], 'sequencer_epoch': claim['epoch']}
     enqueue_sync_job(payload, dispatch_attempt=claim.get('dispatch_attempt', 0))
     latency = max(0.0, (datetime.now(timezone.utc) - claim['accepted_at']).total_seconds())
-    logger.info('event=sync_uid_sequencer action=dispatch outcome=enqueued latency_seconds=%.1f', latency)
+    logger.debug('event=sync_uid_sequencer action=dispatch outcome=enqueued latency_seconds=%.1f', latency)
 
 
 def _enqueue_wake(uid: str, uid_hash: str, deadline: int) -> None:
@@ -163,6 +163,9 @@ def _enqueue_wake(uid: str, uid_hash: str, deadline: int) -> None:
 def kick(uid: str, *, retire_limit: int = MAX_EXPIRED_RETIREMENTS, progress: _ClaimProgress | None = None) -> bool:
     """Select one pending job and enqueue it; a persisted reservation survives uncertainty."""
     if not registry.production_stage():
+        return False
+    if not legacy_dark.sequencer_dispatch_allowed():
+        # Legacy-dark: ``dark`` claims and dispatches nothing (contract (h)).
         return False
     remaining, direct_job_id = (
         backfill_cutover.quiet_remaining(uid) if enabled() else backfill_cutover.direct_remaining_for_uid(uid)
@@ -231,19 +234,20 @@ def _converge_capped_ledger_completion(*, job_id: str, uid: Any, content_id: Any
     )
 
 
-def _finalize_abandoned_budget_chain_job(uid: str, job_id: str, epoch: int, *, now: datetime | None = None) -> bool:
-    """Terminalize a capped budget-deferral chain's Redis job, conservatively.
+def _finalize_abandoned_budget_chain_job(
+    uid: str,
+    job_id: str,
+    epoch: int,
+    *,
+    now: datetime | None = None,
+    failure_message: str = 'sync budget deferral chain exhausted the attempt contract',
+    reason_code: str = 'sync_budget_chain_exhausted',
+) -> bool:
+    """Terminalize a capped dispatch or budget chain conservatively.
 
-    The sweep is about to release the sequencer owner because the chain spent
-    its whole attempt contract; ``is_sync_job_stale`` deliberately excludes
-    sequenced dispatch, so no status poll can ever finalize it — the client
-    would see a nonterminal job until the 24h Redis TTL and the durable
-    content claim could not recover through the normal terminal path. Marking
-    it failed here is the terminal handoff. ``queued`` is accepted alongside
-    ``processing`` because the final whole-budget attempt can expire during
-    staged-file download or another pre-pipeline step, before the attempt ever
-    marked the job processing — that job is exactly as abandoned as the
-    processing one, and nothing else will finalize it either.
+    Sequenced jobs are excluded from stale polling, so the sweep must assure
+    terminal state and cleanup before releasing their owner. Both queued and
+    processing jobs can be abandoned before the handler publishes a result.
 
     The handoff is fenced by *acquiring* the run lock atomically rather than
     checking it and writing later: a final replacement that acquires between
@@ -396,8 +400,8 @@ def _finalize_abandoned_budget_chain_job(uid: str, job_id: str, epoch: int, *, n
             mutation = fenced_mark_job_failed(
                 job_id,
                 lock_token,
-                'sync budget deferral chain exhausted the attempt contract',
-                reason_code='sync_budget_chain_exhausted',
+                failure_message,
+                reason_code=reason_code,
             )
         except Exception as error:
             logger.error(
@@ -585,6 +589,19 @@ def reconcile_uid(
         outcome = 'expired_job_cleanup'
     else:
         outcome = 'lease_expired'
+    from utils.sync.retry_hygiene import reconcile_dispatch_cap
+
+    capped = reconcile_dispatch_cap(
+        uid,
+        owner,
+        epoch,
+        current,
+        registry=registry,
+        finalize=_finalize_abandoned_budget_chain_job,
+        kick=lambda: kick(uid, retire_limit=retire_limit, progress=progress),
+    )
+    if capped is not None:
+        return capped
     deferrals = owner.get('active_budget_deferrals')
     if (
         outcome == 'lease_expired'
@@ -592,27 +609,13 @@ def reconcile_uid(
         and not isinstance(deferrals, bool)
         and deferrals + 1 >= get_sync_tasks_max_attempts()
     ):
-        # The handler's own bound already refused the next replacement at this
-        # count (its final whole-budget run ends through the 409/queue), so a
-        # redrive would copy the maxed count into a fresh epoch payload and run
-        # another full budget, then redrive again — forever. Backfill allows
-        # one in-flight job per UID, so that loop would also block every later
-        # capture for this user. Release the owner and dispatch the next
-        # waiting capture instead; the deferred job's own marker/lock expiry
-        # leaves it to the same recovery as any other abandoned attempt.
+        # A spent budget chain must terminalize before its owner is released.
         logger.error(
             'event=sync_uid_sequencer action=sweep outcome=budget_chain_exhausted job_id=%s uid_hash=%s deferrals=%d',
             job_id,
             backfill_cutover.uid_hash(uid),
             deferrals,
         )
-        # The terminal handoff must be assured BEFORE the owner is released:
-        # after release no sweep retains an identity for this job, and status
-        # polling cannot stale-finalize sequenced jobs. A transient Redis
-        # failure here keeps the owner on the books (deferred one heartbeat)
-        # so the next sweep retries the finalize-and-release sequence; only a
-        # settled job releases the owner and lets the lane advance to the
-        # next waiting capture.
         if not _finalize_abandoned_budget_chain_job(uid, job_id, epoch, now=current):
             registry.defer_owner(uid, registry.HEARTBEAT_SECONDS, now=current)
             return 'finalize_deferred'
@@ -645,6 +648,8 @@ def sweep(*, limit: int = 100) -> dict[str, int]:
     """One bounded Scheduler tick; each UID is independent and transaction-fenced."""
     if not registry.production_stage():
         return {'disabled': 1}
+    if not legacy_dark.sequencer_dispatch_allowed():
+        return {'legacy_dark': 1}
     if sync_redrive.enabled():
         sync_redrive.refresh_metrics()
     now = datetime.now(timezone.utc)

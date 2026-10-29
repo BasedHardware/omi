@@ -8,11 +8,13 @@ precondition is checked against current data, not the caller's snapshot.
 
 Partition, exclusions and gap arithmetic follow the sync bridge
 (``utils/sync/live_overlap.compatible_capture`` / ``assignment.auto_mergeable`` and
-``utils/conversation_continuity``) so the two merge paths agree on what a
+``models/conversation_continuity``) so the two merge paths agree on what a
 device partition and a user-managed row are.
 """
 
 from __future__ import annotations
+
+from utils.sync import processing_hold
 
 import re
 from copy import deepcopy
@@ -20,6 +22,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Iterable, Mapping, Optional, Sequence
 
+from config.sync_live_dedupe import sync_live_dedupe_active_for
+from utils.sync.donor_dedupe import DonorDedupe, dedupe_donor, live_reference
+from utils.sync.bridge_observation import bridge_observation
 import config.speaker_match_scores as match_scores
 from config.conversation_smart_merge import (
     ELIGIBLE_SOURCES,
@@ -37,6 +42,7 @@ from config.conversation_smart_merge import (
 )
 from utils.conversations.smart_merge_state import Fragment
 from utils.conversations.wake_word import find_wake_word_matches
+from utils.sync.clock_run import SYNC_CLOCK_RUN_FIELD
 from utils.stt.speaker_identity import ConversationSpeakerIdAllocator
 
 SMART_MERGE_FIELD = 'smart_merge'
@@ -107,9 +113,17 @@ def refresh_owed(row: Mapping[str, Any]) -> bool:
     return refreshed_revision(row) < revision(row)
 
 
-def partition(row: Mapping[str, Any]) -> tuple[Any, Any, bool]:
-    """Unknown device is its own partition, never a wildcard (same rule as sync)."""
-    return (row.get('source'), row.get('client_device_id'), bool(row.get('is_locked')))
+def partition(row: Mapping[str, Any]) -> tuple[Any, Any, bool, Any]:
+    """Unknown device is its own partition, never a wildcard (same rule as sync).
+
+    So is an estimated-clock run: its recorded gap to any other row is fiction.
+    """
+    return (
+        row.get('source'),
+        row.get('client_device_id'),
+        bool(row.get('is_locked')),
+        row.get(SYNC_CLOCK_RUN_FIELD),
+    )
 
 
 def user_managed(row: Mapping[str, Any]) -> bool:
@@ -329,7 +343,10 @@ def check_pair(
         return PairCheck(reason)
     if partition(survivor) != partition(new):
         return PairCheck(SkipReason.NO_PREDECESSOR)
-    if refresh_owed(survivor):
+    if refresh_owed(survivor) and not (
+        processing_hold.enabled()
+        and int(smart_merge_state(survivor).get('delegated_revision') or 0) >= revision(survivor)
+    ):
         return PairCheck(SkipReason.PREDECESSOR_REFRESH_PENDING)
     if has_wake_word(survivor_segments):
         return PairCheck(SkipReason.WAKE_WORD)
@@ -462,6 +479,9 @@ def rebase_donor_segments(
     survivor_segments: Sequence[Mapping[str, Any]],
     donor: Mapping[str, Any],
     donor_segments: Sequence[Mapping[str, Any]],
+    *,
+    uid: str | None = None,
+    observations: list[dict] | None = None,
 ) -> list[dict[str, Any]]:
     """Survivor transcript followed by the donor's, on the survivor's absolute timeline.
 
@@ -471,10 +491,28 @@ def rebase_donor_segments(
     Segment ids are kept, so an undo can remove exactly the donor's segments.
     """
     offset = donor['started_at'].timestamp() - survivor['started_at'].timestamp()
+    transferred = [dict(item) for item in deepcopy(list(donor_segments))]
+    # uid is supplied only at the transactional persistence boundary, after
+    # eligibility/planning, so policy checks and fragment/undo custody use the
+    # original donor. Reallocation touches only retained segments.
+    if uid is not None and sync_live_dedupe_active_for(uid) and not live_reference(dict(donor)):
+        reference = dict(survivor, transcript_segments=list(survivor_segments))
+        original = [dict(item, timestamp=donor['started_at'].timestamp() + item['start']) for item in transferred]
+        report = dedupe_donor(original, dict(donor), reference) if live_reference(reference) else DonorDedupe(original)
+        transferred = [{key: value for key, value in item.items() if key != 'timestamp'} for item in report.kept]
+        if observations is not None:
+            observations.append(
+                bridge_observation(
+                    reference,
+                    [(original, report)],
+                    operation='smart_absorb',
+                    target_kind='live' if live_reference(reference) else 'sync',
+                )
+            )
     allocator = ConversationSpeakerIdAllocator()
     allocator.hydrate(survivor_segments)
     merged = [dict(segment) for segment in deepcopy(list(survivor_segments))]
-    for segment in (dict(item) for item in deepcopy(list(donor_segments))):
+    for segment in transferred:
         if not segment.get('speaker_id_scope'):
             segment['speaker_id_scope'] = f"legacy-conversation:{donor['id']}:{segment.get('speaker_id')}"
         allocator.assign(segment)
@@ -531,6 +569,8 @@ def absorb_payloads(
     # live survivors too: a processor started before this absorb must not write
     # its old transcript or summary over the newly joined occasion.
     survivor_update['sync_content_revision'] = int(survivor.get('sync_content_revision') or 0) + 1
+    if processing_hold.enabled() and (processing_hold.sync_sourced(survivor) or processing_hold.sync_sourced(donor)):
+        survivor_update[processing_hold.FIELD] = processing_hold.activity_patch(survivor, merged_at.timestamp())
     donor_update: dict[str, Any] = {
         'deleted': True,
         # Hide the redirect from discarded == False list indexes, exactly like a

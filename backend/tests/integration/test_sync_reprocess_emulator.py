@@ -42,9 +42,6 @@ def store(monkeypatch):
     client = firestore.Client(project='demo-omi-reprocess', credentials=AnonymousCredentials())
     client.collection('sync_reprocess_scan').document('cursor').delete()
     monkeypatch.setattr(reprocess, 'get_firestore_client', lambda: client)
-    from utils.batch_pipeline import enrichment
-
-    monkeypatch.setattr(enrichment, 'get_firestore_client', lambda: client)
     from database import _client
 
     monkeypatch.setattr(_client, 'get_firestore_client', lambda: client)
@@ -140,7 +137,7 @@ def test_loopback_worker_http_runs_current_transcript_once(store, monkeypatch):
     import httpx
     import uvicorn
     from routers import sync as sync_router
-    from utils.sync import pipeline
+    from utils.enrichment import callback
 
     client, uid, tasks = store
     processed = []
@@ -155,7 +152,7 @@ def test_loopback_worker_http_runs_current_transcript_once(store, monkeypatch):
             raise HTTPException(status_code=403)
         return 0
 
-    monkeypatch.setattr(pipeline, '_reprocess_conversation_after_update', provider_leaf)
+    monkeypatch.setattr(callback, 'enrich_conversation', provider_leaf)
     monkeypatch.setattr(sync_router.uid_sequencer, 'production_fence_mode', lambda: None)
     app = FastAPI()
     app.include_router(sync_router.router)

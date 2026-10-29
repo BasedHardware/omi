@@ -3,6 +3,7 @@
 import copy
 import hashlib
 import json
+import logging
 from types import SimpleNamespace
 from datetime import datetime, timezone
 from uuid import uuid5, NAMESPACE_URL
@@ -17,7 +18,7 @@ from utils.agent_capabilities.text_edits import replace_term
 from models.agent_refs import base_ref, has_ref, cited_value
 from models.dream_edit import MemoryHygieneEdit
 from models.agent_edit import HarnessEdit
-from models.agent_tools import ProposeEdit
+from models.agent_tools import tool_model
 from database import review_memory_hygiene
 from utils.entity_pages import resolve_entity
 from utils.agent_capabilities.guards import (
@@ -31,6 +32,11 @@ from utils.agent_capabilities.evidence import EvidenceRecords
 from utils.agent_capabilities.errors import ToolError
 from utils.agent_capabilities import change_view as dream_change_view
 from utils.agent_capabilities import cleanup_edits as dream_cleanup_edits
+from utils.review_projection import sync_transcript_chunks
+from database.legal_holds import DestructiveOperationInProgress
+from utils import dream_required_intake
+
+logger = logging.getLogger(__name__)
 
 
 def edit_key(edit, records=None):
@@ -197,6 +203,16 @@ def apply_verified_edit(
             and isinstance(change, dict)
             and change.get('undone', False) is False
         ):
+            if prior.get('transcript_overlay'):
+                try:
+                    sync_transcript_chunks(
+                        uid, prior['transcript_overlay']['conversation_id'], firestore_client=review_store.client()
+                    )
+                except DestructiveOperationInProgress:
+                    raise
+                except Exception:
+                    # The change is committed; a provider failure in the repair must not fail the pass.
+                    logger.warning('dream transcript chunk repair failed after committed change', exc_info=True)
             return 'applied'
     refs = {base_ref(ref) for ref in [edit.target, *edit.evidence, *([edit.other] if edit.other else [])]}
     sources = EvidenceRecords({ref: records[ref] for ref in refs})
@@ -230,6 +246,8 @@ def answer_spelling(uid, source, value):
 def proposal_record(uid, ref, snapshot):
     from utils.agent_capabilities import reads as dream_reads
 
+    if ref.startswith('memory_items/') and dream_required_intake.MARKER in snapshot:
+        return dream_required_intake.read_candidate(uid, ref.split('/', 1)[1], snapshot[dream_required_intake.MARKER])
     if ref.startswith('entity/'):
         entity_id = ref.removeprefix('entity/')
         return (
@@ -524,6 +542,16 @@ def validate_hygiene(edit, records, *, authority='dream'):
     validate_memory_hygiene(edit, records)
 
 
+def validate_required_intake(edit, records, *, authority='dream'):
+    dream_required_intake.validate(edit, records, authority=authority)
+
+
+def apply_required_intake(uid, edit, records, change, key, row, *, expected_records=None, authority='dream'):
+    return dream_required_intake.apply(
+        uid, edit, records, change, key, row, expected_records=expected_records, authority=authority
+    )
+
+
 def validate_memory(edit, records, *, authority='dream'):
     row = records[base_ref(edit.target)]
     collection, _separator, key_id = base_ref(edit.target).partition('/')
@@ -578,7 +606,7 @@ def validate_cleanup(edit, records, *, authority='dream'):
 
 def validate_edit(edit, records, *, authority='dream'):
     if isinstance(edit, HarnessEdit):
-        ProposeEdit.model_validate({'edit': edit.model_dump()})
+        tool_model('propose_edit', authority).model_validate({'edit': edit.model_dump()})
     if not has_ref(edit.target, records) or any((not has_ref(ref, records) for ref in edit.evidence)):
         raise ValueError('agent_unknown_evidence')
     row = records[base_ref(edit.target)]

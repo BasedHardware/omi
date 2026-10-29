@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/services/live_preview/live_preview_controller.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
@@ -14,7 +15,7 @@ import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/activity/activity_bell_button.dart';
 import 'package:omi/pages/activity/activity_seen.dart';
-import 'package:omi/pages/conversation_capturing/page.dart';
+import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/pages/home/home_content.dart';
 import 'package:omi/pages/home/widgets/battery_info_widget.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
@@ -41,6 +42,11 @@ enum AuditLive { idle, pendant, pendantPaused, phone, phonePaused, phoneAfterPen
 
 /// A capture provider reporting one fixed live state, with a short transcript.
 class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
+  @override
+  LivePreviewController? get livePreview => null;
+  @override
+  bool get localPreviewAdmitted => false;
+
   AuditCaptureProvider(this.live);
   final AuditLive live;
   @override
@@ -48,6 +54,10 @@ class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
 
   @override
   bool get pendantCaptureVerified => true;
+  @override
+  bool get pendantCaptureActionRequired => false;
+  @override
+  bool get pendantReconnectInFlight => false;
 
   /// The outage variant: the pendant streams but the server said transcription cannot run.
   bool get _outage => live == AuditLive.pendantOutage;
@@ -358,7 +368,7 @@ Future<void> _runFeed(AuditRun a, {AuditLive live = AuditLive.idle}) async {
 }
 
 Future<void> _runLivePage(AuditRun a, AuditLive live) async {
-  await a.pump(const ConversationCapturingPage(), scaffold: false, providers: [
+  await a.pump(const LiveEpisodePage(), scaffold: false, providers: [
     ChangeNotifierProvider<CaptureProvider>.value(value: AuditCaptureProvider(live)),
     if (live == AuditLive.pendant || live == AuditLive.pendantPaused || live == AuditLive.pendantOutage)
       ChangeNotifierProvider<DeviceProvider>.value(
@@ -398,7 +408,7 @@ void _seedVisibleWedgeEpisode() {
 }
 
 const _home = 'lib/pages/home/page.dart (Home: live card, record button, device chip)';
-const _live = 'lib/pages/conversation_capturing/page.dart (ConversationCapturingPage)';
+const _live = 'lib/pages/episodes/live_episode_page.dart (LiveEpisodePage)';
 
 final captureScenarios = <AuditScenario>[
   AuditScenario(

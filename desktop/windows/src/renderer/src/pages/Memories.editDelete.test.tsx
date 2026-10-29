@@ -113,6 +113,42 @@ afterEach(() => {
 })
 
 describe('Memories — detail sheet stays in sync after an edit (FIX 1)', () => {
+  it('keeps a submitted draft stable until failure and permits retry afterward', async () => {
+    memoriesList = [mem('m1', 'Original content')]
+    let refuse!: (error: Error) => void
+    editMemory.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          refuse = reject
+        })
+    )
+    await renderPage()
+    fireEvent.click(screen.getByText('Original content'))
+    fireEvent.click(await screen.findByTitle('Click to edit'))
+    const dialog = screen.getByRole('dialog')
+    const draft = within(dialog).getByRole('textbox') as HTMLTextAreaElement
+    fireEvent.change(draft, { target: { value: 'Retained correction' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(editMemory).toHaveBeenCalledTimes(1))
+    expect(draft.disabled).toBe(true)
+    expect(
+      (within(dialog).getByRole('button', { name: 'Cancel' }) as HTMLButtonElement).disabled
+    ).toBe(true)
+    expect(
+      (within(dialog).getByRole('button', { name: 'Close' }) as HTMLButtonElement).disabled
+    ).toBe(true)
+    fireEvent.keyDown(draft, { key: 'Escape' })
+    expect(screen.getByRole('dialog')).toBe(dialog)
+    refuse(new Error('Synthetic connection failure'))
+    await waitFor(() => expect(draft.disabled).toBe(false))
+    expect(draft.value).toBe('Retained correction')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(editMemory).toHaveBeenCalledTimes(2))
+    await waitFor(() =>
+      expect(within(screen.getByRole('dialog')).getByText('Retained correction')).toBeTruthy()
+    )
+  })
+
   it('shows the edited content in the open sheet instead of reverting to the stale prop', async () => {
     memoriesList = [mem('m1', 'Original content')]
     await renderPage()

@@ -5,6 +5,7 @@ import axios, {
 } from 'axios'
 import { auth } from './firebase'
 import { forceReauth, refreshIdToken } from './authSession'
+import { getAuthSessionGeneration } from './authSessionScope'
 import { withByokHeadersIfActive } from './byokKeys'
 import { getWindowsDeviceIdHash } from './clientDevice'
 
@@ -25,6 +26,16 @@ type RetryConfig = InternalAxiosRequestConfig & {
   __noRetry?: boolean
   __reauthTried?: boolean
   __sessionPreserving?: boolean
+  __authGeneration?: number
+}
+
+function assertRequestSession(config: RetryConfig | undefined): void {
+  if (
+    config?.__authGeneration !== undefined &&
+    config.__authGeneration !== getAuthSessionGeneration()
+  ) {
+    throw new Error('Your sign-in changed. Please try again.')
+  }
 }
 
 /**
@@ -39,6 +50,7 @@ export async function responseErrorHandler(
 ): Promise<AxiosResponse> {
   const config = error.config
   const status = error.response?.status
+  assertRequestSession(config)
 
   // 401: the backend rejected our Firebase token. Force-refresh once and retry.
   // Mirrors macOS refresh→retry→classify: a DEFINITIVE death (no user, permanent
@@ -51,6 +63,7 @@ export async function responseErrorHandler(
     const preserving = config.__sessionPreserving === true
     if (!config.__reauthTried) {
       const outcome = await refreshIdToken()
+      assertRequestSession(config)
       if (outcome.status === 'ok') {
         config.__reauthTried = true // consumed our one retry
         config.headers.Authorization = `Bearer ${outcome.token}`
@@ -80,6 +93,7 @@ export async function responseErrorHandler(
       ? retryAfter * 1000
       : Math.min(1000 * 2 ** (config.__retryCount - 1), 16_000) + Math.random() * 400
   await new Promise((resolve) => setTimeout(resolve, waitMs))
+  assertRequestSession(config)
   return client(config)
 }
 
@@ -125,6 +139,9 @@ function makeClient(baseURL: string): AxiosInstance {
   const client = axios.create({ baseURL, timeout: 12_000 })
 
   client.interceptors.request.use(async (config) => {
+    const scoped = config as RetryConfig
+    scoped.__authGeneration ??= getAuthSessionGeneration()
+    assertRequestSession(scoped)
     // Platform + version tag on every request — same convention as the macOS/
     // Flutter clients (their shared header builders), so the backend can give
     // Windows-appropriate answers, version-gate features, and attribute quota.
@@ -132,6 +149,7 @@ function makeClient(baseURL: string): AxiosInstance {
     const user = auth.currentUser
     if (user) {
       const token = await user.getIdToken()
+      assertRequestSession(scoped)
       config.headers.Authorization = `Bearer ${token}`
     }
     // BYOK: when the user has a full key set, attach X-BYOK-* (all-or-none) so
@@ -142,10 +160,17 @@ function makeClient(baseURL: string): AxiosInstance {
     }
     config.headers['X-App-Platform'] = 'windows'
     config.headers['X-Device-Id-Hash'] = await getWindowsDeviceIdHash()
+    assertRequestSession(scoped)
     return config
   })
 
-  client.interceptors.response.use(undefined, (error) => responseErrorHandler(client, error))
+  client.interceptors.response.use(
+    (response) => {
+      assertRequestSession(response.config as RetryConfig)
+      return response
+    },
+    (error) => responseErrorHandler(client, error)
+  )
 
   return client
 }

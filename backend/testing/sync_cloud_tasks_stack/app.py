@@ -8,6 +8,7 @@ isolated Redis, Firestore, and filesystem-backed staged blobs.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import time
 import wave
@@ -24,7 +25,7 @@ from .isolation import LOOPBACK_HOSTS as _LOOPBACK_HOSTS, install_no_egress_guar
 install_no_egress_guard()
 
 from .events import write_event  # noqa: E402
-from .storage import configure_storage_dir, patch_google_storage  # noqa: E402
+from .storage import configure_storage_dir, patch_google_storage, read_signed_url  # noqa: E402
 
 _ROLES = frozenset({'admission', 'worker', 'batch-serving'})
 
@@ -108,9 +109,15 @@ if ROLE == 'batch-serving':
 from main import app  # noqa: E402
 
 if ROLE == 'admission' and os.getenv('OMI_BATCH_STACK_POLICY_FILE'):
+    from functools import partial
     import json
     from config.policy import BatchUnitPolicy
     from routers import sync as _policy_sync_router
+    from utils.batch_pipeline import intake as _batch_intake
+
+    # These isolated synthetic processes keep private logs separately from the
+    # sanitized evidence. Retain the actual intake failure for local/CI triage.
+    _batch_intake.logger.error = partial(_batch_intake.logger.error, exc_info=True)
 
     _recorded_policy = BatchUnitPolicy.from_dict(
         json.loads(Path(os.environ['OMI_BATCH_STACK_POLICY_FILE']).read_text())
@@ -234,8 +241,10 @@ elif ROLE == 'worker':
     _post_ledger_failures_remaining = _nonnegative_int('OMI_SYNC_STACK_POST_LEDGER_FAILURES')
     _cleanup_failures_remaining = _nonnegative_int('OMI_SYNC_STACK_CLEANUP_FAILURES')
     _process_persistence_fenced = os.getenv('OMI_SYNC_STACK_PROCESS_PERSISTENCE_FENCED', 'false').lower() == 'true'
-    _gate_dir_raw = os.getenv('OMI_SYNC_STACK_PROCESS_GATE_DIR', '').strip()
-    _gate_dir = Path(_gate_dir_raw) if _gate_dir_raw else None
+    _process_gate_dir_raw = os.getenv('OMI_SYNC_STACK_PROCESS_GATE_DIR', '').strip()
+    _process_gate_dir = Path(_process_gate_dir_raw) if _process_gate_dir_raw else None
+    _worker_pipeline_gate_dir_raw = os.getenv('OMI_SYNC_STACK_WORKER_PIPELINE_GATE_DIR', '').strip()
+    _worker_pipeline_gate_dir = Path(_worker_pipeline_gate_dir_raw) if _worker_pipeline_gate_dir_raw else None
 
     def _job_id_from_path(path: str) -> str:
         # Production paths are syncing/<uid>/<job-id>/<file>; never record path.
@@ -254,6 +263,9 @@ elif ROLE == 'worker':
     def _local_prerecorded(audio_url: str, *, return_language: bool = False, **_kwargs: Any) -> Any:
         """Deterministic STT leaf; it emits no transcript into evidence."""
         job_id = audio_url.rsplit('/', 1)[-1]
+        # The upload worker owns paid STT. Full note processing can be held
+        # for merge settlement and no longer runs inside this worker lease.
+        _wait_for_process_gate(job_id)
         write_event('providers', {'event': 'stt_completed', 'job_id': job_id, 'word_count': 1})
         words = [
             {
@@ -264,19 +276,35 @@ elif ROLE == 'worker':
         ]
         return (words, 'en') if return_language else words
 
-    def _wait_for_process_gate(conversation_id: str) -> None:
-        if _gate_dir is None:
+    def _wait_for_process_gate(job_id: str) -> None:
+        if _process_gate_dir is None:
             return
-        _gate_dir.mkdir(parents=True, exist_ok=True)
-        entered = _gate_dir / 'entered'
-        release = _gate_dir / 'release'
+        _process_gate_dir.mkdir(parents=True, exist_ok=True)
+        entered = _process_gate_dir / 'entered'
+        release = _process_gate_dir / 'release'
         entered.write_text('entered', encoding='utf-8')
-        write_event('providers', {'event': 'processor_gate_entered', 'conversation_id': conversation_id})
+        write_event('providers', {'event': 'processor_gate_entered', 'job_id': job_id})
         deadline = time.monotonic() + 15.0
         while not release.exists():
             if time.monotonic() >= deadline:
                 raise RuntimeError('controlled Sync processor gate timed out')
             time.sleep(0.01)
+
+    async def _wait_for_worker_pipeline_gate() -> None:
+        if _worker_pipeline_gate_dir is None:
+            return
+        _worker_pipeline_gate_dir.mkdir(parents=True, exist_ok=True)
+        entered = _worker_pipeline_gate_dir / 'entered'
+        release = _worker_pipeline_gate_dir / 'release'
+        entered.write_text('entered', encoding='utf-8')
+        write_event('worker', {'event': 'worker_pipeline_gate_entered'})
+        # Hold after worker lease acquisition and before pipeline work so the
+        # concurrent-delivery scenario is independent of transcript content.
+        deadline = time.monotonic() + 60.0
+        while not release.exists():
+            if time.monotonic() >= deadline:
+                raise RuntimeError('controlled Sync worker pipeline gate timed out')
+            await asyncio.sleep(0.01)
 
     def _local_process_conversation(
         uid: str,
@@ -293,7 +321,6 @@ elif ROLE == 'worker':
         conversation_id = getattr(conversation, 'id', None)
         if not isinstance(conversation_id, str) or not conversation_id:
             raise ValueError('Sync stack processor requires a durable conversation id')
-        _wait_for_process_gate(conversation_id)
         effective_language = language_code or language or 'en'
         started_at = getattr(conversation, 'started_at', None) or datetime.now(timezone.utc)
         finished_at = getattr(conversation, 'finished_at', None) or started_at
@@ -334,9 +361,6 @@ elif ROLE == 'worker':
         write_event('providers', {'event': 'conversation_persisted', 'conversation_id': completed.id})
         return completed
 
-    def _delete_segment_blob_immediately(path: str, *_args: Any, **_kwargs: Any) -> None:
-        sync_pipeline.delete_syncing_temporal_file(path)
-
     _original_delete_staged_blobs_async = sync_router._delete_staged_blobs_async
     _original_run_full_pipeline = sync_router._run_full_pipeline_background_async
     _original_mark_sync_content_completed = sync_pipeline.mark_sync_content_completed
@@ -347,15 +371,16 @@ elif ROLE == 'worker':
             _worker_failures_remaining -= 1
             write_event('worker', {'event': 'intentional_worker_failure'})
             raise RuntimeError('controlled Sync worker execution failure')
+        await _wait_for_worker_pipeline_gate()
         return await _original_run_full_pipeline(*args, **kwargs)
 
-    async def _delete_staged_blobs_with_controlled_failure(blob_paths: list[str]) -> None:
+    async def _delete_staged_blobs_with_controlled_failure(blob_paths: list[str], **custody) -> None:
         global _cleanup_failures_remaining
         if _cleanup_failures_remaining:
             _cleanup_failures_remaining -= 1
             write_event('jobs', {'event': 'intentional_cleanup_failure', 'blob_count': len(blob_paths)})
             raise RuntimeError('controlled Sync staged-cleanup failure')
-        await _original_delete_staged_blobs_async(blob_paths)
+        await _original_delete_staged_blobs_async(blob_paths, **custody)
 
     def _mark_sync_content_completed_with_controlled_failure(*args: Any, **kwargs: Any) -> Any:
         global _pre_ledger_failures_remaining, _post_ledger_failures_remaining
@@ -376,8 +401,8 @@ elif ROLE == 'worker':
     sync_pipeline.vad_is_empty = _local_vad
     sync_pipeline.get_prerecorded_service = lambda _language='en': ('parakeet', 'en', 'parakeet')
     sync_pipeline.prerecorded = _local_prerecorded
+    sync_pipeline._download_audio_bytes = read_signed_url
     sync_pipeline.process_conversation = _local_process_conversation
-    sync_pipeline.schedule_syncing_temporal_file_deletion = _delete_segment_blob_immediately
     sync_pipeline.mark_sync_content_completed = _mark_sync_content_completed_with_controlled_failure
     sync_router._run_full_pipeline_background_async = _run_full_pipeline_with_controlled_worker_failure
     sync_router._delete_staged_blobs_async = _delete_staged_blobs_with_controlled_failure

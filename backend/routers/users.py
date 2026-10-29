@@ -22,11 +22,13 @@ from database import (
     llm_usage as llm_usage_db,
     users as users_db,
 )
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from database._client import get_customer_firestore_client
 from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
 from services.users.data_export import iter_user_data_export, iter_user_data_export_streaming
 from services.users.data_export_response import DataExportStreamingResponse
-from services.users.account_deletion import run_deletion_wipe_with_lease, start_account_deletion
+from services.users.account_deletion import run_deletion_wipe_with_lease
+from routers.account_deletion import router as account_deletion_router
 from database.app_review_config import should_hide_subscription_ui
 from database.webhook_health import record_dev_webhook_success
 from database.conversation_scan import conversation_scan_budget, people_stats_scan
@@ -40,6 +42,7 @@ from database.redis_db import (
     enable_user_webhook_db,
     user_webhook_status_db,
     set_user_preferred_app,
+    clear_user_preferred_app,
     set_user_data_protection_level,
     get_generic_cache,
     set_generic_cache,
@@ -48,6 +51,7 @@ from database.redis_db import (
     remove_daily_summary_to_uid,
 )
 
+from utils.storefront_copy import format_money
 from utils.chat_rating_triage import extract_rating_triage_fields, normalize_rating_reason
 from database.users import (
     claim_deletion_wipe_for_task,
@@ -59,7 +63,7 @@ from utils import screen_vector_entitlements
 from utils.observability.fallback import record_fallback
 from config.daily_summary_depth import DEFAULT_DAILY_SUMMARY_DEPTH, DailySummaryDepth
 from utils.sync.held_audio_summary import attach_subscription_held_audio
-from config.stt_cap_dispatch import any_execution_admission_enabled as funded_processing_enabled
+from config.stt_cap_dispatch import any_execution_admission_enabled as funded_processing_enabled, recovery_cohort_admits
 from utils.generated_compute import require_generated_compute, generated_compute_configured
 from models.users import ProcessingBacklog
 from config.stt_provider_policy import supports_live_multilingual_mode
@@ -146,6 +150,13 @@ from utils.other.notifications import (
 from models.notification_message import NotificationMessage
 from models.daily_summary import DailySummariesResponse, DailySummaryResponse
 from utils.daily_summary_search import DAILY_SUMMARY_SEARCH_WINDOW, filter_daily_summaries
+from utils.daily_summary_validation import (
+    DailySummaryUnavailable,
+    read_daily_summary_page,
+    require_daily_summary,
+    validate_daily_summaries,
+)
+from utils.other.daily_recap import delivery_allowed as daily_summary_delivery_allowed
 from utils.memory.learned_today import memories_learned_payload, memory_review_card_block
 from utils.other import endpoints as auth
 from utils.other.list_budget import finish_list_budget
@@ -168,6 +179,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+router.include_router(account_deletion_router)
 
 
 class MigrationRequest(BaseModel):
@@ -296,23 +308,6 @@ def get_user_profile_endpoint(uid: str = Depends(auth.get_current_user_uid)):
         raise HTTPException(status_code=410, detail="User not found")
     profile.setdefault('uid', uid)
     return profile
-
-
-class DeleteAccountRequest(BaseModel):
-    reason: Optional[str] = None
-    reason_details: Optional[str] = None
-
-
-@router.delete('/v1/users/delete-account', tags=['v1'], response_model=UserStatusResponse)
-def delete_account(
-    request: DeleteAccountRequest = DeleteAccountRequest(),
-    uid: str = Depends(auth.get_current_user_uid),
-):
-    try:
-        return start_account_deletion(uid, reason=request.reason, reason_details=request.reason_details)
-    except Exception as e:
-        logger.info(f'delete_account {sanitize(str(e))}')
-        raise HTTPException(status_code=500, detail='Could not delete account. Please try again.')
 
 
 # response_model omitted: include_in_schema=False Cloud Tasks handler; JSONResponse
@@ -1080,6 +1075,18 @@ def set_preferred_app_for_user(
     return {"status": "ok", "message": f"App {app_id_to_set} set as preferred app for user {uid}."}
 
 
+@router.delete('/v1/users/preferences/app', tags=['v1'], response_model=UserStatusResponse)
+def clear_preferred_app_for_user(uid: str = Depends(auth.get_current_user_uid)):
+    """Clears the user's preferred app: future processing uses Omi's own summary. Idempotent."""
+    try:
+        clear_user_preferred_app(uid)
+    except Exception as e:
+        logger.error(f"Failed to clear preferred app in Redis for user {uid}: {type(e).__name__}")
+        raise HTTPException(status_code=500, detail="Failed to clear app preference.")
+
+    return {"status": "ok", "message": "Preferred app cleared."}
+
+
 # **************************************
 # *********** Training Data ************
 # **************************************
@@ -1305,7 +1312,7 @@ def process_waiting_recordings(
     uid: str = Depends(auth.get_current_user_uid),
     idempotency_key: str = Header(..., alias='Idempotency-Key', min_length=8, max_length=128),
 ):
-    if not funded_processing_enabled(uid):
+    if not recovery_cohort_admits(uid) or not funded_processing_enabled(uid):
         raise HTTPException(status_code=404, detail='Not found')
     from utils import processing_backlog
 
@@ -1470,8 +1477,7 @@ def _user_subscription_response(
     words_transcribed_limit = subscription.limits.words_transcribed or 0
     insights_gained_limit = subscription.limits.insights_gained or 0
 
-    # Build available plans. Version-gated: new clients see Operator + Architect,
-    # old clients get legacy plan names. Legacy plans filtered from purchase catalog.
+    # Version-adapt identities, then filter retired plans from the purchase catalog.
     all_definitions = get_paid_plan_definitions()
     if not new_plans_enabled:
         all_definitions = adapt_plans_for_legacy_client(all_definitions)
@@ -1494,7 +1500,7 @@ def _user_subscription_response(
                     PricingOption(
                         id=price_data['id'],
                         title="Monthly",
-                        price_string=f"${price_data['unit_amount'] / 100:.2f}/{price_data['recurring']['interval']}",
+                        price_string=f"{format_money(price_data['unit_amount'], price_data['currency'])}/{price_data['recurring']['interval']}",
                         description="Billed monthly. Cancel anytime.",
                     )
                 )
@@ -1516,7 +1522,7 @@ def _user_subscription_response(
                     PricingOption(
                         id=price_data['id'],
                         title="Annual",
-                        price_string=f"${price_data['unit_amount'] / 100:.2f}/{price_data['recurring']['interval']}",
+                        price_string=f"{format_money(price_data['unit_amount'], price_data['currency'])}/{price_data['recurring']['interval']}",
                         description=definition["annual_description"],
                     )
                 )
@@ -1889,6 +1895,11 @@ def test_daily_summary(
         memories_learned=_memories_learned_payload(uid, conversations, start_date_utc, end_date_utc),
     )
 
+    # Validate before storing or sending anything, as in the shared scheduled/on-demand producer.
+    try:
+        require_daily_summary(summary_data, uid=uid, operation='test_generation_candidate')
+    except DailySummaryUnavailable:
+        raise HTTPException(status_code=502, detail='Daily recap generation returned invalid data') from None
     # Store in database
     summary_id = daily_summaries_db.create_daily_summary(uid, summary_data)
 
@@ -2025,14 +2036,19 @@ class CreateDailySummaryRequest(BaseModel):
 
 @router.get('/v1/users/daily-summaries', tags=['v1'], response_model=DailySummariesResponse)
 def get_daily_summaries(
-    limit: int = Query(30, ge=1, le=100), offset: int = Query(0, ge=0), uid: str = Depends(auth.get_current_user_uid)
+    limit: int = Query(30, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    uid: str = Depends(auth.get_current_user_uid),
+    request: Request = None,
 ):
     """
     Get list of daily summaries for the authenticated user.
     Returns summaries in reverse chronological order.
     """
-    summaries = daily_summaries_db.get_daily_summaries(uid, limit=limit, offset=offset)
-    return {'summaries': summaries}
+    try:
+        return {'summaries': read_daily_summary_page(uid, limit=limit, offset=offset, request=request)}
+    except DailySummaryUnavailable:
+        raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
 
 
 @router.post('/v1/users/daily-summaries', tags=['v1'], response_model=DailySummaryResponse)
@@ -2071,8 +2087,11 @@ def create_user_daily_summary(
 
     date_str = target_date.strftime('%Y-%m-%d')
     existing = daily_summaries_db.get_daily_summary_by_date(uid, date_str)
-    if existing:
-        return existing
+    if existing and daily_summary_delivery_allowed(uid, existing):
+        try:
+            return require_daily_summary(existing, uid=uid, operation='create_existing').model_dump(exclude_unset=True)
+        except DailySummaryUnavailable:
+            raise HTTPException(status_code=503, detail='Stored daily recap data is temporarily unavailable') from None
 
     require_generated_compute(uid, 'daily_summary')
     cooldown_key = f'daily_summary_create:{uid}:{date_str}'
@@ -2083,13 +2102,20 @@ def create_user_daily_summary(
         )
 
     start_date_utc, end_date_utc = local_day_bounds_utc(target_date, time_zone_name)
-    record, declined = generate_daily_summary_on_demand(uid, date_str, start_date_utc, end_date_utc)
+    try:
+        record, declined = generate_daily_summary_on_demand(uid, date_str, start_date_utc, end_date_utc)
+    except DailySummaryUnavailable:
+        raise HTTPException(status_code=502, detail='Daily recap generation returned invalid data') from None
     if record:
+        try:
+            validated = require_daily_summary(record, uid=uid, operation='create_result')
+        except DailySummaryUnavailable:
+            raise HTTPException(status_code=502, detail='Daily recap generation returned invalid data') from None
         # The cooldown exists to rate-limit LLM spend, so it is armed by a generation that
         # happened. Arming it before the call charged the user for attempts that cost nothing
         # and left them 429'd for 30s after a 400 they could have fixed by recording something.
         set_generic_cache(cooldown_key, {'at': datetime.utcnow().isoformat()}, ttl=_REGENERATE_COOLDOWN_SECONDS)
-        return record
+        return validated.model_dump(exclude_unset=True)
 
     if declined == DAILY_SUMMARY_DECLINE_LOCKED:
         # Another writer — almost always the cron for the same day — is mid-generation. That is a
@@ -2115,7 +2141,12 @@ def search_daily_summaries(
     Only the latest 365 summaries are scanned.
     """
     summaries = daily_summaries_db.get_daily_summaries(uid, limit=DAILY_SUMMARY_SEARCH_WINDOW, offset=0)
-    return {'summaries': filter_daily_summaries(summaries, query, limit)}
+    try:
+        valid = validate_daily_summaries(summaries, uid=uid, operation='search')
+    except DailySummaryUnavailable:
+        raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
+    filtered = filter_daily_summaries([item.model_dump() for item in valid], query, limit)
+    return {'summaries': [DailySummaryResponse.model_validate(item) for item in filtered]}
 
 
 @router.get('/v1/users/daily-summaries/{summary_id}', tags=['v1'], response_model=DailySummaryResponse)
@@ -2126,7 +2157,10 @@ def get_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_
     summary = daily_summaries_db.get_daily_summary(uid, summary_id)
     if not summary:
         raise HTTPException(status_code=404, detail='Daily summary not found')
-    return summary
+    try:
+        return require_daily_summary(summary, uid=uid, operation='detail')
+    except DailySummaryUnavailable:
+        raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
 
 
 @router.patch('/v1/users/daily-summaries/{summary_id}/visibility', tags=['v1'], response_model=UserStatusResponse)
@@ -2251,10 +2285,19 @@ def regenerate_daily_summary(
         summary_data['created_at'] = summary['created_at']
     summary_data['regenerated_at'] = datetime.utcnow().isoformat()
 
+    try:
+        validated = require_daily_summary({**summary_data, 'id': summary_id}, uid=uid, operation='regenerate_result')
+    except DailySummaryUnavailable:
+        raise HTTPException(status_code=502, detail='Daily recap generation returned invalid data') from None
     daily_summaries_db.update_daily_summary(uid, summary_id, summary_data)
 
     refreshed = daily_summaries_db.get_daily_summary(uid, summary_id)
-    return refreshed or {**summary_data, 'id': summary_id}
+    if not refreshed:
+        return validated.model_dump(exclude_unset=True)
+    try:
+        return require_daily_summary(refreshed, uid=uid, operation='regenerate_readback').model_dump(exclude_unset=True)
+    except DailySummaryUnavailable:
+        raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
 
 
 @router.get('/v1/daily-summaries/{summary_id}/shared', tags=['v1'], response_model=DailySummaryResponse)
@@ -2265,6 +2308,14 @@ def get_shared_daily_summary(summary_id: str):
     uid = get_daily_summary_uid(summary_id)
     if not uid:
         raise HTTPException(status_code=404, detail='Daily summary not found')
+
+    try:
+        if account_deletion_blocks_user_work(uid):
+            raise HTTPException(status_code=404, detail='Daily summary not found')
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail='Daily summary unavailable') from exc
 
     summary = daily_summaries_db.get_daily_summary(uid, summary_id)
     if not summary or summary.get('visibility') != 'shared':
@@ -2282,7 +2333,12 @@ def get_shared_daily_summary(summary_id: str):
         'decisions_made',
         'knowledge_nuggets',
     }
-    return {k: v for k, v in summary.items() if k in _PUBLIC_FIELDS}
+    try:
+        return require_daily_summary(
+            {k: v for k, v in summary.items() if k in _PUBLIC_FIELDS}, uid=uid, operation='shared'
+        )
+    except DailySummaryUnavailable:
+        raise HTTPException(status_code=404, detail='Daily summary not found') from None
 
 
 # ***********************************

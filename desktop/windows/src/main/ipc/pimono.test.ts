@@ -152,6 +152,81 @@ describe('pimono:setSession — control-plane owner wiring', () => {
     expect(controlPlaneOwnerId()).toBe('account-B')
   })
 
+  it('does not restore an old verified owner after a newer account finishes signing in', async () => {
+    let finish = (_uid: string | null): void => {
+      throw new Error('verification not started')
+    }
+    verify.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    )
+    const old = setSession({ token: 'old-A', desktopApiBase: base })
+    verify.mockResolvedValueOnce('account-B')
+    await setSession({ token: 'new-B', desktopApiBase: base })
+    finish('account-A')
+    await old
+    expect(controlPlaneOwnerId()).toBe('account-B')
+    expect(getAssistantSettingsOwner()).toBe('account-B')
+  })
+
+  it('does not restore an owner when verification finishes after sign-out', async () => {
+    let finish = (_uid: string | null): void => {
+      throw new Error('verification not started')
+    }
+    verify.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    )
+    const old = setSession({ token: 'old-A', desktopApiBase: base })
+    await setSession(null)
+    finish('account-A')
+    await old
+    expect(hasKnownControlPlaneOwner()).toBe(false)
+    expect(getAssistantSettingsOwner()).toBeNull()
+  })
+
+  it('ignores a failed old verification after same-account reauthentication', async () => {
+    let finish = (_uid: string | null): void => {
+      throw new Error('verification not started')
+    }
+    verify.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    )
+    const old = setSession({ token: 'old-A', desktopApiBase: base })
+    verify.mockResolvedValueOnce('account-A')
+    await setSession({ token: 'fresh-A', desktopApiBase: base })
+    finish(null)
+    await old
+    expect(controlPlaneOwnerId()).toBe('account-A')
+    expect(getAssistantSettingsOwner()).toBe('account-A')
+  })
+
+  it('revokes the previous control-plane owner while a replacement credential is being verified', async () => {
+    verify.mockResolvedValueOnce('account-A')
+    await setSession({ token: 'current-A', desktopApiBase: base })
+    let finish = (_uid: string | null): void => {
+      throw new Error('verification not started')
+    }
+    verify.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    )
+    const pending = setSession({ token: 'candidate-B', desktopApiBase: base })
+    expect(hasKnownControlPlaneOwner()).toBe(false)
+    expect(getAssistantSettingsOwner()).toBeNull()
+    finish('account-B')
+    await pending
+  })
+
   it('is host-authoritative — a FORGED token the verifier rejects falls back to default, not a leaked owner', async () => {
     // A valid session SHAPE with a token the verifier rejects (bad sig / unsigned /
     // wrong alg / expired / wrong aud-iss): verify → null, so the owner stays the

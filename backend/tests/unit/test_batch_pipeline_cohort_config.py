@@ -45,6 +45,27 @@ def hosts(config):
     }
 
 
+def test_shadow_controls_ship_off_and_capped_on_every_cloud_run_host(manifest):
+    for config in manifest.values():
+        for service in SERVICES:
+            env = config['cloud_run']['services'][service]['env']
+            assert env['BATCH_PIPELINE_SHADOW_PERCENT']['value'] == '0'
+            assert env['BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR']['value'] == '200'
+
+
+def test_shadow_recovery_role_accepts_its_rendered_gpu_worker_identity(manifest):
+    for stage, config in manifest.items():
+        env = config['cloud_run']['services']['backend-integration']['env']
+        chart = yaml.load(
+            (ROOT / f'charts/batch-pipeline-worker/{stage}_omi_batch-pipeline-worker_values.yaml').read_text(),
+            Loader=yaml.CSafeLoader,
+        )
+        assert env['BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT']['value'] == chart['gcpServiceAccount']
+        assert env['BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE']['value'] == chart['worker']['shadowRecoveryApiUrl']
+        # The other GPU worker RPCs stay closed on the recovery-only role.
+        assert env['BATCH_PIPELINE_WORKER_AUDIENCE']['value'] == ''
+
+
 def test_batch_pipeline_admission_is_configured_without_uid_allowlists(manifest, listen_chart_envs):
     for stage, config in manifest.items():
         for env in hosts(config).values():
@@ -132,7 +153,10 @@ def test_only_always_cpu_integration_host_runs_projection_pump(manifest):
         assert active == (['backend-integration'] if stage == 'prod' else [])
     deploy = (ROOT.parent / '.github/actions/deploy-backend-stack/action.yml').read_text()
     integration = deploy.split('id: deploy-backend-integration', 1)[1].split('id: capture-backend-integration', 1)[0]
-    assert '--no-cpu-throttling' in integration and '--min-instances=3' in integration
+    # 2026-10-24 right-sizing: prod integration stays warm for the projection pump;
+    # the dev project (based-hardware-dev) idles at 0 (lead's live change).
+    integration_min = "--min-instances=${{ inputs.runtime_env == 'prod' && '3' || '0' }}"
+    assert '--no-cpu-throttling' in integration and integration_min in integration
 
 
 def test_policy_identity_storage_and_unit_ceiling_match_chart(manifest):
@@ -146,10 +170,12 @@ def test_policy_identity_storage_and_unit_ceiling_match_chart(manifest):
     for values in hosts(manifest['prod']).values():
         assert values['BUCKET_BATCH_PIPELINE']['value'] == worker['bucket']
         assert int(values['BATCH_PIPELINE_UNIT_SECONDS']['value']) == defaults['worker']['unitSeconds'] == 3600
-    # No CPU host other than the policy target accepts this worker identity.
+    # Normal worker RPCs remain restricted to the policy target. Integration
+    # accepts the same principal only under the separate shadow recovery audience.
     for name, values in hosts(manifest['prod']).items():
         if name != 'backend-sync':
-            assert values['BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT']['value'] == ''
+            expected = worker['gcpServiceAccount'] if name == 'backend-integration' else ''
+            assert values['BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT']['value'] == expected
             assert values['BATCH_PIPELINE_WORKER_AUDIENCE']['value'] == ''
 
 

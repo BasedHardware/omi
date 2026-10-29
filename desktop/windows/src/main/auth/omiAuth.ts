@@ -112,22 +112,18 @@ export function decodeJwtClaims(jwt: string): Record<string, unknown> | null {
 }
 
 /**
- * The Firebase uid from an ID token or custom token (decode, NOT verify).
- *
- * For Firebase custom tokens, `sub` is the minting service account email and
- * the target user identity is placed in the `uid` claim. For Firebase ID tokens,
- * the user identity is in `user_id` or `sub`.
+ * The Firebase uid from an ID token's `user_id`/`sub` claim (decode, NOT verify).
  *
  * Host-authoritative: the uid comes from the credential ITSELF, not from a
  * separate caller-asserted field a renderer could forge. Returns '' when the
  * token is absent or undecodable — callers treat '' as "no known owner" and must
  * fail closed (never fall back to a shared default identity). Shared by every
- * main-side uid-from-token site (omiListen, pi-mono owner wiring, authStore).
+ * main-side uid-from-token site (omiListen, pi-mono owner wiring).
  */
 export function decodeUidFromIdToken(token: string): string {
   const claims = decodeJwtClaims(token)
   if (!claims) return ''
-  const uid = claims.uid ?? claims.user_id ?? claims.sub
+  const uid = claims.user_id ?? claims.sub
   return typeof uid === 'string' ? uid : ''
 }
 

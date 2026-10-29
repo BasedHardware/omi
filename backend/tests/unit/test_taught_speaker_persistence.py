@@ -15,6 +15,7 @@ import pytest
 from database import _client as firestore_client_module
 from database import speaker_learning as speaker_learning_db
 from database import speaker_learning_jobs as speaker_learning_jobs_db
+from database import speaker_auto_enroll
 from database import users
 from routers.listen import speakers
 from utils.audio import AudioRingBuffer
@@ -29,6 +30,7 @@ from datetime import datetime, timezone
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils import speaker_assignment_teaching as teaching_tasks
 from utils import speaker_identification as teaching
+from utils import speaker_learning_jobs
 from utils import speaker_sample, speaker_audio
 
 
@@ -325,8 +327,19 @@ def test_offline_cache_rejects_legacy_and_deleted_profiles(world):
 
 
 def test_mobile_bulk_endpoint_teaches_corrects_and_rejects_foreign_person(world, monkeypatch):
-
     now = datetime(2026, 9, 19, tzinfo=timezone.utc)
+    # The durable command path requires a compatible owner and retained source,
+    # independently of the account's entitlement to automatic person naming.
+    voice = [1.0, *([0.0] * 255)]
+    world.store.rows[('users', 'account-a')] = {
+        'private_cloud_sync_enabled': True,
+        'save_other_voice_profiles': True,
+        'speaker_embedding': [0.0, 1.0, *([0.0] * 254)],
+    }
+    world.store.rows[world.conversation_path]['private_cloud_sync_enabled'] = True
+    monkeypatch.setattr(speaker_auto_enroll, 'get_firestore_client', lambda: world.store)
+    monkeypatch.setattr(speaker_learning_jobs, 'enroll', lambda *args: None)  # No cached vector evidence.
+    monkeypatch.setattr(teaching, 'extract_embedding_from_bytes', lambda *args: np.asarray([voice]))
 
     def deserialize(raw):
         raw = deepcopy(raw)
@@ -353,7 +366,7 @@ def test_mobile_bulk_endpoint_teaches_corrects_and_rejects_foreign_person(world,
         url = '/v1/conversations/teach-1/segments/assign-bulk'
         payload = {'segment_ids': ['s1', 's2'], 'assign_type': 'person_id', 'value': 'person-1'}
         assert client.patch(url, json=payload).status_code == 200
-        assert world.store.rows[world.person_path]['speaker_embedding'] == [1.0, 0.0, 0.0]
+        assert world.store.rows[world.person_path]['speaker_embedding'] == voice
         world.store.rows[('users', 'account-b', 'people', 'foreign-person')] = {'id': 'foreign-person'}
         assert client.patch(url, json={**payload, 'value': 'foreign-person'}).status_code == 404
         assert world.store.rows[world.person_path]['speaker_embedding']
@@ -361,7 +374,7 @@ def test_mobile_bulk_endpoint_teaches_corrects_and_rejects_foreign_person(world,
         assert client.patch(url, json={**payload, 'value': 'person-2'}).status_code == 200
         assert not world.store.rows[world.person_path]['speaker_embedding']
         corrected = world.store.rows[('users', 'account-a', 'people', 'person-2')]
-        assert corrected['speaker_embedding'] == [1.0, 0.0, 0.0]
+        assert corrected['speaker_embedding'] == voice
         assert world.store.rows[world.conversation_path]['transcript_segments'][0]['person_id'] == 'person-2'
         # Free plan end-to-end: manual assignment and teaching above still worked,
         # but a later live session must not auto-identify the non-owner voice, and

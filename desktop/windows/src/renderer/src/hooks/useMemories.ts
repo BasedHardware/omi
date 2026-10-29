@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { omiApi } from '../lib/apiClient'
+import { captureAuthRequestScope, getAuthSessionGeneration } from '../lib/authSessionScope'
 import {
   canonicalLifecycleFromResponse,
   fetchAllMemoriesPaged,
@@ -24,7 +25,10 @@ export type CreateMemoryExtra = { category?: string; tags?: string[] }
 // Read the existing device-scope capability (paired with lifecycle); sort
 // newest-first because the server does not guarantee created_at order.
 async function fetchMemories(): Promise<Memory[]> {
+  const originGeneration = getAuthSessionGeneration()
+  const originUid = getCacheUid()
   const onResponse = (r: MemoriesResponse): void => {
+    if (getAuthSessionGeneration() !== originGeneration || getCacheUid() !== originUid) return
     const lifecycleExposed = canonicalLifecycleFromResponse(r)
     if (lifecycleExposed !== null) cache.canonicalLifecycleExposed = lifecycleExposed
   }
@@ -49,24 +53,47 @@ async function patchMemoryOptimistic(
   apply: (m: Memory) => Memory
 ): Promise<Memory | null> {
   const originUid = getCacheUid()
+  const originGeneration = getAuthSessionGeneration()
+  const isCurrent = (): boolean =>
+    getCacheUid() === originUid && getAuthSessionGeneration() === originGeneration
   const prev = cache.list ?? []
-  publish(prev.map((m) => (m.id === id ? apply(m) : m)))
+  const optimistic = prev.map((m) => (m.id === id ? apply(m) : m))
+  const optimisticRow = optimistic.find((m) => m.id === id)
+  publish(optimistic)
   try {
-    const res = await omiApi.patch(urlPath, { value }, { params: { value } })
+    const res = await omiApi.patch(
+      urlPath,
+      { value },
+      { params: { value }, ...captureAuthRequestScope(originGeneration) }
+    )
+    if (!isCurrent()) throw new Error('Your sign-in changed. Please try again.')
+    const status = (res as { data?: { status?: string } } | undefined)?.data?.status
+    if (status !== undefined && status !== 'ok')
+      throw new Error('The memory edit was not accepted. Please try again.')
     const rawReplacement = (res as { data?: { memory?: unknown } } | undefined)?.data?.memory
     const parsedReplacement = rawReplacement ? parseKnowledgeLedgerMemory(rawReplacement) : null
-    if (parsedReplacement && getCacheUid() === originUid) {
+    if (rawReplacement && !parsedReplacement)
+      throw new Error('The server returned an invalid memory edit.')
+    if (parsedReplacement && isCurrent()) {
       const current = cache.list ?? []
+      const seen = new Set<string>()
       const next = current
         .map((m) => (m.id === id || m.id === parsedReplacement.id ? parsedReplacement : m))
-        .filter((m, idx, arr) => arr.findIndex((x) => x.id === m.id) === idx)
+        .filter((m) => {
+          if (seen.has(m.id)) return false
+          seen.add(m.id)
+          return true
+        })
       publish(next)
     }
     return parsedReplacement
   } catch (e) {
     // Revert only if still the same account — a switch mid-request already reset
     // A's cache, so re-publishing A's `prev` list would stamp it under B.
-    if (getCacheUid() === originUid) publish(prev)
+    if (isCurrent()) {
+      const original = prev.find((m) => m.id === id)
+      if (original) publish((cache.list ?? []).map((m) => (m === optimisticRow ? original : m)))
+    }
     throw e
   }
 }
@@ -106,18 +133,21 @@ export function useMemories(): {
 
     let cancelled = false
     const originUid = getCacheUid()
+    const originGeneration = getAuthSessionGeneration()
+    const isCurrent = (): boolean =>
+      getCacheUid() === originUid && getAuthSessionGeneration() === originGeneration
     ;(async () => {
       try {
         const list = await fetchMemories()
         // Account-switch guard (belt-and-suspenders alongside `cancelled`): drop the
         // publish if the account changed while the fetch was in flight, so it can't
         // write A's memories under B's uid on a future in-place switch.
-        if (!cancelled && getCacheUid() === originUid) {
+        if (!cancelled && isCurrent()) {
           cache.error = null
           publish(list)
         }
       } catch (e) {
-        if (!cancelled) {
+        if (!cancelled && isCurrent()) {
           const msg =
             (e as { response?: { data?: { detail?: string } }; message: string }).response?.data
               ?.detail ?? (e as Error).message
@@ -125,12 +155,12 @@ export function useMemories(): {
           setError(msg)
         }
       } finally {
-        if (!cancelled) {
+        if (!cancelled && isCurrent()) {
           // Only mark the module cache "loaded" if this fetch still belongs to the
           // current account. Otherwise a stale fetch would leave loaded=true with
           // list=null (reset by teardown), so account B would skip its own
           // revalidation (if (cache.loaded) return) and show an empty list.
-          if (getCacheUid() === originUid) cache.loaded = true
+          cache.loaded = true
           setLoading(false)
         }
       }
@@ -147,11 +177,18 @@ export function useMemories(): {
     const text = content.trim()
     if (!text) return
     const originUid = getCacheUid()
-    await omiApi.post('/v3/memories', { content: text, ...extra })
+    const originGeneration = getAuthSessionGeneration()
+    await omiApi.post(
+      '/v3/memories',
+      { content: text, ...extra },
+      captureAuthRequestScope(originGeneration)
+    )
+    if (getCacheUid() !== originUid || getAuthSessionGeneration() !== originGeneration) return
     const list = await fetchMemories()
     // Drop the publish if the account switched while the request was in flight
     // (same guard as the revalidation effect) — never write A's memories under B.
-    if (getCacheUid() === originUid) publish(list)
+    if (getCacheUid() === originUid && getAuthSessionGeneration() === originGeneration)
+      publish(list)
   }
 
   // Edit a memory's content and return any canonical replacement record.
@@ -182,13 +219,15 @@ export function useMemories(): {
   // walk back, only the local list to restore if the request errors.
   const deleteMemory = async (id: string): Promise<void> => {
     const originUid = getCacheUid()
+    const originGeneration = getAuthSessionGeneration()
     const prev = cache.list ?? []
     publish(prev.filter((m) => m.id !== id))
     try {
-      await omiApi.delete(`/v3/memories/${id}`)
+      await omiApi.delete(`/v3/memories/${id}`, captureAuthRequestScope(originGeneration))
     } catch (e) {
       // Same-account revert only — see patchMemoryOptimistic.
-      if (getCacheUid() === originUid) publish(prev)
+      if (getCacheUid() === originUid && getAuthSessionGeneration() === originGeneration)
+        publish(prev)
       throw e
     }
   }
@@ -197,8 +236,10 @@ export function useMemories(): {
   // import so the Memories page and export count reflect the new memories.
   const refresh = async (): Promise<void> => {
     const originUid = getCacheUid()
+    const originGeneration = getAuthSessionGeneration()
     const list = await fetchMemories()
-    if (getCacheUid() === originUid) publish(list)
+    if (getCacheUid() === originUid && getAuthSessionGeneration() === originGeneration)
+      publish(list)
   }
 
   return {

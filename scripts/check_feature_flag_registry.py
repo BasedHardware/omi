@@ -7,9 +7,12 @@ import sys
 from datetime import date
 from pathlib import Path
 
+from feature_flag_parser_defaults import parser_defaults
 from feature_flag_registry import (
     REVIEW_GRACE_DAYS,
+    RAMP_REQUIRED_FROM,
     ROOT,
+    _ramp_applies_to,
     duplicate_declaration_sources,
     extract_action_declarations,
     extract_code_reads,
@@ -29,6 +32,8 @@ AS_OF = re.compile(r"<!-- feature-flag-registry as-of: (\d{4}-\d{2}-\d{2}) -->")
 DUPLICATE_DECLARATION_ALLOWLIST_EXPIRES = date(2026, 11, 20)
 DUPLICATE_DECLARATION_ALLOWLIST = {
     "AUDIO_ARCHIVE_PERCENT",
+    "AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT",
+    "AUDIO_ARCHIVE_STOP_PCM_PERCENT",
     "AUDIO_ARCHIVE_UID_ALLOWLIST",
     "BATCH_LIVE_STT_RETIRE_PERCENT",
     "BATCH_PIPELINE_PERCENT",
@@ -54,8 +59,6 @@ DUPLICATE_DECLARATION_ALLOWLIST = {
     "TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST",
     "TRANSCRIPTION_SHADOW_PERCENT",
     "TRANSCRIPTION_SHADOW_UID_ALLOWLIST",
-    "TRANSLATION_ONDEMAND_COHORT_PERCENT",
-    "TRANSLATION_ONDEMAND_UID_ALLOWLIST",
 }
 # Empty on 2026-10-20: no row is beyond its seven-day grace. Add only an
 # already-overdue row with an expiry and reason; the checker prints it as a
@@ -72,6 +75,21 @@ def check(root: Path, *, check_render: bool = True, as_of: date | None = None) -
         return errors, []
     warnings: list[str] = []
     flags = {entry["key"]: entry for entry in registry["flags"]}
+    for key, expected in parser_defaults(root).items():
+        if key in flags and flags[key]["fail"] != expected:
+            errors.append(f"{key}: fail must be {expected} for the shared boolean parser; regenerate the registry")
+    grandfathered = sum(
+        1
+        for entry in registry["flags"]
+        if _ramp_applies_to(entry) and date.fromisoformat(entry["created"]) < RAMP_REQUIRED_FROM and "ramp" not in entry
+    )
+    if grandfathered:
+        warnings.append(
+            f"WARNING: {grandfathered} grandfathered pending/undecided rollout rows lack ramp "
+            f"(created before {RAMP_REQUIRED_FROM.isoformat()})"
+        )
+    else:
+        warnings.append(f"Grandfathered pending/undecided rollout rows without ramp: 0 (cutoff {RAMP_REQUIRED_FROM})")
     alias_to_key = {alias: entry["key"] for entry in registry["flags"] for alias in entry.get("aliases", [])}
     ignored = {entry["key"] for entry in registry["ignore"]}
     retired = {entry["key"] for entry in registry["retired"]}

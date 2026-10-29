@@ -382,7 +382,8 @@ The CLI is built so an LLM can use it without a wrapper:
 * `--json` returns valid JSON to stdout. Nothing else writes to stdout in JSON
   mode (errors go to stderr as `{"error": "...", "detail": "..."}`).
 * `--timeout SECONDS` bounds individual HTTP operations against the Developer
-  API (retries/backoff may exceed this limit; defaults to 30s read/write, 10s connect).
+  API and the local Desktop API (retries/backoff may exceed this limit; defaults to
+  30s read/write, 10s connect).
 * Use `omi --json version` for a machine-readable version object
   (`{"version": "..."}`). `omi version` and the eager `omi --version` flag
   retain their plain-text output.
@@ -399,6 +400,16 @@ The CLI is built so an LLM can use it without a wrapper:
 
 See [`examples/agent_quickstart.md`](examples/agent_quickstart.md) for a worked
 example.
+
+### Common result types
+
+JSON output encodes dates and datetimes as ISO 8601 strings, filesystem paths
+and UUIDs as strings, and sets/frozensets as arrays. Set members keep their JSON
+value types, including numbers, booleans and tuple members encoded as arrays.
+Set arrays are sorted by each member's JSON representation for reproducible
+output; this is not numeric or insertion order. The same conversion applies
+inside nested mappings and Pydantic models. Pretty table cells show set members
+in deterministic display order and keep their text literal.
 
 ## Rate limits
 

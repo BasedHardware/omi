@@ -32,6 +32,8 @@ import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/services/telemetry/client_telemetry_flags.dart';
 import 'package:omi/utils/analytics/background_checkpoint_store.dart';
 
+part 'analytics_flag_reader.dart';
+
 enum ProductErrorKind { flutterFramework, uncaughtDart, startup }
 
 class AnalyticsManager {
@@ -87,6 +89,10 @@ class AnalyticsManager {
   static bool get trackingEnabled => _trackingEnabled;
   static final ValueNotifier<bool> _trackingConsent = ValueNotifier(true);
   static ValueListenable<bool> get trackingConsent => _trackingConsent;
+  static final ValueNotifier<String?> _settledIdentity = ValueNotifier(null);
+
+  /// The SDK distinct id once an identity settles; null while one settles or tracking is off.
+  static ValueListenable<String?> get settledIdentity => _settledIdentity;
   static String? get currentIdentity => _boundIdentity;
   static String get appBuild => _globalEventProperties['app_build']?.toString() ?? 'unknown';
   static bool get deviceHealthRecordingEnabled => _trackingEnabled && (!_identityKnown || _boundIdentity != null);
@@ -155,6 +161,7 @@ class AnalyticsManager {
   }
 
   static void _notifyIdentity(String? distinctId, bool enabled) {
+    _settledIdentity.value = enabled ? distinctId : null;
     identityChanged?.call(distinctId, enabled);
   }
 
@@ -332,6 +339,7 @@ class AnalyticsManager {
     _trackingConsent.value = true;
     _clientAppNamespace = 'unknown';
     _settledDistinctId = null;
+    _settledIdentity.value = null;
     _identityEpoch++;
     _boundIdentity = null;
     _identityKnown = false;
@@ -565,23 +573,6 @@ class AnalyticsManager {
     _setUserPropertiesBatch({'\$name': _preferences.fullName, '\$email': _preferences.email});
   }
 
-  /// One fenced read per flag value: no adapter/identity, tracking off or an identity switch mid-read → null.
-  Future<T?> _readFlag<T>(Future<T> Function(AnalyticsFeatureFlagAdapter adapter) read,
-      {Duration timeout = _initTimeout}) async {
-    final adapter = _adapter;
-    if (adapter == null || !adapter.isInitialized || !_trackingEnabled || _settledDistinctId == null) return null;
-    if (adapter is! AnalyticsFeatureFlagAdapter) return null;
-    final epoch = _identityEpoch;
-    final identity = _settledDistinctId;
-    try {
-      final value = await read(adapter as AnalyticsFeatureFlagAdapter).timeout(timeout);
-      if (epoch != _identityEpoch || !identical(identity, _settledDistinctId) || !_trackingEnabled) return null;
-      return value;
-    } catch (_) {
-      return null;
-    }
-  }
-
   /// Off-path refresh allows the adapter's four-second request to settle.
   Future<bool> refreshBooleanFeatureFlag(String key) async =>
       await _readFlag((a) async {
@@ -605,7 +596,13 @@ class AnalyticsManager {
           : Future.value(false)) ??
       false;
 
-  Future<bool> isFeatureEnabled(String key) async => await _readFlag((a) => a.isFeatureEnabled(key)) ?? false;
+  Future<bool> isFeatureEnabled(String key, {bool fallback = false}) async =>
+      await _readFlag<bool?>((a) => fallback
+          ? (a is AnalyticsResolvedFlagAdapter
+              ? (a as AnalyticsResolvedFlagAdapter).resolvedFeatureEnabled(key)
+              : Future<bool?>.value(null))
+          : a.isFeatureEnabled(key)) ??
+      fallback;
   Future<Object?> getFeatureFlagPayload(String key) => _readFlag<Object?>((a) => a.getFeatureFlagPayload(key));
   Future<String?> getFeatureFlagVariant(String key) => _readFlag<String?>((a) => a.getFeatureFlagVariant(key));
 
@@ -2799,11 +2796,6 @@ class AnalyticsManager {
       properties: {'hour_24': hour, 'hour_12': hour12, 'period': period, 'display_time': '$hour12:00 $period'},
     );
     setUserProperty('Daily Summary Hour', hour);
-  }
-
-  /// Shape-only dimensions: no advice, source identities or arbitrary producer text.
-  void proactivityOutcome({required String action, required String channel, required String surface}) {
-    track('proactivity_v2_outcome', properties: {'action': action, 'channel': channel, 'surface': surface});
   }
 
   void dailySummaryDetailViewed({required String summaryId, required String date, String? source}) {

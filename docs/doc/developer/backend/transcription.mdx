@@ -57,6 +57,16 @@ transcribed, that explicit selection keeps the conversation visible, including
 short recordings. Silence or an empty transcription creates no conversation.
 Automatic offline fallback recordings still follow the usual relevance policy.
 
+## Speaker identities and display labels
+
+A transcript's `speaker_id` is a storage and speaker-correction key, not a person's
+name or a participant count. Keep it unchanged when sending speaker corrections.
+For user-facing text, resolve speaker names from the complete conversation before
+selecting an excerpt: the owner, named people, then small labels for unnamed voices.
+Unresolved voices do not count as people; excess unnamed voices may be grouped as
+“Others” when diarization splits one voice into too many clusters. MCP transcript
+responses use opaque display voice keys rather than raw diarization IDs.
+
 ## WebSocket Endpoint
 
 <Warning>
@@ -165,12 +175,12 @@ All audio is internally converted to 16-bit linear PCM before being sent to STT 
 The canonical provider/surface matrix and default model order live in
 `backend/config/stt_provider_policy.py`. The deployment validator requires
 `STT_SERVICE_MODELS` and `STT_PRERECORDED_MODEL` to match that code-owned
-policy; an environment edit cannot re-enable hosted Deepgram. The normal serving
-defaults are `modulate-velma-2,parakeet`. Self-hosted Deepgram is a distinct,
-streaming-only provider that requires `DEEPGRAM_SELF_HOSTED_ENABLED=true` and a
-non-cloud `DEEPGRAM_SELF_HOSTED_URL`; it is never a fallback to
-`api.deepgram.com`. If no supported provider can serve a language, the request
-fails closed.
+policy; an environment edit cannot re-enable a retired provider. The normal serving
+defaults are `modulate-velma-2,soniox,parakeet`. Deepgram is retired
+(2026-08-27, no contract): it is absent from the provider policy, a `dg-*` slot
+in `STT_SERVICE_MODELS` logs a startup error and is skipped at selection, and
+the pre-recorded Deepgram client raises. Do not route to Deepgram or add keys.
+If no supported provider can serve a language, the request fails closed.
 
 Managed live connections can use a declarative target registry to select the
 cheapest capable endpoint within its rollout share and capacity. Shared health
@@ -335,12 +345,11 @@ Retire those public endpoints only after they show no `/v4/listen` traffic.
 
 ## Serving STT Configuration
 
-Serving revisions use `HOSTED_PARAKEET_API_URL` for Parakeet and
-`MODULATE_API_KEY` for Modulate. Both are required because the selected
-provider depends on language capability. The retained self-hosted Deepgram
-deployment uses `DEEPGRAM_API_KEY`, `DEEPGRAM_SELF_HOSTED_ENABLED`, and
-`DEEPGRAM_SELF_HOSTED_URL` only in its explicitly configured GKE workload;
-hosted Deepgram is disabled.
+Serving revisions use `HOSTED_PARAKEET_API_URL` for Parakeet,
+`MODULATE_API_KEY` for Modulate, and `SONIOX_API_KEY` for Soniox; all are
+required because the selected provider depends on language capability.
+Deepgram is retired (2026-08-27): no `DEEPGRAM_*` env exists on serving
+workloads, and the self-hosted chart is deleted.
 
 ## External Custom STT Service
 
@@ -815,3 +824,17 @@ PTT, multi-channel, custom STT and BYOK stay outside this rollout. Provider chan
 retain session-relative audio timestamps and separate speaker epochs. Detailed
 controls, capacity arithmetic and rollback are in
 [`backend/docs/operational/windowed-live-stt.md`](https://github.com/BasedHardware/omi/blob/main/backend/docs/operational/windowed-live-stt.md).
+
+### Committed capture and continuation uploads
+
+First-party capture clients can receive `capture_committed` events after transcript
+and source-frame coverage are durable. A receipt identifies a capture stream and
+an exact frame interval; transport acknowledgement alone does not establish a
+saved transcript. Clients retain audio when identity or interval coverage is
+unknown.
+
+Long on-device transcripts can use indexed continuation chunks sharing one client
+session identity. Chunks are immutable while staged, retries are idempotent, and
+incomplete assembly does not create a completed conversation. Clients must retain
+retryable audio when continuation or exact frame admission is unavailable. These
+capabilities are additive and depend on server/client rollout support.

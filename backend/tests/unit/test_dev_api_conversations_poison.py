@@ -8,8 +8,10 @@ import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
@@ -265,3 +267,107 @@ def test_update_conversation_request_null_title_means_unchanged():
     request = developer_module.UpdateConversationRequest.model_validate({'title': None, 'discarded': True})
     assert request.title is None
     assert request.discarded is True
+
+
+def _create_from_text(body):
+    captured = []
+
+    def process(_uid, _language, conversation):
+        captured.append(conversation)
+        return SimpleNamespace(id='c1', status=None, discarded=False, processing_deferred=False)
+
+    with patch.object(developer_module, 'process_conversation', process), patch.object(
+        developer_module, 'resolve_geolocation', lambda _geolocation: None
+    ):
+        response = _build().post('/v1/dev/user/conversations', json={'text': 'hello there', **body})
+    return response, captured
+
+
+@pytest.mark.parametrize(
+    'body, finished_at',
+    [
+        # started_at defaults to now (aware), so the naive finish has to be in the future.
+        ({'finished_at': '2099-01-01T00:10:00'}, datetime(2099, 1, 1, 0, 10, tzinfo=timezone.utc)),
+        (
+            {'started_at': '2026-01-01T00:00:00', 'finished_at': '2026-01-01T00:10:00Z'},
+            datetime(2026, 1, 1, 0, 10, tzinfo=timezone.utc),
+        ),
+        (
+            {'started_at': '2026-01-01T00:00:00Z', 'finished_at': '2026-01-01T00:10:00'},
+            datetime(2026, 1, 1, 0, 10, tzinfo=timezone.utc),
+        ),
+    ],
+)
+def test_create_from_text_reads_a_timestamp_without_an_offset_as_utc(body, finished_at):
+    # A naive timestamp next to an aware one (or the aware started_at default) made the handler's
+    # finished_at < started_at check raise TypeError, an HTTP 500. Naive values are read as UTC.
+    response, captured = _create_from_text(body)
+
+    assert response.status_code == 200
+    assert captured[0].finished_at == finished_at
+
+
+def test_create_from_text_keeps_accepting_two_naive_timestamps_as_utc():
+    response, captured = _create_from_text({'started_at': '2026-01-01T00:00:00', 'finished_at': '2026-01-01T00:10:00'})
+
+    assert response.status_code == 200
+    assert captured[0].started_at == datetime(2026, 1, 1, tzinfo=timezone.utc)
+    assert captured[0].finished_at == datetime(2026, 1, 1, 0, 10, tzinfo=timezone.utc)
+
+
+def test_create_from_text_still_rejects_a_finish_before_the_start():
+    response, captured = _create_from_text({'started_at': '2026-01-01T00:10:00', 'finished_at': '2026-01-01T00:00:00Z'})
+
+    assert response.status_code == 422
+    assert captured == []
+
+
+@pytest.mark.parametrize('detail', [False, True])
+def test_developer_api_preserves_joinable_ids_and_real_owner_name(monkeypatch, detail):
+    from utils.conversations import render
+    from dependencies import get_auth_with_conversation_detail_read
+
+    conversation = _valid('wire')
+    conversation['transcript_segments'] = [
+        {'id': 's1', 'speaker': 'SPEAKER_0', 'speaker_id': 0, 'is_user': True, 'text': 'Hello', 'start': 0, 'end': 1},
+        {
+            'id': 's2',
+            'speaker': 'SPEAKER_379',
+            'speaker_id': 379,
+            'person_id': 'p1',
+            'is_user': False,
+            'text': 'Hi',
+            'start': 1,
+            'end': 2,
+        },
+        {
+            'id': 's3',
+            'speaker': 'SPEAKER_380',
+            'speaker_id': 380,
+            'is_user': False,
+            'text': 'An unknown voice',
+            'start': 2,
+            'end': 3,
+        },
+    ]
+    monkeypatch.setattr(render, 'get_user_name', lambda *a, **k: 'David Zhang')
+    monkeypatch.setattr(render.users_db, 'get_people_by_ids', lambda *a, **k: [{'id': 'p1', 'name': 'Phong'}])
+    monkeypatch.setattr(developer_module, 'populate_folder_names', lambda *a, **k: None)
+    monkeypatch.setattr(developer_module, 'populate_speaker_names', render.populate_speaker_names)
+    client = _build()
+    client.app.dependency_overrides[get_auth_with_conversation_detail_read] = _read_auth
+    if detail:
+        monkeypatch.setattr(conversations_db, 'get_conversation', lambda *a, **k: conversation)
+        response = client.get('/v1/dev/user/conversations/wire?include_transcript=true')
+    else:
+        monkeypatch.setattr(conversations_db, 'get_conversations_without_photos', lambda *a, **k: [conversation])
+        response = client.get('/v1/dev/user/conversations?include_transcript=true')
+    assert response.status_code == 200, response.text
+    body = response.json() if detail else response.json()[0]
+    assert body['participants'] == [
+        {'speaker_id': 0, 'person_id': None, 'is_user': True},
+        {'speaker_id': 379, 'person_id': 'p1', 'is_user': False},
+        {'speaker_id': 380, 'person_id': None, 'is_user': False},
+    ]
+    assert [row['speaker_id'] for row in body['transcript_segments']] == [0, 379, 380]
+    assert [row['speaker_name'] for row in body['transcript_segments']] == ['David Zhang', 'Phong', 'Speaker A']

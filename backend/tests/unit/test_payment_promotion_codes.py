@@ -272,6 +272,9 @@ def _setup_payment_module(include_client: bool = True) -> Any:
 
     sub_mod = sys.modules["utils.subscription"]
     sub_mod.can_user_make_payment = MagicMock(return_value=(True, None))
+    # Checkout's new-buyer single-plan guard is a no-op here: these tests are
+    # about promotion codes, and `price_123` is not a real plan price.
+    sub_mod.new_buyer_single_plan_violation = MagicMock(return_value=None)
     sub_mod.get_basic_plan_limits = MagicMock()
     sub_mod.get_paid_plan_definitions = MagicMock()
     sub_mod.get_plan_type_from_price_id = MagicMock()
@@ -285,6 +288,7 @@ def _setup_payment_module(include_client: bool = True) -> Any:
     sub_mod.find_active_paid_subscription_for_user = MagicMock()
     sub_mod.price_ids_match_plan_and_interval = MagicMock(return_value=True)
     sub_mod.desktop_to_consumer_plan_change_error = MagicMock(return_value=None)
+    sub_mod.retired_plan_change_error = MagicMock(return_value=None)
 
     fallback_mod = types.ModuleType("utils.observability.fallback")
     fallback_mod.record_fallback = MagicMock()
@@ -302,6 +306,7 @@ def _setup_payment_module(include_client: bool = True) -> Any:
 
     stripe_utils_mod = sys.modules["utils.stripe"]
     stripe_utils_mod.base_url = "http://test/"
+    stripe_utils_mod.TERMINAL_SUBSCRIPTION_STATUSES = frozenset({'canceled', 'incomplete_expired'})
     stripe_utils_mod.create_subscription_checkout_session = MagicMock()
     stripe_utils_mod.create_connect_account = MagicMock()
     stripe_utils_mod.refresh_connect_account_link = MagicMock()

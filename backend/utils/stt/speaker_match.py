@@ -10,35 +10,24 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from math import isfinite
-from typing import Any, Mapping, Optional, Sequence, TypeVar
+from typing import Any, Callable, Mapping, Optional, Sequence, TypeVar
 
 import numpy as np
 
-# Cosine distance operating point for enrolled-voiceprint verification only.
-#
-# Measured offline on real enrollments (2026-09-07, scripts/speaker_id_bench): the
-# same user's audio from a different session sits at a median distance of 0.40-0.53
-# from their stored voiceprint, while other users sit at 0.93. The former 0.45
-# (taken from a clean-studio VoxCeleb figure) rejected 40-70% of cross-session
-# owner audio at a 0.0% false-accept rate; 0.65 rejects 14-22% at <1% false-accept
-# against random users. Same-session audio matches at either value, which is why
-# the old constant looked fine in demos. In-session clustering has its own policy in
-# speaker_clustering.py and must not silently retune this boundary.
-SPEAKER_MATCH_THRESHOLD = 0.65
+from utils.speakers.policy import (
+    CROSS_EPOCH,
+    LIVE,
+    MATCH_MARGIN,
+    MIN_EVIDENCE_SECONDS,
+    MAX_CLIPS,
+    OWNER_NEAR_MISS_DISTANCE,
+)
 
-# A match must also beat the runner-up voiceprint by at least this much. Raising the
-# threshold alone would confuse the owner with a taught person in a minority of
-# households (owner-vs-own-person distances were measured as low as 0.43); the
-# margin keeps "the nearest is clearly nearest" as a second condition.
-SPEAKER_MATCH_MARGIN = 0.10
-
-# Live sessions decide on a speaker once this much clip audio has been embedded for
-# them (a single long clip, or a few short ones averaged). Two-second clips alone
-# had a 17% equal-error rate in the bench against 10% at five seconds.
-SPEAKER_MATCH_MIN_EVIDENCE_SECONDS = 5.0
-
-# How many recent clips per diarized speaker feed the running centroid.
-SPEAKER_MATCH_MAX_CLIPS = 3
+# Named policy entries preserve the live verification operating point.
+SPEAKER_MATCH_THRESHOLD = LIVE.distance
+SPEAKER_MATCH_MARGIN = MATCH_MARGIN
+SPEAKER_MATCH_MIN_EVIDENCE_SECONDS = MIN_EVIDENCE_SECONDS
+SPEAKER_MATCH_MAX_CLIPS = MAX_CLIPS
 
 
 @dataclass(frozen=True)
@@ -92,10 +81,63 @@ def select_speaker_match(
     )
 
 
+def group_epoch_voices(
+    centroids: Mapping[int, Any],
+    scopes: Mapping[int, str],
+    evidence_seconds: Mapping[int, float],
+    *,
+    distance: Callable[[Any, Any], float],
+) -> dict[int, int]:
+    """Group live owner competitors, never storage IDs or unnamed display labels.
+
+    Require five extracted seconds on both sides, a clear shared-policy margin,
+    and agreement with every peer. Epoch identity itself supplies no evidence;
+    short owner-continuity accepts cannot merge acoustic competition.
+    """
+    vectors = {}
+    for voice, centroid in centroids.items():
+        try:
+            vector = np.asarray(centroid, dtype=np.float32).reshape(1, -1)
+            if vector.size and np.isfinite(vector).all() and float(np.linalg.norm(vector)) > 0:
+                vectors[voice] = vector
+        except (TypeError, ValueError, OverflowError):
+            continue
+    qualified = {
+        voice
+        for voice, seconds in evidence_seconds.items()
+        if isfinite(seconds) and seconds >= MIN_EVIDENCE_SECONDS and voice in vectors
+    }
+    groups: dict[int, int] = {}
+    members: dict[int, list[int]] = {}
+    for voice in centroids:
+        scope = scopes.get(voice)
+        group = voice
+        if scope and voice in qualified:
+            centroid = vectors[voice]
+            distances = {
+                str(representative): max(
+                    distance(centroid, vectors[peer]) if centroid.size == vectors[peer].size else float('inf')
+                    for peer in peers
+                )
+                for representative, peers in members.items()
+                if all(peer in qualified for peer in peers)
+            }
+            # Nearest, not first acceptable. Even same-scope competitors constrain
+            # the margin, but can never become a merge target.
+            decision = select_speaker_match(distances, threshold=CROSS_EPOCH.distance)
+            if decision.person_id is not None:
+                representative = int(decision.person_id)
+                if all(scopes.get(peer) and scopes[peer] != scope for peer in members[representative]):
+                    group = representative
+        groups[voice] = group
+        members.setdefault(group, []).append(voice)
+    return groups
+
+
 # Calibration-only near-miss sweep on production vectors (five repeated,
 # conversation-disjoint two-fold splits) selected 0.70 in every fold. This band
 # changes evidence state only; acceptance remains strictly below 0.65.
-OWNER_NEAR_MISS_THRESHOLD = 0.70
+OWNER_NEAR_MISS_THRESHOLD = OWNER_NEAR_MISS_DISTANCE
 
 
 def owner_near_miss(decision: SpeakerMatchDecision) -> bool:
@@ -124,6 +166,8 @@ def arbitrate_owner_matches(
     margin: float = SPEAKER_MATCH_MARGIN,
     owner_reserved: bool = False,
     voice_groups: Optional[Mapping[SpeakerKey, SpeakerKey]] = None,
+    voice_scopes: Optional[Mapping[SpeakerKey, str]] = None,
+    evidence_seconds: Optional[Mapping[SpeakerKey, float]] = None,
 ) -> dict[SpeakerKey, SpeakerMatchDecision]:
     """Require an owner claim to beat the other *voices*, not just other prints.
 
@@ -135,6 +179,8 @@ def arbitrate_owner_matches(
 
     Callers supply one row per diarized voice with sufficient audio, retain those
     rows for live re-arbitration, and project withdrawn accepts onto old segments.
+    Short continuity voices with known scopes defer cross-scope competition until
+    both reach the grouping evidence floor; same-scope competition remains active.
     This never promotes a failed voiceprint decision or guesses a second identity.
     """
     ranked = sorted(
@@ -148,24 +194,43 @@ def arbitrate_owner_matches(
         ),
         key=lambda item: item[0],
     )
-    winner = None
-    if ranked and not owner_reserved:
-        best, key = ranked[0]
-        competing = next(
-            (
-                distance
-                for distance, other in ranked[1:]
-                if voice_groups is None or voice_groups.get(other, other) != voice_groups.get(key, key)
-            ),
-            float('inf'),
+    # Group scores retain the strongest evidenced owner claim in each acoustic
+    # group. A short continuity accept remains a separate, provisional group.
+    groups: dict[SpeakerKey, list[SpeakerKey]] = {}
+    scores: dict[SpeakerKey, float] = {}
+    for distance, key in ranked:
+        group = voice_groups.get(key, key) if voice_groups is not None else key
+        groups.setdefault(group, []).append(key)
+        scores.setdefault(group, distance)
+
+    def competes(left: SpeakerKey, right: SpeakerKey) -> bool:
+        if voice_scopes is None or evidence_seconds is None:
+            return True
+        # Only known, different scopes can defer competition. Same-scope voices
+        # and retained competition-only evidence still constrain the owner.
+        return any(
+            not voice_scopes.get(a)
+            or not voice_scopes.get(b)
+            or voice_scopes[a] == voice_scopes[b]
+            or (
+                not 0 <= evidence_seconds.get(a, float('inf')) < MIN_EVIDENCE_SECONDS
+                and not 0 <= evidence_seconds.get(b, float('inf')) < MIN_EVIDENCE_SECONDS
+            )
+            for a in groups[left]
+            for b in groups[right]
         )
-        if competing - best >= margin:
-            winner = voice_groups.get(key, key) if voice_groups is not None else key
+
+    winners = {
+        group
+        for group, best in scores.items()
+        if not owner_reserved
+        and all(other - best >= margin for peer, other in scores.items() if peer != group and competes(group, peer))
+    }
     return {
         key: (
             replace(decision, person_id=None, owner_contended=True)
             if decision.person_id == 'user'
-            and (voice_groups.get(key, key) if voice_groups is not None else key) != winner
+            and (voice_groups.get(key, key) if voice_groups is not None else key) not in winners
             else decision
         )
         for key, decision in decisions.items()

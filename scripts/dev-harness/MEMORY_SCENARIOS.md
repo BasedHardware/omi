@@ -10,6 +10,10 @@ They are **LOCAL_EMULATOR_DEV** artifacts only:
 - Fixture definitions cannot choose evidence labels and must not be used as dev-cloud proof.
 - Synthetic users include `local_default_user`, `alice`, `bob`, and two Chat-first E2E-only principals; no production UIDs, tokens, credentials, or copied user data are present.
 
+The service environment enables canonical writes with `MEMORY_ENABLED=on` only
+inside the isolated local emulator stack. The retired `MEMORY_MODE` does not
+control intake. This setting is not a deployment or production rollout.
+
 Commands:
 
 ```bash

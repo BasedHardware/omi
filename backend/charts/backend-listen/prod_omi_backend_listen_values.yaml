@@ -17,6 +17,9 @@ image:
 gcpProjectId: based-hardware
 runtimeGcpProjectId: based-hardware
 
+# Reject key credentials even when supplied through protected private values.
+workloadIdentityOnly: true
+
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
 # This is to override the chart name.
@@ -30,9 +33,9 @@ serviceAccount:
   # Automatically mount a ServiceAccount's API credentials?
   automount: true
   # Annotations to add to the service account.
-  # Keyless runtime identity (Workload Identity) that replaces the nik-164
-  # SERVICE_ACCOUNT_JSON key once the key env is removed; while the key env is
-  # present the JSON still wins. Shared by the listen canary deployments.
+  # Keyless runtime identity (Workload Identity), shared by listen canaries.
+  # Do not inject SERVICE_ACCOUNT_JSON or GOOGLE_APPLICATION_CREDENTIALS:
+  # they override ADC and can resurrect a revoked key on the next rollout.
   annotations:
     iam.gke.io/gcp-service-account: backend-listen-runtime@based-hardware.iam.gserviceaccount.com
   # The name of the service account to use.
@@ -90,6 +93,12 @@ envFrom:
   - configMapRef:
       name: prod-omi-backend-config
 
+# NAME: "string" env values the prod listen workflow renders from the
+# protected-environment secret LISTEN_PRIVATE_VALUES_YAML, in the same Helm
+# rollout. Never commit values here. A key replaces the env entry of the same
+# name below (e.g. the STT_CAP_DISPATCH_* defaults).
+privateEnv: {}
+
 env:
   - name: STT_CAP_DISPATCH_ENFORCEMENT
     value: "false"
@@ -121,6 +130,8 @@ env:
     value: "0"
   - name: BATCH_PIPELINE_PERCENT
     value: "0"
+  - name: SERVER_BATCH_ONLY_MOBILE_PERCENT
+    value: "0"
   - name: BATCH_PIPELINE_SERVING_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_WORKER_ENABLED
@@ -139,8 +150,12 @@ env:
     value: "false"
   - name: PLAYBACK_ON_DEMAND_ENABLED
     value: "false"
+  - name: STALE_IN_PROGRESS_RECOVERY_ENABLED
+    value: "true"
   - name: REPEAT_WORK_REVISION_ENABLED
     value: "false"
+  - name: CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
+    value: "true"
   - name: REPEAT_WORK_LLM_VERSION
     value: "2026-10-16-v1"
   - name: SYNC_POLL_BACKOFF_ENABLED
@@ -178,9 +193,9 @@ env:
   - name: BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST
     value: ""
   - name: AUDIO_ARCHIVE_LIVE_ENABLED
-    value: "false"
+    value: "true"
   - name: AUDIO_ARCHIVE_READ_ENABLED
-    value: "false"
+    value: "true"
   - name: AUDIO_ARCHIVE_STOP_PCM_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_SYNC_ENABLED
@@ -193,6 +208,10 @@ env:
     value: "false"
   - name: AUDIO_ARCHIVE_PERCENT
     value: "100"
+  - name: AUDIO_ARCHIVE_STOP_PCM_PERCENT
+    value: "0"
+  - name: AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT
+    value: "0"
   - name: AUDIO_ARCHIVE_UID_ALLOWLIST
     value: ""
   - name: BUCKET_AUDIO_DERIVED
@@ -207,7 +226,7 @@ env:
   - name: FIRESTORE_READ_LEDGER
     value: "1"
   - name: FIRESTORE_READ_LEVERS
-    value: '{"action_items_page":100,"backfill_task_reads":0,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":0,"ledger_purge_coalesce":0,"people_scan_dedupe":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":0}'
+    value: '{"action_items_page":100,"backfill_task_reads":100,"batch_privacy_memoize":0,"candidates_page":100,"canonical_statuses_dedupe":100,"deletion_marker_cache":100,"finjob_candidate_queries":5,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":0,"people_scan_dedupe":100,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100,"usage_month_total":0}'
   - name: FSR_QUEUE_AGE_PUBLISHER
     value: "1"
   - name: FSR_QUEUE_AGE_LEASE_SECONDS
@@ -218,6 +237,8 @@ env:
     value: "300"
   - name: FSR_DELETION_NEGATIVE_TTL_SECONDS
     value: "30"
+  - name: FSR_USAGE_MONTH_TOTAL_EPOCH
+    value: "v1"
   - name: FSR_USAGE_MONTH_TTL_SECONDS
     value: "60"
   - name: FSR_SUBSCRIPTION_TTL_SECONDS
@@ -251,11 +272,7 @@ env:
     value: "true"
   - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
     value: "true"
-  - name: SYNC_ASSIGNMENT_RECOVERY_ENABLED
-    value: "true"
   - name: SYNC_FINALIZE_TARGET_RECOVERY_ENABLED
-    value: "true"
-  - name: LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED
     value: "true"
   - name: CAPTURE_GROUP_CONTAINMENT_MODE
     value: "shadow"
@@ -343,7 +360,7 @@ env:
   - name: DREAM_AGENT_UID_ALLOWLIST
     value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23'
   - name: DREAM_ON_DEMAND_ENABLED
-    value: 'true'
+    value: 'false'
   - name: REVIEW_SURFACE_MODE
     value: "on"
   - name: LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED
@@ -384,8 +401,6 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: MEMORY_V3_CURSOR_SECRET
-  - name: MEMORY_CANONICAL_MAINTENANCE_ENABLED
-    value: "false"
   - name: FAL_KEY
     valueFrom:
       secretKeyRef:
@@ -444,16 +459,6 @@ env:
     value: "true"
   - name: BUCKET_TEMPORAL_SYNC_LOCAL
     value: "syncing-local"
-  - name: GOOGLE_APPLICATION_CREDENTIALS
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: GOOGLE_APPLICATION_CREDENTIALS
-  - name: SERVICE_ACCOUNT_JSON
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: SERVICE_ACCOUNT_JSON
   - name: OMI_CUSTOMER_DATA_PROJECT
     value: "based-hardware"
   - name: HOSTED_PUSHER_API_URL
@@ -543,8 +548,6 @@ env:
     value: "false"
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
-  - name: DEEPGRAM_SELF_HOSTED_ENABLED
-    value: "false"
   - name: STT_RESILIENT_RECONNECT
     value: "false"
   - name: STT_LIVE_DEMAND_ENABLED
@@ -568,7 +571,7 @@ env:
   - name: STT_ROUTING_REDIS_TIMEOUT_SECONDS
     value: "0.075"
   - name: STT_ROUTING_ON_PERCENT
-    value: "90"
+    value: "100"
   - name: STT_ROUTING_TARGETS_JSON
     value: ""
   - name: STT_ROUTING_DISRUPTION_GATE
@@ -577,14 +580,8 @@ env:
     value: "30"
   - name: STT_NO_TEXT_RESCUE_ENABLED
     value: "true"
-  - name: SONIOX_MONTHLY_CEILING_USD
-    value: "10000"
-  - name: SONIOX_ESTIMATED_USD_PER_HOUR
-    value: "0.07537"
   - name: STT_MULTI_LANGUAGE_HINTS
     value: "true"
-  - name: SONIOX_CONTEXT_TERMS
-    value: "false"
   - name: STT_LEARNED_LANGUAGE_PROFILE
     value: "true"
   - name: STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT
@@ -635,20 +632,10 @@ env:
     value: "86400"
   - name: TRANSLATION_NEGATIVE_CACHE_TTL
     value: "21600"
-  - name: TRANSLATION_DEMAND_SHADOW_ENABLED
-    value: "false"
   - name: TRANSLATION_DEMAND_GATE_ENABLED
-    value: "true"
-  - name: TRANSLATION_DEMAND_LEASE_V1_ENABLED
-    value: "true"
-  - name: TRANSLATION_ONDEMAND_GEMINI_ENABLED
     value: "true"
   - name: TRANSLATION_ONOPEN_ENABLED
     value: "true"
-  - name: TRANSLATION_ONDEMAND_COHORT_PERCENT
-    value: "100"
-  - name: TRANSLATION_ONDEMAND_UID_ALLOWLIST
-    value: ""
   - name: TRANSLATION_ONDEMAND_MAX_SEGMENTS
     value: "50"
   - name: TRANSLATION_ONDEMAND_MAX_CHARS
@@ -696,15 +683,24 @@ env:
         key: TWILIO_API_KEY_SECRET
   - name: VAD_GATE_MODE
     value: "active"
+  # D2 edge shadow (plan D): mirror a static uid-hash cohort's raw frames to
+  # listen-edge for decode+VAD agreement. The URL alone mirrors nothing: the
+  # mirror needs EDGE_SHADOW_PERCENT > 0, which stays 0 until the lead ramps
+  # it per the EDGE_SHADOW_PERCENT registry row
+  # (backend/docs/runbooks/edge-shadow-rollout.md).
+  - name: EDGE_SHADOW_URL
+    value: "ws://prod-omi-listen-edge.prod-omi-backend.svc.cluster.local:8080/v1/shadow"
+  # EDGE_SHADOW_TOKEN (sent as x-edge-shadow-token; must match listen-edge's)
+  # is a secret: never committed here, set only through privateEnv
+  # (LISTEN_PRIVATE_VALUES_YAML), which adds the entry at rollout. Unset,
+  # listen sends no token.
+  - name: EDGE_SHADOW_PERCENT
+    value: "0"
   # Audio-timeline v2: one capture coordinate for segments and stored audio.
   # Admits new eligible recordings only (single-channel, server STT);
   # existing v1 sessions and resumed v1 conversations are unaffected.
   - name: AUDIO_TIMELINE_V2
     value: "false"
-  - name: AUDIO_TIMELINE_SPANS
-    value: "true"
-  - name: LIVE_SPEAKER_SPAN_RESOLUTION
-    value: "true"
   - name: LIVE_CAPTURE_WINDOW_RETENTION
     value: 'false'
   - name: LIVE_CAPTURE_WINDOW_STRICT_PROJECTION
@@ -720,10 +716,6 @@ env:
   - name: SONIOX_ORDERED_FINALIZE
     value: "false"
   - name: SONIOX_CAPTURE_AXIS_DIAGNOSTICS
-    value: "true"
-  # S1 capture evidence (dedupe of sync uploads against live audio); mobile sends it only from
-  # builds with --dart-define=CAPTURE_EVIDENCE_V1_DARK_WRITE=true.
-  - name: CAPTURE_EVIDENCE_V1_DARK_WRITE
     value: "true"
   # Fair-use system (PR #5748)
   - name: FAIR_USE_ENABLED
@@ -774,6 +766,8 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: MCP_OAUTH_CLIENTS_JSON
+  - name: LISTEN_QUIET_FINALIZATION_ENABLED
+    value: 'true'
   - name: LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS
     value: "900"
 
@@ -817,7 +811,7 @@ startupProbe:
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
-  minReplicas: 40
+  minReplicas: 30
   maxReplicas: 60
   behavior:
     scaleDown:
@@ -840,11 +834,18 @@ autoscaling:
         value: 5
         periodSeconds: 15
       selectPolicy: Max
-  # targetCPUUtilizationPercentage: 70
+  # D0b: CPU is the primary signal. The HPA takes the max across metrics and
+  # ignores ratios within 10% of target, so 55% acts above ~60% mean CPU. On the
+  # 2026-10-19 incident, mean listen CPU peaked at 0.56-0.65 of request while
+  # the hottest pods saturated, so a 60-70% target would never have fired.
+  targetCPUUtilizationPercentage: 55
   # targetMemoryUtilizationPercentage: 70
   # failedResponseCode: 10
-  requestsPerPod: 10
-  activeConnectionsPerPod: 22
+  # Socket guards stay as secondary metrics so a CPU dip cannot strand
+  # sockets on too few pods. Raised 10->16 and 22->35 together (D0b plan) so
+  # they bind only on connection surges, not at ordinary load.
+  requestsPerPod: 16
+  activeConnectionsPerPod: 35
 
 podDisruptionBudget:
   minAvailable: "80%"

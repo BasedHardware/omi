@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydub import AudioSegment
 
 from config.repeat_work import playback_on_demand
-from utils.other.playback_identity import validate_sources
+from utils.other.playback_identity import resolve_sources, validate_sources
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.executors import postprocess_executor, storage_executor, submit_with_context
 from utils.other.storage import (
@@ -26,6 +26,7 @@ from utils.other.storage import (
     get_merged_audio_signed_url,
     get_or_create_merged_audio,
     get_playback_artifact_signed_url,
+    get_playback_failure_retry_epoch,
     is_playback_unavailable,
     list_audio_chunks,
 )
@@ -198,9 +199,28 @@ def _conversation_audio_urls_entry(
         )
         if stamped == source_fingerprint:
             cached_fingerprint, immutable = source_fingerprint, True
-    if stamped == cached_fingerprint:
+    artifact_fingerprint = (conversation or {}).get('conversation_audio_artifact_fingerprint')
+    current_artifact = (
+        compute_audio_files_fingerprint(
+            audio_files,
+            origin=(conversation or {}).get('started_at') or (conversation or {}).get('created_at'),
+            source_identity=True,
+        )
+        if artifact_fingerprint
+        else None
+    )
+    if stamped == cached_fingerprint and artifact_fingerprint == current_artifact:
         signed_url = get_conversation_playback_signed_url(
-            uid, conversation_id, **({'fingerprint': cached_fingerprint} if immutable else {})
+            uid,
+            conversation_id,
+            **(
+                {
+                    'fingerprint': (conversation or {}).get('conversation_audio_artifact_fingerprint')
+                    or cached_fingerprint
+                }
+                if immutable or (conversation or {}).get('conversation_audio_artifact_fingerprint')
+                else {}
+            ),
         )
         if signed_url:
             return {
@@ -211,8 +231,11 @@ def _conversation_audio_urls_entry(
                 "captured_duration": stamp.get('captured_duration'),
                 "spans": stamp.get('spans', []),
             }
+    retry_epoch = None
     if get_conversation_playback_unavailable_fingerprint(uid, conversation_id) == fingerprint:
-        return {"status": "unavailable", "signed_url": None, "spans": []}
+        retry_epoch = get_playback_failure_retry_epoch(uid, conversation_id, fingerprint=fingerprint)
+        if retry_epoch is None:
+            return {"status": "unavailable", "signed_url": None, "spans": []}
     epoch = (conversation or {}).get('playback_eager_epoch') or (stamped if immutable else None)
     enqueue_conversation_artifact_build(
         uid,
@@ -220,6 +243,7 @@ def _conversation_audio_urls_entry(
         fingerprint,
         caller='sync_urls',
         **({'playback_epoch': epoch} if epoch else {}),
+        **({'recovery_epoch': retry_epoch} if retry_epoch else {}),
     )
     return {"status": "pending", "signed_url": None, "spans": []}
 
@@ -260,14 +284,17 @@ def _get_audio_urls_via_artifacts(
                 }
             )
         elif is_playback_unavailable(uid, conversation_id, audio_file_id):
+            retry_epoch = get_playback_failure_retry_epoch(uid, conversation_id, audio_file_id)
             result.append(
                 {
                     "id": audio_file_id,
-                    "status": "unavailable",
+                    "status": "pending" if retry_epoch else "unavailable",
                     "signed_url": None,
                     "duration": af.get('duration', 0),
                 }
             )
+            if retry_epoch:
+                to_enqueue.append({**af, '_playback_retry_epoch': retry_epoch})
         else:
             result.append(
                 {
@@ -402,6 +429,11 @@ def _get_artifact_download_payload(
     if legacy_data is not None:
         return legacy_data, "audio/wav", "wav"
 
+    if is_playback_unavailable(uid, conversation_id, audio_file_id):
+        retry_epoch = get_playback_failure_retry_epoch(uid, conversation_id, audio_file_id)
+        if retry_epoch is None:
+            raise HTTPException(status_code=404, detail="Audio is unavailable")
+        audio_file = {**audio_file, '_playback_retry_epoch': retry_epoch}
     enqueue_conversation_audio_merge(
         uid,
         conversation_id,
@@ -536,16 +568,33 @@ def download_audio_file_response(
     )
 
 
+def _merge_playback_sources(
+    uid: str, conversation_id: str, timestamps: list[float], selected: list[dict[str, Any]] | None
+) -> bytes:
+    if selected is None:
+        return download_audio_chunks_and_merge(
+            uid, conversation_id, timestamps, fill_gaps=True, sample_rate=AUDIO_SAMPLE_RATE
+        )
+    return download_audio_chunks_and_merge(
+        uid,
+        conversation_id,
+        [chunk['timestamp'] for chunk in selected],
+        fill_gaps=True,
+        sample_rate=AUDIO_SAMPLE_RATE,
+        listed_chunks=selected,
+        strict_sources=True,
+    )
+
+
 def build_playback_artifact(
     uid: str, conversation_id: str, timestamps: list[float], *, source_fingerprint: str | None = None
 ) -> bytes:
     """Merge chunks (download -> decrypt -> decode -> gap-fill) and encode MP3 ~48kbps mono."""
     source = [{'chunk_timestamps': timestamps, 'source_fingerprint': source_fingerprint}]
+    selected = None
     if source_fingerprint:
-        validate_sources(source, list_audio_chunks(uid, conversation_id, source_identity=True))
-    pcm_data = download_audio_chunks_and_merge(
-        uid, conversation_id, timestamps, fill_gaps=True, sample_rate=AUDIO_SAMPLE_RATE
-    )
+        selected = resolve_sources(source[0], list_audio_chunks(uid, conversation_id, source_identity=True))
+    pcm_data = _merge_playback_sources(uid, conversation_id, timestamps, selected)
     if source_fingerprint:
         validate_sources(source, list_audio_chunks(uid, conversation_id, source_identity=True))
     if not pcm_data:
@@ -581,19 +630,19 @@ def build_conversation_playback_artifact(
     """
     parts = sorted(
         [af for af in audio_files if af.get('id') and af.get('chunk_timestamps')],
-        key=lambda af: min(af['chunk_timestamps']),
+        key=lambda af: (min(af['chunk_timestamps']), str(af['id'])),
     )
     verified = (strict_sources or playback_on_demand()) and any(af.get('source_fingerprint') for af in parts)
+    resolved: list[list[dict[str, Any]] | None] = [None] * len(parts)
     if verified:
-        validate_sources(parts, list_audio_chunks(uid, conversation_id, source_identity=True))
+        listing = list_audio_chunks(uid, conversation_id, source_identity=True)
+        resolved = [resolve_sources(af, listing) if af.get('source_fingerprint') else None for af in parts]
     pcm_buf = bytearray()
     spans: list[dict] = []
-    for af in parts:
+    for af, selected in zip(parts, resolved):
         timestamps = sorted(af['chunk_timestamps'])
         try:
-            pcm = download_audio_chunks_and_merge(
-                uid, conversation_id, timestamps, fill_gaps=True, sample_rate=AUDIO_SAMPLE_RATE
-            )
+            pcm = _merge_playback_sources(uid, conversation_id, timestamps, selected)
         except FileNotFoundError:
             if strict_sources or playback_on_demand():
                 raise
@@ -601,10 +650,20 @@ def build_conversation_playback_artifact(
             continue
         if not pcm:
             continue
+        # Chunk keys stay on the raw capture clock; a part whose chunks
+        # persisted their skew-normalized playback start carries the wall
+        # basis the conversation's server-clock started_at actually compares
+        # against (a +N s skewed capture yields wall_offset ~0, not ~N).
+        playback_start = af.get('playback_start')
+        wall_basis = (
+            float(playback_start)
+            if isinstance(playback_start, (int, float)) and not isinstance(playback_start, bool)
+            else timestamps[0]
+        )
         spans.append(
             {
                 'file_id': af['id'],
-                'wall_offset': round(timestamps[0] - started_at_ts, 3),
+                'wall_offset': round(wall_basis - started_at_ts, 3),
                 'artifact_offset': round(len(pcm_buf) / _PCM_BYTES_PER_SECOND, 3),
                 'len': round(len(pcm) / _PCM_BYTES_PER_SECOND, 3),
             }

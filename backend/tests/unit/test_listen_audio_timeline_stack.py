@@ -333,6 +333,8 @@ def gcs(monkeypatch):
 
 @pytest.fixture
 def pusher_env(monkeypatch):
+    # Shared by the historical mixed-version/reconnect probes as well.
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
     audio_files_by_conversation = {}
 
     monkeypatch.setattr(pusher, 'get_audio_bytes_webhook_seconds', lambda uid: None)
@@ -341,7 +343,6 @@ def pusher_env(monkeypatch):
     monkeypatch.setattr(pusher.users_db, 'get_data_protection_level', lambda uid: 'standard')
     monkeypatch.setattr(pusher, 'PUSHER_ACTIVE_WS_CONNECTIONS', MagicMock())
     monkeypatch.setattr(pusher, 'PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS', MagicMock())
-    monkeypatch.setattr(pusher, 'is_audio_merge_dispatch_enabled', lambda: False)
     monkeypatch.setattr(pusher.ReadinessGate, 'is_serving', lambda: True)
     monkeypatch.setattr(pusher, 'schedule_person_voice_learning_retry', lambda *args, **kwargs: None)
     monkeypatch.setattr(pusher, 'run_authorized_person_learning', _async_noop)
@@ -360,11 +361,14 @@ class _Stack:
     """One hermetic listen session wired to real pusher server tasks."""
 
     def __init__(self, monkeypatch, *, v2: bool, conversation_id: str, spans: bool = False):
+        # This fixture models the historical timeline algorithm. Custody's
+        # default-on fault matrix and real ASGI stack are separate gates.
+        monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
         self.clock = {'wall': T0, 'mono': 0.0}
         self.v2 = v2
         self.spans = spans
         monkeypatch.setenv('AUDIO_TIMELINE_V2', 'true' if v2 else 'false')
-        monkeypatch.setenv('AUDIO_TIMELINE_SPANS', 'true' if spans else 'false')
+
         # Control the receiver's arrival observations (module-scoped shim).
         self._real_time_module = receiver_module.time
         receiver_module.time = SimpleNamespace(time=lambda: self.clock['wall'], monotonic=lambda: self.clock['mono'])
@@ -1286,6 +1290,11 @@ def _round3_module(name, relpath):
         capture_output=True,
         text=True,
     ).stdout
+    # Historical red comparisons still exercise the graduated consumer path.
+    source = source.replace(
+        'from config.audio_timeline import live_speaker_span_resolution_enabled',
+        'def live_speaker_span_resolution_enabled(): return True',
+    )
     module = types.ModuleType(name)
     exec(compile(source, relpath, 'exec'), module.__dict__)
     return module
@@ -1454,7 +1463,7 @@ async def test_overlapping_spans_from_two_sockets_refuse_ambiguous_windows(monke
     _patch_stage_io(monkeypatch, stage_module, store, diarizer, uploads)
     if old_stage is not None:
         _patch_stage_io(monkeypatch, old_stage, store, diarizer, uploads)
-    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'true')
+
     monkeypatch.setenv('AUDIO_TIMELINE_V2', 'false')
 
     epoch = datetime.fromtimestamp(0.0, tz=timezone.utc)

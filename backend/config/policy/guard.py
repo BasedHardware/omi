@@ -62,12 +62,9 @@ def env_reads(source):
                         constants[target.id] = node.value.value
     for node in ast.walk(tree):
         key = None
-        if (
-            isinstance(node, ast.Call)
-            and name(node.func) in {'os.getenv', 'os.environ.get', 'os.environ.__getitem__'}
-            and node.args
-        ):
-            key = node.args[0]
+        if isinstance(node, ast.Call) and name(node.func) in {'os.getenv', 'os.environ.get', 'os.environ.__getitem__'}:
+            # getenv(key=...) and environ.get(key=...) read the same name as the positional form.
+            key = node.args[0] if node.args else next((k.value for k in node.keywords if k.arg == 'key'), None)
         elif isinstance(node, ast.Subscript) and isinstance(node.ctx, ast.Load) and name(node.value) == 'os.environ':
             key = node.slice
         if isinstance(key, ast.Constant):
@@ -79,18 +76,21 @@ def env_reads(source):
 # Positive resolution edges: admission or a CAS owner may resolve; every other
 # imported resolver/getter call is rejected, regardless of its directory.
 RESOLUTION_EDGES = {
+    'database/batch_pipeline_shadow.py': {'pin_shadow_recovery'},  # Isolated first-writer shadow recovery CAS.
     'config/batch_pipeline.py': {'*'},  # Legacy/E1b facade; in-tree unit callers use parts.
     'config/batch_live_preview.py': {'*'},  # E2 pre-unit routing.
-    'database/batch_pipeline_policy.py': {'admission_fallback', 'stage_in_transaction'},
+    'database/batch_pipeline_policy.py': {'admission_fallback', 'stage_in_transaction', 'refresh_disabled_recovery'},
     'database/batch_pipeline_intake.py': {'admit'},
     'database/sync_jobs.py': {'create_sync_job', '_pin_legacy_job_policy'},
     'utils/batch_pipeline/intake.py': {'accept_upload'},
-    'utils/batch_pipeline/live.py': {'register_recording'},
+    'utils/batch_pipeline/live.py': {'register_recording', 'reserve_recording'},
+    'utils/conversations/lifecycle.py': {'_reserve_batch_live_capture'},
     'utils/batch_pipeline/live_upload.py': {'registered_record_response'},
     'utils/batch_pipeline/scheduler.py': {'enqueue_in_transaction'},
     'utils/conversations/transcription_shadow.py': {'_run_shadow', '_claim_shadow_owner'},
-    'utils/sync/reprocess.py': {'update', 'claim'},  # First-summary outbox CAS callbacks.
-    'routers/sync.py': {'sync_local_files_v2'},
+    # First-summary outbox CAS callbacks (moved from utils/sync/reprocess.py by C2; reprocess.py is an alias).
+    'utils/enrichment/outbox.py': {'update', 'stamp_claim_policy'},
+    'routers/sync.py': {'sync_local_files', 'sync_local_files_v2'},
     'routers/listen/policy.py': {'initialize_session_policy'},
 }
 SNAPSHOT_GETTERS = {

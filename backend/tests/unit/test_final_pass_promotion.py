@@ -10,9 +10,23 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, St
 
 
 @pytest.mark.parametrize(
-    'fence', ['current', 'corrected', 'revision', 'deleted', 'account_deleting', 'locked', 'flag_off']
+    'fence',
+    [
+        'current',
+        'corrected',
+        'revision',
+        'deleted',
+        'account_deleting',
+        'account_restored',
+        'locked',
+        'flag_off',
+        'rehomed',
+    ],
 )
 def test_promotion_is_atomic_preserves_manual_edits_and_fences_current_revision(monkeypatch, fence):
+    """``rehomed``: the race with a still-live final pass. The upload path moved the owner to
+    batch_sync_v1 while this pass ran; its promotion is refused even at the revision it expects,
+    so batch and the pass never both own the transcript (final_pass_rehome)."""
     uid, cid = 'synthetic-user', 'synthetic-conversation'
     revision = datetime(2026, 1, 1, tzinfo=timezone.utc)
     other = datetime(2026, 1, 2, tzinfo=timezone.utc)
@@ -64,10 +78,14 @@ def test_promotion_is_atomic_preserves_manual_edits_and_fences_current_revision(
         data['deleted'] = True
     if fence == 'locked':
         data['is_locked'] = True
+    if fence == 'rehomed':
+        data['record_lane_owner'] = 'batch_sync_v1'
     path = ('users', uid, 'conversations', cid)
     client = StrictFirestore({path: data})
     if fence == 'account_deleting':
         client.rows[('account_deletions', uid)] = {'status': 'deleting'}
+    elif fence == 'account_restored':
+        client.rows[('account_deletions', uid)] = {'wipe_status': 'cancelled'}
     monkeypatch.setattr(
         StrictFirestoreSnapshot,
         'update_time',
@@ -79,7 +97,7 @@ def test_promotion_is_atomic_preserves_manual_edits_and_fences_current_revision(
     written = db.promote_final_pass_if_current(
         uid, cid, [candidate], expected_updated_at=revision, clock_offset=0, firestore_client=client
     )
-    assert written == (fence in {'current', 'corrected'})
+    assert written == (fence in {'current', 'corrected', 'account_restored'})
     stored = db.prepare_conversation_for_read(client.rows[path], uid)
     if written:
         segment = stored['transcript_segments'][0]

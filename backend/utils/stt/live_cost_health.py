@@ -12,8 +12,9 @@ from abc import ABC, abstractmethod
 from typing import Any, Callable, ContextManager
 
 from config import live_stt_state
+from config.live_stt_resilience import escape_trial_votes_enabled
 from config.live_stt_registry import DEFAULT_TARGETS, Target, registry, assigned
-from utils.stt.live_gate import GateState, begin_trial, transition
+from utils.stt.live_gate import GateState, begin_trial, transition, generation_allows, reset_generation_floor
 from utils.stt.live_metrics import (
     COST_BENCH,
     COST_EVENTS,
@@ -26,6 +27,7 @@ from utils.stt.live_metrics import (
     COST_SETTLEMENTS,
     COST_VOTES,
     COST_ALL_DEGRADED,
+    COST_ESCAPE_VOTES,
     MANAGED_LEGS_OPENED,
     MANAGED_LEGS_SETTLED,
     MANAGED_LEGS_OPEN,
@@ -57,6 +59,19 @@ class _RedisCallFailed(RuntimeError):
 
 class _CostStateContention(RuntimeError):
     """The bounded CAS loop lost all retries without a Redis call failure."""
+
+
+def trial_minimum_share(uid: str, entry: Target) -> int:
+    """Smallest trial stage whose re-entry cohort holds this user (100: none).
+
+    A vote is dropped while ``0 < stage < minimum_share``; 0 admits it at
+    every trial stage (used while the escape serves the user).
+    """
+    if not assigned(uid, entry.id, entry.ramp()):
+        return 100
+    if assigned(uid, 'stt-reentry:' + entry.id, 5):
+        return 5
+    return 25 if assigned(uid, 'stt-reentry:' + entry.id, 25) else 100
 
 
 COST_CACHE_CAP = 4096
@@ -132,7 +147,7 @@ class CostHealthMixin(ABC):
                 failed = provider_observation('text' if reason == 'text' else 'failover', reason)
                 outcome = 'censored' if failed is None else 'provider_failure' if failed else 'success'
                 COST_OBSERVATIONS.labels(target=target.id, outcome=outcome, reason=reason)
-                for boundary in ('client_gone', 'owner_teardown'):
+                for boundary in ('client_gone', 'owner_teardown', 'pod_draining'):
                     COST_IGNORED_DEATHS.labels(target=target.id, reason=reason, boundary=boundary)
                 for path in ('close', 'failover', 'connect'):
                     COST_SETTLEMENTS.labels(target=target.id, outcome=outcome, reason=reason, path=path)
@@ -256,6 +271,45 @@ class CostHealthMixin(ABC):
                 raise CostHealthUnavailable('unread language cost state; restore configured order', states=result)
         return result
 
+    def _effective_stages(self, uid: str, language: str) -> dict[str, int]:
+        """Gate stage of every registry target that could serve this user.
+
+        Mirrors ``live_router.select``'s escape test without capacity: a target
+        counts when it is capable of the language and the user is inside its
+        config ramp. Uses the same conservative global/language view.
+        """
+        try:
+            targets = registry()
+        except (ValueError, TypeError):
+            return {}
+        try:
+            # A malformed ramp (e.g. strict window percent) proves nothing:
+            # keep the cohort-only rule rather than guess an escape.
+            servable = [
+                target for target in targets if target.capable(language) and assigned(uid, target.id, target.ramp())
+            ]
+        except (ValueError, TypeError):
+            return {}
+        now = self._clock()
+        stages: dict[str, int] = {}
+        with self._lock:
+            for target in servable:
+                stage = 100
+                for lang in ('all', language):
+                    key = (target.id, lang)
+                    stage = min(stage, self._cost_view(key, self._cost_is_fresh(key, now)).stage)
+                stages[target.id] = stage
+        return stages
+
+    def cost_stage(self, target: str, language: str) -> int:
+        """Conservative (global/language minimum) gate stage; no side effects."""
+        now = self._clock()
+        with self._lock:
+            return min(
+                self._cost_view((target, lang), self._cost_is_fresh((target, lang), now)).stage
+                for lang in ('all', language)
+            )
+
     def prefer_recovery(self, target: str, language: str) -> None:
         self._check_identity()
         with self._lock:
@@ -293,14 +347,20 @@ class CostHealthMixin(ABC):
         ).inc()
         if failed is None:
             return True
-        minimum_share = (
-            5
-            if assigned(uid, 'stt-reentry:' + target, 5)
-            else 25 if assigned(uid, 'stt-reentry:' + target, 25) else 100
-        )
-        if not assigned(uid, target, entry.ramp()):
-            minimum_share = 100
+        minimum_share = trial_minimum_share(uid, entry)
         now = self._clock()
+        if minimum_share > 0 and escape_trial_votes_enabled() and assigned(uid, target, entry.ramp()):
+            stages = self._effective_stages(uid, language)
+            if stages and all(stage < 100 for stage in stages.values()):
+                # No stage-100 target serves this user: the escape routed
+                # them here regardless of the re-entry cohort, so their
+                # outcome is real trial evidence. Dropping it starved
+                # promotion for hours (2026-10-20: 240 dropped vs 4 counted).
+                if 0 < stages.get(target, 100) < minimum_share:
+                    safe_counter_increment(
+                        COST_ESCAPE_VOTES, metric_name='omi_stt_cost_routing_escape_votes_total', target=target
+                    )
+                minimum_share = 0
         with self._lock:
             for lang in ('all', language):
                 key = (target, lang)
@@ -310,7 +370,11 @@ class CostHealthMixin(ABC):
                     state = cached
                 if 0 < state.stage < minimum_share:
                     continue
-                if generations is None or state.generation == generations.get(lang, state.generation):
+                if generation_allows(
+                    state.generation,
+                    generations.get(lang) if generations is not None else None,
+                    connect=outcome == 'connect_failure',
+                ):
                     updated = transition(state, failed, self._fleet_now(), witness=witness, language_only=lang != 'all')
                     self._cost_local.pop(key, None)
                     self._cost_local[key] = updated
@@ -324,7 +388,14 @@ class CostHealthMixin(ABC):
                         self._cost_event(target, lang, state, updated, failed, local=True)
         self.schedule(
             self._write_cost_result(
-                target, language, failed, generations, witness, minimum_share, expected_identity=identity
+                target,
+                language,
+                failed,
+                generations,
+                witness,
+                minimum_share,
+                connect=outcome == 'connect_failure',
+                expected_identity=identity,
             ),
             write_path='cost_routing_result',
             kind='result',
@@ -473,7 +544,18 @@ class CostHealthMixin(ABC):
                 raise _RedisCallFailed('Redis GET failed') from exc
             if self._check_identity() != identity:
                 raise _IdentityChanged('live STT state identity changed')
-            old = GateState.decode(json.loads(raw)) if raw else GateState()
+            if raw:
+                old = GateState.decode(json.loads(raw))
+            else:
+                # Healthy evidence may expire, but a reset fence must outlive
+                # even long-lived pre-reset sessions and outstanding dials.
+                try:
+                    floor = await self._redis().get(live_stt_state.cost_reset_key(target))
+                except Exception as exc:
+                    raise _RedisCallFailed('Redis reset generation GET failed') from exc
+                if self._check_identity() != identity:
+                    raise _IdentityChanged('live STT state identity changed')
+                old = GateState(generation=reset_generation_floor(floor))
             new = update(old)
             if new == old:
                 with self._lock:
@@ -531,6 +613,7 @@ class CostHealthMixin(ABC):
         witness: str,
         minimum_share: int = 5,
         *,
+        connect: bool = False,
         expected_identity: str | None = None,
     ) -> None:
         write_committed = False
@@ -564,7 +647,9 @@ class CostHealthMixin(ABC):
                     if 0 < state.stage < minimum_share:
                         result = 'stage'
                         return state
-                    if generations is not None and state.generation != generations.get(lang, state.generation):
+                    if not generation_allows(
+                        state.generation, generations.get(lang) if generations is not None else None, connect=connect
+                    ):
                         result = 'generation'
                         return state
                     updated = transition(state, failed, now, witness=witness, language_only=lang != 'all')
@@ -677,15 +762,20 @@ class CostHealthMixin(ABC):
         keys = [key for key in keys if key_targets[key] is not None]
         lease_keys = {key: live_stt_state.cost_lease_key(key_targets[key], key[1]) for key in keys if key in preferred}
         redis_keys = [live_stt_state.cost_key(key_targets[key], key[1]) for key in keys]
+        reset_keys = [live_stt_state.cost_reset_key(target) for target in targets]
 
         async def refresh():
             fleet_now = await self._server_now(identity)
-            values = await self._redis().mget(redis_keys)
+            values = await self._redis().mget([*redis_keys, *reset_keys])
             if self._check_identity() != identity:
                 raise _IdentityChanged('live STT state identity changed')
-            if not isinstance(values, list) or len(values) != len(keys):
+            if not isinstance(values, list) or len(values) != len(keys) + len(reset_keys):
                 raise ValueError('invalid cost gate snapshot')
-            states = {key: GateState.decode(json.loads(raw)) if raw else GateState() for key, raw in zip(keys, values)}
+            floors = {target.id: reset_generation_floor(raw) for target, raw in zip(targets, values[len(keys) :])}
+            states = {
+                key: GateState.decode(json.loads(raw)) if raw else GateState(generation=floors[key[0]])
+                for key, raw in zip(keys, values[: len(keys)])
+            }
             with self._lock:
                 local_benches = {
                     key: state

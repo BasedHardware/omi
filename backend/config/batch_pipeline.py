@@ -1,12 +1,20 @@
 """Default-off batch admission cohort. Existing lane classification stays upstream."""
 
+from config.refactor_switches import default_off as rollout_default_off, default_on as rollout_default_on
+
 from enum import IntEnum
 import math
 import os
 
 from config.rollout_cohorts import rollout_cohort_members
 from typing import Callable, TypeVar
-from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL, normalized_stt_language
+from config.stt_provider_policy import (
+    MODULATE_SUPPORTED_LANGUAGES,
+    PARAKEET_MODEL_BY_SURFACE,
+    PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL,
+    STTServingSurface,
+    normalized_stt_language,
+)
 
 
 class Priority(IntEnum):
@@ -14,6 +22,9 @@ class Priority(IntEnum):
     RECENT = 1
     DEEP = 2
 
+
+# David's fresh bar (2026-10-20): capture lag at most 10 min at upload.
+FRESH_CAPTURE_LAG_SECONDS = 600.0
 
 T = TypeVar('T')
 
@@ -38,8 +49,65 @@ def in_percent_cohort(owner_id: str, percent: float) -> bool:
     return bucket < percent
 
 
+def fresh_gpu_priority_enabled() -> bool:
+    """Ship-on: catch-up audio in the 6 h fresh sync lane leases GPU after fresh uploads.
+
+    The owner's FIFO is per priority, so a backlog sharing FRESH queued that
+    owner's fresh uploads behind it. ``false`` is the kill switch.
+    """
+    return rollout_default_on(
+        'BATCH_PIPELINE_FRESH_GPU_PRIORITY_ENABLED',
+        os.getenv('BATCH_PIPELINE_FRESH_GPU_PRIORITY_ENABLED', 'true').strip().lower() != 'false',
+    )
+
+
+def language_inheritance_enabled() -> bool:
+    """Default-on context inheritance; false restores per-piece detection input."""
+    return rollout_default_on(
+        'BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED',
+        os.getenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', 'true').strip().lower() != 'false',
+    )
+
+
+def language_eligibility_enabled() -> bool:
+    """Kill switch (unset is on; only ``false`` disables it).
+
+    While legacy sync is on, a new sync upload whose conversation-or-user language
+    is a named language the batch Parakeet model cannot serve stays on legacy sync
+    instead of entering batch custody, where the worker language guard would
+    quarantine it. Blank, ``multi`` and unknown languages are unaffected.
+    ``false`` restores admitting those uploads to batch.
+    """
+    return rollout_default_on(
+        'BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED',
+        os.getenv('BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED', 'true').strip().lower() != 'false',
+    )
+
+
+def known_unsupported_batch_language(language: str | None) -> bool:
+    """True only for a recognized language code the batch Parakeet model cannot serve.
+
+    Lead ruling 304254: not English-only admission. Blank, ``multi``, ``auto``,
+    ``und`` and any unrecognized value are unknown, never "known unsupported";
+    only a code an STT provider recognizes (the stored-preference vocabulary)
+    that the prerecorded Parakeet model does not support qualifies.
+    """
+    if not language_eligibility_enabled() or not isinstance(language, str):
+        return False
+    code = normalized_stt_language(language.strip())
+    parakeet = PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL[PARAKEET_MODEL_BY_SURFACE[STTServingSurface.PRERECORDED]]
+    return code in MODULATE_SUPPORTED_LANGUAGES and code not in parakeet
+
+
 def priority_for(lane: str, recording_age_seconds: float | None) -> Priority:
     if lane == 'fresh':
+        if (
+            recording_age_seconds is not None
+            and math.isfinite(recording_age_seconds)
+            and recording_age_seconds > FRESH_CAPTURE_LAG_SECONDS
+            and fresh_gpu_priority_enabled()
+        ):
+            return Priority.RECENT
         return Priority.FRESH
     if lane != 'backfill':
         raise ValueError('unclassified sync lane')
@@ -94,6 +162,10 @@ def shared_live_enabled() -> bool:
 SCHEDULER_SHARDS = 64
 
 
+def shard_spread_enabled() -> bool:
+    return os.getenv('BATCH_SHARD_SPREAD_ENABLED', 'true').strip().lower() != 'false'
+
+
 def scheduler_control_key(hashed_owner: str) -> str:
     """Pure shard identity shared by scheduling and privacy cleanup."""
     return f'scheduler_{int(hashed_owner[:8], 16) % SCHEDULER_SHARDS:02d}'
@@ -120,7 +192,10 @@ def authoritative_labels_enabled() -> bool:
 
 
 def empty_asr_recovery_enabled() -> bool:
-    return os.getenv('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', 'false').lower() == 'true'
+    return rollout_default_off(
+        'BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED',
+        os.getenv('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', 'false').lower() == 'true',
+    )
 
 
 def require_live_target_enabled() -> bool:
@@ -143,13 +218,24 @@ def recovery_enabled_for(owner_id: str) -> bool:
 
 def empty_asr_disposition_enabled() -> bool:
     """Dark strict-VAD disposition; accepted paid intents are never reset."""
-    return os.getenv('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', 'false').strip().lower() == 'true'
+    return rollout_default_off(
+        'BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED',
+        os.getenv('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', 'false').strip().lower() == 'true',
+    )
 
 
 def projection_contention_enabled() -> bool:
     from config.policy import resolve_stage_policy
 
     return resolve_stage_policy('', 'projection').projection_contention
+
+
+def contention_retry_enabled() -> bool:
+    """Retry atomic batch Firestore contention by default; false is the kill switch."""
+    return rollout_default_on(
+        'BATCH_PIPELINE_CONTENTION_RETRY_ENABLED',
+        os.getenv('BATCH_PIPELINE_CONTENTION_RETRY_ENABLED', 'true').strip().lower() != 'false',
+    )
 
 
 def speech_empty_multilingual_enabled() -> bool:
@@ -166,9 +252,11 @@ def terminal_empty_disposition_enabled() -> bool:
 
 def read_only_metrics_enabled() -> bool:
     """A scrape may stop draining only while the supervised drain is enabled."""
-    return (
-        os.getenv('BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED', 'false').strip().lower() == 'true'
-        and os.getenv('BATCH_PIPELINE_SERVING_ENABLED', 'false').strip().lower() == 'true'
+    return rollout_default_off(
+        'BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED',
+        os.getenv('BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED', 'false').strip().lower() == 'true',
+    ) and rollout_default_off(
+        'BATCH_PIPELINE_SERVING_ENABLED', os.getenv('BATCH_PIPELINE_SERVING_ENABLED', 'false').strip().lower() == 'true'
     )
 
 
@@ -180,7 +268,10 @@ def projection_timing_enabled() -> bool:
 
 def worker_silence_disposition_enabled() -> bool:
     """Dark worker-side use of integration's strict local silence evidence."""
-    return os.getenv('BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED', 'false').strip().lower() == 'true'
+    return rollout_default_off(
+        'BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED',
+        os.getenv('BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED', 'false').strip().lower() == 'true',
+    )
 
 
 LONG_SPEECH_HANDOFF_SECONDS = 5.0
@@ -193,12 +284,30 @@ def long_speech_handoff_enabled() -> bool:
     pass and at least LONG_SPEECH_HANDOFF_SECONDS of worker VAD speech, skips the
     padded Parakeet retry and goes straight to quarantine recovery.
     """
-    return os.getenv('BATCH_PIPELINE_LONG_SPEECH_HANDOFF_ENABLED', 'true').strip().lower() != 'false'
+    return rollout_default_on(
+        'BATCH_PIPELINE_LONG_SPEECH_HANDOFF_ENABLED',
+        os.getenv('BATCH_PIPELINE_LONG_SPEECH_HANDOFF_ENABLED', 'true').strip().lower() != 'false',
+    )
+
+
+def second_multilingual_enabled() -> bool:
+    """Kill switch (unset is on; only ``false`` disables it).
+
+    A long-speech handoff unit whose Modulate recovery came back valid-empty gets
+    one Deepgram multilingual call inside the same paid recovery intent.
+    """
+    return rollout_default_on(
+        'BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED',
+        os.getenv('BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED', 'true').strip().lower() != 'false',
+    )
 
 
 def worker_validation_disposition_enabled() -> bool:
     """Ship-on deterministic validation handoff; false restores bounded GPU retries."""
-    return os.getenv('BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED', 'true').strip().lower() == 'true'
+    return rollout_default_on(
+        'BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED',
+        os.getenv('BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED', 'true').strip().lower() == 'true',
+    )
 
 
 def head_priority_enabled() -> bool:
@@ -228,6 +337,32 @@ def recovery_dispatch_batch_size() -> int:
     return value if 1 <= value <= 64 else 16
 
 
+RECOVERY_DISPATCH_INTERVAL_DEFAULT = 5.0
+RECOVERY_DISPATCH_INTERVAL_MAX = 60.0
+
+
+def recovery_dispatch_interval_seconds() -> float:
+    """Ship-on: serving dispatches quarantine recovery on its own short loop.
+
+    The serving pass (maintenance, projection sweep, then a 20 s sleep) left
+    quarantine -> recovery prepared at p50 52 s / p95 97 s in the 5% ramp runs.
+    ``off`` or a value <= 0 is the kill switch: dispatch only from the serving
+    pass. Malformed or out-of-range values keep the default.
+    """
+    raw = os.getenv('BATCH_PIPELINE_RECOVERY_DISPATCH_INTERVAL_SECONDS', '').strip().lower()
+    if not raw:
+        return RECOVERY_DISPATCH_INTERVAL_DEFAULT
+    if raw == 'off':
+        return 0.0
+    try:
+        value = float(raw)
+    except ValueError:
+        return RECOVERY_DISPATCH_INTERVAL_DEFAULT
+    if value <= 0:
+        return 0.0
+    return value if 1 <= value <= RECOVERY_DISPATCH_INTERVAL_MAX else RECOVERY_DISPATCH_INTERVAL_DEFAULT
+
+
 def projection_pagination_enabled() -> bool:
     from config.policy import kill_switch
 
@@ -238,6 +373,89 @@ def owner_chain_projection_enabled() -> bool:
     from config.policy import kill_switch
 
     return kill_switch('BATCH_PIPELINE_OWNER_CHAIN_PROJECTION_ENABLED')
+
+
+def recovered_merge_release_enabled() -> bool:
+    """Kill switch: the post-recovery owner wake commits the recovered unit (and
+    its content's ready siblings) at once past an unready merge head, and the
+    unit itself past the catch-up depth hold, so the wake's chain walk can
+    project it."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_RECOVERED_MERGE_RELEASE_ENABLED')
+
+
+def sweep_owner_chain_enabled() -> bool:
+    """Kill switch: a sweep that advances an owner's head keeps walking that chain."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED')
+
+
+def projection_predecessor_replay_enabled() -> bool:
+    """Kill switch: blocked page successors wake their owner's missing head."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_PROJECTION_PREDECESSOR_REPLAY_ENABLED')
+
+
+def projection_pending_page_enabled() -> bool:
+    """Kill switch: the assignment page holds only pending rows; finishing pages separately."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED')
+
+
+def owner_drain_enabled() -> bool:
+    """Kill switch: a per-process owner drain replaces the sweep-shared walk budget."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_OWNER_DRAIN_ENABLED')
+
+
+def projection_index_deferred_enabled() -> bool:
+    """Kill switch: walks converge search/people-stats after the chain, once per conversation."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_PROJECTION_INDEX_DEFERRED_ENABLED')
+
+
+def held_terminal_status_enabled() -> bool:
+    """Kill switch: an upload whose failures are all settled held units reads `completed`."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_HELD_TERMINAL_STATUS_ENABLED')
+
+
+def held_partial_enabled() -> bool:
+    """Kill switch: an upload whose unprojected units are all held completes as partial on the ledger."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_HELD_PARTIAL_ENABLED')
+
+
+def recovery_policy_refresh_enabled() -> bool:
+    """Kill switch: a recovery-disabled snapshot with no paid intent re-resolves the setting."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_RECOVERY_POLICY_REFRESH_ENABLED')
+
+
+PROJECTION_PREFETCH_DEFAULT = 4
+PROJECTION_PREFETCH_MAX = 8
+
+
+def projection_prefetch_depth() -> int:
+    """Ship-on read-ahead of an owner chain's immutable inputs; ``0`` is the kill switch.
+
+    Malformed or out-of-range values keep the default rather than silently
+    turning the read-ahead off.
+    """
+    try:
+        value = int(os.getenv('BATCH_PIPELINE_PROJECTION_PREFETCH', str(PROJECTION_PREFETCH_DEFAULT)))
+    except ValueError:
+        return PROJECTION_PREFETCH_DEFAULT
+    return value if 0 <= value <= PROJECTION_PREFETCH_MAX else PROJECTION_PREFETCH_DEFAULT
 
 
 WORKER_PIPELINE_DEPTH_DEFAULT = 2
@@ -260,6 +478,22 @@ def worker_pipeline_depth() -> int:
 
 WORKER_IO_CONCURRENCY_DEFAULT = 3
 WORKER_IO_CONCURRENCY_MAX = 8
+
+
+def stage_profiling_enabled() -> bool:
+    """Dedicated-worker per-stage wall-clock histograms (metrics-only).
+
+    Default on only for the ``dev`` stage; ``prod`` and an unset stage stay off.
+    An explicit ``true``/``false`` (also 1/0, on/off, yes/no) overrides the
+    stage default so local/offline can opt in; malformed values fall back to
+    the stage default rather than failing the worker.
+    """
+    raw = os.getenv('BATCH_PIPELINE_STAGE_PROFILING_ENABLED', '').strip().lower()
+    if raw in {'true', '1', 'on', 'yes'}:
+        return True
+    if raw in {'false', '0', 'off', 'no'}:
+        return False
+    return os.getenv('OMI_ENV_STAGE', '').strip().lower() == 'dev'
 
 
 def worker_io_concurrency() -> int:
@@ -292,6 +526,60 @@ def publish_concurrency() -> int:
     except ValueError:
         return 1
     return value if 1 <= value <= MAX_PUBLISH_CONCURRENCY else 1
+
+
+MERGE_HEAD_WAIT_DEFAULT = 60.0
+MERGE_HEAD_WAIT_MAX = 3600.0
+
+
+def merge_head_wait_seconds() -> float:
+    """Ship-on bounded ordered-merge head wait (David, 2026-10-20).
+
+    A row ``result_ready`` for this long commits past an earlier pending head,
+    which later appends as ``late_capture``. ``off`` or a value <= 0 is the
+    kill switch: strict capture order. Malformed or out-of-range values keep
+    the default.
+    """
+    raw = os.getenv('BATCH_PIPELINE_MERGE_HEAD_WAIT_SECONDS', '').strip().lower()
+    if not raw:
+        return MERGE_HEAD_WAIT_DEFAULT
+    if raw == 'off':
+        return 0.0
+    try:
+        value = float(raw)
+    except ValueError:
+        return MERGE_HEAD_WAIT_DEFAULT
+    if value <= 0:
+        return 0.0
+    return value if value <= MERGE_HEAD_WAIT_MAX else MERGE_HEAD_WAIT_DEFAULT
+
+
+MERGE_CATCH_UP_DEPTH_DEFAULT = 16
+MERGE_CATCH_UP_DEPTH_MAX = 1000
+
+
+def merge_catch_up_depth() -> int:
+    """Ship-on fresh-first merge (David's fresh bar, 2026-10-20).
+
+    Fresh uploads (capture ended at most ``FRESH_CAPTURE_LAG_SECONDS`` before
+    admission) commit ahead of the owner's pending catch-up rows, and catch-up
+    commits wait while the owner already has this many committed rows awaiting
+    projection, so a fresh row never queues behind the owner's whole backlog.
+    ``off`` or a value <= 0 is the kill switch: the plain ordered merge.
+    Malformed or out-of-range values keep the default.
+    """
+    raw = os.getenv('BATCH_PIPELINE_MERGE_CATCH_UP_DEPTH', '').strip().lower()
+    if not raw:
+        return MERGE_CATCH_UP_DEPTH_DEFAULT
+    if raw == 'off':
+        return 0
+    try:
+        value = int(raw)
+    except ValueError:
+        return MERGE_CATCH_UP_DEPTH_DEFAULT
+    if value <= 0:
+        return 0
+    return value if value <= MERGE_CATCH_UP_DEPTH_MAX else MERGE_CATCH_UP_DEPTH_DEFAULT
 
 
 RECOVERY_WAKE_LEASE_DEFAULT = 600

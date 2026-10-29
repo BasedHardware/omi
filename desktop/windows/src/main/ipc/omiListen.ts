@@ -13,7 +13,6 @@ import { isSignLanguageEnabled } from './integrations'
 import { ByokKeyStore } from '../agentKernel/byokStore'
 import { isByokActive, withByokHeaders } from '../../shared/byok'
 import { decodeUidFromIdToken } from '../auth/omiAuth'
-import { setAssistantSettingsOwner } from './assistantSettings'
 
 // Lazy so this module stays import-pure (ByokKeyStore's default path needs
 // app.getPath('userData'), only ready after the app is).
@@ -255,15 +254,6 @@ export function getListenStats(): Record<string, { bytes: number; chunks: number
   return out
 }
 
-let proactivityWakeup: ((ownerID: string, payload: Record<string, unknown>) => void) | null = null
-
-/** Main-process consumer reads the feed; socket copy never renders a second card. */
-export function setProactivityWakeupHandler(
-  handler: (ownerID: string, payload: Record<string, unknown>) => void
-): void {
-  proactivityWakeup = handler
-}
-
 function emit(ownerId: number, msg: ListenMessage): void {
   const wc = webContents.fromId(ownerId)
   if (wc && !wc.isDestroyed()) {
@@ -341,10 +331,7 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
     // header). Official docs require `uid` as a query param; backend source reads
     // the token from the Authorization header too — send both.
     const uid = decodeUidFromIdToken(args.token)
-    if (uid) {
-      url = `${base}&uid=${encodeURIComponent(uid)}`
-      setAssistantSettingsOwner(uid)
-    }
+    if (uid) url = `${base}&uid=${encodeURIComponent(uid)}`
   }
   // PTT is header-auth only (no uid query param, matching the macOS client) since
   // there's no per-uid conversation to key.
@@ -464,9 +451,6 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
     }
     if (json && typeof json === 'object' && 'type' in (json as object)) {
       const obj = json as Record<string, unknown>
-      if (!session.closed && mode === 'conversation') {
-        proactivityWakeup?.(decodeUidFromIdToken(args.token) ?? '', obj)
-      }
       const event: ListenEvent = { type: String(obj.type), raw: obj }
       emit(session.ownerId, { sessionId: args.sessionId, kind: 'event', event })
     }

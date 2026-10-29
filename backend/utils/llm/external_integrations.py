@@ -1,3 +1,7 @@
+from utils.daily_summary_read_contract import screen_observation_minutes
+from utils.conversations.relevance_content import exclude_from_derived
+from utils.mcp_data import action_item_source
+import database.screen_activity as screen_activity_db
 from utils.generated_compute import require_generated_compute
 import json
 import re
@@ -8,6 +12,7 @@ import pytz
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import ValidationError
 from config.daily_summary_depth import normalize_daily_summary_depth
+from config.episodes import episode_output_language_pinned
 import database.action_items as action_items_db
 import database.daily_summaries as daily_summaries_db
 import database.goals as goals_db
@@ -21,8 +26,10 @@ from models.other import Person
 from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.location import get_google_maps_location
 from utils.conversations.render import conversations_to_string
+from utils.conversations.owner_attribution import speaker_role_projection
 from utils.llm.clients import get_llm, parser
 from utils.llm.usage_tracker import track_usage, Features
+from utils.llm.output_language import normalize_language, resolve_output_language
 from utils.llms.memory import get_prompt_memories
 from utils.log_sanitizer import sanitize, sanitize_validation_error
 from utils.observability.fallback import record_fallback
@@ -188,6 +195,9 @@ def _basic_daily_summary(
         "knowledge_nuggets": [],
         "memories_learned": list(memories_learned or []),
         "locations": locations,
+        "read_contract_version": 2,
+        "memories_learned_coverage": "bounded_review_selection_max_3_from_600_newest_updated; not all stored memories",
+        "action_items_coverage": "created_in_window",
     }
 
 
@@ -278,9 +288,17 @@ def summarize_experience_text(
 
 
 def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
+    memories = [c for c in memories if not exclude_from_derived(uid, c, consumer='recap')]
+    if not memories:
+        return ''
     require_generated_compute(uid, 'daily_summary_simple')
     user_name, memories_str = get_prompt_memories(uid)
-    user_language = users_db.get_user_language_preference(uid)
+    language_pin_enabled = episode_output_language_pinned()
+    user_language = (
+        resolve_output_language(uid, None)
+        if language_pin_enabled
+        else normalize_language(users_db.get_user_language_preference(uid))
+    )
 
     all_person_ids: List[str] = []
     for m in memories:
@@ -293,9 +311,16 @@ def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
 
     conversation_history = conversations_to_string(memories, people=people)
 
-    language_instruction = ''
-    if user_language and user_language != 'en':
-        language_instruction = f'You MUST respond entirely in {user_language}. Do NOT respond in English.'
+    if language_pin_enabled:
+        language_instruction = (
+            f'Write all output in {user_language}. Keep names and quoted words verbatim; do not switch languages.'
+        )
+    else:
+        language_instruction = (
+            f'You MUST respond entirely in {user_language}. Do NOT respond in English.'
+            if user_language and user_language != 'en'
+            else ''
+        )
 
     prompt = f"""
     You are an experienced mentor, that helps people achieve their goals and improve their lives.
@@ -347,6 +372,9 @@ def generate_comprehensive_daily_summary(
 
     Returns a dictionary matching the DailySummary model structure.
     """
+    conversations = [c for c in conversations if not exclude_from_derived(uid, c, consumer='daily_summary')]
+    if not conversations:
+        return {}
     require_generated_compute(uid, 'daily_summary')
     learned_refs: List[Dict[str, Any]] = list(memories_learned or [])
     # Get user's timezone
@@ -360,7 +388,15 @@ def generate_comprehensive_daily_summary(
     user_name, memories_str = get_prompt_memories(uid)
 
     # Get user's language preference for generating summary in their language
-    output_language = user_profile.get('language', '') or 'en'
+    language_pin_enabled = episode_output_language_pinned()
+    output_language = normalize_language(user_profile.get('language')) or 'en'
+    language_rule = (
+        f'OUTPUT LANGUAGE: {output_language}. Write all output in {output_language}, regardless of the conversation '
+        'languages. Keep names and quoted words verbatim.'
+        if language_pin_enabled
+        else f'OUTPUT LANGUAGE: {output_language}. You MUST write every word of this summary in {output_language}, '
+        'regardless of the language the conversations are in.'
+    )
     depth = normalize_daily_summary_depth(user_profile.get('daily_summary_depth'))
     overview_copy, highlight_copy, depth_rules = _daily_summary_depth_copy(depth)
     question_copy, decision_copy, learning_copy = _daily_summary_entry_examples(depth)
@@ -380,7 +416,15 @@ def generate_comprehensive_daily_summary(
         people_data = users_db.get_people_by_ids(uid, list(set(all_person_ids)))
         people = [Person(**p) for p in people_data]
 
-    conversation_history = conversations_to_string(conversations, people=people)
+    conversation_history = conversations_to_string(conversations, people=people, user_name=user_name)
+    attribution_guidance = (
+        'The inputs are generated conversation notes, titles, tasks and events, not full transcripts. '
+        'Keep who said, experienced, requested or promised each thing separate from who owns the recording. '
+        'Preserve third-party subjects and uncertain attribution. Do not turn an unattributed statement into '
+        f'a fact or commitment about {user_name}, and do not claim to have corrected older notes.'
+        if speaker_role_projection(()) is not None
+        else ''
+    )
 
     # Calculate stats - exclude discarded conversations
     non_discarded = [c for c in conversations if not c.discarded]
@@ -398,15 +442,18 @@ def generate_comprehensive_daily_summary(
     assert stats_start_date_utc is not None and stats_end_date_utc is not None
 
     memories_created = memories_db.count_memories_created(uid, stats_start_date_utc, stats_end_date_utc)
-    action_items_created = len(
-        action_items_db.get_action_items(
-            uid,
-            start_date=stats_start_date_utc,
-            end_date=stats_end_date_utc,
-        )
+    created_action_items = action_items_db.get_action_items(
+        uid,
+        start_date=stats_start_date_utc,
+        end_date=stats_end_date_utc,
     )
+    action_items_created = len(created_action_items)
+    total_conversations = daily_summaries_db.get_day_recording_count(uid, stats_start_date_utc, stats_end_date_utc)
     desktop_usage = daily_summaries_db.get_desktop_daily_usage(uid, date_str)
-    watching_minutes = int(round(desktop_usage.get('watching_seconds', 0) / 60))
+    screen_rows = screen_activity_db.get_screen_activity(
+        uid, start_date=stats_start_date_utc, end_date=stats_end_date_utc, limit=5001
+    )
+    watching_minutes = screen_observation_minutes(screen_rows[:5000], stats_start_date_utc, stats_end_date_utc)
     proactive_moments = desktop_usage.get('proactive_cards_shown', 0)
 
     # Extract ALL locations from non-discarded conversations.
@@ -455,20 +502,18 @@ def generate_comprehensive_daily_summary(
                 }
             )
 
-    # Fetch action items for the specific conversations being summarised.
-    # Querying by conversation_id (not date range) prevents pulling in items whose
-    # async processing happened to land on the same UTC day as an unrelated conversation.
-    actual_action_items: List[Dict[str, Any]] = []
-    for c in non_discarded:
-        for item in action_items_db.get_action_items(uid, conversation_id=c.id):
-            actual_action_items.append(
-                {
-                    "description": item.get("description", ""),
-                    "priority": "high" if item.get("completed") == False else "medium",
-                    "completed": item.get("completed", False),
-                    "source_conversation_id": item.get("conversation_id"),
-                }
-            )
+    # Payload and counters share the exact created-in-window task query.
+    actual_action_items = [
+        {
+            'id': item.get('id'),
+            'description': item.get('description', ''),
+            'priority': 'medium' if item.get('completed') else 'high',
+            'completed': item.get('completed', False),
+            'source_conversation_id': item.get('conversation_id'),
+            'source': action_item_source(item),
+        }
+        for item in created_action_items
+    ]
 
     stats = DailySummaryDayStatsPayload(
         total_conversations=total_conversations,
@@ -478,20 +523,30 @@ def generate_comprehensive_daily_summary(
         action_items_created=action_items_created,
         watching_minutes=watching_minutes,
         proactive_moments=proactive_moments,
+        memories_learned_count=len(learned_refs),
+        watching_minutes_basis="screen_observation_interval_union",
+        watching_coverage=(
+            "truncated_at_5000_observations"
+            if len(screen_rows) > 5000
+            else "synced_observations_only; capture_completeness_unknown"
+        ),
+        reported_device_watching_minutes=int(round(desktop_usage.get("watching_seconds", 0) / 60)),
+        summarized_conversations=len(non_discarded),
     )
 
     # Build conversation ID mapping for the LLM
     convo_id_map = {i + 1: c.id for i, c in enumerate(non_discarded)}
 
     prompt = f"""You are creating a daily summary for {user_name}. {memories_str}
-OUTPUT LANGUAGE: {output_language}. You MUST write every word of this summary in {output_language}, regardless of the language the conversations are in.
+{language_rule}
 
 Today's date: {date_str}
-Conversations: {total_conversations}
+Conversations available for recap: {len(non_discarded)} (total recordings in day: {total_conversations})
 Daily stats: {memories_created} memories created, {action_items_created} action items created, {watching_minutes} minutes watched, {proactive_moments} proactive moments.
 {reflection_context}
 
-Here are {user_name}'s conversations from today (numbered 1-{total_conversations}):
+Here are {user_name}'s conversations from today (numbered 1-{len(non_discarded)}):
+{attribution_guidance}
 ```
 {conversation_history}
 ```
@@ -532,7 +587,7 @@ Generate a JSON response. ONLY include sections with genuinely useful content - 
 
 RULES:
 {depth_rules}
-- conversation_number: Reference which conversation (1-{total_conversations}) it came from.
+- conversation_number: Reference which conversation (1-{len(non_discarded)}) it came from.
 - SKIP sections entirely if no quality content.
 - {tone_rule}
 - OUTPUT LANGUAGE: Every word — headline, overview, highlights, questions, decisions, knowledge nuggets — MUST be in {output_language}. Do not use any other language.
@@ -610,6 +665,9 @@ Respond with ONLY valid JSON. Do not include any other text or comments."""
             "knowledge_nuggets": knowledge_nuggets,
             "memories_learned": learned_refs,
             "locations": locations,
+            "read_contract_version": 2,
+            "memories_learned_coverage": "bounded_review_selection_max_3_from_600_newest_updated; not all stored memories",
+            "action_items_coverage": "created_in_window",
         }
     except json.JSONDecodeError as e:
         logger.error("Failed to decode daily summary payload JSON: %s", sanitize(str(e)))

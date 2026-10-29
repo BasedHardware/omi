@@ -426,8 +426,13 @@ def get_user_goal(uid: str, *, firestore_client: Any = None) -> Optional[Dict[st
 
 
 def get_user_goals(uid: str, limit: int = 3, *, firestore_client: Any = None) -> List[Dict[str, Any]]:
+    if limit <= 0:
+        return []
     collection = _get_db(firestore_client).collection(users_collection).document(uid).collection(goals_collection)
-    query = collection.where(filter=FieldFilter('is_active', '==', True)).limit(limit)
+    # Apply the bound only after the ended-goal filter and oldest-first sort in Python:
+    # pushing .limit(limit) into the unordered Firestore query truncates in document-id
+    # order, dropping active goals behind ended rows or later document ids.
+    query = collection.where(filter=FieldFilter('is_active', '==', True))
     goals = _normalize_goal_documents(query.stream())
     goals = [goal for goal in goals if goal['status'] not in {GoalStatus.achieved.value, GoalStatus.abandoned.value}]
     goals.sort(key=_goal_created_at_sort_key)

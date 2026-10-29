@@ -20,10 +20,6 @@ vi.mock('electron', () => ({
   }
 }))
 
-// Store-only tests do not exercise the assistant IPC/notification graph. The
-// owner-fence integration is covered by assistantSettings.test.ts.
-vi.mock('./assistantSettings', () => ({ setAssistantSettingsOwner: vi.fn() }))
-
 import { safeStorage } from 'electron'
 import { AuthTokenStore } from './authStore'
 

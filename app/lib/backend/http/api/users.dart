@@ -250,7 +250,7 @@ Future webhooksStatus() async {
 Future<bool> deleteAccount({String? reason, String? reasonDetails}) async {
   final hasFeedback = (reason != null && reason.isNotEmpty) || (reasonDetails != null && reasonDetails.isNotEmpty);
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/delete-account',
+    url: '${Env.apiBaseUrl}v1/users/delete-account?grace=true',
     headers: hasFeedback ? {'Content-Type': 'application/json'} : {},
     method: 'DELETE',
     body: hasFeedback ? jsonEncode({'reason': reason, 'reason_details': reasonDetails}) : '',
@@ -580,6 +580,20 @@ Future<bool> setPreferredSummarizationAppServer(String appId) async {
   );
   if (response == null) return false;
   Logger.debug('setPreferredSummarizationAppServer response: ${response.body}');
+  if (response.statusCode != 200) return false;
+  final data = wire.GeneratedUserStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  return data.status == 'ok';
+}
+
+/// Clears the server preferred summary template, so automatic processing uses Omi's own summary.
+Future<bool> clearPreferredSummarizationAppServer() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/preferences/app',
+    headers: {},
+    method: 'DELETE',
+    body: '',
+  );
+  if (response == null) return false;
   if (response.statusCode != 200) return false;
   final data = wire.GeneratedUserStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   return data.status == 'ok';

@@ -6,6 +6,10 @@ rollout. The enforcement cohort deadline remains **2026-10-19 18:00 UTC**; neith
 `STT_CAP_DISPATCH_ENFORCEMENT` nor `LADDER_V1_BUDGET_ENFORCEMENT_ENABLED` is enabled
 by this change.
 
+Held-choice API acceptance and its separate DEC-BTR-005 graduation schedule are
+tracked by the [hermetic acceptance and ramp protocol](held-content-acceptance.md).
+The dated dispatch-enforcement ramp below does not authorize that API rollout.
+
 ## Admission scope and original custody lane
 
 The [cohort/lane contract and dazheng-owned ramp](../stt-cap-dispatch.md#cohort-and-lane-rollout-david-2026-10-18)
@@ -80,10 +84,12 @@ fragment clock layout and is not a qualified reader rollback for those sources.
 A committed `processing_backlog/current` choice is the queue. The sweep never
 calls choose, creates upgrade intent, extends cutoff or adopts a new month. It
 visits existing `state=processing` summaries, then awaits the existing worker
-with up to five owners concurrently on existing executors. Each visit considers
-up to 100 candidates in ten-row audio/text pages, with a monotonic 900-second
-budget checked before each next candidate and frozen audio piece. A reserved
-item resumes first and also obeys the piece budget. No new compute is added. Current reservations are retried before a new page;
+with up to eight owners concurrently on existing executors. Each owner may
+consider up to ten candidates per round for at most 100 rounds (1,000
+candidates), in ten-row audio/text pages, with a monotonic 900-second budget
+checked before each next candidate and frozen audio piece. A reserved item
+resumes first and also obeys the piece budget. No new compute pool is added.
+Current reservations are retried before a new page;
 the existing UID worker lease and per-hold/per-text leases deduplicate concurrent
 sweeps/client paths. The month, chosen estimate, reservation, cursors, allowance
 and abuse checks remain authoritative. A busy or killed worker's 30-minute lease
@@ -95,20 +101,36 @@ listing times; it does not move authorized audio beyond the cutoff. A source
 created after cutoff remains excluded. Waiting-choice users are never processed.
 
 Each of three independent discovery streams (choices, staging/sealing, cleanup)
-reads at most five rows per sweep, ordered by full document name with a durable
-keyset cursor. Each wraps on a short/empty page. The cursor advances before work,
+reads a bounded page per sweep, ordered by full document name with a durable
+keyset cursor. Staging/sealing and cleanup stay at five rows; the choices page is
+`CAP_HOLD_REDRIVE_CHOICES_PAGE` (default and ceiling 8) while
+`CAP_HOLD_REDRIVE_PARALLEL_DRAIN_ENABLED` is on (default), and five when it is
+off — the legacy drain shape. The eight-owner bound uses half of the shared
+16-worker sync executor and is below the 24-worker database executor, leaving
+capacity for unrelated work. The sweep orders each bounded choices page by the
+current valid paid subscription using `get_user_valid_subscription(provision=False)`;
+paid owners go first, then basic, missing, or unreadable subscriptions. This
+page-bounded lookup cannot provision or write a default subscription.
+`CAP_HOLD_REDRIVE_ITEMS_PER_OWNER` (default and ceiling 10) bounds one owner's
+candidates per rotation turn; turns still advance every visited owner equally
+before any peer gets another turn. Each stream wraps on a short/empty page. The
+cursor advances before work,
 so a blocked owner cannot hide later existing users. A crash can defer that page
 until the next rotation; it cannot erase intent. For N queued owners, discovery
-latency is roughly `ceil(N/5)` successful scheduler executions; blocked choices
+latency is roughly `ceil(N/choices_page)` successful scheduler executions; blocked choices
 also consume visits. A long request delays subsequent scheduler delivery.
 [Cloud Scheduler's Job.schedule contract](https://docs.cloud.google.com/scheduler/docs/reference/rpc/google.cloud.scheduler.v1#job)
 serializes regular executions of the same job: a later scheduled execution waits
 for the current one to finish. This is bounded fair recovery, not a per-user
-two-minute SLA. A single owner's 100
-short items can now drain in one visit (plus a later no-op finish visit at an exact
-100-item boundary), rather than a minimum 200 minutes. Slow calls constrain this:
+two-minute SLA. The per-owner candidate budget is up to 1,000 per sweep instead
+of 100; an exact 1,000-item boundary can require a later no-op finish visit.
+Slow calls constrain this:
 900 seconds permits about three 300-second provider calls before the next-piece
-check stops the visit. Modulate has a 300-second read timeout (Parakeet 120),
+check stops the visit. The existing global recovery token bucket remains the
+capacity authority: 60 audio-seconds per wall second and 12,000 provider intents
+per hour by default. Fan-out and per-owner budgets do not raise that sustained
+rate or promise that every open hold, including owners without a processing
+choice, drains within a fixed wall-clock SLA. Modulate has a 300-second read timeout (Parakeet 120),
 plus connect/write/pool timeouts; these are per-phase IO limits, not an absolute
 wall deadline for a trickling response. A call started just before budget expiry
 may still add its adapter timeouts plus URL download/codec/ingest/finalization IO. Concurrent owner visits
@@ -119,6 +141,40 @@ no throughput or two-minute SLA is claimed under saturation. Budget expiry does
 not cancel a billable call mid-flight or clear a reservation. A killed owner can
 still wait for its 30-minute lease plus a discovery rotation. Endpoints await work;
 failed requests may be retried and never acknowledge memory-only work as done.
+Each completed sweep logs `duration_seconds`, `visited`, `choices_page`, and
+`owner_items`; compare that duration with the two-minute schedule to identify
+when Scheduler serialization is delaying the next run.
+
+The fleet gauge aggregation runs beside the sweep, never ahead of its discovery
+or owner work: the sweep schedules it, does its own work, then waits at most
+`CAP_HOLD_FLEET_SNAPSHOT_WAIT_SECONDS` (default 90) to publish before returning;
+a slower aggregation keeps running under its own budget and publishes late. At
+most one aggregation runs per process at a time and no more often than
+`CAP_HOLD_FLEET_SNAPSHOT_MIN_INTERVAL_SECONDS` (default 120 seconds). The
+held-content acceptance gate treats snapshots older than 300 seconds as stale,
+so this default leaves 180 seconds for aggregation completion and Scheduler
+delay. Each of its RPCs is bounded by
+`CAP_HOLD_FLEET_SNAPSHOT_TIMEOUT_SECONDS` (default 60; a fixed 10 s budget
+failed every sweep against the multi-million-row held population with
+RetryError). `CAP_HOLD_FLEET_SNAPSHOT_ENABLED=false` stops gauge refresh without
+touching drain work. A stored cursor of `None` means no cursor; any other
+malformed shape (including an empty map, list, string, or zero, null/boolean/
+non-finite `at`, or empty/non-string `id`) is logged once per encounter as
+`event=processing_backlog outcome=cursor_invalid` and rewound to newest — the
+same widening-preserving rewind `finish()` uses for skipped scope — instead of
+rebuilding a query the server rejects on every visit.
+
+After shipping the reader, the operator should trigger the existing
+`cap-hold-durable-redrive` Scheduler job once to resume persisted
+`state=processing` choices, then watch `event=cap_hold_redrive` completion and
+the held backlog gauge until it falls. The worker automatically rewinds a
+malformed cursor. If a valid-shaped cursor still defers, use its new traceback
+to identify the failing call. Only if the traceback identifies a cursor
+rejection, and after confirming that owner's lease is inactive, should an
+operator clear the affected `cursor_audio` or `cursor_text` field on that one
+`processing_backlog/current` document. Preserve its state,
+token, reservation, and all cap-hold receipts. Do not bulk-reset owners or
+manufacture new choices.
 
 ## Provider spend and uncertainty
 
@@ -134,8 +190,15 @@ Held recovery now disables nested URL/provider retries, persists dispatch-starte
 under the exact lease/attempt, and checkpoints an **encrypted** nonempty provider
 result before parsing/ingestion. A restart reuses this result and the original
 provider/model/usage identity, then uses the normal idempotent ingest proof and
-usage key. Empty responses retain existing reconciliation semantics; they are
-not cached as reusable completion or treated as proven silence.
+usage key. An empty response is checkpointed as `provider_empty` with
+`provider_completed_at` and is never cached as a replayable result; because that
+fenced checkpoint proves the vendor finished, recovery settles the piece as a
+transcribed, no-content receipt (`settled_empty`) with no usage and no second
+dispatch, on the same pass or when a later pass resumes the `dispatched` receipt.
+The checkpoint is written only for a reply the adapter validated as the
+provider's success shape with zero words; a 2xx body that is missing or mistypes
+those fields raises inside the adapter, so no completion checkpoint exists and
+the dispatch takes the ambiguous path below rather than settling and purging.
 
 Caching measures the **whole proposed Firestore document** using the installed
 SDK encoded-map Value envelope, including existing encrypted results, plan and
@@ -165,8 +228,9 @@ Without proof, it permits one additional funded application dispatch. Therefore
 one frozen piece can cause **at most two billable STT POST attempts** (one duplicate)
 under these current adapters, excluding vendor-internal billing behavior. Parakeet
 may probe v2 then v1 after 404; the 404 is routing discovery, not completed STT.
-A second uncertain/empty attempt becomes explicitly `failed_reconciliation` and
-retains audio; it is terminal, not a silent successful transcript. This residual
+A second uncertain attempt (no completion checkpoint) becomes explicitly
+`failed_reconciliation` and retains audio; it is terminal, not a silent
+successful transcript. This residual
 operator reconciliation obligation remains visible in the held summary. Do not
 clear markers or purge audio to force progress, and do not promise exactly-once
 vendor spend without a supported provider contract. Provider-result checkpoints
@@ -271,3 +335,92 @@ seven-day soft-delete retention of staged fragments can add roughly 7/30 of the
 retained-source storage term (~$0.000034/hour at the ceiling). Noncurrent versions,
 regional settings and actual compression/wear duration must be measured before
 cohort expansion. No production data or bucket settings were read for this model.
+
+
+## Close 1006 code-path investigation (2026-10-22)
+
+This is a local source inspection and protocol-only probe, not a reproduction
+or an attribution of the 2026-10-21 test-account close. No production calls,
+logs or Firestore were read.
+`ListenReceiver.receive_data` records ASGI disconnect before entering its
+teardown, then awaits `LiveHeldAudio.finish_updates` through a shielded,
+supervised task. `close()` takes the publication lock, drains every PCM tail,
+seals the group and releases unused capacity. It no longer repeats the empty
+flush/seal barrier. A server-initiated close in `ListenSession._teardown_components`
+can occur later, after receiver/drain work and usage persistence.
+
+The Docker entrypoint uses uvicorn's automatic WebSocket protocol selection.
+The locked uvicorn 0.30.5 / websockets 12 implementation handles Close control
+frames in `WebSocketCommonProtocol.read_data_frame` and echoes the Close before
+ASGI's `websocket.disconnect`; wsproto's `handle_close` likewise responds before
+queuing the ASGI disconnect. Once the protocol reader reaches a **client Close frame**, it can acknowledge
+without waiting for application tail persistence. However, uvicorn defaults to
+`ws_max_queue=32`; websockets' `transfer_data` pauses its reads while the inbound
+message queue is full. Listen awaits custody inline between receives
+(`receiver.py`'s `_flush_stt_buffer` / `_emit_stt_cap_live_held`). A slow flush can
+therefore delay reaching a queued Close frame, although the event loop is free.
+A local protocol-only probe with the locked packages held the ASGI consumer at
+an async barrier: one PCM message closed 1000 in 2 ms; 100 queued messages
+closed 1006 in 403 ms with the probe client's 200 ms close timeout. This proves
+the queue/backpressure mechanism, not its occurrence in the reported session.
+A transport EOF without a completed handshake can also report 1006. Executor queueing or remote I/O in cap
+publication does not synchronously block the event loop: encoding, encryption,
+upload, summary, capacity, stage append and seal use worker leaves. PCM copies
+and bounded identity hashing still run on the loop. This inspection cannot prove
+that the reported session received a Close frame, or exclude unrelated loop or
+transport delays. Final sealing after ASGI disconnect is already after the
+protocol reply; moving it later would not unblock a reader stalled before
+disconnect. Decoupling ingress from persistence needs a bounded custody queue
+and backpressure policy, so this PR makes no speculative close-order change.
+
+Budget: each pending fragment has at most two 4 s upload waits (including
+executor queue/encode/encrypt/put), with a 1.5 s socket inactivity timeout per
+attempt: **8 s per fragment**, not per close. Pending fragments drain serially;
+summary migration can wait 30 s, lock waits and Firestore publication have
+separate budgets, and staging compose/reload/cleanup RPCs each use 10 s timeouts
+(with publication transaction retries). Receiver STT teardown uses a 28 s
+delivery + 2 s cleanup bound, but final cap custody runs outside that bound.
+There is no aggregate 8 s close deadline. Moving custody to an unowned detached
+task would weaken audio retention; it remains supervised and awaited.
+
+
+## Capture-order sliver regression (2026-10-22)
+
+The first `ro-prod` read of the fixed test account projected only hold shape
+fields; no encrypted metadata or content was read/decrypted, and no production
+logs or writes were used. Before recovery, it showed:
+
+| Created (UTC) | Seconds | Source frames | Stage part frames |
+| --- | ---: | ---: | --- |
+| 03:31:53.619 | 0.03 | 480 | 480 |
+| 03:31:54.462 | 0.03 | 480 | 480 |
+| 03:31:55.491 | 0.01 | 160 | 160 |
+| 03:32:08.191 | 44.9 | 718400 | 240000, 240000, 238400 |
+
+The first three capture starts were 03:31:57, 03:31:56 and 03:31:57 (the stored
+integer projection), not creation order. No plaintext session/group/owner keys
+were present in these projected rows. Sample indices and owner identities in
+encrypted metadata remain unread. The replay uses synthetic capture coordinates,
+not decrypted production metadata.
+
+`LiveHeldAudio.observe` previously appended unique denied pieces in callback
+order. `_append` queued the old run at a >100 ms wall discontinuity, bypassing
+`TailGrace.ready`. The 1 s updater published that pending run. `_flush` sealed
+its source at the next group-continuity mismatch and allocated another
+`Publication`; `live_cap_staging.append` creates the row at that group ID.
+Neither an updater tick itself nor a per-conversation/session document key
+creates a new hold. `live_cap_manifest` is the legacy fragment-off path.
+Thus a later receiver decision spanning the early pieces could deduplicate
+those bytes, but could no longer put the already-published pieces back in
+capture order. That is why the prior grace metric stayed zero.
+
+The behavioral regression drives the real `observe` / `observe_async` and
+publication coordinator with three 1 s-spaced early decisions, then an
+overlapping denied suffix. Unmodified source produces exactly the table's
+0.03/0.03/0.01/44.9 s, one/one/one/three-part shape. Ordered unpublished capture
+produces one 44.97 s source with 240000/240000/239520-frame parts, preserving
+all 719520 denied samples byte-for-byte while excluding the funded prefix.
+No new custody capacity or volatile-age allowance is introduced. Incompatible
+owners, rates, capture holes, months and wall discontinuities remain separate
+runs. The transition-tail counter now also observes coalesced/sealed tiny runs
+in this capture-order queue, rather than only explicit forced-seal grace.

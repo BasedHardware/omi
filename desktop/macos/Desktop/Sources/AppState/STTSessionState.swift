@@ -25,6 +25,8 @@ struct STTSessionState: Equatable {
   private(set) var fallbackInProgress = false
   /// Active transport mode while capture is running (`nil` when stopped).
   var activeMode: ResolvedMode?
+  /// Language of the running recording; gates the cloud→local fallback.
+  private(set) var activeLanguage: STTLanguageCapability.Selection = .english
 
   var useLocalSTT: Bool { activeMode?.usesLocalSTT ?? false }
 
@@ -59,16 +61,21 @@ struct STTSessionState: Equatable {
   ///
   /// Off by default. It trades on-device transcription for cloud transcription while the
   /// wake word is enabled, which is a privacy and cost decision, not a technical one.
+  ///
+  /// A `language` no on-device model covers (`STTLanguageCapability`) always resolves to cloud,
+  /// even after a cloud→local fallback: a model without the language's tokens emits fluent
+  /// text in the wrong language, which is worse than a cloud outage.
   func resolveMode(
     audioSource: AudioSource,
     isAppleSilicon: Bool,
     debugForceCloud: Bool,
     wakeWordNeedsRecognizableName: Bool = false,
-    preferLocalOnBasic: Bool = false
+    preferLocalOnBasic: Bool = false,
+    language: STTLanguageCapability.Selection = .english
   ) -> ResolvedMode {
     let forceCloud =
       !sessionForceLocal && (debugForceCloud || appRunForceCloud || wakeWordNeedsRecognizableName)
-    if !isAppleSilicon || forceCloud {
+    if !isAppleSilicon || forceCloud || !language.isCoveredOnDevice {
       return .cloud
     }
     if audioSource == .bleDevice && !preferLocalOnBasic {
@@ -82,14 +89,17 @@ struct STTSessionState: Equatable {
     isAppleSilicon: Bool,
     debugForceCloud: Bool,
     wakeWordNeedsRecognizableName: Bool = false,
-    preferLocalOnBasic: Bool = false
+    preferLocalOnBasic: Bool = false,
+    language: STTLanguageCapability.Selection = .english
   ) {
+    activeLanguage = language
     activeMode = resolveMode(
       audioSource: audioSource,
       isAppleSilicon: isAppleSilicon,
       debugForceCloud: debugForceCloud,
       wakeWordNeedsRecognizableName: wakeWordNeedsRecognizableName,
-      preferLocalOnBasic: preferLocalOnBasic
+      preferLocalOnBasic: preferLocalOnBasic,
+      language: language
     )
   }
 
@@ -118,6 +128,7 @@ struct STTSessionState: Equatable {
       && audioSource != .bleDevice
       && !useLocalSTT
       && isAppleSilicon
+      && activeLanguage.isCoveredOnDevice
       && !appRunForceCloud
       && !cloudToLocalFallbackTried
       && !fallbackInProgress

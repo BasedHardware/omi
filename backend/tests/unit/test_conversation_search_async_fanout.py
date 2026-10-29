@@ -158,8 +158,38 @@ def test_snippets_only_attached_to_returned_page_rows(monkeypatch):
     monkeypatch.setattr(conv, 'attach_match_snippets_to_conversations', attach)
 
     result = asyncio.run(conv.search_conversations_endpoint(SearchRequest(query='q', per_page=1), uid='u1'))
-    assert len(result['items']) == 1
-    assert captured['ids'] == [result['items'][0]['id']]
+    # The page's Typesense hit stays behind the spoken-word hit; over-fetched t2/t3 are not returned.
+    assert [item['id'] for item in result['items']] == ['t1', 'c1']
+    assert captured['ids'] == ['t1', 'c1']
+
+
+@pytest.mark.parametrize(
+    'transcript_ids',
+    [
+        ['t1'],  # one spoken-word hit pushes the page's last Typesense hit past per_page
+        ['t1', 't2', 't3', 't4', 't5', 't6'],  # spoken-word hits alone fill the page-1 candidate cap
+    ],
+)
+def test_typesense_hits_displaced_by_spoken_word_hits_stay_on_page_one(monkeypatch, transcript_ids):
+    typesense_pages = {1: ['s1', 's2', 's3'], 2: ['s4']}
+
+    def typesense_page(**kwargs):
+        return _typesense_result(typesense_pages[kwargs['page']], kwargs['page'], kwargs['per_page'])
+
+    _install_base_stubs(monkeypatch, per_page=3)
+    monkeypatch.setattr(conv, 'search_conversations', typesense_page)
+    monkeypatch.setattr(vector_db, 'index', object())
+    monkeypatch.setattr(conv, 'search_transcript_conversation_ids', AsyncMock(return_value=transcript_ids))
+
+    pages = []
+    for page in (1, 2):
+        request = SearchRequest(query='budget', page=page, per_page=3)
+        result = asyncio.run(conv.search_conversations_endpoint(request, uid='u1'))
+        pages.append([item['id'] for item in result['items']])
+
+    # Page 2 starts at the next Typesense page, so a hit cut from page 1 would never be listed.
+    assert [cid for ids in pages for cid in ids if cid.startswith('s')] == ['s1', 's2', 's3', 's4']
+    assert pages[0][0] == 't1'
 
 
 def test_transcript_helper_embeds_once_and_passes_timeout(monkeypatch):

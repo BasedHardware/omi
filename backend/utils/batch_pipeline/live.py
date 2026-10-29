@@ -16,11 +16,13 @@ import time
 
 from config.policy import resolve_batch_policy
 from database.batch_pipeline_policy import load_job_policy
+from database.batch_ramp import ramp_admission_policy
 from config.batch_pipeline import Priority, RecordOwnerContention, record_capture_eligible
 from database.conversations import claim_record_lane_owner
 from database.batch_pipeline_intake import admit
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import FirestoreStore
+from database.batch_pipeline_shadow_hook import shadow_from_env
 from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.scheduler import owner_key
@@ -29,6 +31,7 @@ from utils.executors import db_executor, storage_executor, sync_executor, run_bl
 from utils.other.local_storage import create_storage_client
 from utils.other.storage import list_audio_chunks, private_cloud_sync_bucket
 from utils.sync.stage import current_stage
+from config.server_batch import owned as server_batch_owned, has_audio as server_batch_has_audio
 
 logger = logging.getLogger(__name__)
 OWNER = 'batch_live_v1'
@@ -45,9 +48,12 @@ def reserve_recording(uid: str, conversation: dict) -> str | None:
     owner = conversation.get('record_lane_owner')
     if owner:
         return owner
+    policy = resolve_batch_policy(uid)
     if conversation.get('status') not in {'in_progress', 'processing'} or not record_capture_eligible(
-        uid, conversation
+        uid, conversation, policy=policy
     ):
+        return None
+    if not ramp_admission_policy(uid, policy).live_record_enabled:
         return None
     revision = claim_record_lane_owner(uid, conversation['id'], OWNER, conversation.get('updated_at'))
     if revision is None:
@@ -59,11 +65,13 @@ def reserve_recording(uid: str, conversation: dict) -> str | None:
 def register_recording(uid: str, conversation: dict, *, store=None, now=None) -> bool:
     if conversation.get('record_lane_owner') != OWNER:
         return False
+    if server_batch_owned(conversation) and not server_batch_has_audio(conversation):
+        return False
     if conversation.get('deleted') or conversation.get('discarded') or conversation.get('uses_custom_stt'):
         return False
     if not conversation.get('private_cloud_sync_enabled'):
         return False
-    store = store or FirestoreStore(f'batch_pipeline_{current_stage()}')
+    store = store or shadow_from_env(FirestoreStore(f'batch_pipeline_{current_stage()}'))
     now = time.time() if now is None else now
     content, segment = record_identity(uid, conversation['id'])
     # The immutable native owner is main's earlier admission receipt. A later
@@ -84,6 +92,8 @@ def register_recording(uid: str, conversation: dict, *, store=None, now=None) ->
             'data_protection_level',
         )
     }
+    if (conversation.get('external_data') or {}).get('server_batch_only') is True:
+        snapshot['server_batch_only'] = True
 
     def commit(tx):
         previous = tx.get('jobs', segment)
@@ -209,7 +219,11 @@ async def admit_recording(store, pending, *, now=None):
     client = await run_blocking(storage_executor, create_storage_client)
     bucket = os.getenv('BUCKET_BATCH_PIPELINE', '').strip()
     artifacts = create_artifact_store(store, client, bucket, os.getenv('ENCRYPTION_SECRET', '').encode())
-    chunks = await run_blocking(storage_executor, list_audio_chunks, uid, conversation_id, max_count=4096)
+    # A failed raw-archive listing raises (drain retries in 60 s) rather than
+    # admitting a recording whose later packs are silently missing.
+    chunks = await run_blocking(
+        storage_executor, list_audio_chunks, uid, conversation_id, max_count=4096, require_archive=True
+    )
     if not chunks:
         raise ValueError('retained capture not durable yet')
     seed = WorkItem(
@@ -283,6 +297,11 @@ async def admit_recording(store, pending, *, now=None):
             'client_device_id': binding.client_device_id,
             'client_platform': binding.client_platform,
             'conversation_id': conversation_id,
+            # Native record admission already requires a fully supported
+            # declared language profile. Preserve that proof in its manifest.
+            'stt_language': binding.language or '',
+            'stt_language_evidence': 'declared',
+            'stt_language_confidence': 1.0,
         }
         manifest = {
             'owner_id': uid,
@@ -315,6 +334,7 @@ async def admit_recording(store, pending, *, now=None):
             'total_audio_seconds': sum(i.duration_seconds for i in staged),
             'lane': 'fresh',
             'record_ranges': [{'start': i.capture_at, 'end': i.capture_at + i.duration_seconds} for i in staged],
+            **({'server_batch_only': True} if row.get('server_batch_only') is True else {}),
         },
     )
 

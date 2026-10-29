@@ -157,7 +157,7 @@ def conversations_db():
     """Load the production query function against a minimal in-memory Firestore seam."""
     # Load the pure policy/registry before the fixture closes the utils import path.
     import config.dream_agent  # noqa: F401
-    from utils.conversations import summary_delivery
+    from utils.conversations import summary_delivery, lifecycle_clocks
     from database import sync_live_overlap
     from utils.sync import live_overlap
 
@@ -223,6 +223,8 @@ def conversations_db():
         "database.sync_live_overlap": sync_live_overlap,
         "utils.sync.live_overlap": live_overlap,
         "database.speaker_assignment_effects": AutoMockModule("database.speaker_assignment_effects"),
+        # Archive queries never invoke the separate speaker publication/revocation IO seam.
+        "database.speaker_auto_enroll": ModuleType("database.speaker_auto_enroll"),
         "database.speaker_learning_jobs": AutoMockModule("database.speaker_learning_jobs"),
         "database.users": AutoMockModule("database.users"),
         "models": models,
@@ -233,6 +235,7 @@ def conversations_db():
         "utils": utils,
         "utils.conversations": utils_conversations,
         "utils.conversations.summary_delivery": summary_delivery,
+        "utils.conversations.lifecycle_clocks": lifecycle_clocks,
         "utils.llm": utils_llm,
         "utils.llm.model_constants": utils_llm_model_constants,
         "utils.encryption": AutoMockModule("utils.encryption"),
@@ -294,6 +297,12 @@ def conversations_db():
     # load the real module for the isolated utils package.
     fakes["utils.conversation_page_cursor"] = load_module_fresh(
         "utils.conversation_page_cursor", str(_BACKEND / "utils" / "conversation_page_cursor.py")
+    )
+    # The open-loop field-name constants are stdlib-only; database.conversations
+    # imports them at module level, so load the real module for the isolated
+    # utils package.
+    fakes["utils.open_loops.extraction"] = load_module_fresh(
+        "utils.open_loops.extraction", str(_BACKEND / "utils" / "open_loops" / "extraction.py")
     )
 
     with stub_modules(fakes):
@@ -436,7 +445,7 @@ def test_hosted_mcp_list_uses_transcript_and_photo_free_projection(conversations
     assert "structured.sections" not in selected_fields
     assert "structured.events" not in selected_fields
     assert ("select", tuple(module.MCP_CONVERSATION_CARD_FIELD_PATHS)) in firestore.queries[0].events
-    transcript_fields = set(module._MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS)
+    transcript_fields = set(module.MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS)
     assert "transcript_segments" in transcript_fields
     assert "photos" not in transcript_fields
     assert "structured.action_items" not in transcript_fields

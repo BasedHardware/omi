@@ -6,7 +6,8 @@ import { PlanGrid } from './PlanGrid'
 afterEach(cleanup)
 
 it.each([
-  ['operator', 'Operator', 'Pro'],
+  ['unlimited_v2', 'Stale title', 'Omi Pro'],
+  ['operator', 'Stale title', 'Operator'],
   ['architect', 'Stale title', 'Architect'],
   ['future_plan', 'Free', 'Plan unavailable']
 ])('uses plan identity %s for the card and selection button', (id, title, label) => {
@@ -29,26 +30,26 @@ it.each([
   expect(onSelect).toHaveBeenCalledWith(id)
 })
 
-it('keeps the selected Pro card billing interval and checkout price identity', () => {
+it('keeps the selected Omi Pro card billing interval and checkout price identity', () => {
   const onBuy = vi.fn()
   render(
     <PlanGrid
       plans={[
         {
-          id: 'operator',
-          title: 'Operator',
+          id: 'unlimited_v2',
+          title: 'Unlimited',
           prices: [{ id: 'fixture-price', title: 'Monthly', price_string: '$20' }]
         }
       ]}
       sub={{ plan: 'basic', status: 'active' }}
-      selectedId="operator"
+      selectedId="unlimited_v2"
       onSelect={vi.fn()}
       activePriceId={null}
       onBuy={onBuy}
     />
   )
-  expect(screen.getByText('Pro')).toBeTruthy()
-  expect(screen.queryByText('Operator')).toBeNull()
+  expect(screen.getByText('Omi Pro')).toBeTruthy()
+  expect(screen.queryByText('Unlimited')).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: /Monthly.*\$20/ }))
   expect(onBuy).toHaveBeenCalledWith('fixture-price', undefined)
 })

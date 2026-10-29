@@ -1,61 +1,112 @@
 import Foundation
 
+protocol AssistantSettingsRemote: Sendable {
+  func get(authorization: RuntimeOwnerAuthorizationSnapshot) async throws -> AssistantSettingsResponse
+  func update(_ settings: AssistantSettingsResponse, authorization: RuntimeOwnerAuthorizationSnapshot) async throws
+    -> AssistantSettingsResponse
+}
+
+struct LiveAssistantSettingsRemote: AssistantSettingsRemote {
+  func get(authorization: RuntimeOwnerAuthorizationSnapshot) async throws -> AssistantSettingsResponse {
+    try await APIClient.shared.getAssistantSettings(authorizationSnapshot: authorization)
+  }
+
+  func update(_ settings: AssistantSettingsResponse, authorization: RuntimeOwnerAuthorizationSnapshot) async throws
+    -> AssistantSettingsResponse
+  {
+    try await APIClient.shared.updateAssistantSettings(settings, authorizationSnapshot: authorization)
+  }
+}
+
 /// Manages bidirectional sync of assistant settings between local UserDefaults and the backend.
 /// Server is source of truth — server values override local when present.
 @MainActor
 class SettingsSyncManager {
   static let shared = SettingsSyncManager()
-  private init() {}
+  private let remote: any AssistantSettingsRemote
+  private let captureAuthorization: () -> RuntimeOwnerAuthorizationSnapshot?
+  private let isCurrent: @Sendable (RuntimeOwnerAuthorizationSnapshot) -> Bool
+  private let applySettings: ((AssistantSettingsResponse) -> Void)?
+  private let localSettings: (() -> AssistantSettingsResponse)?
+  private let refreshVoice: () async -> Void
+  private var localWriteRevision: UInt64 = 0
+  private var writeTail: (authorization: RuntimeOwnerAuthorizationSnapshot, task: Task<Void, Never>)?
+
+  init(
+    remote: any AssistantSettingsRemote = LiveAssistantSettingsRemote(),
+    captureAuthorization: @escaping () -> RuntimeOwnerAuthorizationSnapshot? = {
+      guard AuthState.shared.isSignedIn else { return nil }
+      return RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+    },
+    isCurrent: @escaping @Sendable (RuntimeOwnerAuthorizationSnapshot) -> Bool = {
+      RuntimeOwnerIdentity.isAuthorizationCurrent($0)
+    },
+    applySettings: ((AssistantSettingsResponse) -> Void)? = nil,
+    localSettings: (() -> AssistantSettingsResponse)? = nil,
+    refreshVoice: @escaping () async -> Void = { await AssistantVoiceStore.shared.refresh() }
+  ) {
+    self.remote = remote
+    self.captureAuthorization = captureAuthorization
+    self.isCurrent = isCurrent
+    self.applySettings = applySettings
+    self.localSettings = localSettings
+    self.refreshVoice = refreshVoice
+  }
 
   /// Pull settings from server and apply non-nil values to local singletons.
   /// Fenced by the active runtime owner so an in-flight pull from Account A
   /// cannot overwrite Account B's local assistant settings across a reauth switch.
   func syncFromServer() async {
-    guard AuthService.shared.isSignedIn, let originOwner = Self.currentOwnerID else { return }
+    guard let authorization = captureAuthorization(), isCurrent(authorization) else { return }
+    let writeRevision = localWriteRevision
     do {
-      let remote = try await APIClient.shared.getAssistantSettings()
-      guard AuthService.shared.isSignedIn, Self.currentOwnerID == originOwner else {
-        log("SettingsSyncManager: dropped stale remote assistant settings after owner change")
-        return
-      }
-      applyRemoteSettings(remote)
-      await AssistantVoiceStore.shared.refresh()
+      let settings = try await remote.get(authorization: authorization)
+      guard isCurrent(authorization), writeRevision == localWriteRevision else { return }
+      if let applySettings { applySettings(settings) } else { applyRemoteSettings(settings) }
+      guard isCurrent(authorization) else { return }
+      await refreshVoice()
+      guard isCurrent(authorization) else { return }
       log("SettingsSyncManager: synced from server")
     } catch {
+      guard isCurrent(authorization) else { return }
       logError("SettingsSyncManager: failed to sync from server", error: error)
     }
   }
 
   /// Push all current local settings to the server for the active runtime owner.
   func syncToServer() async {
-    guard AuthService.shared.isSignedIn, let originOwner = Self.currentOwnerID else { return }
-    let settings = buildFromLocal()
-    guard AuthService.shared.isSignedIn, Self.currentOwnerID == originOwner else { return }
-    do {
-      let _ = try await APIClient.shared.updateAssistantSettings(settings)
-      log("SettingsSyncManager: synced to server")
-    } catch {
-      logError("SettingsSyncManager: failed to sync to server", error: error)
-    }
+    guard let authorization = captureAuthorization(), isCurrent(authorization) else { return }
+    let settings = localSettings?() ?? buildFromLocal()
+    guard isCurrent(authorization) else { return }
+    await enqueueUpdate(settings, authorization: authorization).value
   }
 
   /// Fire-and-forget partial update to server, fenced to the owner active when queued.
-  func pushPartialUpdate(_ settings: AssistantSettingsResponse) {
-    let originOwner = Self.currentOwnerID
-    Task {
-      guard AuthService.shared.isSignedIn,
-        let originOwner,
-        Self.currentOwnerID == originOwner
-      else {
-        log("SettingsSyncManager: dropped partial update after owner change")
-        return
-      }
+  @discardableResult
+  func pushPartialUpdate(_ settings: AssistantSettingsResponse) -> Task<Void, Never> {
+    guard let authorization = captureAuthorization(), isCurrent(authorization) else { return Task {} }
+    return enqueueUpdate(settings, authorization: authorization)
+  }
+
+  private func enqueueUpdate(
+    _ settings: AssistantSettingsResponse, authorization: RuntimeOwnerAuthorizationSnapshot
+  ) -> Task<Void, Never> {
+    localWriteRevision &+= 1
+    // Preserve user-edit order within one authenticated session. A replacement
+    // session never waits behind an old account's suspended network request.
+    let previous = writeTail?.authorization == authorization ? writeTail?.task : nil
+    let task = Task {
+      await previous?.value
+      guard isCurrent(authorization) else { return }
       do {
-        let _ = try await APIClient.shared.updateAssistantSettings(settings)
+        let _ = try await remote.update(settings, authorization: authorization)
       } catch {
+        guard isCurrent(authorization) else { return }
         logError("SettingsSyncManager: failed to push partial update", error: error)
       }
     }
+    writeTail = (authorization, task)
+    return task
   }
 
   /// Builds the narrow request used by capture-default migrations. A migration of one

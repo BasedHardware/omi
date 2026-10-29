@@ -170,6 +170,32 @@ async def test_failed_followup_stays_durable_and_resumes_with_same_receipt(follo
 
 
 @pytest.mark.asyncio
+async def test_real_claim_released_across_run_blocking_leaves_never_fails_the_task(followup, monkeypatch):
+    # The follow-up enters the real advisory claim in one run_blocking leaf and
+    # releases it in a later leaf; each leaf runs in its own contextvars copy,
+    # so the claim's retry-deadline scope created its ContextVar token in a
+    # different Context than the one resetting it. Before the scope learned to
+    # tolerate that split, every release raised "Token was created in a
+    # different Context" and the background task was reported failed after its
+    # work had already committed. The stubbed owner_claim fixture hides this
+    # seam, so this test restores the real claim against a fake Redis.
+    import fakeredis
+
+    from database import batch_pipeline_projection_claim as claims
+
+    redis = fakeredis.FakeRedis()
+    redis.eval('return 1', 0)  # Load the Lua emulator for the token-fenced release.
+    monkeypatch.setattr(claims, '_redis_client', lambda: redis)
+    monkeypatch.setattr(projection_followup, 'projection_claim', claims.projection_claim)
+
+    f = followup
+    await asyncio.wait_for(f.runner.run('head'), 5)
+    f.projector.complete_content.assert_called_once_with('head', f.binding)
+    # The release ran to completion: the advisory lease is gone, not left to its TTL.
+    assert not redis.keys('batch_projection:*')
+
+
+@pytest.mark.asyncio
 async def test_privacy_fence_prevents_every_followup_effect(followup):
     f = followup
     from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -452,3 +478,26 @@ async def test_slow_followup_keeps_unlaunched_page_before_advancing(followup, mo
         await asyncio.gather(*list(f.runner.tasks.values()))
         await asyncio.sleep(0)
     assert launched == ['head', 'later', 'next-page']
+
+
+@pytest.mark.asyncio
+async def test_split_rollover_followup_stores_playback_for_every_part(followup):
+    from dataclasses import replace
+
+    f = followup
+    binding = replace(f.binding, native_record=False, record_origin=True, private_cloud_sync_enabled=True)
+    receipt = {
+        **f.receipts['head'],
+        'audio_required': True,
+        'size_rollover_outputs': [{'conversation_id': cid, 'created': True} for cid in ['head', 'extra']],
+    }
+    calls = []
+    f.projector.playback = lambda _, cid: calls.append(('playback', cid))
+    f.projector.store.mark_enrichment.side_effect = lambda *args, **kwargs: calls.append(('enrich', args[3]))
+    await f.runner.finish_part(
+        WorkItem(**{k: v for k, v in f.jobs['head'].items() if k in WorkItem.__dataclass_fields__}),
+        binding,
+        receipt,
+        None,
+    )
+    assert calls == [('playback', 'head'), ('playback', 'extra'), ('enrich', 'head')]

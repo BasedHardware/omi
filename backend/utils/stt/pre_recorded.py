@@ -1,6 +1,7 @@
 from utils.observability.sync_phases import observe_sync_call, sync_phase_timer
 import logging
 import os
+import random
 import time
 import wave as _wave
 from abc import ABC, abstractmethod
@@ -9,12 +10,11 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from io import BytesIO
 from math import ceil
-from threading import RLock
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, cast
 
 import httpx
 import numpy as np
-from deepgram import DeepgramClient, DeepgramClientOptions
+from deepgram import DeepgramClient
 from pydub import AudioSegment  # pydub is untyped
 
 from config.prerecorded_stt import (
@@ -24,6 +24,8 @@ from config.prerecorded_stt import (
     get_prerecorded_models,
     require_provider_environment,
 )
+from config.prerecorded_language import language_class, language_guard_enabled
+from config.prerecorded_vendor import vendor_fail_fast_enabled
 from config.stt_provider_policy import (
     MODULATE_PROVIDER,
     PARAKEET_PROVIDER,
@@ -34,14 +36,26 @@ from config.stt_provider_policy import (
     provider_is_enabled,
 )
 from models.transcript_segment import TranscriptSegment
-from utils.byok import get_byok_key
 from utils.log_sanitizer import sanitize_provider_error
 from utils.observability.fallback import record_fallback
+from utils.stt.stream_close import MODULATE_BUDGET_MARKERS
 from utils.other.endpoints import timeit
 from utils.stt.outcomes import TranscriptionFailure
+from utils.stt.parakeet_request_metrics import observe_parakeet_request
 from utils.stt.brand_terms import normalize_brand_terms
 from utils.stt.speaker_clustering import select_speaker_cluster
 from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_from_bytes
+from utils.stt.vendor_guard import (
+    ENDPOINT_STT,
+    ModulateQuotaError,
+    breaker_allows,
+    breaker_budget_exhausted,
+    is_quota_error,
+    record_breaker_other_failure,
+    record_breaker_quota_error,
+    record_breaker_success,
+    record_vendor_burn,
+)
 
 _DG_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
 _MODULATE_TIMEOUT = httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0)
@@ -81,6 +95,25 @@ def _verification_timeout(default: httpx.Timeout | float) -> httpx.Timeout | flo
 
 
 _MAX_PRE_RECORDED_SEGMENT_DURATION_SECONDS = 30.0
+
+# Fail-fast retry backoff bounds (sync functions on executor threads).
+MODULATE_FAIL_FAST_RETRY_SLEEP_MIN_SECONDS = 0.25
+MODULATE_FAIL_FAST_RETRY_SLEEP_MAX_SECONDS = 0.75
+
+
+def _wav_duration_seconds(audio_bytes: bytes) -> float:
+    """Cheap WAV-header duration for burn accounting; unparseable audio is 0 seconds."""
+    try:
+        with _wave.open(BytesIO(audio_bytes)) as source:
+            rate = source.getframerate()
+            return source.getnframes() / rate if rate > 0 else 0.0
+    except Exception:
+        return 0.0
+
+
+def _fail_fast_retry_sleep() -> None:
+    time.sleep(random.uniform(MODULATE_FAIL_FAST_RETRY_SLEEP_MIN_SECONDS, MODULATE_FAIL_FAST_RETRY_SLEEP_MAX_SECONDS))
+
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +162,14 @@ def get_prerecorded_service(language: Optional[str] = 'en') -> Tuple[str, Option
     the serving fallback. A language no capability map claims falls through to Velma
     rather than failing selection.
     """
-    base_lang = normalized_stt_language(language) or 'en'
+    from config.prerecorded_language import requires_multilingual
+
+    base_lang = normalized_stt_language(language.strip() if isinstance(language, str) else None)
+    if requires_multilingual(language) and base_lang in {'', 'und', 'multi', 'unknown'}:
+        if provider_is_enabled(MODULATE_PROVIDER, STTServingSurface.PRERECORDED):
+            return PrerecordedSTTService.MODULATE, 'multi', 'velma-2'
+        raise TranscriptionFailure(TranscriptionOutcome.CONFIG_ERROR, retryable=False)
+    base_lang = base_lang or 'en'
 
     def select(models: Sequence[str]) -> Optional[Tuple[str, Optional[str], str]]:
         for m in models:
@@ -162,40 +202,10 @@ def get_prerecorded_service(language: Optional[str] = 'en') -> Tuple[str, Option
     raise TranscriptionFailure(TranscriptionOutcome.CONFIG_ERROR, retryable=False)
 
 
-# Lazily initialized because constructing the SDK client at import makes every
-# backend consumer credential-dependent, including schema export and unit discovery.
-_deepgram_client: Optional[DeepgramClient] = None
-_deepgram_client_lock = RLock()
-
-
-def _deepgram_options() -> DeepgramClientOptions:
-    """Build fresh options per client.
-
-    DeepgramClient.__init__ calls config.set_apikey(), so a cached options
-    object shared with a BYOK client rewrites the credential the managed
-    client still holds — every later request would bill that user's key.
-    """
-    return DeepgramClientOptions(options={"keepalive": "true"})
-
-
-def _get_deepgram_client() -> DeepgramClient:
-    global _deepgram_client
-    if _deepgram_client is None:
-        with _deepgram_client_lock:
-            if _deepgram_client is None:
-                api_key = os.getenv('DEEPGRAM_API_KEY')
-                if not api_key:
-                    raise PrerecordedSTTConfigurationError(PrerecordedSTTService.DEEPGRAM, 'DEEPGRAM_API_KEY')
-                _deepgram_client = DeepgramClient(api_key, _deepgram_options())
-    return _deepgram_client
-
-
 def _deepgram_client_for_request() -> DeepgramClient:
-    """Route to BYOK Deepgram key when set; otherwise use the process-wide client."""
-    byok = get_byok_key('deepgram')
-    if byok:
-        return DeepgramClient(byok, _deepgram_options())
-    return _get_deepgram_client()
+    """Fail closed: Deepgram retired 2026-08-27 (no contract); do not route or add keys."""
+    logger.error('Deepgram pre-recorded STT is retired (2026-08-27, no contract); refusing the call')
+    raise PrerecordedSTTConfigurationError(PrerecordedSTTService.DEEPGRAM, 'DEEPGRAM_RETIRED')
 
 
 # Languages supported by nova-3
@@ -565,6 +575,21 @@ def deepgram_prerecorded_from_bytes(
         raise RuntimeError(f'Deepgram transcription failed after {attempts + 1} attempts') from e
 
 
+def _modulate_budget_refusal(status_code: int, body: str) -> bool:
+    """True when Velma's batch answer is account-budget, not a transient error.
+
+    402 is credits regardless of wording; 429 is budget only when the body
+    carries a budget marker such as "insufficient credits" — the answer
+    Velma-2 gives when the account is out of credits (2026-10-22 outage: sync
+    jobs recorded it as a retryable upstream_error under provider=unknown).
+    The body is matched, never logged or labeled.
+    """
+
+    if status_code == 402:
+        return True
+    return status_code == 429 and any(marker in body.lower() for marker in MODULATE_BUDGET_MARKERS)
+
+
 @timeit
 def modulate_prerecorded_from_bytes(
     audio_bytes: bytes,
@@ -578,6 +603,20 @@ def modulate_prerecorded_from_bytes(
 
     require_provider_environment(PrerecordedSTTService.MODULATE)
     api_key = os.environ['MODULATE_API_KEY']
+    fail_fast = vendor_fail_fast_enabled()
+    if fail_fast and not breaker_allows(ENDPOINT_STT):
+        if breaker_budget_exhausted(ENDPOINT_STT):
+            # Same typed terminal outcome as the refusal that opened it.
+            raise TranscriptionFailure(
+                TranscriptionOutcome.PROVIDER_BUDGET_EXHAUSTED,
+                provider=PrerecordedSTTService.MODULATE,
+                retryable=False,
+            )
+        raise ModulateQuotaError('Modulate transcription failed: vendor circuit breaker open')
+
+    posted = False
+    post_2xx = False
+    burn_seconds = 0.0
 
     try:
         url = 'https://modulate-developer-apis.com/api/velma-2-stt-batch'
@@ -586,12 +625,56 @@ def modulate_prerecorded_from_bytes(
         data = {'speaker_diarization': str(diarize).lower()}
 
         with httpx.Client(timeout=_verification_timeout(300)) as client:
+            burn_seconds = _wav_duration_seconds(audio_bytes)
+            posted = True
             response = client.post(url, headers=headers, files=files, data=data)
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as error:
+            if _modulate_budget_refusal(response.status_code, response.text):
+                record_vendor_burn(ENDPOINT_STT, 'error', burn_seconds)
+                if fail_fast:
+                    record_breaker_quota_error(ENDPOINT_STT, budget=True)
+                # Out-of-credits is deterministic until the account is funded:
+                # terminal and typed, so the sync job counts
+                # outcome=provider_budget_exhausted provider=modulate instead
+                # of retrying a dead account into upstream_error.
+                raise TranscriptionFailure(
+                    TranscriptionOutcome.PROVIDER_BUDGET_EXHAUSTED,
+                    provider=PrerecordedSTTService.MODULATE,
+                    retryable=False,
+                ) from error
+            raise
+        post_2xx = True
+        if fail_fast:
+            record_breaker_success(ENDPOINT_STT)
+        # The POST itself reached the vendor and was accepted; a later shape
+        # validation failure is not a second burned POST.
+        record_vendor_burn(ENDPOINT_STT, 'ok', burn_seconds)
         result = response.json()
 
-        utterances = result.get('utterances', [])
+        # Velma's batch success shape carries utterances (a list, empty for silence)
+        # beside text ("" for silence) and duration_ms. A 2xx body without the list
+        # (a JSON error envelope, a null, a bare string) is not a no-speech verdict,
+        # and neither is {"utterances": []} alone, which any unrelated 2xx envelope
+        # could carry. Silence therefore also needs text as a str or duration_ms as a
+        # number — one of them, not both, so the older host this client targets is
+        # held to no more than the docs promise. A non-empty list is parsed as
+        # before. Raise so callers keep the audio as retry material and held-piece
+        # recovery never checkpoints the reply as a completed empty result. See #23081.
+        if not isinstance(result, dict) or not isinstance(result.get('utterances'), list):
+            raise RuntimeError('Modulate response must carry an utterances list')
+
+        utterances = result['utterances']
         if not utterances:
+            has_text = isinstance(result.get('text'), str)
+            duration_ms = result.get('duration_ms')
+            has_duration = isinstance(duration_ms, (int, float)) and not isinstance(duration_ms, bool)
+            if not (has_text or has_duration):
+                raise RuntimeError('Modulate response with empty utterances must carry text or duration_ms')
+            if has_text and result['text'].strip():
+                # Transcript text without utterances contradicts itself; never settle it as silence.
+                raise RuntimeError('Modulate response with empty utterances must not carry transcript text')
             if return_language:
                 return [], language or 'multi'
             return []
@@ -622,6 +705,11 @@ def modulate_prerecorded_from_bytes(
                 lang = lang.split('-')[0].split('_')[0].lower()
                 language_votes.append((lang, len(text.split()), max(0, duration_ms)))
 
+        top_text = result.get('text')
+        if not words and isinstance(top_text, str) and top_text.strip():
+            # Transcript text with only blank utterances is contradictory; never return it as silence.
+            raise RuntimeError('Modulate response with blank utterances must not carry transcript text')
+
         if return_language:
             # Tiny acknowledgments are noisy detection evidence. Only use them
             # when the provider supplied no longer transcribed utterance.
@@ -637,8 +725,31 @@ def modulate_prerecorded_from_bytes(
 
         return words
 
+    except TranscriptionFailure:
+        # Typed terminal failures never retry and never re-wrap into the
+        # generic RuntimeError (which erases the outcome the sync job counts).
+        raise
     except Exception as e:
+        if posted and not post_2xx:
+            record_vendor_burn(ENDPOINT_STT, 'error', burn_seconds)
         logger.error('Modulate prerecorded error exception_type=%s attempt=%s', type(e).__name__, attempts + 1)
+        if fail_fast:
+            if is_quota_error(e):
+                record_breaker_quota_error(ENDPOINT_STT)
+                # Quota/auth rejections are terminal: the account is out of credits,
+                # retrying only burns more vendor quota. The prefix keeps callers and
+                # tests matching 'Modulate transcription failed' working.
+                raise ModulateQuotaError('Modulate transcription failed: vendor quota error') from e
+            if posted and not post_2xx:
+                record_breaker_other_failure(ENDPOINT_STT)
+            # Transient failures (5xx, timeouts, transport, malformed bodies) get at
+            # most one retry — 2 paid POSTs total — behind a short jittered backoff.
+            if attempts < 1 and _verification_deadline.get() is None and not _held_single_attempt.get():
+                _fail_fast_retry_sleep()
+                return modulate_prerecorded_from_bytes(
+                    audio_bytes, sample_rate, diarize, attempts + 1, return_language, language
+                )
+            raise RuntimeError(f'Modulate transcription failed after {attempts + 1} attempts') from e
         if attempts < 2 and _verification_deadline.get() is None and not _held_single_attempt.get():
             return modulate_prerecorded_from_bytes(
                 audio_bytes, sample_rate, diarize, attempts + 1, return_language, language
@@ -658,6 +769,29 @@ def modulate_prerecorded(
     logger.info(
         'modulate_prerecorded url_len=%s speakers_count=%s attempt=%s', len(audio_url), speakers_count, attempts
     )
+    if vendor_fail_fast_enabled():
+        # Only the download is retried; the paid bytes path runs once per URL call
+        # (its own single transient retry is bounded to 2 Modulate POSTs).
+        audio_bytes = b''
+        for download_attempt in (0, 1):
+            try:
+                with httpx.Client(timeout=_MODULATE_TIMEOUT) as client:
+                    resp = client.get(audio_url)
+                    resp.raise_for_status()
+                    audio_bytes = resp.content
+                break
+            except Exception as e:
+                logger.error(
+                    'Modulate prerecorded (url) download error exception_type=%s attempt=%s',
+                    type(e).__name__,
+                    download_attempt + 1,
+                )
+                if download_attempt == 0 and attempts < 1 and not _held_single_attempt.get():
+                    continue
+                raise RuntimeError(f'Modulate transcription (url) failed after {attempts + 1} attempts') from e
+        return modulate_prerecorded_from_bytes(
+            audio_bytes, diarize=diarize, attempts=attempts, return_language=return_language, language=language
+        )
     try:
         with httpx.Client(timeout=_MODULATE_TIMEOUT) as client:
             resp = client.get(audio_url)
@@ -666,6 +800,8 @@ def modulate_prerecorded(
         return modulate_prerecorded_from_bytes(
             audio_bytes, diarize=diarize, attempts=attempts, return_language=return_language, language=language
         )
+    except TranscriptionFailure:
+        raise
     except Exception as e:
         logger.error(
             'Modulate prerecorded (url) error exception_type=%s attempt=%s',
@@ -853,29 +989,38 @@ def parakeet_prerecorded_from_bytes(
             data = {}
 
         with httpx.Client(timeout=_verification_timeout(_PARAKEET_TIMEOUT)) as client:
-            response = observe_sync_call('parakeet', client.post, url, files=files, data=data if data else None)
+            with observe_parakeet_request('v2' if use_v2 else 'v1'):
+                response = observe_sync_call('parakeet', client.post, url, files=files, data=data if data else None)
             if response.status_code == 404 and use_v2:
                 url = api_url.rstrip('/') + '/v1/transcribe'
                 client.timeout = _verification_timeout(_PARAKEET_TIMEOUT)
-                response = observe_sync_call(
-                    'parakeet', client.post, url, files={'file': ('audio.wav', BytesIO(audio_bytes), 'audio/wav')}
-                )
+                with observe_parakeet_request('v1'):
+                    response = observe_sync_call(
+                        'parakeet', client.post, url, files={'file': ('audio.wav', BytesIO(audio_bytes), 'audio/wav')}
+                    )
                 use_v2 = False
         response.raise_for_status()
         payload: Any = response.json()
 
         # A Parakeet result always carries both keys, even for silence ({"text": "",
-        # "segments": []}). A 200 body with neither key is a degraded or foreign
-        # responder (misrouted ILB, proxy error shell), not a no-speech verdict. Raise
-        # so the sync job stays truthful and clients keep the audio as retry material
-        # instead of marking the WAL synced and discarding it. See #9586.
-        if not isinstance(payload, dict) or ('segments' not in payload and 'text' not in payload):
-            raise RuntimeError('Parakeet response contained neither segments nor text')
+        # "segments": []}). A 200 body missing either key, or carrying them with the
+        # wrong type, is a degraded or foreign responder (misrouted ILB, proxy error
+        # shell, partial envelope), not a no-speech verdict. Raise so the sync job
+        # stays truthful, clients keep the audio as retry material instead of
+        # marking the WAL synced and discarding it, and held-piece recovery never
+        # checkpoints the reply as a completed empty result. See #9586, #23081.
+        if not isinstance(payload, dict) or 'segments' not in payload or 'text' not in payload:
+            raise RuntimeError('Parakeet response must carry both segments and text')
 
         result: Dict[str, Any] = cast(Dict[str, Any], payload)
-        raw_segments = result.get('segments', [])
-        segments: List[Dict[str, Any]] = list(raw_segments) if isinstance(raw_segments, list) else []  # type: ignore[reportUnknownArgumentType]  # untyped external JSON
-        full_text = (result.get('text') or '').strip()
+        raw_segments = result['segments']
+        if not isinstance(raw_segments, list):
+            raise RuntimeError('Parakeet response segments must be a list')
+        raw_text = result['text']
+        if raw_text is not None and not isinstance(raw_text, str):
+            raise RuntimeError('Parakeet response text must be a string')
+        segments: List[Dict[str, Any]] = list(raw_segments)  # type: ignore[reportUnknownArgumentType]  # untyped external JSON
+        full_text = (raw_text or '').strip()
 
         if not segments and not full_text:
             if return_language:
@@ -1117,6 +1262,10 @@ def prerecorded(
     selected_service: Optional[Tuple[str, Optional[str], str]] = None,
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     """Route pre-recorded URL transcription through STT_PRERECORDED_MODEL."""
+    if selected_service is None and language_guard_enabled() and language_class(language) == 'unknown':
+        from utils.stt.batch_language import resolve_url
+
+        selected_service = resolve_url(language, audio_url, selector=get_prerecorded_service)
     provider = (
         get_prerecorded_provider(language, selected_service=selected_service)
         if selected_service is not None
@@ -1146,7 +1295,14 @@ def prerecorded_from_bytes(
     keywords: Optional[Sequence[str]] = None,
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     """Route pre-recorded bytes transcription through STT_PRERECORDED_MODEL."""
-    provider = get_prerecorded_provider(language)
+    from utils.stt.batch_language import resolve_language, select_decision
+
+    decision = resolve_language(language, audio_bytes, sample_rate=sample_rate, channels=channels, encoding=encoding)
+    resolved = decision.language if decision.parakeet_safe else language
+    if not language_guard_enabled() or language_class(language) != 'unknown':
+        resolved = language
+    selected = select_decision(language, decision, get_prerecorded_service)
+    provider = get_prerecorded_provider(resolved, selected_service=selected)
     return provider.transcribe_bytes(
         audio_bytes,
         sample_rate=sample_rate,
@@ -1160,15 +1316,17 @@ def prerecorded_from_bytes(
     )
 
 
-def _words_cleaning(words: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _words_cleaning(words: List[Dict[str, Any]], *, preserve_timestamps: bool = False) -> List[Dict[str, Any]]:
     words_cleaned: List[Dict[str, Any]] = []
     for i, w in enumerate(words):
         # if w['timestamp'][0] == w['timestamp'][1]:
         #     continue
         words_cleaned.append(
             {
-                'start': round(w['timestamp'][0], 2),
-                'end': round(w['timestamp'][1] or w['timestamp'][0] + 1, 2),
+                'start': w['timestamp'][0] if preserve_timestamps else round(w['timestamp'][0], 2),
+                'end': (
+                    w['timestamp'][1] if preserve_timestamps else round(w['timestamp'][1] or w['timestamp'][0] + 1, 2)
+                ),
                 'speaker': w['speaker'],
                 'text': str(w['text']).strip(),
                 'is_user': False,
@@ -1283,7 +1441,9 @@ def _capitalize_first(text: str) -> str:
     return text[:1].capitalize() + text[1:]
 
 
-def _segments_as_objects(segments: List[Dict[str, Any]]) -> List[TranscriptSegment]:
+def _segments_as_objects(
+    segments: List[Dict[str, Any]], *, preserve_timestamps: bool = False
+) -> List[TranscriptSegment]:
     if not segments:
         return []
     starts_at = segments[0]['start']
@@ -1293,18 +1453,18 @@ def _segments_as_objects(segments: List[Dict[str, Any]]) -> List[TranscriptSegme
             speaker=segment['speaker'],
             is_user=segment['is_user'],
             person_id=None,
-            start=round(segment['start'] - starts_at, 2),
-            end=round(segment['end'] - starts_at, 2),
+            start=segment['start'] - starts_at if preserve_timestamps else round(segment['start'] - starts_at, 2),
+            end=segment['end'] - starts_at if preserve_timestamps else round(segment['end'] - starts_at, 2),
         )
         for segment in segments
     ]
 
 
 def postprocess_words(
-    words: List[Dict[str, Any]], duration: int, skip_n_seconds: int = 0  # , merge_segments: bool = True
+    words: List[Dict[str, Any]], duration: int, skip_n_seconds: int = 0, *, preserve_timestamps: bool = False
 ) -> List[TranscriptSegment]:
-    cleaned_words = _words_cleaning(words)
+    cleaned_words = _words_cleaning(words, preserve_timestamps=preserve_timestamps)
     user_speaker_id = _retrieve_user_speaker_id(cleaned_words, skip_n_seconds)
     segments = _merge_segments(cleaned_words, skip_n_seconds, user_speaker_id)
-    segments_objs = _segments_as_objects(segments)
+    segments_objs = _segments_as_objects(segments, preserve_timestamps=preserve_timestamps)
     return segments_objs

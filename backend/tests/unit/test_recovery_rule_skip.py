@@ -199,3 +199,25 @@ def test_recovery_skip_accepts_only_original_rule_reasons(reason):
     decision = RelevanceDecision('discard', 'rule', reason, ProcessingTrigger.CAPTURE_END)
     assert recovery_rule_discard(decision)
     assert not recovery_rule_discard(RelevanceDecision('keep', 'rule', reason, ProcessingTrigger.CAPTURE_END))
+
+
+def test_silent_backfill_never_uses_rule_discard_or_quiet_minimum(monkeypatch, isolated_processing_module):
+    """A plan-approved keep must request real notes even when recovery's minimum switch is on."""
+    monkeypatch.setenv('LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED', 'true')
+    pc = isolated_processing_module
+    conversation = _empty_recovery_conversation()
+    conversation.transcript_segments = [
+        TranscriptSegment(text='hmm', start=0, end=30, speaker='SPEAKER_00', is_user=False)
+    ]
+    expected = Structured(title='Synthetic preserved keep', overview='Synthetic full summary')
+    with (
+        patch.object(pc, 'conversation_transcripts_for_llm', return_value=('hmm', 'hmm', {})),
+        patch.object(pc, 'has_structural_wake_word_marker', return_value=False),
+        patch.object(pc, 'is_release_probe_uid', return_value=False),
+        patch.object(pc, 'get_conversation_notes', return_value=expected) as notes,
+    ):
+        structured, discarded = pc._get_structured(
+            'uid-recovery', 'en', conversation, trigger=ProcessingTrigger.SILENT_BACKFILL
+        )
+    assert not discarded and structured.overview == expected.overview
+    notes.assert_called_once()

@@ -16,6 +16,7 @@ from prometheus_client import (
     generate_latest,
     start_http_server,
 )
+from utils.episodes import metrics as _episode_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
 
 # All backend, backend-listen, and pusher metrics endpoints import this module.
 # The pinned prometheus_client (0.21.1) otherwise exports a second _created
@@ -78,6 +79,19 @@ PUSHER_QUEUE_DROPS = Counter(
     ['queue'],
 )
 
+# Alert selectors must exist before the first loss, including emergency rollback.
+for _pusher_queue in (
+    'speaker_sample',
+    'transcript',
+    'audio_bytes',
+    'private_cloud',
+    'private_cloud_buffer',
+    'private_cloud_pending',
+    'audio_app_buffer',
+    'audio_webhook_buffer',
+):
+    PUSHER_QUEUE_DROPS.labels(queue=_pusher_queue).inc(0)
+
 PUSHER_QUEUE_DROPPED_BYTES = Counter(
     'pusher_queue_dropped_bytes_total',
     'Pusher queue bytes dropped by bounded queue name',
@@ -116,11 +130,14 @@ OMI_JOURNEY_TERMINAL_TOTAL = Counter(
     ['journey', 'outcome'],
 )
 
+# 10 finite buckets, not 15: the 3x4 journey/outcome product is pre-created
+# below per pod/instance; no rule reads an explicit le= here (p50/p95 only).
+JOURNEY_LATENCY_BUCKETS = (0.5, 1, 2.5, 5, 10, 30, 60, 300, 3600, 21600)
 OMI_JOURNEY_LATENCY_SECONDS = Histogram(
     'omi_journey_latency_seconds',
     'Elapsed time from accepted real-traffic journey to terminal outcome',
     ['journey', 'outcome'],
-    buckets=(0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 900, 3600, 21600, 86400),
+    buckets=JOURNEY_LATENCY_BUCKETS,
 )
 
 OMI_CAPTURE_FINALIZATION_RECONCILIATIONS_TOTAL = Counter(
@@ -270,6 +287,19 @@ OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL = Counter(
     'omi_audio_timeline_chunks_written_total',
     'Successful audio chunk upload completions, by span metadata presence; an idempotent retry can complete the same object more than once',
     ['reason'],
+)
+# GCS-4: all-zero private-cloud runs skipped at enqueue. Readers zero-fill
+# gaps between objects with the same bytes, so an all-zero run stored as its
+# own object is audio-identical to the gap it would leave behind.
+PUSHER_SILENT_RUN_FLUSHES_SKIPPED_TOTAL = Counter(
+    'pusher_silent_run_flushes_skipped_total',
+    'All-zero private-cloud runs not enqueued; their bytes are reproduced by gap fill on read',
+)
+# GCS-3b: span uploads that skipped the replay-reconcile listing because the
+# session ledger showed no replay for that conversation.
+PUSHER_RECONCILE_LISTS_SKIPPED_TOTAL = Counter(
+    'pusher_reconcile_lists_skipped_total',
+    'Private-cloud span uploads that skipped the per-flush replay-reconcile listing',
 )
 OMI_LISTEN_PUSHER_AUDIO_DISCARDED_BYTES_TOTAL = Counter(
     'omi_listen_pusher_audio_discarded_bytes_total',
@@ -510,6 +540,7 @@ JEV_DECISION_LABELS = {
             'capture_same_scene',
             'capture_resummary',
             'conversation_smart_merge',
+            'episode_boundary',
         }
     ),
     'outcome': frozenset(
@@ -758,6 +789,11 @@ MEETING_NOTES_EVIDENCE_WAIT_TOTAL = Counter(
     ['outcome'],
 )
 
+CONVERSATION_ORPHANED_UNFINALIZED = Counter(
+    'omi_conversation_orphaned_unfinalized',
+    'Quiet content-bearing conversations observed without a finalization job and with no live recording lease',
+)
+
 LISTEN_FINALIZATION_RETRIES_TOTAL = Counter(
     'listen_finalization_retries_total',
     'Durable listen finalization jobs replayed by the reconciler',
@@ -857,6 +893,12 @@ OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL = Counter(
     ['mode', 'app_build'],
 )
 
+OMI_SYNC_DISPATCH_FAILURES_TOTAL = Counter(
+    'omi_sync_dispatch_failures_total',
+    'Sync v2 Cloud Tasks staging failures by closed reason',
+    ['reason'],
+)
+
 OMI_SYNC_LANE_JOBS_TOTAL = Counter(
     'omi_sync_lane_jobs_total',
     'Sync jobs admitted by lane, capture-time trust, and outcome',
@@ -873,6 +915,12 @@ OMI_SYNC_LANE_ADMISSIONS_TOTAL = Counter(
     'omi_sync_lane_admissions_total',
     'V2 sync upload lane decisions after the legacy fresh budget',
     ['lane', 'trust', 'reason'],
+)
+
+OMI_SYNC_CAPTURE_TIME_TOTAL = Counter(
+    'omi_sync_capture_time_total',
+    'Sync upload capture-time admission outcomes under the shared future-skew tolerance',
+    ['outcome'],
 )
 
 OMI_SYNC_RECORDING_AGE_SECONDS = Histogram(
@@ -935,6 +983,12 @@ OMI_SYNC_TRANSCRIPTION_JOBS_TOTAL = Counter(
     ['provider', 'model', 'lane', 'outcome', 'deployment_version'],
 )
 
+OMI_SYNC_EMPTY_SUCCESS_GUARD_TOTAL = Counter(
+    'omi_sync_empty_success_guard_total',
+    'Zero-word sync segment dispositions at the silence decision, by provider and reason',
+    ['provider', 'reason'],
+)
+
 OMI_SYNC_BRIDGE_RETRACTION_TOTAL = Counter(
     'omi_sync_bridge_retraction_total',
     (
@@ -944,6 +998,32 @@ OMI_SYNC_BRIDGE_RETRACTION_TOTAL = Counter(
         'Never labeled by uid, conversation id, or exception text.'
     ),
     ['outcome', 'reason'],
+)
+
+# Counted alongside omi_sync_transcription_*_total{outcome="internal_error"}:
+# the bounded internal cause (config.sync_telemetry.SyncFailureReason).
+OMI_SYNC_INTERNAL_FAILURES_TOTAL = Counter(
+    'omi_sync_internal_failures_total',
+    'Sync job/segment failures in persistence or finalize, by bounded internal cause; never STT vendor errors',
+    ['kind', 'lane', 'failure_reason'],
+)
+
+OMI_SYNC_BRIDGE_AUDIO_COPY_TOTAL = Counter(
+    'omi_sync_bridge_audio_copy_total',
+    (
+        'Per-object sync-bridge audio copies. outcome=copied|skipped (destination already held the '
+        'same bytes)|rate_limited (one GCS 429, retried with backoff)|raced (a concurrent copier won)'
+    ),
+    ['outcome'],
+)
+
+OMI_SYNC_FRESH_CONVERSATION_TURN_TOTAL = Counter(
+    'omi_sync_fresh_conversation_turn_total',
+    (
+        'Fresh-lane per-conversation persistence turns. outcome=acquired|waited (acquired after another '
+        'fresh job released it)|timeout|unavailable (both proceed unserialized; the transaction stays correct)'
+    ),
+    ['outcome'],
 )
 
 OMI_LIVE_STT_TERMINAL_FAILURES_TOTAL = Counter(
@@ -996,6 +1076,14 @@ OMI_VAD_GATE_SESSIONS_TOTAL = Counter(
     ['mode'],
 )
 
+# D2 edge shadow mirrors (utils/stt/edge_shadow.py). outcome: completed,
+# queue_full, connect_failed, send_failed, edge_closed.
+OMI_LISTEN_EDGE_SHADOW_SESSIONS_TOTAL = Counter(
+    'omi_listen_edge_shadow_sessions_total',
+    'Listen sessions mirrored to listen-edge by how the mirror ended',
+    ['outcome'],
+)
+
 OMI_LIVE_STT_TERMINAL_TOTAL = Counter(
     'omi_live_stt_terminal_total',
     'Terminal live-STT outcomes for accepted attempts by bounded labels',
@@ -1023,6 +1111,20 @@ OMI_STT_PROVIDER_CIRCUIT_OPEN = Gauge(
     'omi_stt_provider_circuit_open',
     'Whether the process-local STT provider breaker is currently refusing traffic (1) or not (0)',
     ['provider', 'kind'],
+)
+
+# Trips of the same breaker (closed/half-open -> open), counted once per
+# transition by the bounded cause that opened it: the serve-death reason
+# (connection_lost, send_failed, ...) or the connect-failure reason that
+# reached the threshold. error_class uses the shared live-reason vocabulary;
+# 'untyped' covers trips whose caller could not name a cause. Re-arming an
+# already-open breaker does not count. reason groups the bounded cause into
+# auth/quota/5xx/latency/no_text/connect, with capacity/unknown kept explicit.
+# The gauge shows current state; this counter shows why it tripped.
+OMI_STT_PROVIDER_CIRCUIT_TRIP_TOTAL = Counter(
+    'omi_stt_provider_circuit_trip_total',
+    'STT provider breaker transitions into open by bounded cause (serve-death or connect-failure reason)',
+    ['provider', 'kind', 'error_class', 'reason'],
 )
 
 # Per-provider live-STT connection attempts on every connect path (legacy order
@@ -1073,6 +1175,30 @@ OMI_LISTEN_REALTIME_DEMAND_SECONDS_TOTAL = Counter(
     'omi_listen_realtime_demand_seconds_total',
     'Live listen session wall seconds by real-time demand bucket, bounded source and client platform',
     ['transcription_source', 'client_platform', 'realtime_demand'],
+)
+
+OMI_CLOUD_LIVE_STT_MODE_SESSIONS_TOTAL = Counter(
+    'omi_cloud_live_stt_mode_sessions_total',
+    'Listen sessions by resolved CLOUD_LIVE_STT_MODE and whether the client declared a local on-device preview',
+    ['mode', 'local_preview', 'client_platform'],
+)
+
+OMI_CLOUD_LIVE_STT_SAVED_SECONDS_TOTAL = Counter(
+    'omi_cloud_live_stt_saved_seconds_total',
+    'Decoded listen audio seconds that would have been sent to a cloud streaming STT session under stream mode, by mode',
+    ['mode'],
+)
+
+OMI_LISTEN_LOCAL_PREVIEW_SESSIONS_TOTAL = Counter(
+    'omi_listen_local_preview_sessions_total',
+    'Listen sessions by mobile local-preview lane admission outcome (closed reason set)',
+    ['outcome', 'client_platform'],
+)
+
+OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL = Counter(
+    'omi_listen_deferred_stream_opened_total',
+    'Deferred cloud live STT streams opened because audio reached the socket, by why the stream was deferred',
+    ['deferred_by'],
 )
 
 OMI_LISTEN_AUDIO_OUTCOME_TOTAL = Counter(
@@ -1133,8 +1259,8 @@ OMI_LISTEN_NO_AUDIO_TEARDOWN_TOTAL = Counter(
 # series use Cloud Logging of the matching omi_sync_intake line until scrape lands.
 OMI_SYNC_INTAKE_TOTAL = Counter(
     'omi_sync_intake_total',
-    'Sync conversation intake outcomes (created vs merged) by bounded outcome',
-    ['outcome'],
+    'Sync conversation intake outcomes (created vs merged) by bounded outcome and projected encoded-size bucket',
+    ['outcome', 'projected_size_bucket'],
 )
 
 # One decision per safety-WAL upload that carries a recording id and audio
@@ -1146,7 +1272,7 @@ OMI_SYNC_LINEAGE_RESOLVE_TOTAL = Counter(
         'Sync lineage binding decisions. outcome is a closed set: bound|split_across_generations|stamp_overridden|'
         'stamp_fallback|no_rows|truncated|interval_miss|lookup_failed|disabled|not_allowlisted|s1_refused'
     ),
-    ['outcome'],
+    ['outcome', 'stage', 'claim_count_bucket', 'file_count_bucket'],
 )
 
 # Task identity is emitted by all processing hosts; event=action_item_identity logs cover unscraped hosts.
@@ -1177,25 +1303,21 @@ CONVERSATION_SHAPE_SOURCES = (
     'desktop',
     'unknown',
 )
+# 11 finite buckets, not 18: each source product is pre-created per emitter.
+# 10/15 back omi_conversation_shape's log; 120 backs the Core Features
+# le="120.0" panel; the rest only needs p10/p50/p90 resolution.
 CONVERSATION_DURATION_BUCKETS = (
     5,
     10,
     15,
-    20,
     30,
-    45,
     60,
-    90,
     120,
-    180,
     300,
     600,
-    1200,
     1800,
     3600,
-    7200,
     14400,
-    28800,
 )
 CONVERSATION_SEGMENT_BUCKETS = (1, 2, 3, 5, 10, 20, 50, 100, 200, 500, 1000, 5000)
 
@@ -1314,6 +1436,15 @@ OMI_SUBSCRIPTION_EVENTS = Counter(
     'deliveries, which Stripe may retry, so treat these as an operational trend '
     'signal rather than a billing-grade figure; Stripe remains source of truth.',
     ['event', 'plan', 'interval', 'reason'],
+)
+
+OMI_NEW_BUYER_CHECKOUT_REJECTED = Counter(
+    'omi_new_buyer_checkout_rejected_total',
+    'Checkout-session rejections for a retired-plan price (Omi Pro, '
+    "unlimited_v2, is the only plan sold), by reason and the target price's "
+    'plan. Reason `non_omi_pro_price`. The closed label surfaces and '
+    'zero-initialization live next to the recorder in utils.subscription.',
+    ['reason', 'plan'],
 )
 
 

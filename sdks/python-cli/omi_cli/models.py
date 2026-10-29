@@ -139,8 +139,15 @@ class ConversationSummary(BaseModel):
     source: Optional[str] = None
 
 
+# Named so the commands can fail a doomed request before it is sent, rather
+# than restating the bound at the call site. Mirrors ``CreateConversationRequest``
+# and ``UpdateConversationRequest`` in ``backend/routers/developer.py``.
+CONVERSATION_TEXT_MAX_LENGTH = 100000
+CONVERSATION_TITLE_MAX_LENGTH = 500
+
+
 class ConversationCreate(BaseModel):
-    text: str = Field(min_length=1, max_length=100000)
+    text: str = Field(min_length=1, max_length=CONVERSATION_TEXT_MAX_LENGTH)
     text_source: ConversationTextSource = ConversationTextSource.other_text
     text_source_spec: Optional[str] = None
     started_at: Optional[datetime] = None
@@ -149,7 +156,7 @@ class ConversationCreate(BaseModel):
 
 
 class ConversationUpdate(BaseModel):
-    title: Optional[str] = Field(default=None, min_length=1, max_length=500)
+    title: Optional[str] = Field(default=None, min_length=1, max_length=CONVERSATION_TITLE_MAX_LENGTH)
     discarded: Optional[bool] = None
 
 

@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-desktop-macos-memory-save-failed-draft-kept.png",
+      "platform": "desktop-macos",
+      "description": "Isolated synthetic Alice memory: local backend unavailable; failed Save preserves text and retry/cancel controls",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

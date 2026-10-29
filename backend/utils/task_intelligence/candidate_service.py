@@ -8,8 +8,7 @@ import database.action_items as action_items_db
 import database.candidate_integration_outbox as integration_outbox_db
 import database.candidates as candidates_db
 import database.workstreams as workstreams_db
-from database.account_deletion_marker import get_user_deletion_wipe_status
-from database.account_deletion_policy import account_deletion_blocks_access
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from database.durable_queue import OutcomeKind, ProcessOutcome, drain_isolated
 from models.candidate import (
     CandidateAction,
@@ -33,16 +32,15 @@ _PROVIDER_ATTEMPT_OUTCOMES = frozenset({'not_sent', 'definite_error', 'in_doubt'
 
 
 def provider_dispatch_blocked_by_account_deletion(uid: str) -> bool:
-    """Fail closed on the account_deletions/{uid} marker the request auth fence uses."""
+    """Use the shared fail-closed fence before any per-user provider call."""
     try:
-        status = get_user_deletion_wipe_status(uid)
+        return account_deletion_blocks_user_work(uid)
     except Exception as error:
         logger.error(
             'candidate integration deletion fence unavailable exception_type=%s',
             type(error).__name__,
         )
         return True
-    return account_deletion_blocks_access(status)
 
 
 def _classified_provider_outcome(outcome: str, *, succeeded: bool) -> str:

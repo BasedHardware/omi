@@ -1,11 +1,13 @@
 """Shared reversible edit contract, additive to the released Review edit arm."""
 
 from pydantic import Field, model_validator
+from typing import ClassVar
 from models.dream_edit import Edit, MemoryHygieneEdit, Strict, QUESTION_VALUE_DESCRIPTION
-from utils.agent_capabilities.registry import EDIT_KINDS
+from utils.agent_capabilities.registry import EDIT_KINDS, ALL_EDIT_KINDS
 
 
 class HarnessEdit(Strict):
+    _dream_authority: ClassVar[bool] = False
     kind: str = Field(
         json_schema_extra={'enum': list(EDIT_KINDS)},
         description=(
@@ -58,7 +60,31 @@ class HarnessEdit(Strict):
         from utils.agent_capabilities.registry import get_kind
 
         spec = get_kind(self.kind)
+        if spec.dream_only and not self._dream_authority:
+            raise ValueError('Dream-private capability is not a released Review edit')
+        if not spec.dream_only and len(self.evidence) > 10:
+            raise ValueError('Only bounded required-intake inventory may cite more than ten refs')
         if self.effective_from and spec.schema_rule != 'hygiene':
             raise ValueError('Only memory supersession may carry effective_from')
         spec.schema(self)
         return self
+
+
+class DreamHarnessEdit(HarnessEdit):
+    """Private planner model; never added to the released Review response arm."""
+
+    _dream_authority: ClassVar[bool] = True
+    kind: str = Field(
+        json_schema_extra={'enum': list(ALL_EDIT_KINDS)},
+        description=(HarnessEdit.model_fields['kind'].description or '')
+        + ' resolve_required_memory compares a hidden historical required submission with all supplied canonical evidence; preserve before verbatim and leave after empty.',
+    )
+    other: str = Field(
+        default='',
+        max_length=256,
+        description=(HarnessEdit.model_fields['other'].description or '')
+        + ' For resolve_required_memory, optionally name the existing durable memory covering every material detail.',
+    )
+    evidence: list[str] = Field(
+        min_length=1, max_length=101, description=HarnessEdit.model_fields['evidence'].description
+    )

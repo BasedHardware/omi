@@ -37,8 +37,13 @@ Unhandled exceptions retain their validated trace IDs for the outer Uvicorn log
 after request context resets. The requested level also constrains named loggers.
 Cloud Run uses platform request logs. GKE suppresses successful health/metrics
 probes and uses LB logs for diarizer, nllb, parakeet, pusher and vad. Keep general
-access records for listen, llm-gateway and diarizer-batch until actual route
-coverage is proven. A local project ID alone does not suppress general access
+access records for llm-gateway and diarizer-batch until actual route
+coverage is proven. listen moved to `access_policy='platform'` on 2026-10-26:
+its uvicorn access records had grown to ~21M INFO lines/day (~23 GiB/day billed,
+the fleet's largest single stdout source) behind the fronting LB, while per-route
+debugging rides the LB request records and omi_* metrics; revert the
+`main.py` call if a route needs in-pod access lines again. A local project ID
+alone does not suppress general access
 records. Exceptions and ERROR records are never suppressed by noise filters.
 
 ## Consumer admission
@@ -64,6 +69,19 @@ notifications-job migration. Do not silently accept empty label values.
 `sync_backfill_uid_sequencer_scheduler_failure` selects Cloud Scheduler platform
 AttemptFinished records, not application messages. Preserve `severity>=ERROR`,
 `jsonPayload."@type"`, job ID and resource predicates unchanged.
+
+## Adopted in text mode
+
+`main.py` (backend Cloud Run services and listen), `llm_gateway/main.py`,
+`pusher/main.py` and `utils/messaging/maintenance.py` call
+`configure_logging(..., default_format='text')` (plan B B2: the role images
+must pass this guard). Text mode keeps the INFO-stdout / WARNING-stderr split
+and `textPayload`, so the filters above keep matching; the visible change is
+the line prefix (`INFO logger: message` instead of `INFO:logger:message`) and
+Uvicorn's own records routing through the root handler. Pusher passes
+`access_policy='keep'`. The JSON switch for each of these services is
+`OMI_LOG_FORMAT=json` in its runtime env, after the consumer admission above;
+install `TraceContextMiddleware` in the same change so JSON lines carry traces.
 
 ## Per-service acceptance
 

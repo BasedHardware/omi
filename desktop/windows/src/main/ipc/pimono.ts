@@ -33,8 +33,13 @@ export function registerPiMonoHandlers(): void {
     // kernel chat + control tools. Fail closed, never fall back to the decode path.
     // On sign-out (session === null) it resets to default.
     const current = getPiMonoSession()
+    setControlPlaneOwner(null)
     setAssistantSettingsOwner(null)
     const uid = current ? await verifyFirebaseIdToken(current.token) : null
+    // configurePiMonoSession creates a new admitted session object even when
+    // signing back into the same UID/token. An older verifier cannot rebind
+    // either owner after a newer credential or sign-out replaced that object.
+    if (getPiMonoSession() !== current) return
     setControlPlaneOwner(uid)
     setAssistantSettingsOwner(uid)
     // Register the managed-cloud pi-mono adapter into the kernel now that a

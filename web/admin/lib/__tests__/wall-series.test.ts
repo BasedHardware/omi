@@ -16,6 +16,7 @@ import {
   SeriesSources,
   STORE_FAIL_LIMIT,
   UNIT_DAYS,
+  warmSeries,
 } from "../wall-series";
 import { resetWallCache, wallPayload } from "../wall-cache";
 import {
@@ -26,6 +27,16 @@ import {
   SeriesStore,
 } from "../wall-series-store";
 import { isoDay, shiftDay, utcDay } from "../qualified-activity";
+import {
+  INFRA_AS_OF,
+  INFRA_MONTHLY_USD,
+  MARGIN_DAYS_PER_MONTH,
+  STRIPE_FEES_MONTHLY_USD,
+  STT_MONTHLY_USD,
+  VARIABLE_MARGIN_TARGET,
+} from "../wall-cost";
+import { HEALTH_COST_DAYS } from "../wall-finops";
+import { WallSourceError } from "../wall-source-error";
 
 const now = new Date("2026-10-15T12:00Z");
 const end = utcDay(now);
@@ -104,6 +115,19 @@ const finopsMrr = Object.fromEntries(
     { unlimited: 500 + i, plus: 400 },
   ])
 );
+const finopsHistory = {
+  mrr: finopsMrr,
+  paying: Object.fromEntries(Object.keys(finopsMrr).map((day) => [day, 1_500])),
+  payingCustomers: Object.fromEntries(
+    Object.keys(finopsMrr).map((day) => [day, 1_480])
+  ),
+  nonUsdPaying: Object.fromEntries(
+    Object.keys(finopsMrr).map((day) => [day, 0])
+  ),
+  refreshed: Object.fromEntries(
+    Object.keys(finopsMrr).map((day) => [day, `${day}T14:36:00Z`])
+  ),
+};
 function sources(): SeriesSources & WallSources {
   return {
     query: vi.fn(query),
@@ -116,14 +140,15 @@ function sources(): SeriesSources & WallSources {
       unmappedProducts: 0,
       unsupportedItems: 0,
     }),
-    finops: vi.fn(async () => ({
-      mrr: finopsMrr,
-    })),
+    finops: vi.fn(async () => finopsHistory),
     planCost: vi.fn(async () => ({
       plans: {},
       sttMeasured: {},
       saasMeasured: {},
+      saasAnnualPartial: {},
+      sttCash: {},
     })),
+    fees: vi.fn(async () => ({ fees: {}, foreign: {} })),
   };
 }
 const value = (wall: WallPayload, id: string) =>
@@ -196,11 +221,13 @@ describe("v3 series agree with the v2 snapshot", () => {
       value(wall, "retention.if_activated").value!,
       1
     );
+    // The stat is the FinOps book now; the chart's last point is that book's
+    // snapshot day, not a live-read point.
     expect(f.revenue.mrr.at(-1)).toMatchObject({
       total: value(wall, "revenue.mrr").value,
-      unlimited: 600,
+      unlimited: finopsMrr[isoDay(shiftDay(end, -1))].unlimited,
       plus: 400,
-      source: "Live Stripe book",
+      source: "FinOps book",
     });
     expect(f.revenue.arpmau.at(-1)?.arpmau).toBeCloseTo(
       value(wall, "revenue.arpmau").value!,
@@ -385,6 +412,10 @@ describe("v3 series agree with the v2 snapshot", () => {
           ([day]) => day >= isoDay(shiftDay(end, -20))
         )
       ),
+      paying: finopsHistory.paying,
+      payingCustomers: finopsHistory.payingCustomers,
+      nonUsdPaying: finopsHistory.nonUsdPaying,
+      refreshed: finopsHistory.refreshed,
     }));
     const wall = await computeWall(s, now);
     const f = await all(wall, s);
@@ -393,9 +424,9 @@ describe("v3 series agree with the v2 snapshot", () => {
       Array.from({ length: from - to + 1 }, (_, i) =>
         isoDay(shiftDay(end, -from + i))
       );
-    // A book read falls back one day, so the first point is the day before
-    // the book starts; nothing is drawn (or zero) before it.
-    expect(days(f.revenue.arpmau)).toEqual(daily(21, 1));
+    // Each point uses the book snapshotted that day, so the first point is
+    // the book's first day; nothing is drawn (or zero) before it.
+    expect(days(f.revenue.arpmau)).toEqual(daily(20, 1));
     expect(days(f.health.costPerMau)).toEqual(daily(UNIT_DAYS, 2));
     // Every daily point has its own 30-day MAU read (seven offsets per read).
     for (const r of f.revenue.arpmau) expect(r.mau).toBeGreaterThan(0);
@@ -416,6 +447,31 @@ describe("v3 series agree with the v2 snapshot", () => {
         value: f.health.costPerMau.at(-1)?.costPerMau,
       },
     ]);
+  });
+
+  it("prices each day with that day's FinOps book and gaps a day without one", async () => {
+    const s = sources();
+    const hole = isoDay(shiftDay(end, -6));
+    s.finops = vi.fn(async () => ({
+      mrr: Object.fromEntries(
+        Object.entries(finopsMrr).filter(([day]) => day !== hole)
+      ),
+      paying: finopsHistory.paying,
+      payingCustomers: finopsHistory.payingCustomers,
+      nonUsdPaying: finopsHistory.nonUsdPaying,
+      refreshed: finopsHistory.refreshed,
+    }));
+    const wall = await computeWall(s, now);
+    const f = await all(wall, s);
+    const at = (rows: Row[], day: string) =>
+      rows.find((r) => String(r.date).slice(0, 10) === day);
+    expect(at(f.revenue.arpmau, hole)).toBeUndefined();
+    expect(at(f.health.cost, hole)?.revenuePerDay).toBeNull();
+    const day = isoDay(shiftDay(end, -5));
+    const book = finopsMrr[day].unlimited + finopsMrr[day].plus;
+    expect(at(f.health.cost, day)?.revenuePerDay).toBeCloseTo(book / 30.4375);
+    const point = at(f.revenue.arpmau, day)!;
+    expect(point.finopsArpmau).toBeCloseTo(book / (point.mau as number), 1);
   });
 
   it("shades the maturing span from each cohort line's last point to now", async () => {
@@ -461,14 +517,14 @@ describe("v3 series agree with the v2 snapshot", () => {
 describe("margin by plan (allocated estimate)", () => {
   const day = (k: number) => isoDay(shiftDay(end, -k));
   const plans = (scale: number) => ({
-    unlimited: { usd: 40 * scale, users: 4 },
-    unlimited_v2: { usd: 30 * scale, users: 3 },
-    operator: { usd: 10 * scale, users: 1 },
-    plus: { usd: 5 * scale, users: 1 },
-    architect: { usd: 2 * scale, users: 1 },
-    basic: { usd: 60 * scale, users: 8 },
-    unattributed: { usd: 0.5, users: 1 },
-    none: { usd: 0.25, users: 1 },
+    unlimited: { usd: 40 * scale, users: 4, varUsd: 0, varUsers: 0 },
+    unlimited_v2: { usd: 30 * scale, users: 3, varUsd: 0, varUsers: 0 },
+    operator: { usd: 10 * scale, users: 1, varUsd: 0, varUsers: 0 },
+    plus: { usd: 5 * scale, users: 1, varUsd: 0, varUsers: 0 },
+    architect: { usd: 2 * scale, users: 1, varUsd: 0, varUsers: 0 },
+    basic: { usd: 60 * scale, users: 8, varUsd: 0, varUsers: 0 },
+    unattributed: { usd: 0.5, users: 1, varUsd: 0, varUsers: 0 },
+    none: { usd: 0.25, users: 1, varUsd: 0, varUsers: 0 },
   });
   const book = {
     unlimited: 3_000,
@@ -478,8 +534,9 @@ describe("margin by plan (allocated estimate)", () => {
     architect: 200,
   };
   const legs = async (
-    sttMeasured: Record<string, number> = {},
-    saasMeasured: Record<string, number> = {}
+    sttMeasured: Record<string, Record<string, number>> = {},
+    saasMeasured: Record<string, number> = {},
+    saasAnnualPartial: Record<string, string> = {}
   ) => ({
     billing: await billing(),
     // FinOps cost settles ~D−3: days 6..3, with day 5 missing.
@@ -487,10 +544,16 @@ describe("margin by plan (allocated estimate)", () => {
       plans: { [day(6)]: plans(1), [day(4)]: plans(1.1), [day(3)]: plans(1) },
       sttMeasured,
       saasMeasured,
+      saasAnnualPartial,
+      sttCash: {},
     },
     // The book is missing day 4 (like 2026-09-29) and has today's snapshot.
     finops: {
       mrr: Object.fromEntries([7, 6, 5, 3, 2, 1, 0].map((k) => [day(k), book])),
+      paying: {},
+      payingCustomers: {},
+      nonUsdPaying: {},
+      refreshed: {},
     },
   });
 
@@ -540,13 +603,18 @@ describe("margin by plan (allocated estimate)", () => {
       `Margin through ${new Date(`${day(3)}T00:00:00Z`).toLocaleDateString(
         "en-US",
         { month: "short", day: "numeric", timeZone: "UTC" }
-      )} · STT estimate · SaaS estimate as of Oct 16`
+      )} · STT estimate · SaaS estimate · Infra non-GCP estimate as of Oct 16 · Stripe fees unavailable (finops key scope)`
     );
   });
 
   it("prefers a measured FinOps STT line and labels it measured", async () => {
     const estimate = assembleSeries("health", await legs(), null, now);
-    const f = assembleSeries("health", await legs({ [day(3)]: 99 }), null, now);
+    const f = assembleSeries(
+      "health",
+      await legs({ [day(3)]: { soniox: 99 } }),
+      null,
+      now
+    );
     const at = (rows: Row[]) =>
       rows.find((r) => String(r.date).startsWith(day(3)))!;
     expect(at(f.cost)).toMatchObject({ stt: 99, sttSource: "measured" });
@@ -559,7 +627,7 @@ describe("margin by plan (allocated estimate)", () => {
       1
     );
     expect(f.marginStatus[0].text).toMatch(
-      /· STT measured · SaaS estimate as of Oct 16$/
+      /· STT measured · SaaS estimate · Infra non-GCP estimate as of Oct 16 · Stripe fees unavailable \(finops key scope\)$/
     );
   });
 
@@ -587,22 +655,201 @@ describe("margin by plan (allocated estimate)", () => {
       (at(f.cost).total as number) - (at(estimate.cost).total as number)
     ).toBeCloseTo(-(at(estimate.cost).saas as number), 6);
     expect(f.marginStatus[0].text).toMatch(
-      /· STT estimate · measured SaaS \(Mercury\) as of Oct 16$/
+      /· STT estimate · measured SaaS \(Mercury\) · Infra non-GCP estimate as of Oct 16 · Stripe fees unavailable \(finops key scope\)$/
     );
+  });
+
+  it("uses the measured Mercury infra run rate and owns the total once measured", async () => {
+    const estimate = assembleSeries("health", await legs(), null, now);
+    const base = await legs();
+    const f = assembleSeries(
+      "health",
+      {
+        ...base,
+        infra: {
+          infraMeasured: { [day(3)]: 32.87 },
+          infraAnnualPartial: {},
+          infraStripeFeesCash: {},
+        },
+      },
+      null,
+      now
+    );
+    const at = (rows: Row[]) =>
+      rows.find((r) => String(r.date).startsWith(day(3)))!;
+    expect(at(f.cost)).toMatchObject({
+      infra: 32.87,
+      infraSource: "measured",
+      infraMeasuredUsd: 32.87,
+      infraEstimateUsd: null,
+      infraFeesCashUsd: null,
+    });
+    expect(at(estimate.cost)).toMatchObject({
+      infraSource: "estimate",
+      infraMeasuredUsd: null,
+    });
+    expect(
+      (at(f.cost).total as number) - (at(estimate.cost).total as number)
+    ).toBeCloseTo(32.87 - (at(estimate.cost).infra as number), 6);
+    expect(f.marginStatus[0].text).toMatch(
+      /· STT estimate · SaaS estimate · measured Infra non-GCP \(Mercury\) as of Oct 16 · Stripe fees unavailable \(finops key scope\)$/
+    );
+  });
+
+  it("prices a floored partial infra day by the dated constant, fee cash on its own field (Luna r2 P1/P2)", async () => {
+    const base = await legs();
+    const f = assembleSeries(
+      "health",
+      {
+        ...base,
+        // A partial row below the constant, with excluded fee cash while the
+        // fee leg is unavailable (legs() carries no fee table).
+        infra: {
+          infraMeasured: { [day(3)]: 3.75 },
+          infraAnnualPartial: { [day(3)]: "history_under_12_months" },
+          infraStripeFeesCash: { [day(3)]: 4 },
+        },
+      },
+      null,
+      now
+    );
+    const row = f.cost.find((r) => String(r.date).startsWith(day(3)))!;
+    const constant = INFRA_MONTHLY_USD / (365.25 / 12);
+    // The constant floors the base; the series says "estimate", carries the
+    // constant in the estimate field and the fee cash apart — neither series
+    // absorbs the other, and they sum to the line.
+    expect(row).toMatchObject({
+      infraSource: "estimate",
+      infraMeasuredUsd: null,
+      infraFeesCashUsd: 4,
+    });
+    expect(row.infraEstimateUsd).toBeCloseTo(constant, 6);
+    expect(row.infra).toBeCloseTo(constant + 4, 6);
+    // The margin line prices Infra by the constant and states the floor; the
+    // constant's own as-of (Oct 23) is later than STT/SaaS's, so Oct 16 stays.
+    expect(f.marginStatus[0].text).toMatch(
+      /· STT estimate · SaaS estimate · Infra non-GCP estimate \(floors partial Mercury run rate\) as of Oct 16 · Stripe fees unavailable \(finops key scope\)$/
+    );
+    expect(f.estimates.find((e) => e.line === "Infra")).toMatchObject({
+      asOf: INFRA_AS_OF,
+      stale: 0,
+    });
+  });
+
+  it("counts the Mercury stripe_fees cash on every rendered frame while the fee line is dark (Luna r2 P2)", async () => {
+    const base = await legs();
+    // Cash on every frame the wall renders — the oldest included. The frames
+    // span the 60 days ending at the D−2 cutoff (days 61..2 here); a history
+    // read that stops 40 days back drops the cash from the oldest 19.
+    const cash = Object.fromEntries(
+      Array.from({ length: HEALTH_COST_DAYS }, (_, i) => [day(i + 2), 4])
+    );
+    const f = assembleSeries(
+      "health",
+      {
+        ...base,
+        infra: {
+          infraMeasured: {},
+          infraAnnualPartial: {},
+          infraStripeFeesCash: cash,
+        },
+      },
+      null,
+      now
+    );
+    expect(f.cost).toHaveLength(HEALTH_COST_DAYS);
+    expect(String(f.cost[0].date).slice(0, 10)).toBe(day(HEALTH_COST_DAYS + 1));
+    expect(String(f.cost.at(-1)!.date).slice(0, 10)).toBe(day(2));
+    // Every frame, the oldest first: the dated constant base plus the cash,
+    // the fee line dark — the money sits on exactly one line on every day.
+    const constant = INFRA_MONTHLY_USD / (365.25 / 12);
+    for (const r of f.cost) {
+      expect(r.infraFeesCashUsd).toBe(4);
+      expect(r.infra).toBeCloseTo(constant + 4, 6);
+      expect(r.feesUnavailable).toBe(1);
+    }
   });
 
   it("flags the cost frames once a manual estimate is older than 35 days", async () => {
     const fresh = assembleSeries("health", await legs(), null, now);
     expect(fresh.cost.every((r) => r.estimateStale === 0)).toBe(true);
-    const later = new Date("2026-11-21T12:00Z");
+    const later = new Date("2026-12-01T12:00Z"); // past every line's threshold
     const f = assembleSeries("health", {}, null, later);
     expect(f.estimates).toEqual([
       expect.objectContaining({ line: "STT", asOf: "2026-10-16", stale: 1 }),
       expect.objectContaining({ line: "SaaS", asOf: "2026-10-16", stale: 1 }),
+      expect.objectContaining({
+        line: "Infra",
+        asOf: INFRA_AS_OF,
+        stale: 1,
+      }),
     ]);
     expect(f.marginStatus[0].text).toBe(
-      "Margin through — · STT estimate · SaaS estimate as of Oct 16 (stale)"
+      "Margin through — · STT estimate · SaaS estimate · Infra non-GCP estimate as of Oct 16 (stale) · Stripe fees unavailable (finops key scope)"
     );
+  });
+
+  it("keeps modelled Modulate and cash out of the STT measured series (Luna P2)", async () => {
+    const base = await legs({ [day(3)]: { soniox: 99, deepgram: 11 } });
+    const f = assembleSeries(
+      "health",
+      {
+        ...base,
+        planCost: {
+          ...base.planCost,
+          sttCash: { [day(3)]: { deepgram: 5, modulate: 20 } },
+        },
+        modulate: {
+          byDay: {
+            [day(3)]: {
+              usd: 20.5,
+              seconds: 1_230_000,
+              pricePerHour: 0.06,
+              priceAsOf: "2026-10-18",
+            },
+          },
+          price: 0.06,
+          priceAsOf: "2026-10-18",
+        },
+      },
+      null,
+      now
+    );
+    const at = f.cost.find((r) => String(r.date).startsWith(day(3)))!;
+    // Measured = Soniox usage + measured Deepgram ONLY; the modelled Modulate
+    // dollars have their own series and never enter "STT measured".
+    expect(at.stt).toBeCloseTo(99 + 11 + 20.5);
+    expect(at.sttMeasuredUsd).toBeCloseTo(110);
+    expect(at.sttModulateModelledUsd).toBeCloseTo(20.5);
+    expect(at.sttEstimateUsd).toBeNull();
+    expect(at.sttCashUsd).toBeNull(); // measured Deepgram wins over its cash; modelled wins over Modulate cash
+    expect(
+      (at.sttMeasuredUsd as number) + (at.sttModulateModelledUsd as number)
+    ).toBeCloseTo(at.stt as number);
+  });
+
+  it("reads plan cost and both vendor STT legs as health legs", async () => {
+    const s = sources();
+    const vendorBalance = vi.fn(async () => ({
+      snapshots: 0,
+      latestTs: null,
+      asOf: null,
+      spend: {},
+      flags: {},
+    }));
+    const modulate = vi.fn(async () => ({
+      byDay: {},
+      price: null,
+      priceAsOf: null,
+    }));
+    await seriesPayload("health", Promise.resolve(null), now, {
+      ...s,
+      vendorBalance,
+      modulate,
+    });
+    expect(s.planCost).toHaveBeenCalledWith(isoDay(now));
+    expect(vendorBalance).toHaveBeenCalledWith(isoDay(now));
+    expect(modulate).toHaveBeenCalledWith(isoDay(now));
   });
 
   it("reads plan cost as a health leg", async () => {
@@ -704,6 +951,162 @@ describe("v3 series cold-load and cache rules", () => {
       s
     );
     expect(s.query).toHaveBeenCalledTimes(6);
+  });
+});
+
+describe("the warm scheduler fills legs off the viewing path", () => {
+  it("runs every leg to completion so the first viewer reads complete legs", async () => {
+    const store = memorySeriesStore();
+    const w = { ...sources(), store, instance: "warm" };
+    const legs = await warmSeries(now, w);
+    // Every usage leg completed; legs whose sources this fixture omits report why.
+    for (const leg of ["growth", "curve", "retainedHistory", "captureSource"])
+      expect(legs[leg]).toMatchObject({ complete: true, reason: null });
+    resetSeriesCache(); // a viewer on another instance, same shared store
+    const v = { ...sources(), store, instance: "viewer" };
+    const growth = await seriesPayload("growth", Promise.resolve(null), now, v);
+    const retention = await seriesPayload(
+      "retention",
+      Promise.resolve(null),
+      now,
+      v
+    );
+    expect(v.query).not.toHaveBeenCalled();
+    expect(growth).toMatchObject({ refreshing: false, partial: false });
+    expect(retention.refreshing).toBe(false);
+  });
+
+  it("is a store read only once the day is complete", async () => {
+    const store = memorySeriesStore();
+    const w = { ...sources(), store, instance: "warm" };
+    await warmSeries(now, w);
+    const reads = (w.query as ReturnType<typeof vi.fn>).mock.calls.length;
+    await warmSeries(new Date(now.getTime() + 10 * 60_000), w);
+    expect((w.query as ReturnType<typeof vi.fn>).mock.calls.length).toBe(reads);
+  });
+
+  it("answers within its budget while unfinished fills keep running", async () => {
+    vi.useFakeTimers();
+    const w = { ...sources(), store: memorySeriesStore(), instance: "warm" };
+    w.query = vi.fn(() => new Promise<never>(() => {}));
+    const retain = vi.fn();
+    const pending = warmSeries(now, w, 1_000, retain);
+    await vi.advanceTimersByTimeAsync(1_000);
+    const legs = await pending;
+    expect(legs.growth).toMatchObject({ complete: false });
+    expect(retain).toHaveBeenCalled(); // the fill outlives the request
+  });
+
+  it("never serves a leg value older than 24 hours", async () => {
+    const store = memorySeriesStore();
+    const s = { ...sources(), store };
+    await seriesPayload("growth", Promise.resolve(null), now, s);
+    // The next day's refresh is still running when the board reads the leg.
+    vi.useFakeTimers();
+    s.query = vi.fn(() => new Promise<never>(() => {}));
+    const later = new Date(now.getTime() + 24 * 3_600_000 + 60_000);
+    resetSeriesCache();
+    const pending = seriesPayload("growth", Promise.resolve(null), later, s);
+    await vi.advanceTimersByTimeAsync(5_000);
+    const served = await pending;
+    expect(served.frames.weekly).toEqual([]);
+    expect(served.gaps.growth).toBe("Series data older than 24h");
+    expect(served.staleUntil).toBeNull(); // nothing served, nothing to bound
+  });
+
+  it("bounds a retained snapshot metric by when it was retained", async () => {
+    const s = { ...sources(), store: memorySeriesStore() };
+    const wall = await computeWall(s, now);
+    const retained = new Date(now.getTime() - 20 * 3_600_000).toISOString();
+    const kept = {
+      ...wall,
+      metrics: wall.metrics.map((m, i) =>
+        i === 0 ? { ...m, value: m.value ?? 1, retainedSince: retained } : m
+      ),
+    };
+    const served = await seriesPayload(
+      "headline",
+      Promise.resolve(kept),
+      now,
+      s
+    );
+    expect(Date.parse(served.staleUntil!)).toBe(
+      Date.parse(retained) + 24 * 3_600_000
+    );
+  });
+
+  it("drops a retained snapshot metric 24h after it was retained", async () => {
+    const s = { ...sources(), store: memorySeriesStore() };
+    const wall = await computeWall(s, now);
+    const retained = new Date(now.getTime() - 25 * 3_600_000).toISOString();
+    const kept = {
+      ...wall,
+      metrics: wall.metrics.map((m, i) =>
+        i === 0 ? { ...m, value: m.value ?? 1, retainedSince: retained } : m
+      ),
+    };
+    const served = await seriesPayload(
+      "headline",
+      Promise.resolve(kept),
+      now,
+      s
+    );
+    // The bound now comes only from values still within 24h.
+    expect(Date.parse(served.staleUntil!)).toBeGreaterThan(now.getTime());
+    // Its trend points go too. Mark them with a sentinel the legs never produce.
+    const SENTINEL = 987_654;
+    const marked = (since?: string) => ({
+      ...wall,
+      metrics: wall.metrics.map((m) =>
+        m.id === "growth.wau"
+          ? {
+              ...m,
+              retainedSince: since,
+              trend: m.trend.map((t) => ({ ...t, value: SENTINEL })),
+            }
+          : m
+      ),
+    });
+    expect(
+      wall.metrics.find((m) => m.id === "growth.wau")!.trend.length
+    ).toBeGreaterThan(0);
+    const within = await seriesPayload(
+      "growth",
+      Promise.resolve(
+        marked(new Date(now.getTime() - 3_600_000).toISOString())
+      ),
+      now,
+      s
+    );
+    expect(JSON.stringify(within.frames)).toContain(String(SENTINEL));
+    const expired = await seriesPayload(
+      "growth",
+      Promise.resolve(marked(retained)),
+      now,
+      s
+    );
+    expect(JSON.stringify(expired.frames)).not.toContain(String(SENTINEL));
+  });
+
+  it("tells the proxy when its oldest served value turns 24h old", async () => {
+    const s = { ...sources(), store: memorySeriesStore() };
+    const served = await seriesPayload("growth", Promise.resolve(null), now, s);
+    expect(Date.parse(served.staleUntil!)).toBe(now.getTime() + 24 * 3_600_000);
+  });
+
+  it("reports a failing leg's controlled reason instead of hiding it", async () => {
+    const w = { ...sources(), store: memorySeriesStore(), instance: "warm" };
+    w.planCost = vi.fn(async () => {
+      throw new WallSourceError(
+        "omi_finops.mercury_saas_daily not readable by the admin BigQuery identity (missing dataViewer grant)"
+      );
+    });
+    const legs = await warmSeries(now, w);
+    expect(legs.planCost).toMatchObject({
+      complete: false,
+      reason:
+        "omi_finops.mercury_saas_daily not readable by the admin BigQuery identity (missing dataViewer grant)",
+    });
   });
 });
 
@@ -1179,6 +1582,36 @@ describe("the snapshot is shared and never served cold as settled", () => {
     expect(wall.metrics.every((m) => m.value == null)).toBe(true);
   });
 
+  it("keeps a finished partial snapshot unsettled and marks retained headline stats stale", async () => {
+    const s = { ...sources(), store: memorySeriesStore() };
+    const wall = await computeWall(s, now);
+    const partial: WallPayload = {
+      ...wall,
+      retryableFailures: 1,
+      metrics: wall.metrics.map((m) =>
+        m.id === "engagement.dau"
+          ? { ...m, stale: true, retainedSince: now.toISOString() }
+          : m
+      ),
+    };
+    const head = await seriesPayload(
+      "headline",
+      Promise.resolve(partial),
+      now,
+      s
+    );
+    expect(head.refreshing).toBe(true);
+    expect(String(head.frames.through[0].text)).toMatch(/ · 1 stat stale$/);
+    const settled = await seriesPayload(
+      "headline",
+      Promise.resolve(wall),
+      now,
+      s
+    );
+    expect(settled.refreshing).toBe(false);
+    expect(String(settled.frames.through[0].text)).not.toContain("stale");
+  });
+
   it("keeps a failing source's previous metric, labelled stale, on every instance", async () => {
     const store = memorySeriesStore();
     const good = sources();
@@ -1191,6 +1624,9 @@ describe("the snapshot is shared and never served cold as settled", () => {
     const failing = sources();
     failing.stripe = async () => {
       throw new Error("Stripe restricted read key unavailable");
+    };
+    failing.finops = async () => {
+      throw new Error("FinOps aggregate query failed");
     };
     failing.billing = vi.fn(async () => null);
     await wallPayload(new Date(), computeWith(failing), retain, store);
@@ -1211,5 +1647,79 @@ describe("the snapshot is shared and never served cold as settled", () => {
       expect(value(before, id).value).not.toBeNull();
     }
     expect(value(after, "growth.wau").stale).toBe(false);
+  });
+});
+
+describe("variable margin frames (David 2026-10-23)", () => {
+  it("trails the settled 7-day run rate against that day's book, disclosed", async () => {
+    const s = sources();
+    const f = await all(null, s);
+    const rows = f.health.variableMargin;
+    // 60 rendered days, ending at the D−2 cutoff like every cost frame.
+    expect(rows).toHaveLength(60);
+    const cutoff = isoDay(shiftDay(end, -2));
+    const last = rows.at(-1)!;
+    expect(last.date).toBe(`${cutoff}T00:00:00Z`);
+    // The fixture book at the cutoff day: unlimited 500+38 plus plus 400.
+    const mrr = 500 + 38 + 400;
+    expect(last.mrr).toBe(mrr);
+    // Cost scope/day: GCP (60 + vertexLlm avg 106) + OpenAI 10, Soniox on the
+    // console constant, Modulate dark (named), fees on the dated baseline.
+    // The monthly constants convert at the calendar month; the run rate then
+    // scales by the contract's exact 30.44 (Luna r3 P3).
+    const perDay =
+      60 +
+      106 +
+      10 +
+      STT_MONTHLY_USD / (365.25 / 12) +
+      STRIPE_FEES_MONTHLY_USD / (365.25 / 12);
+    const cost = perDay * MARGIN_DAYS_PER_MONTH;
+    expect(last.costPerMonth).toBe(Math.round(cost));
+    expect(last.marginPct).toBe(
+      Math.round(((100 * (mrr - cost)) / mrr) * 10) / 10
+    );
+    expect(last.goalCost).toBe(Math.round(mrr * (1 - VARIABLE_MARGIN_TARGET)));
+    expect(last.missing).toBe("Modulate");
+    // The disclosure names every line's source, including the dark ones.
+    const text = f.health.variableMarginStatus[0].text as string;
+    expect(text).toContain(`through ${cutoff}`);
+    expect(text).toContain("MRR: FinOps plan book $938/mo");
+    expect(text).toContain("0 non-USD paying subs excluded");
+    expect(text).toContain("Modulate: n/a");
+    expect(text).toContain("Soniox: console est.");
+    expect(text).toContain("Stripe fees: est.");
+    expect(text).toContain("OpenAI: invoice");
+  });
+
+  it("discloses that day's non-USD exclusion count from the FinOps book", async () => {
+    const s = sources();
+    s.finops = vi.fn(async () => ({
+      ...finopsHistory,
+      nonUsdPaying: Object.fromEntries(
+        Object.keys(finopsMrr).map((day) => [day, 33])
+      ),
+    }));
+    const f = await all(null, s);
+    expect(String(f.health.variableMarginStatus[0].text)).toContain(
+      "MRR: FinOps plan book $938/mo — 33 non-USD paying subs excluded"
+    );
+  });
+
+  it("says the MRR is missing instead of borrowing the neighbour day's book", async () => {
+    const s = sources();
+    const cutoff = isoDay(shiftDay(end, -2));
+    const mrr = { ...finopsHistory.mrr };
+    delete mrr[cutoff];
+    s.finops = vi.fn(async () => ({ ...finopsHistory, mrr }));
+    const f = await all(null, s);
+    const rows = f.health.variableMargin;
+    const last = rows.at(-1)!;
+    expect(last.date).toBe(`${cutoff}T00:00:00Z`);
+    expect(last.mrr).toBeNull();
+    expect(last.marginPct).toBeNull(); // the headline then shows no value
+    expect(rows.at(-2)!.marginPct).not.toBeNull(); // yesterday's stands
+    expect(String(f.health.variableMarginStatus[0].text)).toContain(
+      "MRR: n/a (no book snapshot that day)"
+    );
   });
 });

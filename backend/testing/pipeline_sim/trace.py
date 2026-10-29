@@ -46,6 +46,7 @@ _BUCKETS = ((1, '<1s'), (5, '<5s'), (30, '<30s'), (60, '<1m'), (300, '<5m'), (90
 _DROP_FIELDS = frozenset(
     (
         'audio_uri',
+        'input_uri_sha256',  # derivative of the dropped immutable input URI
         'result_uri',
         'owner_key',
         'next',
@@ -433,20 +434,28 @@ GOLDEN_CONFIGS: dict[str, Callable[[], SimConfig]] = {
         summary_sigma=0.0,
     ),
     # Near-silence with empty first ASR: padded retry recovers some; the rest quarantine as empty_asr,
-    # spend one paid call and either recover or settle as terminal empty (no_recoverable_speech).
+    # spend one paid call and either recover or retain measured positive-VAD held custody.
     'empty_asr_padded_retry': lambda: _config(
         'empty_asr_padded_retry',
         workload={'near_silence_fraction': 0.7},
         stt=STTProfile(min_replicas=2, max_replicas=2, near_silence_empty_rate=0.6),
         modulate=ModulateProfile(near_silence_recover_rate=0.5),
     ),
-    # Every first and padded ASR attempt is empty and the paid provider finds no speech: terminal empty.
+    # Historical terminal-empty case: every recognizer is empty on positive VAD.
+    # Ship-on safety retains these units; its explicit rollback is mutation-tested.
     'empty_asr_terminal': lambda: _config(
         'empty_asr_terminal',
         workload={'near_silence_fraction': 1.0, 'owners': 2},
         stt=STTProfile(min_replicas=2, max_replicas=2, near_silence_empty_rate=1.0),
         modulate=ModulateProfile(near_silence_recover_rate=0.0),
     ),
+    # C8 with legacy draining: a language Parakeet cannot serve is admitted to the provider-STT stage,
+    # never leased by a GPU pump, pays exactly one vendor call per unit and merges in capture order.
+    'provider_stt_ja': lambda: _config('provider_stt_ja', language='ja', legacy_sync='draining'),
+    'provider_stt_unsupported': lambda: _config('provider_stt_unsupported', language='sw', legacy_sync='draining'),
+    # BYOK routes like everyone (David, 10-19): Parakeet, no vendor spend; the admission policy
+    # records provider_reason=byok so the keyless dispatch re-check never re-holds it.
+    'provider_stt_byok': lambda: _config('provider_stt_byok', byok=True, legacy_sync='draining', trace_policy=True),
     # Provider errors for a window: retries exhaust attempts -> quarantine -> one paid recovery each.
     'provider_failure_quarantine': lambda: _config(
         'provider_failure_quarantine',

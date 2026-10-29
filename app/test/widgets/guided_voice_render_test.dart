@@ -13,6 +13,7 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/onboarding/guided_voice_controller.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/ui/ui.dart';
+import '../helpers/sfpro_font_fixtures.dart';
 import '../providers/guided_voice_experience_test.dart' show ExperienceIO;
 
 Future<void> loadFonts() async {
@@ -24,10 +25,10 @@ Future<void> loadFonts() async {
     }
     await loader.load();
   }
-  for (final family in ['.SF UI Text', '.SF UI Display']) {
+  for (final family in ['.SF UI Text', '.SF UI Display', 'SF Pro Display']) {
     final loader = FontLoader(family);
     for (final font in ['REGULAR', 'MEDIUM', 'BOLD']) {
-      loader.addFont(rootBundle.load('assets/fonts/SFPRODISPLAY$font.OTF'));
+      loader.addFont(sfProFont('SFPRODISPLAY$font.OTF'));
     }
     await loader.load();
   }

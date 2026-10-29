@@ -26,6 +26,7 @@ and serial (the simulation is single-threaded).
 from __future__ import annotations
 
 from copy import deepcopy
+import hashlib
 from typing import Any, Callable, TypeVar
 
 from database.batch_pipeline_privacy import (
@@ -34,7 +35,11 @@ from database.batch_pipeline_privacy import (
     assert_batch_write_allowed,
     privacy_owner_key,
 )
+
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+# Same set as database.batch_pipeline_recovery.PROVIDER_STATES (not imported: keep the model import-light).
+PROVIDER_STATES = frozenset({'provider_pending', 'provider_running'})
 
 T = TypeVar('T')
 
@@ -113,13 +118,24 @@ class SimTransaction:
         return deepcopy({**base, **self.patches.get(address, {})})
 
     def put(self, table: str, key: str, value: dict) -> None:
+        # Same refusals as FirestoreTransaction.put/patch (conformance: tests/integration/test_store_conformance.py).
+        if table == 'conversations':
+            raise ValueError('conversation admission requires a field patch, never a document set')
         self.writes[(table, key)] = deepcopy(value)
 
     def patch(self, table: str, key: str, fields: dict) -> None:
+        if table != 'conversations' or set(fields) != {'record_lane_owner'}:
+            raise ValueError('only the conversation route owner may be patched by admission')
         self.patches.setdefault((table, key), {}).update(deepcopy(fields))
 
     def first_pending(self, owner_key: str) -> dict | None:
         return self.store.first_pending(owner_key)
+
+    def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
+        return self.store.ready_predecessor(owner_key, priority, segment_id)
+
+    def first_ready_pending(self, owner_key: str) -> dict | None:
+        return self.store.first_pending(owner_key, ready_only=True)
 
     def service_frontier(self, priority: int) -> float:
         return self.store.service_frontier(priority)
@@ -207,10 +223,20 @@ class SimStore:
         ]
         return min(values) if values else None
 
-    def control_candidate(self, priority: int, pool: str, now: float) -> str | None:
+    def acquire_pull_claim(self, shard: str, token: str, now: float, ttl: float) -> bool:
+        if self.rows.get(('pull_claims', shard), {}).get('expires_at', 0) > now:
+            return False
+        self.rows['pull_claims', shard] = {'token': token, 'expires_at': now + ttl}
+        return True
+
+    def control_candidate(self, priority: int, pool: str, now: float, *, worker_id: str = '', exclude=()) -> str | None:
+        if priority not in (0, 1, 2) or pool not in {'batch', 'live'}:
+            raise ValueError('bounded priority and pool required')
         prefix = f'p{priority}_'
         best = None
         for key in self._controls:
+            if key in exclude:
+                continue
             row = self.rows[('control', key)]
             if not row.get(prefix + 'active'):
                 continue
@@ -218,7 +244,8 @@ class SimStore:
             available = row.get(prefix + pool + '_available_at')
             if service is None or available is None or service < 0 or available > now:
                 continue
-            candidate = (service, available, key)
+            rank = hashlib.sha256(f'{worker_id}:{key}'.encode()).digest() if worker_id else available
+            candidate = (service, rank, key)
             if best is None or candidate < best:
                 best = candidate
         return best[2] if best else None
@@ -226,7 +253,7 @@ class SimStore:
     def quarantine_fenced(self, segment_id: str, now: float) -> bool:
         """Model of database/batch_pipeline_recovery.quarantine_fenced (fence recheck, revoke only)."""
         job = self.rows.get(('jobs', segment_id), {})
-        if job.get('state') not in {'leased', 'retry'}:
+        if job.get('state') not in {'leased', 'retry'} | PROVIDER_STATES:
             return False
         if not self.customer.blocked(
             job['owner_id'],
@@ -234,23 +261,87 @@ class SimStore:
             job.get('privacy_generation'),
         ):
             return False
-        self.apply(
-            ('jobs', segment_id),
-            {**job, 'state': 'privacy_blocked', 'token': '', 'lease_until': 0.0, 'privacy_blocked_at': now},
-        )
+        revoked = {**job, 'state': 'privacy_blocked', 'token': '', 'lease_until': 0.0, 'privacy_blocked_at': now}
+        if job['state'] in PROVIDER_STATES:
+            revoked['merge_pending'] = False
+        self.apply(('jobs', segment_id), revoked)
         return True
 
     # -- Query helpers --------------------------------------------------
-    def first_pending(self, owner_key: str) -> dict | None:
+    def first_pending(self, owner_key: str, *, ready_only: bool = False) -> dict | None:
         best = None
         for segment_id in self._pending_by_owner.get(owner_key, ()):
             row = self.rows[('jobs', segment_id)]
+            if ready_only and row.get('state') != 'result_ready':
+                continue
             candidate = (row['capture_at'], segment_id)
             if best is None or candidate < best:
                 best = candidate
         return deepcopy(self.rows[('jobs', best[1])]) if best else None
 
+    def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
+        """Only a ready row in this owner's priority FIFO can be the live predecessor; two matches fail closed."""
+        matches = sorted(
+            key
+            for (table, key), row in self.rows.items()
+            if table == 'jobs'
+            and row.get('owner_key') == owner_key
+            and row.get('priority') == priority
+            and row.get('state') == 'ready'
+            and row.get('next') == segment_id
+        )
+        return deepcopy(self.rows[('jobs', matches[0])]) if len(matches) == 1 else None
+
+    def projection_pending(self, limit: int = 100) -> list[str]:
+        return self.projection_page(limit)[0]
+
+    def projection_page(self, limit: int = 100, *, after=None) -> tuple[list[str], Any]:
+        """Keyset page over results awaiting projection, ordered (committed_at, key); mirrors the Firestore scan."""
+        wanted = {'pending', 'persisted', 'ready'}
+        ordered = sorted(
+            (row['committed_at'], key)
+            for (table, key), row in self.rows.items()
+            if table == 'results' and row.get('projection_state') in wanted and 'committed_at' in row
+        )
+        if after is not None:
+            ordered = [entry for entry in ordered if entry > (after[0], after[1])]
+        size = max(1, min(limit, 100))
+        page = ordered[:size]
+        cursor = (page[-1][0], page[-1][1]) if len(page) == size else None
+        return [key for _, key in page], cursor
+
+    def longest_ready_pending(self, owner_key: str) -> dict | None:
+        # Firestore excludes rows without the ordered field, and orders ties by document name.
+        rows = [
+            (row['ready_at'], segment_id)
+            for segment_id in self._pending_by_owner.get(owner_key, ())
+            if (row := self.rows[('jobs', segment_id)]).get('state') == 'result_ready' and 'ready_at' in row
+        ]
+        return deepcopy(self.rows[('jobs', min(rows)[1])]) if rows else None
+
+    def fresh_pending(self, owner_key: str, limit: int) -> list[dict]:
+        rows = sorted(
+            (row['capture_at'], segment_id)
+            for segment_id in self._pending_by_owner.get(owner_key, ())
+            if (row := self.rows[('jobs', segment_id)]).get('fresh_capture') is True
+        )
+        return [deepcopy(self.rows[('jobs', segment_id)]) for _, segment_id in rows[:limit]]
+
+    def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]:
+        keys = sorted(
+            key
+            for (table, key), row in self.rows.items()
+            if table == 'merge_holds' and row.get('held') and (after is None or key > after)
+        )
+        owners = []
+        for key in keys[:limit]:
+            job = self.first_pending(key)
+            owners.append((key, job['owner_id'] if job else None))
+        return owners
+
     def service_frontier(self, priority: int) -> float:
+        if priority not in (0, 1, 2):
+            raise ValueError('bounded priority required')
         name = f'p{priority}_service'
         values = [self.rows[('control', key)][name] for key in self._controls if name in self.rows[('control', key)]]
         return max(values) if values else 0.0
@@ -307,6 +398,7 @@ class SimStore:
 
         key = hash_owner(owner_id)
         removed = 0
+        touched: list[tuple[str, str]] = []  # production purge re-copies these to the A2 shadow after commit
         for (table, segment_id), job in sorted(self.rows.items()):
             if table != 'jobs' or job.get('owner_key') != key:
                 continue
@@ -327,6 +419,8 @@ class SimStore:
                 continue
             queue_key = f"{job['priority']}_{key}"
             queue = self.rows.get(('queues', queue_key))
+            touched += [('jobs', segment_id), ('results', segment_id), ('queues', queue_key)]
+            touched.append(('control', scheduler_control_key(key)))
             predecessors = [
                 other_id
                 for (other_table, other_id), other in sorted(self.rows.items())
@@ -350,6 +444,7 @@ class SimStore:
                     self.apply(('queues', queue_key), queue)
             for predecessor in predecessors:
                 self.mutate('jobs', predecessor, lambda row, nxt=job.get('next', ''): row.update(next=nxt))
+                touched.append(('jobs', predecessor))
             self.delete('jobs', segment_id)
             if ('results', segment_id) in self.rows:
                 if conversation_id is not None:
@@ -357,6 +452,9 @@ class SimStore:
                 else:
                     self.delete('results', segment_id)
             removed += 1
+        from database.batch_pipeline_shadow_hook import mirror_refresh
+
+        mirror_refresh(self.namespace, touched)
         return removed
 
     def mutate(self, table: str, key: str, update: Callable[[dict[str, Any]], None]) -> None:

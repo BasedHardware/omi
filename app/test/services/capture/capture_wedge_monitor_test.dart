@@ -1103,6 +1103,24 @@ void main() {
       monitor.dispose();
     });
 
+    test('the row ends once nothing waiting is old enough to be stalled', () async {
+      final monitor = makeMonitor(transferRetry: () async {});
+      monitor.observeWalBacklog(
+          pendingCount: 5, oldestPendingAt: now.subtract(const Duration(hours: 3)), pendingSeconds: 47 * 60);
+      await pumpEventQueue();
+      expect(monitor.uploadStall?.pendingCount, 5);
+
+      // The stalled recordings were deleted or ran out of retries; one new recording is waiting.
+      now = now.add(const Duration(minutes: 20));
+      monitor.observeWalBacklog(
+          pendingCount: 1, oldestPendingAt: now.subtract(const Duration(minutes: 10)), pendingSeconds: 60);
+      await pumpEventQueue();
+
+      expect(monitor.uploadStall, isNull);
+      expect(monitor.hasCaptureAttention, isFalse);
+      monitor.dispose();
+    });
+
     test('a backlog under the silence threshold never engages the row', () async {
       final monitor = makeMonitor(transferRetry: () async {});
       monitor.observeWalBacklog(
@@ -1472,6 +1490,68 @@ void main() {
       expect(monitor.visiblePrompt, isNotNull);
       monitor.reset();
       expect(monitor.visiblePrompt, isNull);
+    });
+  });
+
+  group('sync silence (the watchdog stall row, #15501)', () {
+    test('a declared stall engages the row and lights the bell', () {
+      final monitor = makeMonitor();
+      final lastActivityAt = now.subtract(const Duration(hours: 26));
+      monitor.observeSyncSilence(stalled: true, since: lastActivityAt);
+
+      expect(monitor.syncSilence?.since, lastActivityAt);
+      expect(monitor.hasCaptureAttention, isTrue);
+      expect(monitor.hasUnseenCaptureAttention.value, isTrue);
+      monitor.dispose();
+    });
+
+    test('re-declaring the same stall is a no-op; a new silence age refreshes the row', () {
+      final monitor = makeMonitor();
+      monitor.observeSyncSilence(stalled: true, since: now.subtract(const Duration(hours: 25)));
+      monitor.markCaptureAttentionSeen();
+      expect(monitor.hasUnseenCaptureAttention.value, isFalse);
+
+      // The watchdog ticks every 30 minutes with the same last-activity time: no re-light.
+      monitor.observeSyncSilence(stalled: true, since: now.subtract(const Duration(hours: 25)));
+      expect(monitor.hasUnseenCaptureAttention.value, isFalse);
+
+      // Activity resumed for a while and then the pipeline went silent again: news.
+      monitor.observeSyncSilence(stalled: true, since: now.add(const Duration(hours: 1)));
+      expect(monitor.hasUnseenCaptureAttention.value, isTrue);
+      expect(monitor.syncSilence?.since, now.add(const Duration(hours: 1)));
+      monitor.dispose();
+    });
+
+    test('the watchdog ending the stall clears the row and the bell', () {
+      final monitor = makeMonitor();
+      monitor.observeSyncSilence(stalled: true, since: now.subtract(const Duration(hours: 26)));
+      expect(monitor.hasCaptureAttention, isTrue);
+
+      monitor.observeSyncSilence(stalled: false, since: now);
+      expect(monitor.syncSilence, isNull);
+      expect(monitor.hasCaptureAttention, isFalse);
+      expect(monitor.hasUnseenCaptureAttention.value, isFalse);
+      monitor.dispose();
+    });
+
+    test('a local-wal reset does not end the watchdog-owned row', () {
+      final monitor = makeMonitor();
+      monitor.observeSyncSilence(stalled: true, since: now.subtract(const Duration(hours: 26)));
+
+      // A storage dismissal resets local-WAL state; the silence row belongs
+      // to the watchdog's evaluation and must survive it.
+      monitor.dismissDeviceEpisode(CaptureWedgeMonitor.localWalDeviceId);
+      expect(monitor.syncSilence, isNotNull);
+      monitor.dispose();
+    });
+
+    test('reset drops the sync silence state', () {
+      final monitor = makeMonitor();
+      monitor.observeSyncSilence(stalled: true, since: now.subtract(const Duration(hours: 26)));
+      monitor.reset();
+      expect(monitor.syncSilence, isNull);
+      expect(monitor.hasUnseenCaptureAttention.value, isFalse);
+      monitor.dispose();
     });
   });
 }

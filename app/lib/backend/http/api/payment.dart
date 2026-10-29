@@ -73,6 +73,33 @@ Future<bool> cancelSubscription({String? reason, String? reasonDetails}) async {
   return false;
 }
 
+/// The stay offer on the last cancel step; null when it cannot be read.
+Future<wire.GeneratedRetentionOfferResponse?> getRetentionOffer() async {
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/payments/retention-offer',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null || response.statusCode != 200) return null;
+  try {
+    return wire.GeneratedRetentionOfferResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Applies the stay offer and keeps the subscription renewing.
+Future<bool> acceptRetentionOffer() async {
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/payments/retention-offer',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  return response != null && response.statusCode == 200;
+}
+
 Future<Map<String, dynamic>?> upgradeSubscription({required String priceId, String? promotionCode}) async {
   final body = <String, dynamic>{'price_id': priceId};
   if (promotionCode != null && promotionCode.trim().isNotEmpty) {
@@ -92,7 +119,7 @@ Future<Map<String, dynamic>?> upgradeSubscription({required String priceId, Stri
     Logger.debug('upgradeSubscription response: ${response.body}');
     return generated.toJson();
   }
-  if (response.statusCode == 400 || response.statusCode == 409) {
+  if (response.statusCode == 400 || response.statusCode == 402 || response.statusCode == 409) {
     return _paymentError(response);
   }
   return null;
@@ -118,7 +145,7 @@ Future<Map<String, dynamic>?> getAppSubscription(String appId) async {
 Future<Map<String, dynamic>?> getAvailablePlans() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/payments/available-plans',
-    headers: {},
+    headers: {'X-Omi-Billing-Currency': '1'},
     method: 'GET',
     body: '',
   );
