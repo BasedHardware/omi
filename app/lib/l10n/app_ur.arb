@@ -11926,5 +11926,20 @@
     "activityAttentionSyncStalledTitle": "Omi سنک نہیں ہو رہا",
     "activityAttentionSyncStalledSubtitle": "{hours} گھنٹوں سے زیادہ کوئی ریکارڈنگ سنک نہیں ہوئی",
     "dailyRecapsOnHome": "ہوم پر روزانہ خلاصے",
-    "dailyRecapsOnHomeDescription": "ہوم کے اوپر اپنے تازہ ترین خلاصے دکھائیں۔"
+    "dailyRecapsOnHomeDescription": "ہوم کے اوپر اپنے تازہ ترین خلاصے دکھائیں۔",
+    "yearlySwitchTitle": "سالانہ پر منتقل کریں",
+    "yearlySwitchRowSavings": "سال میں {amount} بچائیں",
+    "yearlySwitchHomeTitle": "سالانہ ادائیگی سے سال میں {amount} بچائیں",
+    "yearlySwitchHomeSubtitle": "وہی پلان، سال میں ایک بار ادائیگی",
+    "yearlySwitchPlanLabel": "پلان",
+    "yearlySwitchPlanValue": "{plan}، سالانہ {price}",
+    "yearlySwitchDueToday": "آج واجب الادا",
+    "yearlySwitchRenews": "تجدید",
+    "yearlySwitchCreditNote": "اس مہینے کے باقی دنوں کا کریڈٹ شامل ہے۔",
+    "yearlySwitchDeclined": "ادائیگی مسترد ہو گئی۔ آپ اب بھی ماہانہ پلان پر ہیں۔",
+    "yearlySwitchFailed": "تبدیلی نہیں ہو سکی۔ آپ اب بھی ماہانہ پلان پر ہیں۔",
+    "yearlySwitchPreviewFailed": "آپ کی قیمت لوڈ نہیں ہو سکی۔",
+    "yearlySwitchUnavailable": "اس وقت آپ کے پلان کے لیے سالانہ بلنگ دستیاب نہیں ہے۔",
+    "yearlySwitchDoneTitle": "اب آپ سالانہ پلان پر ہیں",
+    "yearlySwitchDoneBody": "آج {amount} وصول کیے گئے۔ تجدید {date} کو۔"
 }

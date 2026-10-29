@@ -11926,5 +11926,20 @@
     "activityAttentionSyncStalledTitle": "Hindi nagri-sync ang Omi",
     "activityAttentionSyncStalledSubtitle": "Walang naka-sync na recording nang mahigit {hours} oras",
     "dailyRecapsOnHome": "Daily Recaps sa Home",
-    "dailyRecapsOnHomeDescription": "Ipakita ang pinakabagong recaps sa itaas ng Home."
+    "dailyRecapsOnHomeDescription": "Ipakita ang pinakabagong recaps sa itaas ng Home.",
+    "yearlySwitchTitle": "Lumipat sa Taunan",
+    "yearlySwitchRowSavings": "Makatipid ng {amount} bawat taon",
+    "yearlySwitchHomeTitle": "Makatipid ng {amount} bawat taon kapag taunan",
+    "yearlySwitchHomeSubtitle": "Parehong plan, isang bayad bawat taon",
+    "yearlySwitchPlanLabel": "Plan",
+    "yearlySwitchPlanValue": "{plan}, {price} bawat taon",
+    "yearlySwitchDueToday": "Babayaran ngayon",
+    "yearlySwitchRenews": "Magre-renew",
+    "yearlySwitchCreditNote": "Kasama ang credit para sa natitirang bahagi ng buwang ito.",
+    "yearlySwitchDeclined": "Tinanggihan ang bayad. Buwanan ka pa rin.",
+    "yearlySwitchFailed": "Hindi nakalipat. Buwanan ka pa rin.",
+    "yearlySwitchPreviewFailed": "Hindi ma-load ang presyo mo.",
+    "yearlySwitchUnavailable": "Hindi pa available ang taunang bayad para sa plan mo ngayon.",
+    "yearlySwitchDoneTitle": "Taunan ka na",
+    "yearlySwitchDoneBody": "{amount} ang siningil ngayon. Magre-renew sa {date}."
 }

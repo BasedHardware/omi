@@ -4500,5 +4500,20 @@
     "activityAttentionSyncStalledTitle": "Omi ไม่ได้ซิงค์",
     "activityAttentionSyncStalledSubtitle": "ไม่มีการบันทึกที่ซิงค์เป็นเวลาเกิน {hours} ชั่วโมง",
     "dailyRecapsOnHome": "สรุปรายวันในหน้าหลัก",
-    "dailyRecapsOnHomeDescription": "แสดงสรุปล่าสุดของคุณที่ด้านบนของหน้าหลัก"
+    "dailyRecapsOnHomeDescription": "แสดงสรุปล่าสุดของคุณที่ด้านบนของหน้าหลัก",
+    "yearlySwitchTitle": "เปลี่ยนเป็นรายปี",
+    "yearlySwitchRowSavings": "ประหยัด {amount} ต่อปี",
+    "yearlySwitchHomeTitle": "ประหยัด {amount} ต่อปีเมื่อจ่ายรายปี",
+    "yearlySwitchHomeSubtitle": "แพ็กเกจเดิม จ่ายปีละครั้ง",
+    "yearlySwitchPlanLabel": "แพ็กเกจ",
+    "yearlySwitchPlanValue": "{plan} {price} ต่อปี",
+    "yearlySwitchDueToday": "ชำระวันนี้",
+    "yearlySwitchRenews": "ต่ออายุ",
+    "yearlySwitchCreditNote": "รวมเครดิตสำหรับช่วงที่เหลือของเดือนนี้แล้ว",
+    "yearlySwitchDeclined": "การชำระเงินถูกปฏิเสธ คุณยังจ่ายแบบรายเดือนอยู่",
+    "yearlySwitchFailed": "เปลี่ยนไม่สำเร็จ คุณยังจ่ายแบบรายเดือนอยู่",
+    "yearlySwitchPreviewFailed": "โหลดราคาไม่ได้",
+    "yearlySwitchUnavailable": "ตอนนี้แพ็กเกจของคุณยังจ่ายรายปีไม่ได้",
+    "yearlySwitchDoneTitle": "ตอนนี้คุณจ่ายแบบรายปีแล้ว",
+    "yearlySwitchDoneBody": "เรียกเก็บ {amount} วันนี้ ต่ออายุ {date}"
 }

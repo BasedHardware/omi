@@ -14884,4 +14884,57 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Näytä uusimmat yhteenvedot Koti-näkymän yläosassa.';
+
+  @override
+  String get yearlySwitchTitle => 'Vaihda vuosimaksuun';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Säästä $amount vuodessa';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Säästä $amount vuodessa vuosimaksulla';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Sama tilaus, maksu kerran vuodessa';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Tilaus';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price vuodessa';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Maksettava tänään';
+
+  @override
+  String get yearlySwitchRenews => 'Uusiutuu';
+
+  @override
+  String get yearlySwitchCreditNote => 'Sisältää hyvityksen tämän kuun jäljellä olevasta ajasta.';
+
+  @override
+  String get yearlySwitchDeclined => 'Maksu hylättiin. Maksat edelleen kuukausittain.';
+
+  @override
+  String get yearlySwitchFailed => 'Vaihto epäonnistui. Maksat edelleen kuukausittain.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Hintaa ei voitu ladata.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Vuosimaksu ei ole juuri nyt saatavilla tilauksellesi.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Maksat nyt vuosittain';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Tänään veloitettiin $amount. Uusiutuu $date.';
+  }
 }

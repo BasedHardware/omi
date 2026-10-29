@@ -4500,5 +4500,20 @@
     "activityAttentionSyncStalledTitle": "Omi sa nesynchronizuje",
     "activityAttentionSyncStalledSubtitle": "Viac než {hours} hodín bez synchronizovaných nahrávok",
     "dailyRecapsOnHome": "Denné súhrny na domovskej obrazovke",
-    "dailyRecapsOnHomeDescription": "Zobraziť najnovšie súhrny v hornej časti domovskej obrazovky."
+    "dailyRecapsOnHomeDescription": "Zobraziť najnovšie súhrny v hornej časti domovskej obrazovky.",
+    "yearlySwitchTitle": "Prejsť na ročné",
+    "yearlySwitchRowSavings": "Ušetrite {amount} ročne",
+    "yearlySwitchHomeTitle": "Ušetrite {amount} ročne s ročnou platbou",
+    "yearlySwitchHomeSubtitle": "Rovnaký plán, platba raz ročne",
+    "yearlySwitchPlanLabel": "Plán",
+    "yearlySwitchPlanValue": "{plan}, {price} ročne",
+    "yearlySwitchDueToday": "Na úhradu dnes",
+    "yearlySwitchRenews": "Obnovenie",
+    "yearlySwitchCreditNote": "Zahŕňa kredit za zvyšok tohto mesiaca.",
+    "yearlySwitchDeclined": "Platba bola zamietnutá. Naďalej platíte mesačne.",
+    "yearlySwitchFailed": "Prechod sa nepodaril. Naďalej platíte mesačne.",
+    "yearlySwitchPreviewFailed": "Cenu sa nepodarilo načítať.",
+    "yearlySwitchUnavailable": "Ročná platba teraz nie je pre váš plán dostupná.",
+    "yearlySwitchDoneTitle": "Teraz platíte ročne",
+    "yearlySwitchDoneBody": "Dnes účtované {amount}. Obnovenie {date}."
 }

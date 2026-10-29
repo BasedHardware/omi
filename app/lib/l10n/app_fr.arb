@@ -4535,5 +4535,20 @@
     "activityAttentionSyncStalledTitle": "Omi ne se synchronise pas",
     "activityAttentionSyncStalledSubtitle": "Aucun enregistrement synchronisé depuis plus de {hours} heures",
     "dailyRecapsOnHome": "Récapitulatifs quotidiens sur l'Accueil",
-    "dailyRecapsOnHomeDescription": "Affiche vos derniers récapitulatifs en haut de l'Accueil."
+    "dailyRecapsOnHomeDescription": "Affiche vos derniers récapitulatifs en haut de l'Accueil.",
+    "yearlySwitchTitle": "Passer à l'annuel",
+    "yearlySwitchRowSavings": "Économisez {amount} par an",
+    "yearlySwitchHomeTitle": "Économisez {amount} par an avec l'annuel",
+    "yearlySwitchHomeSubtitle": "Le même forfait, payé une fois par an",
+    "yearlySwitchPlanLabel": "Forfait",
+    "yearlySwitchPlanValue": "{plan}, {price} par an",
+    "yearlySwitchDueToday": "À payer aujourd'hui",
+    "yearlySwitchRenews": "Renouvellement",
+    "yearlySwitchCreditNote": "Inclut un crédit pour le reste de ce mois.",
+    "yearlySwitchDeclined": "Paiement refusé. Vous restez au mensuel.",
+    "yearlySwitchFailed": "Changement impossible. Vous restez au mensuel.",
+    "yearlySwitchPreviewFailed": "Impossible de charger votre prix.",
+    "yearlySwitchUnavailable": "La facturation annuelle n'est pas disponible pour votre forfait pour le moment.",
+    "yearlySwitchDoneTitle": "Vous êtes passé à l'annuel",
+    "yearlySwitchDoneBody": "{amount} débités aujourd'hui. Renouvellement le {date}."
 }

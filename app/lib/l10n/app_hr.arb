@@ -11926,5 +11926,20 @@
     "activityAttentionSyncStalledTitle": "Omi se ne sinkronizira",
     "activityAttentionSyncStalledSubtitle": "Nijedna snimka nije sinkronizirana dulje od {hours} sati",
     "dailyRecapsOnHome": "Dnevni sažetci na početnoj",
-    "dailyRecapsOnHomeDescription": "Prikaži najnovije sažetke na vrhu početne."
+    "dailyRecapsOnHomeDescription": "Prikaži najnovije sažetke na vrhu početne.",
+    "yearlySwitchTitle": "Prijeđi na godišnje",
+    "yearlySwitchRowSavings": "Uštedite {amount} godišnje",
+    "yearlySwitchHomeTitle": "Uštedite {amount} godišnje uz godišnje plaćanje",
+    "yearlySwitchHomeSubtitle": "Isti plan, plaćanje jednom godišnje",
+    "yearlySwitchPlanLabel": "Plan",
+    "yearlySwitchPlanValue": "{plan}, {price} godišnje",
+    "yearlySwitchDueToday": "Za plaćanje danas",
+    "yearlySwitchRenews": "Obnavlja se",
+    "yearlySwitchCreditNote": "Uključuje kredit za ostatak ovog mjeseca.",
+    "yearlySwitchDeclined": "Plaćanje je odbijeno. I dalje plaćate mjesečno.",
+    "yearlySwitchFailed": "Prelazak nije uspio. I dalje plaćate mjesečno.",
+    "yearlySwitchPreviewFailed": "Cijenu nije moguće učitati.",
+    "yearlySwitchUnavailable": "Godišnje plaćanje trenutačno nije dostupno za vaš plan.",
+    "yearlySwitchDoneTitle": "Sada plaćate godišnje",
+    "yearlySwitchDoneBody": "Danas naplaćeno {amount}. Obnavlja se {date}."
 }

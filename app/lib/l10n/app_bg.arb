@@ -4500,5 +4500,20 @@
     "activityAttentionSyncStalledTitle": "Omi не се синхронизира",
     "activityAttentionSyncStalledSubtitle": "Няма синхронизирани записи от повече от {hours} часа",
     "dailyRecapsOnHome": "Дневни резюмета в Начало",
-    "dailyRecapsOnHomeDescription": "Показвай последните резюмета в горната част на Начало."
+    "dailyRecapsOnHomeDescription": "Показвай последните резюмета в горната част на Начало.",
+    "yearlySwitchTitle": "Преминете към годишен",
+    "yearlySwitchRowSavings": "Спестете {amount} годишно",
+    "yearlySwitchHomeTitle": "Спестете {amount} годишно с годишно плащане",
+    "yearlySwitchHomeSubtitle": "Същият план, плащане веднъж годишно",
+    "yearlySwitchPlanLabel": "План",
+    "yearlySwitchPlanValue": "{plan}, {price} годишно",
+    "yearlySwitchDueToday": "Дължимо днес",
+    "yearlySwitchRenews": "Подновяване",
+    "yearlySwitchCreditNote": "Включва кредит за остатъка от този месец.",
+    "yearlySwitchDeclined": "Плащането е отказано. Оставате на месечно плащане.",
+    "yearlySwitchFailed": "Превключването не успя. Оставате на месечно плащане.",
+    "yearlySwitchPreviewFailed": "Цената не можа да се зареди.",
+    "yearlySwitchUnavailable": "Годишното плащане в момента не е достъпно за вашия план.",
+    "yearlySwitchDoneTitle": "Вече плащате годишно",
+    "yearlySwitchDoneBody": "Днес са таксувани {amount}. Подновяване на {date}."
 }

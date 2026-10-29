@@ -18163,5 +18163,91 @@
     "dailyRecapsOnHomeDescription": "Show your latest recaps at the top of Home.",
     "@dailyRecapsOnHomeDescription": {
         "description": "Subtitle for the Daily Recaps on Home toggle in Developer Settings"
+    },
+    "yearlySwitchTitle": "Switch to Yearly",
+    "@yearlySwitchTitle": {
+        "description": "Title of the sheet, row and button that switch a monthly subscription to the same plan billed yearly"
+    },
+    "yearlySwitchRowSavings": "Save {amount} a year",
+    "@yearlySwitchRowSavings": {
+        "description": "Plans & Billing row subtitle for an Omi Pro monthly subscriber: the exact yearly saving with its currency, like US$89.97",
+        "placeholders": {
+            "amount": {
+                "type": "String"
+            }
+        }
+    },
+    "yearlySwitchHomeTitle": "Save {amount} a year with yearly",
+    "@yearlySwitchHomeTitle": {
+        "description": "Home row for an Omi Pro monthly subscriber: yearly billing of the same plan saves this much a year; amount is the exact saving with its currency, like US$89.97",
+        "placeholders": {
+            "amount": {
+                "type": "String"
+            }
+        }
+    },
+    "yearlySwitchHomeSubtitle": "Same plan, billed once a year",
+    "@yearlySwitchHomeSubtitle": {
+        "description": "Second line of the Home row: nothing about the plan changes except billing once a year"
+    },
+    "yearlySwitchPlanLabel": "Plan",
+    "@yearlySwitchPlanLabel": {
+        "description": "Label of the row naming the plan in the switch-to-yearly preview"
+    },
+    "yearlySwitchPlanValue": "{plan}, {price} a year",
+    "@yearlySwitchPlanValue": {
+        "description": "Value of the Plan row in the switch-to-yearly preview, e.g. \"Unlimited, $269.91 a year\"",
+        "placeholders": {
+            "plan": {
+                "type": "String"
+            },
+            "price": {
+                "type": "String"
+            }
+        }
+    },
+    "yearlySwitchDueToday": "Due today",
+    "@yearlySwitchDueToday": {
+        "description": "Label of the amount charged today when switching to yearly"
+    },
+    "yearlySwitchRenews": "Renews",
+    "@yearlySwitchRenews": {
+        "description": "Label of the date the yearly plan renews, in the switch-to-yearly preview"
+    },
+    "yearlySwitchCreditNote": "Includes credit for the rest of this month.",
+    "@yearlySwitchCreditNote": {
+        "description": "Under the switch-to-yearly preview: today’s charge is lower because the unused part of the current month is credited"
+    },
+    "yearlySwitchDeclined": "Payment declined. You're still on monthly.",
+    "@yearlySwitchDeclined": {
+        "description": "Shown when the card is declined while switching to yearly; nothing changed and the subscription stays monthly"
+    },
+    "yearlySwitchFailed": "Couldn't switch. You're still on monthly.",
+    "@yearlySwitchFailed": {
+        "description": "Shown when switching to yearly fails for another reason; nothing changed"
+    },
+    "yearlySwitchPreviewFailed": "Couldn't load your price.",
+    "@yearlySwitchPreviewFailed": {
+        "description": "Shown in the switch-to-yearly sheet when the price preview cannot be loaded; a Try Again button follows"
+    },
+    "yearlySwitchUnavailable": "Yearly billing isn't available for your plan right now.",
+    "@yearlySwitchUnavailable": {
+        "description": "Shown in the switch-to-yearly sheet when the subscription can no longer switch (for example it was cancelled meanwhile)"
+    },
+    "yearlySwitchDoneTitle": "You're on yearly",
+    "@yearlySwitchDoneTitle": {
+        "description": "Success title after switching to yearly billing"
+    },
+    "yearlySwitchDoneBody": "{amount} charged today. Renews {date}.",
+    "@yearlySwitchDoneBody": {
+        "description": "Success line after switching to yearly: what was charged today and when the yearly plan renews",
+        "placeholders": {
+            "amount": {
+                "type": "String"
+            },
+            "date": {
+                "type": "String"
+            }
+        }
     }
 }

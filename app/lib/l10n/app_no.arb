@@ -4500,5 +4500,20 @@
     "activityAttentionSyncStalledTitle": "Omi synkroniserer ikke",
     "activityAttentionSyncStalledSubtitle": "Ingen opptak synkronisert på over {hours} timer",
     "dailyRecapsOnHome": "Daglige oppsummeringer på Hjem",
-    "dailyRecapsOnHomeDescription": "Vis de nyeste oppsummeringene øverst på Hjem."
+    "dailyRecapsOnHomeDescription": "Vis de nyeste oppsummeringene øverst på Hjem.",
+    "yearlySwitchTitle": "Bytt til årlig",
+    "yearlySwitchRowSavings": "Spar {amount} i året",
+    "yearlySwitchHomeTitle": "Spar {amount} i året med årlig betaling",
+    "yearlySwitchHomeSubtitle": "Samme abonnement, betalt én gang i året",
+    "yearlySwitchPlanLabel": "Abonnement",
+    "yearlySwitchPlanValue": "{plan}, {price} i året",
+    "yearlySwitchDueToday": "Forfaller i dag",
+    "yearlySwitchRenews": "Fornyes",
+    "yearlySwitchCreditNote": "Inkluderer kreditt for resten av denne måneden.",
+    "yearlySwitchDeclined": "Betalingen ble avvist. Du betaler fortsatt månedlig.",
+    "yearlySwitchFailed": "Kunne ikke bytte. Du betaler fortsatt månedlig.",
+    "yearlySwitchPreviewFailed": "Kunne ikke laste inn prisen.",
+    "yearlySwitchUnavailable": "Årlig betaling er ikke tilgjengelig for abonnementet ditt akkurat nå.",
+    "yearlySwitchDoneTitle": "Du betaler nå årlig",
+    "yearlySwitchDoneBody": "{amount} belastet i dag. Fornyes {date}."
 }

@@ -11926,5 +11926,20 @@
     "activityAttentionSyncStalledTitle": "Omi не се синхронизира",
     "activityAttentionSyncStalledSubtitle": "Повеќе од {hours} часа нема синхронизирано снимки",
     "dailyRecapsOnHome": "Дневни резимеа на Почетна",
-    "dailyRecapsOnHomeDescription": "Прикажи ги најновите резимеа на врвот на Почетна."
+    "dailyRecapsOnHomeDescription": "Прикажи ги најновите резимеа на врвот на Почетна.",
+    "yearlySwitchTitle": "Префрли на годишно",
+    "yearlySwitchRowSavings": "Заштедете {amount} годишно",
+    "yearlySwitchHomeTitle": "Заштедете {amount} годишно со годишно плаќање",
+    "yearlySwitchHomeSubtitle": "Истиот план, плаќање еднаш годишно",
+    "yearlySwitchPlanLabel": "План",
+    "yearlySwitchPlanValue": "{plan}, {price} годишно",
+    "yearlySwitchDueToday": "За плаќање денес",
+    "yearlySwitchRenews": "Обновување",
+    "yearlySwitchCreditNote": "Вклучува кредит за остатокот од овој месец.",
+    "yearlySwitchDeclined": "Плаќањето е одбиено. И понатаму плаќате месечно.",
+    "yearlySwitchFailed": "Префрлањето не успеа. И понатаму плаќате месечно.",
+    "yearlySwitchPreviewFailed": "Цената не можеше да се вчита.",
+    "yearlySwitchUnavailable": "Годишното плаќање моментално не е достапно за вашиот план.",
+    "yearlySwitchDoneTitle": "Сега плаќате годишно",
+    "yearlySwitchDoneBody": "Денес се наплатени {amount}. Обновување на {date}."
 }

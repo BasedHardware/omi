@@ -4535,5 +4535,20 @@
     "activityAttentionSyncStalledTitle": "Omi eşitlemiyor",
     "activityAttentionSyncStalledSubtitle": "{hours} saatten uzun süredir eşitlenmiş kayıt yok",
     "dailyRecapsOnHome": "Ana Sayfada Günlük Özetler",
-    "dailyRecapsOnHomeDescription": "En son özetlerini Ana Sayfanın üstünde göster."
+    "dailyRecapsOnHomeDescription": "En son özetlerini Ana Sayfanın üstünde göster.",
+    "yearlySwitchTitle": "Yıllığa geçin",
+    "yearlySwitchRowSavings": "Yılda {amount} tasarruf edin",
+    "yearlySwitchHomeTitle": "Yıllık ödemeyle yılda {amount} tasarruf edin",
+    "yearlySwitchHomeSubtitle": "Aynı plan, yılda bir kez ödenir",
+    "yearlySwitchPlanLabel": "Plan",
+    "yearlySwitchPlanValue": "{plan}, yıllık {price}",
+    "yearlySwitchDueToday": "Bugün ödenecek",
+    "yearlySwitchRenews": "Yenilenme",
+    "yearlySwitchCreditNote": "Bu ayın kalan kısmı için kredi içerir.",
+    "yearlySwitchDeclined": "Ödeme reddedildi. Aylık ödemeye devam ediyorsunuz.",
+    "yearlySwitchFailed": "Geçiş yapılamadı. Aylık ödemeye devam ediyorsunuz.",
+    "yearlySwitchPreviewFailed": "Fiyatınız yüklenemedi.",
+    "yearlySwitchUnavailable": "Yıllık ödeme şu anda planınız için kullanılamıyor.",
+    "yearlySwitchDoneTitle": "Artık yıllık ödüyorsunuz",
+    "yearlySwitchDoneBody": "Bugün {amount} tahsil edildi. Yenilenme: {date}."
 }

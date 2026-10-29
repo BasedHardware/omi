@@ -4500,5 +4500,20 @@
     "activityAttentionSyncStalledTitle": "Omi 未同步",
     "activityAttentionSyncStalledSubtitle": "超过 {hours} 小时未同步任何录音",
     "dailyRecapsOnHome": "首页每日回顾",
-    "dailyRecapsOnHomeDescription": "在首页顶部显示最新的回顾。"
+    "dailyRecapsOnHomeDescription": "在首页顶部显示最新的回顾。",
+    "yearlySwitchTitle": "改为按年付费",
+    "yearlySwitchRowSavings": "每年节省 {amount}",
+    "yearlySwitchHomeTitle": "按年付费，每年节省 {amount}",
+    "yearlySwitchHomeSubtitle": "同一计划，每年付费一次",
+    "yearlySwitchPlanLabel": "计划",
+    "yearlySwitchPlanValue": "{plan}，每年 {price}",
+    "yearlySwitchDueToday": "今日应付",
+    "yearlySwitchRenews": "续订日期",
+    "yearlySwitchCreditNote": "已包含本月剩余天数的抵扣。",
+    "yearlySwitchDeclined": "付款被拒。你仍按月付费。",
+    "yearlySwitchFailed": "无法切换。你仍按月付费。",
+    "yearlySwitchPreviewFailed": "无法加载价格。",
+    "yearlySwitchUnavailable": "你的计划目前不支持按年付费。",
+    "yearlySwitchDoneTitle": "已改为按年付费",
+    "yearlySwitchDoneBody": "今日已扣款 {amount}。续订日期：{date}。"
 }

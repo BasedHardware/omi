@@ -14979,4 +14979,57 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Εμφάνιση των πιο πρόσφατων περιλήψεων στην κορυφή της Αρχικής.';
+
+  @override
+  String get yearlySwitchTitle => 'Μετάβαση σε ετήσιο';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Εξοικονομήστε $amount τον χρόνο';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Εξοικονομήστε $amount τον χρόνο με ετήσια χρέωση';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Ίδιο πρόγραμμα, μία πληρωμή τον χρόνο';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Πρόγραμμα';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price τον χρόνο';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Πληρωτέο σήμερα';
+
+  @override
+  String get yearlySwitchRenews => 'Ανανέωση';
+
+  @override
+  String get yearlySwitchCreditNote => 'Περιλαμβάνει πίστωση για το υπόλοιπο του μήνα.';
+
+  @override
+  String get yearlySwitchDeclined => 'Η πληρωμή απορρίφθηκε. Παραμένετε σε μηνιαία χρέωση.';
+
+  @override
+  String get yearlySwitchFailed => 'Η αλλαγή δεν ήταν δυνατή. Παραμένετε σε μηνιαία χρέωση.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Δεν ήταν δυνατή η φόρτωση της τιμής.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Η ετήσια χρέωση δεν είναι διαθέσιμη για το πρόγραμμά σας αυτή τη στιγμή.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Είστε πλέον σε ετήσια χρέωση';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Χρεώθηκαν σήμερα $amount. Ανανέωση στις $date.';
+  }
 }

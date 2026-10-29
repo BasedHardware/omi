@@ -4500,5 +4500,20 @@
     "activityAttentionSyncStalledTitle": "Omi не синхронізується",
     "activityAttentionSyncStalledSubtitle": "Записи не синхронізувалися понад {hours} годин",
     "dailyRecapsOnHome": "Щоденні підсумки на головній",
-    "dailyRecapsOnHomeDescription": "Показувати останні підсумки вгорі головної."
+    "dailyRecapsOnHomeDescription": "Показувати останні підсумки вгорі головної.",
+    "yearlySwitchTitle": "Перейти на річний",
+    "yearlySwitchRowSavings": "Заощаджуйте {amount} на рік",
+    "yearlySwitchHomeTitle": "Заощаджуйте {amount} на рік з річною оплатою",
+    "yearlySwitchHomeSubtitle": "Той самий план, оплата раз на рік",
+    "yearlySwitchPlanLabel": "План",
+    "yearlySwitchPlanValue": "{plan}, {price} на рік",
+    "yearlySwitchDueToday": "До сплати сьогодні",
+    "yearlySwitchRenews": "Поновлення",
+    "yearlySwitchCreditNote": "Містить кредит за решту цього місяця.",
+    "yearlySwitchDeclined": "Платіж відхилено. Ви й надалі платите щомісяця.",
+    "yearlySwitchFailed": "Не вдалося перейти. Ви й надалі платите щомісяця.",
+    "yearlySwitchPreviewFailed": "Не вдалося завантажити ціну.",
+    "yearlySwitchUnavailable": "Річна оплата зараз недоступна для вашого плану.",
+    "yearlySwitchDoneTitle": "Тепер ви платите раз на рік",
+    "yearlySwitchDoneBody": "Сьогодні списано {amount}. Поновлення {date}."
 }

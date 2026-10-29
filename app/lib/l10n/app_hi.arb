@@ -4500,5 +4500,20 @@
     "activityAttentionSyncStalledTitle": "Omi सिंक नहीं हो रहा है",
     "activityAttentionSyncStalledSubtitle": "{hours} घंटे से ज़्यादा समय से कोई रिकॉर्डिंग सिंक नहीं हुई",
     "dailyRecapsOnHome": "होम पर दैनिक सारांश",
-    "dailyRecapsOnHomeDescription": "होम के ऊपर अपने नवीनतम सारांश दिखाएं।"
+    "dailyRecapsOnHomeDescription": "होम के ऊपर अपने नवीनतम सारांश दिखाएं।",
+    "yearlySwitchTitle": "सालाना पर स्विच करें",
+    "yearlySwitchRowSavings": "साल में {amount} बचाएं",
+    "yearlySwitchHomeTitle": "सालाना भुगतान से साल में {amount} बचाएं",
+    "yearlySwitchHomeSubtitle": "वही प्लान, साल में एक बार भुगतान",
+    "yearlySwitchPlanLabel": "प्लान",
+    "yearlySwitchPlanValue": "{plan}, {price} प्रति वर्ष",
+    "yearlySwitchDueToday": "आज देय",
+    "yearlySwitchRenews": "नवीनीकरण",
+    "yearlySwitchCreditNote": "इस महीने के बचे समय का क्रेडिट शामिल है।",
+    "yearlySwitchDeclined": "भुगतान अस्वीकार हुआ। आप अभी भी मासिक प्लान पर हैं।",
+    "yearlySwitchFailed": "स्विच नहीं हो सका। आप अभी भी मासिक प्लान पर हैं।",
+    "yearlySwitchPreviewFailed": "आपकी कीमत लोड नहीं हो सकी।",
+    "yearlySwitchUnavailable": "अभी आपके प्लान के लिए सालाना बिलिंग उपलब्ध नहीं है।",
+    "yearlySwitchDoneTitle": "अब आप सालाना प्लान पर हैं",
+    "yearlySwitchDoneBody": "आज {amount} चार्ज किए गए। नवीनीकरण {date} को।"
 }

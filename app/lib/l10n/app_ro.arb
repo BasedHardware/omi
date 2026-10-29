@@ -4500,5 +4500,20 @@
     "activityAttentionSyncStalledTitle": "Omi nu se sincronizează",
     "activityAttentionSyncStalledSubtitle": "Nicio înregistrare sincronizată de peste {hours} ore",
     "dailyRecapsOnHome": "Recapitulări zilnice pe Acasă",
-    "dailyRecapsOnHomeDescription": "Afișează cele mai noi recapitulări în partea de sus a ecranului Acasă."
+    "dailyRecapsOnHomeDescription": "Afișează cele mai noi recapitulări în partea de sus a ecranului Acasă.",
+    "yearlySwitchTitle": "Treci la anual",
+    "yearlySwitchRowSavings": "Economisește {amount} pe an",
+    "yearlySwitchHomeTitle": "Economisește {amount} pe an cu plata anuală",
+    "yearlySwitchHomeSubtitle": "Același plan, plătit o dată pe an",
+    "yearlySwitchPlanLabel": "Plan",
+    "yearlySwitchPlanValue": "{plan}, {price} pe an",
+    "yearlySwitchDueToday": "De plată azi",
+    "yearlySwitchRenews": "Se reînnoiește",
+    "yearlySwitchCreditNote": "Include credit pentru restul acestei luni.",
+    "yearlySwitchDeclined": "Plată refuzată. Rămâi la plata lunară.",
+    "yearlySwitchFailed": "Nu s-a putut schimba. Rămâi la plata lunară.",
+    "yearlySwitchPreviewFailed": "Prețul nu a putut fi încărcat.",
+    "yearlySwitchUnavailable": "Plata anuală nu este disponibilă acum pentru planul tău.",
+    "yearlySwitchDoneTitle": "Acum plătești anual",
+    "yearlySwitchDoneBody": "Azi s-au încasat {amount}. Se reînnoiește pe {date}."
 }
