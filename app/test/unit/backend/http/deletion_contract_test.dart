@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/api/account_deletion.dart';
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/schema/gen/users_wire.g.dart' as wire;
 import 'package:omi/services/account_deletion_data.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -12,6 +13,7 @@ void main() {
     for (final json in <Map<String, dynamic>>[
       {},
       {'grace_days': -1},
+      {'grace_period_days': '14'},
       {'wipe_at': 'invalid'},
       {'wipe_at': now.toIso8601String()},
       {'pending_deletion': true, 'grace_days': 14}
@@ -25,19 +27,21 @@ void main() {
         5);
   });
 
-  test('wire adapter preserves conservative malformed policy and count defaults', () {
-    final status = AccountDeletionStatus.fromJson({
-      'pending_deletion': 'true',
-      'wipe_at': 'invalid',
-      'grace_period_days': -2,
-      'loss_summary': {'held_recordings': double.infinity, 'backlog_conversations': 4.9},
+  test('generated deletion adapter preserves legacy counts and grace aliases', () {
+    final value = AccountDeletionStatus.fromJson({
+      'grace_days': 7,
+      'loss_summary': {'held_recordings': 3.5, 'backlog_conversations': '14'},
     });
-    expect(status.pendingDeletion, isFalse);
-    expect(status.wipeAt, isNull);
-    expect(status.gracePeriodDays, 0);
-    expect(status.heldCount, 0);
-    expect(status.processingCount, 4);
-    expect(AccountDeletionStatus.fromJson({'grace_days': 3}).gracePeriodDays, 3);
+    expect(value.gracePeriodDays, 7);
+    expect(value.heldCount, 3);
+    expect(value.processingCount, 0);
+    final negative = AccountDeletionStatus.fromGenerated(const wire.GeneratedAccountDeletionStatusResponse(
+      gracePeriodDays: -7,
+      lossSummary: wire.GeneratedAccountDeletionLossSummary(heldRecordings: -3, backlogConversations: -14),
+    ));
+    expect(negative.gracePeriodDays, 0);
+    expect(negative.heldCount, 0);
+    expect(negative.processingCount, 0);
   });
 
   test('counts exclude uploaded/synced, retired/unowned and non-phone recordings', () {
