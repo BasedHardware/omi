@@ -515,7 +515,7 @@ final class DeviceProvider: ObservableObject {
 
     do {
       let response = try await APIClient.shared.checkFirmwareUpdate(
-        modelNumber: device.modelNumber,
+        modelNumber: device.modelNumber ?? "unknown",
         currentFirmware: device.firmwareRevision ?? "0.0.0",
         hardwareRevision: device.hardwareRevision ?? "unknown",
         manufacturerName: device.manufacturerName ?? "unknown"
