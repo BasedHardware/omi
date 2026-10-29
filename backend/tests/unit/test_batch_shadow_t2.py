@@ -4,7 +4,8 @@ from copy import deepcopy
 
 import pytest
 
-from scripts.rollout.batch_shadow_t2 import census, combine as _combine, query_pages, serving_clock
+from scripts.rollout.batch_shadow_t2 import census as _census, combine as _combine, query_pages, serving_clock
+from scripts.rollout.batch_quality_gate import epoch
 
 NOW = '2026-10-29T06:30:00+00:00'
 START = '2026-10-29T06:00:00+00:00'
@@ -19,6 +20,7 @@ def terminal(speech, outcome='recovered', **extra):
             speech_seconds=speech,
             speech_loss_seconds=0 if outcome == 'recovered' else speech,
             projection_status='planned' if outcome == 'recovered' else 'empty' if outcome == 'empty' else None,
+            created_at=epoch(START),
         ),
         **extra,
     }
@@ -37,6 +39,29 @@ def base():
 
 def combine(base, counts, read_time, since, now, prior=None):
     return _combine(base, counts, read_time, since, now, prior, history=[base])
+
+
+def census(rows, overdue, since=None):
+    return _census(rows, overdue, epoch(START) if since is None else since)
+
+
+def test_preactivation_work_settling_now_cannot_fill_shadow_floor():
+    rows = [terminal(4000, created_at=epoch(START) - 1), terminal(1000)]
+    counts = census(rows, [])
+    assert counts['terminal_unrecovered_speech_denominator_seconds'] == 1000
+    assert combine(base(), counts, NOW, START, NOW)['hard3']['T2'] == 'UNKNOWN'
+
+
+def test_missing_admission_time_is_unknown_not_qualified_speech():
+    row = terminal(4000)
+    row.pop('created_at')
+    counts = census([row], [])
+    assert counts['terminal_unrecovered_speech_unknown_units'] == 1
+    assert counts['terminal_unrecovered_speech_denominator_seconds'] == 0
+
+
+def test_settled_rows_in_creation_query_are_not_overdue():
+    assert census([terminal(4000)], [{'state': 'settled'}])['overdue_units'] == 0
 
 
 def test_empty_or_sparse_shadow_never_uses_serving_denominator():

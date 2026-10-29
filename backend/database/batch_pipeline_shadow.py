@@ -93,6 +93,7 @@ class ShadowStore:
             'owner_key': job['owner_key'],
             'class': job['class'],
             'outcome': outcome,
+            'created_at': job.get('created_at'),
             **({'projection_status': projection_status} if projection_status is not None else {}),
             'vad': vad,
             **({'recognizers': recognizers, 'paid_providers': job.get('paid', [])} if recognizers is not None else {}),

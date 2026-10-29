@@ -490,6 +490,7 @@ def test_artifact_sink_cannot_persist_shadow_transcript(repository):
     artifacts._write.assert_not_called()
     artifacts.register_artifact.assert_not_called()
     assert row(repository, item.segment_id)['projection_status'] == 'planned'
+    assert row(repository, item.segment_id)['created_at'] == 7200
     assert 'secret' not in repr(repository.store.client.rows)
     with pytest.raises(PermissionError):
         artifacts.persist_recovery_result(item, {'words': []}, 'token')

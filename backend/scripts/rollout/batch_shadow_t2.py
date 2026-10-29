@@ -47,7 +47,7 @@ def value(raw):
     return None
 
 
-def census(rows, overdue):
+def census(rows, overdue, since):
     """Only measured terminal units enter the speech denominator; drops do not."""
     speech = loss = maximum = 0.0
     unknown = 0
@@ -59,6 +59,12 @@ def census(rows, overdue):
         if row.get('outcome') == 'dropped':
             dropped += 1
             continue
+        created = row.get('created_at')
+        if type(created) not in (int, float) or not math.isfinite(created) or created < 0:
+            unknown += 1
+            continue
+        if created < since:
+            continue  # Earlier-regime work settling now is not shadow25 evidence.
         if (
             row.get('outcome') == 'recovered'
             and row.get('projection_status') != 'planned'
@@ -86,7 +92,8 @@ def census(rows, overdue):
         speech += measured
         loss += lost
         maximum = max(maximum, lost)
-    unknown += sum(row.get('state') != 'settled' for row in overdue)
+    pending = [row for row in overdue if row.get('state') != 'settled']
+    unknown += len(pending)
     return {
         'terminal_unrecovered_vad_speech_seconds': loss,
         'terminal_unrecovered_speech_denominator_seconds': speech,
@@ -100,7 +107,7 @@ def census(rows, overdue):
         'since_t0_failed_held_vad_fallback_units': 0,
         'sampled_terminal_units': len(rows),
         'dropped_units': dropped,
-        'overdue_units': len(overdue),
+        'overdue_units': len(pending),
     }
 
 
@@ -309,7 +316,7 @@ def main():
             prior = {}
         row = combine(
             base,
-            census(rows, overdue),
+            census(rows, overdue, since),
             read_time,
             args.since,
             dt.datetime.now(dt.timezone.utc).isoformat(),
