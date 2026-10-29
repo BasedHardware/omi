@@ -226,7 +226,8 @@ void main() {
       expect(SharedPreferencesUtil().getInt('onboarding/resumeStep/u1', defaultValue: -1), -1);
     });
 
-    testWidgets('connect_first: an Omi paired at Connect takes the voice intro out of the steps', (tester) async {
+    testWidgets('connect_first: a saved Omi (what a pairing writes) takes the voice intro out of the steps',
+        (tester) async {
       await _pumpAtConsent(tester, 'connect_first');
       await _agree(tester);
       // What a pairing leaves behind: the Omi saved for this account.
