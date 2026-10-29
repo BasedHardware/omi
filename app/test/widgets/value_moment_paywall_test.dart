@@ -10,11 +10,15 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
+import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/paywall/paywall_pacing.dart';
 import 'package:omi/pages/paywall/value_moment_paywall.dart';
+import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/providers/user_provider.dart';
 import 'package:omi/ui/prompts/prompt_queue.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 
 // A free Omi owner gets the paywall at the first summary they read and at the first conversation
 // the free allowance locks: once per moment, never within 72h of another paywall, never for a paying
@@ -298,6 +302,58 @@ void main() {
         conversation: _conversation(locked: true), queue: queue, open: open);
     await settle(tester);
     expect(opened, ['free_cap']);
+  });
+
+  testWidgets('after the "Processing paused" Upgrade opens the plans sheet, the cap offer stays away', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(430, 2400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    PlatformManager.initializeForLocalHarness();
+    usage.debugSetAvailablePlans({
+      'plans': <dynamic>[
+        for (final (interval, amount) in [('month', 2999), ('year', 26991)])
+          {
+            'id': 'price_unlimited_v2_$interval',
+            'plan_id': 'unlimited_v2',
+            'title': 'Omi Pro',
+            'interval': interval,
+            'unit_amount': amount,
+            'is_active': false,
+          },
+      ]
+    });
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<UsageProvider>.value(value: usage),
+          ChangeNotifierProvider<UserProvider>(create: (_) => UserProvider()),
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: const [Locale('en')],
+          home: Scaffold(
+            body: Builder(builder: (context) {
+              presentOn = context;
+              return TextButton(onPressed: () => openHeldAudioPlans(context), child: const Text('Upgrade'));
+            }),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Upgrade'));
+    for (var i = 0; i < 20; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.byType(PlansSheet), findsOneWidget);
+    Navigator.of(tester.element(find.byType(PlansSheet))).pop();
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(
+        ValueMomentPaywall.offer(PaywallMoment.freeCap,
+            conversation: _conversation(locked: true), usage: usage, queue: queue, open: open),
+        isFalse);
+    await settle(tester);
+    expect(opened, isEmpty);
   });
 
   group('locked row', () {
