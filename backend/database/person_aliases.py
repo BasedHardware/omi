@@ -6,16 +6,17 @@ from datetime import datetime, timezone
 import os
 import pickle
 import threading
-
-from config.firestore_read_levers import lever_enabled
-from database import chat_edits
-from database.people_generation import bump_people_generation, read_people_generation
 from typing import Any, Optional
 
 from google.api_core.exceptions import NotFound
 from google.cloud.firestore_v1 import FieldFilter, transactional
-from utils.speakers import auto_enroll
+
+from config.firestore_read_levers import lever_enabled
+from database import chat_edits
+from database._client import db, get_firestore_client
+from database.people_generation import bump_people_generation, read_people_generation
 from utils.observability.fallback import record_fallback
+from utils.speakers import auto_enroll
 
 
 class _PeopleScanMemo:
@@ -102,6 +103,35 @@ def _people_write():
                 memo.writers -= 1
 
 
+def _clean_id(value: Any) -> str:
+    """Normalize and validate document / user identifiers."""
+    if not isinstance(value, str):
+        return ""
+    cleaned = value.strip()
+    if (
+        not cleaned
+        or len(cleaned) > 128
+        or ".." in cleaned
+        or "/" in cleaned
+        or "\\" in cleaned
+        or "\x00" in cleaned
+    ):
+        return ""
+    return cleaned
+
+
+def _client(db_client: Any = None) -> Any:
+    """Resolve Firestore client with dependency injection and fallback."""
+    if db_client is not None:
+        return db_client
+    if db is not None:
+        return db
+    try:
+        return get_firestore_client()
+    except Exception:
+        return None
+
+
 def normalized_person_alias(value: Any) -> str | None:
     if not isinstance(value, str):
         return None
@@ -116,9 +146,14 @@ def update_person_name_transaction(
     transaction: Any, person_ref: Any, name: str, expected_chat_state: dict | None = None
 ) -> bool:
     """Rename one stable person while retaining bounded exact aliases."""
+    if transaction is None or person_ref is None:
+        return False
+    normalized_name = normalized_person_alias(name)
+    if normalized_name is None:
+        return False
 
     snapshot = person_ref.get(transaction=transaction)
-    if not snapshot.exists:
+    if not getattr(snapshot, 'exists', False):
         return False
     raw = snapshot.to_dict()
     data = raw if isinstance(raw, dict) else {}
@@ -126,15 +161,12 @@ def update_person_name_transaction(
         fields = {key: data[key] for key in chat_edits.FIELDS['person'] if key in data}
         if chat_edits.encode(fields) != expected_chat_state['before']:
             raise PermissionError('Person changed before rename')
-    normalized_name = normalized_person_alias(name)
-    if normalized_name is None:
-        return False
 
     aliases: list[str] = []
     seen: set[str] = {normalized_name.casefold()}
     stored_aliases = data.get('aliases')
     if isinstance(stored_aliases, list):
-        for value in stored_aliases:
+        for value in stored_aliases[-48:]:
             alias = normalized_person_alias(value)
             if alias is None or alias.casefold() in seen:
                 continue
@@ -161,13 +193,23 @@ def rename_person_retaining_aliases(
     db_client: Any, uid: str, person_id: str, name: str, *, expected_chat_state: dict | None = None
 ) -> bool:
     """Rename an owner-scoped person and map concurrent deletion to missing."""
+    clean_uid = _clean_id(uid)
+    clean_person_id = _clean_id(person_id)
+    if not clean_uid or not clean_person_id:
+        return False
+    if normalized_person_alias(name) is None:
+        return False
 
-    person_ref = db_client.collection('users').document(uid).collection('people').document(person_id)
+    client = _client(db_client)
+    if client is None:
+        return False
+
+    person_ref = client.collection('users').document(clean_uid).collection('people').document(clean_person_id)
     with _people_write():
         try:
             if expected_chat_state is not None:
-                return update_person_name_transaction(db_client.transaction(), person_ref, name, expected_chat_state)
-            return update_person_name_transaction(db_client.transaction(), person_ref, name)
+                return update_person_name_transaction(client.transaction(), person_ref, name, expected_chat_state)
+            return update_person_name_transaction(client.transaction(), person_ref, name)
         except NotFound:
             return False
 
@@ -175,9 +217,11 @@ def rename_person_retaining_aliases(
 @transactional
 def dismiss_person_transaction(transaction: Any, person_ref: Any) -> bool:
     """Soft-dismiss one person while preserving its history and voice data."""
+    if transaction is None or person_ref is None:
+        return False
 
     snapshot = person_ref.get(transaction=transaction)
-    if not snapshot.exists:
+    if not getattr(snapshot, 'exists', False):
         return False
     raw = snapshot.to_dict()
     data = raw if isinstance(raw, dict) else {}
@@ -188,7 +232,7 @@ def dismiss_person_transaction(transaction: Any, person_ref: Any) -> bool:
     if has_pool:
         owner_ref = person_ref.parent.parent
         owner = owner_ref.get(transaction=transaction)
-        if owner.exists:
+        if getattr(owner, 'exists', False):
             authority_change = (owner_ref, auto_enroll.authority_after(owner.to_dict() or {}, {person_ref.id: None}))
     if data.get('is_dismissed') is True:
         if authority_change is not None:
@@ -212,11 +256,19 @@ def dismiss_person_transaction(transaction: Any, person_ref: Any) -> bool:
 
 def dismiss_person_soft(db_client: Any, uid: str, person_id: str) -> bool:
     """Soft-dismiss an owner-scoped person and map concurrent deletion to missing."""
+    clean_uid = _clean_id(uid)
+    clean_person_id = _clean_id(person_id)
+    if not clean_uid or not clean_person_id:
+        return False
 
-    person_ref = db_client.collection('users').document(uid).collection('people').document(person_id)
+    client = _client(db_client)
+    if client is None:
+        return False
+
+    person_ref = client.collection('users').document(clean_uid).collection('people').document(clean_person_id)
     with _people_write():
         try:
-            return dismiss_person_transaction(db_client.transaction(), person_ref)
+            return dismiss_person_transaction(client.transaction(), person_ref)
         except NotFound:
             return False
 
