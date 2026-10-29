@@ -1590,11 +1590,20 @@ being split on silence and stitched back together by smart merge afterwards
 ## Same-occasion folding across a silence split (smart merge)
 
 The two-minute silence split can turn one occasion into several pendant
-conversations. `utils/conversations/smart_merge.py` runs inside
-`finalize_persisted_conversation` on both finalization hosts (pusher for the
-live handoff, backend-sync for Cloud Tasks), only for `CAPTURE_END` jobs, after
-the fanout claim is `claimed` and before duplicate-capture linking or any derived
-effect. `CONVERSATION_SMART_MERGE_MODE` selects `merge` (the default when the
+conversations. With `CONVERSATION_MERGE_BEFORE_PROCESSING` (default on),
+`utils/conversations/merge_before_processing.py` is the shared pre-notes boundary
+for persisted live (`CAPTURE_END`), sync (`SYNC_UPDATE`) and untitled self-heal
+(`SERVER_RECOVERY`) rows. Budget and relevance admission run first; only a kept
+raw row can become a donor, before notes/title/tasks/memories or derived effects.
+The absorb transaction rechecks the live job binding, generation, lease epoch
+and expiry, or the enrichment owner, as well as both content revisions. A
+completed row with rich notes is never newly absorbed on this path. Explicit
+client ends, user reprocessing and manual merges keep their immediate paths.
+The flag is independent of the sync hold switch, registered with owner
+rollout-meetings and review date 2026-11-28 in the flag budget. Setting it to
+`false/0/off/no` restores the post-notes `CAPTURE_END` fanout-claimed merge path;
+committed donors always resume cleanup even after either switch is disabled.
+`CONVERSATION_SMART_MERGE_MODE` selects `merge` (the default when the
 variable is unset or blank), `shadow` (decide and record, never merge) or `off`
 (the kill switch: one env read, no I/O; an unrecognized value also means `off`);
 
@@ -7875,9 +7884,18 @@ acknowledging; it never processes the donor. Smart-merge survivor refreshes
 for sync-touched rows hand off to this same outbox, then persist a
 `smart_merge.delegated_revision` receipt. Only that committed handoff permits
 another absorb while a refresh is owed. The settled worker still uses the
-smart-merge refresh lease, processing checkpoint and vector completion. Ordinary
-live-only refreshes retain their existing path. This step does not move the
-smart-merge decision before the donor's first processing; that is step 2.
+smart-merge refresh lease, processing checkpoint and vector completion. Step 2
+extends this handoff to live-only absorbs with a `before_notes` decision stamp:
+`sync_processing_hold.merge_first` and outbox `merge_hold` select the independent
+merge-before-processing kill switch. The first survivor notes supply the baseline;
+subsequent absorbs coalesce against it. Unchanged, immaterial and capped work
+settles the merge revision without a paid refresh. A raw survivor still passes
+the normal `SYNC_UPDATE` relevance policy on its first full processing.
+Rollback drains live-only merge holds through their stored wakes and the repair
+sweep. Mixed sync/live obligations keep the independent sync window while its
+switch remains on. New epochs reset their producer markers, so a historical live
+hold cannot disable a future sync hold. New absorbs use the legacy path after
+rollback.
 
 Successful automatic processing stores a content digest, word count and union
 speech duration in `sync_processing_hold.full_snapshot`, after processing and its existing effects return, through a
@@ -7919,3 +7937,38 @@ Home acceptance remains occasion architecture step 3b: intake still stores its
 legacy completed minimum, so released clients can show a held piece as a
 finished row. This backend change does not claim to fix that UI or to prevent
 smart merges after a row has been seen. No UI is changed here.
+
+
+### Occasion step 2 merge-path audit
+
+- Smart/Jev same-source pendant absorption now runs at the shared relevance-to-notes
+  boundary above. Raw/minimum self-heal uses the same boundary; rich recovery
+  results retain their identity. Jev sees bounded transcript excerpts and may see
+  an empty donor summary; there is no preliminary full summary call.
+- Sync intake/bridge assignment already chooses and appends to its canonical row
+  before enrichment (step 1). A late bridge now prefers an already-processed
+  canonical and excludes every other processed row from donor selection, then
+  replans without those rows extending the interval. This closes the hole after
+  the maximum hold: completed identities survive even when late audio connects
+  them. Explicit live targets remain canonical and the incoming content is still
+  appended; protected processed captures retain their own notes.
+  Redirected `sync_merged_into` donors transfer outbox
+  custody through the existing cycle/depth-bounded resolver, including deep chains.
+- Desktop/pendant shared-speech capture groups and cross-device overlap hints are
+  metadata associations, not destructive transcript merges. Both transcripts and
+  independent relevance remain: overlap/partial shared speech cannot prove the
+  secondary has no unique content. Their identity-evidence refresh remains
+  fingerprint-deduplicated and capped at three attempts per group; no extra full
+  processing is introduced here. Home row absorption is step 3b.
+- Batch record owners already merge/project through their record authority; the
+  legacy smart merger must not compete for `batch_live_v1`/`batch_sync_v1` rows.
+- Manual `/v1/conversations/merge` is explicit user intent over completed sources,
+  with a durable merge job; it is not an automatic donor-processing decision.
+
+`omi_conversation_merge_processing_stage_total{stage,donor_notes}` now separates
+`before_notes`/`after_notes` absorbs and actual donor note presence. Existing
+`omi_conversation_smart_merge_decision_total` counts decisions/attempts, not unique
+conversations or confirmed full-note runs. Sum increases across serving jobs;
+Cloud Run coverage can differ from GKE scrapes. `omi_sync_intake_total{outcome="merged"}`
+counts appends/absorbs, not already-processed donors. Missing series are unknown,
+never zero. No account ids or transcript data are exported by these counters.

@@ -47,14 +47,25 @@ def test_callback_body_matches_the_legacy_copy():
     assert _shape(legacy) == _shape(moved)
 
 
-def test_callback_helpers_match_the_legacy_copy():
-    for legacy_name, moved_name in (
-        ('_run_conversation_created_webhook', '_run_conversation_created_webhook'),
-        ('_require_current_conversation_persistence', '_require_current_conversation_persistence'),
-    ):
-        legacy = _function('utils/sync/pipeline.py', legacy_name)
-        moved = _function('utils/enrichment/callback.py', moved_name)
-        assert _shape(legacy) == _shape(moved), legacy_name
+def test_callback_helpers_share_the_legacy_custody_primitive():
+    def shared_imports(path):
+        tree = ast.parse((BACKEND / path).read_text())
+        return {
+            alias.asname or alias.name: (node.module, alias.name)
+            for node in tree.body
+            if isinstance(node, ast.ImportFrom)
+            for alias in node.names
+            if node.module == 'utils.enrichment.admission'
+        }
+
+    expected = {
+        'ConversationAbsorbed': ('utils.enrichment.admission', 'ConversationAbsorbed'),
+        'SyncConversationPersistenceFenced': ('utils.enrichment.admission', 'SyncConversationPersistenceFenced'),
+        '_require_current_conversation_persistence': ('utils.enrichment.admission', 'require_current_persistence'),
+        '_run_conversation_created_webhook': ('utils.enrichment.admission', 'run_created_webhook'),
+    }
+    assert shared_imports('utils/sync/pipeline.py') == expected
+    assert shared_imports('utils/enrichment/callback.py') == expected
 
 
 def test_lineage_retry_language_matches_the_legacy_sentinel():
