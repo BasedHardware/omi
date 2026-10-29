@@ -59,7 +59,7 @@ def test_surging_class_fires_against_baseline(client):
     result = evaluate_window(error_entries(60), now_epoch=now, client=client)
     assert len(result['fired']) == 1
     assert result['fired'][0]['disposition'] == 'surge'
-    assert result['fired'][0]['baseline_mean'] == 2.5  # 10 counted over a 4h span
+    assert result['fired'][0]['baseline_mean'] == 5.0  # 5 in the one elapsed hour before the window
 
 
 def test_new_class_below_threshold_alerts_when_it_crosses(client):

@@ -170,9 +170,13 @@ def stitch_tracebacks(entries: list[dict]) -> list[dict]:
     at the marker line, collects indented frame lines, and closes at the
     exception line, which carries the class; frame-only output without a
     closing exception line is flushed unchanged. Non-block lines pass through.
+    A level-header line ("WARNING x: ...") immediately preceding the marker is
+    absorbed into the block so the app level survives into the fingerprint -
+    without it, a warning-logged exception would use the standard thresholds.
     """
-    out: list[dict] = []
+    out: list[dict | None] = []
     blocks: dict[str, list[str]] = {}
+    last_header: dict[str, tuple[int, str]] = {}
     for entry in entries:
         if not entry.get('textPayload'):
             out.append(entry)
@@ -181,7 +185,13 @@ def stitch_tracebacks(entries: list[dict]) -> list[dict]:
         line = str(entry['textPayload']).rstrip('\n')
         pending = blocks.get(key)
         if line == TRACEBACK_START or line.endswith(TRACEBACK_START):
-            blocks[key] = [line]
+            head = last_header.pop(key, None)
+            if head is not None:
+                position, header = head
+                out[position] = None  # absorbed into the block below
+                blocks[key] = [header, line]
+            else:
+                blocks[key] = [line]
             continue
         if pending is not None:
             if FRAME_LINE_RE.match(line) or line.startswith('    ') or EXC_LINE_RE.match(line):
@@ -196,8 +206,14 @@ def stitch_tracebacks(entries: list[dict]) -> list[dict]:
             merged['textPayload'] = '\n'.join(pending)
             out.append(merged)
             blocks.pop(key, None)
+        # Only the immediately preceding line from this source can be the
+        # header of the block: any other pass-through line clears the candidate.
+        if LEVEL_LOGGER_RE.match(line):
+            last_header[key] = (len(out), line)
+        else:
+            last_header.pop(key, None)
         out.append(entry)
     for key, lines in blocks.items():
         if len(lines) > 1:
             out.append({'resource': {'labels': json.loads(key)}, 'textPayload': '\n'.join(lines)})
-    return out
+    return [entry for entry in out if entry is not None]

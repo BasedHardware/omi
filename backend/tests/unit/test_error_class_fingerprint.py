@@ -112,7 +112,7 @@ def test_request_log_errors_fingerprint_on_status_and_path():
 
 def test_stitch_tracebacks_merges_block_into_one_entry():
     lines = [
-        k8s_entry('INFO keepalive tick'),
+        k8s_entry('raw unstructured status 7'),
         k8s_entry('Traceback (most recent call last):'),
         k8s_entry('  File "/app/utils/contracts.py", line 45, in check'),
         k8s_entry('ValueError: bad span 99'),
@@ -124,6 +124,26 @@ def test_stitch_tracebacks_merges_block_into_one_entry():
     assert '\n' in texts[1] and 'contracts.py' in texts[1] and 'ValueError:' in texts[1]
     fp = fingerprint_entry(stitched[1])
     assert fp.fingerprint == 'ValueError|contracts.py:45|stderr'
+
+
+def test_stitch_absorbs_the_preceding_level_header():
+    # The two read passes split a warning-logged traceback across queries; the
+    # header must join the block so the class keeps warning-level thresholds.
+    lines = [
+        k8s_entry('WARNING routers.y: widget failed'),
+        k8s_entry('Traceback (most recent call last):'),
+        k8s_entry('  File "/app/widgets.py", line 7, in build'),
+        k8s_entry('ValueError: nope'),
+        k8s_entry('INFO after'),
+    ]
+    stitched = stitch_tracebacks(lines)
+    texts = [e['textPayload'] for e in stitched]
+    assert len(stitched) == 2
+    assert texts[0].startswith('WARNING routers.y: widget failed')
+    assert 'ValueError: nope' in texts[0]
+    fp = fingerprint_entry(stitched[0])
+    assert fp.exception == 'ValueError' and fp.level == 'WARNING'
+    assert fp.fingerprint == 'ValueError|widgets.py:7|routers.y'
 
 
 def test_stitch_tracebacks_flushes_broken_block_and_keeps_unrelated_lines():

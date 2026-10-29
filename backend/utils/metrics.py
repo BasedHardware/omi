@@ -790,6 +790,14 @@ OMI_ERROR_CLASS_ALERT_FIRED_TOTAL = Counter(
     'Error-class new/surge alert firings by class',
     ['fingerprint', 'service'],
 )
+# increase() over a series born at 1 and flat returns 0, so the paging rule
+# keys on this timestamp gauge instead: freshly fired = time() - max(...) is
+# small; a frozen or stale instance's value ages out of the window.
+OMI_ERROR_CLASS_LAST_FIRED_TIMESTAMP = Gauge(
+    'omi_error_class_last_fired_timestamp_seconds',
+    'Unix time of the most recent new/surge firing per error class',
+    ['fingerprint', 'service'],
+)
 
 
 LISTEN_FINALIZATION_JOB_STATUS = Gauge(

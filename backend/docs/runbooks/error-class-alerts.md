@@ -44,13 +44,16 @@ REST read pattern from `services/capture_wedge.py`.
 ## Delivery
 
 - `omi-error-class-firing` (Grafana): pages when
-  `sum(increase(omi_error_class_alert_fired_total[1h])) > 0`. The rule keys on
-  the monotonic counter because a gauge held at 1 by a Cloud Run instance that
-  stops running sweeps would page forever; a frozen counter's increase decays
-  to zero inside the rule window. The firing class fingerprint, hourly count,
-  baseline mean and first-seen epoch are on the counter labels and in the
-  matching `error_class_alert` ERROR line in backend-sync logs. The
-  `omi_error_class_alert_firing` gauge is display-only.
+  `time() - max(omi_error_class_last_fired_timestamp_seconds) < 900` for 2m.
+  The rule keys on the last-fired timestamp because `increase()` over a
+  counter series born at its alert value stays zero (first fire would never
+  page), while a timestamp naturally ages out of the window: a live-but-idle
+  instance's frozen value stops qualifying, and a dead instance's series goes
+  stale and drops out of the query. The firing class fingerprint, hourly
+  count, baseline mean and first-seen epoch are on the gauge/counter labels
+  and in the matching `error_class_alert` ERROR line in backend-sync logs.
+  The `omi_error_class_alert_firing` gauge and
+  `omi_error_class_alert_fired_total` counter are display/dashboard history.
 - `omi-error-class-sweep-silent` (Grafana): dead-man. Pages when the sweep
   reports any non-ok outcome (including `permission_denied`), completes fewer
   than 4 ticks in an hour (boolean modifiers, so zero-valued counters still

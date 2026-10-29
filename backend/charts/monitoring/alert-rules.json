@@ -23619,7 +23619,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(omi_error_class_alert_fired_total[1h])) > 0",
+          "expr": "time() - max(omi_error_class_last_fired_timestamp_seconds) < 900",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -23715,15 +23715,15 @@
     "updated": "2026-10-29T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "Error",
-    "for": "5m",
+    "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
       "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
-      "summary": "A prod error class fired a new (>=20/h) or surge (>=50/h and >=5x 7-day baseline) alert in the last hour",
-      "threshold": "sum(increase(omi_error_class_alert_fired_total[1h])) > 0; new >=20/h, surge >=50/h and >=5x baseline mean; warning-level classes at doubled thresholds",
+      "summary": "A prod error class fired a new (>=20/h) or surge (>=50/h and >=5x 7-day baseline) alert in the last 15 minutes",
+      "threshold": "time() - max(omi_error_class_last_fired_timestamp_seconds) < 900 for 2m; new >=20/h, surge >=50/h and >=5x baseline mean; warning-level classes at doubled thresholds",
       "user_impact": "An error family is accumulating unwatched; left alone it can grow into the next ramp-blocking batch failure or user-visible processing gap.",
       "scope": "backend, backend-sync, backend-sync-backfill, backend-integration, backend-listen, and prod-omi-gke batch-pipeline-worker / pusher / backend-listen pods.",
-      "verification": "Open the backend-sync logs for the firing service and filter severity>=ERROR; the matching error_class_alert line names the class fingerprint, hourly count, baseline mean, and first-seen epoch. Compare against the 7-day baseline in Redis key errclass:baseline.",
+      "verification": "Open the backend-sync logs for the firing service and filter severity>=ERROR; the matching error_class_alert line names the class fingerprint, hourly count, baseline mean, and first-seen epoch. Compare against the 7-day baseline in Redis key errclass:baseline. A stale firing timestamp ages out of the window on its own.",
       "safe_next_action": "Read the firing class fingerprint (exception type + file:line + logger) and inspect that code path before changing retry budgets or scaling. Suppress a known class by pausing the error-class-alerts-sweep scheduler job, not by muting the rule.",
       "runbook": "backend/docs/runbooks/error-class-alerts.md"
     },

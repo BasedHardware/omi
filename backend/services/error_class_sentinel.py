@@ -28,6 +28,7 @@ logs or stores raw entry payloads.
 from __future__ import annotations
 
 import logging
+import time
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
@@ -38,7 +39,12 @@ from google.auth.transport.requests import AuthorizedSession
 from database import error_class_baseline as baseline_db
 from utils.error_class_fingerprint import fingerprint_entry, stitch_tracebacks
 from utils.executors import db_executor, run_blocking
-from utils.metrics import OMI_ERROR_CLASS_ALERT_FIRED_TOTAL, OMI_ERROR_CLASS_ALERT_FIRING, OMI_ERROR_CLASS_SWEEP_TOTAL
+from utils.metrics import (
+    OMI_ERROR_CLASS_ALERT_FIRED_TOTAL,
+    OMI_ERROR_CLASS_ALERT_FIRING,
+    OMI_ERROR_CLASS_LAST_FIRED_TIMESTAMP,
+    OMI_ERROR_CLASS_SWEEP_TOTAL,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -223,16 +229,20 @@ def _thresholds(level: str) -> tuple[int, int]:
 
 
 def fire_alerts(fired: list[dict[str, Any]]) -> int:
-    """Count the firing signal, raise the display gauge, log one line per class.
+    """Stamp the paging signal, raise the display gauge, log one line per class.
 
-    The alert rule keys on the monotonic fired counter: a gauge held at 1 by an
-    instance that stops running sweeps would page forever, while a frozen
-    counter's increase decays to zero within the rule window.
+    The alert rule keys on the last-fired timestamp: freshly fired means
+    ``time() - max(gauge)`` is small, a live-but-idle instance's frozen value
+    ages out of the window, and a dead instance's series goes stale and drops
+    out of the query entirely. The fired counter is dashboard history.
     """
     global _firing_labels
     active: set[tuple[str, str]] = set()
     for alert in fired:
         OMI_ERROR_CLASS_ALERT_FIRED_TOTAL.labels(fingerprint=alert['fingerprint'], service=alert['service']).inc()
+        OMI_ERROR_CLASS_LAST_FIRED_TIMESTAMP.labels(fingerprint=alert['fingerprint'], service=alert['service']).set(
+            time.time()
+        )
         OMI_ERROR_CLASS_ALERT_FIRING.labels(fingerprint=alert['fingerprint'], service=alert['service']).set(1)
         active.add((alert['fingerprint'], alert['service']))
         logger.error(
@@ -268,6 +278,10 @@ def _tick(
     elif any(p['truncated'] for p in passes):
         outcome = 'truncated'
     entries = [entry for p in passes for entry in p['entries']]
+    # The two passes split one log stream by line prefix; a warning-logged
+    # traceback has its header in the warning pass and its frames in the other.
+    # Merge and re-sort by timestamp so stitching sees the original stream.
+    entries.sort(key=lambda e: e.get('timestamp') or '')
     summary: dict[str, Any] = {'outcome': outcome, 'entries': len(entries)}
     if outcome != 'ok':
         # Fail closed: unbounded or unreadable counts must not raise alerts.

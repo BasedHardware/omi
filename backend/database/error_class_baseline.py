@@ -84,7 +84,9 @@ def baseline_mean(
     if not prior:
         return None
     total = sum(count for _, count in prior)
-    span = before_bucket - min(bucket for bucket, _ in prior) + 1
+    # Elapsed hours between the first observed bucket and the window start:
+    # two consecutive prior buckets are two hours of baseline, not three.
+    span = max(1, before_bucket - min(bucket for bucket, _ in prior))
     return total / min(span, KEEP_BUCKETS)
 
 
