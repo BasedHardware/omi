@@ -12,9 +12,14 @@ class DeviceUtils {
     switch (device.type) {
       case DeviceType.omi:
         final identity = '${device.modelNumber} ${device.name}'.toUpperCase();
-        if (isOmiCv1(modelNumber: device.modelNumber, deviceName: device.name)) return 'omi_cv1';
+        if (isOmiCv1(modelNumber: device.modelNumber, deviceName: device.name))
+          return 'omi_cv1';
         if (identity.contains('FRIEND')) return 'friend_devkit';
-        if (isOmiDevKit(modelNumber: device.modelNumber, deviceName: device.name)) return 'omi_devkit';
+        if (isOmiDevKit(
+          modelNumber: device.modelNumber,
+          deviceName: device.name,
+        ))
+          return 'omi_devkit';
         if (identity.contains('GLASS')) return 'omi_glass';
         if (identity.contains('NEO')) return 'omi_neo';
         return 'omi_unknown';
@@ -53,7 +58,8 @@ class DeviceUtils {
     if (currentFirmware.isEmpty) {
       return ('Unable to determine current firmware version', false, '');
     }
-    if (latestFirmwareDetails.isEmpty || latestFirmwareDetails['version'] == null) {
+    if (latestFirmwareDetails.isEmpty ||
+        latestFirmwareDetails['version'] == null) {
       return ('Latest Version Not Available', false, '');
     }
     if (latestFirmwareDetails['draft'] == true) {
@@ -66,7 +72,9 @@ class DeviceUtils {
     }
     String latestVersionStr = latestFirmwareDetails['version'];
     Version? latestVersion = _tryParseVersion(latestVersionStr);
-    Version? minVersion = _tryParseVersion(latestFirmwareDetails['min_version']);
+    Version? minVersion = _tryParseVersion(
+      latestFirmwareDetails['min_version'],
+    );
     if (latestVersion == null || minVersion == null) {
       return ('Latest Version Not Available', false, '');
     }
@@ -77,9 +85,13 @@ class DeviceUtils {
       if (latestVersion > currentVersion) {
         PackageInfo packageInfo = await PackageInfo.fromPlatform();
         final appVersion = _tryParseVersion(packageInfo.version);
-        final minAppVersion = _tryParseVersion(latestFirmwareDetails['min_app_version']);
+        final minAppVersion = _tryParseVersion(
+          latestFirmwareDetails['min_app_version'],
+        );
         final buildNumber = int.tryParse(packageInfo.buildNumber);
-        final minBuildNumber = int.tryParse('${latestFirmwareDetails['min_app_version_code']}');
+        final minBuildNumber = int.tryParse(
+          '${latestFirmwareDetails['min_app_version_code']}',
+        );
         if (appVersion != null &&
             minAppVersion != null &&
             buildNumber != null &&
@@ -92,10 +104,18 @@ class DeviceUtils {
             latestVersionStr,
           );
         } else {
-          return ('A new version is available! Update your Omi now.', true, latestVersionStr);
+          return (
+            'A new version is available! Update your Omi now.',
+            true,
+            latestVersionStr,
+          );
         }
       } else {
-        return ('You are already on the latest version', false, latestVersionStr);
+        return (
+          'You are already on the latest version',
+          false,
+          latestVersionStr,
+        );
       }
     }
   }
@@ -138,7 +158,10 @@ class DeviceUtils {
     final model = modelNumber?.trim() ?? '';
     final name = deviceName?.trim() ?? '';
     final upperModel = model.toUpperCase();
-    final hasConcreteModel = model.isNotEmpty && upperModel != 'OMI DEVICE' && upperModel != 'UNKNOWN';
+    final hasConcreteModel =
+        model.isNotEmpty &&
+        upperModel != 'OMI DEVICE' &&
+        upperModel != 'UNKNOWN';
 
     if (hasConcreteModel) return !isVariant(model);
     if (name.isNotEmpty) return !isVariant(name);
@@ -147,7 +170,11 @@ class DeviceUtils {
 
   /// Get device image path by device type and model number (most accurate)
   /// Falls back to device name if type/model not available
-  static String getDeviceImagePath({DeviceType? deviceType, String? modelNumber, String? deviceName}) {
+  static String getDeviceImagePath({
+    DeviceType? deviceType,
+    String? modelNumber,
+    String? deviceName,
+  }) {
     // Check deviceType first
     if (deviceType != null) {
       switch (deviceType) {
@@ -169,14 +196,17 @@ class DeviceUtils {
           return Assets.images.raybanMeta.path;
         case DeviceType.omi:
           // For omi type, need to check model/name to distinguish between devkit and regular omi
-          if (modelNumber != null && modelNumber.isNotEmpty && modelNumber.toUpperCase() != 'UNKNOWN') {
+          if (modelNumber != null &&
+              modelNumber.isNotEmpty &&
+              modelNumber.toUpperCase() != 'UNKNOWN') {
             final upperModel = modelNumber.toUpperCase();
 
             if (upperModel.contains('GLASS')) {
               return Assets.images.omiGlass.path;
             }
 
-            if (upperModel.contains('DEVKIT') || (upperModel.contains('FRIEND'))) {
+            if (upperModel.contains('DEVKIT') ||
+                (upperModel.contains('FRIEND'))) {
               return Assets.images.omiDevkitWithoutRope.path;
             }
 
@@ -191,7 +221,9 @@ class DeviceUtils {
               return Assets.images.omiGlass.path;
             }
 
-            if (upperName.contains('DEVKIT') || upperName.contains('DEV') || (upperName.contains('FRIEND'))) {
+            if (upperName.contains('DEVKIT') ||
+                upperName.contains('DEV') ||
+                (upperName.contains('FRIEND'))) {
               return Assets.images.omiDevkitWithoutRope.path;
             }
 
@@ -205,7 +237,9 @@ class DeviceUtils {
     }
 
     // Then check modelNumber for specific variants
-    if (modelNumber != null && modelNumber.isNotEmpty && modelNumber.toUpperCase() != 'UNKNOWN') {
+    if (modelNumber != null &&
+        modelNumber.isNotEmpty &&
+        modelNumber.toUpperCase() != 'UNKNOWN') {
       final upperModel = modelNumber.toUpperCase();
 
       if (upperModel.contains('PLAUD')) {
@@ -214,7 +248,8 @@ class DeviceUtils {
       if (upperModel.contains('FRIEND PENDANT')) {
         return Assets.images.friendPendant.path;
       }
-      if (upperModel.contains('OMI DEVKIT 2') || upperModel.contains('FRIEND')) {
+      if (upperModel.contains('OMI DEVKIT 2') ||
+          upperModel.contains('FRIEND')) {
         return Assets.images.omiDevkitWithoutRope.path;
       }
       if (upperModel.contains('GLASS')) {
@@ -250,7 +285,9 @@ class DeviceUtils {
       if (upperName.startsWith('FRIEND_')) {
         return Assets.images.friendPendant.path;
       }
-      if (upperName.contains('OMI DEVKIT') || upperName.contains('OMI DEV') || upperName.contains('FRIEND')) {
+      if (upperName.contains('OMI DEVKIT') ||
+          upperName.contains('OMI DEV') ||
+          upperName.contains('FRIEND')) {
         return Assets.images.omiDevkitWithoutRope.path;
       }
       if (upperName.contains('BEE')) {
@@ -276,7 +313,11 @@ class DeviceUtils {
 
   /// Convenience method when you have a BtDevice object
   static String getDeviceImageFromBtDevice(BtDevice device) {
-    return getDeviceImagePath(deviceType: device.type, modelNumber: device.modelNumber, deviceName: device.name);
+    return getDeviceImagePath(
+      deviceType: device.type,
+      modelNumber: device.modelNumber,
+      deviceName: device.name,
+    );
   }
 
   /// Get device image with connection state (for special cases like Omi)
@@ -287,7 +328,7 @@ class DeviceUtils {
     required bool isConnected,
   }) {
     // Special case for Omi when disconnected
-    if (deviceType == DeviceType.omi && !isConnected) {
+    if ((deviceType == DeviceType.omi || deviceName == 'Omi') && !isConnected) {
       return Assets.images.omiWithoutRopeTurnedOff.path;
     }
 
@@ -296,6 +337,10 @@ class DeviceUtils {
       return Assets.images.friendPendant.path;
     }
 
-    return getDeviceImagePath(deviceType: deviceType, modelNumber: modelNumber, deviceName: deviceName);
+    return getDeviceImagePath(
+      deviceType: deviceType,
+      modelNumber: modelNumber,
+      deviceName: deviceName,
+    );
   }
 }
