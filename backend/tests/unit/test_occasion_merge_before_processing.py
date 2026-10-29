@@ -56,6 +56,8 @@ def test_each_raw_path_merges_before_full_notes_and_delegates_one_parent_refresh
     with pytest.raises(ConversationAbsorbed) as raised:
         invoke(world, trigger)
     assert raised.value.canonical_id == 'p'
+    assert world.raw('n')['relevance_decision']['verdict'] == 'absorbed'
+    assert world.raw('n')['relevance_decision']['neighbor_id'] == 'p'
     assert world.processed == [] and world.vectors == []
     assert world.raw('n')['smart_merge_decision']['processing_stage'] == 'before_notes'
     assert world.raw('p')['smart_merge']['delegated_revision'] == 1

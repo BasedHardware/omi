@@ -311,6 +311,7 @@ class _SessionCounter:
         self._last: dict[str, list[str]] = {}
         self._activity: dict[str, dict[str, float]] = {}
         self._cap = cap
+        self._origins: dict[tuple[str, str], tuple[float, dict[str, Any]]] = {}
         self._lock = threading.Lock()
 
     def first_moment(self, uid: str, conversation_id: str) -> bool:
@@ -340,10 +341,26 @@ class _SessionCounter:
             times[conversation_id] = now
             return True
 
+    def recorded_origin(self, uid: str, conversation_id: str) -> Optional[dict[str, Any]]:
+        with self._lock:
+            cached = self._origins.get((uid, conversation_id))
+            if cached is not None and time.monotonic() - cached[0] < ACTIVITY_INTERVAL_SECONDS:
+                return dict(cached[1])
+            self._origins.pop((uid, conversation_id), None)
+            return None
+
+    def remember_origin(self, uid: str, conversation_id: str, row: Mapping[str, Any]) -> None:
+        with self._lock:
+            self._origins.pop((uid, conversation_id), None)
+            self._origins[(uid, conversation_id)] = (time.monotonic(), dict(row))
+            while len(self._origins) > self._cap:
+                self._origins.pop(next(iter(self._origins)))
+
     def clear(self) -> None:
         with self._lock:
             self._last.clear()
             self._activity.clear()
+            self._origins.clear()
 
 
 sessions = _SessionCounter()
@@ -400,13 +417,17 @@ async def on_realtime_segments(
         if recorded_episodes_enabled() and conversation_id:
             if not await executors.run_blocking(executors.db_executor, client_gate.client_seen_cached, uid):
                 return
-            row = await executors.run_blocking(
-                executors.db_executor,
-                conversations_db.get_conversation_raw_snapshot,
-                uid,
-                conversation_id,
-                field_paths=['started_at', 'finished_at', 'last_speech_at', 'source', 'discarded', 'deleted'],
-            )
+            row = sessions.recorded_origin(uid, conversation_id)
+            if row is None:
+                row = await executors.run_blocking(
+                    executors.db_executor,
+                    conversations_db.get_conversation_raw_snapshot,
+                    uid,
+                    conversation_id,
+                    field_paths=['started_at', 'finished_at', 'last_speech_at', 'source', 'discarded', 'deleted'],
+                )
+                if row:
+                    sessions.remember_origin(uid, conversation_id, row)
             if not row:
                 return
             recorded = recorded_span(row.get('started_at'), segments)

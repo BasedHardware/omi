@@ -20,8 +20,9 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 169,
-  "count": 192,
+  "count": 193,
   "names": {
+    "CONVERSATION_OCCASION_RELEVANCE_ENABLED": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28", "registry": "config/feature-flags.yaml"},
     "CONVERSATION_MERGE_BEFORE_PROCESSING": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28", "registry": "config/feature-flags.yaml"},
     "BATCH_SHARD_SPREAD_ENABLED": {"owner": "batch record lane / rollout lead", "review_by": "2026-11-28"},
     "SYNC_PROCESSING_HOLD_ENABLED": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28"},

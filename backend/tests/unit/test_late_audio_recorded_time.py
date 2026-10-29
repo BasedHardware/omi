@@ -199,16 +199,21 @@ def test_live_timer_wire_is_current_episode_start_and_has_rollback(monkeypatch):
 def test_morning_shape_34_fragments_replayed_through_sync_intake(monkeypatch, timeline_store, arrival_order):
     """22m recorded speech arrives 2–4h late, with a new live stamp on every fragment.
 
-    Synthetic meaningful speech replaces private content. A six-minute early
+    Synthetic speech replaces private content; 29 ambiguous continuations would
+    independently fail the synthetic discard scorer. A six-minute early
     silence makes two conversations; the 30m episode gap makes one occasion.
     """
     store = timeline_store
     monkeypatch.setattr(late_audio.lifecycle, 'ingest_sync_conversation', lambda uid, incoming: intake(store, incoming))
     monkeypatch.setattr(late_audio.outbox, 'mark', lambda *a, **kw: None)
+    c = service.Collaborators(firestore_client=store, now=lambda: NOW)
+    # No provider calls: recovery content stays in the real member conversations.
+    # Exercise production repointing, including closed episodes, on each append.
+    monkeypatch.setattr(service, '_record_recovered', lambda *a: 'skipped_applied')
     monkeypatch.setattr(
         late_audio,
         'schedule_synced_intake_attach',
-        lambda uid, cid, row: _attach(store, cid, row['started_at'], row['finished_at']),
+        lambda uid, cid, row: service._attach_synced(uid, cid, row, c),
     )
     store.rows[('users', 'u', 'episode_links', 'current')] = {'episode_id': 'current-live'}
     store.rows[('users', 'u', 'episodes', 'current-live')] = episodes.seal(
@@ -220,6 +225,40 @@ def test_morning_shape_34_fragments_replayed_through_sync_intake(monkeypatch, ti
         order.reverse()
     if arrival_order == 'interleaved':
         order = order[::2] + order[1::2]
+    from utils.conversations.relevance import decide_relevance
+    from utils.conversations.processing_trigger import ProcessingTrigger
+
+    def fragment_text(i):
+        return (
+            f'For checklist item {i}, the team agreed to review the release plan on Friday.'
+            if i < 5
+            else 'Coming over there in a second, and then we can carry on with that.'
+        )
+
+    calls = {'isolated': 0, 'occasion': 0}
+
+    def relevance(texts, *, protected, slot, discard=True):
+        def model(*_):
+            calls[slot] += 1
+            return discard
+
+        return decide_relevance(
+            trigger=ProcessingTrigger.SYNC_UPDATE,
+            texts=texts,
+            speech_seconds=18,
+            has_photos=False,
+            user_kept=False,
+            exempt=False,
+            trusted_wake_word=False,
+            model_discards=model,
+            calendar_retains=lambda: False,
+            occasion_retains=lambda: protected or None,
+        )
+
+    # Identical synthetic scorer, 34 isolated assessments: 29 discards and 5 keeps.
+    baseline = [relevance([fragment_text(i)], protected=False, slot='isolated', discard=i >= 5) for i in range(34)]
+    assert sum(d.discard for d in baseline) == 29
+    assert calls['isolated'] == 34
     for arrival, i in enumerate(order):
         captured = T0 + timedelta(seconds=offsets[i])
         uploaded = T0 + timedelta(hours=2, seconds=arrival * 220)
@@ -238,7 +277,7 @@ def test_morning_shape_34_fragments_replayed_through_sync_intake(monkeypatch, ti
                 'start': 0.0,
                 'end': 18.0,
                 'speaker_id': 0,
-                'text': f'For checklist item {i}, the team agreed to review the release plan together on Friday and bring the completed test results.',
+                'text': fragment_text(i),
             }
         ]
         assert is_late(recorded_span(captured, segments), uploaded)
@@ -248,7 +287,21 @@ def test_morning_shape_34_fragments_replayed_through_sync_intake(monkeypatch, ti
     ]
     assert len(kept) == 2
     assert sum(len(row['transcript_segments']) for row in kept) == 34
-    assert all(not row['discarded'] and row['sync_relevance'] == 'keep' for row in kept)
+    assert all(not row['discarded'] for row in kept)
+    # Finalization assesses the canonical spans, not their 34 arrival fragments.
+    # Episode ownership supplies context before either paid discard tier.
+    from types import SimpleNamespace
+    from utils.conversations.relevance_io import occasion_retention
+
+    monkeypatch.setattr(episodes, 'get_firestore_client', lambda: store)
+    for row in kept:
+        reason = occasion_retention('u', SimpleNamespace(**row))
+        assert reason == 'occasion_member'
+        assert not relevance([s['text'] for s in row['transcript_segments']], protected=reason, slot='occasion').discard
+    assert calls == {'isolated': 34, 'occasion': 0}  # 34 fewer discard LLM calls.
+    assert sorted(s['text'] for row in kept for s in row['transcript_segments']) == sorted(
+        fragment_text(i) for i in range(34)
+    )
     for row in kept:
         assert row['finished_at'] == row['started_at'] + timedelta(
             seconds=max(s['end'] for s in row['transcript_segments'])
@@ -258,6 +311,14 @@ def test_morning_shape_34_fragments_replayed_through_sync_intake(monkeypatch, ti
         row for key, row in store.rows.items() if len(key) == 4 and key[2] == 'episodes' and key[-1] != 'current-live'
     ]
     assert len(old) == 1
+    assert set(old[0]['conversation_ids']) == {row['id'] for row in kept}
+    assert (
+        sum(
+            len(store.rows[('users', 'u', 'conversations', cid)]['transcript_segments'])
+            for cid in old[0]['conversation_ids']
+        )
+        == 34
+    )
     assert old[0]['status'] == 'closed' and old[0]['started_at'] == T0
     assert old[0]['last_activity_at'] == old[0]['closed_at'] == T0 + timedelta(seconds=offsets[-1] + 18)
     assert store.rows[('users', 'u', 'episode_links', 'current')] == {'episode_id': 'current-live'}
@@ -377,3 +438,22 @@ def test_realtime_transport_does_not_open_arrival_time_episode_for_late_speech(m
     )
     assert len(calls) == 1
     assert calls[0][2]['finished_at'] == T0 + timedelta(seconds=20)
+
+
+def test_recorded_origin_reads_are_bounded_and_refresh_after_one_minute(monkeypatch):
+    from utils.episodes import live
+
+    counter = live._SessionCounter(cap=2)
+    clock = [0.0]
+    monkeypatch.setattr(live.time, 'monotonic', lambda: clock[0])
+    counter.remember_origin('u', 'a', {'started_at': T0})
+    clock[0] = 59
+    assert counter.recorded_origin('u', 'a') == {'started_at': T0}
+    clock[0] = 60
+    assert counter.recorded_origin('u', 'a') is None
+    for key in ('a', 'b', 'c'):
+        counter.remember_origin('u', key, {'started_at': T0})
+    assert counter.recorded_origin('u', 'a') is None
+    assert len(counter._origins) == 2
+    counter.clear()
+    assert counter.recorded_origin('u', 'c') is None

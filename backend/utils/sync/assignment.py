@@ -43,6 +43,7 @@ from utils.capture_evidence import bounded_envelope, merge_track_receipts
 from config import merge_ancestry, merge_before_processing
 import config.speaker_match_scores as match_scores
 from utils.conversations.fragment_visibility import is_rule_discard_decision, is_user_curated
+from config.occasion_relevance import enabled as occasion_relevance_enabled
 from utils.conversations.relevance import sync_intake_decision
 from utils.conversations.smart_merge_policy import user_managed as _policy_user_managed
 from utils.conversations.relevance_rules import deterministic_relevance
@@ -822,6 +823,7 @@ def assign_in_transaction(
         # Meaningful later intake automatically promotes the complete recording.
         result['discarded'] = bool(
             verdict == 'discard'
+            and not occasion_relevance_enabled()
             and getattr(result.get('status'), 'value', result.get('status')) == 'completed'
             and not curated
         )
@@ -1262,6 +1264,19 @@ def _donor_redirect_patch(row: dict, canonical: str) -> dict:
         'deleted': True,
         'discarded': True,
         'sync_merged_into': canonical,
+        **(
+            {
+                'relevance_decision': {
+                    'verdict': 'absorbed',
+                    'decided_by': 'policy',
+                    'reason': 'sync_merge',
+                    'neighbor_id': canonical,
+                    'trigger': 'sync_intake',
+                }
+            }
+            if occasion_relevance_enabled()
+            else {}
+        ),
         'sync_content_revision': (row.get('sync_content_revision') or 0) + 1,
     }
 

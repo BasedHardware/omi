@@ -112,6 +112,7 @@ from utils.conversations.fragment_visibility import is_user_curated
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.process_conversation import process_conversation
+from config.occasion_relevance import enabled as occasion_relevance_enabled
 from utils.sync import processing_hold
 from utils.enrichment.smart_refresh import settle_survivor
 from utils.conversations.sync_hold_completion import complete_explicit
@@ -1117,6 +1118,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     status = getattr(conversation_data.get('status'), 'value', conversation_data.get('status'))
     if (
         status == 'completed'
+        and not occasion_relevance_enabled()
         and conversation_data.get('sync_relevance') == 'review'
         and not is_user_curated(conversation_data)
     ):

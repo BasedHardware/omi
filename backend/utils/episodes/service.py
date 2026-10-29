@@ -1478,7 +1478,8 @@ def attach_synced_intake(
         if not client_gate.client_seen_cached(uid):
             return 'skipped_no_client'
         if row.get('discarded') or row.get('deleted') or row.get('sync_merged_into'):
-            # A discarded fragment or a merge donor never joins (the finalize path's rule).
+            # Only isolated final verdicts skip intake; occasion-aware sync intake
+            # defers fragment discards, so their content joins before finalization.
             return 'skipped_discarded'
         owner = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
         if owner is not None and not policy.is_live(owner):
@@ -1499,9 +1500,13 @@ def _repoint_sync_donors(uid: str, survivor_id: str, row: Mapping[str, Any], c: 
     """
     donors = [str(d) for d in (row.get('sync_merged_from') or []) if d and str(d) != survivor_id]
     for donor_id in donors:
-        episode = episodes_db.get_current_episode(uid, firestore_client=c.firestore_client)
-        if episode is None or not policy.is_live(episode):
-            return
+        episode = (
+            episodes_db.get_episode_for_conversation(uid, donor_id, firestore_client=c.firestore_client)
+            if recorded_episodes_enabled()
+            else episodes_db.get_current_episode(uid, firestore_client=c.firestore_client)
+        )
+        if episode is None or (not recorded_episodes_enabled() and not policy.is_live(episode)):
+            continue
         if donor_id in (episode.get('conversation_ids') or []):
             _repoint_absorbed(uid, episode, donor_id, survivor_id, c)
 

@@ -179,6 +179,12 @@ def should_discard_conversation(
     neighbor (a kept conversation within the boundary gap) is described by its
     gap and position only; none of its content enters the prompt.
     """
+    from config.occasion_relevance import enabled as occasion_relevance_enabled
+
+    if neighbor_gap_seconds is not None and occasion_relevance_enabled():
+        # Proximity is not proof of absorption. Preserve the continuation until
+        # the merge transaction transfers it and writes its absorbed receipt.
+        return False
     # If there's a long transcript, it's very unlikely we want to discard it.
     # This is a performance optimization to avoid unnecessary LLM calls.
     word_count = _word_count(transcript) if transcript and transcript.strip() else 0

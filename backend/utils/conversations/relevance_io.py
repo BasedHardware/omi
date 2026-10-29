@@ -30,7 +30,9 @@ logger = logging.getLogger(__name__)
 NEIGHBOR_CANDIDATE_LIMIT = 10
 
 
-def adjacent_conversation(uid: str, conversation: Any, conversation_id: Optional[str]) -> Optional[Neighbor]:
+def adjacent_conversation(
+    uid: str, conversation: Any, conversation_id: Optional[str], *, require_complete: bool = False
+) -> Optional[Neighbor]:
     """A kept conversation this one would have joined had capture not split it (fail-open)."""
     started_at, finished_at = conversation.started_at, conversation.finished_at
     if started_at is None or finished_at is None:
@@ -43,15 +45,60 @@ def adjacent_conversation(uid: str, conversation: Any, conversation_id: Optional
             limit=NEIGHBOR_CANDIDATE_LIMIT,
         )
     except Exception as error:
+        if require_complete:
+            raise
         logger.warning('relevance neighbor lookup failed uid=%s: %s', uid, error)
         return None
-    return find_neighbor(
+    found = find_neighbor(
         rows,
         conversation_id=conversation_id or getattr(conversation, 'id', None),
         started_at=started_at,
         finished_at=finished_at,
         gap_seconds=DEFAULT_GAP_SECONDS,
     )
+    if require_complete and found is None and len(rows) >= NEIGHBOR_CANDIDATE_LIMIT:
+        raise RuntimeError('neighbor_window_incomplete')
+    return found
+
+
+def occasion_retention(uid: str, conversation: Any, conversation_id: Optional[str] = None) -> Optional[str]:
+    """Prove isolation before admitting a standalone discard; metadata only.
+
+    Ownership includes an existing closed occasion at recorded time, even when
+    this member's asynchronous attachment has not run yet. Lookup failure keeps
+    the content; it is never evidence that the clip is isolated.
+    """
+    from config.occasion_relevance import enabled
+
+    if not enabled():
+        return None
+    from database import episodes
+    from utils.episodes.timeline import episode_owning_recorded_time
+
+    cid = conversation_id or getattr(conversation, 'id', None)
+    start, end = getattr(conversation, 'started_at', None), getattr(conversation, 'finished_at', None)
+    if start is None or end is None:
+        return None
+    try:
+        if cid and episodes.get_episode_for_conversation(uid, cid):
+            return 'occasion_member'
+        if episode_owning_recorded_time(uid, start, ended_at=end):
+            return 'occasion_member'
+        if adjacent_conversation(uid, conversation, cid, require_complete=True):
+            return 'occasion_neighbor'
+    except Exception:
+        from utils.observability.fallback import record_fallback
+
+        record_fallback(
+            component='conversation_relevance',
+            from_mode='occasion_lookup',
+            to_mode='retain',
+            reason='lookup_unavailable',
+            outcome='degraded',
+        )
+        logger.warning('event=occasion_retention outcome=lookup_unavailable')
+        return 'occasion_lookup_unavailable'
+    return None
 
 
 def rules_only_relevance(
@@ -78,6 +125,7 @@ def rules_only_relevance(
         trusted_wake_word=bool(find_wake_word_matches(segments)),
         model_discards=None,
         calendar_retains=calendar_retains,
+        occasion_retains=lambda: occasion_retention(uid, conversation),
     )
 
 

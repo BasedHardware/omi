@@ -247,6 +247,7 @@ def decide_relevance(
     model_discards: Optional[Callable[[Callable[[Exception], None], Optional[Neighbor]], bool]],
     calendar_retains: Callable[[], bool],
     neighbor: Callable[[], Optional[Neighbor]] = lambda: None,
+    occasion_retains: Callable[[], Optional[str]] = lambda: None,
     jev_discard_probability: Optional[Callable[[], Optional[float]]] = None,
     arm: RelevanceArm = 'nano',
     record_arm: bool = False,
@@ -314,6 +315,18 @@ def decide_relevance(
         return keep('policy', 'exempt')
     if user_kept:
         return keep('user', 'restored')
+
+    # A member is evidence of the whole occasion. A continuation can only be
+    # hidden after transactional absorption proves its content reached a survivor.
+    from config.occasion_relevance import enabled as occasion_relevance_enabled
+
+    if occasion_relevance_enabled():
+        occasion_reason = occasion_retains()
+        if occasion_reason:
+            return keep('policy', occasion_reason)
+        adjacent = neighbor()
+        if adjacent is not None:
+            return replace(keep('policy', 'occasion_neighbor'), neighbor_id=adjacent.conversation_id)
 
     # Photos carry content the transcript rules cannot see, and a trusted wake
     # word is judged by the model's wake-word rules (an invocation the

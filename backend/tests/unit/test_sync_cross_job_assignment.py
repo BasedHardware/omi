@@ -281,7 +281,7 @@ def test_filler_is_preserved_and_promoted_regardless_of_speakers(is_user, speake
     short['transcript_segments'][0].update(is_user=is_user, speaker_id=speaker_id)
     review, _, _ = intake(store, short)
     assert review['sync_relevance'] == 'review'
-    assert review['discarded'] is True
+    assert review['discarded'] is False
     assert review['transcript_segments'][0]['text'] == 'Mm-hmm. Ha ha ha.'
     promoted, created, _ = intake(store, chunk('meaningful', 1060, 'Please call the doctor tomorrow.'))
     assert not created and promoted['id'] == review['id']
@@ -304,7 +304,7 @@ def test_subsecond_meaningful_speech_is_kept(text):
     assert result['discarded'] is False
 
 
-def test_separated_fillers_are_hidden_without_deleting_transcript_or_audio():
+def test_separated_fillers_wait_for_finalization_without_losing_transcript_or_audio():
     store = StrictFirestore()
     short = chunk('filler', 1000, 'Mm-hmm.')
     short['transcript_segments'][0]['end'] = 0.24
@@ -312,7 +312,7 @@ def test_separated_fillers_are_hidden_without_deleting_transcript_or_audio():
     short['finished_at'] = datetime.fromtimestamp(1065.32, timezone.utc)
     short['audio_files'] = [{'id': 'retained-audio'}]
     result, _, _ = intake(store, short)
-    assert result['discarded'] is True
+    assert result['discarded'] is False
     assert len(result['transcript_segments']) == 2
     assert result['audio_files'] == short['audio_files']
     assert not result.get('deleted')
@@ -340,7 +340,7 @@ def test_published_or_finished_live_filler_is_not_curation(metadata):
     short = chunk('filler', 1000, 'Mm-hmm.')
     short.update(metadata)
     result, _, _ = intake(StrictFirestore(), short)
-    assert result['discarded'] is True
+    assert result['discarded'] is False
 
 
 def test_explicitly_restored_fragment_stays_kept_when_live_target_gets_more_filler():
@@ -441,7 +441,7 @@ def test_real_process_segment_two_independent_job_responses(independent_job_pipe
     }
     pipeline.process_conversation = MagicMock()
     pipeline._reprocess_conversation_after_update('u', 'a', 'en')
-    pipeline.process_conversation.assert_not_called()
+    pipeline.process_conversation.assert_called_once()  # Occasion-aware finalization owns the aggregate verdict.
 
     # Everything the rules cannot settle is assessed as a sync update, with
     # the stored restore marker the wire model does not carry.

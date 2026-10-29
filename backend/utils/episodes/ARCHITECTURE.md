@@ -145,6 +145,32 @@ slot retries admission without a later append or a retry thread. At 64 deferred
 calls synchronous producers backpressure. This queue, like the executor's
 ordinary queue, is process-local and cancels on process shutdown.
 
+## Occasion-aware relevance (David, 2026-10-29)
+
+`CONVERSATION_OCCASION_RELEVANCE_ENABLED` is an independent default-on kill
+switch. Intake preserves every sync fragment until temporal assignment and
+its processing hold have assembled the canonical span. Rule-only filler is
+marked for review, never independently hidden at intake. Finalization runs
+relevance on that assembled span. Recorded-time episode ownership (live or
+closed), or a kept neighbor inside the shared conversation join gap, retains
+its evidence before deterministic or paid discard tiers. The occasion's notes
+are the aggregate assessment; an individual member's low relevance cannot
+remove evidence from that occasion. Lookup failure cannot prove isolation and
+retains content. Standalone rejection remains available only after both
+ownership and neighbor lookups establish isolation.
+
+A neighbor is context, never proof that content was absorbed. The discard
+prompt cannot drop a continuation on proximity alone. Only a successful merge
+transaction writes an `absorbed` relevance receipt and the canonical redirect;
+content, tasks and notes follow the existing survivor refresh protocol. Donor
+membership and consumption receipts follow the survivor in closed historical
+episodes as well as live ones. All original evidence remains reachable from
+one occasion, including short answers and acknowledgments. A discarded
+isolated clip does not join an episode; related content is retained before
+that verdict can be produced. Provisional task suggestions may be dropped
+when not confirmed at finalization; their source conversation content remains
+in the occasion. No historical records are rewritten.
+
 ## Provisional items (INV-TASK-2)
 
 The cheap model's tasks and reminders are shown live (inline in the transcript
