@@ -45,5 +45,7 @@ def create_if_absent(uid, payload, *, firestore_client):
 def stamp_for_write(data):
     # Membership has one transactional writer; processing snapshots cannot replay it.
     data.pop('episode_id', None)
-    if data.get('started_at') or data.get('created_at'):
+    # Full creates/processing writes recompute from their complete recording.
+    # Partial writes carry the span computed by their transaction snapshot.
+    if data.get('created_at') is not None:
         data.update(write_span(data, arrival_at=datetime.now(timezone.utc)))

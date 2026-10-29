@@ -66,3 +66,25 @@ def test_overlap_uses_recorded_speech_end_in_every_cohort(monkeypatch):
     monkeypatch.setenv('LIFECYCLE_V2_MODE', 'serve')
     assert capture_record(row, 'test-account').duration_seconds == 5
     assert clocks.overlap_fields('test-account', row)['finished_at'] == NOW + timedelta(seconds=5)
+
+
+@pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
+def test_partial_live_write_preserves_snapshot_span_in_every_clock_cohort(world, monkeypatch, mode):
+    monkeypatch.setenv('LIFECYCLE_V2_MODE', mode)
+    store, path, segments = world
+    store.rows[path].update(
+        started_at=NOW,
+        finished_at=NOW,
+        recorded_start=NOW,
+        recorded_end=NOW + timedelta(seconds=10),
+        last_speech_at=NOW + timedelta(seconds=10),
+        arrival_at=NOW,
+        clock='live_capture',
+    )
+    db.update_conversation_segments(
+        'u', 'c', segments, live_segments=segments, started_at=NOW, finished_at=NOW + timedelta(seconds=90)
+    )
+    row = store.rows[path]
+    assert row['recorded_start'] == NOW
+    assert row['recorded_end'] == NOW + timedelta(seconds=10)
+    assert row['arrival_at'] == NOW
