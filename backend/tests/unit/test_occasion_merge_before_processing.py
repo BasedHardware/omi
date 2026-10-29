@@ -369,6 +369,7 @@ def test_stale_relevance_snapshot_cannot_absorb_newer_speech(world):
     'extra',
     [
         {'notes_llm_input_hash': 'receipt', 'summary_output_present': False},
+        {'structured': {'title': 'Generated title only'}, 'summary_output_present': False},
         {'structured': {'action_items': [{'description': 'saved task'}]}, 'summary_output_present': False},
     ],
 )
@@ -424,3 +425,12 @@ def test_existing_sync_obligation_keeps_its_window_when_live_merge_joins(state, 
     monkeypatch.setenv('CONVERSATION_MERGE_BEFORE_PROCESSING', 'false')
     monkeypatch.setenv('SYNC_PROCESSING_HOLD_ENABLED', 'true')
     assert rows[key]['sync_hold_requested'] and hold.enabled_for(rows[key])
+
+
+def test_proven_server_minimum_title_still_merges_before_first_notes(world):
+    world.raw('n').update(
+        structured={'title': 'Raw speech', 'title_provenance': 'server_minimum'}, summary_output_present=False
+    )
+    with pytest.raises(boundary.ConversationAbsorbed):
+        invoke(world)
+    assert world.processed == [] and len(world.marks) == 1

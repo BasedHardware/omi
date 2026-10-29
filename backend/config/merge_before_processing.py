@@ -29,6 +29,17 @@ def already_processed(row: Mapping[str, Any]) -> bool:
     structured = row.get('structured') or {}
     if isinstance(structured, Mapping) and (structured.get('action_items') or structured.get('events')):
         return True
+    if (
+        isinstance(structured, Mapping)
+        and structured.get('title')
+        and not (
+            structured.get('title_provenance') == 'server_minimum'
+            or row.get('summary_title_provenance') == 'server_minimum'
+        )
+    ):
+        # Old title-only results may lack summary/hash receipts. Preserve their
+        # identity conservatively; only proven server-minimum titles are raw.
+        return True
     if row.get('summary_output_present') is False:
         return False
     return isinstance(structured, Mapping) and bool(structured.get('overview') or structured.get('sections'))
