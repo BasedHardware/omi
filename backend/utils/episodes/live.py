@@ -451,7 +451,7 @@ async def on_realtime_segments(
                 )
                 if row:
                     sessions.remember_origin(uid, conversation_id, row)
-            if not row:
+            if not row or row.get('discarded') or row.get('deleted'):
                 return
             recorded = recorded_span(row.get('started_at'), segments)
             if recorded is None:

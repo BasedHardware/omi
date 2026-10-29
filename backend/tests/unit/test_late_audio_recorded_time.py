@@ -529,34 +529,26 @@ def test_stale_capture_origin_cannot_bind_old_wal_to_new_live_speech():
     assert store.rows[('users', 'u', 'conversations', 'live')]['transcript_segments'] == target['transcript_segments']
 
 
-def test_five_hour_offline_capture_forms_two_capped_closed_windows(timeline_store):
+def test_five_hour_offline_capture_stays_in_one_capped_episode(timeline_store):
     store = timeline_store
     row = _attach(store, 'long', T0, T0 + timedelta(hours=5))
-    windows = row['_recorded_windows']
-    assert len(windows) == 2
-    assert windows[0]['close_reason'] == 'hard_cap' and windows[1]['close_reason'] == 'gap'
-    assert [(w['started_at'], w['last_activity_at']) for w in windows] == [
-        (T0, T0 + timedelta(hours=4)),
-        (T0 + timedelta(hours=4), T0 + timedelta(hours=5)),
-    ]
-    assert all(w['status'] == 'closed' and w['conversation_ids'] == ['long'] for w in windows)
-    retry = _attach(store, 'long', T0, T0 + timedelta(hours=5))
-    assert [w['id'] for w in retry['_recorded_windows']] == [w['id'] for w in windows]
-    assert (
-        timeline.episode_owning_recorded_time('u', T0 + timedelta(hours=4, minutes=30), firestore_client=store)['id']
-        == windows[1]['id']
-    )
+    assert len(row['_recorded_windows']) == 1
+    assert row['close_reason'] == 'hard_cap'
+    assert row['started_at'] == T0 and row['last_activity_at'] == T0 + timedelta(hours=4)
+    assert row['conversation_ids'] == ['long']
+    assert _attach(store, 'long', T0, T0 + timedelta(hours=5))['id'] == row['id']
+    assert len(episode_timeline.member_episodes('u', 'long', firestore_client=store)) == 1
     assert ('users', 'u', 'episode_links', 'current') not in store.rows
 
 
-def test_late_append_rotates_at_existing_episode_start_plus_four_hours(timeline_store):
+def test_late_append_stays_with_original_owner_at_four_hour_cap(timeline_store):
     store = timeline_store
     _attach(store, 'earlier', T0, T0 + timedelta(minutes=20))
     row = _attach(store, 'continued', T0 + timedelta(minutes=20), T0 + timedelta(hours=4, minutes=10))
     windows = row['_recorded_windows']
-    assert len(windows) == 2
-    assert windows[0]['last_activity_at'] == windows[1]['started_at'] == T0 + timedelta(hours=4)
-    assert windows[1]['last_activity_at'] == T0 + timedelta(hours=4, minutes=10)
+    assert len(windows) == 1
+    assert windows[0]['last_activity_at'] == T0 + timedelta(hours=4)
+    assert set(windows[0]['conversation_ids']) == {'earlier', 'continued'}
 
 
 def test_capped_recovery_places_each_segment_once_and_keeps_unplaced_content(timeline_store):
@@ -584,9 +576,12 @@ def test_capped_recovery_places_each_segment_once_and_keeps_unplaced_content(tim
         record_windows('u', 'long', row, placed['_recorded_windows'], None, record, now=T0 + timedelta(hours=8))
         == 'applied'
     )
-    first, second = placed['_recorded_windows']
-    assert {s['id'] for eid, moment in seen if eid == first['id'] for s in moment.segments} == {'before', 'unknown'}
-    assert {s['id'] for eid, moment in seen if eid == second['id'] for s in moment.segments} == {'after'}
+    (first,) = placed['_recorded_windows']
+    assert {s['id'] for eid, moment in seen if eid == first['id'] for s in moment.segments} == {
+        'before',
+        'after',
+        'unknown',
+    }
     assert len([s for _, moment in seen for s in moment.segments]) == 3
     assert seen[0][1].ended_at <= T0 + timedelta(hours=4)
 
@@ -641,7 +636,7 @@ def test_long_fresh_batch_uses_recorded_end_to_determine_liveness(timeline_store
     assert episodes.get_current_episode('u', firestore_client=store)['started_at'] == T0
 
 
-def test_first_sync_finalization_reconciles_all_capped_windows(monkeypatch, timeline_store):
+def test_first_sync_finalization_reconciles_single_capped_owner(monkeypatch, timeline_store):
     store = timeline_store
     row = dict(
         started_at=T0,
@@ -657,7 +652,7 @@ def test_first_sync_finalization_reconciles_all_capped_windows(monkeypatch, time
     seen = []
     monkeypatch.setattr(service, '_reconcile', lambda uid, episode, *a: seen.append(episode['id']) or 'finalized')
     assert service._on_finalized('u', 'long', row, 'sync_update', None, c) == 'finalized'
-    assert len(seen) == len(set(seen)) == 2
+    assert len(seen) == len(set(seen)) == 1
     assert set(seen) == {e['id'] for e in episode_timeline.member_episodes('u', 'long', firestore_client=store)}
 
 

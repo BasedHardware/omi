@@ -38,13 +38,13 @@ one capture window's evidence.
      retains the buffer for one `MOMENT_PAUSE_SECONDS` reconnect window, then
      flushes the tail if no reconnect arrives. Finalization and Wrap Up flush it
      sooner when they run.
-   - The first episode moment is checked against the episode's original start
-     across every member conversation. At `MAX_EPISODE_SECONDS`, the old episode
-     closes and continued speech starts a new one at the cap boundary. Provisional
-     items for a continuing member transfer to the successor for finalization
-     reconciliation. While an episode is live, the Home row timer uses its
-     `started_at`; during rotation it holds the prior anchor until the successor
-     row is visible.
+   - The hard cap is four hours from the episode's recorded `started_at`.
+     Moment count only bounds the stored presentation list; it cannot close an
+     occasion. A continuing conversation stays with its original episode after
+     the cap or an explicit close. Only a different conversation opens the next
+     episode. Finalization retains the original member's evidence and reconciles
+     its provisional items on that owner.
+
 2. When a moment ends, `service.record_moment` runs on `postprocess_executor` as
    a tracked background task:
    - **Boundary** (`policy.boundary`): the hard cap (`MAX_EPISODE_SECONDS`), a gap at
@@ -100,15 +100,14 @@ one capture window's evidence.
    only recorded activity; old audio cannot replace current activity with
    ingestion time. With no covering episode, sync creates a **closed** episode
    at its recorded start/end and leaves both `current` and `last_closed`
-   navigation pointers alone. Retry membership is stable inside its recorded window and notes still
-   use the existing transactional content receipts. A later append extends
-   the same member's recorded window before notes recovery. A conversation that
-   crosses a four-hour or existing explicit boundary remains one storage row
-   referenced by successive closed windows, just like a live cap rotation.
-   Its membership link records all windows and names the latest one. Recovery
-   assigns each placed segment to its start window once, clamps moment clocks
-   at the cap, and retains unplaced evidence in the first window. Receipts
-   remain global to the conversation, so retries cannot duplicate the text.
+   navigation pointers alone. Membership is singular and checked in the same
+   transaction as each link write, including live commits, updates and reopens.
+   A capture crossing the cap stays in its starting episode, whose visible
+   recorded window stops at four hours or the following episode. All retained
+   speech (including the tail beyond the cap) is recovered once into that owner;
+   recovery cannot substitute an upload-time `finished_at` for recorded activity.
+   The timeline fence and metadata-window guard reject overlapping recorded
+   windows before any writes.
    A later **fresh live** capture may resume a silence-closed owner under the
    timeline/current-pointer fence; late intake never calls that transition.
    Explicit closes and the four-hour boundary stay closed. Finalization
@@ -292,6 +291,19 @@ builds, the desktop app and web never call any `/v1/episodes` route.
 The shared `utils.metrics` exporter imports these collectors, so the backend,
 listen and pusher `/metrics` routes expose the same bounded-label families.
 
+## Live integrity and grouped completion
+
+A confirmed capture-group join schedules one canonical recovery, including
+`desktop` groups, with the admitted `capture_group` trigger. Other members join
+as hidden duplicates and contribute no additional moments or model work. Metadata attachment runs
+before short-tail/model checks, and completed finalizer replays repeat the hook.
+Grouping and primary-note refresh never substitute for episode membership.
+
+Known discarded/deleted/absorbed captures cannot open an episode or update its
+activity. Per-member recorded clocks let a later discard remove only that
+member's contribution without a stale notes CAS restoring it. A retained hidden
+membership does not extend the quiet window. API visibility suppresses episodes
+with no retained members independently of the occasion-relevance kill switch.
 
 ## Recorded span and time index (Phase A)
 
@@ -319,8 +331,8 @@ live/user/calendar boundaries stay authoritative; no historical scan/backfill
 is performed outside intake. Member/window/query budgets fail closed.
 
 Each membership CAS writes `conversation.episode_id` alongside its overlay
-link. For a conversation spanning capped windows, that field names the latest
-window; `episode_links.episode_ids` retains every window. An attach-before-create
+link. A conversation crossing the cap stays with its starting episode; only
+a different conversation starts the next window. An attach-before-create
 link is adopted by the conversation create transaction without fabricating a
 conversation. Episode writes retain `EPISODES_CLIENT_CHANNELS` admission; span
 writes are global. No new composite index or reconciliation is required.
@@ -356,3 +368,11 @@ transaction, before any writes, so a busy component can retain all reverse
 links. Relevance and duplicate-capture discovery widen legacy `finished_at`
 prefilters by the shared clock-skew tolerance; recorded spans still decide
 adjacency and overlap, including delayed ingestion.
+
+Explicit closes store `recorded_end` from retained members' typed recorded spans,
+clipped to the hard cap and the next recorded episode. `closed_at` remains the
+close event time; it is never a new recorded ownership edge. The time index and
+all overlap guards use `recorded_end` for explicit closes. The existing hard-cap
+kill switch also disables the live activity clamp and automatic cap close.
+A late discard removes that member's moments and items, clears the mixed summary,
+and marks it for regeneration before later valid speech can reuse it.

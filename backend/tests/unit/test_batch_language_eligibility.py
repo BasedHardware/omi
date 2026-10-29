@@ -23,6 +23,7 @@ from utils.batch_pipeline.artifacts import ProtectionContext
 from utils.batch_pipeline.audio import audio_unit, read_context
 from utils.stt import batch_language
 from utils.sync.legacy_dark import LegacySyncMode
+from utils import funded_processing, stt_cap_dispatch
 
 ROUTE_METRIC = 'omi_batch_pipeline_language_route_total'
 EXCLUDED_LABELS = {'surface': 'intake', 'language_class': 'unsupported', 'route': 'multilingual'}
@@ -34,6 +35,10 @@ def excluded_count() -> float:
 
 @pytest.fixture(autouse=True)
 def defaults(monkeypatch):
+    # Language eligibility cases have a funded/consented synthetic owner;
+    # per-probe refusals are exercised by test_batch_serving_language_probe.
+    monkeypatch.setattr(funded_processing, 'consent_allows', lambda *_: True)
+    monkeypatch.setattr(stt_cap_dispatch, 'sync_allowed', lambda *a, **k: True)
     # This suite pins the former eligibility switch independently of the new
     # all-mode admission exclusion (covered by test_batch_admission_language).
     monkeypatch.setenv('BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED', 'false')
@@ -250,7 +255,7 @@ async def test_unknown_conversation_uses_user_language_without_single_mode(monke
 async def test_both_unknown_still_detect_per_piece(monkeypatch, language, single, mode):
     detect = Mock(return_value=batch_language.LanguageDecision('en', 0.99, 'audio_lid', 4))
     monkeypatch.setattr(batch_language, 'detect', detect)
-    monkeypatch.setattr(batch_language, '_self_gate', lambda *args: (False, None))
+    monkeypatch.setattr(batch_language, '_self_gate', lambda *args, **kwargs: (False, None))
     response, staged, probe = await upload(
         monkeypatch,
         user_language=language,
@@ -271,7 +276,7 @@ async def test_inheritance_kill_switch_restores_per_piece_detection(monkeypatch)
     monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', ' false ')
     detect = Mock(return_value=batch_language.LanguageDecision('vi', 0.99, 'audio_lid', 4))
     monkeypatch.setattr(batch_language, 'detect', detect)
-    monkeypatch.setattr(batch_language, '_self_gate', lambda *args: (False, None))
+    monkeypatch.setattr(batch_language, '_self_gate', lambda *args, **kwargs: (False, None))
     response, staged, probe = await upload(
         monkeypatch,
         user_language='en',

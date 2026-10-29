@@ -384,3 +384,17 @@ def test_invalid_explicit_span_does_not_fall_back_to_legacy_wall(start, end):
         )
         is None
     )
+
+
+def test_cap_successor_uses_its_own_members_recorded_span():
+    from database.episode_recorded_components import partition
+
+    facts = {
+        'long': {'start': T0, 'end': T0 + timedelta(hours=5)},
+        'next': {'start': T0 + timedelta(hours=4, minutes=10), 'end': T0 + timedelta(hours=4, minutes=11)},
+    }
+    windows = partition('synthetic', facts)
+    assert [(r['started_at'], r['last_activity_at'], r['conversation_ids']) for r in windows] == [
+        (T0, T0 + timedelta(hours=4), ['long']),
+        (T0 + timedelta(hours=4, minutes=10), T0 + timedelta(hours=4, minutes=11), ['next']),
+    ]

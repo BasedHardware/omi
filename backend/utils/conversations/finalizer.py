@@ -486,6 +486,7 @@ async def finalize_persisted_conversation(
             # summary-vector emission below the claim branch is unreachable on
             # this path, so run the same fail-soft freshness guard here; a
             # summary-vector failure never fails finalization (#21111 gap).
+            latest_data = None
             try:
                 latest_data = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
                 latest = deserialize_conversation(latest_data) if latest_data else None
@@ -503,6 +504,7 @@ async def finalize_persisted_conversation(
             except Exception as error:
                 OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='error').inc()
                 logger.warning('summary_vector outcome=error exception_type=%s', type(error).__name__)
+            await _episode_after_finalization(uid, conversation_id, latest_data, trigger)
             return ConversationFinalizationDisposition.completed
         if fanout['status'] == 'fenced':
             logger.info(

@@ -363,3 +363,37 @@ def test_group_notes_refresh_persists_notes_without_derived_fanout(harness, monk
     apps.assert_not_called()
     memories.assert_not_called()
     tasks.assert_not_called()
+
+
+def test_confirmed_group_notifies_episode_attachment_for_both_sources(harness, monkeypatch):
+    own, other = row('pendant', 'omi'), row('desktop', 'desktop', 100, 590)
+    harness.rows.update({path('pendant'): own, path('desktop'): other})
+    monkeypatch.setattr(
+        conversations_db, 'get_conversation_for_capture_check', lambda uid, cid: (harness.rows[path(cid)], cid)
+    )
+    monkeypatch.setattr(
+        policy,
+        'measure_shared_speech',
+        lambda *a: SimpleNamespace(confirms=lambda: True, evidence=lambda: {}, containment=1.0, shared_trigrams=20),
+    )
+    monkeypatch.setattr(policy.capture_groups_db, 'join_capture_group', lambda *a, **kw: 'confirmed-group')
+    notified = []
+    monkeypatch.setattr(policy, 'schedule_group_attachments', lambda uid, ids: notified.append((uid, ids)))
+    policy._group_confirmed_captures(UID, own, policy.capture_record(own, UID), [policy.capture_record(other, UID)])
+    assert notified == [(UID, ['pendant', 'desktop'])]
+
+
+@pytest.mark.asyncio
+async def test_completed_fanout_replay_still_delivers_grouped_row_to_episode_hook(harness, monkeypatch):
+    capture = row('desktop', 'desktop', capture_group={'id': 'g', 'primary_id': 'pendant'})
+    harness.rows[path('desktop')] = capture
+    monkeypatch.setattr(finalizer.lifecycle_service, 'claim_finalization_fanout', lambda *a: {'status': 'completed'})
+    seen = []
+
+    async def after(uid, cid, latest, trigger):
+        seen.append((uid, cid, latest))
+
+    monkeypatch.setattr(finalizer, '_episode_after_finalization', after)
+    assert await finalize('desktop') == finalizer.ConversationFinalizationDisposition.completed
+    assert seen and seen[0][:2] == (UID, 'desktop')
+    assert seen[0][2]['capture_group'] == capture['capture_group']
