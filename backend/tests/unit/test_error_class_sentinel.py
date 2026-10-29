@@ -200,6 +200,40 @@ def test_tick_fails_closed_on_permission_denied(client):
     assert 'fired' not in summary
 
 
+def test_logging_read_uses_dedicated_impersonated_sa(monkeypatch):
+    # backend-runtime must not hold logging.read itself (David, 2026-10-29):
+    # the default-session path has to impersonate omi-errclass-sentinel.
+    captured = {}
+
+    class _Creds:
+        def __init__(self, source_credentials, target_principal, target_scopes):
+            captured['principal'] = target_principal
+            captured['scopes'] = target_scopes
+            captured['source'] = source_credentials
+
+    import google.auth as _gauth
+
+    monkeypatch.setattr(_gauth, 'default', lambda *a, **k: (_Creds('src', 'x', ['y']), None))
+    monkeypatch.setattr('google.auth.impersonated_credentials.Credentials', _Creds)
+    session = sentinel.logging_session()
+    assert captured['principal'] == sentinel.LOGGING_SA
+    assert sentinel.LOGGING_SA == 'omi-errclass-sentinel@based-hardware.iam.gserviceaccount.com'
+    assert captured['scopes'] == [sentinel.LOGGING_READ_SCOPE]
+    assert session is not None
+
+
+def test_read_log_entries_fails_closed_when_impersonation_unavailable(monkeypatch):
+    def _boom():
+        raise RuntimeError('no adc')
+
+    monkeypatch.setattr(sentinel, 'logging_session', _boom)
+    out = sentinel.read_log_entries(
+        start=datetime(2026, 10, 29, 3, 0, tzinfo=timezone.utc),
+        end=datetime(2026, 10, 29, 4, 0, tzinfo=timezone.utc),
+    )
+    assert out == {'entries': [], 'truncated': False, 'errors': 1, 'status': 403}
+
+
 def test_tick_fails_closed_on_truncation(monkeypatch, client):
     def truncated_read(**_kwargs):
         return {'entries': error_entries(3), 'truncated': True, 'errors': 0, 'status': 200}

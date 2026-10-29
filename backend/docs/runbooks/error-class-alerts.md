@@ -64,13 +64,38 @@ are provisioned by the existing Grafana alert provisioning workflow.
 
 ## IAM dependency (deploy-blocking, lead-owned)
 
-backend-sync runs as `backend-runtime@based-hardware.iam.gserviceaccount.com`,
-which currently has **no** `logging.read` role. Until the lead grants
-`roles/logging.viewer` (or an equivalent narrow read grant) on
-`based-hardware`, every sweep reports
+David approved the log access (2026-10-29) but **not** on `backend-runtime` —
+project logs can carry leaked secrets, so the runtime SA must not hold
+project-wide `logging.read`. The sweep instead impersonates a dedicated
+least-privilege SA, `omi-errclass-sentinel@based-hardware.iam.gserviceaccount.com`
+(`roles/logging.viewer` only), minting tokens per request via token creator.
+Until the SA and bindings exist, every sweep reports
 `omi_error_class_sweep_total{outcome="permission_denied"}` and the dead-man
 rule fires within the hour. That is deliberate fail-loud behavior: the
 detector must not pretend to watch while it cannot read.
+
+Exact commands (owner: David; one-time):
+
+```bash
+gcloud iam service-accounts create omi-errclass-sentinel \
+  --project=based-hardware \
+  --display-name='Omi error-class sentinel (logging read only)'
+
+gcloud projects add-iam-policy-binding based-hardware \
+  --member='serviceAccount:omi-errclass-sentinel@based-hardware.iam.gserviceaccount.com' \
+  --role='roles/logging.viewer'
+
+gcloud iam service-accounts add-iam-policy-binding \
+  omi-errclass-sentinel@based-hardware.iam.gserviceaccount.com \
+  --member='serviceAccount:backend-runtime@based-hardware.iam.gserviceaccount.com' \
+  --role='roles/iam.serviceAccountTokenCreator' \
+  --project=based-hardware
+```
+
+The third command is what lets backend-sync mint short-lived tokens as the
+sentinel SA; it grants no log access of its own. To revoke the detector's
+read access later, delete the viewer binding (or the SA) — sweeps fail
+closed and the dead-man says so.
 
 ## Kill switch
 

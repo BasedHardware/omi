@@ -21,8 +21,11 @@ Container stderr arrives as severity=ERROR regardless of app level, so app
 levels are parsed from the message: WARNING classes alert at doubled
 thresholds, INFO never alerts. Every failure mode fails closed: a read error,
 permission denial, or truncation suppresses alerting for that tick and reports
-it through the sweep counter. Fingerprints and counts only - this module never
-logs or stores raw entry payloads.
+it through the sweep counter. The logging read runs as a dedicated
+least-privilege SA (``omi-errclass-sentinel``, roles/logging.viewer only),
+impersonated per request from the runtime identity - backend-runtime itself
+never holds project-wide log access. Fingerprints and counts only - this
+module never logs or stores raw entry payloads.
 """
 
 from __future__ import annotations
@@ -51,6 +54,12 @@ logger = logging.getLogger(__name__)
 PROJECT_ID = 'based-hardware'
 LOGGING_ENTRIES_LIST_URL = 'https://logging.googleapis.com/v2/entries:list'
 LOGGING_READ_SCOPE = 'https://www.googleapis.com/auth/logging.read'
+# Least-privilege read identity (David, 2026-10-29): backend-runtime must NOT
+# hold project-wide logging.read (project logs can carry leaked secrets), so
+# the sweep impersonates this dedicated SA, which holds only
+# roles/logging.viewer. Until the SA and the token-creator binding exist,
+# every tick fails closed as permission_denied and the dead-man pages.
+LOGGING_SA = 'omi-errclass-sentinel@based-hardware.iam.gserviceaccount.com'
 LOG_PAGE_SIZE = 1000
 LOG_MAX_PER_PASS = 60_000
 LOG_REQUEST_TIMEOUT_SECONDS = 30
@@ -98,6 +107,26 @@ def log_filter(start: datetime, end: datetime, extra: str = '') -> str:
     )
 
 
+def logging_session() -> Any:
+    """AuthorizedSession for the dedicated logging-viewer SA (impersonated).
+
+    The sentinel runs inside backend-sync but its read identity is
+    omi-errclass-sentinel, minted per-request via token creator, so
+    backend-runtime itself never gains project-wide log access. Any failure
+    here (SA missing, binding missing, ADC unavailable) propagates to the
+    caller and fails the tick closed as permission_denied.
+    """
+    from google.auth import impersonated_credentials
+
+    source_credentials, _ = google.auth.default()
+    credentials = impersonated_credentials.Credentials(
+        source_credentials=source_credentials,
+        target_principal=LOGGING_SA,
+        target_scopes=[LOGGING_READ_SCOPE],
+    )
+    return AuthorizedSession(credentials)
+
+
 def read_log_entries(
     *,
     start: datetime,
@@ -108,8 +137,11 @@ def read_log_entries(
 ) -> dict[str, Any]:
     """One bounded paged read; ``{'entries', 'truncated', 'errors', 'status'}``."""
     if session is None:
-        credentials, _ = google.auth.default(scopes=[LOGGING_READ_SCOPE])
-        session = AuthorizedSession(credentials)
+        try:
+            session = logging_session()
+        except Exception:
+            logger.error('error_class_sentinel impersonation failed sa=%s', LOGGING_SA)
+            return {'entries': [], 'truncated': False, 'errors': 1, 'status': 403}
     entries: list[dict] = []
     token = ''
     truncated = False
