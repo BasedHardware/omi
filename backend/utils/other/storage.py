@@ -1244,9 +1244,13 @@ def list_audio_chunk_paths_after(
             timeout=timeout,
             retry=None,
         ):
-            names.append(blob.name)
-            if len(names) >= 8:
-                break
+            # start_offset is inclusive: the boundary object itself appears
+            # (once per bucket when both sources hold it). Only names strictly
+            # beyond it can invalidate a cached listing ending at after_path.
+            if blob.name > after_path:
+                names.append(blob.name)
+                if len(names) >= 8:
+                    break
         if len(names) >= 8:
             break
     return names

@@ -742,7 +742,11 @@ def coverage_store(monkeypatch):
         calls['freshness'] += 1
         if calls['freshness_raises']:
             raise TimeoutError('probe budget')
-        return [f'chunks/{uid}/{conversation_id}/1760000100.000.opus.enc'] if calls['grew'] else []
+        if calls.get('boundary_only'):
+            # start_offset is inclusive: the boundary object itself comes back.
+            return [after_path]
+        # A genuinely new object sorts beyond the cached listing's max path.
+        return [f'chunks/{uid}/{conversation_id}/1760002000.000.opus.enc'] if calls['grew'] else []
 
     def fake_download(uid, path, rate):
         calls['download'] += 1
@@ -812,3 +816,13 @@ def test_listing_cache_is_bounded(coverage_store):
     assert len(coverage._listing_cache) == coverage._COVERAGE_LISTING_MAX_ENTRIES
     assert ('uid0', 'conv0') not in coverage._listing_cache
     assert ('uid_new', 'conv_new') in coverage._listing_cache
+
+
+def test_boundary_object_returned_by_inclusive_probe_keeps_cache_valid(coverage_store):
+    coverage.load_live_coverage('uid', {'id': 'conv'}, T, T + 20)
+    coverage_store['boundary_only'] = True
+    coverage.load_live_coverage('uid', {'id': 'conv'}, T + 5, T + 25)
+    # The inclusive start_offset probe returns the cached listing's own last
+    # object; that is not growth, so the full listing is not repeated.
+    assert coverage_store['freshness'] == 1
+    assert coverage_store['list'] == 1

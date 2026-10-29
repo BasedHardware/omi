@@ -796,3 +796,14 @@ def test_list_audio_chunk_paths_after_probes_both_sources_with_start_offset(monk
         storage_mod.private_cloud_sync_bucket,
         'derived-bucket',
     }
+
+
+def test_list_audio_chunk_paths_after_skips_the_inclusive_boundary(monkeypatch):
+    boundary = 'chunks/synthetic-owner/synthetic-conversation/1700000000.000.opus.enc'
+    blob = MagicMock()
+    blob.name = boundary
+    bucket = MagicMock()
+    bucket.list_blobs.return_value = [blob]
+    storage_mod.storage_client.bucket.return_value = bucket
+    monkeypatch.delenv('BUCKET_AUDIO_DERIVED', raising=False)
+    assert storage_mod.list_audio_chunk_paths_after('synthetic-owner', 'synthetic-conversation', boundary) == []

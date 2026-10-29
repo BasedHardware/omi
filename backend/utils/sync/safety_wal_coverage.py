@@ -182,9 +182,12 @@ def _cached_chunk_listing(uid: str, conversation_id: str) -> list[dict] | None:
             _listing_cache.pop((uid, conversation_id), None)
             return None
     try:
-        grew = storage.list_audio_chunk_paths_after(uid, conversation_id, last_path)
+        beyond = storage.list_audio_chunk_paths_after(uid, conversation_id, last_path)
     except Exception:
-        grew = ['unproven']  # Freshness not provable: take the exact listing.
+        beyond = ['unproven']  # Freshness not provable: take the exact listing.
+    # Defense in depth against the inclusive start_offset boundary: only a name
+    # strictly beyond the cached listing's last path is growth.
+    grew = [name for name in beyond if name > last_path]
     if grew:
         with _listing_cache_lock:
             _listing_cache.pop((uid, conversation_id), None)
