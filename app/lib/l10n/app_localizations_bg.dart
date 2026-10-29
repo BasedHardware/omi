@@ -14604,4 +14604,25 @@ class AppLocalizationsBg extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Готово. $percent% отстъпка за следващите $months месеца.';
   }
+
+  @override
+  String get singlePress => 'Single Press';
+
+  @override
+  String get triplePress => 'Triple Press';
+
+  @override
+  String get longPress => 'Long Press';
+
+  @override
+  String get singlePressAction => 'Single Press Action';
+
+  @override
+  String get triplePressAction => 'Triple Press Action';
+
+  @override
+  String get turnOnOff => 'Включване / Изключване';
+
+  @override
+  String get triplePressSubtitle => 'Requires updated firmware';
 }

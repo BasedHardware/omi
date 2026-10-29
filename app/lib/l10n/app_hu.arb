@@ -4520,5 +4520,12 @@
     "recapInTheBackground": "A háttérben",
     "retentionOfferAccept": "Maradj {percent}% kedvezménnyel",
     "retentionOfferBody": "Maradj, és fizess havi {price} összeget a következő {months} hónapban.",
-    "retentionOfferApplied": "Kész. {percent}% kedvezmény a következő {months} hónapban."
+    "retentionOfferApplied": "Kész. {percent}% kedvezmény a következő {months} hónapban.",
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "Bekapcsolás / Kikapcsolás",
+    "triplePressSubtitle": "Requires updated firmware"
 }

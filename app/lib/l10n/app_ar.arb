@@ -4424,5 +4424,12 @@
     "recapInTheBackground": "في الخلفية",
     "retentionOfferAccept": "ابقَ بخصم {percent}%",
     "retentionOfferBody": "ابقَ وادفع {price} شهريًا لمدة {months} أشهر قادمة.",
-    "retentionOfferApplied": "تم. خصم {percent}% لمدة {months} أشهر قادمة."
+    "retentionOfferApplied": "تم. خصم {percent}% لمدة {months} أشهر قادمة.",
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "تشغيل / إيقاف التشغيل",
+    "triplePressSubtitle": "Requires updated firmware"
 }

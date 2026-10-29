@@ -14565,4 +14565,25 @@ class AppLocalizationsTr extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Tamam. %$percent indirim, önümüzdeki $months ay.';
   }
+
+  @override
+  String get singlePress => 'Single Press';
+
+  @override
+  String get triplePress => 'Triple Press';
+
+  @override
+  String get longPress => 'Long Press';
+
+  @override
+  String get singlePressAction => 'Single Press Action';
+
+  @override
+  String get triplePressAction => 'Triple Press Action';
+
+  @override
+  String get turnOnOff => 'Aç / Kapat';
+
+  @override
+  String get triplePressSubtitle => 'Requires updated firmware';
 }

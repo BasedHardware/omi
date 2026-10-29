@@ -4424,5 +4424,12 @@
     "recapInTheBackground": "In sottofondo",
     "retentionOfferAccept": "Resta con il {percent}% di sconto",
     "retentionOfferBody": "Resta e paga {price} al mese per i prossimi {months} mesi.",
-    "retentionOfferApplied": "Fatto. {percent}% di sconto per i prossimi {months} mesi."
+    "retentionOfferApplied": "Fatto. {percent}% di sconto per i prossimi {months} mesi.",
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "Accendi / Spegni",
+    "triplePressSubtitle": "Requires updated firmware"
 }

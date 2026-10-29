@@ -4424,5 +4424,12 @@
     "recapInTheBackground": "पृष्ठभूमि में",
     "retentionOfferAccept": "{percent}% छूट के साथ बने रहें",
     "retentionOfferBody": "बने रहें और हर महीने {price} दें, अगले {months} महीनों तक।",
-    "retentionOfferApplied": "हो गया। {percent}% छूट, अगले {months} महीनों तक।"
+    "retentionOfferApplied": "हो गया। {percent}% छूट, अगले {months} महीनों तक।",
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "चालू करें / बंद करें",
+    "triplePressSubtitle": "Requires updated firmware"
 }

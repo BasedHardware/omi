@@ -4459,5 +4459,12 @@
     "recapInTheBackground": "На фоне",
     "retentionOfferAccept": "Остаться со скидкой {percent}%",
     "retentionOfferBody": "Оставайтесь и платите {price} в месяц следующие {months} месяца.",
-    "retentionOfferApplied": "Готово. Скидка {percent}% на следующие {months} месяца."
+    "retentionOfferApplied": "Готово. Скидка {percent}% на следующие {months} месяца.",
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "Включить / Выключить",
+    "triplePressSubtitle": "Requires updated firmware"
 }

@@ -456,6 +456,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       key: const Key('triple_tap_setting'),
       leading: const FaIcon(FontAwesomeIcons.handPointer),
       title: l10n.triplePress,
+      subtitle: l10n.triplePressSubtitle,
       value: _buttonActionLabel(SharedPreferencesUtil().triplePressAction),
       onTap: _pickTriplePressAction,
       showChevron: true,

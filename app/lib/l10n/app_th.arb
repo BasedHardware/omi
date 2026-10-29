@@ -4424,5 +4424,12 @@
     "recapInTheBackground": "ในเบื้องหลัง",
     "retentionOfferAccept": "อยู่ต่อพร้อมส่วนลด {percent}%",
     "retentionOfferBody": "อยู่ต่อและจ่ายเดือนละ {price} ใน {months} เดือนถัดไป",
-    "retentionOfferApplied": "เรียบร้อย ส่วนลด {percent}% ใน {months} เดือนถัดไป"
+    "retentionOfferApplied": "เรียบร้อย ส่วนลด {percent}% ใน {months} เดือนถัดไป",
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "เปิดเครื่อง / ปิดเครื่อง",
+    "triplePressSubtitle": "Requires updated firmware"
 }

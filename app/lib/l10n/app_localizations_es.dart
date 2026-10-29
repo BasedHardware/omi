@@ -14596,4 +14596,25 @@ class AppLocalizationsEs extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Listo. $percent% de descuento los próximos $months meses.';
   }
+
+  @override
+  String get singlePress => 'Un toque';
+
+  @override
+  String get triplePress => 'Triple toque';
+
+  @override
+  String get longPress => 'Pulsación larga';
+
+  @override
+  String get singlePressAction => 'Acción de un toque';
+
+  @override
+  String get triplePressAction => 'Acción de triple toque';
+
+  @override
+  String get turnOnOff => 'Encender / Apagar';
+
+  @override
+  String get triplePressSubtitle => 'Requiere firmware actualizado';
 }

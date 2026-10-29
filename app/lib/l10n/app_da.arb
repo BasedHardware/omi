@@ -4466,5 +4466,12 @@
     "recapInTheBackground": "I baggrunden",
     "retentionOfferAccept": "Bliv for {percent}% rabat",
     "retentionOfferBody": "Bliv og betal {price} om måneden de næste {months} måneder.",
-    "retentionOfferApplied": "Færdig. {percent}% rabat de næste {months} måneder."
+    "retentionOfferApplied": "Færdig. {percent}% rabat de næste {months} måneder.",
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "Tænd / Sluk",
+    "triplePressSubtitle": "Requires updated firmware"
 }

@@ -4424,5 +4424,12 @@
     "recapInTheBackground": "Taustalla",
     "retentionOfferAccept": "Jatka {percent} % alennuksella",
     "retentionOfferBody": "Jatka ja maksa {price} kuukaudessa seuraavat {months} kuukautta.",
-    "retentionOfferApplied": "Valmis. {percent} % alennus seuraavat {months} kuukautta."
+    "retentionOfferApplied": "Valmis. {percent} % alennus seuraavat {months} kuukautta.",
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "Käynnistä / Sammuta",
+    "triplePressSubtitle": "Requires updated firmware"
 }

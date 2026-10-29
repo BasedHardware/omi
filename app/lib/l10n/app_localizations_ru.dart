@@ -14601,4 +14601,25 @@ class AppLocalizationsRu extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Готово. Скидка $percent% на следующие $months месяца.';
   }
+
+  @override
+  String get singlePress => 'Single Press';
+
+  @override
+  String get triplePress => 'Triple Press';
+
+  @override
+  String get longPress => 'Long Press';
+
+  @override
+  String get singlePressAction => 'Single Press Action';
+
+  @override
+  String get triplePressAction => 'Triple Press Action';
+
+  @override
+  String get turnOnOff => 'Включить / Выключить';
+
+  @override
+  String get triplePressSubtitle => 'Requires updated firmware';
 }

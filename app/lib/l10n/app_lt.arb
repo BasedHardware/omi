@@ -4424,5 +4424,12 @@
     "recapInTheBackground": "Fone",
     "retentionOfferAccept": "Likti su {percent}% nuolaida",
     "retentionOfferBody": "Likite ir mokėkite {price} per mėnesį ateinančius {months} mėnesius.",
-    "retentionOfferApplied": "Atlikta. {percent}% nuolaida ateinančius {months} mėnesius."
+    "retentionOfferApplied": "Atlikta. {percent}% nuolaida ateinančius {months} mėnesius.",
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "Įjungti / Išjungti",
+    "triplePressSubtitle": "Requires updated firmware"
 }

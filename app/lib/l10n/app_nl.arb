@@ -4424,5 +4424,12 @@
     "recapInTheBackground": "Op de achtergrond",
     "retentionOfferAccept": "Blijf met {percent}% korting",
     "retentionOfferBody": "Blijf en betaal {price} per maand de komende {months} maanden.",
-    "retentionOfferApplied": "Klaar. {percent}% korting de komende {months} maanden."
+    "retentionOfferApplied": "Klaar. {percent}% korting de komende {months} maanden.",
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "Aanzetten / Uitzetten",
+    "triplePressSubtitle": "Requires updated firmware"
 }

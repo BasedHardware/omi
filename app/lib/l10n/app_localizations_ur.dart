@@ -14565,4 +14565,25 @@ class AppLocalizationsUr extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'ہو گیا۔ $percent% رعایت، اگلے $months مہینے۔';
   }
+
+  @override
+  String get singlePress => 'Single Press';
+
+  @override
+  String get triplePress => 'Triple Press';
+
+  @override
+  String get longPress => 'Long Press';
+
+  @override
+  String get singlePressAction => 'Single Press Action';
+
+  @override
+  String get triplePressAction => 'Triple Press Action';
+
+  @override
+  String get turnOnOff => 'آن کریں / بند کریں';
+
+  @override
+  String get triplePressSubtitle => 'Requires updated firmware';
 }

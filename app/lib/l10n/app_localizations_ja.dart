@@ -14348,4 +14348,25 @@ class AppLocalizationsJa extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return '完了しました。$percent%オフが$monthsか月続きます。';
   }
+
+  @override
+  String get singlePress => 'シングルプレス';
+
+  @override
+  String get triplePress => 'トリプルプレス';
+
+  @override
+  String get longPress => '長押し';
+
+  @override
+  String get singlePressAction => 'シングルプレスの動作';
+
+  @override
+  String get triplePressAction => 'トリプルプレスの動作';
+
+  @override
+  String get turnOnOff => '電源を入れる / 電源を切る';
+
+  @override
+  String get triplePressSubtitle => '最新のファームウェアが必要';
 }

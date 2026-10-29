@@ -11850,5 +11850,12 @@
     "recapInTheBackground": "پس منظر میں",
     "retentionOfferAccept": "{percent}% رعایت کے ساتھ رہیں",
     "retentionOfferBody": "رہیں اور ہر ماہ {price} ادا کریں، اگلے {months} مہینے۔",
-    "retentionOfferApplied": "ہو گیا۔ {percent}% رعایت، اگلے {months} مہینے۔"
+    "retentionOfferApplied": "ہو گیا۔ {percent}% رعایت، اگلے {months} مہینے۔",
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "آن کریں / بند کریں",
+    "triplePressSubtitle": "Requires updated firmware"
 }

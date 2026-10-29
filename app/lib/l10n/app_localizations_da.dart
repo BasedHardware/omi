@@ -14543,4 +14543,25 @@ class AppLocalizationsDa extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Færdig. $percent% rabat de næste $months måneder.';
   }
+
+  @override
+  String get singlePress => 'Single Press';
+
+  @override
+  String get triplePress => 'Triple Press';
+
+  @override
+  String get longPress => 'Long Press';
+
+  @override
+  String get singlePressAction => 'Single Press Action';
+
+  @override
+  String get triplePressAction => 'Triple Press Action';
+
+  @override
+  String get turnOnOff => 'Tænd / Sluk';
+
+  @override
+  String get triplePressSubtitle => 'Requires updated firmware';
 }

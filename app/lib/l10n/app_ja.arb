@@ -4424,5 +4424,12 @@
     "recapInTheBackground": "バックグラウンド",
     "retentionOfferAccept": "{percent}%オフで続ける",
     "retentionOfferBody": "続ければ月額{price}、次の{months}か月間。",
-    "retentionOfferApplied": "完了しました。{percent}%オフが{months}か月続きます。"
+    "retentionOfferApplied": "完了しました。{percent}%オフが{months}か月続きます。",
+    "singlePress": "シングルプレス",
+    "triplePress": "トリプルプレス",
+    "longPress": "長押し",
+    "singlePressAction": "シングルプレスの動作",
+    "triplePressAction": "トリプルプレスの動作",
+    "turnOnOff": "電源を入れる / 電源を切る",
+    "triplePressSubtitle": "最新のファームウェアが必要"
 }

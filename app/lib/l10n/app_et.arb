@@ -4424,5 +4424,12 @@
     "recapInTheBackground": "Taustal",
     "retentionOfferAccept": "Jää {percent}% allahindlusega",
     "retentionOfferBody": "Jää ja maksa {price} kuus järgmised {months} kuud.",
-    "retentionOfferApplied": "Valmis. {percent}% allahindlust järgmised {months} kuud."
+    "retentionOfferApplied": "Valmis. {percent}% allahindlust järgmised {months} kuud.",
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "Lülita sisse / Lülita välja",
+    "triplePressSubtitle": "Requires updated firmware"
 }

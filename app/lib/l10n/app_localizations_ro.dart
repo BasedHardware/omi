@@ -14614,4 +14614,25 @@ class AppLocalizationsRo extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Gata. $percent% reducere în următoarele $months luni.';
   }
+
+  @override
+  String get singlePress => 'Single Press';
+
+  @override
+  String get triplePress => 'Triple Press';
+
+  @override
+  String get longPress => 'Long Press';
+
+  @override
+  String get singlePressAction => 'Single Press Action';
+
+  @override
+  String get triplePressAction => 'Triple Press Action';
+
+  @override
+  String get turnOnOff => 'Pornire / Oprire';
+
+  @override
+  String get triplePressSubtitle => 'Requires updated firmware';
 }

@@ -4459,5 +4459,12 @@
     "recapInTheBackground": "Em segundo plano",
     "retentionOfferAccept": "Fique com {percent}% de desconto",
     "retentionOfferBody": "Fique e pague {price} por mês nos próximos {months} meses.",
-    "retentionOfferApplied": "Pronto. {percent}% de desconto nos próximos {months} meses."
+    "retentionOfferApplied": "Pronto. {percent}% de desconto nos próximos {months} meses.",
+    "singlePress": "Toque único",
+    "triplePress": "Toque triplo",
+    "longPress": "Toque longo",
+    "singlePressAction": "Ação de toque único",
+    "triplePressAction": "Ação de toque triplo",
+    "turnOnOff": "Ligar / Desligar",
+    "triplePressSubtitle": "Requer firmware atualizado"
 }

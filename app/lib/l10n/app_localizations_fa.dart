@@ -14547,4 +14547,25 @@ class AppLocalizationsFa extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'انجام شد. $percent% تخفیف برای $months ماه آینده.';
   }
+
+  @override
+  String get singlePress => 'Single Press';
+
+  @override
+  String get triplePress => 'Triple Press';
+
+  @override
+  String get longPress => 'Long Press';
+
+  @override
+  String get singlePressAction => 'Single Press Action';
+
+  @override
+  String get triplePressAction => 'Triple Press Action';
+
+  @override
+  String get turnOnOff => 'روشن کردن / خاموش کردن';
+
+  @override
+  String get triplePressSubtitle => 'Requires updated firmware';
 }

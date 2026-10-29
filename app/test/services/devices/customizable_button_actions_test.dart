@@ -206,6 +206,7 @@ void main() {
       expect(find.text('Double Tap'), findsOneWidget);
       expect(find.text('Mute / Unmute'), findsOneWidget);
       expect(find.text('Triple Press'), findsOneWidget);
+      expect(find.text('Requires updated firmware'), findsOneWidget);
       expect(find.text('End Conversation'), findsOneWidget);
       expect(find.text('Long Press'), findsOneWidget);
       expect(find.text('Turn On / Turn Off'), findsOneWidget);

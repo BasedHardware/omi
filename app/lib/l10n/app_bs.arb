@@ -11850,5 +11850,12 @@
     "recapInTheBackground": "U pozadini",
     "retentionOfferAccept": "Ostani uz {percent}% popusta",
     "retentionOfferBody": "Ostani i plaćaj {price} mjesečno sljedećih {months} mjeseca.",
-    "retentionOfferApplied": "Gotovo. {percent}% popusta sljedećih {months} mjeseca."
+    "retentionOfferApplied": "Gotovo. {percent}% popusta sljedećih {months} mjeseca.",
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "Uključi / Isključi",
+    "triplePressSubtitle": "Requires updated firmware"
 }

@@ -4424,5 +4424,12 @@
     "recapInTheBackground": "Di latar belakang",
     "retentionOfferAccept": "Kekal dengan diskaun {percent}%",
     "retentionOfferBody": "Kekal dan bayar {price} sebulan untuk {months} bulan akan datang.",
-    "retentionOfferApplied": "Selesai. Diskaun {percent}% untuk {months} bulan akan datang."
+    "retentionOfferApplied": "Selesai. Diskaun {percent}% untuk {months} bulan akan datang.",
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "Hidupkan / Matikan",
+    "triplePressSubtitle": "Requires updated firmware"
 }
