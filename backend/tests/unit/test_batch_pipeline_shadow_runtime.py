@@ -241,11 +241,21 @@ async def test_disabled_upload_and_byok_have_no_io(monkeypatch):
 
 
 def test_private_http_recovery_writes_only_shadow_state(repository, monkeypatch):
-    work = running(repository)
+    from utils.batch_pipeline.recovery_recognizers import words_payload
+    from utils.batch_pipeline import projection
+    from utils.sync import assignment
+
+    monkeypatch.setattr(projection, 'cap_dispatch_enabled', lambda *args: False)
+    monkeypatch.setattr(assignment, 'smart_merge_flatten_enabled', lambda: False)
+    monkeypatch.setattr(assignment, 'sync_lineage_resolve_enabled', lambda: False)
+    work = running(repository, duration=20)
     monkeypatch.setattr(router.WorkerRequest, 'service', lambda self: SimpleNamespace(store=repository.store))
     monkeypatch.setattr(artifact_policy, 'artifacts_for', lambda _: SimpleNamespace(fetch_audio=lambda _: b'audio'))
     original = shadow_recovery.recover_async
-    provider = Mock(return_value={'words': [{'word': 'private transcript'}]})
+    spans = [{'start': 0, 'end': 2}]
+    provider = Mock(
+        return_value=words_payload(20, spans, [{'word': 'Synthetic', 'timestamp': [0, 1], 'speaker': '0'}], 'en')
+    )
     monkeypatch.setattr(
         shadow_recovery,
         'recover_async',
@@ -254,7 +264,7 @@ def test_private_http_recovery_writes_only_shadow_state(repository, monkeypatch)
             artifacts,
             segment,
             stt=provider,
-            inspect=lambda *a: (b'', 300, [{'start': 0, 'end': 300}]),
+            inspect=lambda *a: (b'', 20, spans),
         ),
     )
     app = FastAPI()
@@ -271,6 +281,7 @@ def test_private_http_recovery_writes_only_shadow_state(repository, monkeypatch)
             '/v2/batch-pipeline/shadow-recover', json={'stage': 'dev', 'segment_id': work.segment_id}
         ).json() == {'status': 'held'}
     assert provider.call_count == 1
+    assert row(repository, work.segment_id)['projection_status'] == 'planned'
     assert all(path[0].startswith('batch_pipeline_dev_shadow_') for path in repository.store.client.rows)
     assert 'private transcript' not in repr(repository.store.client.rows)
 

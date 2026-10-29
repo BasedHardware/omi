@@ -24,6 +24,15 @@ recovery role's private OIDC `shadow-project` endpoint. It runs the production
 partitioner and assignment transaction body through bounded read-only
 references and discarded write plans. It never publishes, enriches, meters or
 changes a conversation; normal projection continues to reject shadow jobs.
+Paid shadow recovery also sends its ephemeral recovered payload through that
+same planner on the CPU role, using the original intake reservation once.
+Only a successful plan certifies recovered speech; planner refusal or failure
+settles a shadow error and never falls back to publication. Verified zero-speech
+recovery certifies an empty plan without running assignment. Recovery results
+remain absent from transcript storage, usage and customer records.
+Guarded shadow recognizers receive the same input-bound worker VAD evidence as
+serving recovery. Provider words can position that measured speech when CPU
+VAD misses it; words alone and unbound scalar estimates never prove speech.
 This observes assignment planning rather than owner-chain scheduling or a
 durable transaction. See [shadow isolation and the proposed 25% window](batch-pipeline-shadow.md)
 for runtime bounds, cost assumptions, rollback and the lead-owned activation.

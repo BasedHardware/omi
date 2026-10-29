@@ -316,7 +316,7 @@ class ShadowStore:
             job = tx.get('shadow_jobs', segment)
             if (
                 job.get('shadow') is not True
-                or job.get('state') != 'running'
+                or job.get('state') not in {'running', 'recovering'}
                 or 'projection_attempted_at' in job
                 or 'projection_reserved_at' not in job
             ):
