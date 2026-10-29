@@ -2430,7 +2430,9 @@ enum PaywallOpenedSource {
   screenContextGate("screen_context_gate"),
   mcpDailyCap("mcp_daily_cap"),
   budget80("budget_80"),
-  onboarding("onboarding");
+  onboarding("onboarding"),
+  ahaFirstSummary("aha_first_summary"),
+  freeCap("free_cap");
   const PaywallOpenedSource(this.wireName);
   final String wireName;
 }
@@ -2500,7 +2502,9 @@ enum UpgradePlanSelectedSource {
   screenContextGate("screen_context_gate"),
   mcpDailyCap("mcp_daily_cap"),
   budget80("budget_80"),
-  onboarding("onboarding");
+  onboarding("onboarding"),
+  ahaFirstSummary("aha_first_summary"),
+  freeCap("free_cap");
   const UpgradePlanSelectedSource(this.wireName);
   final String wireName;
 }
@@ -2972,7 +2976,9 @@ enum PaywallVariantShownSource {
   screenContextGate("screen_context_gate"),
   mcpDailyCap("mcp_daily_cap"),
   budget80("budget_80"),
-  onboarding("onboarding");
+  onboarding("onboarding"),
+  ahaFirstSummary("aha_first_summary"),
+  freeCap("free_cap");
   const PaywallVariantShownSource(this.wireName);
   final String wireName;
 }

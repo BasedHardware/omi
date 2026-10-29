@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.555",
+      "date": "2026-10-29",
+      "changes": [
+        "Improved task descriptions and prevented tasks from linking to unavailable source conversations."
+      ]
+    },
+    {
       "version": "0.12.554",
       "date": "2026-10-28",
       "changes": [

@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/pages/paywall/paywall_pacing.dart';
 import 'package:omi/pages/settings/widgets/cancel_subscription_sheet.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/plan_storefront.dart';
@@ -710,6 +711,7 @@ class _PlansSheetState extends State<PlansSheet> {
 
   @override
   void initState() {
+    PaywallPacing.markShown();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadAvailablePlans();
       _initializeStorefront();
