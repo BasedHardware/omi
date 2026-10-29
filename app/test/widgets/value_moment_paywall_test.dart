@@ -181,6 +181,24 @@ void main() {
     expect(opened, isEmpty);
   });
 
+  testWidgets('never stacked with a store-review sheet; the moment waits for another session', (tester) async {
+    await host(tester);
+    var reviewAsked = true;
+    ValueMomentPaywall.offer(PaywallMoment.ahaFirstSummary,
+        conversation: _conversation(), queue: queue, open: open, reviewRequested: () => reviewAsked);
+    await settle(tester);
+    expect(opened, isEmpty);
+
+    reviewAsked = false;
+    expect(
+        ValueMomentPaywall.offer(PaywallMoment.ahaFirstSummary,
+            conversation: _conversation(), queue: queue, open: open, reviewRequested: () => reviewAsked),
+        isTrue,
+        reason: 'not spent: nothing opened');
+    await settle(tester);
+    expect(opened, ['aha_first_summary']);
+  });
+
   testWidgets('a plans sheet opened while the cap offer loads the subscription cancels it', (tester) async {
     usage.dispose();
     // The reader taps Upgrade on "Processing paused" while the subscription is still loading.

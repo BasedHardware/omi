@@ -10,6 +10,7 @@ import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/paywall/paywall_pacing.dart';
 import 'package:omi/pages/paywall/paywall_router.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/services/app_review_service.dart';
 import 'package:omi/ui/prompts/prompt_queue.dart';
 import 'package:omi/widgets/freemium_switch_dialog.dart';
 
@@ -43,13 +44,15 @@ abstract final class ValueMomentPaywall {
   /// Queues the offer for [moment] about [conversation]. Returns true when it was queued. The
   /// moment is spent only when an offer actually opens, so a paced or not-yet-eligible reader gets
   /// it at the next such moment. With [usage], a reader known not to qualify queues nothing.
-  /// [queue] and [open] replace the app queue and the paywall in tests.
+  /// [queue], [open] and [reviewRequested] replace the app queue, the paywall and the store-review
+  /// latch in tests.
   static bool offer(
     PaywallMoment moment, {
     required ServerConversation conversation,
     UsageProvider? usage,
     PromptQueue? queue,
     Future<void> Function(BuildContext context, String source)? open,
+    bool Function()? reviewRequested,
   }) {
     if (_spent(moment) || PaywallPacing.shownRecently() || !ownsOmi(conversation)) return false;
     if (moment == PaywallMoment.ahaFirstSummary && !_summarized(conversation)) return false;
@@ -57,7 +60,12 @@ abstract final class ValueMomentPaywall {
     return (queue ?? PromptQueue.instance).enqueue(
       'value-moment-${moment.source}',
       PromptPriority.low,
-      show: (context) => _show(context, moment, open ?? _open),
+      show: (context) => _show(
+        context,
+        moment,
+        open ?? _open,
+        reviewRequested ?? () => AppReviewService().requestedThisSession,
+      ),
     );
   }
 
@@ -89,11 +97,13 @@ abstract final class ValueMomentPaywall {
     BuildContext context,
     PaywallMoment moment,
     Future<void> Function(BuildContext context, String source) open,
+    bool Function() reviewRequested,
   ) async {
     await Future<void>.delayed(moment.beat);
     if (!context.mounted) return;
-    // Another paywall may have opened while this one waited in the queue.
-    if (_spent(moment) || PaywallPacing.shownRecently()) return;
+    // Another paywall may have opened while this one waited in the queue. A store-review sheet
+    // asked for this session (it fires while a summary is read) is never stacked with a paywall.
+    if (_spent(moment) || PaywallPacing.shownRecently() || reviewRequested()) return;
     final usage = context.read<UsageProvider>();
     if (usage.subscription == null) {
       await usage.fetchSubscription().timeout(const Duration(seconds: 6), onTimeout: () {});
