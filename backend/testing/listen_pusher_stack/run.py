@@ -634,8 +634,23 @@ class Stack:
         )
 
     def age_conversation(self, uid: str, conversation_id: str) -> None:
-        self.firestore.collection('users').document(uid).collection('conversations').document(conversation_id).update(
-            {'finished_at': datetime.now(timezone.utc) - timedelta(seconds=121)}
+        from utils.conversations.recorded_time import conversation_span
+
+        ref = self.firestore.collection('users').document(uid).collection('conversations').document(conversation_id)
+        row = ref.get().to_dict()
+        span = conversation_span(row)
+        if span is None:
+            raise StackFailure('cannot age a conversation without recorded evidence')
+        end = datetime.now(timezone.utc) - timedelta(seconds=121)
+        shift = end - span.recorded_end
+        ref.update(
+            {
+                'started_at': row['started_at'] + shift,
+                'recorded_start': span.recorded_start + shift,
+                'recorded_end': end,
+                'last_speech_at': end,
+                'finished_at': end,
+            }
         )
 
     def release_inline_finalization(self) -> None:
