@@ -31,6 +31,27 @@ void main() {
           anchor.resolve(episode: current(corrected), captureStart: previousEnd, streaming: true, now: now), corrected);
     });
 
+    test('late uploaded capture time cannot rewind the current episode or a polling gap', () {
+      final anchor = LiveStartAnchor();
+      final recorded = DateTime.utc(2026, 10, 29, 1, 4);
+      final currentStart = DateTime.utc(2026, 10, 29, 5, 46);
+      final now = DateTime.utc(2026, 10, 29, 7, 11);
+      final current = Episode(
+        id: 'current',
+        live: true,
+        startedAt: currentStart,
+        timerStartedAt: currentStart,
+        lastActivityAt: now,
+      );
+      expect(anchor.resolve(episode: current, captureStart: recorded, streaming: true, now: now), currentStart);
+      // A delayed capture timestamp during a short server polling gap cannot
+      // replace the authoritative floor established by the current episode.
+      expect(anchor.resolve(episode: null, captureStart: recorded, streaming: true, now: now), currentStart);
+      expect(anchor.resolve(episode: null, captureStart: recorded, streaming: true, now: now), currentStart);
+      expect(anchor.resolve(episode: current, captureStart: recorded, streaming: true, now: now), currentStart);
+      expect(now.difference(currentStart), const Duration(hours: 1, minutes: 25));
+    });
+
     test('a pendant lease lapsing for a tick keeps the running start', () {
       final anchor = LiveStartAnchor();
       DateTime? at(int s, DateTime? capture) =>
