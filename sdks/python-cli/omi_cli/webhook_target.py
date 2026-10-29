@@ -69,8 +69,8 @@ def inspect_target(url: str, resolver: Optional[Resolver] = None) -> TargetRepor
     resolve = resolver or resolve_addresses
     try:
         parts = urlsplit(url)
-    except ValueError as exc:
-        return TargetReport(False, "The URL is malformed", str(exc))
+    except ValueError:
+        return TargetReport(False, "The URL is malformed", "Enter a valid http or https URL.")
     if parts.scheme not in ("http", "https"):
         return TargetReport(
             False,
@@ -82,8 +82,8 @@ def inspect_target(url: str, resolver: Optional[Resolver] = None) -> TargetRepor
         return TargetReport(False, "The URL has no hostname")
     try:
         port = parts.port
-    except ValueError as exc:
-        return TargetReport(False, "The URL has an invalid port", str(exc))
+    except ValueError:
+        return TargetReport(False, "The URL has an invalid port", "Port must be between 1 and 65535.")
     if port == 0:
         return TargetReport(False, "The URL has an invalid port", "Port must be between 1 and 65535.")
 

@@ -14,7 +14,7 @@ def test_inspect_target_rejects_malformed_ipv6_url_without_raising() -> None:
 
     assert report.ok is False
     assert report.summary == "The URL is malformed"
-    assert report.detail is not None
+    assert report.detail == "Enter a valid http or https URL."
 
 
 def test_inspect_target_rejects_non_numeric_and_out_of_range_ports() -> None:
@@ -26,7 +26,7 @@ def test_inspect_target_rejects_non_numeric_and_out_of_range_ports() -> None:
         report = webhook_target.inspect_target(url, resolver=_unexpected_resolve)
         assert report.ok is False, url
         assert report.summary == "The URL has an invalid port", url
-        assert report.detail is not None, url
+        assert report.detail == "Port must be between 1 and 65535.", url
 
 
 def test_inspect_target_accepts_valid_explicit_port() -> None:
