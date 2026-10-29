@@ -45,7 +45,11 @@ from database.batch_pipeline_projection_claim import projection_claim
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.voice_evidence import prepare as prepare_voice_evidence
 from utils.batch_pipeline.projection_parts import align_projection_words, bounded_projection_words
-from utils.sync.assignment_errors import SyncAssignmentSuperseded
+from utils.sync.assignment_errors import (
+    SyncAssignmentConflict,
+    SyncAssignmentSuperseded,
+    sync_assignment_conflict_strikes,
+)
 from utils.stt.transcript_admission import filter_admission
 
 if TYPE_CHECKING:
@@ -146,6 +150,22 @@ def projection_block_reason(error: BaseException) -> str:
     if type(reason) is str and reason in BATCH_PROJECTION_BLOCK_REASONS:
         return reason
     return 'other'
+
+
+def quarantines_assignment_conflict(error: BaseException, job: dict | None) -> bool:
+    """Whether a record-target assignment conflict must take the held disposition.
+
+    The walk retries an owner's chain head forever, so a conflict nothing can
+    resolve wedges every later capture behind it. The sync strike rule decides
+    what nothing can resolve: structural conflicts always quarantine;
+    awaiting-writer ones (a record being restored from discard, a finalize
+    landing) quarantine only on catch-up rows, whose writer is already hours
+    late. Fresh rows keep waiting for their writer.
+    """
+    return isinstance(error, SyncAssignmentConflict) and sync_assignment_conflict_strikes(
+        error.subtype,
+        'backfill' if (job or {}).get('fresh_capture') is False else 'fresh',
+    )
 
 
 @contextmanager
@@ -544,13 +564,17 @@ class Projector:
                 # Without the pre-check this is the replay it would have seen.
             except SyncAssignmentSuperseded:
                 self.supersede(session)
+            except SyncAssignmentConflict as error:
+                if not quarantines_assignment_conflict(error, job):
+                    raise
+                persist_disposition(session, quarantined=True)
             except BatchPrivacyBlocked as error:
                 if error.reason != BatchPrivacyReason.CONVERSATION_DELETED:
                     raise
                 persist_disposition(session, privacy_deleted=True)
         else:
             with projection_phase('assignment', policy):
-                self.assign_parts(item, entry, binding, finish=finish, policy=policy, hint=hint)
+                self.assign_parts(item, entry, binding, finish=finish, policy=policy, hint=hint, job=job)
 
     def _payload(self, item, entry, hint):
         prefetched = hint.prefetched if hint is not None else None
@@ -755,7 +779,7 @@ class Projector:
     def _mirror_assignment(self, session) -> None:
         mirror_assignment(self.store, session)
 
-    def assign_parts(self, item, entry, binding, *, finish=True, policy=None, hint=None):
+    def assign_parts(self, item, entry, binding, *, finish=True, policy=None, hint=None, job=None):
         policy = policy or self.store.policy(item.segment_id)
         from database.conversations import get_closest_conversation_to_timestamps
         from utils.batch_pipeline.context import ResolvedContext, resolve_context, require_repair_manifest
@@ -904,6 +928,10 @@ class Projector:
                 receipt = persist_disposition(session, quarantined=True)
             except SyncAssignmentSuperseded:
                 receipt = self.supersede(session)
+            except SyncAssignmentConflict as error:
+                if not quarantines_assignment_conflict(error, job):
+                    raise
+                receipt = persist_disposition(session, quarantined=True)
             except BatchPrivacyBlocked as error:
                 if error.reason != BatchPrivacyReason.CONVERSATION_DELETED:
                     if policy.projection_contention:
