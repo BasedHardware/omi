@@ -60,7 +60,7 @@ def main():
         raise ValueError('public reference must contain words')
     raw_spans = json.loads(Path(args.vad_json).read_text()) if args.vad_json else [(0, duration)]
     spans = [(s['start'], s['end']) if isinstance(s, dict) else tuple(s) for s in raw_spans]
-    model = nemo_asr.models.ASRModel.from_pretrained(args.model).cuda().eval()
+    model = nemo_asr.models.ASRModel.from_pretrained(args.model).cuda().train(False)
     pin_parakeet_decoding(model)
     provider = ParakeetWords(model, enforce_eager=True)
     rows = []
