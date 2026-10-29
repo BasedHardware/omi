@@ -25,6 +25,9 @@ from contextlib import contextmanager
 
 import pytest
 
+# The assignment seam's monkeypatch string targets resolve database.conversations
+# on first use; import it at collection so no test's call phase pays that graph.
+from database import conversations  # noqa: F401
 from database.batch_pipeline_projection_protocol import ProjectionGenerationAmbiguous
 from tests.unit.test_batch_pipeline_owner_chain_projection import (
     BURST,

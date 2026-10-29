@@ -16,6 +16,7 @@ import json
 
 import pytest
 
+from tests.unit.test_batch_pipeline_owner_chain_projection import SUCCESS_PAYLOAD
 from utils.batch_pipeline.audio import audio_unit
 from utils.batch_pipeline.contracts import (
     ProjectionBinding,
@@ -262,9 +263,6 @@ def test_projection_payload_duration_tolerance_is_one_hundred_ms(audio_seconds, 
     """The fence build_incoming/split_result share: +-0.1 s around the admitted
     capture, so a sample-rounded decoded clock always passes and a real
     mismatch by one sample past the tolerance fails."""
-    from tests.unit.test_batch_pipeline_owner_chain_projection import SUCCESS_PAYLOAD
-    from utils.batch_pipeline.contracts import ProjectionBinding
-
     item = WorkItem('seg', 'sim-owner', 0.0, 'gs://synthetic/audio', 1.0, Priority.DEEP)
     payload = {**SUCCESS_PAYLOAD, 'audio_seconds': audio_seconds, 'speech_seconds': min(0.5, audio_seconds)}
     payload['speech_spans'] = [{'start': 0.0, 'end': min(0.5, audio_seconds)}]
