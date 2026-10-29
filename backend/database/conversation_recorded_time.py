@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from google.cloud import firestore
 
 from database._client import run_transactional
-from utils.conversations.recorded_time import span_fields, write_span
+from utils.conversations.recorded_time import SPAN_FIELDS, span_fields, write_span
 
 
 def hydrate(data):
@@ -47,5 +47,7 @@ def stamp_for_write(data):
     data.pop('episode_id', None)
     # Full creates/processing writes recompute from their complete recording.
     # Partial writes carry the span computed by their transaction snapshot.
-    if data.get('created_at') is not None:
+    complete = data.get('created_at') is not None
+    recording = data.get('started_at') is not None and isinstance(data.get('transcript_segments'), list)
+    if complete or (recording and not all(field in data for field in SPAN_FIELDS)):
         data.update(write_span(data, arrival_at=datetime.now(timezone.utc)))

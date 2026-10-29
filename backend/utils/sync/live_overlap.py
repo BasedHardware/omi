@@ -91,14 +91,14 @@ def _legacy_choose_live_overlap(rows: list[dict], incoming: dict) -> str | None:
     return min(eligible, key=lambda pair: (-pair[0], pair[1]['started_at'], pair[1]['id']))[1]['id']
 
 
-def _new_live_overlap_seconds(row: dict, incoming: dict) -> float:
+def _live_binding_score(row: dict, incoming: dict) -> float:
     if not compatible_keys(row, incoming):
         return 0
     keyed_open = same_explicit_key(row, incoming) and row.get('status') == 'in_progress'
-    if keyed_open:
-        # An OPEN occasion can bind before its first transcript. This chooses
-        # an identity only; wall time never claims covered source frames.
-        return _strict_overlap_seconds(row, incoming, require_device=False)
+    if keyed_open and compatible_capture(row, incoming) and not row.get('deleted') and not row.get('sync_merged_into'):
+        # Matching stream identity can bind an empty OPEN stub. The score floor
+        # selects identity only; it is never a claim of recorded frame coverage.
+        return _strict_overlap_seconds(row, incoming, require_device=False) or 1e-9
     return live_overlap_seconds(row, incoming)
 
 
@@ -107,7 +107,7 @@ def choose_live_overlap(rows: list[dict], incoming: dict, *, uid: str | None = N
     legacy = _legacy_choose_live_overlap(rows, incoming)
     if not refactor_modes.shadow_or_serve('CAPTURE_COVERAGE_MODE'):
         return legacy
-    eligible = [(seconds, row) for row in rows if (seconds := _new_live_overlap_seconds(row, incoming)) > 0]
+    eligible = [(seconds, row) for row in rows if (seconds := _live_binding_score(row, incoming)) > 0]
     proposed = (
         min(eligible, key=lambda pair: (-pair[0], pair[1]['started_at'], pair[1]['id']))[1]['id'] if eligible else None
     )

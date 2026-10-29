@@ -46,7 +46,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Mapping, Optional, Sequence
 from uuid import uuid4
 from config.recorded_time import recorded_episodes_enabled, live_timer_start_enabled
-from utils.conversations.recorded_time import conversation_span, is_late
+from utils.conversations.recorded_time import conversation_span, is_late, at_offset as _wall
+from utils.sync.repeat_work_metrics import conversation_scope
 from utils.episodes.timeline import episode_owning_recorded_time, choose_recorded_episode
 from utils.episodes.timeline import episode_at as episode_at, episodes_between as episodes_between
 from database import episode_timeline
@@ -665,6 +666,7 @@ def _attach_once(
     return 'pending' if decision.action == policy.ASK else 'joined'
 
 
+@conversation_scope
 def record_moment(
     uid: str,
     moment: MomentInput,
@@ -1121,10 +1123,6 @@ def _record_moment_once(
 
 
 # --------------------------------------------------------------------------- finalization
-
-
-def _wall(base: Optional[datetime], offset: float) -> Optional[datetime]:
-    return base + timedelta(seconds=max(0.0, offset)) if base else None
 
 
 def _saved_tasks(uid: str, conversation_id: str, c: Collaborators) -> list[dict]:

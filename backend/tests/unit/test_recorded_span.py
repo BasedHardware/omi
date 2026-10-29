@@ -11,7 +11,8 @@ import pytest
 
 from models.recorded_span import RecordedClock, RecordedSpan
 from utils.conversations.recorded_time import conversation_span, span_fields, write_span
-from utils.episodes import timeline
+from utils.episodes import service, timeline
+from utils.episodes.moment import MomentInput
 from database import episode_timeline, episodes
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
@@ -154,6 +155,28 @@ def test_llm_measurement_is_on_without_revision_reuse_and_has_bounded_labels(mon
     assert metrics.PHASE_A_CALLS.labels('other', 'completed')._value.get() == before + 1
     assert 'feature=other' in caplog.text
     assert 'synthetic-user' not in caplog.text and 'synthetic-episode' not in caplog.text
+
+
+def test_live_moment_llm_measurement_uses_conversation_identity(monkeypatch, caplog):
+    import hashlib
+    from utils.sync import repeat_work_metrics as metrics
+
+    monkeypatch.setattr(service, 'episodes_enabled_for', lambda uid: True)
+
+    def process(*args, **kwargs):
+        metrics.record_llm_call('completed', 'episode_incremental')
+        return 'updated'
+
+    monkeypatch.setattr(service, '_record_moment_once', process)
+    moment = MomentInput('conversation-live', 'omi', [], T0, T0, 'pause')
+    before = metrics.PHASE_A_CALLS.labels('episode_incremental', 'completed')._value.get()
+    outer_scope = metrics._scope.get()
+    with caplog.at_level('INFO'):
+        assert service.record_moment('user-live', moment) == 'updated'
+    assert metrics._scope.get() is outer_scope
+    assert metrics.PHASE_A_CALLS.labels('episode_incremental', 'completed')._value.get() == before + 1
+    assert hashlib.sha256(b'user-live\0conversation-live').hexdigest() in caplog.text
+    assert 'conversation-live' not in caplog.text
 
 
 @pytest.mark.parametrize('order', list(permutations(range(3))))

@@ -341,7 +341,8 @@ Typed-span readers do not depend on this unfinished rollout. No runtime flag or
 production state is read or modified by this change.
 
 Read-only Phase B sizing: `omi_conversation_llm_calls_total{feature,outcome}`
-counts observed LangChain completions/errors in conversation scope regardless
+counts observed LangChain completions/errors and direct Jev dispatch attempts
+in processing, live-moment and smart-merge conversation scopes regardless
 of the revision-reuse flag. Content-free `repeat_work` log joins identify each
 conversation using an account-scoped hash. `omi_episode_survivor_refreshes_total`
 counts actual refresh processing attempts by assigned/unassigned membership;

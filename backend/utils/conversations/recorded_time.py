@@ -145,3 +145,8 @@ def recorded_end(row: Mapping[str, Any]) -> datetime | None:
     from utils.conversations.lifecycle_clocks import utc
 
     return utc(row.get('last_speech_at')) or utc(row.get('finished_at'))
+
+
+def at_offset(base: datetime | None, offset: float) -> datetime | None:
+    """Project an offset from a supplied recording origin, never from arrival."""
+    return base + timedelta(seconds=max(0.0, offset)) if base else None

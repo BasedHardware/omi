@@ -95,6 +95,7 @@ from utils.conversations.smart_merge_policy import (
 from utils.conversations.smart_merge_state import QUESTION_NAME, QUESTIONS, build_state, state_sha256
 from utils.executors import lifecycle_executor, run_blocking
 from utils.llm.jev_client import ask_jev
+from utils.sync.repeat_work_metrics import conversation_scope
 from utils.metrics_smart_merge import record_merge_processing_stage
 from utils.metrics import (
     record_conversation_smart_merge,
@@ -148,6 +149,7 @@ async def smart_merge_step(
     )
 
 
+@conversation_scope
 def decide_and_apply(
     uid: str,
     conversation_id: str,
