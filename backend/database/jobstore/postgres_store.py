@@ -179,20 +179,24 @@ class PostgresStore:
             raise ValueError('only recoverable states may be scanned')
         field = _DUE_FIELDS[state]  # a fixed column name, never caller text
         with self._read_conn() as conn:
-            rows = conn.execute(
-                f'SELECT key FROM jobs WHERE namespace = %s AND state = %s AND {field} <= %s '
-                f'ORDER BY {field}, key LIMIT %s',
-                (self.namespace, state, now, max(1, min(limit, 100))),
-            ).fetchall()
+            from psycopg.sql import SQL, Identifier  # pyright: ignore[reportMissingImports]
+
+            query = SQL(
+                'SELECT key FROM jobs WHERE namespace = %s AND state = %s AND {} <= %s '
+                'ORDER BY {}, key LIMIT %s'
+            ).format(Identifier(field), Identifier(field))
+            rows = conn.execute(query, (self.namespace, state, now, max(1, min(limit, 100)))).fetchall()
         return [row[0] for row in rows]
 
     def oldest(self, priority: int, *, ready_only: bool = False) -> float | None:
         predicate = "state = 'ready'" if ready_only else 'merge_pending'
         with self._read_conn() as conn:
-            row = conn.execute(
-                f'SELECT min(enqueued_at) FROM jobs WHERE namespace = %s AND priority = %s AND {predicate}',
-                (self.namespace, priority),
-            ).fetchone()
+            from psycopg.sql import SQL  # pyright: ignore[reportMissingImports]
+
+            query = SQL('SELECT min(enqueued_at) FROM jobs WHERE namespace = %s AND priority = %s AND {}').format(
+                SQL(predicate)
+            )
+            row = conn.execute(query, (self.namespace, priority)).fetchone()
         return row[0]
 
     def oldest_retry(self, priority: int) -> float | None:
@@ -218,11 +222,20 @@ class PostgresStore:
             raise ValueError('bounded priority and pool required')
         p, at = f'p{priority}', f'p{priority}_{pool}_at'
         with self._read_conn() as conn:
-            rows = conn.execute(
-                f'SELECT key, {p}_service FROM control WHERE namespace = %s AND {p}_active AND {p}_service >= 0 '
-                f'AND {at} <= %s ORDER BY {p}_service, {at}, key LIMIT %s',
-                (self.namespace, now, 64 if worker_id else 1),
-            ).fetchall()
+            from psycopg.sql import SQL, Identifier  # pyright: ignore[reportMissingImports]
+
+            query = SQL(
+                'SELECT key, {} FROM control WHERE namespace = %s AND {} AND {} >= 0 '
+                'AND {} <= %s ORDER BY {}, {}, key LIMIT %s'
+            ).format(
+                Identifier(f'{p}_service'),
+                Identifier(f'{p}_active'),
+                Identifier(f'{p}_service'),
+                Identifier(at),
+                Identifier(f'{p}_service'),
+                Identifier(at),
+            )
+            rows = conn.execute(query, (self.namespace, now, 64 if worker_id else 1)).fetchall()
         if worker_id:
             rows = [row for row in rows if row[0] not in exclude]
             rows.sort(key=lambda row: (row[1], hashlib.sha256(f'{worker_id}:{row[0]}'.encode()).digest()))
@@ -289,7 +302,10 @@ class PostgresStore:
 
     def read_doc(self, conn: Any, table: str, key: str) -> dict:
         if table in _TYPED:
-            row = conn.execute(f'SELECT doc FROM {table} WHERE namespace = %s AND key = %s', (self.namespace, key))
+            from psycopg.sql import SQL, Identifier  # pyright: ignore[reportMissingImports]
+
+            query = SQL('SELECT doc FROM {} WHERE namespace = %s AND key = %s').format(Identifier(table))
+            row = conn.execute(query, (self.namespace, key))
         else:
             row = conn.execute(
                 'SELECT doc FROM docs WHERE namespace = %s AND tbl = %s AND key = %s', (self.namespace, table, key)
@@ -299,11 +315,13 @@ class PostgresStore:
 
     def write_doc(self, conn: Any, table: str, key: str, value: dict) -> None:
         if table in _TYPED:
-            conn.execute(
-                f'INSERT INTO {table} (namespace, key, doc) VALUES (%s, %s, %s) '
-                'ON CONFLICT (namespace, key) DO UPDATE SET doc = EXCLUDED.doc',
-                (self.namespace, key, jsonb(value)),
-            )
+            from psycopg.sql import SQL, Identifier  # pyright: ignore[reportMissingImports]
+
+            query = SQL(
+                'INSERT INTO {} (namespace, key, doc) VALUES (%s, %s, %s) '
+                'ON CONFLICT (namespace, key) DO UPDATE SET doc = EXCLUDED.doc'
+            ).format(Identifier(table))
+            conn.execute(query, (self.namespace, key, jsonb(value)))
         else:
             conn.execute(
                 'INSERT INTO docs (namespace, tbl, key, doc) VALUES (%s, %s, %s, %s) '
@@ -313,7 +331,10 @@ class PostgresStore:
 
     def delete_doc(self, conn: Any, table: str, key: str) -> None:
         if table in _TYPED:
-            conn.execute(f'DELETE FROM {table} WHERE namespace = %s AND key = %s', (self.namespace, key))
+            from psycopg.sql import SQL, Identifier  # pyright: ignore[reportMissingImports]
+
+            query = SQL('DELETE FROM {} WHERE namespace = %s AND key = %s').format(Identifier(table))
+            conn.execute(query, (self.namespace, key))
         else:
             conn.execute(
                 'DELETE FROM docs WHERE namespace = %s AND tbl = %s AND key = %s', (self.namespace, table, key)
@@ -322,9 +343,10 @@ class PostgresStore:
     def service_frontier_in(self, conn: Any, priority: int) -> float:
         if priority not in (0, 1, 2):
             raise ValueError('bounded priority required')
-        row = conn.execute(
-            f'SELECT max(p{priority}_service) FROM control WHERE namespace = %s', (self.namespace,)
-        ).fetchone()
+        from psycopg.sql import SQL, Identifier  # pyright: ignore[reportMissingImports]
+
+        query = SQL('SELECT max({}) FROM control WHERE namespace = %s').format(Identifier(f'p{priority}_service'))
+        row = conn.execute(query, (self.namespace,)).fetchone()
         return row[0] if row[0] is not None else 0.0
 
     def check_privacy_for(self, uid: str, conversation_ids, expected_generation: int | None) -> int:
@@ -343,5 +365,8 @@ class PostgresStore:
         if not self.namespace.startswith('batch_pipeline_test_'):
             raise RuntimeError('only test namespaces may be purged')
         with self._read_conn() as conn:
+            from psycopg.sql import SQL, Identifier  # pyright: ignore[reportMissingImports]
+
             for table in ('jobs', 'results', 'control', 'docs', 'outbox'):
-                conn.execute(f'DELETE FROM {table} WHERE namespace = %s', (self.namespace,))
+                query = SQL('DELETE FROM {} WHERE namespace = %s').format(Identifier(table))
+                conn.execute(query, (self.namespace,))
