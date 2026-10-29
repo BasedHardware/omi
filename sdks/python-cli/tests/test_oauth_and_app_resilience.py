@@ -46,6 +46,7 @@ TRANSPORT_ERRORS = [
     httpx.TimeoutException("timed out"),
     httpx.ReadTimeout("read timed out"),
     httpx.RemoteProtocolError("server disconnected"),
+    httpx.HTTPError("generic httpx error"),
 ]
 
 # 200 bodies that decode to JSON but are not an object.
