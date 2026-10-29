@@ -25,9 +25,7 @@ from datetime import datetime, timezone
 from typing import Any, Mapping
 
 from config.capture_shared_speech import shared_speech_mode
-from config.refactor_modes import serving_for
 from utils.capture.coverage_crossdevice import reconcile as reconcile_cross_device
-from utils.conversations.lifecycle_clocks import speech_clock, utc
 from database import capture_groups as capture_groups_db
 from database import conversations as conversations_db
 from database.capture_speech import get_shared_speech_snapshot

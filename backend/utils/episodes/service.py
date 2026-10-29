@@ -1,4 +1,4 @@
-"""Episode orchestration: moments in, compact state out, conversations untouched.
+"""Episode orchestration: moments in, compact state and atomic membership out.
 
 Entry points (all synchronous, fail-open, run on a worker thread by callers):
 
@@ -33,7 +33,6 @@ Entry points (all synchronous, fail-open, run on a worker thread by callers):
 - ``live_episode`` / ``episode_for_conversation``: reads for the API, which
   close an idle live episode lazily.
 
-Nothing here writes a conversation, an action item or a memory.
 """
 
 from __future__ import annotations
@@ -48,7 +47,8 @@ from typing import Any, Callable, Mapping, Optional, Sequence
 from uuid import uuid4
 from config.recorded_time import recorded_episodes_enabled, live_timer_start_enabled
 from utils.conversations.recorded_time import conversation_span, is_late
-from utils.episodes.timeline import episode_owning_recorded_time, choose_recorded_episode, episode_at, episodes_between
+from utils.episodes.timeline import episode_owning_recorded_time, choose_recorded_episode
+from utils.episodes.timeline import episode_at as episode_at, episodes_between as episodes_between
 from database import episode_timeline
 
 from config.episodes import (
