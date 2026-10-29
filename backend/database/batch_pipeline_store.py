@@ -21,7 +21,7 @@ from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPri
 from database.batch_pipeline_recovery import quarantine_fenced
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.batch_pipeline_transaction_labels import (
-    _pull_operation as _pull_operation,
+    current_operation,
     pull_operation as pull_operation,
 )
 from utils.sync.stage import collection_name
@@ -204,7 +204,7 @@ class FirestoreStore:
         return run_with_transaction_contention_retry(
             lambda: client.transaction(max_attempts=1),
             commit,
-            operation_name=_pull_operation.get(),
+            operation_name=current_operation(),
         )
 
     def due(self, state: str, now: float, limit: int = 100) -> list[str]:

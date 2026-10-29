@@ -23,6 +23,10 @@ SHADOW_STORE_OPERATIONS = frozenset(
 )
 
 
+def current_operation() -> str:
+    return _pull_operation.get()
+
+
 @contextmanager
 def shadow_operation(operation: str):
     if operation not in SHADOW_STORE_OPERATIONS:
