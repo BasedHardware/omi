@@ -839,3 +839,180 @@ def test_legacy_commit_override_only_tombstone_is_fenced():
         )
 
     assert f"users/{uid}/memory_historical_overrides/m1" in database.gets
+
+
+def test_fold_commits_orders_mixed_naive_aware_iso_and_epoch_commit_times():
+    c_missing = {
+        "commit_id": "c0",
+        "commit_time": None,
+        "mutations": [memory_ledger.add_fact(_fact("m1", "Lives in Boston"))],
+    }
+    c_naive = {
+        "commit_id": "c1",
+        "commit_time": datetime(2026, 6, 1, 12, 0, 0),
+        "mutations": [memory_ledger.refine_fact("m1", {"content": {"to": "Lives in NYC"}})],
+    }
+    c_iso = {
+        "commit_id": "c2",
+        "commit_time": "2026-06-02T12:00:00Z",
+        "mutations": [memory_ledger.refine_fact("m1", {"content": {"to": "Lives in Austin"}})],
+    }
+    c_epoch = {
+        "commit_id": "c3",
+        "commit_time": datetime(2026, 6, 3, 12, 0, 0, tzinfo=timezone.utc).timestamp(),
+        "mutations": [memory_ledger.refine_fact("m1", {"content": {"to": "Lives in SF"}})],
+    }
+    c_aware = {
+        "commit_id": "c4",
+        "commit_time": datetime(2026, 6, 4, 12, 0, 0, tzinfo=timezone.utc),
+        "mutations": [memory_ledger.refine_fact("m1", {"content": {"to": "Lives in Seattle"}})],
+    }
+
+    head = memory_ledger.fold_commits([c_aware, c_iso, c_missing, c_epoch, c_naive])
+
+    assert head["m1"]["content"] == "Lives in Seattle"
+
+
+def test_fold_commits_valid_time_enforces_iso_string_and_date_qualifiers():
+    fact = _fact("m1", "Lives in NYC", valid_from="2026-06-01", valid_to="2026-07-01T00:00:00Z")
+    commit = memory_ledger.build_commit(
+        None,
+        [memory_ledger.add_fact(fact)],
+        commit_time=datetime(2026, 6, 1, tzinfo=timezone.utc),
+    )
+
+    assert "m1" not in memory_ledger.fold_commits([commit], valid_time=datetime(2026, 5, 31, tzinfo=timezone.utc))
+    assert "m1" in memory_ledger.fold_commits([commit], valid_time=datetime(2026, 6, 15, tzinfo=timezone.utc))
+    assert "m1" not in memory_ledger.fold_commits([commit], valid_time=datetime(2026, 7, 2, tzinfo=timezone.utc))
+
+
+def test_fold_commits_valid_time_compares_naive_and_aware_bounds_without_type_error():
+    fact = _fact(
+        "m1",
+        "Lives in NYC",
+        valid_from=datetime(2026, 6, 1, 0, 0, 0),
+        valid_to=datetime(2026, 6, 30, 0, 0, 0),
+    )
+    commit = memory_ledger.build_commit(
+        None,
+        [memory_ledger.add_fact(fact)],
+        commit_time=datetime(2026, 6, 1, tzinfo=timezone.utc),
+    )
+
+    assert "m1" in memory_ledger.fold_commits([commit], valid_time=datetime(2026, 6, 15, tzinfo=timezone.utc))
+    assert "m1" in memory_ledger.fold_commits([commit], valid_time=datetime(2026, 6, 15, 0, 0, 0))
+    assert "m1" not in memory_ledger.fold_commits([commit], valid_time=datetime(2026, 5, 15, 0, 0, 0))
+
+
+def test_fold_commits_valid_time_ignores_malformed_qualifiers_and_bounds():
+    fact = _fact("m1", "Lives in NYC")
+    fact["qualifiers"] = "not-a-dict"
+    fact["valid_at"] = "not-a-timestamp"
+    commit = memory_ledger.build_commit(
+        None,
+        [memory_ledger.add_fact(fact)],
+        commit_time=datetime(2026, 6, 1, tzinfo=timezone.utc),
+    )
+
+    assert "m1" in memory_ledger.fold_commits([commit], valid_time=datetime(2026, 6, 15, tzinfo=timezone.utc))
+
+
+def test_replay_to_filters_mixed_commit_times_and_skips_missing_timestamps(monkeypatch):
+    docs = [
+        _LedgerSnapshot(
+            {
+                "commit_id": "c1",
+                "commit_time": datetime(2026, 6, 1, 0, 0, 0),
+                "mutations": [memory_ledger.add_fact(_fact("m1", "Lives in NYC"))],
+            }
+        ),
+        _LedgerSnapshot(
+            {
+                "commit_id": "c2",
+                "commit_time": "2026-06-02T00:00:00Z",
+                "mutations": [memory_ledger.add_fact(_fact("m2", "Lives in SF"))],
+            }
+        ),
+        _LedgerSnapshot(
+            {
+                "commit_id": "c3",
+                "commit_time": None,
+                "mutations": [memory_ledger.add_fact(_fact("m3", "Corrupt commit"))],
+            }
+        ),
+        _LedgerSnapshot(
+            {
+                "commit_id": "c4",
+                "commit_time": datetime(2026, 6, 5, 0, 0, 0, tzinfo=timezone.utc),
+                "mutations": [memory_ledger.add_fact(_fact("m4", "Future commit"))],
+            }
+        ),
+    ]
+    fake_db = MagicMock()
+    (
+        fake_db.collection.return_value.document.return_value.collection.return_value.order_by.return_value.stream.return_value
+    ) = docs
+    monkeypatch.setattr(memory_ledger, "db", fake_db)
+
+    replayed = memory_ledger.replay_to(
+        "uid-1",
+        commit_time=datetime(2026, 6, 3, 0, 0, 0, tzinfo=timezone.utc),
+    )
+
+    assert set(replayed.keys()) == {"m1", "m2"}
+
+
+def test_replay_to_accepts_naive_commit_time_cutoff(monkeypatch):
+    docs = [
+        _LedgerSnapshot(
+            {
+                "commit_id": "c1",
+                "commit_time": datetime(2026, 6, 1, 0, 0, 0, tzinfo=timezone.utc),
+                "mutations": [memory_ledger.add_fact(_fact("m1", "Lives in NYC"))],
+            }
+        ),
+        _LedgerSnapshot(
+            {
+                "commit_id": "c2",
+                "commit_time": datetime(2026, 6, 4, 0, 0, 0, tzinfo=timezone.utc),
+                "mutations": [memory_ledger.add_fact(_fact("m2", "Lives in SF"))],
+            }
+        ),
+    ]
+    fake_db = MagicMock()
+    (
+        fake_db.collection.return_value.document.return_value.collection.return_value.order_by.return_value.stream.return_value
+    ) = docs
+    monkeypatch.setattr(memory_ledger, "db", fake_db)
+
+    replayed = memory_ledger.replay_to("uid-1", commit_time=datetime(2026, 6, 2, 0, 0, 0))
+
+    assert set(replayed.keys()) == {"m1"}
+
+
+def test_coerce_utc_datetime_rejects_booleans_and_invalid_strings():
+    assert memory_ledger._coerce_utc_datetime(True) is None
+    assert memory_ledger._coerce_utc_datetime(False) is None
+    assert memory_ledger._coerce_utc_datetime("") is None
+    assert memory_ledger._coerce_utc_datetime("   ") is None
+    assert memory_ledger._coerce_utc_datetime("not-a-date") is None
+
+
+def test_supersede_and_normalize_handle_none_qualifiers_without_error():
+    fact = _fact("m1", "Lives in NYC")
+    fact["qualifiers"] = None
+    fact["valid_at"] = "2026-06-01T00:00:00Z"
+    first = memory_ledger.build_commit(
+        None,
+        [memory_ledger.add_fact(fact)],
+        commit_time=datetime(2026, 6, 1, tzinfo=timezone.utc),
+    )
+    first["mutations"][0]["fact"]["qualifiers"] = None
+    second = memory_ledger.build_commit(
+        first["commit_id"],
+        [memory_ledger.supersede_fact("m1", by="m2", kind="contradict")],
+        commit_time=datetime(2026, 6, 2, tzinfo=timezone.utc),
+    )
+
+    assert "m1" in memory_ledger.fold_commits([first, second], valid_time=datetime(2026, 6, 1, 12, tzinfo=timezone.utc))
+    assert "m1" not in memory_ledger.fold_commits([first, second], valid_time=datetime(2026, 6, 3, tzinfo=timezone.utc))
