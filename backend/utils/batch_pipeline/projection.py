@@ -8,6 +8,7 @@ from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_
 from config.policy import ProjectionPolicy
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
+from cryptography.exceptions import InvalidTag
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import threading
@@ -166,6 +167,26 @@ def quarantines_assignment_conflict(error: BaseException, job: dict | None) -> b
         error.subtype,
         'backfill' if (job or {}).get('fresh_capture') is False else 'fresh',
     )
+
+
+def payload_contract_violation(error: BaseException) -> bool:
+    """Whether retrying the same committed bytes cannot fix this error.
+
+    Every other ValueError on the assignment path is a contract violation of
+    the committed result or manifest (spans, split, word bounding, source
+    decode). A tampered or wrongly-keyed artifact body fails authenticated
+    decryption as ``InvalidTag`` — equally permanent. Firestore commit
+    contention also surfaces as ``ValueError`` and must stay retryable;
+    ``error_type`` names that shape ``FirestoreContentionExhausted``.
+    """
+    if isinstance(error, InvalidTag):
+        return True
+    return isinstance(error, ValueError) and error_type(error) != 'FirestoreContentionExhausted'
+
+
+# The contract catch shape: both classes can carry a permanent payload
+# violation; payload_contract_violation decides which instances disposition.
+PAYLOAD_CONTRACT_ERRORS = (ValueError, InvalidTag)
 
 
 @contextmanager
@@ -785,36 +806,50 @@ class Projector:
         from utils.batch_pipeline.context import ResolvedContext, resolve_context, require_repair_manifest
         from utils.batch_pipeline.projection_parts import split_result
 
-        with projection_phase('load_result', policy):
-            payload = self._payload(item, entry, hint)
-        if payload.get('recovery_version') == 1 and entry.get('recovery_version') != 1:
-            raise ProjectionBlocked('recovery result requires recovery handoff')
-        speech = payload.get('speech_seconds')
-        if (
-            not isinstance(speech, (int, float))
-            or isinstance(speech, bool)
-            or not math.isfinite(speech)
-            or not 0 < speech <= float(payload['audio_seconds'])
-        ):
-            raise ProjectionBlocked('validated VAD speech accounting required')
-        if binding.record_origin:
-            projection_speech_spans(payload, item.duration_seconds)
-        parts = [(item, payload)] if binding.record_origin else split_result(item, payload)
-        from utils.capture.batch_coverage import optional_manifest
+        try:
+            with projection_phase('load_result', policy):
+                payload = self._payload(item, entry, hint)
+            if not isinstance(payload, dict):
+                # load_result is json.loads over the committed artifact: a
+                # valid non-object body must take the contract disposition,
+                # not an AttributeError that wedges the chain head.
+                raise ValueError('batch result must be a JSON object')
+            if payload.get('recovery_version') == 1 and entry.get('recovery_version') != 1:
+                raise ProjectionBlocked('recovery result requires recovery handoff')
+            speech = payload.get('speech_seconds')
+            if (
+                not isinstance(speech, (int, float))
+                or isinstance(speech, bool)
+                or not math.isfinite(speech)
+                or not 0 < speech <= float(payload['audio_seconds'])
+            ):
+                raise ProjectionBlocked('validated VAD speech accounting required')
+            if binding.record_origin:
+                projection_speech_spans(payload, item.duration_seconds)
+            parts = [(item, payload)] if binding.record_origin else split_result(item, payload)
+            from utils.capture.batch_coverage import optional_manifest
 
-        manifest = None if item.requires_compute_admission else optional_manifest(self, item, hint)
-        if item.requires_compute_admission:
-            if self.fetch_audio is None:
-                raise ProjectionBlocked('authenticated intake manifest loader required')
-            from utils.batch_pipeline.audio import read_context
+            manifest = None if item.requires_compute_admission else optional_manifest(self, item, hint)
+            if item.requires_compute_admission:
+                if self.fetch_audio is None:
+                    raise ProjectionBlocked('authenticated intake manifest loader required')
+                from utils.batch_pipeline.audio import read_context
 
-            with projection_phase('manifest', policy):
-                prefetched = hint.prefetched if hint is not None else None
-                if prefetched is not None and prefetched.manifest is not None:
-                    manifest = prefetched.manifest
-                else:
-                    manifest = read_context(self.fetch_audio(item))
-        require_repair_manifest(item, binding, manifest, self.require_lineage_fence)
+                with projection_phase('manifest', policy):
+                    prefetched = hint.prefetched if hint is not None else None
+                    if prefetched is not None and prefetched.manifest is not None:
+                        manifest = prefetched.manifest
+                    else:
+                        manifest = read_context(self.fetch_audio(item))
+            require_repair_manifest(item, binding, manifest, self.require_lineage_fence)
+        except PAYLOAD_CONTRACT_ERRORS as error:
+            if not payload_contract_violation(error):
+                raise
+            # The committed result/manifest itself violates the contract: no
+            # retry can fix those bytes, and an unhandled raise would wedge
+            # every later capture behind this chain head.
+            self._quarantine_payload_contract(item, binding, policy, error)
+            return
         receipts = entry.get('projection_parts') or {}
         for index, (part, part_payload) in enumerate(parts):
             if index and hint is not None and hint.deadline is not None and time.monotonic() >= hint.deadline:
@@ -942,6 +977,10 @@ class Projector:
                         )
                     raise
                 receipt = persist_disposition(session, privacy_deleted=True)
+            except PAYLOAD_CONTRACT_ERRORS as error:
+                if not payload_contract_violation(error):
+                    raise
+                receipt = self._quarantine_payload_contract(item, binding, policy, error, session=session)
             except Exception as error:
                 if policy.projection_contention:
                     logger.error(
@@ -952,6 +991,21 @@ class Projector:
                 raise
             if finish:
                 self.finish_part(item, binding, receipt, index, policy=policy)
+
+    def _quarantine_payload_contract(self, item, binding, policy, error, *, session=None):
+        """Hold a committed payload that can never validate: the walk retries a
+        chain head forever, so an unhandled contract ``ValueError`` wedges every
+        later capture behind it. Same held disposition as a structural
+        assignment conflict: quarantine receipt, watermark advance, recovery
+        owns the unit, audio retained."""
+        session = session or self.store.session(item.segment_id, binding, self.clock(), policy=policy)
+        receipt = persist_disposition(session, quarantined=True)
+        logger.warning(
+            'event=batch_projection action=assignment outcome=payload_contract_quarantined exception_type=%s%s',
+            error_type(error),
+            error_site_field(error),
+        )
+        return receipt
 
     def supersede(self, session):
         return persist_disposition(session)
