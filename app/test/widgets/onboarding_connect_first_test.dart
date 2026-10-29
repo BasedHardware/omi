@@ -1,21 +1,33 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/app_globals.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/pages/capture/connect.dart';
+import 'package:omi/pages/home/page.dart';
+import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
 import 'package:omi/providers/auth_provider.dart';
+import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/onboarding_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
+import 'package:omi/services/account_cutover/account_cutover_control.dart';
+import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/services/devices/bluetooth_readiness.dart';
 import 'package:omi/services/experiments/onboarding_variant_gate.dart';
 import 'package:omi/services/experiments/paywall_experiment.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/widgets/bluetooth_guidance_listener.dart';
+
+import '../../integration_test/visual_audit/fakes.dart' show AuditDeviceProvider;
 
 // The `connect_first` arm of `onboarding-variant`: Connect your Omi right after sign-up (no Back),
 // then control's steps; an Omi paired there skips the phone voice intro. Readers the flag does not
@@ -57,12 +69,90 @@ final class _SignedIn implements AuthTokenGateway {
   Future<void> signOut() async {}
 }
 
-Future<void> _saveOmi() => SharedPreferencesUtil().btDeviceSet(
-      BtDevice(id: 'OMI-1', name: 'Omi', type: DeviceType.omi, rssi: -50),
-    );
+class _Usage extends UsageProvider {
+  @override
+  Future<void> fetchSubscription() async {}
+}
 
-/// A signed-in reader on the Data & Privacy step whose flag read answers [variant].
-Future<void> _pumpAtConsent(WidgetTester tester, String? variant) async {
+/// The device-connection service faked at its I/O edge: the scan, the OS Bluetooth permission and
+/// the connect result. Everything above it is real: the Connect step, the Connect page and its
+/// device list, the Bluetooth recovery prompt, and the wrapper's hand-off.
+class _FakePairing extends OnboardingProvider {
+  _FakePairing(this.readiness);
+
+  final BluetoothReadiness readiness;
+  bool bluetoothAllowed = true;
+  int scans = 0;
+  static final omi = BtDevice(id: 'OMI-TEST-1', name: 'Omi', type: DeviceType.omi, rssi: -40);
+
+  @override
+  Future<void> scanDevices({required VoidCallback onShowDialog, VoidCallback? onShowLocationDialog}) async {
+    scans++;
+    if (!bluetoothAllowed) {
+      // As a real scan does when the OS denies Bluetooth: the one recovery prompt, then the
+      // "No Omi found" help with Scan Again.
+      await readiness.ensureReady(BluetoothUse.discovery);
+      enableInstructions = true;
+      notifyListeners();
+      return;
+    }
+    deviceList = [omi];
+    notifyListeners();
+  }
+
+  @override
+  Future<void> handleTap({required BtDevice device, required bool isFromOnboarding, VoidCallback? goNext}) async {
+    // What a real connect leaves before it calls back: the Omi saved for the account, connected.
+    await SharedPreferencesUtil().btDeviceSet(device);
+    deviceId = device.id;
+    deviceName = device.name;
+    deviceType = device.type;
+    isConnected = true;
+    deviceList = [];
+    notifyListeners();
+    goNext?.call();
+  }
+
+  @override
+  void cancelActiveScan() {}
+}
+
+/// One app run: providers, the pairing service and Bluetooth readiness as the app wires them.
+class _Lane {
+  bool bluetoothPermission = true;
+  late final readiness = BluetoothReadiness(
+    readState: () async => 'on',
+    permissionState: (_) async => bluetoothPermission ? null : BluetoothAdapterState.unauthorized,
+    observeBridge: false,
+  );
+  late final pairing = _FakePairing(readiness);
+}
+
+/// The OS permission plugin: everything granted, Settings recorded.
+void _mockPermissions({void Function()? onOpenSettings}) {
+  const channel = MethodChannel('flutter.baseflow.com/permissions/methods');
+  final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+  messenger.setMockMethodCallHandler(channel, (call) async {
+    switch (call.method) {
+      case 'checkPermissionStatus':
+      case 'checkServiceStatus':
+        return 1;
+      case 'requestPermissions':
+        return {for (final permission in call.arguments as List) permission: 1};
+      case 'shouldShowRequestPermissionRationale':
+        return false;
+      case 'openAppSettings':
+        onOpenSettings?.call();
+        return true;
+    }
+    return null;
+  });
+  addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+}
+
+/// A signed-in reader opening the app: the wrapper as the app mounts it, with the flag read
+/// answering [variant].
+Future<void> _pumpWrapper(WidgetTester tester, String? variant, _Lane lane) async {
   OnboardingVariantGate.warm(
     settledIdentity: () => 'u1',
     reload: () async => true,
@@ -74,23 +164,45 @@ Future<void> _pumpAtConsent(WidgetTester tester, String? variant) async {
     providers: [
       ChangeNotifierProvider<HomeProvider>(create: (_) => _QuietHome()),
       ChangeNotifierProvider<AuthenticationProvider>(create: (_) => _QuietAuth()),
+      ChangeNotifierProvider<OnboardingProvider>.value(value: lane.pairing),
+      ChangeNotifierProvider<DeviceProvider>(create: (_) => AuditDeviceProvider()),
+      ChangeNotifierProvider<UsageProvider>(create: (_) => _Usage()),
     ],
     child: MaterialApp(
+      navigatorKey: globalNavigatorKey,
       theme: buildOmiTheme(brightness: Brightness.light),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
+      builder: (context, child) => BluetoothGuidanceListener(readiness: lane.readiness, child: child!),
       home: const OnboardingWrapper(),
     ),
   ));
-  await tester.pump();
-  await tester.pump(const Duration(milliseconds: 600));
+  await _settle(tester);
+}
+
+/// A signed-in reader on the Data & Privacy step whose flag read answers [variant].
+Future<void> _pumpAtConsent(WidgetTester tester, String? variant) async {
+  await _pumpWrapper(tester, variant, _Lane());
   expect(find.byKey(const Key('ai_consent_agree')), findsOneWidget);
 }
 
-Future<void> _agree(WidgetTester tester) async {
-  await tester.tap(find.byKey(const Key('ai_consent_agree')));
+Future<void> _settle(WidgetTester tester) async {
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 600));
+}
+
+/// Connect my Omi on the Connect step opens today's Connect page.
+Future<void> _openConnectPage(WidgetTester tester) async {
+  await tester.tap(find.byKey(const Key('first_capture_omi')));
+  await _settle(tester);
+  expect(find.byType(ConnectDevicePage), findsOneWidget);
+}
+
+Finder _omiRow() => find.ancestor(of: find.text('Omi'), matching: find.byType(InkWell)).first;
+
+Future<void> _agree(WidgetTester tester) async {
+  await tester.tap(find.byKey(const Key('ai_consent_agree')));
+  await _settle(tester);
 }
 
 OnboardingProgressDots _dots(WidgetTester tester) =>
@@ -200,20 +312,101 @@ void main() {
       expect(SharedPreferencesUtil().getInt('onboarding/resumeStep/u1', defaultValue: -1), -1);
     });
 
-    testWidgets('connect_first: a saved Omi (what a pairing writes) takes the voice intro out of the steps',
+    testWidgets('connect_first: Back from the Connect page returns to the choices; a retry pairs and moves on to Name',
         (tester) async {
-      await _pumpAtConsent(tester, 'connect_first');
+      final lane = _Lane();
+      await _pumpWrapper(tester, 'connect_first', lane);
       await _agree(tester);
-      // What a pairing leaves behind: the Omi saved for this account.
-      await _saveOmi();
-      expect(jsonDecode(SharedPreferencesUtil().getStringList('btDevices').single)['id'], 'OMI-1');
 
-      await tester.tap(find.byKey(const Key('onboarding_complete_start')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 600));
+      // Cancel: Back on the Connect page lands on the Connect step again, with its choices working.
+      await _openConnectPage(tester);
+      expect(_omiRow(), findsOneWidget);
+      await tester.tap(find.byType(OmiBackButton));
+      await _settle(tester);
+      expect(find.byType(ConnectDevicePage), findsNothing);
+      expect(find.byKey(const Key('first_capture_omi')), findsOneWidget);
+      expect(find.byKey(const Key('onboarding_name_continue')), findsNothing);
+      expect(find.byKey(const Key('onboarding_back')), findsNothing);
 
+      // Retry: the same button opens the page again; choosing the Omi pairs it and the wrapper moves on.
+      await _openConnectPage(tester);
+      await tester.tap(_omiRow());
+      await _settle(tester);
+      expect(find.byType(ConnectDevicePage), findsNothing);
+      expect(find.byKey(const Key('onboarding_name_continue')), findsOneWidget);
+      expect(find.byKey(const Key('onboarding_back')), findsNothing);
+      expect(_dots(tester).total, 4, reason: 'paired: the voice intro is no longer ahead');
+      expect(SharedPreferencesUtil().onboardingCompleted, isFalse, reason: 'pairing first does not finish onboarding');
+      expect(lane.pairing.scans, 2);
+    });
+
+    testWidgets('connect_first: denied Bluetooth shows the recovery prompt to Settings; Scan Again then pairs',
+        (tester) async {
+      var settingsOpened = 0;
+      _mockPermissions(onOpenSettings: () => settingsOpened++);
+      final lane = _Lane()..bluetoothPermission = false;
+      lane.pairing.bluetoothAllowed = false;
+      await _pumpWrapper(tester, 'connect_first', lane);
+      await _agree(tester);
+
+      await _openConnectPage(tester);
+      await _settle(tester);
+      expect(find.text('Permissions Required'), findsOneWidget);
+      await tester.tap(find.text('Open Settings'));
+      await _settle(tester);
+      expect(settingsOpened, 1);
+      expect(find.text('Permissions Required'), findsNothing);
+      expect(find.byKey(const Key('onboarding_name_continue')), findsNothing, reason: 'a denial never skips Connect');
+
+      // Back from Settings with Bluetooth allowed: the page's own Scan Again finds the Omi.
+      lane.bluetoothPermission = true;
+      lane.pairing.bluetoothAllowed = true;
+      await tester.tap(find.byKey(const Key('find_devices_scan_again')));
+      await _settle(tester);
+      await tester.tap(_omiRow());
+      await _settle(tester);
       expect(find.byKey(const Key('onboarding_name_continue')), findsOneWidget);
       expect(_dots(tester).total, 4);
+    });
+
+    testWidgets(
+        'connect_first: after pairing, relaunches resume on the arm\'s own step; Permissions opens Home with no '
+        'voice intro', (tester) async {
+      _mockPermissions();
+      await _pumpWrapper(tester, 'connect_first', _Lane());
+      await _agree(tester);
+      await _openConnectPage(tester);
+      await tester.tap(_omiRow());
+      await _settle(tester);
+      expect(find.byKey(const Key('onboarding_name_continue')), findsOneWidget);
+
+      // Relaunch on Name: back on Name, not Connect, still four steps.
+      await tester.pumpWidget(const SizedBox());
+      await _pumpWrapper(tester, 'connect_first', _Lane());
+      expect(find.byKey(const Key('onboarding_name_continue')), findsOneWidget);
+      expect(find.byKey(const Key('first_capture_omi')), findsNothing);
+      expect(_dots(tester).total, 4);
+
+      // Relaunch on Permissions (Name, language and how you found us answered): Continue finishes
+      // onboarding and opens Home; the voice intro never shows. Home's own cutover gate is held
+      // closed so the test stops at Home's door instead of booting Home's services.
+      AccountCutoverRuntime.instance.apply(AccountCutoverControl.unavailable(), authoritative: false);
+      addTearDown(AccountCutoverRuntime.instance.resetForTesting);
+      await tester.pumpWidget(const SizedBox());
+      SharedPreferencesUtil().saveInt('onboarding/connectFirst/resumeStep/u1', _Steps.permissions);
+      await _pumpWrapper(tester, 'connect_first', _Lane());
+      expect(find.byKey(const Key('onboarding_permissions_continue')), findsOneWidget);
+      expect(_dots(tester).current, 3);
+      expect(_dots(tester).total, 4);
+      await tester.tap(find.byKey(const Key('onboarding_permissions_continue')));
+      for (var i = 0; i < 20 && find.byType(HomePageWrapper).evaluate().isEmpty; i++) {
+        expect(find.byType(SpeechProfileWidget), findsNothing);
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.byType(HomePageWrapper), findsOneWidget);
+      expect(find.byType(SpeechProfileWidget), findsNothing);
+      expect(SharedPreferencesUtil().onboardingCompleted, isTrue);
+      await tester.pumpWidget(const SizedBox());
     });
 
     testWidgets('control (and an unread flag): Name first, no Connect step up front', (tester) async {
