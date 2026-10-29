@@ -60,9 +60,9 @@ def test_no_split_inside_a_signal_but_end_and_quiet_are_hard(store):
     row = {'started_at': NOW, 'finished_at': NOW + timedelta(minutes=10)}
     assert boundaries.conversation_decision(ACCOUNT, row, NOW + timedelta(minutes=11), firestore_client=store) == 'hold'
     assert (
-        boundaries.conversation_decision(ACCOUNT, row, NOW + timedelta(minutes=25), firestore_client=store) == 'close'
+        boundaries.conversation_decision(ACCOUNT, row, NOW + timedelta(minutes=40), firestore_client=store) == 'close'
     )
-    row['finished_at'] = NOW + timedelta(minutes=29)
+    row['finished_at'] = NOW + timedelta(minutes=30)
     assert (
         boundaries.conversation_decision(ACCOUNT, row, NOW + timedelta(minutes=30), firestore_client=store) == 'close'
     )
@@ -76,22 +76,22 @@ def test_episode_start_closes_previous_and_opens_meeting_without_model_call(stor
     monkeypatch.setattr(boundary_runtime.episodes_db, 'get_current_episode', lambda *a, **k: previous)
     monkeypatch.setattr(boundary_runtime.episodes_db, 'close_episode', lambda *a, **k: changes.append(('close', a[2])))
     monkeypatch.setattr(boundary_runtime.episodes_db, 'commit_moment', lambda *a, **k: changes.append(('open', k)))
-    assert boundary_runtime.apply_signal_edges(ACCOUNT, now=NOW, firestore_client=store) == 'opened'
+    assert boundary_runtime.apply_signal_edges(ACCOUNT, arrival_at=NOW, firestore_client=store) == 'opened'
     assert changes[0] == ('close', 'boundary')
     assert changes[1][1]['new_episode']['started_at'] == NOW
     monkeypatch.setenv('EPISODE_BOUNDARIES_MODE', 'shadow')
     changes.clear()
-    assert boundary_runtime.apply_signal_edges(ACCOUNT, now=NOW, firestore_client=store) == 'shadow'
+    assert boundary_runtime.apply_signal_edges(ACCOUNT, arrival_at=NOW, firestore_client=store) == 'shadow'
     assert changes == []
 
 
-def test_episode_policy_holds_even_if_legacy_would_split_inside_meeting(store):
+def test_episode_policy_preserves_hard_cap_inside_meeting(store):
     boundary_store.record(ACCOUNT, [signal()], firestore_client=store)
     facts = policy.MomentFacts('conversation-test', 'omi', NOW + timedelta(minutes=2), NOW + timedelta(minutes=3))
     chosen = boundary_runtime.decision(
         ACCOUNT, {'started_at': NOW}, facts, policy.Boundary('close', 'hard_cap'), firestore_client=store
     )
-    assert chosen.action == 'continue'
+    assert chosen.action == 'close' and chosen.reason == 'hard_cap'
 
 
 def test_calendar_and_screen_context_produce_signals():
@@ -124,13 +124,13 @@ def test_quiet_rule_ends_the_signal_so_later_ambient_capture_is_not_a_meeting(st
     boundary_store.record(ACCOUNT, [signal()], firestore_client=store)
     row = {'started_at': NOW, 'finished_at': NOW + timedelta(minutes=1)}
     assert (
-        boundaries.conversation_decision(ACCOUNT, row, NOW + timedelta(minutes=16), firestore_client=store) == 'close'
+        boundaries.conversation_decision(ACCOUNT, row, NOW + timedelta(minutes=31), firestore_client=store) == 'close'
     )
     known = boundary_store.windows(ACCOUNT, firestore_client=store)
-    assert boundaries.active(known, NOW + timedelta(minutes=17)) == []
-    later = {'started_at': NOW + timedelta(minutes=17), 'finished_at': NOW + timedelta(minutes=18)}
+    assert boundaries.active(known, NOW + timedelta(minutes=32)) == []
+    later = {'started_at': NOW + timedelta(minutes=32), 'finished_at': NOW + timedelta(minutes=33)}
     assert (
-        boundaries.conversation_decision(ACCOUNT, later, NOW + timedelta(minutes=19), firestore_client=store)
+        boundaries.conversation_decision(ACCOUNT, later, NOW + timedelta(minutes=34), firestore_client=store)
         == 'legacy'
     )
 

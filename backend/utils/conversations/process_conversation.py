@@ -2521,8 +2521,6 @@ def _enrich_meeting_context(uid: str, conversation: Any) -> Optional[CalendarMee
     return context
 
 
-@spelling_context_run
-@conversation_scope
 def _is_funded_budget_denial(error):
     return (
         isinstance(error, HTTPException)
@@ -2568,6 +2566,8 @@ def _preserve_capture_on_budget_denial(function):
 
 @_preserve_capture_on_budget_denial
 @funded_processing.scoped
+@spelling_context_run
+@conversation_scope
 def process_conversation(
     uid: str,
     language_code: str,
@@ -2605,6 +2605,8 @@ def process_conversation(
     ``DERIVED_EFFECTS_TRANSCRIPT_FIELD`` digest: the transcript the stored
     memories, tasks and goal progress were last derived from.
     """
+    generated_conversation_id = str(uuid.uuid4()) if _is_ingress_create(conversation) else None
+    bind_generation(uid, generated_conversation_id)
     silent_backfill = trigger is ProcessingTrigger.SILENT_BACKFILL
     backlog_authorized = trigger is ProcessingTrigger.BACKLOG_CHOICE
     mode = PROCESSING_MODES[trigger]
@@ -2802,8 +2804,6 @@ def process_conversation(
         people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
         people = Person.deserialize_many_safe(people_data)
 
-    generated_conversation_id = str(uuid.uuid4()) if _is_ingress_create(conversation) else None
-    bind_generation(uid, generated_conversation_id)
     decisions: list[RelevanceDecision] = []
     llm_hashes: dict[str, str] = {}
     # Filled only by a fresh notes parse that ran with open loops enabled; a

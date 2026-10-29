@@ -77,13 +77,30 @@ def capture_record(record: Any, uid: str | None = None) -> CaptureRecord | None:
 
     if field('discarded') or field('status') != 'completed':
         return None
-    normalize = uid is not None and serving_for('LIFECYCLE_V2_MODE', uid)
-    start = utc(field('started_at')) if normalize else field('started_at')
-    finish = (
-        speech_clock(uid, {'finished_at': field('finished_at'), 'last_speech_at': field('last_speech_at')})
-        if normalize and uid is not None
-        else field('finished_at')
+    from utils.conversations.recorded_time import conversation_span
+
+    row = (
+        dict(record)
+        if isinstance(record, Mapping)
+        else {
+            name: field(name)
+            for name in (
+                'started_at',
+                'finished_at',
+                'created_at',
+                'recorded_start',
+                'recorded_end',
+                'arrival_at',
+                'clock',
+                'last_speech_at',
+                'transcript_segments',
+                'status',
+                'source',
+            )
+        }
     )
+    span = conversation_span(row)
+    start, finish = (span.recorded_start, span.recorded_end) if span else (None, None)
     if not isinstance(start, datetime) or not isinstance(finish, datetime):
         return None
     start = start if start.tzinfo else start.replace(tzinfo=timezone.utc)

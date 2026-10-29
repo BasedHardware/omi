@@ -9125,6 +9125,18 @@
             "title": "Apps Results",
             "type": "array"
           },
+          "arrival_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Arrival At"
+          },
           "audio_files": {
             "default": [],
             "items": {
@@ -9245,6 +9257,16 @@
               }
             ]
           },
+          "clock": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordedClock"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "content_kind": {
             "anyOf": [
               {
@@ -9296,6 +9318,17 @@
             "default": false,
             "title": "Discarded",
             "type": "boolean"
+          },
+          "episode_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Id"
           },
           "external_data": {
             "anyOf": [
@@ -9498,6 +9531,30 @@
                 "type": "null"
               }
             ]
+          },
+          "recorded_end": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded End"
+          },
+          "recorded_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded Start"
           },
           "screenshot_sharing_enabled": {
             "default": true,
@@ -10456,6 +10513,18 @@
             "title": "Apps Results",
             "type": "array"
           },
+          "arrival_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Arrival At"
+          },
           "audio_files": {
             "default": [],
             "items": {
@@ -10576,6 +10645,16 @@
               }
             ]
           },
+          "clock": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordedClock"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "content_kind": {
             "anyOf": [
               {
@@ -10627,6 +10706,17 @@
             "default": false,
             "title": "Discarded",
             "type": "boolean"
+          },
+          "episode_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Id"
           },
           "external_data": {
             "anyOf": [
@@ -10837,6 +10927,30 @@
                 "type": "null"
               }
             ]
+          },
+          "recorded_end": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded End"
+          },
+          "recorded_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded Start"
           },
           "screenshot_sharing_enabled": {
             "default": true,
@@ -27429,6 +27543,18 @@
         },
         "title": "RecordLlmUsageBucketRequest",
         "type": "object"
+      },
+      "RecordedClock": {
+        "enum": [
+          "device",
+          "estimated_device",
+          "frame",
+          "live_capture",
+          "imported",
+          "legacy"
+        ],
+        "title": "RecordedClock",
+        "type": "string"
       },
       "RedeemCodeRequest": {
         "properties": {

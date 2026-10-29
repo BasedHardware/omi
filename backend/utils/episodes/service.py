@@ -47,8 +47,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Mapping, Optional, Sequence
 from uuid import uuid4
 from config.recorded_time import recorded_episodes_enabled, live_timer_start_enabled
-from utils.conversations.recorded_time import recorded_span, is_late
-from utils.episodes.timeline import episode_owning_recorded_time, choose_recorded_episode
+from utils.conversations.recorded_time import conversation_span, is_late
+from utils.episodes.timeline import episode_owning_recorded_time, choose_recorded_episode, episode_at, episodes_between
 from database import episode_timeline
 
 from config.episodes import (
@@ -1382,12 +1382,10 @@ def _attach_synced_once(uid: str, conversation_id: str, row: Mapping[str, Any], 
     """
     started = policy.utc(row.get('started_at')) or policy.utc(row.get('created_at'))
     if recorded_episodes_enabled() and started is not None:
-        segments = [s for s in row.get('transcript_segments') or [] if isinstance(s, Mapping)]
-        span = recorded_span(started, segments)
-        finished = span[1] if span else policy.utc(row.get('last_speech_at')) or policy.utc(row.get('finished_at'))
-        if finished is None or finished < started:
+        span = conversation_span(row)
+        if span is None:
             return 'no_episode'
-        _attach_recorded(uid, conversation_id, row, span[0] if span else started, finished, c)
+        _attach_recorded(uid, conversation_id, row, span.recorded_start, span.recorded_end, c)
         return 'recorded'
     if started is None:
         return 'no_episode'
@@ -1582,7 +1580,8 @@ def _on_finalized(
         episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
     if segments and not absorbed_from and trigger != SYNC_UPDATE:
         # Sync members use content receipts at attachment instead of this live cursor.
-        ended = policy.utc(row.get('finished_at')) or _wall(started, max(_segment_end(s) for s in segments))
+        span = conversation_span(row)
+        ended = span.recorded_end if span else _wall(started, max(_segment_end(s) for s in segments))
         tail = MomentInput(
             conversation_id=conversation_id,
             source=str(row.get('source') or '') or None,
@@ -1678,6 +1677,7 @@ def _repoint_absorbed(uid: str, episode: Mapping[str, Any], donor_id: str, survi
         str(episode['id']),
         expected_version=int(episode.get('state_version') or 0),
         updates={
+            **episode_timeline.repointed_members(episode, donor_id, survivor_id),
             'conversation_ids': list(dict.fromkeys(ids)),
             'recovered_conversation_ids': list(
                 dict.fromkeys(

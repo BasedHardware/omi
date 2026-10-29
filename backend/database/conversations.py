@@ -1,4 +1,5 @@
 from database import conversation_visibility_counts, processing_backlog, speaker_auto_enroll, capture_group_notes
+from database import conversation_recorded_time
 from utils.conversations import summary_delivery, lifecycle_clocks
 from utils.sync import processing_hold
 from config.refactor_modes import serving_for, shadow_or_serve
@@ -313,6 +314,7 @@ def _prepare_conversation_for_write(
 ) -> Dict[str, Any]:
     data = copy.deepcopy(data)
 
+    conversation_recorded_time.stamp_for_write(data)
     summary_delivery.prepare(data, uid)
     if owner_diagnostics.FIELD in data:
         try:
@@ -663,7 +665,10 @@ def prepare_conversation_for_read(
         from utils.agent_capabilities.transcripts import project
 
         return project(
-            uid, _decrypt_conversation_data(data, uid), firestore_client=firestore_client, read_budget=read_budget
+            uid,
+            conversation_recorded_time.hydrate(_decrypt_conversation_data(data, uid)),
+            firestore_client=firestore_client,
+            read_budget=read_budget,
         )
 
     # Handle standard level with potential compression
@@ -684,7 +689,9 @@ def prepare_conversation_for_read(
     _reveal_match_scores_for_read(data, uid)
     from utils.agent_capabilities.transcripts import project
 
-    return project(uid, data, firestore_client=firestore_client, read_budget=read_budget)
+    return project(
+        uid, conversation_recorded_time.hydrate(data), firestore_client=firestore_client, read_budget=read_budget
+    )
 
 
 def document_data_with_revision(document) -> Optional[Dict[str, Any]]:
@@ -1114,10 +1121,13 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
         write_data = copy.deepcopy(conversation_data)
         # Capture-group membership has one writer (database.capture_groups).
         write_data.pop(CAPTURE_GROUP_FIELD, None)
+        conversation_recorded_time.adopt_membership(transaction, user_ref, write_data)
         existing_snapshot = conversation_ref.get(transaction=transaction)
         if getattr(existing_snapshot, 'exists', False):
             existing = existing_snapshot.to_dict() or {}
             preserve_duplicate_hint(write_data, existing)
+            if existing.get('arrival_at'):
+                write_data['arrival_at'] = existing['arrival_at']
             if existing.get('record_lane_owner'):
                 write_data['record_lane_owner'] = existing['record_lane_owner']
             else:
@@ -1248,6 +1258,8 @@ def persist_processing_result_with_lifecycle(
             return False
 
         existing = existing_snapshot.to_dict() or {}
+        if existing.get('arrival_at'):
+            write_data['arrival_at'] = existing['arrival_at']
         if expected_capture_group is not None:
             expected_group_id, expected_group_revision = expected_capture_group
             current_group = existing.get(CAPTURE_GROUP_FIELD) or {}
@@ -1440,31 +1452,12 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
 
     summary_receipt = summary_delivery.creation_result(conversation_data, uid)
-    summary_changed = False
-    try:
-        if conversation_data.get('processing_deferred'):
-
-            @firestore.transactional
-            def create_waiting(transaction):
-                nonlocal summary_changed
-                summary_changed = False
-                if conversation_ref.get(transaction=transaction).exists:
-                    raise AlreadyExists('conversation exists')
-                summary_changed = processing_backlog.stage_transition(
-                    transaction, uid, conversation_data['id'], {}, conversation_data, firestore_client=db
-                )
-                transaction.create(conversation_ref, conversation_data)
-
-            run_transactional(db, create_waiting)
-            if summary_changed:
-                _drop_summary_memo(uid)
-        else:
-            conversation_ref.create(conversation_data)
-    except (AlreadyExists, Conflict):
-        # The conversation exists but may be new to the search index (writer
-        # lag, backfill gap); the read-back sync converges it either way.
+    created, summary_changed = conversation_recorded_time.create_if_absent(uid, conversation_data, firestore_client=db)
+    if not created:
         _sync_conversation_search_index(uid, conversation_data['id'])
         return False
+    if summary_changed:
+        _drop_summary_memo(uid)
     summary_delivery.emit(summary_receipt)
     invalidate_people_stats_cache(uid)
     _sync_conversation_search_index(uid, conversation_data['id'])
@@ -3758,6 +3751,9 @@ def update_conversation_segments(
             update_payload['started_at'] = started_at
         # With the marker already present, a stale started_at is ignored: the
         # origin was pinned with the marker and must not move.
+        from utils.conversations.recorded_time import write_span
+
+        update_payload.update(write_span({**current, **update_payload}, arrival_at=datetime.now(timezone.utc)))
         prepared_payload = _prepare_conversation_for_write(
             update_payload, uid, doc_level, preserve_transcript_identity=bool(current.get('has_transcript_corrections'))
         )
@@ -4299,6 +4295,9 @@ def assign_sync_conversation(
     call: it receives the canonical and its donor lineage, and the caller
     converges each conversation once later (``index_sync_assignment``).
     """
+    from utils.conversations.recorded_time import write_span
+
+    incoming = {**incoming, **write_span(incoming, arrival_at=datetime.now(timezone.utc))}
     from utils.sync.assignment import assign_in_transaction
     from config.sync_lineage import sync_lineage_resolve_enabled
     from utils.sync.intake_completion import log_assignment_observations

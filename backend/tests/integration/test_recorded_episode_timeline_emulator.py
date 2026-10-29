@@ -43,7 +43,8 @@ def test_simultaneous_late_devices_converge_on_one_closed_episode(store):
 
     with ThreadPoolExecutor(max_workers=4) as pool:
         rows = list(pool.map(attach, range(8)))
-    assert len({row['id'] for row in rows}) == 1
+    # Earlier concurrent prefixes can move a canonical start; returned IDs remain aliases.
+    assert len({episodes.get_episode(uid, row['id'], firestore_client=client)['id'] for row in rows}) == 1
     owner = episode_owning_recorded_time(uid, T0 + timedelta(seconds=35), firestore_client=client)
     assert owner['status'] == 'closed'
     assert len(owner['conversation_ids']) == 8
@@ -132,3 +133,60 @@ def test_long_capture_caps_and_only_fresh_live_resume_changes_navigation(store):
         )
         is None
     )  # A competing current owner cannot be replaced.
+
+
+def test_time_index_paginates_and_membership_is_atomic(store, monkeypatch):
+    from utils.episodes import service
+
+    client, uid = store
+    root = client.collection('users').document(uid)
+    for i in range(5):
+        start = T0 + timedelta(hours=i)
+        root.collection('conversations').document(f'c{i}').set({'id': f'c{i}'})
+        episode_timeline.attach_recorded(
+            uid,
+            f'c{i}',
+            'omi',
+            start,
+            start + timedelta(minutes=5),
+            choose=choose_recorded_episode,
+            new_episode={},
+            firestore_client=client,
+        )
+    monkeypatch.setattr(episode_timeline, 'PAGE_LIMIT', 2)
+    found = service.episodes_between(uid, T0, T0 + timedelta(hours=5), firestore_client=client)
+    assert len(found) == 5
+    for i, episode in enumerate(found):
+        assert (
+            service.episode_at(uid, T0 + timedelta(hours=i, minutes=1), firestore_client=client)['id'] == episode['id']
+        )
+        assert root.collection('conversations').document(f'c{i}').get().to_dict()['episode_id'] == episode['id']
+        assert root.collection('episode_links').document(f'c{i}').get().to_dict()['episode_id'] == episode['id']
+
+
+def test_reverse_prefixes_repartition_new_historical_caps_without_moving_live_navigation(store):
+    client, uid = store
+    root = client.collection('users').document(uid)
+    root.collection('episode_links').document('current').set({'episode_id': 'unrelated-live'})
+    for i in reversed(range(5)):
+        root.collection('conversations').document(f'prefix-{i}').set({'id': f'prefix-{i}'})
+        episode_timeline.attach_recorded(
+            uid,
+            f'prefix-{i}',
+            'omi',
+            T0 + timedelta(hours=i),
+            T0 + timedelta(hours=i + 1),
+            choose=choose_recorded_episode,
+            new_episode={},
+            firestore_client=client,
+        )
+    rows = episode_timeline.between(uid, T0, T0 + timedelta(hours=5), firestore_client=client)
+    assert [(row['started_at'], row['last_activity_at']) for row in rows] == [
+        (T0, T0 + timedelta(hours=4)),
+        (T0 + timedelta(hours=4), T0 + timedelta(hours=5)),
+    ]
+    assert root.collection('episode_links').document('current').get().to_dict() == {'episode_id': 'unrelated-live'}
+    for i in range(5):
+        assert (
+            root.collection('conversations').document(f'prefix-{i}').get().to_dict()['episode_id'] == rows[i // 4]['id']
+        )

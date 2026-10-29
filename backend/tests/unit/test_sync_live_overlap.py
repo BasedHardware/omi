@@ -245,7 +245,12 @@ def test_kill_switch_restores_old_assignment(monkeypatch):
 
 def test_maximum_overlap_wins_without_merging_live_identities():
     first = live_row()
-    longer = dict(live_row(), id='longer', finished_at=first['finished_at'] + timedelta(seconds=10))
+    longer = dict(
+        live_row(),
+        id='longer',
+        finished_at=first['finished_at'] + timedelta(seconds=10),
+        transcript_segments=[dict(first['transcript_segments'][0], end=19.5)],
+    )
     assert choose_live_overlap([first, longer], chunk('wal', 1005)) == 'longer'
 
 
@@ -302,7 +307,8 @@ def test_discovery_excludes_other_partitions_and_off_lifecycle_rows():
     assert not discoverable_live_overlap(dict(stub, deleted=True), chunk('wal', 1002))
     assert not discoverable_live_overlap(dict(stub, status='processing'), chunk('wal', 1002))
     assert not discoverable_live_overlap(dict(stub, client_device_id='other'), chunk('wal', 1002))
-    assert not discoverable_live_overlap(dict(stub, finished_at=stub['started_at']), chunk('wal', 1002))
+    # An obsolete processing end cannot erase placed recording evidence.
+    assert discoverable_live_overlap(dict(stub, finished_at=stub['started_at']), chunk('wal', 1002))
 
 
 @pytest.mark.parametrize('fleet,lineage', [('off', 'on'), ('on', 'on'), ('off', 'off')])

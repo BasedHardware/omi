@@ -6,8 +6,11 @@ from typing import Any, Mapping
 
 from config.server_batch import language_compatible, owned
 
-DEFAULT_GAP_SECONDS = 120
-MAX_CONVERSATION_TIMEOUT_SECONDS = 4 * 60 * 60
+from config.recorded_time_tolerances import (
+    CONTINUE_GAP_SECONDS as DEFAULT_GAP_SECONDS,
+    MAX_EPISODE_SECONDS as MAX_CONVERSATION_TIMEOUT_SECONDS,
+)
+
 MEETING_END_GRACE_SECONDS = 120
 
 

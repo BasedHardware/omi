@@ -1041,6 +1041,7 @@ _add(
         neutrals={'diagnostics': (None, 'caller-owned diagnostic sink; no filter, order or projection effect')},
     )
 )
+_add(DriverEntry('database.episode_timeline.between', base={'uid': UID, 'start': T0, 'end': T1}))
 _add(
     DriverEntry(
         'database.episode_timeline.recorded_candidates',

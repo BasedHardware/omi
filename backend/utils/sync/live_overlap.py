@@ -2,6 +2,8 @@
 
 import os
 
+from utils.conversations.recorded_time import conversation_span
+
 from config import refactor_modes
 from utils.capture.identity import compatible_keys, same_explicit_key
 from utils.capture.shadow import compare
@@ -32,11 +34,12 @@ def _strict_overlap_seconds(row: dict, incoming: dict, *, require_device: bool =
         or row.get('status') not in ('completed', 'in_progress')
     ):
         return 0
+    left, right = conversation_span(row), conversation_span(incoming)
+    if left is None or right is None:
+        return 0
     return max(
         0.0,
-        (
-            min(row['finished_at'], incoming['finished_at']) - max(row['started_at'], incoming['started_at'])
-        ).total_seconds(),
+        (min(left.recorded_end, right.recorded_end) - max(left.recorded_start, right.recorded_start)).total_seconds(),
     )
 
 
@@ -60,10 +63,21 @@ def discoverable_live_overlap(row: dict, incoming: dict) -> bool:
     contention retry the assignment once the listen writer adds content, instead
     of publishing a twin the transaction never saw conflict on.
     """
-    return _strict_overlap_seconds(row, incoming) > 0 or (
-        refactor_modes.shadow_or_serve('CAPTURE_COVERAGE_MODE')
-        and same_explicit_key(row, incoming)
-        and _strict_overlap_seconds(row, incoming, require_device=False) > 0
+    if (
+        not compatible_capture(row, incoming)
+        or row.get('deleted')
+        or row.get('sync_merged_into')
+        or row.get('status') not in ('completed', 'in_progress')
+    ):
+        return False
+    if _strict_overlap_seconds(row, incoming) > 0:
+        return True
+    # Legacy metadata can over-discover; only the decoded recorded-span check
+    # in choose_live_overlap authorizes membership. No wall-time ownership.
+    return (
+        row.get('started_at') is not None
+        and row.get('finished_at') is not None
+        and max(row['started_at'], incoming['started_at']) < min(row['finished_at'], incoming['finished_at'])
     )
 
 

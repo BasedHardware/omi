@@ -112,6 +112,18 @@ class StrictFirestoreDocument:
                 ["language"],
                 ['discarded', 'deleted', 'sync_merged_into'],
                 ['started_at', 'finished_at', 'discarded', 'deleted', 'sync_merged_into'],
+                [
+                    'started_at',
+                    'finished_at',
+                    'discarded',
+                    'deleted',
+                    'sync_merged_into',
+                    'recorded_start',
+                    'recorded_end',
+                    'last_speech_at',
+                    'status',
+                    'capture_evidence',
+                ],
                 ['manual_speaker_assignments', 'manual_speaker_assignments_compressed'],
                 [
                     'deleted',

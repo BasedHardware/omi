@@ -166,7 +166,10 @@ def speech_bounds(row: Mapping[str, Any], segments: Sequence[Mapping[str, Any]])
 
 
 def fragment_of(row: Mapping[str, Any]) -> Optional[Fragment]:
-    started, finished = row.get('started_at'), row.get('finished_at')
+    from utils.conversations.recorded_time import conversation_span
+
+    span = conversation_span(row)
+    started, finished = (span.recorded_start, span.recorded_end) if span else (None, None)
     if not isinstance(started, datetime) or not isinstance(finished, datetime) or not row.get('id'):
         return None
     stored = row.get('structured')
@@ -370,7 +373,11 @@ def _check_pair_legacy(
 ) -> PairCheck:
     survivor_speech = speech_bounds(survivor, survivor_segments)
     new_speech = speech_bounds(new, new_segments)
-    survivor_end, new_start = survivor.get('finished_at'), new.get('started_at')
+    from utils.conversations.recorded_time import conversation_span
+
+    a = conversation_span(dict(survivor, transcript_segments=list(survivor_segments)))
+    b = conversation_span(dict(new, transcript_segments=list(new_segments)))
+    survivor_end, new_start = a.recorded_end if a else None, b.recorded_start if b else None
     if survivor_speech is None or new_speech is None or not isinstance(survivor_end, datetime):
         return PairCheck(SkipReason.GAP_OUT_OF_WINDOW)
     if not isinstance(new_start, datetime):
@@ -395,7 +402,10 @@ def _check_pair_legacy(
 
 
 def _wall_times(row: Mapping[str, Any]) -> Optional[tuple[datetime, datetime]]:
-    created, finished = row.get('created_at'), row.get('finished_at')
+    from utils.conversations.recorded_time import conversation_span
+
+    span = conversation_span(row)
+    created, finished = (span.recorded_start, span.recorded_end) if span else (None, None)
     if not isinstance(created, datetime) or not isinstance(finished, datetime) or finished < created:
         return None
     return created, finished

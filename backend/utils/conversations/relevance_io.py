@@ -34,7 +34,11 @@ def adjacent_conversation(
     uid: str, conversation: Any, conversation_id: Optional[str], *, require_complete: bool = False
 ) -> Optional[Neighbor]:
     """A kept conversation this one would have joined had capture not split it (fail-open)."""
-    started_at, finished_at = conversation.started_at, conversation.finished_at
+    from utils.conversations.recorded_time import conversation_span
+
+    row = conversation.model_dump() if hasattr(conversation, 'model_dump') else vars(conversation)
+    span = conversation_span(row)
+    started_at, finished_at = (span.recorded_start, span.recorded_end) if span else (None, None)
     if started_at is None or finished_at is None:
         return None
     try:
@@ -77,7 +81,11 @@ def occasion_retention(uid: str, conversation: Any, conversation_id: Optional[st
     from utils.episodes.timeline import episode_owning_recorded_time, choose_recorded_episode
 
     cid = conversation_id or getattr(conversation, 'id', None)
-    start, end = getattr(conversation, 'started_at', None), getattr(conversation, 'finished_at', None)
+    from utils.conversations.recorded_time import conversation_span
+
+    row = conversation.model_dump() if hasattr(conversation, 'model_dump') else vars(conversation)
+    span = conversation_span(row)
+    start, end = (span.recorded_start, span.recorded_end) if span else (None, None)
     if start is None or end is None:
         return None
     try:
@@ -92,13 +100,27 @@ def occasion_retention(uid: str, conversation: Any, conversation_id: Optional[st
                 other = conversations_db.get_conversation_raw_snapshot(
                     uid,
                     other_id,
-                    field_paths=['started_at', 'finished_at', 'discarded', 'deleted', 'sync_merged_into'],
+                    field_paths=[
+                        'started_at',
+                        'finished_at',
+                        'discarded',
+                        'deleted',
+                        'sync_merged_into',
+                        'recorded_start',
+                        'recorded_end',
+                        'last_speech_at',
+                        'status',
+                        'capture_evidence',
+                    ],
                 )
                 if not other or any(other.get(key) for key in ('discarded', 'deleted', 'sync_merged_into')):
                     continue
                 # Check the other member's span, not an envelope this clip may
                 # already have extended. Attachment order cannot widen proof.
-                evidence = dict(episode, started_at=other.get('started_at'), last_activity_at=other.get('finished_at'))
+                other_span = conversation_span(other)
+                if other_span is None:
+                    continue
+                evidence = dict(episode, started_at=other_span.recorded_start, last_activity_at=other_span.recorded_end)
                 if choose_recorded_episode([evidence], start, end):
                     return 'occasion_member'
         if adjacent_conversation(uid, conversation, cid, require_complete=True):

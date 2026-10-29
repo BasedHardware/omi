@@ -11,6 +11,7 @@ import config.owner_recognition_diagnostics as owner_diagnostics
 
 from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_serializer, model_validator
 
+from models.recorded_span import RecordedClock
 from models.audio_file import AudioFile
 from models.calendar_context import CalendarMeetingContext
 from models.chat import Message
@@ -465,6 +466,20 @@ class Conversation(BaseModel):
     updated_at: Optional[datetime] = None
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
+    recorded_start: Optional[datetime] = None
+    recorded_end: Optional[datetime] = None
+    arrival_at: Optional[datetime] = None
+    clock: Optional[RecordedClock] = None
+    episode_id: Optional[str] = None
+
+    @model_validator(mode='before')
+    @classmethod
+    def derive_legacy_recorded_span(cls, data):
+        if isinstance(data, dict):
+            from utils.conversations.recorded_time import span_fields
+
+            return {**data, **span_fields(data)}
+        return data
 
     source: Optional[ConversationSource] = ConversationSource.omi
     language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'

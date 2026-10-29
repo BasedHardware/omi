@@ -22,6 +22,30 @@ FEATURES = Counter(
     'omi_repeat_work_features_total', 'Feature invocations and exact successful reuse', ['feature', 'outcome']
 )
 CALLS = Counter('omi_repeat_work_llm_calls_total', 'Observed LangChain calls in conversation scope', ['outcome'])
+PHASE_A_CALLS = Counter(
+    'omi_conversation_llm_calls_total',
+    'Observed calls by bounded feature in conversation scope',
+    ['feature', 'outcome'],
+)
+SURVIVOR_REFRESHES = Counter(
+    'omi_episode_survivor_refreshes_total',
+    'Actual survivor processing attempts; episode joins are in content-free logs',
+    ['membership'],
+)
+LLM_FEATURES = frozenset(
+    {
+        'conv_structure',
+        'conversation_processing',
+        'memories',
+        'knowledge_graph',
+        'goals',
+        'app_integrations',
+        'realtime_integrations',
+        'episode_boundary',
+        'episode_moment',
+        'speaker_identification',
+    }
+)
 FINALS = Counter(
     'omi_repeat_work_finalizations_total', 'Durable conversation revisions; join logs for distinct survivors'
 )
@@ -36,7 +60,7 @@ PLAYBACK_BUILD_SECONDS = Histogram(
 
 
 def _join(uid: str, conversation: object, event: str, feature: str = 'none', outcome: str = 'success') -> None:
-    identity = getattr(conversation, 'id', None)
+    identity = getattr(conversation, 'id', None) or getattr(conversation, 'processing_conversation_id', None)
     current = _scope.get()
     if not identity and current is not None and current[0] == uid:
         identity = getattr(current[1], 'id', None)
@@ -66,10 +90,22 @@ def record_final(uid: str, conversation: object) -> None:
 
 def record_llm_call(outcome: str, feature: str = 'other') -> None:
     current = _scope.get()
-    if revision_reuse() and current is not None:
-        CALLS.labels(outcome).inc()
-        bounded_feature = {'conv_structure': 'notes', 'memories': 'l1'}.get(feature, 'other')
-        _join(*current, 'llm_call', feature=bounded_feature, outcome=outcome)
+    if current is not None:
+        bounded_feature = feature if feature in LLM_FEATURES else 'other'
+        bounded_outcome = outcome if outcome in {'completed', 'failed'} else 'other'
+        PHASE_A_CALLS.labels(bounded_feature, bounded_outcome).inc()
+        _join(*current, 'llm_call', feature=bounded_feature, outcome=bounded_outcome)
+        if revision_reuse():
+            CALLS.labels(outcome).inc()
+
+
+def record_survivor_refresh(uid: str, conversation_id: str, episode_id: str | None) -> None:
+    SURVIVOR_REFRESHES.labels('episode' if episode_id else 'unassigned').inc()
+    logger.info(
+        'event=episode_survivor_refresh conversation_key=%s episode_key=%s',
+        hashlib.sha256(f'{uid}\0{conversation_id}'.encode()).hexdigest(),
+        hashlib.sha256(f'{uid}\0{episode_id}'.encode()).hexdigest() if episode_id else 'unassigned',
+    )
 
 
 def conversation_scope(function: Callable[P, R]) -> Callable[P, R]:
@@ -77,8 +113,6 @@ def conversation_scope(function: Callable[P, R]) -> Callable[P, R]:
 
     @wraps(function)
     def wrapped(*args: P.args, **kwargs: P.kwargs) -> R:
-        if not revision_reuse():
-            return function(*args, **kwargs)
         bound = signature.bind(*args, **kwargs)
         token = _scope.set((bound.arguments['uid'], bound.arguments['conversation']))
         try:
@@ -105,5 +139,5 @@ def record_playback_ready(payload: dict[str, Any], representation: str) -> None:
 
 def bind_generation(uid: str, conversation_id: str | None, revision: int | None = None) -> None:
     """Bind ingress calls to the ID chosen before notes run, without storing content."""
-    if revision_reuse() and conversation_id:
+    if conversation_id:
         _scope.set((uid, SimpleNamespace(id=conversation_id, sync_content_revision=revision)))

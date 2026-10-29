@@ -1037,7 +1037,7 @@ class LiveConversationController:
                 await self.host.persistence.call(
                     boundary_runtime.apply_signal_edges,
                     self.host.request.uid,
-                    now=self.clock(),
+                    arrival_at=self.clock(),
                     quiet=(self.clock() - finished_at).total_seconds() >= boundaries.QUIET_SECONDS,
                 )
                 action = ConversationLifecycleAction.process_and_create_new
