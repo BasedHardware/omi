@@ -1,12 +1,13 @@
 import * as React from 'react';
 import { AsyncLock } from "../utils/lock";
-import { imageDescription, llamaFind } from "./imageDescription";
+import { imageDescription, llamaFind, summarizeDescriptions } from "./imageDescription";
 import { startAudio } from '../modules/openai';
 
 type AgentState = {
     lastDescription?: string;
     answer?: string;
     loading: boolean;
+    summary?: string;
 }
 
 export class Agent {
@@ -29,7 +30,18 @@ export class Agent {
                 lastDescription = description;
             }
 
-            // TODO: Update summaries
+            // Update summaries
+            let combined = '';
+            let i = 0;
+            for (let p of this.#photos) {
+                combined += '\n\nImage #' + i + '\n\n';
+                combined += p.description;
+                i++;
+            }
+            if (combined !== '') {
+                const summary = await summarizeDescriptions(combined);
+                this.#state.summary = summary;
+            }
 
             // Update UI
             if (lastDescription) {
@@ -54,7 +66,7 @@ export class Agent {
             let combined = '';
             let i = 0;
             for (let p of this.#photos) {
-                combined + '\n\nImage #' + i + '\n\n';
+                combined += '\n\nImage #' + i + '\n\n';
                 combined += p.description;
                 i++;
             }
