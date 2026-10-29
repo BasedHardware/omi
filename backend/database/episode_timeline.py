@@ -101,7 +101,10 @@ def _attach_recorded_window(
         lo = min(existing['started_at'], started) if existing else started
         window_end = min(finished, lo + timedelta(seconds=MAX_EPISODE_SECONDS))
         if existing and existing.get('status') != 'live' and existing.get('close_reason') not in {'gap', 'idle'}:
-            window_end = min(window_end, recorded_end(existing))
+            boundary_end = recorded_end(existing)
+            if not isinstance(boundary_end, datetime):
+                raise episodes.EpisodeConflict('recorded_owner_missing_end')
+            window_end = min(window_end, boundary_end)
         if existing is None or existing.get('status') == 'live' or existing.get('close_reason') in {'gap', 'idle'}:
             # A late prefix that would overflow an existing capped occasion
             # ends at that occasion; it must not create an overlapping 4h row.

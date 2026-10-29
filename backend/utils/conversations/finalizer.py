@@ -486,6 +486,7 @@ async def finalize_persisted_conversation(
             # summary-vector emission below the claim branch is unreachable on
             # this path, so run the same fail-soft freshness guard here; a
             # summary-vector failure never fails finalization (#21111 gap).
+            latest_data = None
             try:
                 latest_data = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
                 latest = deserialize_conversation(latest_data) if latest_data else None

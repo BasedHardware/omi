@@ -1108,10 +1108,6 @@ def _record_moment_once(
 # --------------------------------------------------------------------------- finalization
 
 
-def _wall(base: Optional[datetime], offset: float) -> Optional[datetime]:
-    return base + timedelta(seconds=max(0.0, offset)) if base else None
-
-
 def _saved_tasks(uid: str, conversation_id: str, c: Collaborators) -> list[dict]:
     if c.saved_tasks is not None:
         return c.saved_tasks(uid, conversation_id)
