@@ -102,6 +102,7 @@ def app_module_stubs() -> dict:
     return {
         "dotenv": _module("dotenv", load_dotenv=lambda *a, **k: None),
         "requests": _module("requests"),
+        "httpx": _module("httpx"),
         "db": db,
         "models": _module("models", ChatToolResponse=ChatToolResponse),
     }
