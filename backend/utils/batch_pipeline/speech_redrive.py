@@ -148,8 +148,9 @@ def redrive_one(
     audio = artifacts.fetch_audio(item)
     _, duration, spans = inspect_audio(item, audio)
     measured = sum(span['end'] - span['start'] for span in spans)
-    # Bound worker VAD may locate guarded words that strict CPU VAD missed.
-    worker = worker_vad_speech(job) if independent or repair else None
+    # The same bound acoustic proof applies to ordinary worker failures. This
+    # changes neither the explicit paid epoch nor its ownership/privacy fences.
+    worker = worker_vad_speech(job)
     if independent and not protocol.observe_vad(sid, token, plan_digest, measured):
         return 'fenced'
     if not spans and not independent and worker is None:
@@ -206,7 +207,7 @@ def redrive_one(
                 normalized_binding(job['projection_binding']),
                 audio,
                 multilingual=True,
-                **({'force_recognition': True, 'worker_speech': worker} if repair else {}),
+                **({'force_recognition': True, 'worker_speech': worker} if repair or worker is not None else {}),
             )
         )
         if result_outcome(payload) != 'success' or not payload.get('words'):

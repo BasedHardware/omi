@@ -15,7 +15,8 @@
     "backend/tests/unit/test_batch_language_recovery.py",
     "backend/tests/unit/test_soniox_batch.py",
     "backend/utils/batch_pipeline/contracts.py",
-    "backend/tests/unit/test_batch_held_vad_census.py"
+    "backend/tests/unit/test_batch_held_vad_census.py",
+    "backend/tests/unit/test_batch_worker_vad_recovery.py"
   ],
   "evidence_prs": [],
   "scope_hints": [

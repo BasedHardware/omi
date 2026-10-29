@@ -302,19 +302,22 @@ class QuarantineRecovery:
                 return 'held'
             audio = self.artifacts.fetch_audio(item)
             duration = item.duration_seconds
+            # The input-bound worker VAD is acoustic evidence for ordinary
+            # empty/ownership failures too. A later zero CPU VAD cannot turn
+            # that speech into silence or suppress the existing recovery call.
+            worker = worker_vad_speech(job)
             local_payload, inspection_failure, measured_vad, inspected_spans = None, None, None, None
             if disposition:
                 try:
                     _, duration, spans = inspect_audio(item, audio)
                     inspected_spans = spans
                     measured_vad = sum(span['end'] - span['start'] for span in spans)
-                    if not spans and not language_guarded(job):
+                    if not spans and not language_guarded(job) and worker is None:
                         if not held_silence_allowed(job, measured_vad):
                             raise RecoveryFailure('payload_validation', 'invalid_payload')
                         local_payload = silence_payload(duration)
                 except RecoveryFailure as error:
                     inspection_failure = error
-            worker = worker_vad_speech(job) if language_guarded(job) else None
             if (
                 language_guarded(job)
                 and inspected_spans == []
@@ -376,7 +379,7 @@ class QuarantineRecovery:
                             normalized_binding(job['projection_binding']),
                             audio,
                             multilingual=multilingual,
-                            force_recognition=language_guarded(job),
+                            force_recognition=language_guarded(job) or worker is not None,
                             worker_speech=worker,
                         )
                         if self.stt is transcribe
@@ -386,7 +389,7 @@ class QuarantineRecovery:
                 result_outcome(payload)
                 if payload.get('outcome') != 'silence':
                     metered(record_accepted, owner_id, 'modulate' if multilingual else 'unknown', item.duration_seconds)
-                    if language_guarded(job):
+                    if language_guarded(job) or (multilingual and self.stt is transcribe):
                         raw_words = payload['words']
                         if not isinstance(raw_words, list):
                             raise RecoveryFailure('payload_validation', 'invalid_payload')
@@ -423,6 +426,27 @@ class QuarantineRecovery:
             else:
                 failure = None
             first_empty = empty is not None
+            # Preserve bounded outcomes for ordinary multilingual recovery too;
+            # an absent receipt must not be mistaken for an empty recognizer.
+            # Inspection failures and locally proven silence are not attempts.
+            if (
+                multilingual
+                and self.stt is transcribe
+                and not language_guarded(job)
+                and inspection_failure is None
+                and local_payload is None
+                and (failure or first_empty)
+            ):
+                record_recognizer(
+                    self.store,
+                    segment_id,
+                    token,
+                    'recovery',
+                    'modulate',
+                    'empty' if first_empty else 'words' if recognized_count else 'error',
+                    0 if first_empty else recognized_count,
+                    measured_vad,
+                )
             if (
                 failure
                 and language_guarded(job)
