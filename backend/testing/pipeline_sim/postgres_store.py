@@ -30,8 +30,19 @@ class PgRows(Mapping):
 
     def _all(self) -> dict[tuple[str, str], dict]:
         namespace = self._store.pg.namespace
-        sql = ' UNION ALL '.join(f"SELECT '{t}', key, doc FROM {t} WHERE namespace = %s" for t in _TYPED)
-        sql += ' UNION ALL SELECT tbl, key, doc FROM docs WHERE namespace = %s'
+        from database.jobstore.connection import _psycopg
+        psycopg = _psycopg()
+        queries = [
+            psycopg.sql.SQL("SELECT {t_literal}, key, doc FROM {t_ident} WHERE namespace = %s").format(
+                t_literal=psycopg.sql.Literal(t),
+                t_ident=psycopg.sql.Identifier(t)
+            ) for t in _TYPED
+        ]
+        sql = psycopg.sql.SQL(' UNION ALL ').join(queries)
+        sql = psycopg.sql.SQL(' UNION ALL ').join([
+            sql,
+            psycopg.sql.SQL('SELECT tbl, key, doc FROM docs WHERE namespace = %s')
+        ])
         with self._store.pg.pool.connection() as conn:
             rows = conn.execute(sql, (namespace,) * (len(_TYPED) + 1)).fetchall()
         return {(table, key): doc for table, key, doc in rows}
@@ -168,8 +179,13 @@ class PgSimStore(SimStore):
 
     def delete(self, table: str, key: str) -> None:
         with self.pg.pool.connection() as conn:
+            from database.jobstore.connection import _psycopg
+            psycopg = _psycopg()
             if table in _TYPED:
-                conn.execute(f'DELETE FROM {table} WHERE namespace = %s AND key = %s', (self.pg.namespace, key))
+                query = psycopg.sql.SQL('DELETE FROM {table} WHERE namespace = %s AND key = %s').format(
+                    table=psycopg.sql.Identifier(table)
+                )
+                conn.execute(query, (self.pg.namespace, key))
             else:
                 conn.execute(
                     'DELETE FROM docs WHERE namespace = %s AND tbl = %s AND key = %s', (self.pg.namespace, table, key)

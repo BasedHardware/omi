@@ -289,7 +289,12 @@ class PostgresStore:
 
     def read_doc(self, conn: Any, table: str, key: str) -> dict:
         if table in _TYPED:
-            row = conn.execute(f'SELECT doc FROM {table} WHERE namespace = %s AND key = %s', (self.namespace, key))
+            from database.jobstore.connection import _psycopg
+            psycopg = _psycopg()
+            query = psycopg.sql.SQL('SELECT doc FROM {table} WHERE namespace = %s AND key = %s').format(
+                table=psycopg.sql.Identifier(table)
+            )
+            row = conn.execute(query, (self.namespace, key))
         else:
             row = conn.execute(
                 'SELECT doc FROM docs WHERE namespace = %s AND tbl = %s AND key = %s', (self.namespace, table, key)
@@ -299,9 +304,14 @@ class PostgresStore:
 
     def write_doc(self, conn: Any, table: str, key: str, value: dict) -> None:
         if table in _TYPED:
+            from database.jobstore.connection import _psycopg
+            psycopg = _psycopg()
+            query = psycopg.sql.SQL(
+                'INSERT INTO {table} (namespace, key, doc) VALUES (%s, %s, %s) '
+                'ON CONFLICT (namespace, key) DO UPDATE SET doc = EXCLUDED.doc'
+            ).format(table=psycopg.sql.Identifier(table))
             conn.execute(
-                f'INSERT INTO {table} (namespace, key, doc) VALUES (%s, %s, %s) '
-                'ON CONFLICT (namespace, key) DO UPDATE SET doc = EXCLUDED.doc',
+                query,
                 (self.namespace, key, jsonb(value)),
             )
         else:
@@ -313,7 +323,12 @@ class PostgresStore:
 
     def delete_doc(self, conn: Any, table: str, key: str) -> None:
         if table in _TYPED:
-            conn.execute(f'DELETE FROM {table} WHERE namespace = %s AND key = %s', (self.namespace, key))
+            from database.jobstore.connection import _psycopg
+            psycopg = _psycopg()
+            query = psycopg.sql.SQL('DELETE FROM {table} WHERE namespace = %s AND key = %s').format(
+                table=psycopg.sql.Identifier(table)
+            )
+            conn.execute(query, (self.namespace, key))
         else:
             conn.execute(
                 'DELETE FROM docs WHERE namespace = %s AND tbl = %s AND key = %s', (self.namespace, table, key)
