@@ -15,6 +15,7 @@ import 'package:omi/widgets/conversation_bottom_bar.dart' show ConversationTab;
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/conversation_actions.dart';
 import 'package:omi/pages/on_device/on_device_provenance_section.dart';
+import 'package:omi/pages/paywall/value_moment_paywall.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/pages/held_audio/processing_backlog_view.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -135,6 +136,28 @@ class _ConversationListItemState extends State<ConversationListItem> {
         conversation.processingDeferred,
         widget.fillingSeconds,
       );
+
+  @override
+  void initState() {
+    super.initState();
+    _offerAtCapIfLocked();
+  }
+
+  @override
+  void didUpdateWidget(covariant ConversationListItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.conversation.isLocked) _offerAtCapIfLocked();
+  }
+
+  /// The free allowance locked a conversation the reader can see: the cap offer, once.
+  void _offerAtCapIfLocked() {
+    if (!widget.conversation.isLocked) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !widget.conversation.isLocked || ModalRoute.of(context)?.isCurrent == false) return;
+      ValueMomentPaywall.offer(PaywallMoment.freeCap,
+          conversation: widget.conversation, usage: context.read<UsageProvider?>());
+    });
+  }
 
   @override
   void dispose() {

@@ -478,6 +478,10 @@ SCHEMA_GROUPS = {
     'users': {
         'output': DEFAULT_OUTPUT_DIR / 'users_wire.g.dart',
         'schemas': (
+            'AccountDeletionLossSummary',
+            'AccountDeletionStatusResponse',
+            'AccountDeletionRestoreResponse',
+            'AccountDeletionActionResponse',
             'MobileFeedbackReceipt',
             'UserStatusResponse',
             'UserWebhooksStatusResponse',
