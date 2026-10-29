@@ -58,7 +58,13 @@ Scenarios cover:
 5. a first pipeline success on the final Cloud Tasks delivery converges its
    completed ledger rather than publishing a false terminal failure;
 6. retry-budget exhaustion becomes a truthful durable failure and retains its source;
-7. concurrent worker deliveries are fenced by the real Redis run lock;
+7. concurrent worker deliveries are fenced by the real Redis run lock while
+   the paid STT leaf is held, and release produces exactly one STT invocation;
+   with `SYNC_PROCESSING_HOLD_ENABLED=true`, upload completion retains the
+   pending conversation hold and durable deferred enrichment obligation without
+   entering the full note processor. A separate hold-off scenario proves eager
+   full processing still persists once. Terminal duplicate delivery repeats
+   neither STT nor full processing in either scenario;
 8. a lost create-task acknowledgement converges through named-task
    `AlreadyExists`, never falls back inline, and later completes; and
 9. a missing staged blob follows the real expired-input failure path without

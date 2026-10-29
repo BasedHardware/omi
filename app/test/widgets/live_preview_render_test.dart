@@ -39,6 +39,7 @@ import 'package:omi/services/live_preview/live_preview_notes.dart';
 import 'package:omi/services/live_preview/live_preview_telemetry.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/widgets/transcript.dart';
 import 'package:omi/utils/enums.dart';
 
 import '../helpers/sfpro_font_fixtures.dart';
@@ -334,6 +335,60 @@ void main() {
     if (number == null) return null;
     return '${number.toString().padLeft(3, '0')}-mobile-ios-${light ? slug : '$slug-dark'}.png';
   }
+
+  testWidgets('hybrid 1000-line live episode stays lazy and preview ticks leave final rows alone', (tester) async {
+    final (preview, engine) = await tester.runAsync(() => previewIn(_State.listening)) ?? (null, null);
+    final capture = captureFor(_State.hybrid, preview);
+    capture.segments = List.generate(
+        1000,
+        (i) => TranscriptSegment(
+              id: 'history-$i',
+              text: 'Final line $i',
+              speaker: 'SPEAKER_0',
+              isUser: true,
+              personId: null,
+              start: i.toDouble(),
+              end: i + 1.0,
+              translations: [],
+            ));
+    addTearDown(capture.dispose);
+    for (var i = 0; i < 200; i++) {
+      engine!.emit('preview-$i', 'Preview line $i', true);
+    }
+    final episodes = episodesWith(episodeWith());
+    addTearDown(episodes.dispose);
+    await shoot(tester, null,
+        light: true,
+        home: const LiveEpisodePage(initialTab: LiveEpisodeTab.transcript),
+        capture: capture,
+        episodes: episodes);
+    final rows = find.byWidgetPredicate((w) =>
+        w is KeyedSubtree &&
+        w.key is ValueKey<String> &&
+        (w.key! as ValueKey<String>).value.startsWith('transcript-segment-'));
+    expect(rows.evaluate().length, lessThan(40));
+    expect(find.byKey(const ValueKey('live_preview_tail_preview-199')).hitTestable(), findsOneWidget);
+    final mountedFinalRows = rows.evaluate().map((e) => e.widget).toList();
+    var transcriptBuilds = 0;
+    var previewTextBuilds = 0;
+    debugOnRebuildDirtyWidget = (element, _) {
+      if (element.widget is TranscriptWidget) transcriptBuilds++;
+      final widget = element.widget;
+      if (widget is Text && (widget.data ?? '').startsWith('Preview line ')) previewTextBuilds++;
+    };
+    addTearDown(() => debugOnRebuildDirtyWidget = null);
+    for (var i = 0; i < 3; i++) {
+      engine!.emit('preview-199', 'Preview line 199 with revision $i and more words', false);
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pump(const Duration(milliseconds: 600));
+    }
+    expect(transcriptBuilds, 0);
+    expect(previewTextBuilds, 3, reason: 'only the revised preview line rebuilds per tick');
+    for (final row in rows.evaluate()) {
+      expect(mountedFinalRows.any((old) => identical(old, row.widget)), isTrue);
+    }
+    expect(find.text('Preview line 199 with revision 2 and more words'), findsOneWidget);
+  });
 
   for (final (onAndroid, light) in [(false, false), (false, true), (true, false), (true, true)]) {
     final theme = '${onAndroid ? 'android' : 'ios'}, ${light ? 'light' : 'dark'}';

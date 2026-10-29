@@ -178,6 +178,12 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | subscriptionCancelConfirmed | Subscription Cancel Confirmed | reason, has_details | active | subscription-funnel |
 | subscriptionCancelKeptPlan | Subscription Cancel Kept Plan | step, reason | active | subscription-funnel |
 | subscriptionCancelAbandoned | Subscription Cancel Abandoned | step, reason | active | subscription-funnel |
+| subscriptionYearlySwitchShown | Subscription Yearly Switch Shown | surface | active | subscription-funnel |
+| subscriptionYearlySwitchOpened | Subscription Yearly Switch Opened | surface | active | subscription-funnel |
+| subscriptionYearlySwitchConfirmed | Subscription Yearly Switch Confirmed | surface | active | subscription-funnel |
+| subscriptionYearlySwitchSucceeded | Subscription Yearly Switch Succeeded | surface | active | subscription-funnel |
+| subscriptionYearlySwitchFailed | Subscription Yearly Switch Failed | surface, reason | active | subscription-funnel |
+| subscriptionYearlySwitchDismissed | Subscription Yearly Switch Dismissed | surface | active | subscription-funnel |
 | guidedIntroPayoffShown | Guided Intro Payoff Shown | memories_count, answer_source, latency_ms | active | guided-intro-payoff-presence |
 | guidedIntroPayoffContinued | Guided Intro Payoff Continued | none | active | guided-intro-payoff-presence |
 | onboardingFirstCaptureShown | Onboarding First Capture Shown | none | active | mobile-instrumentation-presence |

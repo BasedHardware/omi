@@ -422,12 +422,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get autoSync => '自动同步';
 
   @override
-  String get syncHealthAlerts => '同步状态提醒';
-
-  @override
-  String get syncHealthAlertsDescription => '如果 Omi 超过一天未同步录音，则发出提醒';
-
-  @override
   String get autoSyncDescription => '设备连接时自动同步离线录音';
 
   @override
@@ -8591,6 +8585,27 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deleteReasonOther => '其他';
 
   @override
+  String get deletePauseInsteadTitle => '改为暂停 Omi？';
+
+  @override
+  String get deletePauseInsteadSubtitle => '停止录音并保留所有内容。随时回来。';
+
+  @override
+  String get deletePauseRecordingLine => '录音将停止。您离开期间不会录制新内容。';
+
+  @override
+  String get deletePauseKeepLine => '您的记忆、对话和应用都会保持原样。';
+
+  @override
+  String get deletePauseReturnLine => '您仍会保持登录。随时恢复录音。您的订阅不会改变。';
+
+  @override
+  String get pauseOmiButton => '暂停 Omi';
+
+  @override
+  String get continueDeletingButton => '继续删除';
+
+  @override
   String get deleteFlowFeedbackTitle => '告诉我们更多';
 
   @override
@@ -8610,6 +8625,28 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deleteConsequenceNoRecovery => '您的账户无法恢复 — 即使是客服也无法处理。';
+
+  @override
+  String deletePendingRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '您有 $count 段录音仍在处理中。现在删除会丢失这些录音。',
+      one: '您有 1 段录音仍在处理中。现在删除会丢失这段录音。',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteGracePeriodNotice(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '请在 $days 天内重新登录以恢复账户。',
+      one: '请在 1 天内重新登录以恢复账户。',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get deleteTypeToConfirm => '输入 DELETE 以确认';
@@ -8910,14 +8947,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => '等待网络连接';
-
-  @override
-  String get syncStallAlertTitle => 'Omi 未同步';
-
-  @override
-  String syncStallAlertBody(int hours) {
-    return '你的 Omi 已超过 $hours 小时未同步任何录音。打开 Omi 检查设备连接。';
-  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13482,14 +13511,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get activityAttentionStorageSubtitle => '录音已暂停';
 
   @override
-  String get activityAttentionSyncStalledTitle => 'Omi 未同步';
-
-  @override
-  String activityAttentionSyncStalledSubtitle(int hours) {
-    return '超过 $hours 小时未同步任何录音';
-  }
-
-  @override
   String get activityAttentionUploadStalledTitle => '上传停滞';
 
   @override
@@ -14503,5 +14524,178 @@ class AppLocalizationsZh extends AppLocalizations {
       one: '隐藏 1 段短录音',
     );
     return '$_temp0';
+  }
+
+  @override
+  String deleteLocalRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '有 $count 段录音尚未上传。现在删除会丢失这些录音 — 请保持应用开启，直到上传完成。',
+      one: '有 1 段录音尚未上传。现在删除会丢失这段录音 — 请保持应用开启，直到上传完成。',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConfirmGraceSubtitle => '离开前，请查看您的数据会如何处理。';
+
+  @override
+  String get deletePauseConfirmation => 'Omi 已暂停。随时恢复录音。';
+
+  @override
+  String deleteProcessingKept(int count, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 条录音仍在处理中。它们会在您的账户中再保留 ',
+      one: '1 条录音仍在处理中。它会在您的账户中再保留 ',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days 天。',
+      one: '1 天。',
+    );
+    return '$_temp0$_temp1';
+  }
+
+  @override
+  String deleteDataErasedAfterDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '您的记忆和对话将在 $days 天后删除。',
+      one: '您的记忆和对话将在 1 天后删除。',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteAppsDisconnectImmediately => '您的应用和集成会立即断开连接。';
+
+  @override
+  String get deleteSubscriptionImmediately => '您的订阅会立即取消。';
+
+  @override
+  String get deleteRestoreTitle => '您的账户待删除';
+
+  @override
+  String get deleteRestoreSubtitle => '改变主意了？请在账户被擦除前恢复账户。';
+
+  @override
+  String get deleteRestoreKeepData => '恢复您的记忆和对话。';
+
+  @override
+  String get deleteRestoreBillingNotice => '您的订阅仍会保持取消状态。恢复后，请重新连接应用和集成。';
+
+  @override
+  String deleteRestoreDaysRemaining(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '您还剩 $days 天时间恢复您的账户。',
+      one: '您还剩 1 天时间恢复您的账户。',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteRestoreButton => '恢复我的账户';
+
+  @override
+  String get deleteFinishButton => '完成删除';
+
+  @override
+  String get deleteFinishNowButton => '立即擦除我的账户';
+
+  @override
+  String get deleteFinishNowWarning => '此操作会结束恢复期限。您的账户及其中的录音将被永久擦除。';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => '您还剩不到 1 天时间恢复您的账户。';
+
+  @override
+  String get deleteFinishNowTitle => '删除您的账户？';
+
+  @override
+  String get syncHealthAlerts => '同步状态提醒';
+
+  @override
+  String get syncHealthAlertsDescription => '如果 Omi 超过一天未同步录音，则发出提醒';
+
+  @override
+  String get syncStallAlertTitle => 'Omi 未同步';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return '你的 Omi 已超过 $hours 小时未同步任何录音。打开 Omi 检查设备连接。';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi 未同步';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return '超过 $hours 小时未同步任何录音';
+  }
+
+  @override
+  String get dailyRecapsOnHome => '首页每日回顾';
+
+  @override
+  String get dailyRecapsOnHomeDescription => '在首页顶部显示最新的回顾。';
+
+  @override
+  String get yearlySwitchTitle => '改为按年付费';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return '每年节省 $amount';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return '按年付费，每年节省 $amount';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => '同一计划，每年付费一次';
+
+  @override
+  String get yearlySwitchPlanLabel => '计划';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan，每年 $price';
+  }
+
+  @override
+  String get yearlySwitchDueToday => '今日应付';
+
+  @override
+  String get yearlySwitchRenews => '续订日期';
+
+  @override
+  String get yearlySwitchCreditNote => '已包含本月剩余天数的抵扣。';
+
+  @override
+  String get yearlySwitchDeclined => '付款被拒。你仍按月付费。';
+
+  @override
+  String get yearlySwitchFailed => '无法切换。你仍按月付费。';
+
+  @override
+  String get yearlySwitchPreviewFailed => '无法加载价格。';
+
+  @override
+  String get yearlySwitchUnavailable => '你的计划目前不支持按年付费。';
+
+  @override
+  String get yearlySwitchDoneTitle => '已改为按年付费';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return '今日已扣款 $amount。续订日期：$date。';
   }
 }

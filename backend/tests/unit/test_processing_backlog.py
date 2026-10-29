@@ -23,6 +23,7 @@ from routers import users as route
 def no_cap_hold_reservations(monkeypatch):
     # Cap-hold batch reservations (lane 6) are covered by test_cap_hold_batch_debit.py; here none are open.
     monkeypatch.setattr(worker.cap_hold_reservations, 'open_units', lambda *args, **kwargs: 0.0)
+    monkeypatch.setattr(worker, 'account_deletion_blocks_user_work', lambda _uid: False)
 
 
 def allowance(remaining=130, managed=True):
@@ -50,6 +51,22 @@ def test_flags_off_add_no_reads_or_wire_fields(monkeypatch):
         data = client.get('/subscription').json()
     assert 'processing_backlog' not in data and 'held_audio' not in data
     assert data['phone_call_quota'] is None
+
+
+async def test_pending_deletion_owner_is_skipped_before_backlog_reads(monkeypatch):
+    calls = []
+
+    async def blocking(_executor, function, *args, **kwargs):
+        calls.append(function.__name__)
+        return function(*args, **kwargs)
+
+    monkeypatch.setattr(worker, 'account_deletion_blocks_user_work', lambda _uid: True)
+    monkeypatch.setattr(worker, 'recovery_cohort_admits', lambda _uid: True)
+    monkeypatch.setattr(worker.funded_processing, 'enabled', lambda _uid: True)
+    monkeypatch.setattr(worker, 'run_blocking', blocking)
+
+    assert await worker.run('uid-pending') is None
+    assert calls == ['<lambda>']
 
 
 @pytest.mark.parametrize(

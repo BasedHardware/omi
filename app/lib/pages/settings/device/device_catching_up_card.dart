@@ -19,7 +19,7 @@ typedef DeviceCatchUpLocal = ({
   String targetIds,
 });
 
-DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals, {DateTime? now}) {
+DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals, {DateTime? now, bool alreadyCollapsed = false}) {
   final nowSeconds = (now ?? DateTime.now()).millisecondsSinceEpoch ~/ 1000;
   final minute = nowSeconds ~/ 60;
   // Sync progress notifies with the same list instance (the provider swaps it on
@@ -31,7 +31,7 @@ DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals, {DateTime? now}) {
   // terminal recordings belong to the bell, a lagging device twin is hidden, and
   // a drain's copied pieces fold into their source.
   final uploaded = wals.where((w) => w.status == WalStatus.uploaded).toList(growable: false);
-  final rows = [...uploaded, ...SyncPendingWork.syncingOf(wals)];
+  final rows = alreadyCollapsed ? wals : [...uploaded, ...SyncPendingWork.syncingOf(wals)];
   var onDeviceSeconds = 0;
   var onPhoneSeconds = 0;
   var pendingSeconds = 0;

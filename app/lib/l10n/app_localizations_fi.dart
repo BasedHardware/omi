@@ -426,12 +426,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get autoSync => 'Automaattinen synkronointi';
 
   @override
-  String get syncHealthAlerts => 'Synkronoinnin tila-ilmoitukset';
-
-  @override
-  String get syncHealthAlertsDescription => 'Ilmoita, jos Omi ei ole synkronoinut tallenteita yli vuorokauteen';
-
-  @override
   String get autoSyncDescription => 'Synkronoi offline-tallenteet automaattisesti, kun laitteesi yhdistetään';
 
   @override
@@ -8727,6 +8721,28 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deleteReasonOther => 'Muu';
 
   @override
+  String get deletePauseInsteadTitle => 'Keskeytetäänkö Omi sen sijaan?';
+
+  @override
+  String get deletePauseInsteadSubtitle => 'Pysäytä tallennus ja säilytä kaikki. Voit palata milloin tahansa.';
+
+  @override
+  String get deletePauseRecordingLine => 'Tallennus pysähtyy. Poissa ollessasi mitään uutta ei tallenneta.';
+
+  @override
+  String get deletePauseKeepLine => 'Muistosi, keskustelusi ja sovelluksesi säilyvät ennallaan.';
+
+  @override
+  String get deletePauseReturnLine =>
+      'Pysyt kirjautuneena. Voit jatkaa tallennusta milloin tahansa. Tilauksesi jatkuu ennallaan.';
+
+  @override
+  String get pauseOmiButton => 'Keskeytä Omi';
+
+  @override
+  String get continueDeletingButton => 'Jatka poistamista';
+
+  @override
   String get deleteFlowFeedbackTitle => 'Kerro lisää';
 
   @override
@@ -8746,6 +8762,28 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get deleteConsequenceNoRecovery => 'Tiliäsi ei voi palauttaa — ei edes tuki voi tehdä sitä.';
+
+  @override
+  String deletePendingRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tallennetta on vielä käsiteltävänä. Jos poistat ne nyt, menetät ne.',
+      one: 'Yksi tallenne on vielä käsiteltävänä. Jos poistat sen nyt, menetät sen.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteGracePeriodNotice(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Kirjaudu uudelleen $days päivän kuluessa tilisi palauttamiseksi.',
+      one: 'Kirjaudu uudelleen 1 päivän kuluessa tilisi palauttamiseksi.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get deleteTypeToConfirm => 'Kirjoita DELETE vahvistaaksesi';
@@ -9050,14 +9088,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'Odottaa verkkoyhteyttä';
-
-  @override
-  String get syncStallAlertTitle => 'Omi ei synkronoi';
-
-  @override
-  String syncStallAlertBody(int hours) {
-    return 'Omistasi ei ole synkronoitu tallenteita yli $hours tuntiin. Avaa Omi ja tarkista laitteen yhteys.';
-  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13694,14 +13724,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get activityAttentionStorageSubtitle => 'Tallenteet keskeytetty';
 
   @override
-  String get activityAttentionSyncStalledTitle => 'Omi ei synkronoi';
-
-  @override
-  String activityAttentionSyncStalledSubtitle(int hours) {
-    return 'Tallenteita ei synkronoitu yli $hours tuntiin';
-  }
-
-  @override
   String get activityAttentionUploadStalledTitle => 'Lataus on pysähtynyt';
 
   @override
@@ -14735,5 +14757,181 @@ class AppLocalizationsFi extends AppLocalizations {
       one: 'Piilota 1 lyhyt leike',
     );
     return '$_temp0';
+  }
+
+  @override
+  String deleteLocalRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count tallennetta ei ole vielä ladattu. Jos poistat ne nyt, menetät ne — pidä sovellus auki, jotta lataus valmistuu.',
+      one:
+          'Yhtä tallennetta ei ole vielä ladattu. Jos poistat sen nyt, menetät sen — pidä sovellus auki, jotta lataus valmistuu.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConfirmGraceSubtitle => 'Tarkista, mitä tiedoillesi tapahtuu, ennen kuin lähdet.';
+
+  @override
+  String get deletePauseConfirmation => 'Omi on keskeytetty. Voit jatkaa tallennusta milloin tahansa.';
+
+  @override
+  String deleteProcessingKept(int count, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tallennetta on yhä käsittelyssä. Ne säilytetään tililläsi vielä ',
+      one: '1 tallenne on yhä käsittelyssä. Se säilytetään tililläsi vielä ',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days päivän ajan.',
+      one: '1 päivän ajan.',
+    );
+    return '$_temp0$_temp1';
+  }
+
+  @override
+  String deleteDataErasedAfterDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Muistosi ja keskustelusi poistetaan $days päivän kuluttua.',
+      one: 'Muistosi ja keskustelusi poistetaan 1 päivän kuluttua.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteAppsDisconnectImmediately => 'Sovelluksesi ja integraatiosi yhteydet katkaistaan heti.';
+
+  @override
+  String get deleteSubscriptionImmediately => 'Tilauksesi peruutetaan heti.';
+
+  @override
+  String get deleteRestoreTitle => 'Tilisi odottaa poistamista';
+
+  @override
+  String get deleteRestoreSubtitle => 'Muuttiko mielesi? Palauta tilisi ennen sen poistamista.';
+
+  @override
+  String get deleteRestoreKeepData => 'Palauta muistosi ja keskustelusi.';
+
+  @override
+  String get deleteRestoreBillingNotice =>
+      'Tilauksesi pysyy peruutettuna. Yhdistä sovellukset ja integraatiot uudelleen palautuksen jälkeen.';
+
+  @override
+  String deleteRestoreDaysRemaining(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Sinulla on $days päivää aikaa palauttaa tilisi.',
+      one: 'Sinulla on 1 päivä aikaa palauttaa tilisi.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteRestoreButton => 'Palauta tilini';
+
+  @override
+  String get deleteFinishButton => 'Viimeistele poistaminen';
+
+  @override
+  String get deleteFinishNowButton => 'Poista tilini nyt';
+
+  @override
+  String get deleteFinishNowWarning => 'Tämä päättää palautusajan. Tilisi ja sen tallenteet poistetaan pysyvästi.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'Sinulla on alle päivä aikaa palauttaa tilisi.';
+
+  @override
+  String get deleteFinishNowTitle => 'Poista tilisi?';
+
+  @override
+  String get syncHealthAlerts => 'Synkronoinnin tila-ilmoitukset';
+
+  @override
+  String get syncHealthAlertsDescription => 'Ilmoita, jos Omi ei ole synkronoinut tallenteita yli vuorokauteen';
+
+  @override
+  String get syncStallAlertTitle => 'Omi ei synkronoi';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Omistasi ei ole synkronoitu tallenteita yli $hours tuntiin. Avaa Omi ja tarkista laitteen yhteys.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi ei synkronoi';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Tallenteita ei synkronoitu yli $hours tuntiin';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Päivittäiset yhteenvedot Koti-näkymässä';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Näytä uusimmat yhteenvedot Koti-näkymän yläosassa.';
+
+  @override
+  String get yearlySwitchTitle => 'Vaihda vuosimaksuun';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Säästä $amount vuodessa';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Säästä $amount vuodessa vuosimaksulla';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Sama tilaus, maksu kerran vuodessa';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Tilaus';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price vuodessa';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Maksettava tänään';
+
+  @override
+  String get yearlySwitchRenews => 'Uusiutuu';
+
+  @override
+  String get yearlySwitchCreditNote => 'Sisältää hyvityksen tämän kuun jäljellä olevasta ajasta.';
+
+  @override
+  String get yearlySwitchDeclined => 'Maksu hylättiin. Maksat edelleen kuukausittain.';
+
+  @override
+  String get yearlySwitchFailed => 'Vaihto epäonnistui. Maksat edelleen kuukausittain.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Hintaa ei voitu ladata.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Vuosimaksu ei ole juuri nyt saatavilla tilauksellesi.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Maksat nyt vuosittain';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Tänään veloitettiin $amount. Uusiutuu $date.';
   }
 }

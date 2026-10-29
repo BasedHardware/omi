@@ -111,6 +111,13 @@ def test_source_deleted_blocks_outcome(store):
         outcome(store, item, 'opened')
 
 
+def test_pending_deletion_owner_cannot_admit_proactive_work(store):
+    store.rows[('account_deletions', 'u')] = {'wipe_status': 'pending_deletion'}
+
+    with pytest.raises(ProactivityDenied, match='not_found'):
+        ready(store)
+
+
 def test_server_reply_window_is_anchored_to_persisted_message(store):
     item = ready(store, 'conversation_mentor_v2')
     ledger.record_mentor_chat(

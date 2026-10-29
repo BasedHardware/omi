@@ -334,6 +334,29 @@ def test_result_write_is_fenced_by_account_deletion_intent(monkeypatch):
     transaction.set.assert_called_once_with(parent.collection.return_value.document.return_value, {'outcome': 'ok'})
 
 
+def test_restored_account_can_write_transcription_shadow_result(monkeypatch):
+    client = MagicMock()
+    user = MagicMock()
+    parent = user.collection.return_value.document.return_value
+    marker = MagicMock()
+    marker.get.return_value.exists = True
+    marker.get.return_value.to_dict.return_value = {'wipe_status': 'cancelled'}
+    client.collection.side_effect = lambda name: {
+        'users': SimpleNamespace(document=lambda _uid: user),
+        'account_deletions': SimpleNamespace(document=lambda _uid: marker),
+    }[name]
+    parent.get.return_value.exists = True
+    parent.get.return_value.to_dict.return_value = {}
+    transaction = client.transaction.return_value
+    monkeypatch.setattr(shadow, 'db', client)
+    monkeypatch.setattr(shadow.firestore, 'transactional', lambda fn: fn)
+
+    shadow._store_result('synthetic-uid', 'synthetic-conversation', {'outcome': 'ok'})
+
+    marker.get.assert_called_once_with(transaction=transaction)
+    transaction.set.assert_called_once_with(parent.collection.return_value.document.return_value, {'outcome': 'ok'})
+
+
 def test_flag_off_output_is_byte_identical_to_legacy(monkeypatch):
     """Fixture executed from origin/main e2edc7c15ca (not this PR's code).
 

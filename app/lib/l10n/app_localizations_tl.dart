@@ -429,13 +429,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get autoSync => 'Awtomatikong pag-sync';
 
   @override
-  String get syncHealthAlerts => 'Mga alerto sa kalusugan ng sync';
-
-  @override
-  String get syncHealthAlertsDescription =>
-      'I-alerto kung hindi nag-sync ang Omi ng mga recording nang mahigit isang araw';
-
-  @override
   String get autoSyncDescription =>
       'Awtomatikong i-sync ang mga offline na recording kapag nakakonekta ang iyong device';
 
@@ -8808,6 +8801,28 @@ class AppLocalizationsTl extends AppLocalizations {
   String get deleteReasonOther => 'Iba pa';
 
   @override
+  String get deletePauseInsteadTitle => 'I-pause na lang ang Omi?';
+
+  @override
+  String get deletePauseInsteadSubtitle => 'Itigil ang pagre-record at panatilihin ang lahat. Bumalik kahit kailan.';
+
+  @override
+  String get deletePauseRecordingLine => 'Hihinto ang pagre-record. Walang bagong mare-record habang wala ka.';
+
+  @override
+  String get deletePauseKeepLine => 'Mananatiling gaya ng dati ang iyong mga alaala, pag-uusap, at app.';
+
+  @override
+  String get deletePauseReturnLine =>
+      'Mananatili kang naka-sign in. Ipagpatuloy ang pagre-record kahit kailan. Hindi magbabago ang subscription mo.';
+
+  @override
+  String get pauseOmiButton => 'I-pause ang Omi';
+
+  @override
+  String get continueDeletingButton => 'Ituloy ang Pagtanggal';
+
+  @override
   String get deleteFlowFeedbackTitle => 'Sabihin mo sa amin ang higit pa';
 
   @override
@@ -8828,6 +8843,28 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get deleteConsequenceNoRecovery => 'Hindi maibabalik ang iyong account — kahit ng support team.';
+
+  @override
+  String deletePendingRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'May $count recording ka pang pinoproseso. Kapag nag-delete ka ngayon, mawawala ang mga ito.',
+      one: 'May 1 recording ka pang pinoproseso. Kapag nag-delete ka ngayon, mawawala ito.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteGracePeriodNotice(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Mag-sign in ulit sa loob ng $days araw para maibalik ang account mo.',
+      one: 'Mag-sign in ulit sa loob ng 1 araw para maibalik ang account mo.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get deleteTypeToConfirm => 'I-type ang DELETE para kumpirmahin';
@@ -9132,14 +9169,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'Naghihintay ng internet';
-
-  @override
-  String get syncStallAlertTitle => 'Hindi nagri-sync ang Omi';
-
-  @override
-  String syncStallAlertBody(int hours) {
-    return 'Walang recording mula sa iyong Omi na na-sync nang mahigit $hours oras. Buksan ang Omi para tingnan ang koneksyon ng iyong device.';
-  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13797,14 +13826,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get activityAttentionStorageSubtitle => 'Naka-pause ang mga recording';
 
   @override
-  String get activityAttentionSyncStalledTitle => 'Hindi nagri-sync ang Omi';
-
-  @override
-  String activityAttentionSyncStalledSubtitle(int hours) {
-    return 'Walang naka-sync na recording nang mahigit $hours oras';
-  }
-
-  @override
   String get activityAttentionUploadStalledTitle => 'Naka-stall ang upload';
 
   @override
@@ -14848,5 +14869,184 @@ class AppLocalizationsTl extends AppLocalizations {
       one: 'Itago ang 1 maikling clip',
     );
     return '$_temp0';
+  }
+
+  @override
+  String deleteLocalRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Hindi pa naa-upload ang $count recording. Kapag nag-delete ka ngayon, mawawala ang mga ito — panatilihing bukas ang app para matapos ang pag-upload.',
+      one:
+          'Hindi pa naa-upload ang 1 recording. Kapag nag-delete ka ngayon, mawawala ito — panatilihing bukas ang app para matapos ang pag-upload.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConfirmGraceSubtitle => 'Suriin kung ano ang mangyayari sa data mo bago ka umalis.';
+
+  @override
+  String get deletePauseConfirmation => 'Naka-pause ang Omi. Ipagpatuloy ang pagre-record kahit kailan.';
+
+  @override
+  String deleteProcessingKept(int count, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Pinoproseso pa ang $count recording. Itatago ang mga ito sa iyong account nang ',
+      one: 'Pinoproseso pa ang 1 recording. Itatago ito sa iyong account nang ',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days araw.',
+      one: '1 araw.',
+    );
+    return '$_temp0$_temp1';
+  }
+
+  @override
+  String deleteDataErasedAfterDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Mabubura ang mga alaala at pag-uusap mo pagkalipas ng $days araw.',
+      one: 'Mabubura ang mga alaala at pag-uusap mo pagkalipas ng 1 araw.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteAppsDisconnectImmediately => 'Agad na madidiskonekta ang mga app at integration mo.';
+
+  @override
+  String get deleteSubscriptionImmediately => 'Agad na makakansela ang subscription mo.';
+
+  @override
+  String get deleteRestoreTitle => 'Nakabinbin ang pagtanggal ng account mo';
+
+  @override
+  String get deleteRestoreSubtitle => 'Nagbago ang isip mo? Ibalik ang account mo bago ito mabura.';
+
+  @override
+  String get deleteRestoreKeepData => 'Ibalik ang mga alaala at pag-uusap mo.';
+
+  @override
+  String get deleteRestoreBillingNotice =>
+      'Mananatiling kanselado ang subscription mo. Ikonekta ulit ang mga app at integration pagkatapos maibalik ang account.';
+
+  @override
+  String deleteRestoreDaysRemaining(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'May natitira pang $days araw para i-restore ang iyong account.',
+      one: 'May natitira pang 1 araw para i-restore ang iyong account.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteRestoreButton => 'Ibalik ang account ko';
+
+  @override
+  String get deleteFinishButton => 'Tapusin ang pagtanggal';
+
+  @override
+  String get deleteFinishNowButton => 'Burahin na ang account ko';
+
+  @override
+  String get deleteFinishNowWarning =>
+      'Matatapos na ang panahon para maibalik ang account. Permanenteng mabubura ang account mo at ang mga recording nito.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining =>
+      'May natitira pang kulang sa isang araw para i-restore ang iyong account.';
+
+  @override
+  String get deleteFinishNowTitle => 'Tanggalin ang Iyong Account?';
+
+  @override
+  String get syncHealthAlerts => 'Mga alerto sa kalusugan ng sync';
+
+  @override
+  String get syncHealthAlertsDescription =>
+      'I-alerto kung hindi nag-sync ang Omi ng mga recording nang mahigit isang araw';
+
+  @override
+  String get syncStallAlertTitle => 'Hindi nagri-sync ang Omi';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'Walang recording mula sa iyong Omi na na-sync nang mahigit $hours oras. Buksan ang Omi para tingnan ang koneksyon ng iyong device.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Hindi nagri-sync ang Omi';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'Walang naka-sync na recording nang mahigit $hours oras';
+  }
+
+  @override
+  String get dailyRecapsOnHome => 'Daily Recaps sa Home';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Ipakita ang pinakabagong recaps sa itaas ng Home.';
+
+  @override
+  String get yearlySwitchTitle => 'Lumipat sa Taunan';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Makatipid ng $amount bawat taon';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Makatipid ng $amount bawat taon kapag taunan';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Parehong plan, isang bayad bawat taon';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Plan';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price bawat taon';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Babayaran ngayon';
+
+  @override
+  String get yearlySwitchRenews => 'Magre-renew';
+
+  @override
+  String get yearlySwitchCreditNote => 'Kasama ang credit para sa natitirang bahagi ng buwang ito.';
+
+  @override
+  String get yearlySwitchDeclined => 'Tinanggihan ang bayad. Buwanan ka pa rin.';
+
+  @override
+  String get yearlySwitchFailed => 'Hindi nakalipat. Buwanan ka pa rin.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Hindi ma-load ang presyo mo.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Hindi pa available ang taunang bayad para sa plan mo ngayon.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Taunan ka na';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return '$amount ang siningil ngayon. Magre-renew sa $date.';
   }
 }

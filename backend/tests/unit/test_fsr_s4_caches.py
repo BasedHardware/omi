@@ -14,7 +14,7 @@ from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 from google.cloud.firestore_v1.transforms import Increment
 
-from database import account_deletion_marker as deletion
+from database import _client, account_deletion_marker as deletion
 from database import desktop_update_policy, serving_query_reads, user_usage, users
 from models.users import PlanType, Subscription
 from routers import users as router, payment, desktop_prompts, updates
@@ -136,7 +136,7 @@ def env(monkeypatch):
     monkeypatch.setattr(cache, '_redis', lambda: redis)
     monkeypatch.setattr(users, 'db', store)
     monkeypatch.setattr(users, 'get_data_plane_firestore_client', lambda: store)
-    monkeypatch.setattr(deletion, 'get_data_plane_firestore_client', lambda: store)
+    monkeypatch.setattr(_client, 'get_data_plane_firestore_client', lambda: store)
     monkeypatch.setattr(user_usage, 'db', store)
     monkeypatch.setattr(user_usage, 'resolve_usage_plan_id', lambda *args, **kwargs: 'basic')
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{}')

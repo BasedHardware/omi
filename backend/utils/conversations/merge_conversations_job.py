@@ -25,6 +25,8 @@ async def run(job_id: str, generation: int | None = None) -> str:
     job = await run_blocking(db_executor, store.claim, job_id, generation=generation)
     if job is None:
         return 'fenced'
+    if job.get('account_pending_deletion'):
+        return 'account_pending_deletion'
     epoch = job['lease_epoch']
     stop = asyncio.Event()
 
@@ -66,6 +68,8 @@ def reconcile(job_id: str, *, firestore_client: Any = None) -> str:
     job = store.begin_recovery(job_id, firestore_client=firestore_client)
     if job is None:
         return 'fenced'
+    if job.get('account_pending_deletion'):
+        return 'account_pending_deletion'
     if job['recovery'] == 'resume_cleanup':
         from utils.cloud_tasks import enqueue_listen_finalization_job
 

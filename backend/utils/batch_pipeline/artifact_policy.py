@@ -2,6 +2,7 @@
 
 from typing import Any
 from functools import partial
+from functools import lru_cache
 import os
 
 from cryptography.hazmat.primitives import hashes
@@ -9,6 +10,9 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from utils.batch_pipeline.artifacts import ArtifactStore
 from utils.batch_pipeline.retention import batch_artifact_authorize, batch_artifact_register
 from utils.other.local_storage import create_storage_client
+from database.batch_pipeline_shadow import ShadowStore
+from config.batch_pipeline_shadow import shadow_percent
+from utils.batch_pipeline.compute_client import shadow_from_env
 
 
 def artifacts_for(store: Any) -> ArtifactStore:
@@ -41,12 +45,33 @@ def create_artifact_store(store: Any, storage_client: Any, bucket: str, master_s
     )
 
 
-def shadow_result(store, item, payload):
-    from database.batch_pipeline_shadow import ShadowStore
+@lru_cache(maxsize=1)
+def _shadow_projection_client():
+    """Reuse the existing process-config adapter and its cached OIDC client."""
+    return shadow_from_env()
+
+
+def shadow_result(store, item, payload, *, projection=None):
+
+    receipt = {'status': 'not_eligible'}
+    if shadow_percent():
+        try:
+            if projection is None:
+                client = _shadow_projection_client()
+                projection = client.shadow_project
+            receipt = projection(item.segment_id, payload)
+        except Exception:
+            receipt = {'status': 'error'}
+    valid = receipt.get('status') in {'planned', 'empty'}
 
     ShadowStore(store).finish(
         item.segment_id,
-        'recovered' if payload.get('words') else 'empty',
+        ('recovered' if payload.get('words') else 'empty') if valid else 'error',
         speech=float(payload.get('speech_seconds', 0)),
         vad='worker',
+        projection_status=(
+            receipt.get('status')
+            if receipt.get('status') in {'planned', 'empty', 'not_eligible', 'budget_skipped', 'busy', 'error'}
+            else 'error'
+        ),
     )

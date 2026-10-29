@@ -3,7 +3,7 @@ import 'package:omi/services/live_preview/live_preview_controller.dart';
 
 /// Final offsets are relative to the server conversation, never the Home
 /// capture timer. Union coverage preserves holes when batches land out of order.
-abstract final class LivePreviewCoverage {
+final class LivePreviewCoverage {
   /// The transcript API has no processed-through signal. Hold a 10-second tail
   /// behind its latest final segment to allow a late batch to fill recent holes;
   /// older gaps are authoritative too, including silence omitted by final STT.
@@ -13,10 +13,20 @@ abstract final class LivePreviewCoverage {
   /// passes their first observed time before they are discarded.
   static const untimedGrace = Duration(seconds: 10);
 
-  static List<LivePreviewLine> uncovered(
-      List<LivePreviewLine> lines, List<TranscriptSegment> finals, DateTime? origin) {
-    if (origin == null) return List.of(lines);
+  /// Prepare final intervals once for a transcript snapshot. Preview revisions
+  /// can reuse them without walking the final history again.
+  LivePreviewCoverage.forFinals(List<TranscriptSegment> finals, DateTime? origin)
+      : _hasOrigin = origin != null,
+        _merged = origin == null ? const [] : _mergedFinalSpans(finals, origin);
 
+  final bool _hasOrigin;
+  final List<_TimeSpan> _merged;
+
+  static List<LivePreviewLine> uncovered(
+          List<LivePreviewLine> lines, List<TranscriptSegment> finals, DateTime? origin) =>
+      LivePreviewCoverage.forFinals(finals, origin).excludeCovered(lines);
+
+  static List<_TimeSpan> _mergedFinalSpans(List<TranscriptSegment> finals, DateTime origin) {
     final originUs = origin.microsecondsSinceEpoch;
     final finalSpans = <_TimeSpan>[];
     for (final segment in finals) {
@@ -45,6 +55,12 @@ abstract final class LivePreviewCoverage {
         merged[merged.length - 1] = (merged.last.$1, span.$2);
       }
     }
+    return merged;
+  }
+
+  List<LivePreviewLine> excludeCovered(List<LivePreviewLine> lines) {
+    if (!_hasOrigin) return List.of(lines);
+    final merged = _merged;
 
     // Segment ends do not prove that every earlier batch arrived. Moving this
     // watermark behind the latest end leaves a reorder window while letting

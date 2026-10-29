@@ -3,6 +3,13 @@
 Edit `_base.yaml` and the environment overlays, then regenerate
 `backend/deploy/runtime_env.yaml` with `backend/deploy/compose_runtime_env.py`.
 
+Batch admission percentage is runtime-owned in `rollout_cohorts/_ramp`; these
+deploy inputs and listen charts deliberately omit `BATCH_PIPELINE_PERCENT`.
+Keep it out of deployment defaults and use the
+[runtime ramp migration](../../docs/runbooks/batch-runtime-ramp.md) for the
+one-time zero seed, controller/guard cutover and rollback. Existing env values
+are fallback only, never evidence of effective admission after that seed.
+
 Version 2 requires the backend voice route's staging bucket as an explicit
 literal: `syncing-local-development` in dev and `syncing-local` in prod. Normal
 admission and the existing prebuild preflight reject missing, blank, implicit,
@@ -59,35 +66,44 @@ provisioned. Source-only rendering cannot inspect omitted live values; it enforc
 the precondition on supplied prices and runtime authority remains unavailable if
 mixed identity cannot be established. No actual resource is configured here.
 
-## Firestore read train (5xx-guard flag-off, 2026-10-28)
+## Firestore read train (#23797, 2026-10-27)
 
 `FIRESTORE_READ_LEVERS` is a **replacement JSON literal**, not a patch. All
-surfaces explicitly declare all 19 current keys. This train flags off nine
-levers to 0 on the 2026-10-28T10Z backend-sync 5xx guard breach (rate 0.0035 /
-1424 errors vs ref 0.0014): `singleton_loops`, `usage_month_cache`,
-`backfill_task_reads`, `historical_scan_memo`, `ledger_purge_coalesce`,
-`people_scan_dedupe`, `queue_age_sample_budget`, `finjob_candidate_queries`
-(was 5), and `usage_month_total`. The eight SUPPORTED levers stay at 100
-(`deletion_marker_cache`, `subscription_cache`, `request_read_dedupe`,
-`serving_config_cache`, `candidates_page`, `action_items_page`,
-`mcp_conversation_cards_cache`, `canonical_statuses_dedupe`);
-`memory_list_index_window` and `batch_privacy_memoize` stay 0.
+surfaces explicitly declare all 19 current keys. The three train changes are
+`memory_list_index_window:0`, `batch_privacy_memoize:0`, and
+`people_scan_dedupe:100`; `finjob_candidate_queries` stays at 5.
 
-Monthly-total enablement is dissolved by this flag-off:
+Monthly-total enablement and epoch deliberately remain split:
 
 | Surface | `usage_month_total` | `FSR_USAGE_MONTH_TOTAL_EPOCH` |
 | --- | --- | --- |
-| All surfaces (base, charts, Cloud Run, jobs, desktop backend, dev) | 0 | unchanged |
+| Four prod Cloud Run services: backend, backend-sync, backend-sync-backfill, backend-integration | 100 | `c2fs_20261026_r1` |
+| Base, both GKE charts/environments, jobs, desktop backend, all dev services | 0 | `v1` |
 
-Cloud Run's previously qualified `c2fs_20261026_r1` epoch stays recorded and
-ready; every reader is off, so no reader seeds or overwrites totals. Do not
-re-enable any reader until the writers re-qualify and the lead selects a common
-epoch. If the 5xx rate persists with these levers at 0, the guard exonerates
-them and each lever may come back at 5% individually (complete-literal changes
-only, restoring the monthly-total split deliberately at that point).
+The Cloud Run overrides preserve the previously qualified serving scope. An off
+reader never seeds a total, so the inactive `v1` declarations cannot overwrite
+Cloud Run's ready epoch. This train does not qualify or enable additional
+monthly-total readers. Never copy the Cloud Run literal into the base or charts.
 
-The rollout lead ships **listen → pusher → Cloud Run** as an URGENT flag-off
-train. Read back each serving artifact and its complete literal before
-advancing. Kill switch for this train: restore the prior 19-key literal
-(#23837 state) in every applicable full literal, retaining the monthly-total
-split, if the breach is attributed to a non-lever cause.
+The rollout lead ships **listen → pusher → Cloud Run** after the batch soak.
+Read back each serving artifact and its complete literal/epoch before advancing.
+Start the people 5% clock only once the last relevant service serves this config;
+hold at least three hours and two clean evaluator ticks. Require no deletion or
+privacy violations, speaker/transcript/Free-plan changes, 5xx or live-p95
+regression. The lead then expands people to 100 with a complete-literal change
+across the same surfaces, targeted by **2026-10-28 12:00Z**; report a failed gate
+instead of expanding. Kill switch: change only `people_scan_dedupe` to 0 in every
+applicable full literal, retaining all other keys and the monthly-total split.
+
+Additional monthly-total reader scope is gated separately by
+[the writer/epoch qualification contract](../../docs/monthly-usage-totals.md).
+By **2026-10-28 12:00Z**, the lead must either attest every serving writer and
+operator path, align new readers to `c2fs_20261026_r1` while still off, and admit
+5%, or record the qualification blocker. After zero synthetic equivalence
+mismatches, no accounting/Free allowance, contention, 5xx or p95 regressions for
+two hours, the lead may expand that scope to 100 by **2026-10-29 12:00Z**.
+Never enable a `v1` reader against the shared production totals. Rollback readers
+with `usage_month_total:0` while leaving maintenance on; after any old writer,
+keep readers off until all writers qualify and a new common epoch is selected.
+Count net reads plus writes and seed scans in D+1 billing; this config alone
+establishes no realized savings.

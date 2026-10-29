@@ -11,6 +11,7 @@ from typing import Any
 
 from google.cloud import firestore
 from database import processing_backlog as store, conversations as conversations_db
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from models.conversation import Conversation
 from utils import funded_processing
 from utils.processing_backlog import choose, is_active
@@ -180,6 +181,8 @@ async def run(
     """True permits another round; false/None parks a blocked or inactive owner."""
     if not recovery_cohort_admits(uid) or not funded_processing.enabled(uid):
         return
+    if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
+        return
     max_items = max(1, min(max_items, 100))
     if not continuation and not await run_blocking(db_executor, cap_hold.recovery_cooldown, uid):
         return
@@ -207,6 +210,8 @@ async def run(
             return False
 
     async def attempt(item):
+        if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
+            return False
         # Executors and spawned callbacks inherit this UID/month grant. Later
         # model/STT dispatches must not silently adopt a reset allowance.
         with funded_processing.backlog_consent(uid, job['period']):

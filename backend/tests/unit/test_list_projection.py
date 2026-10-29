@@ -462,6 +462,7 @@ def test_recursive_wipe_closes_head_recreation_when_user_root_already_missing(mo
     )
     client = SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda key: root))
     monkeypatch.setattr(batch_pipeline_purge, 'purge_batch_owner', lambda uid: None)
+    monkeypatch.setattr(user_data_deletion, 'search_apps_db', lambda _uid, my_apps: [])
     monkeypatch.setattr(
         user_data_deletion,
         'get_data_plane_firestore_client',

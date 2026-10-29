@@ -1401,7 +1401,18 @@ def get_workstream_detail(
     tasks = _task_responses_from_snapshots(task_snapshots, context='workstream_detail')
     return WorkstreamDetailProjection(
         workstream=workstream,
-        recent_events=list_workstream_events(uid, workstream_id, firestore_client=client),
+        # The journal is contiguous: every append sets sequence to
+        # latest_event_sequence + 1 in the same transaction. Reading from
+        # latest_event_sequence - 100 returns the newest 100 events in the
+        # ascending order the response already promises. The default
+        # after_sequence=0 always returned sequences 1..100, so a thread past
+        # 100 events never showed its newest changes.
+        recent_events=list_workstream_events(
+            uid,
+            workstream_id,
+            after_sequence=max(0, workstream.latest_event_sequence - 100),
+            firestore_client=client,
+        ),
         tasks=tasks,
         artifacts=list_artifact_descriptors(uid, workstream_id, firestore_client=client),
         checkpoints=list_continuation_checkpoints(uid, workstream_id, firestore_client=client),
