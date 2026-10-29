@@ -12,7 +12,15 @@ from database._client import get_firestore_client, run_transactional
 from database import episodes
 
 PAGE_LIMIT = 128
-FIELDS = ('started_at', 'last_activity_at', 'status', 'close_reason', 'state_version')
+FIELDS = (
+    'started_at',
+    'last_activity_at',
+    'status',
+    'close_reason',
+    'state_version',
+    'recorded_merged_into',
+    'recorded_members',
+)
 
 
 def recorded_candidates(
@@ -35,7 +43,7 @@ def recorded_candidates(
     rows = [dict(doc.to_dict(), id=doc.id) for doc in query.stream(transaction=transaction)]
     if len(rows) >= PAGE_LIMIT:
         raise episodes.EpisodeConflict('recorded_window_incomplete')
-    return rows
+    return [row for row in rows if not row.get('recorded_merged_into')]
 
 
 def _attach_recorded_window(
@@ -59,8 +67,10 @@ def _attach_recorded_window(
         fence_row = fence.get(transaction=transaction).to_dict() or {}
         member = links.document(conversation_id)
         member_row = member.get(transaction=transaction).to_dict() or {}
+        members = episodes.read_memberships(transaction, client, uid, [conversation_id])
         rows = recorded_candidates(uid, started, finished, firestore_client=client, transaction=transaction)
-        selected = choose(rows, started, started)
+        rows = [row for row in rows if not row.get('recorded_merged_into')]
+        selected = choose(rows, started, finished) or choose(rows, started, started)
         # Membership stays stable inside a window. A continuing conversation
         # can also appear in a successor after a recorded hard/user boundary.
         owner_id = member_row.get('episode_id')
@@ -123,19 +133,7 @@ def _attach_recorded_window(
                 recovered_conversation_ids=[conversation_id],
             )
         transaction.set(root.collection('episodes').document(result['id']), episodes.seal(uid, result))
-        member_ids = [
-            *(member_row.get('episode_ids') or []),
-            *([member_row['episode_id']] if member_row.get('episode_id') else []),
-            result['id'],
-        ]
-        transaction.set(
-            member,
-            {
-                'episode_id': result['id'],
-                'episode_ids': list(dict.fromkeys(member_ids)),
-                'updated_at': datetime.now(timezone.utc),
-            },
-        )
+        episodes.write_memberships(transaction, client, uid, result['id'], members, datetime.now(timezone.utc))
         transaction.set(fence, {'version': int(fence_row.get('version') or 0) + 1})
         # Never modify current/last_closed navigation pointers for late audio.
         return {**result, '_window_end': window_end}
@@ -162,6 +160,23 @@ def attach_recorded(
     """
     if finished < started or (finished - started).total_seconds() > MAX_EPISODE_SECONDS * PAGE_LIMIT:
         raise episodes.EpisodeConflict('recorded_capture_window_exhausted')
+    from database import episode_recorded_components
+
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    canonical = episode_recorded_components.attach(
+        uid,
+        conversation_id,
+        source,
+        started,
+        finished,
+        candidates=recorded_candidates,
+        template=new_episode,
+        choose=choose,
+        firestore_client=client,
+        page_limit=PAGE_LIMIT,
+    )
+    if canonical is not None:
+        return canonical
     cursor, windows = started, []
     while True:
         result = _attach_recorded_window(
@@ -195,7 +210,8 @@ def member_episodes(uid: str, conversation_id: str, *, firestore_client: Any = N
             if isinstance(value, str) and value
         )
     )
-    return [episode for eid in ids if (episode := episodes.get_episode(uid, eid, firestore_client=client))]
+    resolved = [episode for eid in ids if (episode := episodes.get_episode(uid, eid, firestore_client=client))]
+    return list({episode['id']: episode for episode in resolved}.values())
 
 
 def resume_recorded(uid, episode_id, at, *, expected_version, choose: Callable, firestore_client=None):
@@ -244,3 +260,50 @@ def resume_recorded(uid, episode_id, at, *, expected_version, choose: Callable, 
         return result
 
     return run_transactional(client, resume, transient=True)
+
+
+def between(uid: str, start: datetime, end: datetime, *, firestore_client: Any = None) -> list[dict[str, Any]]:
+    """Complete ordered time-index scan using the automatic started_at index.
+
+    Paginate rather than silently dropping episodes after PAGE_LIMIT. Only the
+    selected overlapping rows are decrypted by the service. No composite index.
+    """
+    if end < start:
+        raise ValueError('episode window end precedes start')
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    query = (
+        client.collection('users')
+        .document(uid)
+        .collection('episodes')
+        .where(filter=FieldFilter('started_at', '>=', start - timedelta(seconds=MAX_EPISODE_SECONDS)))
+        .where(filter=FieldFilter('started_at', '<=', end))
+        .order_by('started_at')
+        .select(FIELDS)
+        .limit(PAGE_LIMIT)
+    )
+    result = []
+    while True:
+        page = list(query.stream())
+        result.extend(
+            dict(doc.to_dict(), id=doc.id) for doc in page if not (doc.to_dict() or {}).get('recorded_merged_into')
+        )
+        if len(page) < PAGE_LIMIT:
+            return result
+        query = query.start_after(page[-1])
+
+
+def repointed_members(episode, donor_id, survivor_id):
+    """Transfer recorded evidence with a conversation absorption, in the same CAS."""
+    members = episode.get('recorded_members')
+    if members is None or donor_id not in members:
+        return {}
+    members = dict(members)
+    donor = members.pop(donor_id)
+    survivor = members.get(survivor_id, donor)
+    members[survivor_id] = {
+        **donor,
+        **survivor,
+        'start': min(donor['start'], survivor['start']),
+        'end': max(donor['end'], survivor['end']),
+    }
+    return {'recorded_members': members}

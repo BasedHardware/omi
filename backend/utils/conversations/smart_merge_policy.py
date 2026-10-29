@@ -166,7 +166,10 @@ def speech_bounds(row: Mapping[str, Any], segments: Sequence[Mapping[str, Any]])
 
 
 def fragment_of(row: Mapping[str, Any]) -> Optional[Fragment]:
-    started, finished = row.get('started_at'), row.get('finished_at')
+    from utils.conversations.recorded_time import conversation_span
+
+    span = conversation_span(row)
+    started, finished = (span.recorded_start, span.recorded_end) if span else (None, None)
     if not isinstance(started, datetime) or not isinstance(finished, datetime) or not row.get('id'):
         return None
     stored = row.get('structured')
@@ -370,10 +373,14 @@ def _check_pair_legacy(
 ) -> PairCheck:
     survivor_speech = speech_bounds(survivor, survivor_segments)
     new_speech = speech_bounds(new, new_segments)
-    survivor_end, new_start = survivor.get('finished_at'), new.get('started_at')
+    from utils.conversations.recorded_time import conversation_span
+
+    a = conversation_span(dict(survivor, transcript_segments=list(survivor_segments)))
+    b = conversation_span(dict(new, transcript_segments=list(new_segments)))
+    survivor_end, new_start = a.recorded_end if a else None, b.recorded_start if b else None
     if survivor_speech is None or new_speech is None or not isinstance(survivor_end, datetime):
         return PairCheck(SkipReason.GAP_OUT_OF_WINDOW)
-    if not isinstance(new_start, datetime):
+    if a is None or b is None or not isinstance(new_start, datetime):
         return PairCheck(SkipReason.GAP_OUT_OF_WINDOW)
     gap = (new_start - survivor_end).total_seconds()
     speech_gap = new_speech[0] - survivor_speech[1]
@@ -385,7 +392,7 @@ def _check_pair_legacy(
     a_segments = fragment_segments(survivor, survivor_segments, last) if last else survivor_segments
     if word_count(a_segments) < MIN_WORDS or word_count(new_segments) < MIN_WORDS:
         return PairCheck(SkipReason.TOO_FEW_WORDS, gap, speech_gap)
-    if new_speech[1] - survivor_speech[0] > MAX_MERGED_SPAN_SECONDS:
+    if (max(a.recorded_end, b.recorded_end) - a.recorded_start).total_seconds() > MAX_MERGED_SPAN_SECONDS:
         return PairCheck(SkipReason.SPAN_CAP, gap, speech_gap)
     if len(survivor_segments) + len(new_segments) > MAX_MERGED_SEGMENTS:
         return PairCheck(SkipReason.SEGMENT_CAP, gap, speech_gap)
@@ -395,7 +402,10 @@ def _check_pair_legacy(
 
 
 def _wall_times(row: Mapping[str, Any]) -> Optional[tuple[datetime, datetime]]:
-    created, finished = row.get('created_at'), row.get('finished_at')
+    from utils.conversations.recorded_time import conversation_span
+
+    span = conversation_span(row)
+    created, finished = (span.recorded_start, span.recorded_end) if span else (None, None)
     if not isinstance(created, datetime) or not isinstance(finished, datetime) or finished < created:
         return None
     return created, finished

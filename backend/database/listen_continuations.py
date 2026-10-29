@@ -9,6 +9,7 @@ from typing import Any, Mapping
 from google.cloud import firestore
 
 from database._client import get_firestore_client
+from utils.conversations.recorded_time import recorded_end
 from database.document_ids import calendar_meeting_doc_id
 from utils.observability.fallback import record_fallback
 from models.conversation_continuity import (
@@ -146,13 +147,13 @@ def resolve_live_continuation(
                     row,
                     source=source,
                     device_id=device_id,
-                    now=now,
+                    arrival_at=now,
                     timeout=timeout,
                     language=language,
                     allow_server_batch=allow_server_batch,
                 ):
                     return {'conversation_id': cid, 'recording_session_id': sid}, None
-                finish = row.get('finished_at')
+                finish = recorded_end(row)
                 if (
                     row.get('source') == source
                     and row.get('client_device_id') == device_id
@@ -175,7 +176,7 @@ def resolve_live_continuation(
                 candidate,
                 source=source,
                 device_id=device_id,
-                now=now,
+                arrival_at=now,
                 timeout=timeout,
                 language=language,
                 allow_server_batch=allow_server_batch,

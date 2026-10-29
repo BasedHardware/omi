@@ -1458,6 +1458,7 @@ export interface ContinuationCheckpointUpsert {
 export interface Conversation {
   app_id?: string | null;
   apps_results?: Array<AppResult>;
+  arrival_at?: string | null;
   audio_files?: Array<AudioFile>;
   audio_timeline?: AudioTimelineProvenance | null;
   calendar_event?: CalendarEventLink | null;
@@ -1469,12 +1470,14 @@ export interface Conversation {
   client_device_id?: string | null;
   client_platform?: string | null;
   client_processing?: ClientProcessing | null;
+  clock?: RecordedClock | null;
   content_kind?: "conversation" | "media" | "noise" | null;
   conversation_audio?: ConversationAudio | null;
   created_at: string;
   data_protection_level?: string | null;
   deferred?: boolean;
   discarded?: boolean;
+  episode_id?: string | null;
   external_data?: Record<string, unknown> | null;
   finished_at: string | null;
   folder_id?: string | null;
@@ -1497,6 +1500,8 @@ export interface Conversation {
   processing_deferred?: boolean;
   processing_memory_id?: string | null;
   processing_state?: ConversationProcessingState | null;
+  recorded_end?: string | null;
+  recorded_start?: string | null;
   screenshot_sharing_enabled?: boolean;
   source?: ConversationSource | null;
   speaker_resolution?: ConversationSpeakers | null;
@@ -1664,6 +1669,7 @@ export interface ConversationScreenFrameSet {
 export interface ConversationSearchItem {
   app_id?: string | null;
   apps_results?: Array<AppResult>;
+  arrival_at?: string | null;
   audio_files?: Array<AudioFile>;
   audio_timeline?: AudioTimelineProvenance | null;
   calendar_event?: CalendarEventLink | null;
@@ -1675,12 +1681,14 @@ export interface ConversationSearchItem {
   client_device_id?: string | null;
   client_platform?: string | null;
   client_processing?: ClientProcessing | null;
+  clock?: RecordedClock | null;
   content_kind?: "conversation" | "media" | "noise" | null;
   conversation_audio?: ConversationAudio | null;
   created_at: string;
   data_protection_level?: string | null;
   deferred?: boolean;
   discarded?: boolean;
+  episode_id?: string | null;
   external_data?: Record<string, unknown> | null;
   finished_at: string | null;
   folder_id?: string | null;
@@ -1704,6 +1712,8 @@ export interface ConversationSearchItem {
   processing_deferred?: boolean;
   processing_memory_id?: string | null;
   processing_state?: ConversationProcessingState | null;
+  recorded_end?: string | null;
+  recorded_start?: string | null;
   screenshot_sharing_enabled?: boolean;
   source?: ConversationSource | null;
   speaker_resolution?: ConversationSpeakers | null;
@@ -4452,6 +4462,8 @@ export interface RecordLlmUsageBucketRequest {
   total_tokens?: number;
 }
 
+export type RecordedClock = "device" | "estimated_device" | "frame" | "live_capture" | "imported" | "legacy";
+
 export interface RedeemCodeRequest {
   code: string;
 }
@@ -6986,6 +6998,7 @@ export interface OmiApiSchemas {
   "Recommendation": Recommendation;
   "RecommendationSubjectKind": RecommendationSubjectKind;
   "RecordLlmUsageBucketRequest": RecordLlmUsageBucketRequest;
+  "RecordedClock": RecordedClock;
   "RedeemCodeRequest": RedeemCodeRequest;
   "RedeemCodeResponse": RedeemCodeResponse;
   "ReferralClaimRequest": ReferralClaimRequest;
