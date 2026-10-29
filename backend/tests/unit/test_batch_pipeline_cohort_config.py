@@ -83,6 +83,7 @@ def test_shadow_rung_matches_the_worker_charts_that_offer_its_capacity(manifest)
         worker = {**defaults['worker'], **values['worker']}
         assert str(worker['shadowPercent']) == percent, values_name
         assert str(worker['shadowPaidRecoveryPerHour']) == cap, values_name
+        assert worker['shadowRecoveryApiUrl'], f'{values_name}: shadow work needs a recovery URL'
 
 
 def test_shadow_recovery_role_accepts_its_rendered_gpu_worker_identity(manifest):
