@@ -469,7 +469,7 @@ def test_storage_failure_never_pushes(account):
 @pytest.mark.parametrize(
     'language, title, untitled',
     [
-        ('de', 'Ihre erste Zusammenfassung ist fertig', 'Tippen zum Anzeigen'),
+        ('de', 'Erste Zusammenfassung ist fertig', 'Tippen zum Anzeigen'),
         ('ja', '最初の要約ができました', 'タップして表示'),
         ('ar', 'ملخصك الأول جاهز', 'اضغط للعرض'),
     ],
@@ -507,8 +507,10 @@ def test_copy_language_follows_the_summary_language(account, preference, capture
 
 
 def test_copy_is_short_and_plain():
-    for language, strings in FIRST_SUMMARY_COPY.items():
-        for text in strings:
+    for language, (title, untitled) in FIRST_SUMMARY_COPY.items():
+        # A collapsed lock-screen notification shows one line of title (about 33 Latin characters).
+        assert len(title) <= 33, language
+        for text in (title, untitled):
             assert text.strip() == text and text, language
             assert '—' not in text and '–' not in text, language
 
