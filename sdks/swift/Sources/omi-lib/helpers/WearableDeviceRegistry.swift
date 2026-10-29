@@ -16,12 +16,16 @@ class WearableDeviceRegistry {
     private var wearableRegistry: [WearableDevice.Type] = []
     private(set) var scanServices: [CBUUID] = []
 
-    func registerDevice(wearable: WearableDevice.Type) {
-        if !scanServices.contains(wearable.deviceConfiguration.scanServiceUUID) {
-            wearableRegistry.append(wearable)
-            scanServices.append(wearable.deviceConfiguration.scanServiceUUID)
+    enum RegistryError: Error {
+        case duplicateScanUUID
+    }
+
+    func registerDevice(wearable: WearableDevice.Type) throws {
+        if scanServices.contains(wearable.deviceConfiguration.scanServiceUUID) {
+            throw RegistryError.duplicateScanUUID
         }
-        // TODO: return error if service with same scan UUID already registered
+        wearableRegistry.append(wearable)
+        scanServices.append(wearable.deviceConfiguration.scanServiceUUID)
     }
     
     func deviceTypeForService(uuid serviceUUID: CBUUID) -> WearableDevice.Type? {
