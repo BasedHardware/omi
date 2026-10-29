@@ -1,0 +1,128 @@
+"""Compare a fixed replay adapter/corpus against two immutable Git refs."""
+
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tarfile
+import tempfile
+
+
+def compare(candidate, baseline):
+    new_exceptions = sorted(set(candidate['exceptions']) - set(baseline['exceptions']))
+    old_blocked = {sid for row in baseline['chain_blocks'] for sid in row.get('units', [])}
+    old_blocks = {(row['owner'], row['head']): row['blocked_units'] for row in baseline['chain_blocks']}
+    new_blocks = [
+        row
+        for row in candidate['chain_blocks']
+        if (
+            bool(set(row['units']) - old_blocked)
+            if 'units' in row
+            else row['blocked_units'] > old_blocks.get((row['owner'], row['head']), 0)
+        )
+    ]
+    # Per-unit checks also catch a known exception/site spreading to new shapes.
+    new_units = {
+        unit: sorted(set(issues) - set(baseline['unit_issues'].get(unit, [])))
+        for unit, issues in candidate['unit_issues'].items()
+        if set(issues) - set(baseline['unit_issues'].get(unit, []))
+    }
+    return {
+        'new_exception_sites': new_exceptions,
+        'new_chain_blocks': new_blocks,
+        'new_unit_failures': new_units,
+        'regression': bool(new_exceptions or new_blocks or new_units),
+    }
+
+
+def gate(repo, corpus, ref, base, output, allow_incomplete=False):
+    runner = Path(__file__).with_name('runner.py')
+    resolved = {
+        label: subprocess.check_output(
+            ['git', '-C', str(repo), 'rev-parse', '--verify', f'{value}^{{commit}}'], text=True
+        ).strip()
+        for label, value in (('candidate', ref), ('baseline', base))
+    }
+    output.mkdir(parents=True, exist_ok=True, mode=0o700)
+    reports = {}
+    for label, sha in resolved.items():
+        with tempfile.TemporaryDirectory(prefix=f'batch-replay-{label}-', dir=output) as directory:
+            snapshot = Path(directory)
+            archive = snapshot / 'source.tar'
+            with archive.open('wb') as stream:
+                subprocess.run(['git', '-C', str(repo), 'archive', sha, 'backend'], stdout=stream, check=True)
+            with tarfile.open(archive) as bundle:
+                bundle.extractall(snapshot, filter='data')
+            report = output / f'{label}.json'
+            environment = {
+                key: value
+                for key, value in os.environ.items()
+                if not (
+                    key.startswith(('GOOGLE_', 'GCLOUD_', 'GCP_', 'CLOUDSDK_', 'OMI_', 'BATCH_', 'REDIS_'))
+                    or key in {'SERVICE_ACCOUNT_JSON', 'ENCRYPTION_SECRET', 'OPENAI_API_KEY', 'PYTHONPATH'}
+                )
+            }
+            # stdout/stderr are private diagnostic files. Never surface raw
+            # product logs or unexpected import errors to shared operator output.
+            with (output / f'{label}.log').open('wb') as stream:
+                subprocess.run(
+                    [
+                        sys.executable,
+                        '-I',
+                        str(runner),
+                        '--backend',
+                        str(snapshot / 'backend'),
+                        '--corpus',
+                        str(corpus.resolve()),
+                        '--output',
+                        str(report.resolve()),
+                    ],
+                    env=environment,
+                    stdout=stream,
+                    stderr=stream,
+                    check=True,
+                    timeout=1800,
+                )
+            reports[label] = json.loads(report.read_text())
+    diff = compare(reports['candidate'], reports['baseline'])
+    coverage = reports['candidate']['coverage']
+    incomplete = {key: count for key, count in coverage.items() if key.startswith(('missing_', 'invalid_')) and count}
+    result = {
+        'schema': 1,
+        'refs': resolved,
+        'corpus_sha256': hashlib.sha256(corpus.read_bytes()).hexdigest(),
+        **diff,
+        'incomplete': incomplete,
+        'diagnostic_only': allow_incomplete,
+        'verdict': 'FAIL' if diff['regression'] or (incomplete and not allow_incomplete) else 'PASS',
+    }
+    (output / 'gate.json').write_text(json.dumps(result, indent=2, sort_keys=True) + '\n')
+    print(
+        json.dumps(
+            {
+                'verdict': result['verdict'],
+                'refs': resolved,
+                'new_exception_sites': diff['new_exception_sites'],
+                'new_chain_blocks': len(diff['new_chain_blocks']),
+                'incomplete': incomplete,
+                'diagnostic_only': allow_incomplete,
+            },
+            sort_keys=True,
+        )
+    )
+    return 1 if result['verdict'] == 'FAIL' else 0
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--repo', type=Path, default=Path(__file__).resolve().parents[3])
+    parser.add_argument('--corpus', type=Path, required=True)
+    parser.add_argument('--ref', required=True)
+    parser.add_argument('--base', required=True)
+    parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--allow-incomplete', action='store_true', help='diagnostic comparison; not a deploy receipt')
+    args = parser.parse_args()
+    sys.exit(gate(args.repo, args.corpus, args.ref, args.base, args.output, args.allow_incomplete))
