@@ -21,9 +21,7 @@ def test_disable_app_in_firestore_success():
     mock_doc_ref.get.return_value = mock_doc
     mock_client.collection.return_value.document.return_value = mock_doc_ref
 
-    res = wh_db.disable_app_in_firestore(
-        "app-123", "HTTP 500", 48, firestore_client=mock_client
-    )
+    res = wh_db.disable_app_in_firestore("app-123", "HTTP 500", 48, firestore_client=mock_client)
     assert res is True
     mock_client.collection.assert_called_once_with("plugins_data")
     mock_client.collection.return_value.document.assert_called_once_with("app-123")
@@ -65,9 +63,7 @@ def test_disable_app_in_firestore_raw_error_sanitized():
     mock_client.collection.return_value.document.return_value = mock_doc_ref
 
     raw_error = "Connection refused: internal IP 10.0.0.1 failed to connect"
-    res = wh_db.disable_app_in_firestore(
-        "app-raw-err", raw_error, 24, firestore_client=mock_client
-    )
+    res = wh_db.disable_app_in_firestore("app-raw-err", raw_error, 24, firestore_client=mock_client)
     assert res is True
     payload = mock_doc_ref.update.call_args[0][0]
     assert payload["disabled_error"] == "Webhook delivery failed"
@@ -81,9 +77,7 @@ def test_disable_app_in_firestore_closed_set_diagnostic_preserved():
     mock_doc_ref.get.return_value = mock_doc
     mock_client.collection.return_value.document.return_value = mock_doc_ref
 
-    res = wh_db.disable_app_in_firestore(
-        "app-timeout", "TimeoutException", 24, firestore_client=mock_client
-    )
+    res = wh_db.disable_app_in_firestore("app-timeout", "TimeoutException", 24, firestore_client=mock_client)
     assert res is True
     payload = mock_doc_ref.update.call_args[0][0]
     assert payload["disabled_error"] == "TimeoutException"
@@ -91,14 +85,8 @@ def test_disable_app_in_firestore_closed_set_diagnostic_preserved():
 
 def test_disable_app_in_firestore_empty_app_id():
     mock_client = MagicMock()
-    assert (
-        wh_db.disable_app_in_firestore("", "err", 24, firestore_client=mock_client)
-        is False
-    )
-    assert (
-        wh_db.disable_app_in_firestore("   ", "err", 24, firestore_client=mock_client)
-        is False
-    )
+    assert wh_db.disable_app_in_firestore("", "err", 24, firestore_client=mock_client) is False
+    assert wh_db.disable_app_in_firestore("   ", "err", 24, firestore_client=mock_client) is False
     assert wh_db.disable_app_in_firestore(None, "err", 24, firestore_client=mock_client) is False  # type: ignore[arg-type]
     mock_client.collection.assert_not_called()
 
@@ -111,9 +99,7 @@ def test_disable_app_in_firestore_non_existent_app():
     mock_doc_ref.get.return_value = mock_doc
     mock_client.collection.return_value.document.return_value = mock_doc_ref
 
-    res = wh_db.disable_app_in_firestore(
-        "app-missing", "err", 24, firestore_client=mock_client
-    )
+    res = wh_db.disable_app_in_firestore("app-missing", "err", 24, firestore_client=mock_client)
     assert res is False
     mock_doc_ref.update.assert_not_called()
 
@@ -130,9 +116,7 @@ def test_disable_app_in_firestore_missing_doc_does_not_poison_cache():
     with wh_db._cache_lock:
         wh_db._disabled_cache.pop(app_id, None)
 
-    res = wh_db.disable_app_in_firestore(
-        app_id, "err", 24, firestore_client=mock_client
-    )
+    res = wh_db.disable_app_in_firestore(app_id, "err", 24, firestore_client=mock_client)
     assert res is False
     mock_doc_ref.update.assert_not_called()
     with wh_db._cache_lock:
@@ -148,9 +132,7 @@ def test_disable_app_in_firestore_exception_handled():
     mock_doc_ref.update.side_effect = Exception("Firestore network timeout")
     mock_client.collection.return_value.document.return_value = mock_doc_ref
 
-    res = wh_db.disable_app_in_firestore(
-        "app-fail", "err", 24, firestore_client=mock_client
-    )
+    res = wh_db.disable_app_in_firestore("app-fail", "err", 24, firestore_client=mock_client)
     assert res is False
 
 
@@ -167,9 +149,7 @@ def test_disable_app_in_firestore_exception_does_not_poison_cache():
     with wh_db._cache_lock:
         wh_db._disabled_cache.pop(app_id, None)
 
-    res = wh_db.disable_app_in_firestore(
-        app_id, "err", 24, firestore_client=mock_client
-    )
+    res = wh_db.disable_app_in_firestore(app_id, "err", 24, firestore_client=mock_client)
     assert res is False
     with wh_db._cache_lock:
         assert app_id not in wh_db._disabled_cache
