@@ -19,7 +19,6 @@ from config.episodes import (
     CONTINUE_GAP_SECONDS,
     FALLBACK_CLOSE_GAP_SECONDS,
     MAX_EPISODE_SECONDS,
-    MAX_MOMENTS,
     MOVED_ON_THRESHOLD,
     PROVISIONAL_MATCH_THRESHOLD,
     episode_hard_cap_across_conversations_enabled,
@@ -135,8 +134,6 @@ def boundary(episode: Optional[Mapping[str, Any]], moment: MomentFacts) -> Bound
             return Boundary('close', 'hard_cap')
     elif (moment.ended_at - started).total_seconds() > MAX_EPISODE_SECONDS:
         # The kill switch restores the pre-rotation moment-end check.
-        return Boundary('close', 'hard_cap')
-    if len(episode.get('moments') or []) >= MAX_MOMENTS:
         return Boundary('close', 'hard_cap')
     conversation_ids = set(episode.get('conversation_ids') or [])
     if moment.conversation_id in conversation_ids:

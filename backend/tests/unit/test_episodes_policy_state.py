@@ -177,7 +177,7 @@ def test_boundary_rules(monkeypatch):
     assert policy.boundary(_episode(), _moment(start_minutes=240, end_minutes=240)).reason == 'hard_cap'
     assert policy.boundary(_episode(), _moment(start_minutes=230, end_minutes=241)).reason == 'hard_cap'
     full = _episode(moments=[{'id': str(i)} for i in range(config.MAX_MOMENTS)])
-    assert policy.boundary(full, _moment()).reason == 'hard_cap'
+    assert policy.boundary(full, _moment()).action == 'continue'
 
 
 def test_hard_cap_kill_switch_restores_the_legacy_moment_end_boundary(monkeypatch):

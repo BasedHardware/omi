@@ -86,6 +86,14 @@ def close_now(uid: str, conversation_id: str, trigger: ProcessingTrigger, source
         return 'error'
 
 
+def schedule_group_attachments(uid: str, conversation_ids: list[str]) -> None:
+    """A group join owes every retained member an episode, independently of notes refresh."""
+    if not episodes_enabled_for(uid) or not client_gate.client_seen_cached(uid):
+        return
+    for cid in dict.fromkeys(conversation_ids):
+        schedule_after_finalization(uid, cid, ProcessingTrigger.CAPTURE_GROUP)
+
+
 def schedule_after_finalization(uid: str, conversation_id: str, trigger: ProcessingTrigger) -> None:
     """Run on the episode pool; saturation queues admission with bounded producer backpressure."""
     if not episodes_enabled_for(uid):

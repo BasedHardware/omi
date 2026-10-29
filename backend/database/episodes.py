@@ -24,13 +24,14 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Optional, Sequence
 
 from google.cloud import firestore
 from config.recorded_time import recorded_episodes_enabled
+from config.episodes import MAX_EPISODE_SECONDS
 
-from database import episode_receipts
+from database import episode_receipts, episode_timeline
 from database._client import get_firestore_client, run_transactional
 from utils.encryption import decrypt, encrypt
 
@@ -130,10 +131,60 @@ def _closed_fields(reason: str, closed_at: datetime) -> dict[str, Any]:
 def _merge_state(raw: Mapping[str, Any], updates: Mapping[str, Any]) -> dict[str, Any]:
     """A notes CAS must not overwrite speech retained while its model call ran."""
     merged = {**raw, **updates}
-    before, after = raw.get('last_activity_at'), updates.get('last_activity_at')
-    if isinstance(before, datetime) and isinstance(after, datetime):
-        merged['last_activity_at'] = max(before, after)
+    hidden = set(raw.get('discarded_conversation_ids') or []) | set(updates.get('discarded_conversation_ids') or [])
+    activity = dict(raw.get('member_activity') or {})
+    if not activity and isinstance(raw.get('last_activity_at'), datetime) and raw.get('primary_conversation_id'):
+        activity[raw['primary_conversation_id']] = raw['last_activity_at']
+    for cid, at in (updates.get('member_activity') or {}).items():
+        if isinstance(at, datetime):
+            activity[cid] = max(activity.get(cid, at), at)
+    if activity or hidden:
+        activity = {cid: at for cid, at in activity.items() if cid not in hidden}
+        merged['member_activity'] = activity
+        merged['discarded_conversation_ids'] = sorted(hidden)
+        merged['last_activity_at'] = max(activity.values(), default=merged['started_at'])
+    else:
+        before, after = raw.get('last_activity_at'), updates.get('last_activity_at')
+        if isinstance(before, datetime) and isinstance(after, datetime):
+            merged['last_activity_at'] = max(before, after)
+    if isinstance(merged.get('last_activity_at'), datetime):
+        merged['last_activity_at'] = _bounded_activity(
+            {**merged, **{k: raw[k] for k in ('status', 'close_reason', 'last_activity_at') if k in raw}},
+            merged['last_activity_at'],
+        )
     return merged
+
+
+def _member_links(before, after, requested):
+    added = set(after.get('conversation_ids') or []) - set((before or {}).get('conversation_ids') or [])
+    links = [cid for cid in dict.fromkeys([*requested, *sorted(added)]) if cid and cid not in {CURRENT, LAST_CLOSED}]
+    if len(links) > _LINK_BATCH_LIMIT:
+        raise EpisodeConflict('link_batch_exhausted')
+    return links
+
+
+def _check_membership(transaction, client, uid, episode_id, conversation_ids):
+    """Check ownership in the same read phase as the link write, on every writer."""
+    for cid in dict.fromkeys(conversation_ids):
+        if not cid or cid in {CURRENT, LAST_CLOSED}:
+            continue
+        owner_id = _link_target(client, uid, cid, transaction)
+        if owner_id and owner_id != episode_id:
+            owner = _episodes(client, uid).document(owner_id).get(transaction=transaction).to_dict() or {}
+            # A provisional boundary may detach first; an extant member cannot move.
+            if cid in (owner.get('conversation_ids') or []):
+                raise EpisodeConflict('conversation_already_owned')
+
+
+def _bounded_activity(episode, at):
+    start = episode.get('started_at')
+    if isinstance(start, datetime):
+        at = min(at, start + timedelta(seconds=MAX_EPISODE_SECONDS))
+    if episode.get('status') == 'closed' and episode.get('close_reason') not in {'gap', 'idle'}:
+        end = episode.get('last_activity_at')
+        if isinstance(end, datetime):
+            at = min(at, end)
+    return at
 
 
 @firestore.transactional
@@ -144,11 +195,30 @@ def _record_activity(
     raw = ref.get(transaction=transaction).to_dict() or {}
     if raw.get('status') != 'live' or conversation_id not in (raw.get('conversation_ids') or []):
         return None
+    conversation = (
+        client.collection('users')
+        .document(uid)
+        .collection('conversations')
+        .document(conversation_id)
+        .get(transaction=transaction)
+        .to_dict()
+        or {}
+    )
+    if any(conversation.get(key) for key in ('discarded', 'deleted', 'sync_merged_into')):
+        return None
     last = raw.get('last_activity_at')
-    activity = max(last, at) if isinstance(last, datetime) else at
-    if activity != last:
-        # This clock has its own transaction. It must not invalidate notes state_version.
-        transaction.update(ref, {'last_activity_at': activity})
+    member_at = _bounded_activity(raw, at)
+    activity = max(last, member_at) if isinstance(last, datetime) else member_at
+    members = dict(raw.get('member_activity') or {})
+    prior_member = members.get(conversation_id)
+    members[conversation_id] = max(prior_member, member_at) if isinstance(prior_member, datetime) else member_at
+    if activity != last or members != raw.get('member_activity'):
+        if recorded_episodes_enabled() and activity != last:
+            fence = episode_timeline.check_window(transaction, client, uid, {**raw, 'last_activity_at': activity})
+            if fence:
+                transaction.set(fence[0], {'version': fence[1]})
+        # This clock must not invalidate the notes state_version.
+        transaction.update(ref, {'last_activity_at': activity, 'member_activity': members})
     return activity
 
 
@@ -237,18 +307,24 @@ def _commit(
         if not current_raw or current_raw.get('state_version') != expected_version:
             raise EpisodeConflict('state_version_changed')
     now = datetime.now(timezone.utc)
-    links = [cid for cid in dict.fromkeys(link_conversation_ids) if cid and cid not in {CURRENT, LAST_CLOSED}][
-        :_LINK_BATCH_LIMIT
-    ]
+    target = (
+        _merge_state({}, new_episode)
+        if new_episode is not None
+        else _merge_state(unseal(uid, current_raw) or {}, updates)
+    )
+    links = _member_links(None if new_episode is not None else current_raw, target, link_conversation_ids)
+    _check_membership(transaction, client, uid, target['id'], [*links, *(target.get('conversation_ids') or [])])
+    if recorded_episodes_enabled():
+        episode_timeline.check_window(transaction, client, uid, target)
     if new_episode is not None:
         if current_ref is not None and current_raw and current_raw.get('status') == 'live':
             transaction.update(current_ref, _closed_fields(close_reason or 'gap', closed_at or now))
             transaction.set(_links(client, uid).document(LAST_CLOSED), {'episode_id': current_id, 'updated_at': now})
         episode_id = str(new_episode['id'])
-        stored = seal(uid, {**new_episode, 'state_version': 1})
+        stored = seal(uid, {**target, 'state_version': 1})
         transaction.set(_episodes(client, uid).document(episode_id), stored)
         transaction.set(pointer, {'episode_id': episode_id, 'updated_at': now})
-        result = {**new_episode, 'state_version': 1}
+        result = {**target, 'state_version': 1}
     else:
         if current_ref is None or current_raw is None:
             raise EpisodeConflict('no_open_episode')
@@ -298,6 +374,7 @@ def commit_moment(
         dict(updates or {}),
         list(link_conversation_ids),
         dict(segment_receipts or {}) or None,
+        transient=True,
     )
 
 
@@ -336,13 +413,17 @@ def _reopen(
         },
     )
     merged['state_version'] = int(raw.get('state_version') or 0) + 1
+    links = _member_links(raw, merged, link_conversation_ids)
+    _check_membership(transaction, client, uid, episode_id, [*links, *(merged.get('conversation_ids') or [])])
+    if recorded_episodes_enabled():
+        fence = episode_timeline.check_window(transaction, client, uid, merged)
+        if fence:
+            transaction.set(fence[0], {'version': fence[1]})
     transaction.set(ref, seal(uid, merged))
     transaction.set(_links(client, uid).document(CURRENT), {'episode_id': episode_id, 'updated_at': now})
     # The recap must not advertise a live episode as the last closed one.
     transaction.set(_links(client, uid).document(LAST_CLOSED), {'episode_id': None, 'updated_at': now})
-    for conversation_id in [
-        cid for cid in dict.fromkeys(link_conversation_ids) if cid and cid not in {CURRENT, LAST_CLOSED}
-    ]:
+    for conversation_id in links:
         transaction.set(_links(client, uid).document(conversation_id), {'episode_id': episode_id, 'updated_at': now})
     return merged
 
@@ -449,12 +530,16 @@ def _update(
     merged = _merge_state(unseal(uid, raw) or {}, updates)
     _drop_legacy_receipts(merged, segment_receipts)
     merged['state_version'] = expected_version + 1
+    links = _member_links(raw, merged, link_conversation_ids)
+    _check_membership(transaction, client, uid, episode_id, [*links, *(merged.get('conversation_ids') or [])])
+    if recorded_episodes_enabled():
+        fence = episode_timeline.check_window(transaction, client, uid, merged)
+        if fence:
+            transaction.set(fence[0], {'version': fence[1]})
     transaction.set(ref, seal(uid, merged))
     now = datetime.now(timezone.utc)
     _write_receipts(transaction, client, uid, segment_receipts, receipts_raw, now)
-    for conversation_id in [
-        cid for cid in dict.fromkeys(link_conversation_ids) if cid and cid not in {CURRENT, LAST_CLOSED}
-    ]:
+    for conversation_id in links:
         transaction.set(_links(client, uid).document(conversation_id), {'episode_id': episode_id, 'updated_at': now})
     return merged
 
@@ -485,4 +570,5 @@ def update_episode(
         dict(updates),
         list(link_conversation_ids),
         dict(segment_receipts or {}) or None,
+        transient=True,
     )

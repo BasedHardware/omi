@@ -503,6 +503,7 @@ async def finalize_persisted_conversation(
             except Exception as error:
                 OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='error').inc()
                 logger.warning('summary_vector outcome=error exception_type=%s', type(error).__name__)
+            await _episode_after_finalization(uid, conversation_id, latest_data, trigger)
             return ConversationFinalizationDisposition.completed
         if fanout['status'] == 'fenced':
             logger.info(

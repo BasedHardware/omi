@@ -2,16 +2,15 @@
 
 from typing import Any, Optional
 
-from config.occasion_relevance import enabled
 from database import conversations
 
 
 def visible_episode(
     uid: str, episode: Optional[dict[str, Any]], *, firestore_client: Any = None
 ) -> Optional[dict[str, Any]]:
-    if not enabled() or not episode or not episode.get('conversation_ids'):
+    if not episode or 'conversation_ids' not in episode:
         return episode
-    for cid in episode['conversation_ids']:
+    for cid in episode.get('conversation_ids') or []:
         row = conversations.get_conversation_raw_snapshot(
             uid, cid, field_paths=['discarded', 'deleted', 'sync_merged_into'], firestore_client=firestore_client
         )

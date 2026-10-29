@@ -106,29 +106,123 @@ def test_long_capture_caps_and_only_fresh_live_resume_changes_navigation(store):
         firestore_client=client,
     )
     windows = result['_recorded_windows']
-    assert len(windows) == 2 and all(w['status'] == 'closed' for w in windows)
-    assert windows[0]['last_activity_at'] == windows[1]['started_at'] == T0 + timedelta(hours=4)
+    assert len(windows) == 1 and windows[0]['status'] == 'closed'
+    assert windows[0]['last_activity_at'] == T0 + timedelta(hours=4)
     assert episodes.get_current_episode(uid, firestore_client=client) is None
-    assert len(episode_timeline.member_episodes(uid, 'long', firestore_client=client)) == 2
-    resumed = episode_timeline.resume_recorded(
+    assert len(episode_timeline.member_episodes(uid, 'long', firestore_client=client)) == 1
+    # A different conversation starts the successor, never the capped member.
+    successor = episode_timeline.attach_recorded(
         uid,
-        windows[1]['id'],
-        T0 + timedelta(hours=5, seconds=30),
-        expected_version=windows[1]['state_version'],
+        'next',
+        'desktop',
+        T0 + timedelta(hours=5),
+        T0 + timedelta(hours=5, minutes=1),
         choose=choose_recorded_episode,
+        new_episode={},
         firestore_client=client,
     )
-    assert resumed['status'] == 'live'
-    assert episodes.get_current_episode(uid, firestore_client=client)['id'] == windows[1]['id']
+    assert successor['id'] != result['id'] and successor['conversation_ids'] == ['next']
+    retry = episode_timeline.attach_recorded(
+        uid,
+        'long',
+        'phone',
+        T0,
+        T0 + timedelta(hours=6),
+        choose=choose_recorded_episode,
+        new_episode={},
+        firestore_client=client,
+    )
+    assert retry['id'] == result['id']
+    assert len(episode_timeline.member_episodes(uid, 'long', firestore_client=client)) == 1
     assert root.collection('episode_links').document('last_closed').get().to_dict()['episode_id'] == 'previous'
-    assert (
-        episode_timeline.resume_recorded(
-            uid,
-            windows[0]['id'],
-            T0 + timedelta(minutes=5),
-            expected_version=windows[0]['state_version'],
-            choose=choose_recorded_episode,
-            firestore_client=client,
+
+
+def test_live_commit_cannot_steal_membership_or_overlap_recorded_owner(store):
+    client, uid = store
+    old = episode_timeline.attach_recorded(
+        uid,
+        'long',
+        'omi',
+        T0,
+        T0 + timedelta(minutes=110),
+        choose=choose_recorded_episode,
+        new_episode={},
+        firestore_client=client,
+    )
+    for cid in ('long', 'different'):
+        proposed = dict(
+            id='overlap',
+            status='live',
+            started_at=T0 + timedelta(minutes=35),
+            last_activity_at=T0 + timedelta(minutes=36),
+            conversation_ids=[cid],
         )
-        is None
-    )  # A competing current owner cannot be replaced.
+        with pytest.raises(episodes.EpisodeConflict, match='conversation_already_owned|recorded_window_overlap'):
+            episodes.commit_moment(
+                uid,
+                expected_episode_id=None,
+                expected_version=None,
+                new_episode=proposed,
+                link_conversation_ids=[cid],
+                firestore_client=client,
+            )
+    assert episodes.get_episode_for_conversation(uid, 'long', firestore_client=client)['id'] == old['id']
+    assert episodes.get_episode(uid, 'overlap', firestore_client=client) is None
+    assert episodes.get_current_episode(uid, firestore_client=client) is None
+
+
+def test_concurrent_live_and_recorded_attachments_preserve_timeline(store):
+    client, uid = store
+
+    def attach(i):
+        at = T0 + timedelta(seconds=i * 20)
+        if i % 2:
+            return episode_timeline.attach_recorded(
+                uid,
+                f'c{i}',
+                'desktop',
+                at,
+                at + timedelta(seconds=18),
+                choose=choose_recorded_episode,
+                new_episode={},
+                firestore_client=client,
+            )
+        try:
+            return episodes.commit_moment(
+                uid,
+                expected_episode_id=None,
+                expected_version=None,
+                new_episode=dict(
+                    id=f'live-{i}',
+                    status='live',
+                    started_at=at,
+                    last_activity_at=at + timedelta(minutes=5),
+                    conversation_ids=[f'c{i}'],
+                ),
+                link_conversation_ids=[f'c{i}'],
+                firestore_client=client,
+            )
+        except episodes.EpisodeConflict:
+            return episode_timeline.attach_recorded(
+                uid,
+                f'c{i}',
+                'omi',
+                at,
+                at + timedelta(seconds=18),
+                choose=choose_recorded_episode,
+                new_episode={},
+                firestore_client=client,
+            )
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        list(pool.map(attach, range(8)))
+    rows = sorted(
+        [
+            episodes.unseal(uid, d.to_dict())
+            for d in client.collection('users').document(uid).collection('episodes').stream()
+        ],
+        key=lambda e: e['started_at'],
+    )
+    members = [cid for row in rows for cid in row['conversation_ids']]
+    assert len(members) == len(set(members)) == 8
+    assert all(a['last_activity_at'] <= b['started_at'] for a, b in zip(rows, rows[1:]))
