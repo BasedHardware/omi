@@ -434,3 +434,17 @@ def test_proven_server_minimum_title_still_merges_before_first_notes(world):
     with pytest.raises(boundary.ConversationAbsorbed):
         invoke(world)
     assert world.processed == [] and len(world.marks) == 1
+
+
+@pytest.mark.parametrize(
+    'merge_enabled,uid,expected', [('true', 'owner', 'server_minimum'), ('false', 'owner', None), ('true', None, None)]
+)
+def test_minimum_provenance_is_available_outside_first_summary_cohort(monkeypatch, merge_enabled, uid, expected):
+    from utils.conversations import deterministic_minimum as minimum
+
+    monkeypatch.setattr(minimum, 'enabled', lambda _: False)
+    monkeypatch.setenv('CONVERSATION_MERGE_BEFORE_PROCESSING', merge_enabled)
+    conversation = SimpleNamespace(transcript_segments=[SimpleNamespace(text='Raw synthetic speech.')])
+    result = minimum.build_deterministic_minimum_structured(conversation, uid=uid)
+    assert result.title_provenance == expected
+    assert result.overview == '' and result.action_items == []
