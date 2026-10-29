@@ -8,7 +8,8 @@ import os
 import shutil
 import tempfile
 
-from config.batch_pipeline import Priority, priority_for
+from config.batch_pipeline import Priority, priority_for, language_inheritance_enabled
+from config.batch_language_recovery import inherited_language
 from config.prerecorded_language import language_class, language_guard_enabled
 from config.stt_provider_policy import normalized_stt_language
 from config.batch_pipeline_shadow import language_only_enabled, selected, shadow_percent
@@ -25,6 +26,30 @@ from utils.sync.stage import current_stage
 from utils.sync.content_id import compute_sync_content_id
 
 logger = logging.getLogger(__name__)
+
+
+class _LanguageProbeGuard:
+    """Fresh, fail-closed authorization for each model/vendor classification."""
+
+    def __init__(self, store, item):
+        self.store, self.item, self.blocked = store, item, False
+
+    def __call__(self):
+        from utils.stt_cap_dispatch import sync_allowed
+        from utils.funded_processing import consent_allows
+
+        if self.blocked:
+            return False
+        try:
+            batch_artifact_authorize(self.store, self.item)
+            allowed = consent_allows(self.item.owner_id) and sync_allowed(
+                self.item.owner_id, self.item.duration_seconds, 'modulate', lane='batch'
+            )
+        except Exception:
+            self.blocked = True
+            raise
+        self.blocked = not allowed
+        return allowed
 
 
 def _next_unit(iterator):
@@ -171,6 +196,14 @@ async def stage_upload(
         language = target.get('language') or user.get('language') or ''
         prefs = user.get('transcription_preferences') or {}
         input_language = normalized_stt_language(user.get('language')) if prefs.get('single_language_mode') else 'multi'
+        inherit = language_inheritance_enabled()
+        inherited = inherited_language(target.get('language'), user.get('language')) if inherit else None
+        if inherited:
+            language = inherited
+            if language_class(inherited) == 'supported':
+                input_language = inherited
+        elif inherit:
+            language = input_language = 'multi'
         artifacts = await run_blocking(storage_executor, artifacts_for, store)
         config = provider_config()
         if config.pool_kind != 'dedicated_batch':
@@ -189,8 +222,16 @@ async def stage_upload(
                 await run_blocking(db_executor, repository.finish, reservation[0], 'dropped')
                 break
             from utils.stt.batch_language import resolve_language
-            from config.stt_cap_dispatch import execution_admission_enabled
-            from utils.stt_cap_dispatch import sync_allowed
+
+            item = replace(
+                seed,
+                segment_id=reservation[0],
+                capture_at=unit.capture_at,
+                duration_seconds=unit.duration_seconds,
+                privacy_generation=context.generation,
+                unit_kind='conversation' if conversation_id else 'capture_span',
+            )
+            probe = _LanguageProbeGuard(store, item)
 
             # Mirror serving intake's per-audio proof. A primary-language hint
             # alone cannot authorize fixed-language GPU recognition in multi mode.
@@ -201,21 +242,16 @@ async def stage_upload(
                 unit.wav,
                 surface='batch',
                 cohort_key=uid,
-                before_probe=lambda duration=unit.duration_seconds: not execution_admission_enabled(uid, 'batch')
-                or sync_allowed(uid, duration, 'modulate', lane='batch'),
+                before_probe=probe,
+                before_self_probe=probe,
             )
+            if probe.blocked:
+                await run_blocking(db_executor, repository.finish, reservation[0], 'dropped')
+                continue
             frozen_language = (
                 language_decision.language
                 if language_decision.parakeet_safe or language_class(language_decision.language) == 'unsupported'
                 else 'und' if language_guard_enabled() else input_language
-            )
-            item = replace(
-                seed,
-                segment_id=reservation[0],
-                capture_at=unit.capture_at,
-                duration_seconds=unit.duration_seconds,
-                privacy_generation=context.generation,
-                unit_kind='conversation' if conversation_id else 'capture_span',
             )
             wav = await run_blocking(
                 sync_executor,
