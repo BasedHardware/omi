@@ -63,6 +63,15 @@ contract, not the truth of a caller-supplied receipt.
 Errclass/replay receipts expire after 15 minutes; observer evidence after five.
 An expired receipt asks its owner to refresh evidence, never to reseal a packet.
 
+For initial shadow qualification at serving0%, lead44cf37 specifies actual
+serving T1/T4 CLEAN continuity over30m, clean shadow T2 over at least3,600
+measured speech seconds, and no serving T2 harm. Use the
+[shadow T2 collector](../batch-pipeline-shadow.md), which reconstructs the
+serving clock from actual sample history and keeps the shadow denominator
+separate. It does not backdate from a supplied start or wait an extra30m after
+the floor. Owner-chain coverage remains replay evidence. The other checklist
+receipts and lead APPROVE ENTRY remain required.
+
 ```bash
 python3 -I backend/scripts/rollout/batch_quality_gate.py "$GATE_PACKET"
 ```

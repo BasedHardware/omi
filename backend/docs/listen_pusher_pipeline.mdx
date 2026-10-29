@@ -19,6 +19,15 @@ transactional job claims and recovery cadence are unchanged. See
 
 ## Server batch-only capture by platform
 
+Real-upload batch shadow can send its ephemeral result to the existing CPU
+recovery role's private OIDC `shadow-project` endpoint. It runs the production
+partitioner and assignment transaction body through bounded read-only
+references and discarded write plans. It never publishes, enriches, meters or
+changes a conversation; normal projection continues to reject shadow jobs.
+This observes assignment planning rather than owner-chain scheduling or a
+durable transaction. See [shadow isolation and the proposed 25% window](batch-pipeline-shadow.md)
+for runtime bounds, cost assumptions, rollback and the lead-owned activation.
+
 Dedicated batch GPU capacity follows fresh admissible queued-unit counts, not
 raw queue age. Allowance-held work remains in durable custody while parked;
 its periodic ready/re-evaluation transition cannot request additional GPUs.
