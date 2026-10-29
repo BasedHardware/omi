@@ -1,5 +1,7 @@
 """Authenticated HTTP contract for durable conversation mutations."""
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 
@@ -9,8 +11,11 @@ from models.conversation import (
     ConversationSyncMutationRequest,
     ConversationSyncMutationResponse,
 )
+from utils.log_sanitizer import sanitize
 from utils.other import endpoints as auth
 from utils.product_metrics import record_product_event
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -28,14 +33,22 @@ def apply_conversation_sync_mutation(
     http_request: Request = None,  # type: ignore[assignment]
 ):
     """Apply or exactly replay one durable optimistic conversation mutation."""
+    clean_conversation_id = (conversation_id or "").strip()
+    if not clean_conversation_id:
+        raise HTTPException(status_code=400, detail="Valid conversation_id is required")
+
     try:
         response, replayed = mutations_db.apply_conversation_sync_mutation(
             uid,
-            conversation_id,
+            clean_conversation_id,
             client_mutation_id=request.client_mutation_id,
             base_revision=request.base_revision,
             operation=request.operation.model_dump(mode='python'),
         )
+    except (ValueError, TypeError) as error:
+        record_product_event('conversation_sync_mutation', request=http_request, outcome='error')
+        logger.warning("Invalid conversation mutation payload for user %s: %s", uid, sanitize(str(error)))
+        raise HTTPException(status_code=400, detail="Invalid conversation mutation payload") from error
     except mutations_db.ConversationMutationNotFoundError as error:
         raise HTTPException(status_code=404, detail='Conversation not found') from error
     except mutations_db.ConversationMutationLockedError as error:
@@ -47,6 +60,11 @@ def apply_conversation_sync_mutation(
     except mutations_db.ConversationMutationReceiptUnavailableError as error:
         record_product_event('conversation_sync_mutation', request=http_request, outcome='error')
         raise HTTPException(status_code=503, detail='Conversation mutation acknowledgement unavailable') from error
+    except Exception as error:
+        record_product_event('conversation_sync_mutation', request=http_request, outcome='error')
+        logger.error("Failed to apply conversation mutation for user %s: %s", uid, sanitize(str(error)), exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to apply conversation mutation") from error
+
     record_product_event(
         'conversation_sync_mutation',
         request=http_request,
