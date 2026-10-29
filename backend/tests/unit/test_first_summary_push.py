@@ -284,3 +284,35 @@ def test_the_fcm_message_is_a_visible_push_that_deep_links_to_the_summary(monkey
             'navigate_to': '/conversation/conv-1',
         }
         assert message['android']['notification']['tag'] == message['apns']['headers']['apns-collapse-id']
+
+
+def test_hand_off_queues_a_summary_this_pass_made_appear(monkeypatch):
+    submitted = []
+    monkeypatch.setattr(first_summary_push, 'submit_with_context', lambda *args: submitted.append(args))
+    conversation = _conversation()
+
+    first_summary_push.hand_off(UID, conversation, ProcessingTrigger.CAPTURE_END, first_observation=True)
+
+    assert submitted == [
+        (
+            first_summary_push.postprocess_executor,
+            first_summary_push.maybe_send_first_summary_push,
+            UID,
+            conversation,
+            ProcessingTrigger.CAPTURE_END,
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    'conversation, first_observation',
+    [(_conversation(), False), (_conversation(overview=''), True), (_conversation(discarded=True), True)],
+    ids=['regenerated', 'no-summary', 'discarded'],
+)
+def test_hand_off_queues_nothing_without_a_new_summary(monkeypatch, conversation, first_observation):
+    submitted = []
+    monkeypatch.setattr(first_summary_push, 'submit_with_context', lambda *args: submitted.append(args))
+
+    first_summary_push.hand_off(UID, conversation, ProcessingTrigger.CAPTURE_END, first_observation=first_observation)
+
+    assert submitted == []

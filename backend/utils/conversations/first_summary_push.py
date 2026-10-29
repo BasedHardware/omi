@@ -1,7 +1,8 @@
 """One push when an account's first summary is ready.
 
-``process_conversation`` calls this off the processing path for each conversation whose summary
-appeared in that pass. The account decides once, in
+``process_conversation`` calls :func:`hand_off` first in its derived-effects bundle (so a failing app or
+memory step cannot drop it), which queues the decision off the processing path for a summary that pass
+made appear. The account decides once, in
 ``users/{uid}/notification_markers/first_summary_push``: the summary is pushed only when it belongs
 to the account's only completed conversation, the reader did not ask for it in the app, and
 server-side notifications are on. Every later summary finds the marker and does nothing.
@@ -16,6 +17,7 @@ import database.notifications as notification_db
 import database.users as users_db
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.summary_delivery import present as summary_present
+from utils.executors import postprocess_executor, submit_with_context
 from utils.notification_dispatch import NotificationIntent, NotificationKind, dispatch_notification
 
 logger = logging.getLogger(__name__)
@@ -48,6 +50,18 @@ def first_summary_intent(uid: str, conversation: Any) -> NotificationIntent:
             'navigate_to': f'/conversation/{conversation.id}',
         },
     )
+
+
+def hand_off(uid: str, conversation: Any, trigger: ProcessingTrigger, *, first_observation: bool) -> None:
+    """Queue the decision when this pass made the summary appear.
+
+    ``first_observation`` is ``process_conversation``'s own record that no earlier pass processed this
+    conversation, so a regenerated summary (reprocess, sync append, merge refresh) never counts.
+    """
+    if not first_observation or getattr(conversation, 'discarded', False):
+        return
+    if summary_present(getattr(conversation, 'structured', None)):
+        submit_with_context(postprocess_executor, maybe_send_first_summary_push, uid, conversation, trigger)
 
 
 def maybe_send_first_summary_push(uid: str, conversation: Any, trigger: ProcessingTrigger) -> str:

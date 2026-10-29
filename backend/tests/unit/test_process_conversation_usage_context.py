@@ -519,23 +519,21 @@ def test_deferred_derived_effects_emit_nothing_until_runner_invoked(monkeypatch)
     assert all(call.args[1] is not process_conversation.save_structured_vector for call in submit.call_args_list)
 
 
-def _first_summary_pushes(submit):
-    return [call for call in submit.call_args_list if process_conversation._send_first_summary_push in call.args]
-
-
-def _process_for_first_summary_push(monkeypatch, prior_structured, submit, extract_memories=None, **process_kwargs):
-    """Process a conversation whose stored structure was ``prior_structured``."""
+def _process_for_first_summary_push(monkeypatch, prior, hand_off, extract_memories=None, **process_kwargs):
+    """Process a conversation stored as ``prior`` with ``hand_off`` recording the first-summary hand-off."""
     input_conversation = MagicMock()
     input_conversation.source = "omi"
     input_conversation.get_person_ids.return_value = []
-    input_conversation.structured = prior_structured
+    for name, value in prior.items():
+        setattr(input_conversation, name, value)
     completed = _explicit_selection_flow_conversation()
+    monkeypatch.setattr(process_conversation.first_summary_push, "hand_off", hand_off)
     monkeypatch.setattr(process_conversation, "_get_structured", lambda *args, **kwargs: (MagicMock(), False))
     monkeypatch.setattr(process_conversation, "_get_conversation_obj", lambda *args, **kwargs: completed)
     monkeypatch.setattr(
         process_conversation.lifecycle_service, "persist_processed_conversation", MagicMock(return_value=True)
     )
-    monkeypatch.setattr(process_conversation, "submit_with_context", submit)
+    monkeypatch.setattr(process_conversation, "submit_with_context", MagicMock())
     monkeypatch.setattr(process_conversation, "trigger_conversation_apps", MagicMock())
     monkeypatch.setattr(process_conversation, "_extract_memories", extract_memories or MagicMock())
     monkeypatch.setattr(process_conversation, "_save_action_items", MagicMock())
@@ -544,43 +542,53 @@ def _process_for_first_summary_push(monkeypatch, prior_structured, submit, extra
     return completed
 
 
-def test_a_summary_this_pass_creates_goes_to_the_first_summary_push(monkeypatch):
-    submit = MagicMock()
-    completed = _process_for_first_summary_push(monkeypatch, Structured(title='Processing'), submit)
+_UNPROCESSED = {'structured': Structured(title='Processing'), 'processing_state': None, 'status': 'processing'}
 
-    pushes = _first_summary_pushes(submit)
-    assert len(pushes) == 1
-    assert pushes[0].args[1:] == (
-        process_conversation._send_first_summary_push,
-        "uid",
-        completed,
-        process_conversation.ProcessingTrigger.CAPTURE_END,
+
+def test_a_first_processing_pass_hands_its_summary_to_the_first_summary_push(monkeypatch):
+    hand_off = MagicMock()
+    completed = _process_for_first_summary_push(monkeypatch, _UNPROCESSED, hand_off)
+
+    hand_off.assert_called_once_with(
+        "uid", completed, process_conversation.ProcessingTrigger.CAPTURE_END, first_observation=True
     )
 
 
-def test_a_regenerated_summary_never_goes_to_the_first_summary_push(monkeypatch):
-    submit = MagicMock()
+def test_sync_intake_first_processing_counts_as_a_first_observation(monkeypatch):
+    hand_off = MagicMock()
     _process_for_first_summary_push(
         monkeypatch,
-        Structured(title='Standup', overview='Already summarized.'),
-        submit,
+        {**_UNPROCESSED, 'status': 'completed'},
+        hand_off,
         trigger=process_conversation.ProcessingTrigger.SYNC_UPDATE,
+        prior_relevance_decision={'trigger': 'sync_intake'},
     )
 
-    assert _first_summary_pushes(submit) == []
+    assert hand_off.call_args.kwargs == {'first_observation': True}
+
+
+def test_a_regenerated_summary_is_never_a_first_observation(monkeypatch):
+    hand_off = MagicMock()
+    _process_for_first_summary_push(
+        monkeypatch,
+        {'structured': Structured(title='Standup', overview='Already summarized.'), 'processing_state': None},
+        hand_off,
+        trigger=process_conversation.ProcessingTrigger.SYNC_UPDATE,
+        prior_relevance_decision={'trigger': 'sync_update'},
+    )
+
+    assert hand_off.call_args.kwargs == {'first_observation': False}
 
 
 def test_a_failing_memory_step_cannot_drop_the_first_summary_push(monkeypatch):
     def memory_extraction_down(uid, conversation):
         raise RuntimeError('memory extraction unavailable')
 
-    submit = MagicMock()
+    hand_off = MagicMock()
     with pytest.raises(RuntimeError):
-        _process_for_first_summary_push(
-            monkeypatch, Structured(title='Processing'), submit, extract_memories=memory_extraction_down
-        )
+        _process_for_first_summary_push(monkeypatch, _UNPROCESSED, hand_off, extract_memories=memory_extraction_down)
 
-    assert len(_first_summary_pushes(submit)) == 1
+    hand_off.assert_called_once()
 
 
 def _run_merge_created_webhook_flow(monkeypatch, **process_kwargs):
