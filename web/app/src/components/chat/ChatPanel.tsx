@@ -1,6 +1,12 @@
 'use client';
 
 import { ChatBudgetPause, useChatBudgetPause } from './ChatBudgetPause';
+import {
+  chatDraftKeys,
+  clearChatDraft,
+  readChatDraft,
+  writeChatDraft,
+} from './chatDraft';
 import { useRef, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Send, Sparkles, Trash2, Brain, Paperclip, ArrowLeft } from 'lucide-react';
@@ -68,7 +74,7 @@ export function ChatPanel() {
     loadHistory,
   } = chat;
 
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState(() => readChatDraft(chatDraftKeys.panel));
   const [showClearDialog, setShowClearDialog] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<FilePreviewItem[]>([]);
@@ -77,6 +83,16 @@ export function ChatPanel() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Persist the composer draft as it changes; the persisted copy is cleared
+  // only after a send is accepted (see handleSend).
+  useEffect(() => {
+    if (input) {
+      writeChatDraft(chatDraftKeys.panel, input);
+    } else {
+      clearChatDraft(chatDraftKeys.panel);
+    }
+  }, [input]);
 
   // Fetch app info when selectedAppId changes
   useEffect(() => {
@@ -205,7 +221,17 @@ export function ChatPanel() {
 
     setInput('');
     setSelectedFiles([]);
-    await sendMessage(text, fileIds, currentContext);
+    const accepted = await sendMessage(text, fileIds, currentContext);
+    // Only this send's own draft is retired on acceptance; a newer draft the
+    // user typed while the reply streamed is never clobbered. The persist
+    // effect may have already cleared the composer's own copy, so an empty
+    // persisted draft on failure still restores this send's text.
+    const persisted = readChatDraft(chatDraftKeys.panel);
+    if (persisted === text) {
+      if (accepted) clearChatDraft(chatDraftKeys.panel);
+    } else if (persisted === '') {
+      if (!accepted) writeChatDraft(chatDraftKeys.panel, text);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

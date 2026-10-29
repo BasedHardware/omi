@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "FC-web-draft-cleared-before-acknowledgement",
+  "violated_contract": "A composer that clears its input before the send is acknowledged holds no restorable copy of what the user typed: a failed or interrupted send leaves the text only in volatile component state. The same contract covers the send verdict: a caller that cannot observe whether the stream failed cannot keep restorable state for a retry.",
+  "canonical_prevention": "Persist the composer draft (one storage key per composer scope) on every change, restore it on mount, and clear the persisted copy only after the send is accepted. useChat.sendMessage resolves false when the stream reported an error chunk or the transport failed, so composers can distinguish accepted sends. The post-send write only replaces the persisted copy when it still holds this send's text; a newer draft typed while the send ran is never clobbered, and a synchronous read/write pair replaces any debounce race.",
+  "canonical_prevention_artifact": [
+    "web/app/src/components/chat/chatDraft.ts",
+    "web/app/src/components/chat/ChatPanel.tsx",
+    "web/app/src/components/chat/ChatComposer.tsx",
+    "web/app/src/hooks/useChat.ts",
+    "web/app/src/components/chat/__tests__/chatDraft.test.tsx",
+    "web/app/src/hooks/__tests__/useChat.test.tsx"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "web/app/src/components/chat/**",
+    "web/app/src/hooks/useChat.ts"
+  ],
+  "status": "open"
+}

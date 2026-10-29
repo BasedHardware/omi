@@ -1,6 +1,12 @@
 'use client';
 
 import { ChatBudgetPause, useChatBudgetPause } from './ChatBudgetPause';
+import {
+  chatDraftKeys,
+  clearChatDraft,
+  readChatDraft,
+  writeChatDraft,
+} from './chatDraft';
 import { useRef, useState, useEffect, useImperativeHandle } from 'react';
 import { ArrowUp, Paperclip } from 'lucide-react';
 import { FilePreview, ALLOWED_EXTENSIONS, MAX_FILES } from './FilePreview';
@@ -33,8 +39,8 @@ export interface ChatComposerHandle {
 }
 
 interface ChatComposerProps {
-  /** Resolves once the send completes, so the caller can react to the first message. */
-  onSend: (text: string, files: MessageFile[]) => Promise<void>;
+  /** Resolves true when the send was accepted, so the caller can react to the first message. */
+  onSend: (text: string, files: MessageFile[]) => Promise<boolean>;
   isStreaming: boolean;
   disabled?: boolean;
   appId?: string;
@@ -71,7 +77,7 @@ export function ChatComposer({
 }: ChatComposerProps) {
   const budget = useChatBudgetPause();
   const chatDisabled = disabled || budget.state !== null;
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState(() => readChatDraft(chatDraftKeys.home));
   const [selectedFiles, setSelectedFiles] = useState<FilePreviewItem[]>([]);
   const [pendingUploadCount, setPendingUploadCount] = useState(0);
 
@@ -87,6 +93,16 @@ export function ChatComposer({
     if (inputRef.current) {
       inputRef.current.style.height = 'auto';
       inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 200)}px`;
+    }
+  }, [input]);
+
+  // Persist the composer draft as it changes; the persisted copy is cleared
+  // only after a send is accepted (see handleSend).
+  useEffect(() => {
+    if (input) {
+      writeChatDraft(chatDraftKeys.home, input);
+    } else {
+      clearChatDraft(chatDraftKeys.home);
     }
   }, [input]);
 
@@ -186,7 +202,17 @@ export function ChatComposer({
       inputRef.current.style.height = 'auto';
     }
 
-    await onSend(text, uploadedFiles);
+    const accepted = await onSend(text, uploadedFiles);
+    // Only this send's own draft is retired on acceptance; a newer draft the
+    // user typed while the send ran is never clobbered. The persist effect may
+    // have already cleared the composer's own copy, so an empty persisted
+    // draft on failure still restores this send's text.
+    const persisted = readChatDraft(chatDraftKeys.home);
+    if (persisted === text) {
+      if (accepted) clearChatDraft(chatDraftKeys.home);
+    } else if (persisted === '') {
+      if (!accepted) writeChatDraft(chatDraftKeys.home, text);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
