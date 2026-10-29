@@ -4,7 +4,7 @@
     {
       "file": "001-mobile-ios-connect-first-step.png",
       "platform": "mobile-ios",
-      "description": "Connect your Omi. BEFORE: control, step 9, after the voice intro (Back button, pairing subtitle). AFTER: connect_first, step 4 right after the trial paywall, no Back, subtitle says what to press. Real simulator shots, iPhone 17 Pro, iOS 26.2.",
+      "description": "Connect your Omi. BEFORE: control, step 9, after the voice intro (Back button). AFTER: connect_first, step 4 right after the trial paywall, no Back, same screen and copy as control. Real simulator shots, iPhone 17 Pro, iOS 26.2.",
       "captured_by": "agent",
       "source": "screencapture"
     },
