@@ -134,7 +134,8 @@ class ShadowStore:
             'created_at': job.get('created_at'),
             **({'projection_status': projection_status} if projection_status is not None else {}),
             'vad': vad,
-            **({'recognizers': recognizers, 'paid_providers': job.get('paid', [])} if recognizers is not None else {}),
+            'paid_providers': job.get('paid', []),
+            **({'recognizers': recognizers} if recognizers is not None else {}),
             **({'reason_code': 'shadow_paid_skipped'} if outcome == 'paid_skipped' else {}),
             'speech_seconds': float(speech),
             'speech_loss_seconds': float(speech) if outcome != 'recovered' else 0.0,
@@ -316,7 +317,7 @@ class ShadowStore:
             job = tx.get('shadow_jobs', segment)
             if (
                 job.get('shadow') is not True
-                or job.get('state') != 'running'
+                or job.get('state') not in {'running', 'recovering'}
                 or 'projection_attempted_at' in job
                 or 'projection_reserved_at' not in job
             ):
