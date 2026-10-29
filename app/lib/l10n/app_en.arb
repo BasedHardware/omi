@@ -11034,9 +11034,9 @@
     "@deviceOnboardingTranscriptionTitle": {
         "description": "Tutorial step 1 title — prompts the user to speak into the Omi device for the live-transcription demo"
     },
-    "deviceOnboardingTranscriptionSubtitle": "Say a few words and watch them appear in real-time",
+    "deviceOnboardingTranscriptionSubtitle": "Say something like\n“Remind me to call Sam tomorrow.”",
     "@deviceOnboardingTranscriptionSubtitle": {
-        "description": "Tutorial step 1 subtitle — explains that spoken words appear in real time"
+        "description": "Tutorial step 1 subtitle: an example sentence the user can say into their Omi for the live-transcription demo. Keep the line break before the quoted sentence."
     },
     "deviceOnboardingGoodJob": "Good job!",
     "@deviceOnboardingGoodJob": {
@@ -11141,18 +11141,6 @@
     "deviceOnboardingFinish": "Finish",
     "@deviceOnboardingFinish": {
         "description": "Onboarding tutorial final button label to complete the tutorial"
-    },
-    "deviceOnboardingIntroTitle": "Get to Know Your Omi",
-    "@deviceOnboardingIntroTitle": {
-        "description": "Onboarding intro screen title shown before the device tutorial steps"
-    },
-    "deviceOnboardingIntroSubtitle": "Try live transcription, asking a question, and the double-tap shortcut.",
-    "@deviceOnboardingIntroSubtitle": {
-        "description": "Onboarding intro screen subtitle explaining the tutorial"
-    },
-    "deviceOnboardingIntroDuration": "About 1 minute",
-    "@deviceOnboardingIntroDuration": {
-        "description": "Onboarding intro screen estimated duration hint"
     },
     "quoteJumpToTime": "Jump to {duration}",
     "@quoteJumpToTime": {

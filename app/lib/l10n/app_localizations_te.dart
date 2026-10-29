@@ -9323,7 +9323,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'మీ Omiతో మాట్లాడండి';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle => 'కొన్ని మాటలు చెప్పి, అవి తక్షణమే కనిపించడం చూడండి';
+  String get deviceOnboardingTranscriptionSubtitle => 'ఇలా ఏదైనా చెప్పండి\n“రేపు సామ్‌కి ఫోన్ చేయమని గుర్తు చేయి.”';
 
   @override
   String get deviceOnboardingGoodJob => 'శభాష్!';
@@ -9402,16 +9402,6 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'ముగించు';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'మీ Omiని తెలుసుకోండి';
-
-  @override
-  String get deviceOnboardingIntroSubtitle =>
-      'లైవ్ ట్రాన్స్‌క్రిప్షన్, ప్రశ్న అడగడం మరియు డబుల్-ట్యాప్ షార్ట్‌కట్‌ను ప్రయత్నించండి.';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'సుమారు 1 నిమిషం';
 
   @override
   String quoteJumpToTime(String duration) {

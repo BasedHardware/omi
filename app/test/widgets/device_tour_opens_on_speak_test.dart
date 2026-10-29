@@ -169,9 +169,11 @@ void main() {
     analytics.expectSingle('Device Onboarding Step Completed', {'step': 'transcription_demo'});
   });
 
-  testWidgets('close X on the first screen leaves, saves the tour as done and reports step 0', (tester) async {
+  // One test on purpose: the completion save goes through a process-wide queue, so every close in this file
+  // shares one fake-async zone. Closing three times is also the repeat a real owner can do from Settings.
+  testWidgets('close X leaves from any screen, saves the tour as done and reports the screen it left on',
+      (tester) async {
     await openTour(tester);
-
     await tester.tap(find.byKey(const Key('device_onboarding_close_button')));
     await frames(tester);
 
@@ -181,21 +183,37 @@ void main() {
     expect(capture.deviceOnboardingProvider, isNull);
     expect(capture.calls, ['suspend', 'cancelTutorialVoice', 'restore']);
     expect(await tourEvents(tester), ['Device Onboarding Started', 'Device Onboarding Abandoned']);
-    analytics.expectSingle('Device Onboarding Abandoned', {'step': 0});
-  });
+    expect(analytics.propertiesOf('Device Onboarding Abandoned').single, containsPair('step', 0));
 
-  testWidgets('step indexes follow the screens: leaving on the second screen reports step 1', (tester) async {
-    await openTour(tester);
+    // Second time: leave on the next screen. The step index matches the screen; there is no intro offset.
+    navigator.currentState!.push(MaterialPageRoute(builder: (_) => const InteractiveDeviceOnboardingWrapper()));
+    await frames(tester);
+    expect(find.text(_speakTitle), findsOneWidget);
     await speak(tester, 'Remind me to call Sam tomorrow.');
     await tester.tap(find.text('Continue'));
     await frames(tester);
+    await tester.tap(find.byKey(const Key('device_onboarding_close_button')));
+    await frames(tester);
 
+    // Third time: open and leave right away again.
+    navigator.currentState!.push(MaterialPageRoute(builder: (_) => const InteractiveDeviceOnboardingWrapper()));
+    await frames(tester);
+    expect(find.text(_speakTitle), findsOneWidget);
     await tester.tap(find.byKey(const Key('device_onboarding_close_button')));
     await frames(tester);
 
     expect(find.byType(InteractiveDeviceOnboardingWrapper), findsNothing);
-    expect(await tourEvents(tester),
-        ['Device Onboarding Started', 'Device Onboarding Step Completed', 'Device Onboarding Abandoned']);
-    analytics.expectSingle('Device Onboarding Abandoned', {'step': DeviceOnboardingProvider.askQuestionStep});
+    expect(await tourEvents(tester), [
+      'Device Onboarding Started',
+      'Device Onboarding Abandoned',
+      'Device Onboarding Started',
+      'Device Onboarding Step Completed',
+      'Device Onboarding Abandoned',
+      'Device Onboarding Started',
+      'Device Onboarding Abandoned',
+    ]);
+    expect(analytics.propertiesOf('Device Onboarding Abandoned').map((p) => p['step']),
+        [0, DeviceOnboardingProvider.askQuestionStep, 0]);
+    analytics.expectSingle('Device Onboarding Step Completed', {'step': 'transcription_demo'});
   });
 }

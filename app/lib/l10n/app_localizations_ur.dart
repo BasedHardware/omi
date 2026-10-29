@@ -9290,7 +9290,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'اپنے Omi سے بولیں';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle => 'چند الفاظ کہیں اور انہیں فوری طور پر نمودار ہوتے دیکھیں';
+  String get deviceOnboardingTranscriptionSubtitle => 'کچھ ایسا کہیں\n«مجھے کل سیم کو فون کرنا یاد دلانا۔»';
 
   @override
   String get deviceOnboardingGoodJob => 'شاباش!';
@@ -9370,15 +9370,6 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'مکمل کریں';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'اپنے Omi کو جانیں';
-
-  @override
-  String get deviceOnboardingIntroSubtitle => 'لائیو ٹرانسکرپشن، سوال پوچھنے اور ڈبل ٹیپ شارٹ کٹ کو آزمائیں۔';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'تقریباً 1 منٹ';
 
   @override
   String quoteJumpToTime(String duration) {

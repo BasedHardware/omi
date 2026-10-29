@@ -9299,7 +9299,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'Govorite v Omi';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle => 'Izgovorite nekaj besed in opazujte, kako se sproti izpisujejo';
+  String get deviceOnboardingTranscriptionSubtitle => 'Recite na primer\n„Spomni me, da jutri pokličem Sama.“';
 
   @override
   String get deviceOnboardingGoodJob => 'Odlično!';
@@ -9379,16 +9379,6 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Končaj';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'Spoznajte svoj Omi';
-
-  @override
-  String get deviceOnboardingIntroSubtitle =>
-      'Preizkusite živo transkripcijo, postavite vprašanje in bližnjico z dvojnim dotikom.';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'Približno 1 minuta';
 
   @override
   String quoteJumpToTime(String duration) {

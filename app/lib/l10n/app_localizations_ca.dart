@@ -9325,7 +9325,8 @@ class AppLocalizationsCa extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'Parla a l\'Omi';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle => 'Digues unes paraules i mira com apareixen en temps real';
+  String get deviceOnboardingTranscriptionSubtitle =>
+      'Digues alguna cosa com ara\n«Recorda\'m que truqui al Sam demà.»';
 
   @override
   String get deviceOnboardingGoodJob => 'Ben fet!';
@@ -9405,16 +9406,6 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Finalitza';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'Coneix el teu Omi';
-
-  @override
-  String get deviceOnboardingIntroSubtitle =>
-      'Prova la transcripció en directe, fer una pregunta i la drecera de doble toc.';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'Aproximadament 1 minut';
 
   @override
   String quoteJumpToTime(String duration) {

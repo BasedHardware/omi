@@ -9279,7 +9279,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'আপনার Omi-তে কথা বলুন';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle => 'কয়েকটি শব্দ বলুন এবং রিয়েল-টাইমে সেগুলো ভেসে উঠতে দেখুন';
+  String get deviceOnboardingTranscriptionSubtitle => 'এমন কিছু বলুন\n“কাল স্যামকে ফোন করার কথা মনে করিয়ে দাও।”';
 
   @override
   String get deviceOnboardingGoodJob => 'দারুণ!';
@@ -9358,15 +9358,6 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'সম্পন্ন করুন';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'আপনার Omi-কে জানুন';
-
-  @override
-  String get deviceOnboardingIntroSubtitle => 'লাইভ ট্রান্সক্রিপশন, প্রশ্ন করা এবং ডাবল-ট্যাপ শর্টকাট চেষ্টা করুন।';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'প্রায় ১ মিনিট';
 
   @override
   String quoteJumpToTime(String duration) {

@@ -9276,7 +9276,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'Nói vào Omi của bạn';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle => 'Nói vài câu và xem chúng hiện ra theo thời gian thực';
+  String get deviceOnboardingTranscriptionSubtitle => 'Hãy nói điều gì đó như\n“Nhắc tôi gọi cho Sam vào ngày mai.”';
 
   @override
   String get deviceOnboardingGoodJob => 'Tuyệt vời!';
@@ -9355,16 +9355,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Hoàn tất';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'Tìm hiểu về Omi của bạn';
-
-  @override
-  String get deviceOnboardingIntroSubtitle =>
-      'Hãy thử chuyển giọng nói thành văn bản trực tiếp, đặt câu hỏi và phím tắt chạm đúp.';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'Khoảng 1 phút';
 
   @override
   String quoteJumpToTime(String duration) {

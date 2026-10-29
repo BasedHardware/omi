@@ -9340,8 +9340,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'Μιλήστε στο Omi σας';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle =>
-      'Πείτε λίγες λέξεις και δείτε τες να εμφανίζονται σε πραγματικό χρόνο';
+  String get deviceOnboardingTranscriptionSubtitle => 'Πείτε κάτι όπως\n«Θύμισέ μου να πάρω τον Σαμ αύριο.»';
 
   @override
   String get deviceOnboardingGoodJob => 'Μπράβο!';
@@ -9421,16 +9420,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Τέλος';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'Γνωρίστε το Omi σας';
-
-  @override
-  String get deviceOnboardingIntroSubtitle =>
-      'Δοκιμάστε τη ζωντανή μεταγραφή, την ερώτηση και τη συντόμευση με διπλό πάτημα.';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'Περίπου 1 λεπτό';
 
   @override
   String quoteJumpToTime(String duration) {

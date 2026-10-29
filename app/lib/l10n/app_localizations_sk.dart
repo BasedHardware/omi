@@ -9266,7 +9266,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'Hovorte do svojho Omi';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle => 'Povedzte pár slov a sledujte, ako sa zobrazia v reálnom čase';
+  String get deviceOnboardingTranscriptionSubtitle => 'Povedzte napríklad\n„Pripomeň mi zajtra zavolať Samovi.“';
 
   @override
   String get deviceOnboardingGoodJob => 'Výborne!';
@@ -9345,15 +9345,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Dokončiť';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'Spoznajte svoj Omi';
-
-  @override
-  String get deviceOnboardingIntroSubtitle => 'Vyskúšajte živý prepis, položte otázku a skratku dvojitým ťuknutím.';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'Približne 1 minúta';
 
   @override
   String quoteJumpToTime(String duration) {

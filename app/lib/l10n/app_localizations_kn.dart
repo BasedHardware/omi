@@ -9306,7 +9306,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'ನಿಮ್ಮ Omi ಜೊತೆ ಮಾತನಾಡಿ';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle => 'ಕೆಲವು ಪದಗಳನ್ನು ಹೇಳಿ, ಅವು ತಕ್ಷಣವೇ ಕಾಣಿಸುವುದನ್ನು ನೋಡಿ';
+  String get deviceOnboardingTranscriptionSubtitle => 'ಈ ರೀತಿ ಏನಾದರೂ ಹೇಳಿ\n“ನಾಳೆ ಸ್ಯಾಮ್‌ಗೆ ಕರೆ ಮಾಡಲು ನೆನಪಿಸು.”';
 
   @override
   String get deviceOnboardingGoodJob => 'ಭೇಷ್‌!';
@@ -9385,16 +9385,6 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'ಮುಗಿಸಿ';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'ನಿಮ್ಮ Omi ಅನ್ನು ತಿಳಿಯಿರಿ';
-
-  @override
-  String get deviceOnboardingIntroSubtitle =>
-      'ಲೈವ್ ಟ್ರಾನ್ಸ್‌ಕ್ರಿಪ್ಷನ್, ಪ್ರಶ್ನೆ ಕೇಳುವುದು ಮತ್ತು ಡಬಲ್-ಟ್ಯಾಪ್ ಶಾರ್ಟ್‌ಕಟ್ ಅನ್ನು ಪ್ರಯತ್ನಿಸಿ.';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'ಸುಮಾರು 1 ನಿಮಿಷ';
 
   @override
   String quoteJumpToTime(String duration) {

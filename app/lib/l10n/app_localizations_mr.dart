@@ -9284,7 +9284,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'तुमच्या Omi शी बोला';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle => 'काही शब्द बोला आणि ते रिअल-टाइममध्ये दिसताना पाहा';
+  String get deviceOnboardingTranscriptionSubtitle => 'असे काहीतरी बोला\n“उद्या सॅमला फोन करायची आठवण करून दे.”';
 
   @override
   String get deviceOnboardingGoodJob => 'छान!';
@@ -9363,15 +9363,6 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'पूर्ण करा';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'तुमच्या Omi ला जाणून घ्या';
-
-  @override
-  String get deviceOnboardingIntroSubtitle => 'लाइव्ह ट्रान्स्क्रिप्शन, प्रश्न विचारणे आणि डबल-टॅप शॉर्टकट वापरून पहा.';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'सुमारे 1 मिनिट';
 
   @override
   String quoteJumpToTime(String duration) {

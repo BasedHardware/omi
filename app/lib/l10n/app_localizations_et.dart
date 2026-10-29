@@ -9268,7 +9268,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'Räägi oma Omisse';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle => 'Ütle paar sõna ja vaata, kuidas need reaalajas ilmuvad';
+  String get deviceOnboardingTranscriptionSubtitle => 'Ütle näiteks\n„Tuleta mulle meelde, et homme Samile helistada.“';
 
   @override
   String get deviceOnboardingGoodJob => 'Tubli!';
@@ -9348,16 +9348,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Lõpeta';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'Tutvu oma Omiga';
-
-  @override
-  String get deviceOnboardingIntroSubtitle =>
-      'Proovi reaalajas transkriptsiooni, küsimuse esitamist ja topeltpuudutuse otseteed.';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'Umbes 1 minut';
 
   @override
   String quoteJumpToTime(String duration) {

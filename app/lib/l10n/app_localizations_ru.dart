@@ -9308,8 +9308,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get deviceOnboardingTranscriptionTitle => 'Говорите в Omi';
 
   @override
-  String get deviceOnboardingTranscriptionSubtitle =>
-      'Скажите несколько слов и смотрите, как они появляются в реальном времени';
+  String get deviceOnboardingTranscriptionSubtitle => 'Скажите, например:\n«Напомни мне завтра позвонить Сэму.»';
 
   @override
   String get deviceOnboardingGoodJob => 'Отлично!';
@@ -9389,16 +9388,6 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Готово';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'Знакомство с Omi';
-
-  @override
-  String get deviceOnboardingIntroSubtitle =>
-      'Попробуйте живую расшифровку, задайте вопрос и используйте быстрый жест двойным касанием.';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'Около 1 минуты';
 
   @override
   String quoteJumpToTime(String duration) {

@@ -9301,7 +9301,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get deviceOnboardingTranscriptionSubtitle =>
-      'Скажыце некалькі слоў і паглядзіце, як яны з\'яўляюцца ў рэальным часе';
+      'Скажыце нешта накшталт\n“Нагадай мне заўтра патэлефанаваць Сэму.”';
 
   @override
   String get deviceOnboardingGoodJob => 'Выдатна!';
@@ -9381,15 +9381,6 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Гатова';
-
-  @override
-  String get deviceOnboardingIntroTitle => 'Пазнаёмцеся з Omi';
-
-  @override
-  String get deviceOnboardingIntroSubtitle => 'Паспрабуйце жывую расшыфроўку, пытанне і хуткі доступ двайным дотыкам.';
-
-  @override
-  String get deviceOnboardingIntroDuration => 'Каля 1 хвіліны';
 
   @override
   String quoteJumpToTime(String duration) {
