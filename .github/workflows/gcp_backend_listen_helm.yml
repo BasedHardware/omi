@@ -22,6 +22,11 @@ on:
         description: 'Branch to deploy from'
         required: true
         default: 'main'
+      expected_sha:
+        description: 'Full commit SHA the checked-out tree must contain before any mutation (blank keeps the unpinned behavior; prod dispatches should pin the reviewed SHA)'
+        required: false
+        default: ''
+        type: string
       mode:
         description: 'deploy applies the chart; rollback restores an earlier Helm revision'
         required: true
@@ -141,6 +146,8 @@ jobs:
 
       - name: Admit checked-out production source and image identity
         id: admit-deploy-source
+        env:
+          EXPECTED_SHA: ${{ github.event.inputs.expected_sha }}
         run: |
           set -euo pipefail
           CHECKED_OUT_SHA=$(git rev-parse HEAD)
@@ -150,6 +157,31 @@ jobs:
               echo "ERROR: checked-out HEAD $CHECKED_OUT_SHA is not an ancestor of fresh origin/main $(git rev-parse origin/main)." >&2
               exit 1
             fi
+          fi
+          # Optional caller pin, checked before any helm/kubectl mutation in
+          # this workflow: the checked-out tree must contain this commit (the
+          # containment rule gcp_backend.yml applies to release_sha), so a
+          # dispatch cannot roll whatever main happened to be at checkout time.
+          # Blank keeps the historical unpinned behavior for existing callers;
+          # manual prod dispatches should pass the reviewed SHA.
+          if [[ -n "${EXPECTED_SHA:-}" ]]; then
+            if [[ ! "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ || "$EXPECTED_SHA" == "0000000000000000000000000000000000000000" ]]; then
+              echo "ERROR: expected_sha must be one non-zero, lowercase, full commit SHA." >&2
+              exit 1
+            fi
+            # Plain object-type check, version-proof like gcp_backend.yml (git
+            # 2.54 regressed "<full-sha>^{commit}" peeling).
+            if [ "$(git cat-file -t "$EXPECTED_SHA" 2>/dev/null)" != "commit" ]; then
+              echo "ERROR: expected_sha $EXPECTED_SHA is not a commit in this repository." >&2
+              exit 1
+            fi
+            if ! git merge-base --is-ancestor "$EXPECTED_SHA" "$CHECKED_OUT_SHA"; then
+              echo "ERROR: expected_sha $EXPECTED_SHA is not contained in the checked-out HEAD $CHECKED_OUT_SHA; failing closed before any mutation." >&2
+              exit 1
+            fi
+            echo "Admitted expected tree: $EXPECTED_SHA is contained in $CHECKED_OUT_SHA."
+          elif [[ "${{ github.event_name }}" == workflow_dispatch ]]; then
+            echo "::notice title=Deploy tree unpinned::No expected_sha was provided; deploying the head of the selected ref ($CHECKED_OUT_SHA)."
           fi
           IMAGE_TAG=$(git rev-parse --short=7 "$CHECKED_OUT_SHA")
           echo "Admitted deployment source: $CHECKED_OUT_SHA"
