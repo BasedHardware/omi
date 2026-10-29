@@ -45,3 +45,11 @@ def join_duplicates(
         link_conversation_ids=ids,
         firestore_client=firestore_client,
     )
+
+
+def calendar_identity(row: Mapping[str, Any]) -> Optional[str]:
+    external = row.get('external_data') if isinstance(row.get('external_data'), Mapping) else {}
+    context = external.get('calendar_meeting_context') if isinstance(external, Mapping) else None
+    event_id = (context or {}).get('calendar_event_id') if isinstance(context, Mapping) else None
+    event_id = event_id or (external or {}).get('calendar_event_id')
+    return str(event_id) if event_id else None

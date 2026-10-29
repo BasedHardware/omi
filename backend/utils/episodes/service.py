@@ -75,6 +75,7 @@ from utils.episodes import moment_render, boundary_runtime
 from utils.episodes import output_language as episode_language
 from utils.episodes import client_gate, incremental, metrics, policy, recovery
 from utils.episodes import capture_groups as episode_groups
+from utils.episodes.capture_groups import calendar_identity as _calendar_identity
 from utils.episodes.recovery import segment_end as _segment_end, segment_start as _segment_start
 from utils.episodes.moment import MomentInput
 from utils.episodes.state import apply_update, clean_text, provisional_items, render_state
@@ -1568,7 +1569,12 @@ def _on_finalized(
         if outcome == 'conflict' or (episode is None and not recorded_episodes_enabled()):
             return outcome
         episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
-    if episode is None and not absorbed_from and trigger != SYNC_UPDATE and recorded_episodes_enabled():
+    if (
+        (episode is None or trigger == 'capture_group')
+        and not absorbed_from
+        and trigger != SYNC_UPDATE
+        and recorded_episodes_enabled()
+    ):
         outcome = _attach_synced(uid, conversation_id, row, c)
         if outcome == 'conflict':
             return outcome
@@ -1625,14 +1631,6 @@ def _end_discarded(uid: str, conversation_id: str, row: Mapping[str, Any], trigg
         },
         firestore_client=c.firestore_client,
     )
-
-
-def _calendar_identity(row: Mapping[str, Any]) -> Optional[str]:
-    external = row.get('external_data') if isinstance(row.get('external_data'), Mapping) else {}
-    context = external.get('calendar_meeting_context') if isinstance(external, Mapping) else None
-    event_id = (context or {}).get('calendar_event_id') if isinstance(context, Mapping) else None
-    event_id = event_id or (external or {}).get('calendar_event_id')
-    return str(event_id) if event_id else None
 
 
 def _repoint_absorbed(uid: str, episode: Mapping[str, Any], donor_id: str, survivor_id: str, c: Collaborators) -> None:

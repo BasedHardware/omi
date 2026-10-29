@@ -386,7 +386,8 @@ def test_late_discard_purges_notes_before_valid_member_joins(lane):
     assert 'Discarded noise' not in str(calls)
 
 
-def test_paired_desktop_pendant_group_recovers_once_without_duplicate_moments(lane, monkeypatch):
+@pytest.mark.parametrize('already_live', [False, True])
+def test_paired_desktop_pendant_group_recovers_once_without_duplicate_moments(lane, monkeypatch, already_live):
     from utils.episodes import finalize
 
     store, c, calls = lane
@@ -396,6 +397,8 @@ def test_paired_desktop_pendant_group_recovers_once_without_duplicate_moments(la
     for cid, capture in captures.items():
         capture['transcript_segments'][0]['text'] = 'Plan the next milestone together. ' * 30
         store.rows[('users', 'u', 'conversations', cid)] = capture
+    if already_live:
+        service.attach_conversation('u', 'pendant', 'omi', started_at=T0, collaborators=c)
     c.now = lambda: T0 + timedelta(hours=2)
     recovered = []
     recover = service._record_recovered
