@@ -8,7 +8,7 @@ from models.boundary_evidence import BoundarySignal
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.episodes import boundaries, boundary_store, boundary_runtime, policy, service
 
-NOW = datetime(2026, 10, 22, 15, tzinfo=timezone.utc)
+NOW = datetime.now(timezone.utc).replace(microsecond=0)
 ACCOUNT = 'test-account'
 
 
