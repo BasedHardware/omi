@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-yearly-return-before-after.png",
+      "platform": "mobile-ios",
+      "description": "Main versus branch after leaving yearly checkout without buying.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-monthly-offer-light.png",
+      "platform": "mobile-ios",
+      "description": "Trial-eligible monthly fallback, light appearance.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-monthly-checkout.png",
+      "platform": "mobile-ios",
+      "description": "Accepting the fallback opens the offline monthly checkout with seven trial days.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-mobile-ios-monthly-offer-dark.png",
+      "platform": "mobile-ios",
+      "description": "Monthly fallback with the app in dark appearance; the trial variant keeps its approved light canvas.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "005-mobile-ios-decline-repeat.png",
+      "platform": "mobile-ios",
+      "description": "The third yearly checkout return after Not now shows no second fallback.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}
