@@ -218,16 +218,19 @@ def test_concurrent_live_and_recorded_attachments_preserve_timeline(store):
 
     with ThreadPoolExecutor(max_workers=4) as pool:
         list(pool.map(attach, range(8)))
-    rows = sorted(
-        [
-            episodes.unseal(uid, d.to_dict())
-            for d in client.collection('users').document(uid).collection('episodes').stream()
-        ],
-        key=lambda e: e['started_at'],
-    )
+    # Phase A retains redirects when an earlier prefix replaces a historical
+    # window. Compare active canonical owners, just as the time index does.
+    owners = [
+        episodes.get_episode(uid, d.id, firestore_client=client)
+        for d in client.collection('users').document(uid).collection('episodes').stream()
+    ]
+    rows = sorted({e['id']: e for e in owners}.values(), key=lambda e: e['started_at'])
     members = [cid for row in rows for cid in row['conversation_ids']]
     assert len(members) == len(set(members)) == 8
-    assert all(a['last_activity_at'] <= b['started_at'] for a, b in zip(rows, rows[1:]))
+    assert all(episode_timeline.recorded_end(a) <= b['started_at'] for a, b in zip(rows, rows[1:]))
+    for row in rows:
+        for cid in row['conversation_ids']:
+            assert episodes.get_episode_for_conversation(uid, cid, firestore_client=client)['id'] == row['id']
 
 
 def test_time_index_paginates_and_membership_is_atomic(store, monkeypatch):
