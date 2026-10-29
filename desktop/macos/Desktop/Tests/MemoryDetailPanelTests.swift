@@ -4,9 +4,9 @@ import XCTest
 
 private final class MemoryEditMockURLProtocol: URLProtocol, @unchecked Sendable {
   private static let lock = NSLock()
-  private nonisolated(unsafe) static var _responseHandler: ((URLRequest) -> (HTTPURLResponse, Data))?
+  private nonisolated(unsafe) static var _responseHandler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
 
-  static func setResponseHandler(_ handler: @escaping (URLRequest) -> (HTTPURLResponse, Data)) {
+  static func setResponseHandler(_ handler: @escaping (URLRequest) throws -> (HTTPURLResponse, Data)) {
     lock.lock()
     _responseHandler = handler
     lock.unlock()
@@ -27,17 +27,22 @@ private final class MemoryEditMockURLProtocol: URLProtocol, @unchecked Sendable 
     Self.lock.unlock()
 
     if let handler {
-      let (response, data) = handler(request)
-      client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-      client?.urlProtocol(self, didLoad: data)
-      client?.urlProtocolDidFinishLoading(self)
+      do {
+        let (response, data) = try handler(request)
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: data)
+        client?.urlProtocolDidFinishLoading(self)
+      } catch {
+        client?.urlProtocol(self, didFailWithError: error)
+      }
     } else {
-      let response = HTTPURLResponse(
-        url: request.url!,
-        statusCode: 200,
-        httpVersion: nil,
-        headerFields: ["Content-Type": "application/json"]
-      )!
+      guard let url = request.url,
+        let response = HTTPURLResponse(
+          url: url, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])
+      else {
+        client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+        return
+      }
       client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
       client?.urlProtocol(self, didLoad: Data("{\"status\":\"ok\"}".utf8))
       client?.urlProtocolDidFinishLoading(self)
@@ -216,12 +221,14 @@ final class MemoryDetailPanelTests: XCTestCase {
     await APIClient.shared.setTestAuthHeader("Bearer test-token")
 
     MemoryEditMockURLProtocol.setResponseHandler { request in
-      let response = HTTPURLResponse(
-        url: request.url!,
-        statusCode: 200,
-        httpVersion: nil,
-        headerFields: ["Content-Type": "application/json"]
-      )!
+      let url = try XCTUnwrap(request.url)
+      let response = try XCTUnwrap(
+        HTTPURLResponse(
+          url: url,
+          statusCode: 200,
+          httpVersion: nil,
+          headerFields: ["Content-Type": "application/json"]
+        ))
       let body: String
       if request.httpMethod == "PATCH" && (request.url?.path.contains("/v3/memories/") ?? false) {
         body = """

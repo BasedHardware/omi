@@ -46,7 +46,13 @@
       "Emulator bootstrap, not a live Apple/Google login",
       "No production account or deployment",
       "Canned read fixtures are not writable canonical-generation fixtures"
-    ]
+    ],
+    "swift_focused_tests_passed": 44,
+    "swift_component_suites_passed": 957,
+    "swiftlint": {
+      "files": 1907,
+      "violations": 0
+    }
   },
   "electron": {
     "runtime": "Electron on macOS",
@@ -80,5 +86,7 @@
   "not_verified": [
     "production rollout or store release",
     "independent account-isolation approval"
-  ]
+  ],
+  "validation_main_revision": "92bff3c2d5d121d0a02c5ce8932bb73f159ebb62",
+  "evidence_reuse": "Production source hashes are unchanged from 83fe829c50. Newer upstream changes do not touch desktop production sources or the memory/settings endpoints. After replacing unsafe unwraps in two test fixtures, all 44 affected Swift tests passed again."
 }

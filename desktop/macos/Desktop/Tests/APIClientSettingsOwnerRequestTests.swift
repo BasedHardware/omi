@@ -19,8 +19,13 @@ private final class SettingsOwnerRequestCapture: URLProtocol, @unchecked Sendabl
   override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
   override func startLoading() {
     Self.lock.withLock { Self.paths.append(request.url?.path ?? "") }
-    let response = HTTPURLResponse(
-      url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+    guard let url = request.url,
+      let response = HTTPURLResponse(
+        url: url, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])
+    else {
+      client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+      return
+    }
     client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
     client?.urlProtocol(self, didLoad: Data(Self.lock.withLock { Self.payload }.utf8))
     client?.urlProtocolDidFinishLoading(self)

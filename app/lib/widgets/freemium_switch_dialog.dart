@@ -71,16 +71,7 @@ class FreemiumSwitchHandler {
         if (!promptContext.mounted) return;
         if (await PaywallRouter.openVariant(promptContext, source: 'freemium_switch')) return;
         if (!promptContext.mounted) return;
-        final plan = promptContext.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown';
-        PlatformManager.instance.analytics.paywallOpened('freemium_switch', currentPlan: plan);
-        final title = await plansSheetTitle(promptContext);
-        if (!promptContext.mounted) return;
-        return showOmiSheet<void>(
-          context: promptContext,
-          title: title,
-          padding: EdgeInsets.zero,
-          builder: (_) => const _PlansSheetWrapper(),
-        );
+        return showPlansSheetPrompt(promptContext, source: 'freemium_switch');
       },
     );
   }
@@ -176,9 +167,26 @@ class FreemiumSwitchHandler {
   }
 }
 
+/// The shipped plans sheet for an opener outside Settings, once [PaywallRouter] has declined (the
+/// control arm, or a reader the trial page can't serve). Emits `Paywall Opened` with [source].
+Future<void> showPlansSheetPrompt(BuildContext context, {required String source}) async {
+  final plan = context.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown';
+  PlatformManager.instance.analytics.paywallOpened(source, currentPlan: plan);
+  final title = await plansSheetTitle(context);
+  if (!context.mounted) return;
+  return showOmiSheet<void>(
+    context: context,
+    title: title,
+    padding: EdgeInsets.zero,
+    builder: (_) => _PlansSheetWrapper(source: source),
+  );
+}
+
 /// Wrapper widget to create animation controllers for PlansSheet
 class _PlansSheetWrapper extends StatefulWidget {
-  const _PlansSheetWrapper();
+  const _PlansSheetWrapper({required this.source});
+
+  final String source;
 
   @override
   State<_PlansSheetWrapper> createState() => _PlansSheetWrapperState();
@@ -217,7 +225,7 @@ class _PlansSheetWrapperState extends State<_PlansSheetWrapper> with TickerProvi
       notesController: _waveController,
       arrowController: _arrowController,
       arrowAnimation: _arrowAnimation,
-      analyticsSource: 'freemium_switch',
+      analyticsSource: widget.source,
     );
   }
 }
