@@ -32,7 +32,7 @@ interface UseChatReturn {
     fileIds?: string[],
     context?: ChatContextInfo | null,
     optimisticFiles?: MessageFile[],
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   clearHistory: () => Promise<void>;
   loadHistory: () => Promise<void>;
   appendRealtimeExchange: (humanText: string, aiText: string) => Promise<void>;
