@@ -293,10 +293,21 @@ def test_claim_stamps_a_fallback_snapshot_on_a_batch_row_without_one(rows):
 
 
 def _install_paged_due_query(state_rows, monkeypatch):
-    """Fake Firestore collection that enforces <=100 per-page limits and keyset start_after cursors."""
+    """Fake Firestore collection that enforces <=100 per-page limits and DocumentSnapshot start_after cursors."""
     from types import SimpleNamespace
 
     stream_calls: list[tuple[int, tuple | None]] = []
+
+    class _Snapshot:
+        exists = True
+
+        def __init__(self, doc_id: str, row: dict):
+            self.id = doc_id
+            self.reference = SimpleNamespace(id=doc_id)
+            self._row = dict(row)
+
+        def to_dict(self):
+            return dict(self._row)
 
     class _Query:
         def __init__(self, max_due=None, orders=(), page_limit=100, cursor=None):
@@ -316,11 +327,12 @@ def _install_paged_due_query(state_rows, monkeypatch):
             assert 1 <= count <= 100
             return _Query(self._max_due, self._orders, count, self._cursor)
 
-        def start_after(self, cursor):
-            assert isinstance(cursor, dict)
-            doc_ref = cursor['__name__']
-            doc_id = getattr(doc_ref, 'id', doc_ref)
-            return _Query(self._max_due, self._orders, self._limit, (cursor['due_at'], doc_id))
+        def start_after(self, snapshot):
+            if isinstance(snapshot, dict):
+                raise TypeError('Firestore query ordered by __name__ requires a DocumentSnapshot cursor')
+            assert isinstance(snapshot, _Snapshot)
+            row = snapshot.to_dict()
+            return _Query(self._max_due, self._orders, self._limit, (row['due_at'], snapshot.id))
 
         def stream(self):
             assert self._orders == ('due_at', '__name__')
@@ -334,7 +346,7 @@ def _install_paged_due_query(state_rows, monkeypatch):
             if self._cursor is not None:
                 items = [item for item in items if (item[1]['due_at'], item[0]) > self._cursor]
             page = items[: self._limit]
-            return [SimpleNamespace(id=doc_id, to_dict=lambda r=row: dict(r)) for doc_id, row in page]
+            return [_Snapshot(doc_id, row) for doc_id, row in page]
 
     class _Collection(_Query):
         def document(self, doc_id):
@@ -429,3 +441,59 @@ def test_pl003_explicit_backlog_budget_is_not_silently_capped_at_100(rows, monke
         assert outbox.ack(claim, 'done', now=t0 + 2)
     assert outbox.claim(125, 120.0, now=t0 + 499) == []
     assert [claim.row_id for claim in outbox.claim(125, 120.0, now=t0 + 500)] == [future.row_id]
+
+
+def test_due_rows_passes_real_firestore_document_snapshot_cursor_across_pages():
+    import threading
+    from google.auth.credentials import AnonymousCredentials
+    from google.cloud import firestore
+    from google.cloud.firestore_v1.base_document import DocumentSnapshot
+    from google.cloud.firestore_v1.query import Query
+
+    client = firestore.Client(project='test-outbox', credentials=AnonymousCredentials())
+    # Simulate an active gRPC channel lock on the live client (deepcopying a dict with a DocumentReference fails).
+    client._live_channel_lock = threading.Lock()
+    collection = client.collection(reprocess.COLLECTION)
+
+    page1 = [
+        DocumentSnapshot(
+            reference=collection.document(f'{i:064x}'),
+            data={'due_at': 10.0 + i, 'lease_until': 0.0, 'task_token': f'{i + 1:032x}'},
+            exists=True,
+            read_time=None,
+            create_time=None,
+            update_time=None,
+        )
+        for i in range(2)
+    ]
+    page2 = [
+        DocumentSnapshot(
+            reference=collection.document(f'{2:064x}'),
+            data={'due_at': 12.0, 'lease_until': 0.0, 'task_token': f'{3:032x}'},
+            exists=True,
+            read_time=None,
+            create_time=None,
+            update_time=None,
+        )
+    ]
+    seen_queries = []
+
+    def fake_stream(self, *_args, **_kwargs):
+        pb = self._to_protobuf()
+        seen_queries.append(pb)
+        return iter(page1 if len(seen_queries) == 1 else page2)
+
+    original_stream = Query.stream
+    Query.stream = fake_stream
+    try:
+        yielded = list(reprocess.due_rows(now=100.0, limit=2, client=client))
+    finally:
+        Query.stream = original_stream
+
+    assert [doc_id for doc_id, _ in yielded] == [f'{0:064x}', f'{1:064x}', f'{2:064x}']
+    assert len(seen_queries) == 2
+    assert not seen_queries[0]._pb.HasField('start_at')
+    assert seen_queries[1]._pb.HasField('start_at')
+    assert seen_queries[1].start_at.before is False
+    assert seen_queries[1].start_at.values[0].double_value == 11.0
+    assert seen_queries[1].start_at.values[1].reference_value.endswith(f'/{reprocess.COLLECTION}/{1:064x}')

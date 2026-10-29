@@ -934,8 +934,14 @@ def sweep(
 def due_rows(*, now: float, limit: int = 100, client: Any = None) -> Iterator[tuple[str, Row]]:
     """Pull mode: due, unleased, awake rows as ``(document_id, row)``, paged by ``(due_at, __name__)``."""
     page_size = max(1, min(100, limit))
-    collection = (client or get_firestore_client()).collection(COLLECTION)
-    query = collection.where('due_at', '<=', now).order_by('due_at').order_by('__name__').limit(page_size)
+    query = (
+        (client or get_firestore_client())
+        .collection(COLLECTION)
+        .where('due_at', '<=', now)
+        .order_by('due_at')
+        .order_by('__name__')
+        .limit(page_size)
+    )
     page_query = query
     while True:
         page = list(page_query.stream())
@@ -945,10 +951,7 @@ def due_rows(*, now: float, limit: int = 100, client: Any = None) -> Iterator[tu
                 yield snapshot.id, row
         if len(page) < page_size:
             return
-        last = page[-1]
-        last_row = last.to_dict() or {}
-        cursor = {'due_at': last_row.get('due_at'), '__name__': collection.document(last.id)}
-        page_query = query.start_after(cursor)
+        page_query = query.start_after(page[-1])
 
 
 def mark_effects(uid: str, conversation_id: str, language: str, *, immediate: bool = False) -> None:
