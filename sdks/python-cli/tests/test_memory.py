@@ -65,6 +65,72 @@ def test_memory_create_with_category_and_tags(authed_profile, respx_mock, cli_ru
     assert body["tags"] == ["a", "b"]
 
 
+def test_memory_create_from_file_posts_body(authed_profile, respx_mock, cli_runner, tmp_path) -> None:
+    memory_file = tmp_path / "memory.txt"
+    memory_file.write_text("from file", encoding="utf-8")
+    route = respx_mock.post("/v1/dev/user/memories").respond(
+        json={"id": "m99", "content": "from file", "category": "work", "visibility": "public", "tags": ["a"]}
+    )
+    result = cli_runner.invoke(
+        app,
+        [
+            "--json",
+            "memory",
+            "create",
+            "--file",
+            str(memory_file),
+            "--category",
+            "work",
+            "--visibility",
+            "public",
+            "--tag",
+            "a",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    body = json.loads(route.calls.last.request.content)
+    assert body["content"] == "from file"
+    assert body["category"] == "work"
+    assert body["visibility"] == "public"
+    assert body["tags"] == ["a"]
+
+
+def test_memory_create_from_file_missing_is_usage_error(authed_profile, cli_runner, tmp_path) -> None:
+    result = cli_runner.invoke(app, ["memory", "create", "--file", str(tmp_path / "nope.txt")])
+    assert result.exit_code == 1
+    assert "not found" in result.stderr.lower()
+
+
+def test_memory_create_from_file_invalid_utf8_is_usage_error(authed_profile, cli_runner, tmp_path) -> None:
+    memory_file = tmp_path / "bad.txt"
+    memory_file.write_bytes(b"\xff\xfe not utf-8")
+    result = cli_runner.invoke(app, ["memory", "create", "--file", str(memory_file)])
+    assert result.exit_code == 1
+    assert "utf-8" in result.stderr.lower()
+
+
+def test_memory_create_from_empty_file_is_usage_error(authed_profile, cli_runner, tmp_path) -> None:
+    memory_file = tmp_path / "empty.txt"
+    memory_file.write_text("", encoding="utf-8")
+    result = cli_runner.invoke(app, ["memory", "create", "--file", str(memory_file)])
+    assert result.exit_code == 1
+    assert "empty" in result.stderr.lower()
+
+
+def test_memory_create_from_directory_is_usage_error(authed_profile, cli_runner, tmp_path) -> None:
+    result = cli_runner.invoke(app, ["memory", "create", "--file", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "memory file" in result.stderr.lower()
+
+
+def test_memory_create_rejects_content_and_file_together(authed_profile, cli_runner, tmp_path) -> None:
+    memory_file = tmp_path / "m.txt"
+    memory_file.write_text("x", encoding="utf-8")
+    result = cli_runner.invoke(app, ["memory", "create", "inline text", "--file", str(memory_file)])
+    assert result.exit_code == 1
+    assert "exactly one" in result.stderr.lower()
+
+
 def test_memory_delete_skips_prompt_with_yes(authed_profile, respx_mock, cli_runner) -> None:
     respx_mock.delete("/v1/dev/user/memories/m1").respond(204)
     result = cli_runner.invoke(app, ["memory", "delete", "m1", "--yes"])
