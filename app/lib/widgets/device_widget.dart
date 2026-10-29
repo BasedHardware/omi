@@ -26,8 +26,7 @@ class DeviceAnimationWidget extends StatefulWidget {
   State<DeviceAnimationWidget> createState() => _DeviceAnimationWidgetState();
 }
 
-class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget>
-    with TickerProviderStateMixin {
+class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with TickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _animation;
 
@@ -50,9 +49,7 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget>
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: MediaQuery.sizeOf(context).height <= 700
-          ? 220 * widget.sizeMultiplier
-          : 340 * widget.sizeMultiplier,
+      height: MediaQuery.sizeOf(context).height <= 700 ? 220 * widget.sizeMultiplier : 340 * widget.sizeMultiplier,
       child: Center(
         child: Stack(
           alignment: Alignment.center,
@@ -69,28 +66,12 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget>
                       },
                       child: Image.asset(
                         Assets.images.blob.path,
-                        height:
-                            (MediaQuery.sizeOf(context).height <= 700
-                                ? 360
-                                : 390) *
-                            widget.sizeMultiplier,
-                        width:
-                            (MediaQuery.sizeOf(context).height <= 700
-                                ? 360
-                                : 390) *
-                            widget.sizeMultiplier,
+                        height: (MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) * widget.sizeMultiplier,
+                        width: (MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) * widget.sizeMultiplier,
                         cacheHeight:
-                            ((MediaQuery.sizeOf(context).height <= 700
-                                        ? 360
-                                        : 390) *
-                                    widget.sizeMultiplier)
-                                .round(),
+                            ((MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) * widget.sizeMultiplier).round(),
                         cacheWidth:
-                            ((MediaQuery.sizeOf(context).height <= 700
-                                        ? 360
-                                        : 390) *
-                                    widget.sizeMultiplier)
-                                .round(),
+                            ((MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) * widget.sizeMultiplier).round(),
                       ),
                     ),
                   )
@@ -104,12 +85,8 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget>
 
   Widget _buildDeviceImage() {
     final pixelRatio = MediaQuery.of(context).devicePixelRatio;
-    final double imageHeight =
-        (MediaQuery.sizeOf(context).height <= 700 ? 130 : 160) *
-        widget.sizeMultiplier;
-    final double imageWidth =
-        (MediaQuery.sizeOf(context).height <= 700 ? 130 : 160) *
-        widget.sizeMultiplier;
+    final double imageHeight = (MediaQuery.sizeOf(context).height <= 700 ? 130 : 160) * widget.sizeMultiplier;
+    final double imageWidth = (MediaQuery.sizeOf(context).height <= 700 ? 130 : 160) * widget.sizeMultiplier;
 
     return Image.asset(
       DeviceUtils.getDeviceImagePathWithState(

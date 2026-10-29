@@ -12,14 +12,12 @@ class DeviceUtils {
     switch (device.type) {
       case DeviceType.omi:
         final identity = '${device.modelNumber} ${device.name}'.toUpperCase();
-        if (isOmiCv1(modelNumber: device.modelNumber, deviceName: device.name))
-          return 'omi_cv1';
+        if (isOmiCv1(modelNumber: device.modelNumber, deviceName: device.name)) return 'omi_cv1';
         if (identity.contains('FRIEND')) return 'friend_devkit';
         if (isOmiDevKit(
           modelNumber: device.modelNumber,
           deviceName: device.name,
-        ))
-          return 'omi_devkit';
+        )) return 'omi_devkit';
         if (identity.contains('GLASS')) return 'omi_glass';
         if (identity.contains('NEO')) return 'omi_neo';
         return 'omi_unknown';
@@ -58,8 +56,7 @@ class DeviceUtils {
     if (currentFirmware.isEmpty) {
       return ('Unable to determine current firmware version', false, '');
     }
-    if (latestFirmwareDetails.isEmpty ||
-        latestFirmwareDetails['version'] == null) {
+    if (latestFirmwareDetails.isEmpty || latestFirmwareDetails['version'] == null) {
       return ('Latest Version Not Available', false, '');
     }
     if (latestFirmwareDetails['draft'] == true) {
@@ -158,10 +155,7 @@ class DeviceUtils {
     final model = modelNumber?.trim() ?? '';
     final name = deviceName?.trim() ?? '';
     final upperModel = model.toUpperCase();
-    final hasConcreteModel =
-        model.isNotEmpty &&
-        upperModel != 'OMI DEVICE' &&
-        upperModel != 'UNKNOWN';
+    final hasConcreteModel = model.isNotEmpty && upperModel != 'OMI DEVICE' && upperModel != 'UNKNOWN';
 
     if (hasConcreteModel) return !isVariant(model);
     if (name.isNotEmpty) return !isVariant(name);
@@ -196,17 +190,14 @@ class DeviceUtils {
           return Assets.images.raybanMeta.path;
         case DeviceType.omi:
           // For omi type, need to check model/name to distinguish between devkit and regular omi
-          if (modelNumber != null &&
-              modelNumber.isNotEmpty &&
-              modelNumber.toUpperCase() != 'UNKNOWN') {
+          if (modelNumber != null && modelNumber.isNotEmpty && modelNumber.toUpperCase() != 'UNKNOWN') {
             final upperModel = modelNumber.toUpperCase();
 
             if (upperModel.contains('GLASS')) {
               return Assets.images.omiGlass.path;
             }
 
-            if (upperModel.contains('DEVKIT') ||
-                (upperModel.contains('FRIEND'))) {
+            if (upperModel.contains('DEVKIT') || (upperModel.contains('FRIEND'))) {
               return Assets.images.omiDevkitWithoutRope.path;
             }
 
@@ -221,9 +212,7 @@ class DeviceUtils {
               return Assets.images.omiGlass.path;
             }
 
-            if (upperName.contains('DEVKIT') ||
-                upperName.contains('DEV') ||
-                (upperName.contains('FRIEND'))) {
+            if (upperName.contains('DEVKIT') || upperName.contains('DEV') || (upperName.contains('FRIEND'))) {
               return Assets.images.omiDevkitWithoutRope.path;
             }
 
@@ -237,9 +226,7 @@ class DeviceUtils {
     }
 
     // Then check modelNumber for specific variants
-    if (modelNumber != null &&
-        modelNumber.isNotEmpty &&
-        modelNumber.toUpperCase() != 'UNKNOWN') {
+    if (modelNumber != null && modelNumber.isNotEmpty && modelNumber.toUpperCase() != 'UNKNOWN') {
       final upperModel = modelNumber.toUpperCase();
 
       if (upperModel.contains('PLAUD')) {
@@ -248,8 +235,7 @@ class DeviceUtils {
       if (upperModel.contains('FRIEND PENDANT')) {
         return Assets.images.friendPendant.path;
       }
-      if (upperModel.contains('OMI DEVKIT 2') ||
-          upperModel.contains('FRIEND')) {
+      if (upperModel.contains('OMI DEVKIT 2') || upperModel.contains('FRIEND')) {
         return Assets.images.omiDevkitWithoutRope.path;
       }
       if (upperModel.contains('GLASS')) {
@@ -285,9 +271,7 @@ class DeviceUtils {
       if (upperName.startsWith('FRIEND_')) {
         return Assets.images.friendPendant.path;
       }
-      if (upperName.contains('OMI DEVKIT') ||
-          upperName.contains('OMI DEV') ||
-          upperName.contains('FRIEND')) {
+      if (upperName.contains('OMI DEVKIT') || upperName.contains('OMI DEV') || upperName.contains('FRIEND')) {
         return Assets.images.omiDevkitWithoutRope.path;
       }
       if (upperName.contains('BEE')) {
