@@ -49,6 +49,7 @@ BUDGET_PATH = BACKEND_DIR / 'config' / 'flag_budget.json'
 FEATURE_FLAGS_PATH = BACKEND_DIR.parent / 'config' / 'feature-flags.yaml'
 SEED_BUDGET = 170  # 2026-10-25 seed; lower it when the surface shrinks, never raise it.
 HELPER_KILL_SWITCHES = {
+    'CONVERSATION_MERGE_BEFORE_PROCESSING',
     'EPISODE_CARRY_ON_SESSION_END',
     'EPISODE_HARD_CAP_ACROSS_CONVERSATIONS',
     'EPISODE_MOMENT_OUTPUT_VALIDATOR',

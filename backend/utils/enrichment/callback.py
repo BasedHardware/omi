@@ -24,6 +24,7 @@ from utils.conversations.process_conversation import process_conversation
 from utils.sync import processing_hold
 from utils.enrichment.smart_refresh import settle_survivor
 from utils.conversations.smart_merge_policy import refresh_owed
+from utils.conversations.merge_before_processing import ConversationAbsorbed
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.silent_redrive import is_silent_redrive
 from utils.conversations.relevance import sync_intake_decision
@@ -115,7 +116,7 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
         # after success so lazy effects do not remain fenced indefinitely.
         outcome, due = (
             processing_hold.admission(conversation_data, context, now=time.time())
-            if processing_hold.enabled()
+            if processing_hold.enabled_for(conversation_data)
             else ('ready', None)
         )
         processing_hold.record(outcome)
@@ -123,6 +124,10 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
             context.update(defer_reason=outcome, defer_until=due)
             return
         if outcome in {'unchanged', 'late_cap', 'immaterial'}:
+            if (conversation_data.get('smart_merge') or {}).get('role') == 'survivor' and refresh_owed(
+                conversation_data
+            ):
+                settle_survivor(uid, conversation_id, owner=context['owner'], skip_processing=True)
             if not conversations_db.complete_sync_processing_hold(
                 uid, conversation_id, conversation_data.get('sync_content_revision'), None
             ):
@@ -205,18 +210,26 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
     # finalization, so discarded -> visible still accepts once.
     already_visible_finalized = already_sync_processed and not was_discarded
     started = time.monotonic()
-    processed_conversation = process_conversation(
-        uid=uid,
-        language_code=language or 'en',
-        conversation=conversation,
-        trigger=ProcessingTrigger.SYNC_UPDATE,
-        defer_derived_effects=silent_redrive,
-        user_kept=is_user_curated(conversation_data) or REPAIR_CONTEXT.get() is not None,
-        persistence_observer=_require_current_conversation_persistence,
-        # Deserialize drops relevance_decision. The raw row still has it:
-        # sync_update means a previous enrichment, sync_intake or absence does not.
-        prior_relevance_decision=prior_decision if isinstance(prior_decision, dict) else None,
-    )
+    try:
+        processed_conversation = process_conversation(
+            uid=uid,
+            language_code=language or 'en',
+            conversation=conversation,
+            trigger=ProcessingTrigger.SYNC_UPDATE,
+            defer_derived_effects=silent_redrive,
+            user_kept=is_user_curated(conversation_data) or REPAIR_CONTEXT.get() is not None,
+            persistence_observer=_require_current_conversation_persistence,
+            # Deserialize drops relevance_decision. The raw row still has it:
+            # sync_update means a previous enrichment, sync_intake or absence does not.
+            prior_relevance_decision=prior_decision if isinstance(prior_decision, dict) else None,
+        )
+    except ConversationAbsorbed as absorbed:
+        if context is not None:
+            context['redirect_to'] = absorbed.canonical_id
+            return
+        canonical = conversations_db.get_sync_redirected_conversation(uid, conversation_id)
+        return deserialize_conversation(canonical) if canonical else None
+
     if (
         context is not None
         and context.get('hold_snapshot') is not None

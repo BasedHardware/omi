@@ -179,7 +179,7 @@ class World:
         if not self.process_persisted:
             persistence_observer(False)
             return conversation
-        assert trigger is ProcessingTrigger.SMART_MERGE
+        assert trigger in {ProcessingTrigger.SMART_MERGE, ProcessingTrigger.SYNC_UPDATE}
         assert smart_merge_refresh[0] == self.raw(conversation.id)['smart_merge']['revision']
         self.processed.append((conversation.id, len(conversation.transcript_segments)))
         raw = self.raw(conversation.id)
@@ -734,6 +734,7 @@ class _Jobs:
 
 @pytest.mark.asyncio
 async def test_failed_refresh_is_finished_by_the_finalization_retry_exactly_once(world, monkeypatch, caplog):
+    monkeypatch.setenv('CONVERSATION_MERGE_BEFORE_PROCESSING', 'false')
     world.add('p', 0, 10)
     world.add('n', 15, 10, private_cloud_sync_enabled=True, finalization_job_id=JOB, finalization_revision=1)
     monkeypatch.setenv(config.SMART_MERGE_MODE_ENV, 'merge')
@@ -864,7 +865,7 @@ def test_expired_delivery_cannot_release_a_new_delivery_of_the_same_job(world, m
         old = kwargs['smart_merge_refresh'][1]
         world.raw('p')['smart_merge']['refresh_lease']['until'] = T0
 
-        def paused(uid, cid, revision, *, owner):
+        def paused(uid, cid, revision, *, owner, skip_processing=False):
             newer.update(world.raw('p')['smart_merge']['refresh_lease'])
             assert owner != old
 

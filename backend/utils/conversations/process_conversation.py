@@ -83,6 +83,7 @@ from utils.conversations.deterministic_minimum import (
 from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.sync_hold_completion import complete_explicit
+from utils.conversations.merge_before_processing import before_notes, ConversationAbsorbed
 from utils.conversations.processing_trigger import is_recovery_trigger
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
 from utils.conversations.recovery import (
@@ -370,6 +371,7 @@ def _get_structured(
     llm_hashes: dict[str, str] | None = None,
     open_loop_out: Optional[dict[str, Any]] = None,
     meeting_context_override: Optional[CalendarMeetingContext] = None,
+    finalization_fence: tuple[str, int, int] | None = None,
 ) -> Tuple[Structured, bool]:
     try:
         if is_recovery_trigger(trigger) and not recovery_transcript_decoded:
@@ -621,6 +623,8 @@ def _get_structured(
         if decision.discard:
             return Structured(emoji=random.choice(['🧠', '🎉'])), True
 
+        before_notes(uid, main_conv, trigger, finalization_fence=finalization_fence)
+
         conv_started_at = cast(datetime, main_conv.started_at)
 
         roster: Optional[MeetingRoster] = None
@@ -673,6 +677,8 @@ def _get_structured(
             )
         validate_structured_source_segment_ids(structured, transcript_segment_ids)
         return structured, False
+    except ConversationAbsorbed:
+        raise
     except Exception as e:
         if funded_processing.enabled(uid, 'batch') and _is_funded_budget_denial(e):
             raise
@@ -2585,6 +2591,7 @@ def process_conversation(
     created_webhook_observer: Callable[[Callable[[], None]], None] | None = None,
     first_party_only: bool = False,
     derived_effects_transcript_sha256: str | None = None,
+    finalization_fence: tuple[str, int, int] | None = None,
 ) -> Conversation:
     """Process ``conversation``; ``trigger`` says why, and its ``ProcessingMode``
     fixes run-now, reprocess, bypass, and relevance policy together.
@@ -2822,6 +2829,7 @@ def process_conversation(
         llm_hashes=llm_hashes,
         open_loop_out=open_loop_sink,
         meeting_context_override=meeting_context_override,
+        finalization_fence=finalization_fence,
     )
     if recovery_minimum_fallback:
         sys.stdout.write(

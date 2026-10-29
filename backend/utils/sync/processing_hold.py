@@ -14,6 +14,7 @@ import os
 from typing import Any
 
 from prometheus_client import Counter, REGISTRY
+from config.merge_before_processing import enabled as merge_before_processing_enabled
 from utils.observability.reasons import ReasonFamily, SyncProcessingHoldOutcome, reason_label
 
 QUIET_SECONDS = 600
@@ -49,6 +50,13 @@ def record(outcome: str) -> None:
 
 def enabled() -> bool:
     return os.getenv('SYNC_PROCESSING_HOLD_ENABLED', 'true').strip().lower() not in {'false', '0', 'off', 'no'}
+
+
+def enabled_for(row: Mapping[str, Any]) -> bool:
+    state = row.get(FIELD) or {}
+    if row.get('merge_hold') or state.get('merge_first'):
+        return merge_before_processing_enabled()
+    return enabled()
 
 
 def owns_runtime() -> bool:
