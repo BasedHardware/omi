@@ -1,20 +1,24 @@
 """Client read projection with only retained, extant episode members."""
 
+from typing import Any
+
 from database import conversations
 from utils.episodes import service
 
 
-def wire_episode(episode: dict | None) -> dict | None:
+def wire_episode(episode: dict[str, Any] | None) -> dict[str, Any] | None:
     """Additive read fields, without changing the shared lifecycle service's wire helper."""
     if episode is None:
         return None
-    return {**service.to_wire(episode), 'emoji': episode.get('emoji') or '', 'members': []}
+    wire = service.to_wire(episode)
+    assert wire is not None  # Non-null input always has a wire projection.
+    return {**wire, 'emoji': episode.get('emoji') or '', 'members': []}
 
 
-def project_episode(uid: str, episode: dict | None) -> dict | None:
+def project_episode(uid: str, episode: dict[str, Any] | None) -> dict[str, Any] | None:
     if episode is None:
         return None
-    members = []
+    members: list[dict[str, Any]] = []
     for cid in dict.fromkeys(episode.get('conversation_ids') or []):
         raw = conversations.get_conversation_raw_snapshot(
             uid,

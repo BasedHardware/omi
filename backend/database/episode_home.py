@@ -19,7 +19,7 @@ def list_episode_window(
     limit: int = 50,
     cursor: str | None = None,
     firestore_client: Any = None,
-) -> tuple[list[dict], str | None]:
+) -> tuple[list[dict[str, Any]], str | None]:
     """Page the recorded window, including starts before it (episodes have a 4h span cap).
 
     Pagination advances over scanned documents, even when overlap/visibility filtering
