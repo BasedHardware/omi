@@ -99,10 +99,18 @@ def app_module_stubs() -> dict:
             self.result = result
             self.error = error
 
+    class StubAsyncClient:
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            pass
+        async def post(self, *args, **kwargs):
+            return StubResponse()
+
     return {
         "dotenv": _module("dotenv", load_dotenv=lambda *a, **k: None),
         "requests": _module("requests"),
-        "httpx": _module("httpx"),
+        "httpx": _module("httpx", AsyncClient=StubAsyncClient),
         "db": db,
         "models": _module("models", ChatToolResponse=ChatToolResponse),
     }
