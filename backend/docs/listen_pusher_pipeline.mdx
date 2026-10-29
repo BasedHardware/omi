@@ -27,6 +27,12 @@ changes a conversation; normal projection continues to reject shadow jobs.
 This observes assignment planning rather than owner-chain scheduling or a
 durable transaction. See [shadow isolation and the proposed 25% window](batch-pipeline-shadow.md)
 for runtime bounds, cost assumptions, rollback and the lead-owned activation.
+Idle offers yield to ready work, live leases, every due retry,
+and recording placeholders younger than 120 seconds. Future retries and expired
+leases do not occupy shadow capacity. An attempt counter at its cap does not
+terminalize a due retry; only its authoritative state releases ordinary-work
+priority. Four existing indexed probes read at most four documents; each worker
+still rechecks its GPU lock and ordinary in-flight work.
 
 Dedicated batch GPU capacity follows fresh admissible queued-unit counts, not
 raw queue age. Allowance-held work remains in durable custody while parked;
@@ -391,6 +397,20 @@ flag persists the existing CUDA graph selection across NeMo timestamp setup.
 The [packing runbook](runbooks/parakeet-packing.md) owns the demand-scaler train,
 warm floor, mixed-load gates and rollback.
 
+Startup continuous speech selects its first POST after
+`min(PARAKEET_WINDOW_PACE_SECONDS, PARAKEET_WINDOW_FIRST_POST_SECONDS)`
+admitted seconds (first-post default `8`, normal pace default `15`). Earlier
+VAD pause/idle flushes still apply. While a first-text or progress watchdog is
+armed and rescue is allowed, the default-on
+`PARAKEET_WINDOW_FIRST_TEXT_CUT_ENABLED` releases a nonempty answer's held tail
+through the timestamp-preserving cut when no ordinary segment can emit. An
+answer that already emits a completed segment keeps its unfinished tail anchored.
+Otherwise even a healthy answer can wait until the 24-second context cap, past
+the 12-second watchdog, including at the production six-second pace. Outside an
+armed watchdog, normal sentence anchoring applies; POST pacing is unchanged. Empty or stalled POSTs retain
+the deadline and exact fallback replay. Rollback: set first-post seconds to `15`
+and first-text cut to `false`; neither setting changes the cost gate.
+
 `PARAKEET_WINDOW_DEADLINE_CUT_ENABLED` defaults to `false` in code and
 both listen manifests. Qualification must explicitly enable it in the target
 listen cohort. While enabled, a successful nonempty POST can release its held
@@ -398,7 +418,7 @@ tail through the existing timestamp-preserving cut only when the remaining
 first-text/progress deadline is at most
 `PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS` (default `1.2`, approximately
 the observed POST p95; invalid/nonpositive values use the default). A normal
-first POST after six seconds of capture retains sentence anchoring. Neither a
+progress POST after six seconds of capture retains sentence anchoring. Neither a
 full audio pace nor the next pacing wait increases the allowance.
 
 Emitted text advances the existing capture anchor and cancels the applicable
@@ -3668,6 +3688,10 @@ blips and quiet intervals, so its bake baseline retains the original semantics.
 `seconds_since_first_speech` (original admission), `episode_admitted_seconds`,
 `seconds_since_deadline_speech` (active budget), and
 `answered_empty_admitted_seconds` (the cumulative cancellation allowance).
+`posts` counts starts since the current anchor, including an in-flight call;
+`empty_posts` counts completed empty answers. These are not lifetime POST counts.
+The legacy `first_text_deadline` reason also covers armed progress episodes,
+so `seconds_since_first_speech` can exceed the current 12-second budget.
 The immutable snapshot is
 taken before pump cancellation and carried through the existing replay hop.
 Seconds are bounded to 86,400 and counts to 1,000,000; non-finite seconds use

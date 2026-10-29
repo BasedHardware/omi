@@ -20,7 +20,7 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 169,
-  "count": 193,
+  "count": 194,
   "names": {
     "CONVERSATION_OCCASION_RELEVANCE_ENABLED": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28", "registry": "config/feature-flags.yaml"},
     "CONVERSATION_MERGE_BEFORE_PROCESSING": {"owner": "rollout-meetings / occasion architecture", "review_by": "2026-11-28", "registry": "config/feature-flags.yaml"},
@@ -141,6 +141,7 @@
     "PARAKEET_WINDOW_ALLOCATION_PERCENT": {"seeded": "2026-10-25"},
     "PARAKEET_WINDOW_DEADLINE_CUT_ENABLED": {"seeded": "2026-10-25"},
     "PARAKEET_WINDOW_DIARIZATION": {"seeded": "2026-10-25"},
+    "PARAKEET_WINDOW_FIRST_TEXT_CUT_ENABLED": {"owner": "dazheng (live STT / rollout lead)", "review_by": "2026-11-15"},
     "PARAKEET_WINDOW_MAX_SESSIONS": {"seeded": "2026-10-25"},
     "PARAKEET_WINDOW_POST_TIMEOUT_SECONDS": {"seeded": "2026-10-25"},
     "PARAKEET_WINDOW_SECONDS": {"seeded": "2026-10-25"},
