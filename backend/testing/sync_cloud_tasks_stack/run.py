@@ -149,6 +149,39 @@ def _read_events(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def _processor_gate_diagnostics(state_dir: Path, deliveries: list[httpx.Response]) -> str:
+    """Bounded failure stages, never response text, paths or fixture identities."""
+    http_status = str(deliveries[0].status_code) if deliveries else 'pending'
+    response_status = 'unknown'
+    if deliveries:
+        with suppress(ValueError):
+            body = deliveries[0].json()
+            candidate = body.get('status') if isinstance(body, dict) else None
+            if isinstance(candidate, str) and candidate in {
+                'done',
+                'failed',
+                'locked',
+                'acked',
+                'retry',
+                'queued',
+                'processing',
+                'completed',
+                'partial',
+            }:
+                response_status = candidate
+    fields = [f'first_delivery_http={http_status}', f'first_delivery_status={response_status}']
+    for channel, stages in (
+        ('worker', ('local_oidc_verified',)),
+        ('providers', ('vad_result', 'stt_completed', 'processor_gate_entered', 'conversation_persisted')),
+    ):
+        try:
+            names = {row.get('event') for row in _read_events(state_dir / 'evidence' / f'{channel}.jsonl')}
+            fields.extend(f'{stage}={int(stage in names)}' for stage in stages)
+        except OSError:
+            fields.extend(f'{stage}=unknown' for stage in stages)
+    return ' '.join(fields)
+
+
 def postgres_requested() -> bool:
     return os.getenv('OMI_STACK_POSTGRES', '').strip().lower() in {'1', 'true', 'yes', 'on'}
 
@@ -931,6 +964,7 @@ def _retry_budget_terminalizes_truthfully(stack: Stack) -> None:
 
 
 def _concurrent_delivery_is_lease_fenced(stack: Stack) -> None:
+    """Hold paid STT inside the upload lease, independently of full-note settlement."""
     if stack.gate_dir is None:
         raise StackFailure('concurrent scenario requires a processor gate')
     uid = stack.scenario_uid('concurrent')
@@ -942,7 +976,14 @@ def _concurrent_delivery_is_lease_fenced(stack: Stack) -> None:
 
     thread = threading.Thread(target=first_delivery, daemon=True)
     thread.start()
-    _wait_until(lambda: (stack.gate_dir / 'entered').exists(), label='first worker processor gate')
+    try:
+        _wait_until(lambda: (stack.gate_dir / 'entered').exists() or bool(first_result), label='first worker STT gate')
+    except StackFailure as exc:
+        raise StackFailure(f'{exc}; {_processor_gate_diagnostics(stack.state_dir, first_result)}') from None
+    if not (stack.gate_dir / 'entered').exists():
+        raise StackFailure(
+            'first worker returned before STT gate; ' + _processor_gate_diagnostics(stack.state_dir, first_result)
+        )
     second = _deliver_task(task, retry_count=1)
     if second.status_code != 409 or second.json().get('status') != 'locked':
         raise StackFailure('concurrent worker delivery did not observe the real run lock')

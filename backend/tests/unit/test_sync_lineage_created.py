@@ -147,7 +147,7 @@ def test_stamp_gap_reroute_discovers_and_rechecks_live_candidates(monkeypatch, c
             discovery_calls=calls,
             before_assign=lambda transaction: fences.append(transaction),
         )
-    assert created and row['_sync_lineage_stamp_gap_refused'] is True
+    assert created and '_sync_lineage_stamp_gap_refused' not in row
     assert client.rows[('users', 'u', 'conversations', 'stamp')] == stamp
     assert len(calls) == 1 and len(fences) == 2 and fences[0] is not fences[1]
     outcome = 'created_overlap' if overlap else 'created_clear'
@@ -190,7 +190,7 @@ def test_stamp_gap_reroute_never_adopts_live_content(monkeypatch, caplog, overla
             discovery_calls=calls,
         )
     assert created and row['id'] == 'wal'
-    assert row['_sync_lineage_stamp_gap_refused'] is True
+    assert '_sync_lineage_stamp_gap_refused' not in row
     assert client.rows[('users', 'u', 'conversations', 'stamp')] == stamp
     assert client.rows[('users', 'u', 'conversations', 'live')] == live
     assert ('users', 'u', 'conversations', 'wal') in client.rows
@@ -258,12 +258,13 @@ def test_reroute_rechecks_fence_before_any_write(monkeypatch, caplog):
     assert client.rows == {('users', 'u', 'conversations', 'live'): live}
 
 
-def test_create_without_discovery_is_labelled_skipped(monkeypatch, caplog):
+def test_missing_explicit_target_discovers_before_creation(monkeypatch, caplog):
     calls = []
     with caplog.at_level(logging.INFO):
         _, (_, created, _) = persist(monkeypatch, target_id='missing', discovery_calls=calls)
-    assert created and not calls
-    assert observations(caplog)[0].endswith('lookup_complete=false incomplete_reason=discovery_skipped')
+    assert created and calls == [True]
+    assert 'outcome=created_clear' in observations(caplog)[0]
+    assert observations(caplog)[0].endswith('lookup_complete=true')
 
 
 @pytest.mark.parametrize('reason', ['lookup_failed', 'page_cap'])

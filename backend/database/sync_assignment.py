@@ -10,7 +10,7 @@ from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, 
 
 
 class SyncAssignmentDiscovery:
-    """One bounded discovery per call, reused across read-only stamp-gap replanning."""
+    """One bounded discovery per call, reused across read-only target rerouting."""
 
     def __init__(self, lineage_eligible: bool):
         self.lineage_eligible = lineage_eligible
@@ -24,7 +24,7 @@ class SyncAssignmentDiscovery:
         return {
             'live_lookup_complete': self.lookup.get('lookup_complete', False),
             'live_lookup_incomplete_reason': self.lookup.get('incomplete_reason'),
-            'discover_on_stamp_gap': not self.attempted,
+            'discover_on_reroute': not self.attempted,
         }
 
     def discover(self, user_ref, incoming, find_candidates):
