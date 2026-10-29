@@ -1,48 +1,17 @@
 """Ordinary runnable work wins, while parked debt cannot poison shadow idle offers."""
 
 from copy import deepcopy
-from types import SimpleNamespace
 
 import pytest
 
-from database.batch_pipeline_shadow import RECORD_PENDING_BUSY_SECONDS, pool_busy
+from tests.unit.fixtures.batch_shadow_metadata_query import metadata_client
 
-
-class MetadataQuery:
-    """Synthetic metadata query fixture; query/index shapes have their own real-builder guard."""
-
-    def __init__(self, rows, filters=(), limit=None):
-        self.rows, self.filters, self.bound = rows, filters, limit
-
-    def where(self, field, op, value):
-        return MetadataQuery(self.rows, (*self.filters, (field, op, value)), self.bound)
-
-    def order_by(self, field):
-        return self
-
-    def select(self, fields):
-        return self
-
-    def limit(self, value):
-        return MetadataQuery(self.rows, self.filters, value)
-
-    def stream(self):
-        matches = []
-        for row in self.rows:
-            for field, op, value in self.filters:
-                actual = row.get(field)
-                if actual is None or not (
-                    actual == value if op == '==' else actual <= value if op == '<=' else actual > value
-                ):
-                    break
-            else:
-                matches.append(SimpleNamespace(to_dict=lambda row=row: deepcopy(row)))
-        return iter(matches[: self.bound])
+from database.batch_pipeline_shadow import BUSY_HOLD_SCAN_LIMIT, RECORD_PENDING_BUSY_SECONDS, pool_busy
 
 
 def busy(rows):
     original = deepcopy(rows)
-    client = SimpleNamespace(collection=lambda name: MetadataQuery(rows))
+    client = metadata_client(rows)
     result = pool_busy(client, 'batch_pipeline_dev', now=10000.0)
     assert rows == original  # The probe never repairs or changes ordinary work.
     return result
@@ -107,3 +76,35 @@ def test_due_retry_at_attempt_cap_behind_parked_population_retains_priority():
 
 def test_empty_pool_is_idle():
     assert not busy([])
+
+
+@pytest.mark.parametrize('state', ['ready', 'retry'])
+def test_authoritative_allowance_hold_does_not_block_idle_gpu(state):
+    row = retry(state=state, compute_decision={'outcome': 'held', 'reason': 'allowance_exhausted'})
+    assert not busy([row])
+
+
+def test_policy_hold_survives_unevaluated_refresh_but_a_new_allow_wins():
+    row = retry(last_policy_hold={'reason': 'allowance_exhausted'})
+    assert not busy([row])
+    row['compute_decision'] = {'outcome': 'allowed'}
+    assert busy([row])
+
+
+def test_other_hold_reasons_remain_busy():
+    assert busy([retry(compute_decision={'outcome': 'held', 'reason': 'synthetic_other_hold'})])
+
+
+def test_held_prefix_does_not_hide_runnable_retry_at_attempt_cap():
+    held = [retry(compute_decision={'outcome': 'held', 'reason': 'allowance_exhausted'}) for _ in range(168)]
+    assert not busy(held)
+    assert busy([*held, retry(attempt=5)])
+
+
+def test_full_held_scan_fails_busy_for_unmeasured_tail():
+    held = [
+        retry(compute_decision={'outcome': 'held', 'reason': 'allowance_exhausted'})
+        for _ in range(BUSY_HOLD_SCAN_LIMIT)
+    ]
+    assert not busy(held)
+    assert busy([*held, held[0]])
