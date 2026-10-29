@@ -19,6 +19,26 @@ transactional job claims and recovery cadence are unchanged. See
 
 ## Server batch-only capture by platform
 
+Real-upload batch shadow can send its ephemeral result to the existing CPU
+recovery role's private OIDC `shadow-project` endpoint. It runs the production
+partitioner and assignment transaction body through bounded read-only
+references and discarded write plans. It never publishes, enriches, meters or
+changes a conversation; normal projection continues to reject shadow jobs.
+This observes assignment planning rather than owner-chain scheduling or a
+durable transaction. See [shadow isolation and the proposed 25% window](batch-pipeline-shadow.md)
+for runtime bounds, cost assumptions, rollback and the lead-owned activation.
+Idle offers yield to ready work, live leases, and due retries,
+and recording placeholders younger than 120 seconds. Future retries and expired
+leases do not occupy shadow capacity. An attempt counter at its cap does not
+terminalize a due retry; only its authoritative state releases ordinary-work
+priority. A proven `allowance_exhausted` scheduler HOLD remains parked through
+retry/ready re-evaluation and does not occupy a GPU. A fresh allow, an unknown
+decision, another hold reason, or a live lease retains ordinary-work priority.
+The existing indexed probes scan at most 500 held ready/retry rows each plus
+one sentinel and fail busy on an unmeasured tail. Each worker still rechecks
+its GPU lock and ordinary in-flight work. No funding decision or job is changed
+by this shadow-only read.
+
 Dedicated batch GPU capacity follows fresh admissible queued-unit counts, not
 raw queue age. Allowance-held work remains in durable custody while parked;
 its periodic ready/re-evaluation transition cannot request additional GPUs.
@@ -382,6 +402,20 @@ flag persists the existing CUDA graph selection across NeMo timestamp setup.
 The [packing runbook](runbooks/parakeet-packing.md) owns the demand-scaler train,
 warm floor, mixed-load gates and rollback.
 
+Startup continuous speech selects its first POST after
+`min(PARAKEET_WINDOW_PACE_SECONDS, PARAKEET_WINDOW_FIRST_POST_SECONDS)`
+admitted seconds (first-post default `8`, normal pace default `15`). Earlier
+VAD pause/idle flushes still apply. While a first-text or progress watchdog is
+armed and rescue is allowed, the default-on
+`PARAKEET_WINDOW_FIRST_TEXT_CUT_ENABLED` releases a nonempty answer's held tail
+through the timestamp-preserving cut when no ordinary segment can emit. An
+answer that already emits a completed segment keeps its unfinished tail anchored.
+Otherwise even a healthy answer can wait until the 24-second context cap, past
+the 12-second watchdog, including at the production six-second pace. Outside an
+armed watchdog, normal sentence anchoring applies; POST pacing is unchanged. Empty or stalled POSTs retain
+the deadline and exact fallback replay. Rollback: set first-post seconds to `15`
+and first-text cut to `false`; neither setting changes the cost gate.
+
 `PARAKEET_WINDOW_DEADLINE_CUT_ENABLED` defaults to `false` in code and
 both listen manifests. Qualification must explicitly enable it in the target
 listen cohort. While enabled, a successful nonempty POST can release its held
@@ -389,7 +423,7 @@ tail through the existing timestamp-preserving cut only when the remaining
 first-text/progress deadline is at most
 `PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS` (default `1.2`, approximately
 the observed POST p95; invalid/nonpositive values use the default). A normal
-first POST after six seconds of capture retains sentence anchoring. Neither a
+progress POST after six seconds of capture retains sentence anchoring. Neither a
 full audio pace nor the next pacing wait increases the allowance.
 
 Emitted text advances the existing capture anchor and cancels the applicable
@@ -1581,11 +1615,20 @@ being split on silence and stitched back together by smart merge afterwards
 ## Same-occasion folding across a silence split (smart merge)
 
 The two-minute silence split can turn one occasion into several pendant
-conversations. `utils/conversations/smart_merge.py` runs inside
-`finalize_persisted_conversation` on both finalization hosts (pusher for the
-live handoff, backend-sync for Cloud Tasks), only for `CAPTURE_END` jobs, after
-the fanout claim is `claimed` and before duplicate-capture linking or any derived
-effect. `CONVERSATION_SMART_MERGE_MODE` selects `merge` (the default when the
+conversations. With `CONVERSATION_MERGE_BEFORE_PROCESSING` (default on),
+`utils/conversations/merge_before_processing.py` is the shared pre-notes boundary
+for persisted live (`CAPTURE_END`), sync (`SYNC_UPDATE`) and untitled self-heal
+(`SERVER_RECOVERY`) rows. Budget and relevance admission run first; only a kept
+raw row can become a donor, before notes/title/tasks/memories or derived effects.
+The absorb transaction rechecks the live job binding, generation, lease epoch
+and expiry, or the enrichment owner, as well as both content revisions. A
+completed row with rich notes is never newly absorbed on this path. Explicit
+client ends, user reprocessing and manual merges keep their immediate paths.
+The flag is independent of the sync hold switch, registered with owner
+rollout-meetings and review date 2026-11-28 in the flag budget. Setting it to
+`false/0/off/no` restores the post-notes `CAPTURE_END` fanout-claimed merge path;
+committed donors always resume cleanup even after either switch is disabled.
+`CONVERSATION_SMART_MERGE_MODE` selects `merge` (the default when the
 variable is unset or blank), `shadow` (decide and record, never merge) or `off`
 (the kill switch: one env read, no I/O; an unrecognized value also means `off`);
 
@@ -3650,6 +3693,10 @@ blips and quiet intervals, so its bake baseline retains the original semantics.
 `seconds_since_first_speech` (original admission), `episode_admitted_seconds`,
 `seconds_since_deadline_speech` (active budget), and
 `answered_empty_admitted_seconds` (the cumulative cancellation allowance).
+`posts` counts starts since the current anchor, including an in-flight call;
+`empty_posts` counts completed empty answers. These are not lifetime POST counts.
+The legacy `first_text_deadline` reason also covers armed progress episodes,
+so `seconds_since_first_speech` can exceed the current 12-second budget.
 The immutable snapshot is
 taken before pump cancellation and carried through the existing replay hop.
 Seconds are bounded to 86,400 and counts to 1,000,000; non-finite seconds use
@@ -6262,8 +6309,12 @@ available for multilingual recovery, never permission for fixed-language STT.
 
 `BATCH_PIPELINE_LIVE_ADMISSION_ENABLED=false` is the sole new producer control.
 When true, retained server-STT captures use the existing
-`BATCH_PIPELINE_ENABLED` master switch, `BATCH_PIPELINE_PERCENT` hash ramp and
-private Firestore `batch-pipeline` cohort. New in-progress rows
+`BATCH_PIPELINE_ENABLED` master switch, runtime `rollout_cohorts/_ramp`
+`batch-pipeline` hash percentage and
+private Firestore `batch-pipeline` cohort. The env percentage remains a fallback;
+deploys omit it and admission warmup reads remote config before snapshotting.
+See [runtime ramp migration and rollback](runbooks/batch-runtime-ramp.md).
+New in-progress rows
 reserve `record_lane_owner=batch_live_v1` in their existing create write. Captures
 already in progress at enablement reserve the same owner from the finalizer's
 already-loaded revision using a conditional write, with zero extra reads on a
@@ -7862,9 +7913,18 @@ acknowledging; it never processes the donor. Smart-merge survivor refreshes
 for sync-touched rows hand off to this same outbox, then persist a
 `smart_merge.delegated_revision` receipt. Only that committed handoff permits
 another absorb while a refresh is owed. The settled worker still uses the
-smart-merge refresh lease, processing checkpoint and vector completion. Ordinary
-live-only refreshes retain their existing path. This step does not move the
-smart-merge decision before the donor's first processing; that is step 2.
+smart-merge refresh lease, processing checkpoint and vector completion. Step 2
+extends this handoff to live-only absorbs with a `before_notes` decision stamp:
+`sync_processing_hold.merge_first` and outbox `merge_hold` select the independent
+merge-before-processing kill switch. The first survivor notes supply the baseline;
+subsequent absorbs coalesce against it. Unchanged, immaterial and capped work
+settles the merge revision without a paid refresh. A raw survivor still passes
+the normal `SYNC_UPDATE` relevance policy on its first full processing.
+Rollback drains live-only merge holds through their stored wakes and the repair
+sweep. Mixed sync/live obligations keep the independent sync window while its
+switch remains on. New epochs reset their producer markers, so a historical live
+hold cannot disable a future sync hold. New absorbs use the legacy path after
+rollback.
 
 Successful automatic processing stores a content digest, word count and union
 speech duration in `sync_processing_hold.full_snapshot`, after processing and its existing effects return, through a
@@ -7906,3 +7966,62 @@ Home acceptance remains occasion architecture step 3b: intake still stores its
 legacy completed minimum, so released clients can show a held piece as a
 finished row. This backend change does not claim to fix that UI or to prevent
 smart merges after a row has been seen. No UI is changed here.
+
+
+### Recorded-time late audio (2026-10-29)
+
+`LATE_AUDIO_SYNC_INTAKE_ENABLED` defaults on. A placed listen batch whose
+recorded end is at least 120 seconds behind processing uses the same temporal
+sync assignment and durable enrichment hold as WAL speech. It keeps recorded
+start/end, ignores the carrying live generation as a target, and cannot feed
+arrival-timed realtime episodes. A WAL stamp whose generation began after the
+recorded audio's entire span is rejected by the same switch; ordinary temporal
+assignment then groups continuous speech using the shared 120-second boundary.
+Audio custody is not acknowledged against the empty live stub: existing WAL /
+pack receipt processing still owns release of original audio.
+
+Episodes use the recorded-time ownership function and four-hour / thirty-minute
+rules documented in `utils/episodes/ARCHITECTURE.md`. The additive
+`timer_started_at` field fixes Home's elapsed-time anchor without new UI.
+Late-audio intake and occasion-aware discard apply globally; episode storage
+and timer fields retain the existing beta cohort and client-capability gates.
+The default-on `CONVERSATION_OCCASION_RELEVANCE_ENABLED` kill switch retains
+short fragments only when another non-discarded member supports recorded-time
+ownership within the episode gap/cap rules, or a kept conversation is adjacent.
+A clip's self-created singleton never proves relevance. Episode API projections
+hide episodes whose members are all discarded, deleted or absorbed, including
+when a relevance decision arrives after the episode poll cache was populated.
+
+### Occasion step 2 merge-path audit
+
+- Smart/Jev same-source pendant absorption now runs at the shared relevance-to-notes
+  boundary above. Raw/minimum self-heal uses the same boundary; rich recovery
+  results retain their identity. Jev sees bounded transcript excerpts and may see
+  an empty donor summary; there is no preliminary full summary call.
+- Sync intake/bridge assignment already chooses and appends to its canonical row
+  before enrichment (step 1). A late bridge now prefers an already-processed
+  canonical and excludes every other processed row from donor selection, then
+  replans without those rows extending the interval. This closes the hole after
+  the maximum hold: completed identities survive even when late audio connects
+  them. Explicit live targets remain canonical and the incoming content is still
+  appended; protected processed captures retain their own notes.
+  Redirected `sync_merged_into` donors transfer outbox
+  custody through the existing cycle/depth-bounded resolver, including deep chains.
+- Desktop/pendant shared-speech capture groups and cross-device overlap hints are
+  metadata associations, not destructive transcript merges. Both transcripts and
+  independent relevance remain: overlap/partial shared speech cannot prove the
+  secondary has no unique content. Their identity-evidence refresh remains
+  fingerprint-deduplicated and capped at three attempts per group; no extra full
+  processing is introduced here. Home row absorption is step 3b.
+- Batch record owners already merge/project through their record authority; the
+  legacy smart merger must not compete for `batch_live_v1`/`batch_sync_v1` rows.
+- Manual `/v1/conversations/merge` is explicit user intent over completed sources,
+  with a durable merge job; it is not an automatic donor-processing decision.
+
+`omi_conversation_merge_processing_stage_total{stage,donor_notes}` now separates
+`before_notes`/`after_notes` absorbs and actual donor note presence. Existing
+`omi_conversation_smart_merge_decision_total` counts decisions/attempts, not unique
+conversations or confirmed full-note runs. Sum increases across serving jobs;
+Cloud Run coverage can differ from GKE scrapes. `omi_sync_intake_total{outcome="merged"}`
+counts appends/absorbs, not already-processed donors. Missing series are unknown,
+never zero. No account ids or transcript data are exported by these counters.

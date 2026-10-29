@@ -14940,4 +14940,57 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'హోమ్ పైభాగంలో మీ తాజా రీక్యాప్‌లను చూపించు.';
+
+  @override
+  String get yearlySwitchTitle => 'వార్షికానికి మారండి';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'ఏడాదికి $amount ఆదా చేయండి';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'వార్షిక చెల్లింపుతో ఏడాదికి $amount ఆదా చేయండి';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'అదే ప్లాన్, ఏడాదికి ఒకసారి చెల్లింపు';
+
+  @override
+  String get yearlySwitchPlanLabel => 'ప్లాన్';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, ఏడాదికి $price';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'ఈరోజు చెల్లించాల్సినది';
+
+  @override
+  String get yearlySwitchRenews => 'పునరుద్ధరణ';
+
+  @override
+  String get yearlySwitchCreditNote => 'ఈ నెలలో మిగిలిన రోజులకు క్రెడిట్ ఉంటుంది.';
+
+  @override
+  String get yearlySwitchDeclined => 'చెల్లింపు తిరస్కరించబడింది. మీరు ఇంకా నెలవారీ ప్లాన్‌లోనే ఉన్నారు.';
+
+  @override
+  String get yearlySwitchFailed => 'మారడం సాధ్యం కాలేదు. మీరు ఇంకా నెలవారీ ప్లాన్‌లోనే ఉన్నారు.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'మీ ధరను లోడ్ చేయలేకపోయాం.';
+
+  @override
+  String get yearlySwitchUnavailable => 'ప్రస్తుతం మీ ప్లాన్‌కు వార్షిక బిల్లింగ్ అందుబాటులో లేదు.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'మీరు ఇప్పుడు వార్షిక ప్లాన్‌లో ఉన్నారు';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'ఈరోజు $amount వసూలు చేశాం. పునరుద్ధరణ $date.';
+  }
 }

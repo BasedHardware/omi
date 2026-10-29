@@ -11925,5 +11925,20 @@
     "activityAttentionSyncStalledTitle": "Omi לא מסתנכרן",
     "activityAttentionSyncStalledSubtitle": "לא סונכרנו הקלטות במשך יותר מ-{hours} שעות",
     "dailyRecapsOnHome": "סיכומים יומיים במסך הבית",
-    "dailyRecapsOnHomeDescription": "הצג את הסיכומים האחרונים שלך בראש מסך הבית."
+    "dailyRecapsOnHomeDescription": "הצג את הסיכומים האחרונים שלך בראש מסך הבית.",
+    "yearlySwitchTitle": "מעבר לתשלום שנתי",
+    "yearlySwitchRowSavings": "חסכו {amount} בשנה",
+    "yearlySwitchHomeTitle": "חסכו {amount} בשנה עם תשלום שנתי",
+    "yearlySwitchHomeSubtitle": "אותה תוכנית, תשלום פעם בשנה",
+    "yearlySwitchPlanLabel": "תוכנית",
+    "yearlySwitchPlanValue": "{plan}, {price} לשנה",
+    "yearlySwitchDueToday": "לתשלום היום",
+    "yearlySwitchRenews": "מתחדש",
+    "yearlySwitchCreditNote": "כולל זיכוי על יתרת החודש.",
+    "yearlySwitchDeclined": "התשלום נדחה. נשארת בתשלום חודשי.",
+    "yearlySwitchFailed": "המעבר נכשל. נשארת בתשלום חודשי.",
+    "yearlySwitchPreviewFailed": "לא ניתן היה לטעון את המחיר.",
+    "yearlySwitchUnavailable": "תשלום שנתי אינו זמין כרגע לתוכנית שלך.",
+    "yearlySwitchDoneTitle": "עברת לתשלום שנתי",
+    "yearlySwitchDoneBody": "חויבו היום {amount}. מתחדש ב-{date}."
 }

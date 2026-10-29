@@ -1,0 +1,176 @@
+{
+  "schema": 1,
+  "source": "synthetic-incident-shapes-no-production-identities",
+  "units": [
+    {
+      "unit": "vad-eof",
+      "owner": "vad-owner",
+      "content": "vad-content",
+      "conversation": "vad-target",
+      "target": "vad-target",
+      "previous": null,
+      "duration": 1.0,
+      "decoded_duration": 1.0000625,
+      "speech_seconds": 0.5000625,
+      "spans": [
+        {
+          "start": 0.5,
+          "end": 1.0000625
+        }
+      ],
+      "references": [
+        {
+          "start_frame": 0,
+          "offset_frame": 0,
+          "frames": 16000,
+          "source_frames": 16000
+        }
+      ],
+      "lane": "backfill",
+      "record_origin": true,
+      "target_state": {
+        "exists": true,
+        "discarded": false,
+        "deleted": false,
+        "status": "completed"
+      },
+      "outcome": "success"
+    },
+    {
+      "unit": "vad-tail",
+      "owner": "vad-owner",
+      "content": "vad-tail",
+      "conversation": "vad-target",
+      "target": "vad-target",
+      "previous": "vad-eof",
+      "duration": 1.0,
+      "decoded_duration": 1.0,
+      "speech_seconds": 0.5,
+      "spans": [
+        {
+          "start": 0.0,
+          "end": 0.5
+        }
+      ],
+      "references": [
+        {
+          "start_frame": 0,
+          "offset_frame": 0,
+          "frames": 16000,
+          "source_frames": 16000
+        }
+      ],
+      "lane": "backfill",
+      "record_origin": true,
+      "target_state": {
+        "exists": true,
+        "discarded": false,
+        "deleted": false,
+        "status": "completed"
+      },
+      "outcome": "success"
+    },
+    {
+      "unit": "discarded-head",
+      "owner": "discarded-owner",
+      "content": "discarded-content",
+      "conversation": "discarded-target",
+      "target": "discarded-target",
+      "previous": null,
+      "duration": 1.0,
+      "decoded_duration": 1.0,
+      "speech_seconds": 0.5,
+      "spans": [
+        {
+          "start": 0.0,
+          "end": 0.5
+        }
+      ],
+      "references": [
+        {
+          "start_frame": 0,
+          "offset_frame": 0,
+          "frames": 16000,
+          "source_frames": 16000
+        }
+      ],
+      "lane": "backfill",
+      "record_origin": true,
+      "target_state": {
+        "exists": true,
+        "discarded": true,
+        "deleted": false,
+        "status": "completed"
+      },
+      "outcome": "success"
+    },
+    {
+      "unit": "discarded-tail",
+      "owner": "discarded-owner",
+      "content": "discarded-tail",
+      "conversation": "healthy-target",
+      "target": "healthy-target",
+      "previous": "discarded-head",
+      "duration": 1.0,
+      "decoded_duration": 1.0,
+      "speech_seconds": 0.5,
+      "spans": [
+        {
+          "start": 0.0,
+          "end": 0.5
+        }
+      ],
+      "references": [
+        {
+          "start_frame": 0,
+          "offset_frame": 0,
+          "frames": 16000,
+          "source_frames": 16000
+        }
+      ],
+      "lane": "backfill",
+      "record_origin": true,
+      "target_state": {
+        "exists": true,
+        "discarded": false,
+        "deleted": false,
+        "status": "completed"
+      },
+      "outcome": "success"
+    },
+    {
+      "unit": "claim-sentinel",
+      "owner": "claim-owner",
+      "content": "claim-content",
+      "conversation": "claim-target",
+      "target": "claim-target",
+      "previous": null,
+      "duration": 1.0,
+      "decoded_duration": 1.0,
+      "speech_seconds": 0.5,
+      "spans": [
+        {
+          "start": 0.0,
+          "end": 0.5
+        }
+      ],
+      "references": [
+        {
+          "start_frame": 0,
+          "offset_frame": 0,
+          "frames": 16000,
+          "source_frames": 16000
+        }
+      ],
+      "lane": "fresh",
+      "record_origin": true,
+      "target_state": {
+        "exists": true,
+        "discarded": false,
+        "deleted": false,
+        "status": "completed"
+      },
+      "outcome": "success"
+    }
+  ]
+}

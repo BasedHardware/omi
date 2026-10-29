@@ -45,6 +45,11 @@ tolerations:
 worker:
   # Preserve the measured profiling-on state across the scaler Helm upgrade.
   stageProfilingEnabled: true
+  # Batch quality shadow at 25% (lead 2026-10-29, retro ruling "shadow 25% first").
+  # Matches the four Cloud Run roles; paid recovery keeps the 200/h base cap
+  # (lead ruling 12:15Z reversing the #23964 zero pin). Rollback: 0.
+  shadowPercent: 25
+  shadowPaidRecoveryPerHour: 200
   shadowRecoveryApiUrl: "https://backend-integration-hhibjajaja-uc.a.run.app"
   apiUrl: https://backend-sync-hhibjajaja-uc.a.run.app
   audience: https://backend-sync-hhibjajaja-uc.a.run.app

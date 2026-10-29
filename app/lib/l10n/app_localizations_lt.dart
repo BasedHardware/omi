@@ -14899,4 +14899,57 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Rodyti naujausias apžvalgas pradžios ekrano viršuje.';
+
+  @override
+  String get yearlySwitchTitle => 'Pereiti prie metinio';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Sutaupykite $amount per metus';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Sutaupykite $amount per metus mokėdami kas metus';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Tas pats planas, mokama kartą per metus';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Planas';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price per metus';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Mokėti šiandien';
+
+  @override
+  String get yearlySwitchRenews => 'Atnaujinama';
+
+  @override
+  String get yearlySwitchCreditNote => 'Įskaičiuotas kreditas už likusią šio mėnesio dalį.';
+
+  @override
+  String get yearlySwitchDeclined => 'Mokėjimas atmestas. Toliau mokate kas mėnesį.';
+
+  @override
+  String get yearlySwitchFailed => 'Nepavyko pereiti. Toliau mokate kas mėnesį.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Nepavyko įkelti kainos.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Metinis mokėjimas jūsų planui šiuo metu negalimas.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Dabar mokate kas metus';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Šiandien nuskaičiuota $amount. Atnaujinama $date.';
+  }
 }

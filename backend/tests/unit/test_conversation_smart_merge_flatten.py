@@ -468,7 +468,8 @@ def test_flatten_off_donor_with_ancestry_is_ineligible(world, reads):
     assert not any(path[-1] in ('g1', 'g2') for _, path in reads)
 
 
-def test_flatten_off_plain_pair_keeps_baseline_write_shape(world, reads):
+def test_flatten_off_plain_pair_keeps_baseline_write_shape(world, reads, monkeypatch):
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')
     world.add('p', 0, 10)
     world.add('n', 15, 10)
     world.raw('n')['sync_content_revision'] = 7
@@ -763,7 +764,7 @@ def test_off_keeps_sync_donor_temporal_fallback(world):
 def test_sync_absorb_then_smart_merge_flattens_one_hop(world):
     world.add('p', 0, 10)
     world.add('n', 15, 10, sync_content_revision=2)
-    world.add('g', 14, 2, sync_content_revision=1)
+    world.add('g', 14, 2, sync_content_revision=1, structured={})
     _seed_index(world, 'n', 'g')
     start_ids = {seg['id'] for cid in ('p', 'n', 'g') for seg in world.transcript(cid)}
     result, _, _ = _assign(world, _sync_chunk('wal-7', 15, minutes=2), target_id='n')
@@ -783,7 +784,7 @@ def test_sync_absorb_then_smart_merge_flattens_one_hop(world):
 def test_smart_merge_then_sync_absorb_flattens_new_donor_ancestry(world, monkeypatch):
     monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', UID)
     _flattened_world(world)
-    world.add('d', 20, 8, sync_content_revision=1)
+    world.add('d', 20, 8, sync_content_revision=1, structured={})
     world.add('g3', 19, 2)
     _tombstone(world, 'g3', merged_into='d')
     world.raw('d')['sync_merged_from'] = ['g3']
@@ -806,7 +807,7 @@ def test_smart_merge_then_sync_absorb_flattens_new_donor_ancestry(world, monkeyp
 
 def test_invalid_grand_donor_blocks_the_whole_assignment(world):
     _flattened_world(world)
-    world.add('d', 20, 8, sync_content_revision=1)
+    world.add('d', 20, 8, sync_content_revision=1, structured={})
     world.raw('d')['sync_merged_from'] = ['missing-ancestor']
     _seed_index(world, 'd')
     before = deepcopy(world.store.rows)
@@ -819,7 +820,7 @@ def test_size_rollover_abandons_the_flatten_plan_without_ancestor_writes(world, 
     from utils.sync import assignment
 
     _flattened_world(world)
-    world.add('d', 24, 8, sync_content_revision=1)
+    world.add('d', 24, 8, sync_content_revision=1, structured={})
     world.add('g3', 23, 2)
     _tombstone(world, 'g3', merged_into='d')
     world.raw('d')['sync_merged_from'] = ['g3']
@@ -844,7 +845,7 @@ def test_size_rollover_abandons_the_flatten_plan_without_ancestor_writes(world, 
 
 def test_over_cap_sync_donor_ancestry_conflicts_before_grand_reads(world, reads):
     _flattened_world(world)
-    world.add('d', 20, 8, sync_content_revision=1)
+    world.add('d', 20, 8, sync_content_revision=1, structured={})
     world.raw('d')['sync_merged_from'] = [f'zz{i}' for i in range(12)]
     _seed_index(world, 'd')
     before = deepcopy(world.store.rows)
@@ -858,7 +859,7 @@ def test_over_cap_sync_donor_ancestry_conflicts_before_grand_reads(world, reads)
 @pytest.mark.parametrize('bad', [[{'a': 1}], 'notalist', 42], ids=['unhashable', 'non_list', 'non_string'])
 def test_malformed_sync_donor_ancestry_conflicts_without_typeerror(world, bad):
     _flattened_world(world)
-    world.add('d', 20, 8, sync_content_revision=1)
+    world.add('d', 20, 8, sync_content_revision=1, structured={})
     world.raw('d')['sync_merged_from'] = bad
     _seed_index(world, 'd')
     before = deepcopy(world.store.rows)
@@ -870,7 +871,7 @@ def test_malformed_sync_donor_ancestry_conflicts_without_typeerror(world, bad):
 def test_ordinary_sync_merge_keeps_no_flatten_cap(world):
     """A normal sync intake with many fragments stays under the old behavior."""
     for i in range(12):
-        world.add(f'f{i}', 0, 10, sync_content_revision=1)
+        world.add(f'f{i}', 0, 10, sync_content_revision=1, structured={})
     _seed_index(world, *(f'f{i}' for i in range(12)))
     result, created, _ = _assign(world, _sync_chunk('wal-10', 2, minutes=6), target_id='f0')
     assert not created

@@ -110,6 +110,8 @@ class StrictFirestoreDocument:
                 ["is_locked"],
                 ["folder_id"],
                 ["language"],
+                ['discarded', 'deleted', 'sync_merged_into'],
+                ['started_at', 'finished_at', 'discarded', 'deleted', 'sync_merged_into'],
                 ['manual_speaker_assignments', 'manual_speaker_assignments_compressed'],
                 [
                     'deleted',
@@ -120,7 +122,7 @@ class StrictFirestoreDocument:
                 ],
             ):
                 raise UnsupportedFirestoreOperationError(
-                    "only privacy, folder membership, language and speaker-receipt projections are supported"
+                    "only privacy, folder membership, language, episode visibility and speaker-receipt projections are supported"
                 )
             data = {key: value for key, value in data.items() if key in field_paths}
         return StrictFirestoreSnapshot(data)

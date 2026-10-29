@@ -244,3 +244,9 @@ def test_sync_intake_wall_window_equals_the_transcript_span_and_the_floor_uses_t
     # packed a dozen words into it, and even if its wall window collapses.
     assert below_short_clip_floor(words=12, speech_seconds=2.0)
     assert below_short_clip_floor(words=12, speech_seconds=speech_seconds(_segments(12, start=0.0, end=2.0)))
+
+
+@pytest.fixture(autouse=True)
+def _isolated_relevance_policy(monkeypatch):
+    # This legacy model/input fixture has no episode or neighbor database.
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')

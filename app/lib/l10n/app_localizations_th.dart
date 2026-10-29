@@ -14804,4 +14804,57 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'แสดงสรุปล่าสุดของคุณที่ด้านบนของหน้าหลัก';
+
+  @override
+  String get yearlySwitchTitle => 'เปลี่ยนเป็นรายปี';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'ประหยัด $amount ต่อปี';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'ประหยัด $amount ต่อปีเมื่อจ่ายรายปี';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'แพ็กเกจเดิม จ่ายปีละครั้ง';
+
+  @override
+  String get yearlySwitchPlanLabel => 'แพ็กเกจ';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan $price ต่อปี';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'ชำระวันนี้';
+
+  @override
+  String get yearlySwitchRenews => 'ต่ออายุ';
+
+  @override
+  String get yearlySwitchCreditNote => 'รวมเครดิตสำหรับช่วงที่เหลือของเดือนนี้แล้ว';
+
+  @override
+  String get yearlySwitchDeclined => 'การชำระเงินถูกปฏิเสธ คุณยังจ่ายแบบรายเดือนอยู่';
+
+  @override
+  String get yearlySwitchFailed => 'เปลี่ยนไม่สำเร็จ คุณยังจ่ายแบบรายเดือนอยู่';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'โหลดราคาไม่ได้';
+
+  @override
+  String get yearlySwitchUnavailable => 'ตอนนี้แพ็กเกจของคุณยังจ่ายรายปีไม่ได้';
+
+  @override
+  String get yearlySwitchDoneTitle => 'ตอนนี้คุณจ่ายแบบรายปีแล้ว';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'เรียกเก็บ $amount วันนี้ ต่ออายุ $date';
+  }
 }

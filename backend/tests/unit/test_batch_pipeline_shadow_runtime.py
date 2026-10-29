@@ -5,6 +5,7 @@ import threading
 import io
 import json
 import time
+from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -95,7 +96,9 @@ async def test_runner_uses_full_worker_but_never_normal_publication(repository, 
         authorize=Mock(),
         key_for_owner=Mock(),
         register_artifact=Mock(),
-        shadow_result=lambda work, payload: shadow_result(repository.store, work, payload),
+        shadow_result=lambda work, payload: shadow_result(
+            repository.store, work, payload, projection=lambda *args: {'status': 'planned'}
+        ),
     )
     worker, words, _, decoded, diarized, failures = setup_worker(persist=artifacts.persist_result)
     monkeypatch.setattr(batch_pipeline, 'cap_dispatch_enabled', Mock(side_effect=AssertionError('no user quota')))
@@ -287,14 +290,53 @@ def test_shadow_client_uses_existing_recovery_role_and_oidc_audience(monkeypatch
     assert token.call_args.args[1] == 'https://recovery.invalid'
 
 
-def test_shadow_endpoint_uses_recovery_audience_with_gpu_principal(monkeypatch):
+@pytest.mark.parametrize('path', ['shadow-recover', 'shadow-project'])
+def test_shadow_endpoint_uses_recovery_audience_with_gpu_principal(monkeypatch, path):
     monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', 'https://recovery.invalid')
     monkeypatch.setenv('BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT', 'synthetic-worker@example.invalid')
     verify = Mock(return_value=1)
     monkeypatch.setattr(cloud_tasks, 'verify_configured_cloud_tasks_oidc', verify)
-    assert router.verify_worker(SimpleNamespace(url=SimpleNamespace(path='/v2/batch-pipeline/shadow-recover'))) == 1
+    assert router.verify_worker(SimpleNamespace(url=SimpleNamespace(path='/v2/batch-pipeline/' + path))) == 1
     assert verify.call_args.kwargs['audience'] == 'https://recovery.invalid'
     assert verify.call_args.kwargs['invoker_sa'] == 'synthetic-worker@example.invalid'
+
+
+def test_private_projection_runs_real_planner_and_only_writes_shadow_metadata(repository, monkeypatch):
+    from utils.batch_pipeline import shadow_projection
+    from tests.unit.test_batch_pipeline_shadow_projection import payload
+
+    work = running(repository, duration=10)
+    repository.store.run(
+        lambda tx: tx.put(
+            'shadow_jobs', work.segment_id, {**tx.get('shadow_jobs', work.segment_id), 'state': 'running'}
+        )
+    )
+    monkeypatch.setattr(router.WorkerRequest, 'service', lambda self: SimpleNamespace(store=repository.store))
+    actual = shadow_projection.plan
+    # The network read adapter is separate: execute the real builder/assignment
+    # here against an empty synthetic snapshot without a customer SDK reference.
+    monkeypatch.setattr(
+        shadow_projection,
+        'plan',
+        lambda work, data, context, reader, **kwargs: actual(
+            work, data, context, lambda *args: None, decode=lambda raw: raw
+        ),
+    )
+    app = FastAPI()
+    app.include_router(router.router)
+    app.dependency_overrides[router.verify_worker] = lambda: 1
+    app.dependency_overrides[router.require_http_stage] = lambda: None
+    before = deepcopy(repository.store.client.rows)
+    with TestClient(app) as client:
+        body = {'stage': 'dev', 'segment_id': work.segment_id, 'payload': payload()}
+        result = client.post('/v2/batch-pipeline/shadow-project', json=body)
+        assert result.status_code == 200 and result.json()['status'] == 'planned'
+        assert client.post('/v2/batch-pipeline/shadow-project', json=body).json() == {'status': 'not_eligible'}
+    changed = {path for path, data in repository.store.client.rows.items() if before.get(path) != data}
+    assert changed and all(
+        path[0] in {'batch_pipeline_dev_shadow_jobs', 'batch_pipeline_dev_shadow_spend'} for path in changed
+    )
+    assert 'A useful synthetic sentence.' not in repr(repository.store.client.rows)
 
 
 async def test_real_decode_encrypted_staging_preserves_legacy_files(repository, monkeypatch, tmp_path):

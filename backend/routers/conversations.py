@@ -2260,8 +2260,8 @@ async def search_conversations_endpoint(
 
     # Spoken-word hits (optional transcript-chunk index) are merged on page 1 only so
     # Typesense pagination stays stable. Snippets still attach for every hydrated hit.
-    # Over-fetch candidates on page 1 so lock/speaker/date filters can still fill per_page
-    # without permanently dropping displaced Typesense hits that lost the merge race.
+    # Over-fetch candidates on page 1 so lock/speaker/date filters can still fill per_page.
+    # Page 2 starts at the next Typesense page, so the per_page cut below keeps every hit of this one.
     merge_cap = effective_per_page
     if effective_page == 1 and (search_request.query or '').strip():
         merge_cap = min(effective_per_page * 2, 250)
@@ -2319,7 +2319,7 @@ async def search_conversations_endpoint(
         if conversation_matches_speaker(conversation, search_request.speaker_id)
         and conversation_matches_date_range(conversation, start_timestamp, end_timestamp)
     ]
-    conversations = conversations[:effective_per_page]
+    conversations = [c for i, c in enumerate(conversations) if i < effective_per_page or c.get('id') in typesense_ids]
     # Attach grep-style transcript snippets (start/end for seek-to-moment) before list redaction
     # clears segments on locked rows.
     if (search_request.query or '').strip():

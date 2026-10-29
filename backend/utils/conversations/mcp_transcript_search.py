@@ -436,13 +436,24 @@ def merge_typesense_page_with_transcript_hits(
     """On page 1, prefer spoken-word (transcript) hits, then Typesense title/overview.
 
     Later pages keep Typesense order only so pagination stays stable without a
-    shared cursor across two indexes.
+    shared cursor across two indexes. Page 2 starts at the next Typesense page,
+    so a page-1 Typesense hit left out here would never be listed: transcript-only
+    hits take only the slots this page's Typesense hits leave under ``per_page``.
     """
     page = max(1, int(page or 1))
     per_page = max(1, min(int(per_page or 10), 250))
     if page > 1:
         return [str(x) for x in typesense_ids if str(x).strip()][:per_page]
-    return merge_summary_and_transcript_ids(transcript_ids, typesense_ids, per_page)
+    page_hits = merge_summary_and_transcript_ids(typesense_ids, [], per_page)
+    room = per_page - len(page_hits)
+    lead: List[str] = []
+    for cid in merge_summary_and_transcript_ids(transcript_ids, [], len(transcript_ids)):
+        if cid in page_hits:
+            lead.append(cid)
+        elif room > 0:
+            lead.append(cid)
+            room -= 1
+    return merge_summary_and_transcript_ids(lead, page_hits, per_page)
 
 
 def attach_match_snippets_to_conversations(

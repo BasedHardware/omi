@@ -14911,4 +14911,57 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Паказваць апошнія рэзюмэ ўверсе галоўнай.';
+
+  @override
+  String get yearlySwitchTitle => 'Перайсці на гадавы';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Зэканомце $amount за год';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Зэканомце $amount за год з гадавой аплатай';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Той жа план, аплата раз на год';
+
+  @override
+  String get yearlySwitchPlanLabel => 'План';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price за год';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Да аплаты сёння';
+
+  @override
+  String get yearlySwitchRenews => 'Падаўжэнне';
+
+  @override
+  String get yearlySwitchCreditNote => 'Уключае крэдыт за астатак гэтага месяца.';
+
+  @override
+  String get yearlySwitchDeclined => 'Аплата адхілена. Вы застаяцеся на штомесячнай аплаце.';
+
+  @override
+  String get yearlySwitchFailed => 'Не ўдалося перайсці. Вы застаяцеся на штомесячнай аплаце.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Не ўдалося загрузіць цану.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Гадавая аплата зараз недаступная для вашага плана.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Цяпер у вас гадавая аплата';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Сёння спісана $amount. Падаўжэнне $date.';
+  }
 }

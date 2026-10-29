@@ -13,6 +13,7 @@ import time
 from config.batch_pipeline_shadow import paid_recovery_limit, shadow_percent
 from config.policy import resolve_stage_policy
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.batch_pipeline_store import is_allowance_policy_hold
 from utils.batch_pipeline.contracts import (
     WorkItem,
     RecoveryWork,
@@ -24,6 +25,8 @@ from utils.batch_pipeline.contracts import (
 from utils.batch_pipeline.shadow_metrics import OUTCOMES, PAID, PAID_AUDIO, record
 
 MAX_OFFERS = 4
+BUSY_HOLD_SCAN_LIMIT = 500
+RECORD_PENDING_BUSY_SECONDS = 120.0
 OFFER_SECONDS = 6
 STAGING_SECONDS = 120
 logger = logging.getLogger(__name__)
@@ -33,11 +36,46 @@ def identity(uid, content_id):
     return 'sh_' + hashlib.sha256(f'{uid}\0{content_id}'.encode()).hexdigest()
 
 
-def pool_busy(client, namespace):
+def _has_dispatchable(rows):
+    for index, document in enumerate(rows):
+        if index >= BUSY_HOLD_SCAN_LIMIT:
+            return True  # A held prefix cannot certify an unmeasured tail idle.
+        if not is_allowance_policy_hold(document.to_dict()):
+            return True  # Missing/unknown authority remains ordinary-work priority.
+    return False
+
+
+def pool_busy(client, namespace, *, now=None):
+    """Yield to runnable ordinary work, rather than durable parked obligations.
+
+    A future retry, expired lease or old recording placeholder cannot occupy a
+    GPU now. Use the scheduler's existing state/time indexes; no age-based
+    exclusion of due retries. Local GPU/normal-flight checks remain mandatory.
+    """
+    now = time.time() if now is None else now
+    jobs = client.collection(f'{namespace}_jobs')
+    if list(jobs.where('state', '==', 'leased').where('lease_until', '>', now).limit(1).stream()):
+        return True
+    # Preserve nonempty unknown decisions: a subfield mask could turn one into
+    # an absent decision and incorrectly revive a stale allowance hold.
+    fields = ('compute_decision', 'last_policy_hold.reason')
+    if _has_dispatchable(jobs.where('state', '==', 'ready').select(fields).limit(BUSY_HOLD_SCAN_LIMIT + 1).stream()):
+        return True
+    # Scheduler.recover promotes every due retry, including one whose attempt
+    # counter reached the cap outside the serving retry-cap cohort. Only the
+    # authoritative terminal state releases its ordinary-work priority.
+    if _has_dispatchable(
+        jobs.where('state', '==', 'retry')
+        .where('available_at', '<=', now)
+        .select(fields)
+        .limit(BUSY_HOLD_SCAN_LIMIT + 1)
+        .stream()
+    ):
+        return True
     return bool(
         list(
-            client.collection(f'{namespace}_jobs')
-            .where('state', 'in', ['ready', 'leased', 'retry', 'record_pending'])
+            jobs.where('state', '==', 'record_pending')
+            .where('enqueued_at', '>', now - RECORD_PENDING_BUSY_SECONDS)
             .limit(1)
             .stream()
         )
@@ -54,11 +92,11 @@ class ShadowStore:
         self.busy = busy or self._busy
 
     def _busy(self):
-        # Single-field index, no new production index or scan. Any admitted
+        # Existing scheduler indexes; bounded held-prefix scans. Runnable
         # ordinary GPU work wins, including a flight prefetched by another lane.
-        return pool_busy(self.store.client, self.store.namespace)
+        return pool_busy(self.store.client, self.store.namespace, now=self.clock())
 
-    def _finish(self, tx, segment, outcome, *, speech=0.0, vad='unknown', recognizers=None):
+    def _finish(self, tx, segment, outcome, *, speech=0.0, vad='unknown', recognizers=None, projection_status=None):
         job = tx.get('shadow_jobs', segment)
         if job.get('shadow') is not True or job.get('state') == 'settled':
             return None
@@ -93,6 +131,8 @@ class ShadowStore:
             'owner_key': job['owner_key'],
             'class': job['class'],
             'outcome': outcome,
+            'created_at': job.get('created_at'),
+            **({'projection_status': projection_status} if projection_status is not None else {}),
             'vad': vad,
             **({'recognizers': recognizers, 'paid_providers': job.get('paid', [])} if recognizers is not None else {}),
             **({'reason_code': 'shadow_paid_skipped'} if outcome == 'paid_skipped' else {}),
@@ -104,11 +144,28 @@ class ShadowStore:
         tx.put('shadow_jobs', segment, row)
         return row
 
-    def finish(self, segment, outcome, *, speech=0.0, vad='unknown', recognizers=None):
+    def finish(self, segment, outcome, *, speech=0.0, vad='unknown', recognizers=None, projection_status=None):
         if outcome not in OUTCOMES:
             raise ValueError('closed shadow outcome required')
+        if projection_status is not None and projection_status not in {
+            'planned',
+            'empty',
+            'not_eligible',
+            'budget_skipped',
+            'busy',
+            'error',
+        }:
+            raise ValueError('closed shadow projection status required')
         row = self.store.run(
-            lambda tx: self._finish(tx, segment, outcome, speech=speech, vad=vad, recognizers=recognizers)
+            lambda tx: self._finish(
+                tx,
+                segment,
+                outcome,
+                speech=speech,
+                vad=vad,
+                recognizers=recognizers,
+                projection_status=projection_status,
+            )
         )
         if row:
             record(row)
@@ -155,15 +212,20 @@ class ShadowStore:
     def reserve(self, uid, content_id, class_name):
         now, segment = self.clock(), identity(uid, content_id)
         busy = not shadow_percent() or self.busy()
+        hour = 'projection-' + str(int(now // 3600))
 
         def claim(tx):
             prior = tx.get('shadow_jobs', segment)
             slots = [tx.get('shadow_slots', str(i)) for i in range(MAX_OFFERS)]
+            budget = tx.get('shadow_spend', hour)
             if prior:
                 return None, None
+            used = budget.get('units', 0)
+            if type(used) is not int or used < 0:
+                return None, None  # Uncertain cost authority never admits work.
             index = (
                 None
-                if busy
+                if busy or used >= 200
                 else next(
                     (i for i, slot in enumerate(slots) if slot.get('state') == 'idle' and slot['until'] > now), None
                 )
@@ -177,11 +239,17 @@ class ShadowStore:
                     'class': class_name,
                     'state': 'staging',
                     'created_at': now,
+                    **({'projection_reserved_at': now} if index is not None else {}),
                     'expires_at': datetime.fromtimestamp(now, timezone.utc) + timedelta(hours=2),
                 },
             )
             if index is None:
                 return None, self._finish(tx, segment, 'dropped')
+            tx.put(
+                'shadow_spend',
+                hour,
+                {'units': used + 1, 'expires_at': datetime.fromtimestamp(now, timezone.utc) + timedelta(days=2)},
+            )
             tx.put(
                 'shadow_slots',
                 str(index),
@@ -199,7 +267,7 @@ class ShadowStore:
             record(row)
         return reservation
 
-    def ready(self, reservation, item, language):
+    def ready(self, reservation, item, language, *, projection_context=None):
         segment, index = reservation
         now = self.clock()
 
@@ -222,11 +290,45 @@ class ShadowStore:
             tx.check_privacy(
                 item.owner_id, (item.conversation_id,) if item.conversation_id else (), item.privacy_generation
             )
-            tx.put('shadow_jobs', segment, {**job, 'state': 'ready', 'item': asdict(item), 'language': language})
+            tx.put(
+                'shadow_jobs',
+                segment,
+                {
+                    **job,
+                    'state': 'ready',
+                    'item': asdict(item),
+                    'language': language,
+                    'projection_context': projection_context or {},
+                },
+            )
             tx.put('shadow_slots', index, {**slot, 'state': 'ready', 'until': now + OFFER_SECONDS})
             return True
 
         return self.store.run(publish)
+
+    def projection_input(self, segment):
+        """Use the intake reservation once, even across an hour rollover."""
+        if not shadow_percent():
+            return None
+        now = self.clock()
+
+        def reserve(tx):
+            job = tx.get('shadow_jobs', segment)
+            if (
+                job.get('shadow') is not True
+                or job.get('state') != 'running'
+                or 'projection_attempted_at' in job
+                or 'projection_reserved_at' not in job
+            ):
+                return None
+            item = WorkItem(**job['item'])
+            tx.check_privacy(
+                item.owner_id, (item.conversation_id,) if item.conversation_id else (), item.privacy_generation
+            )
+            tx.put('shadow_jobs', segment, {**job, 'projection_attempted_at': now})
+            return job
+
+        return self.store.run(reserve)
 
     def take(self, worker):
         if not shadow_percent() or self.busy():

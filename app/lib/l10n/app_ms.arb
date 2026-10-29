@@ -4499,5 +4499,20 @@
     "activityAttentionSyncStalledTitle": "Omi tidak disegerakkan",
     "activityAttentionSyncStalledSubtitle": "Tiada rakaman disegerakkan selama lebih {hours} jam",
     "dailyRecapsOnHome": "Ringkasan Harian di Utama",
-    "dailyRecapsOnHomeDescription": "Tunjukkan ringkasan terkini anda di bahagian atas Utama."
+    "dailyRecapsOnHomeDescription": "Tunjukkan ringkasan terkini anda di bahagian atas Utama.",
+    "yearlySwitchTitle": "Tukar ke Tahunan",
+    "yearlySwitchRowSavings": "Jimat {amount} setahun",
+    "yearlySwitchHomeTitle": "Jimat {amount} setahun dengan bayaran tahunan",
+    "yearlySwitchHomeSubtitle": "Pelan yang sama, dibayar setahun sekali",
+    "yearlySwitchPlanLabel": "Pelan",
+    "yearlySwitchPlanValue": "{plan}, {price} setahun",
+    "yearlySwitchDueToday": "Perlu dibayar hari ini",
+    "yearlySwitchRenews": "Diperbaharui",
+    "yearlySwitchCreditNote": "Termasuk kredit untuk baki bulan ini.",
+    "yearlySwitchDeclined": "Pembayaran ditolak. Anda masih membayar bulanan.",
+    "yearlySwitchFailed": "Tidak dapat menukar. Anda masih membayar bulanan.",
+    "yearlySwitchPreviewFailed": "Tidak dapat memuatkan harga anda.",
+    "yearlySwitchUnavailable": "Pengebilan tahunan tidak tersedia untuk pelan anda sekarang.",
+    "yearlySwitchDoneTitle": "Anda kini membayar tahunan",
+    "yearlySwitchDoneBody": "{amount} dicaj hari ini. Diperbaharui pada {date}."
 }

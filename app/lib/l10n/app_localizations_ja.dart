@@ -14664,4 +14664,57 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => '最新の要約をホームの上部に表示します。';
+
+  @override
+  String get yearlySwitchTitle => '年払いに切り替える';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return '年間$amountお得';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return '年払いで年間$amountお得';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => '同じプランを年1回のお支払いで';
+
+  @override
+  String get yearlySwitchPlanLabel => 'プラン';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan、年額$price';
+  }
+
+  @override
+  String get yearlySwitchDueToday => '本日のお支払い';
+
+  @override
+  String get yearlySwitchRenews => '次回更新';
+
+  @override
+  String get yearlySwitchCreditNote => '今月の残り期間分のクレジットを含みます。';
+
+  @override
+  String get yearlySwitchDeclined => 'お支払いが拒否されました。月払いのままです。';
+
+  @override
+  String get yearlySwitchFailed => '切り替えられませんでした。月払いのままです。';
+
+  @override
+  String get yearlySwitchPreviewFailed => '料金を読み込めませんでした。';
+
+  @override
+  String get yearlySwitchUnavailable => '現在、お使いのプランでは年払いをご利用いただけません。';
+
+  @override
+  String get yearlySwitchDoneTitle => '年払いに切り替わりました';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return '本日$amountを請求しました。次回更新は$dateです。';
+  }
 }

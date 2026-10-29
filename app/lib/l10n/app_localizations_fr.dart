@@ -14999,4 +14999,58 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Affiche vos derniers récapitulatifs en haut de l\'Accueil.';
+
+  @override
+  String get yearlySwitchTitle => 'Passer à l\'annuel';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Économisez $amount par an';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Économisez $amount par an avec l\'annuel';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Le même forfait, payé une fois par an';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Forfait';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price par an';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'À payer aujourd\'hui';
+
+  @override
+  String get yearlySwitchRenews => 'Renouvellement';
+
+  @override
+  String get yearlySwitchCreditNote => 'Inclut un crédit pour le reste de ce mois.';
+
+  @override
+  String get yearlySwitchDeclined => 'Paiement refusé. Vous restez au mensuel.';
+
+  @override
+  String get yearlySwitchFailed => 'Changement impossible. Vous restez au mensuel.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Impossible de charger votre prix.';
+
+  @override
+  String get yearlySwitchUnavailable =>
+      'La facturation annuelle n\'est pas disponible pour votre forfait pour le moment.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Vous êtes passé à l\'annuel';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return '$amount débités aujourd\'hui. Renouvellement le $date.';
+  }
 }

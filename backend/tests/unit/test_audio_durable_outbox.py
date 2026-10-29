@@ -6,6 +6,7 @@ from contextlib import nullcontext
 from datetime import datetime, timezone
 import hashlib
 import json
+import logging
 from pathlib import Path
 import struct
 import threading
@@ -1350,7 +1351,7 @@ async def test_conflict_projection_failure_never_retries_and_withholds_close(rem
 
 
 @pytest.mark.asyncio
-async def test_transient_projection_failure_drops_after_the_retry_budget(remote, monkeypatch):
+async def test_transient_projection_failure_drops_after_the_retry_budget(remote, monkeypatch, caplog):
     pcm = struct.pack('<160h', *range(160))
     attempts = {'upload': 0}
     release = asyncio.Event()
@@ -1376,21 +1377,30 @@ async def test_transient_projection_failure_drops_after_the_retry_budget(remote,
         return await real_receive()
 
     monkeypatch.setattr(sock, 'receive_bytes', hold_socket_open)
-    task = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
-    try:
-        for _ in range(4000):  # <= ~20 s at the 5 ms poll cadence
-            if attempts['upload'] >= 1 + pusher.PROJECTION_RETRY_BUDGET:
-                break
-            await asyncio.sleep(0.005)
-        assert (
-            attempts['upload'] == 1 + pusher.PROJECTION_RETRY_BUDGET
-        ), 'the budget must requeue exactly PROJECTION_RETRY_BUDGET times while the session is live'
-    finally:
-        release.set()
-    await task
+    with caplog.at_level(logging.WARNING, logger='routers.pusher'):
+        task = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
+        try:
+            for _ in range(4000):  # <= ~20 s at the 5 ms poll cadence
+                if attempts['upload'] >= 1 + pusher.PROJECTION_RETRY_BUDGET:
+                    break
+                await asyncio.sleep(0.005)
+            assert (
+                attempts['upload'] == 1 + pusher.PROJECTION_RETRY_BUDGET
+            ), 'the budget must requeue exactly PROJECTION_RETRY_BUDGET times while the session is live'
+        finally:
+            release.set()
+        await task
     assert failures == [('projection', 'transient')], 'exactly one drop after the bounded budget'
     assert seal.call_count == 0, 'an exhausted projection still withholds the record close'
     assert [read_pcm('owner', receipt) for receipt in _sent_receipts(sock)] == [pcm]
+    class_lines = [
+        record.getMessage()
+        for record in caplog.records
+        if record.getMessage().startswith('Durable audio projection failure class:')
+    ]
+    assert class_lines == ['Durable audio projection failure class: OSError'] * (
+        1 + pusher.PROJECTION_RETRY_BUDGET
+    ), 'every failed attempt logs the exception class name, never the message'
 
 
 def test_custody_failure_reason_label_is_a_bounded_vocabulary():

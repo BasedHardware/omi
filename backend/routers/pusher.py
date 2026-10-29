@@ -443,7 +443,7 @@ async def _websocket_util_trigger(
                     log=logger,
                 )
                 logger.warning('Durable audio projection conflict; archive receipt retained')
-            except Exception:
+            except Exception as exc:
                 # Transient projection failure: while the session is live the
                 # receipts requeue for one bounded retry pass instead of
                 # dropping the projection outright; the drain loop's age and
@@ -452,6 +452,11 @@ async def _websocket_util_trigger(
                 # drop semantics. Only the deterministic conflict above is
                 # exempt — plain ValueError upload wrappers (probe/read
                 # errors) and custody read-back mismatches retry here.
+                # The exception class (never its message, which can carry
+                # user-identifying object paths) is logged on both arms so an
+                # RCA can split read-back mismatches from transport timeouts
+                # without redeploying.
+                logger.warning('Durable audio projection failure class: %s', type(exc).__name__)
                 if (
                     websocket_active
                     and projection_retries.get(conv_id, 0) < PROJECTION_RETRY_BUDGET

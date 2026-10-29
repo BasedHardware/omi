@@ -2725,6 +2725,7 @@ def get_conversations_finished_after(
     status: str,
     finished_after: datetime,
     limit: int = 25,
+    include_hidden: bool = False,
     firestore_client=None,
 ) -> List[Dict[str, Any]]:
     """Conversations in ``status`` whose last activity is at or after ``finished_after``.
@@ -2748,8 +2749,8 @@ def get_conversations_finished_after(
     conversations: List[Dict[str, Any]] = []
     for doc in conversations_ref.stream():
         data = doc.to_dict()
-        if data and not is_soft_deleted(data):
-            conversations.append(data)
+        if data and (include_hidden or not is_soft_deleted(data)):
+            conversations.append({**data, 'id': doc.id} if include_hidden else data)
     return conversations
 
 
@@ -4257,15 +4258,14 @@ def store_conversation_photos(
     @firestore.transactional
     def _store(transaction) -> bool:
         conversation_snapshot = conversation_ref.get(transaction=transaction)
-        if not getattr(conversation_snapshot, 'exists', False):
+        raw = conversation_snapshot.to_dict() if getattr(conversation_snapshot, 'exists', False) else None
+        if not raw or is_soft_deleted(raw):
             return False
-        level = (conversation_snapshot.to_dict() or {}).get('data_protection_level', 'standard')
+        level = raw.get('data_protection_level', 'standard')
         for photo in photos:
             photo_id = photo.id or str(uuid.uuid4())
-            photo_ref = photos_ref.document(photo_id)
-            data = photo.model_dump()
-            data['id'] = photo_id
-            transaction.set(photo_ref, prepare_photo_for_write(data, uid, level))
+            data = {**photo.model_dump(), 'id': photo_id}
+            transaction.set(photos_ref.document(photo_id), prepare_photo_for_write(data, uid, level))
         transaction.update(conversation_ref, {'has_content': True, 'has_photos': True})
         return True
 
@@ -4631,7 +4631,7 @@ def complete_sync_processing_hold(
         if snapshot is not None:
             state = processing_hold.completion_patch(existing, snapshot, automatic=automatic)
         else:
-            state.update(pending_since=None, held=False)
+            state.update(pending_since=None, held=False, unprocessed_donor=False)
         transaction.update(ref, {processing_hold.FIELD: state})
         return True
 

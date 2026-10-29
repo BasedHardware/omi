@@ -83,6 +83,7 @@ from utils.overage import (
 )
 from utils.executors import db_executor, stripe_executor, run_blocking
 from utils.log_sanitizer import sanitize
+from utils import yearly_switch
 import os
 import logging
 
@@ -132,6 +133,10 @@ class CreateCheckoutRequest(BaseModel):
 class UpgradeSubscriptionRequest(BaseModel):
     price_id: str = Field(..., min_length=1, max_length=255)
     promotion_code: Optional[str] = None
+    # Omi Pro monthly to yearly, charged now: only the previewed amount at its proration_date (utils/yearly_switch.py).
+    switch_now: bool = False
+    proration_date: Optional[int] = None
+    expected_amount_due: Optional[int] = None
 
 
 class PaymentMutationResponse(BaseModel):
@@ -914,6 +919,12 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         if change_error:
             raise HTTPException(status_code=400, detail=change_error)
 
+        # The yearly switch offer's rules: no trial (#23298), past_due, scheduled change or discount.
+        refusal = request.switch_now and yearly_switch.upgrade_refusal(stripe_sub, request)
+        if refusal:
+            logger.info(f"Yearly switch refused for user {uid}: {refusal}")
+            raise HTTPException(status_code=409, detail="Switching to yearly is not available for this subscription.")
+
         # Validate and resolve promotion code if provided
         resolved_promo_id = None
         if request.promotion_code:
@@ -927,8 +938,8 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         # re-schedule. Release it first so the user can switch plans again.
         _release_attached_schedules(stripe_sub)
 
-        # Cross-plan change (e.g. Unlimited→Architect): immediate swap with proration
-        if current_plan != target_plan:
+        # Cross-plan change (e.g. Unlimited→Architect), or the yearly switch: immediate swap with proration
+        if current_plan != target_plan or request.switch_now:
             modify_params = {
                 'items': [{'id': current_item_id, 'price': request.price_id}],
                 'proration_behavior': 'always_invoice',
@@ -937,6 +948,9 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
             }
             if resolved_promo_id:
                 modify_params['discounts'] = [{'promotion_code': resolved_promo_id}]
+            if request.switch_now:
+                modify_params['metadata']['omi_yearly_switch'] = 'in_app'
+                modify_params.update(yearly_switch.charge_params(stripe_sub['id'], request.proration_date))
 
             updated_sub = stripe.Subscription.modify(stripe_sub['id'], **modify_params)
             updated_sub_dict = updated_sub.to_dict()

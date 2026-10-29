@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/paywall/paywall_checkout.dart';
+import 'package:omi/pages/paywall/paywall_pacing.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -45,6 +46,7 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
   @override
   void initState() {
     super.initState();
+    PaywallPacing.markShown();
     if (widget.offer == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;

@@ -1,6 +1,7 @@
 """Meeting edges are shared by storage, conversation, episode and merge policy."""
 
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import pytest
 
@@ -14,6 +15,7 @@ ACCOUNT = 'test-account'
 
 @pytest.fixture
 def store(monkeypatch):
+    monkeypatch.setattr(boundary_store, 'datetime', SimpleNamespace(now=lambda tz: NOW))
     monkeypatch.setenv('EPISODE_BOUNDARIES_MODE_SHADOW_PERCENT', '100')
     db = StrictFirestore()
     monkeypatch.setenv('EPISODE_BOUNDARIES_MODE', 'serve')
@@ -170,7 +172,7 @@ async def test_off_mode_never_offloads_boundary_storage(monkeypatch):
 
 
 def test_full_index_evicts_old_terminal_edges_but_preserves_active_signals(store):
-    current = datetime.now(timezone.utc)
+    current = NOW
     state = ('users', ACCOUNT, 'capture_boundary_state', 'v1')
     store.rows[state] = {
         'entries': {

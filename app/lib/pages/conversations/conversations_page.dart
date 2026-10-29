@@ -38,6 +38,7 @@ import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
 import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps_setting.dart';
+import 'package:omi/pages/settings/widgets/yearly_switch.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -666,6 +667,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               // Phone-local recordings stay with their conversations. Device catch-up lives on Device.
               const SliverToBoxAdapter(child: OnDeviceQueueBanner()),
               const SliverToBoxAdapter(child: HeldAudioHomeSection()),
+              const SliverToBoxAdapter(child: YearlySwitchHomeRow()),
               // With no list yet, the live episode opens Today itself.
               if (episodeLive && builtRows.isEmpty)
                 SliverToBoxAdapter(
