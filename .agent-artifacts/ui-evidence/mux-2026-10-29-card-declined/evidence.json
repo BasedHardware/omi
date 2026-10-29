@@ -39,7 +39,7 @@
     {
       "file": "006-mobile-ios-home-invoice-paid.png",
       "platform": "mobile-ios",
-      "description": "After the invoice is paid in the offline fixture, returning Home removes the row",
+      "description": "Paid invoice removes the declined-card row; the yearly offer shown here already belongs to main PR 23764",
       "captured_by": "agent",
       "source": "screencapture"
     },

@@ -1,34 +1,46 @@
-iPhone 17 Pro (iOS 26.2), local_dev. BEFORE main 92bff3c2d5. AFTER c69f08a0a2.
-Real app + local backend + Auth/Firestore emulators. Stripe is an offline loopback stub; no real payment.
+Proposal 4: verified on an iPhone 17 Pro simulator with the real Flutter app and backend.
+BEFORE: main 92bff3c2d5d121d0a02c5ce8932bb73f159ebb62 (current when this run began).
+AFTER: app/backend cf7dd7655d41c66e2d08d96e5a7e31d5b75a94d4, including main e0cc9e1309 and expired-period fix 35ce0e45e3.
+Build receipt: final-build-receipt.json, Flutter 3.44.5, simulator debug local_dev. Only local build configuration was dirty; both tracked iOS configuration files were restored and excluded from commits.
+Environment: loopback backend, Auth/Firestore emulators, offline Stripe stub, synthetic month-2 Omi Pro subscriber. No real payment or live flag change.
 
-Check | main | proposal
-Same past_due month-2 payer | Basic, no payment_issue, no row | Basic plus payment_issue, one Home row
-Update | absent | Opens native payment web view with Billing portal (offline stub)
-Return unpaid, visit 1 | absent | Row remains; portal_sessions=1; charge/change calls=0
-Return unpaid, visit 2 | absent | Row remains; portal_sessions=2; charge/change calls=0
-Paid fixture, visit 3 | absent | App refresh is first subscription read after fixture; Pro and row gone; portal_sessions=3; charge/change calls=0
-Relaunch paid | absent | Row remains absent
-Portal unavailable | absent | Error toast and row stays; retry opens portal; charge/change calls=0
-Dark | No row | Legible row, neutral inverse Update pill
-Largest accessibility text | Existing Home/Tasks, conversation-row and chat-input overflows | Recovery copy and Update fit after stacking; existing surrounding overflows remain outside scope
-Locales | Not changed | German, Japanese and Arabic recovery copy visible; Arabic mirrors correctly
+Check | Main | Proposal
+Past_due, open attempted invoice | Basic; no recovery row | One recovery row above Today
+Expired stored period | no recovery UI | Server still reads current Stripe status; row shown
+Update + return unpaid, twice | no Update | Portal route opens; row remains after each return
+Third Update + paid fixture + return | unavailable | First app refresh restores Pro and removes the declined row
+Relaunch after paying | unavailable | Declined row stays absent
+Money calls during the three-visit run | unavailable | Exactly 3 portal sessions; 0 charge/subscription-change calls
+Portal 503 + retry | unavailable | Error feedback; row remains; retry loads the portal
+Dark / largest text | no recovery row | Recovery row and Update readable and within viewport
+German / Japanese / Arabic | unavailable | Localized copy; Arabic right-to-left placement
+Portal content | unavailable | Native web view reports loading=false/error=false; offline portal text visible
 
-Image inspection (opened and visually checked):
-before/light/01-home.png: Home, Today, seeded conversation cards. No recovery row.
-before/dark/01-home.png: Dark Home, Today and seeded cards. No recovery row.
-before/xxxl/01-home.png: Main already has yellow overflow markers at Home/Tasks, conversation metadata and chat input.
-after/light/01-home-row.png: White row below Home/Tasks, above Today; red dot, approved copy, black Update pill.
-after/light/02-portal.png: Manage Payment Method app bar and Billing portal (offline stub) page.
-after/light/03-home-row-after-unpaid-visit.png: Back on Home, unpaid row remains.
-after/light/04-home-after-paid.png: Home shows Today directly below title; recovery row gone.
-after/light/05-home-relaunch.png: Same paid Home after relaunch; no recovery row.
-after/light/06-locale-de.png: German recovery text and Aktualisieren pill fit; unrelated bottom Home overflow marker remains.
-after/light/07-locale-ja.png: Japanese recovery copy wraps and Update pill is visible.
-after/light/08-locale-ar.png: Arabic right-to-left copy, red dot on right and Update pill on left.
-after/dark/01-home-row.png: Dark recovery row with white Update pill; no row clipping.
-after/xxxl/01-home-row.png: Full recovery message and Update fit at largest text. Existing surrounding Home overflows still visible.
-after/error/01-home-row.png: Same declined-card row before failure injection.
-after/error/02-portal-error-row-stays.png: Row stays; error toast says Could not open payment settings. Please try again.
-before-after.png: Same seeded payer on main and proposal; one recovery row is the visible change.
+73 focused/related tests passed, files run separately: backend decision 37, HTTP route 6, row 10, shared OmiButton 5, model/provider 15. Row tests reran after merging main. The expired-period tests failed before removing the incorrect time gate. The largest-text test failed before responsive stacking was added.
+Localization: 49 locales, 4350 keys; scripts/l10n.py check passed after main merge. PR metadata: five contracts passed. CI results are tracked on PR #23953; this report makes no claim about pending CI.
 
-UNVERIFIED: real Stripe portal/card entry/payment and webhook timing; physical iPhone; Android runtime; production and churn impact.
+Image inspection (all final PNGs opened):
+before/light/01-home.png: Home/Tasks, Today and conversations; no recovery row.
+before/dark/01-home.png: Dark Home without recovery row.
+before/xxxl/01-home.png: Main already overflows its header, conversation metadata and chat input at maximum text size.
+after/light/01-home-row.png: White row, red dot, full declined-card copy and black Update pill above Today.
+after/light/02-portal.png: Final loaded portal proof, copied from the dedicated demo after a first capture showed a spinner. Shows Manage Payment Method and Billing portal (offline stub).
+after/light/03-home-row-after-unpaid-visit.png: Returning without paying retains the row.
+after/light/04-home-after-paid.png: Declined-card row absent; main's existing yearly-switch offer is visible.
+after/light/05-home-relaunch.png: Declined-card row still absent after relaunch; existing yearly offer visible.
+after/light/06-locale-de.png: German copy and button fit. Existing small bottom Home/input overflow remains outside this row.
+after/light/07-locale-ja.png: Japanese title, message and Update fit.
+after/light/08-locale-ar.png: Arabic right-to-left copy, red dot on right, Update on left.
+after/dark/01-home-row.png: Dark recovery row with white Update pill, readable copy.
+after/xxxl/01-home-row.png: Full recovery copy and Update fit at largest text. Existing surrounding Home overflows remain.
+after/error/01-home-row.png: Recovery row before portal-failure injection.
+after/error/02-portal-error-row-stays.png: Error feedback and recovery row both visible.
+after/demo/01-home-row.png: English declined-card row at the start of the final demo.
+after/demo/02-portal.png: Loaded offline billing portal, verified after the native page-loading state completed.
+after/demo/03-home-after-paid.png: Home without the declined-card row after paid fixture and app refresh.
+before-after.png: Real main and proposal captures side by side; the recovery row is the intended visible change.
+
+Existing main limitation: maximum text overflows Home/Tasks, conversation rows and the chat input; German also has a small bottom/input overflow. The added recovery row fits. Surrounding UI is outside this proposal.
+UNVERIFIED: real Stripe card entry/payment/retry/webhook timing; physical iPhone; Android runtime; production behavior and churn impact. No real payment attempted. Draft PR only, not merged or deployed.
+
+Video inspection: native prefix 0-8s preserves the full flow; frames inspected at 0, 2.25, 3.25, 3.75 and 5s. Portal HTML is visible around 3.25s; paid Home appears around 3.75s. Removed only the idle paid-Home tail. Raw capture retained at after/demo/demo.mp4. Final MP4 is 8s; GIF is below 8MB.
