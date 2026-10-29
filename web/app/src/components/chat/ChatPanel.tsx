@@ -115,6 +115,18 @@ export function ChatPanel() {
     }
   }, [isOpen, loadHistory]);
 
+  // Restore a persisted draft when the panel opens. The panel stays mounted
+  // while closed, so the mount-time initializer alone never reruns; restoring
+  // here also brings back a failed send's draft without a page refresh.
+  useEffect(() => {
+    if (isOpen && !input) {
+      const draft = readChatDraft(chatDraftKeys.panel);
+      if (draft) setInput(draft);
+    }
+    // Restore only on open transitions, not on every keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
   // Scroll to bottom when messages change or streaming text updates
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

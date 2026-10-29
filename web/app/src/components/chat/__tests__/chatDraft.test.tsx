@@ -1,7 +1,12 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatPanel } from '@/components/chat/ChatPanel';
-import { chatDraftKeys, readChatDraft } from '@/components/chat/chatDraft';
+import {
+  chatDraftKeys,
+  readChatDraft,
+  setChatDraftOwner,
+  writeChatDraft,
+} from '@/components/chat/chatDraft';
 import type { ClientMessage } from '@/types/conversation';
 
 const { push } = vi.hoisted(() => ({ push: vi.fn() }));
@@ -10,10 +15,11 @@ vi.mock('@tschk/moonshine-next/navigation', () => ({ useRouter: () => ({ push })
 const sendMessage = vi.fn(async () => true);
 const loadHistory = vi.fn(async () => undefined);
 const mockMessages: ClientMessage[] = [];
+let panelOpen = true;
 
 vi.mock('@/components/chat/ChatContext', () => ({
   useChat: () => ({
-    isOpen: true,
+    isOpen: panelOpen,
     closeChat: vi.fn(),
     currentContext: undefined,
     selectedAppId: null,
@@ -44,6 +50,8 @@ vi.mock('@/lib/analytics/posthog', () => ({
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
+  setChatDraftOwner(null);
+  panelOpen = true;
   Element.prototype.scrollIntoView = vi.fn();
 });
 
@@ -97,7 +105,7 @@ describe('chat draft persistence', () => {
     );
     render(<ChatPanel />);
     typeDraft('first message');
-    fireEvent.click(screen.getByRole('button', { name: /send/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
 
     // The user starts a second draft while the first send is still running.
     typeDraft('second draft');
@@ -107,5 +115,39 @@ describe('chat draft persistence', () => {
     await waitFor(() => expect(sendMessage).toHaveBeenCalled());
     // The accepted first send must not erase the newer draft.
     await waitFor(() => expect(readChatDraft(chatDraftKeys.panel)).toBe('second draft'));
+  });
+
+  it('restores a failed send draft when the panel reopens without a refresh', async () => {
+    sendMessage.mockResolvedValueOnce(false);
+    panelOpen = true;
+    const { rerender } = render(<ChatPanel />);
+    typeDraft('reopen me');
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+
+    await waitFor(() => expect(sendMessage).toHaveBeenCalled());
+    await waitFor(() => expect(readChatDraft(chatDraftKeys.panel)).toBe('reopen me'));
+    // The composer is empty after the failed send; the panel closes and opens
+    // again without unmounting.
+    panelOpen = false;
+    rerender(<ChatPanel />);
+    panelOpen = true;
+    rerender(<ChatPanel />);
+
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText('Ask anything...')).toHaveValue('reopen me'),
+    );
+  });
+
+  it('never restores one account draft into another account composer', () => {
+    setChatDraftOwner('uid-a');
+    writeChatDraft(chatDraftKeys.panel, 'account a prompt');
+    expect(readChatDraft(chatDraftKeys.panel)).toBe('account a prompt');
+
+    // Account B signs in on the same browser: A's drafts are cleared, and the
+    // panel restores nothing.
+    setChatDraftOwner('uid-b');
+    expect(readChatDraft(chatDraftKeys.panel)).toBe('');
+    expect(localStorage.getItem(chatDraftKeys.panel)).toBeNull();
+    expect(localStorage.getItem(`${chatDraftKeys.panel}:uid-a`)).toBeNull();
   });
 });
