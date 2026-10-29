@@ -133,7 +133,7 @@ def maybe_send_first_summary_push(uid: str, conversation: Any, trigger: Processi
             return 'already_decided'
         cid = conversation.id
         stored = conversations_db.get_conversation(uid, cid)
-        if not (
+        if stored is None or not (
             conversations_db.is_visible_conversation(stored) and stored.get('status') == 'completed' and _ready(stored)
         ):
             return 'not_visible'
