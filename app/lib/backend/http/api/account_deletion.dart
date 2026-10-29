@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/api_result.dart';
-import 'package:omi/backend/schema/gen/users_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 
 Map<String, dynamic> _object(String body) {
@@ -30,27 +29,12 @@ class AccountDeletionStatus {
 
   factory AccountDeletionStatus.fromJson(Map<String, dynamic> json) {
     final loss = json['loss_summary'];
-    // Preserve the adapter's conservative legacy defaults before the shared
-    // wire decoder. In particular, a numeric string must not grant grace.
-    final value = wire.GeneratedAccountDeletionStatusResponse.fromJson({
-      'pending_deletion': json['pending_deletion'] == true,
-      'wipe_at': json['wipe_at'] is String ? DateTime.tryParse(json['wipe_at'] as String)?.toIso8601String() : null,
-      'grace_period_days': _count(json['grace_period_days'] ?? json['grace_days']),
-      'loss_summary': {
-        'held_recordings': loss is Map ? _count(loss['held_recordings']) : 0,
-        'backlog_conversations': loss is Map ? _count(loss['backlog_conversations']) : 0,
-      },
-    });
-    return AccountDeletionStatus.fromGenerated(value);
-  }
-
-  factory AccountDeletionStatus.fromGenerated(wire.GeneratedAccountDeletionStatusResponse value) {
     return AccountDeletionStatus(
-      pendingDeletion: value.pendingDeletion,
-      wipeAt: value.wipeAt,
-      gracePeriodDays: _count(value.gracePeriodDays),
-      heldCount: _count(value.lossSummary.heldRecordings),
-      processingCount: _count(value.lossSummary.backlogConversations),
+      pendingDeletion: json['pending_deletion'] == true,
+      wipeAt: json['wipe_at'] is String ? DateTime.tryParse(json['wipe_at'] as String) : null,
+      gracePeriodDays: _count(json['grace_period_days'] ?? json['grace_days']),
+      heldCount: loss is Map ? _count(loss['held_recordings']) : 0,
+      processingCount: loss is Map ? _count(loss['backlog_conversations']) : 0,
     );
   }
 
@@ -90,13 +74,7 @@ class AccountDeletionApi {
   Future<ApiResult<bool>> restore() => executeApi(
         request: ApiRequest(url: _url('restore-account'), method: 'POST'),
         send: send,
-        decode: (body) {
-          final data = _object(body);
-          return wire.GeneratedAccountDeletionRestoreResponse.fromJson({
-            'status': data['status'] is String ? data['status'] : '',
-            'restored': data['restored'] == true,
-          }).restored;
-        },
+        decode: (body) => _object(body)['restored'] == true,
       );
 
   Future<ApiResult<bool>> finishDeleting() => executeApi(
@@ -109,12 +87,7 @@ class AccountDeletionApi {
         send: send,
         decode: (body) {
           final data = _object(body);
-          final value = wire.GeneratedAccountDeletionActionResponse.fromJson({
-            'status': data['status'] is String ? data['status'] : '',
-            'message': data['message'] is String ? data['message'] : '',
-            'pending_deletion': data['pending_deletion'] == true,
-          });
-          return value.status == 'ok' && !value.pendingDeletion;
+          return data['status'] == 'ok' && data['pending_deletion'] != true;
         },
       );
 }
