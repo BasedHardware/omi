@@ -26,12 +26,12 @@ class _Obj:
         return dict(self._data)
 
 
-def _client(monkeypatch, stripe_status='past_due', hide_subscription_ui=False):
+def _client(monkeypatch, stripe_status='past_due', hide_subscription_ui=False, period_end=NOW + 29 * 86400):
     stored = users_router.Subscription(
         plan=users_router.PlanType.basic,
         status=users_router.SubscriptionStatus.active,
         stripe_subscription_id='sub_1',
-        current_period_end=NOW + 29 * 86400,
+        current_period_end=period_end,
     )
     stripe_calls = []
 
@@ -98,6 +98,14 @@ def test_past_due_payer_gets_payment_issue_and_stays_basic(monkeypatch):
     assert body['payment_issue'] == {'status': 'past_due', 'plan': 'unlimited_v2'}
     assert body['subscription']['plan'] == 'basic'
     assert stripe_calls == ['sub_1', 'in_1']
+
+
+@pytest.mark.parametrize('stripe_status', ['past_due', 'unpaid'])
+def test_open_failed_renewal_is_reported_after_the_stored_period_ended(monkeypatch, stripe_status):
+    body, _ = _client(monkeypatch, stripe_status=stripe_status, period_end=NOW - 86400)
+
+    assert body['payment_issue'] == {'status': stripe_status, 'plan': 'unlimited_v2'}
+    assert body['subscription']['plan'] == 'basic'
 
 
 @pytest.mark.parametrize('stripe_status', ['active', 'canceled'])

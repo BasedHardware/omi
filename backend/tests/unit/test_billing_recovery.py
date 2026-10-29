@@ -149,7 +149,7 @@ def _stripe(monkeypatch, sub=None, invoice=None, error=None):
 def test_lookup_reads_the_stored_subscription_and_its_latest_invoice(monkeypatch):
     calls = _stripe(monkeypatch, _stripe_sub(), _invoice())
 
-    issue = billing_recovery.payment_issue_for('uid-1', _stored(), now=NOW)
+    issue = billing_recovery.payment_issue_for('uid-1', _stored())
 
     assert issue == PaymentIssue(status='past_due', plan=PlanType.unlimited_v2)
     assert calls == [('subscription', 'sub_1'), ('invoice', 'in_1')]
@@ -158,7 +158,7 @@ def test_lookup_reads_the_stored_subscription_and_its_latest_invoice(monkeypatch
 def test_active_subscription_never_reads_an_invoice(monkeypatch):
     calls = _stripe(monkeypatch, _stripe_sub(status='active'), _invoice())
 
-    assert billing_recovery.payment_issue_for('uid-1', _stored(), now=NOW) is None
+    assert billing_recovery.payment_issue_for('uid-1', _stored()) is None
     assert calls == [('subscription', 'sub_1')]
 
 
@@ -169,22 +169,37 @@ def test_active_subscription_never_reads_an_invoice(monkeypatch):
         _stored(plan=PlanType.unlimited_v2),
         _stored(stripe_subscription_id=None),
         _stored(stripe_subscription_id='pi_org_grant'),
-        # Canceled by choice: the webhook stores the period that already ended.
-        _stored(current_period_end=NOW - DAY),
     ],
 )
-def test_paid_free_and_former_subscribers_cost_no_stripe_call(monkeypatch, stored):
+def test_paid_free_and_org_grants_cost_no_stripe_call(monkeypatch, stored):
     calls = _stripe(monkeypatch, _stripe_sub(), _invoice())
 
-    assert billing_recovery.payment_issue_for('uid-1', stored, now=NOW) is None
+    assert billing_recovery.payment_issue_for('uid-1', stored) is None
     assert calls == []
 
 
 def test_unknown_stored_period_still_asks_stripe(monkeypatch):
     calls = _stripe(monkeypatch, _stripe_sub(), _invoice())
 
-    assert billing_recovery.payment_issue_for('uid-1', _stored(current_period_end=None), now=NOW) is not None
+    assert billing_recovery.payment_issue_for('uid-1', _stored(current_period_end=None)) is not None
     assert calls[0] == ('subscription', 'sub_1')
+
+
+@pytest.mark.parametrize('status', ['past_due', 'unpaid'])
+def test_expired_stored_period_still_reports_an_open_failed_renewal(monkeypatch, status):
+    calls = _stripe(monkeypatch, _stripe_sub(status=status), _invoice())
+
+    issue = billing_recovery.payment_issue_for('uid-1', _stored(current_period_end=NOW - DAY))
+
+    assert issue == PaymentIssue(status=status, plan=PlanType.unlimited_v2)
+    assert calls == [('subscription', 'sub_1'), ('invoice', 'in_1')]
+
+
+def test_expired_stored_period_does_not_report_a_chosen_cancellation(monkeypatch):
+    calls = _stripe(monkeypatch, _stripe_sub(status='canceled'), _invoice())
+
+    assert billing_recovery.payment_issue_for('uid-1', _stored(current_period_end=NOW - DAY)) is None
+    assert calls == [('subscription', 'sub_1')]
 
 
 def test_stripe_failure_answers_no_issue_and_records_the_fallback(monkeypatch):
@@ -192,7 +207,7 @@ def test_stripe_failure_answers_no_issue_and_records_the_fallback(monkeypatch):
     recorded = []
     monkeypatch.setattr(billing_recovery, 'record_fallback', lambda **labels: recorded.append(labels))
 
-    assert billing_recovery.payment_issue_for('uid-1', _stored(), now=NOW) is None
+    assert billing_recovery.payment_issue_for('uid-1', _stored()) is None
     assert recorded == [
         {
             'component': 'other',

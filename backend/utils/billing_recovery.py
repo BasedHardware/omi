@@ -11,7 +11,6 @@ POST /v1/payments/customer-portal.
 """
 
 import logging
-import time
 from typing import Any, Mapping, Optional
 
 import stripe
@@ -62,22 +61,19 @@ def payment_issue_from_stripe(
     return PaymentIssue(status=status, plan=plan)
 
 
-def payment_issue_for(uid: str, stored: Optional[Subscription], now: Optional[int] = None) -> Optional[PaymentIssue]:
+def payment_issue_for(uid: str, stored: Optional[Subscription]) -> Optional[PaymentIssue]:
     """The user's payable failed renewal, or None.
 
     Reads Stripe only for a stored Basic plan that still points at a Stripe
-    subscription whose period has not ended: the shape the webhook leaves for a
-    past_due payer. A subscription canceled by choice ends at its period end, so
-    former subscribers cost no Stripe call. Any Stripe failure answers None.
+    subscription: the shape the webhook leaves for a past_due payer. A stored
+    period end cannot distinguish an unpaid renewal from a cancellation;
+    Stripe's current status and latest invoice decide. Any Stripe failure answers None.
     """
     if not stored or stored.plan != PlanType.basic:
         return None
     subscription_id = stored.stripe_subscription_id
     # Organization grants store a one-time PaymentIntent here, not a subscription.
     if not subscription_id or subscription_id.startswith('pi_'):
-        return None
-    period_end = stored.current_period_end
-    if period_end is not None and period_end <= (now if now is not None else int(time.time())):
         return None
     try:
         subscription = stripe.Subscription.retrieve(subscription_id).to_dict()  # type: ignore[reportDeprecated]  # stripe public serialization API

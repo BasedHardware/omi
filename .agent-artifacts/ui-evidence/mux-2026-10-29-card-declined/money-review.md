@@ -1,14 +1,14 @@
 # Money-safety review: proposal #4 (card declined row on Home)
 
-Branch `mux/2026-10-29-card-declined` (worktree ~/projects/omi-mux-p4-card-declined), merged with origin/main 92bff3c2d5; reviewed through c69f08a0a2.
+Branch `mux/2026-10-29-card-declined` (worktree ~/projects/omi-mux-p4-card-declined), merged with origin/main 92bff3c2d5; reviewed through the expired-period regression fix after c69f08a0a2.
 Verdict: **no charge path.** The app never charges, retries, cancels or changes a subscription. It reads one new
 optional field and opens the existing Stripe-hosted billing portal; card details and payment happen only on Stripe's page.
 
 ## What the backend does (read-only)
 `backend/utils/billing_recovery.py` (new), called once from `_user_subscription_response` (`routers/users.py`):
 - Runs only when the stored plan is Basic, the stored row still points at a Stripe subscription (`sub_`, never an
-  org-grant `pi_`), its stored period has not ended, and subscription UI is shown (`show_subscription_ui`).
-  A sub canceled by choice ends at its period end, so former subscribers cost no Stripe call.
+  org-grant `pi_`), and subscription UI is shown (`show_subscription_ui`).
+  An expired stored period can still have an open failed renewal; Stripe status decides whether it is recoverable.
 - Stripe calls: `Subscription.retrieve(stored id)` and, only for past_due/unpaid, `Invoice.retrieve(latest_invoice)`.
   No `modify`, `pay`, `cancel`, `create`, checkout or schedule call anywhere in the diff
   (`git diff origin/main...HEAD -- backend | grep -E "\.(modify|pay|cancel|create|delete)\("` = nothing).
@@ -36,11 +36,11 @@ optional field and opens the existing Stripe-hosted billing portal; card details
 - New app + old backend: no field -> no row. Nothing else changes.
 
 ## Edge cases checked in tests
-backend `tests/unit/test_billing_recovery.py` (35) + `tests/routers/test_users_payment_issue.py` (4): past_due and
+backend `tests/unit/test_billing_recovery.py` (37) + `tests/routers/test_users_payment_issue.py` (6): past_due and
 unpaid report; active/trialing/canceled/incomplete/incomplete_expired/paused do not; cancel_at_period_end, cancel_at,
 send_invoice, other uid, unknown price, no items do not; trial first charge does not, renewal after a converted trial
 does; invoice none/paid/draft/not attempted/zero remaining/void/uncollectible do not; non-basic, no sub id, `pi_`,
-ended period cost no Stripe call; Stripe failure -> no field + fallback; hidden subscription UI -> no field, no call;
+paid/free/org grants cost no Stripe call; expired stored periods still report past_due/unpaid open renewals, while canceled subscriptions do not; Stripe failure -> no field + fallback; hidden subscription UI -> no field, no call;
 entitlement stays `basic` in the HTTP body.
 app `test/pages/home/payment_issue_row_test.dart` (10): row for past_due; legacy plan named; no row for active,
 no issue, hidden UI; Update opens the portal and the row leaves after the invoice is paid; portal failure keeps the row. The largest-text regression failed on the original row and passes with the Update action stacked below the copy. The shared OmiButton supports an opt-in pill shape; its 5 existing behavior tests pass.
