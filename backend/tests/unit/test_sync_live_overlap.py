@@ -98,6 +98,19 @@ def test_non_overlap_and_touching_boundary_create_normal_sync(start):
     assert store.rows[('users', 'u', 'conversations', 'live')] == original[('users', 'u', 'conversations', 'live')]
 
 
+def test_live_wall_envelope_cannot_authorize_nonoverlapping_recorded_speech():
+    live = live_row('in_progress')
+    live['finished_at'] = live['started_at'] + timedelta(seconds=600)
+    store = seeded(live)
+    original = deepcopy(live)
+    incoming = dict(chunk('wal', 1100), data_protection_level='standard')
+
+    row, created, _ = assign(store, incoming)
+
+    assert created and row['id'] == 'wal'
+    assert store.rows[('users', 'u', 'conversations', 'live')] == original
+
+
 @pytest.mark.parametrize('start', [995, 1005])
 @pytest.mark.parametrize('timeline', [None, {'version': 2}])
 @pytest.mark.parametrize('explicit_target', [False, True])
