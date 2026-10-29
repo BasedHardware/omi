@@ -1,13 +1,76 @@
 """Unit tests for file_tools input validation, timestamp parsing, and configuration fallbacks."""
 
 from datetime import datetime, timezone
+from pathlib import Path
+from types import ModuleType
 from unittest.mock import MagicMock, patch
 
-import utils.retrieval.tools.file_tools as file_tools
+import pytest
+
+from testing.import_isolation import load_module_fresh, stub_modules
+
+BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+
+
+def _tool_decorator(fn=None, **kwargs):
+    if fn is not None and callable(fn):
+        fn.func = fn
+        return fn
+
+    def dec(func):
+        func.func = func
+        return func
+
+    return dec
+
+
+@pytest.fixture(scope="class")
+def file_tools_module():
+    """Load utils.retrieval.tools.file_tools hermetically with isolated stubs."""
+    db_chat = ModuleType("database.chat")
+    db_chat.get_chat_session_by_id = MagicMock()
+
+    class FakeChatSession:
+        def __init__(self, **kwargs):
+            for k, v in kwargs.items():
+                setattr(self, k, v)
+            self.file_ids = kwargs.get("file_ids", [])
+            self.created_at = kwargs.get("created_at")
+
+    models_chat = ModuleType("models.chat")
+    models_chat.ChatSession = FakeChatSession
+
+    class FakeProviderRejectedChatFileError(Exception):
+        pass
+
+    utils_chat_file = ModuleType("utils.other.chat_file")
+    utils_chat_file.FileChatTool = MagicMock()
+    utils_chat_file.ProviderRejectedChatFileError = FakeProviderRejectedChatFileError
+
+    lc_tools = ModuleType("langchain_core.tools")
+    lc_tools.tool = _tool_decorator
+
+    lc_runnables = ModuleType("langchain_core.runnables")
+    lc_runnables.RunnableConfig = dict
+
+    stubs: dict[str, ModuleType | None] = {
+        "database.chat": db_chat,
+        "models.chat": models_chat,
+        "utils.other.chat_file": utils_chat_file,
+        "langchain_core.tools": lc_tools,
+        "langchain_core.runnables": lc_runnables,
+    }
+
+    tool_path = BACKEND_DIR / "utils" / "retrieval" / "tools" / "file_tools.py"
+    with stub_modules(stubs):
+        mod = load_module_fresh("utils.retrieval.tools._file_tools_coercion_isolated", str(tool_path))
+        yield mod
 
 
 class TestFileToolsCoercionAndGuards:
-    mod = file_tools
+    @pytest.fixture(autouse=True)
+    def _setup_mod(self, file_tools_module):
+        self.mod = file_tools_module
 
     def test_parse_seconds(self):
         assert self.mod._parse_seconds(10) == 10.0
