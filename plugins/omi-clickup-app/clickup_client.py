@@ -1,5 +1,6 @@
 import os
 import requests
+import httpx
 from typing import Optional, List, Dict, Any
 from dotenv import load_dotenv
 
@@ -47,7 +48,7 @@ class ClickUpClient:
                 data={
                     "client_id": self.client_id,
                     "client_secret": self.client_secret,
-                    "code": code
+                    "code": code,
                 },
                 timeout=REQUEST_TIMEOUT,
             )
@@ -57,7 +58,7 @@ class ClickUpClient:
 
                 return {
                     "access_token": data.get("access_token"),
-                    "token_type": data.get("token_type", "Bearer")
+                    "token_type": data.get("token_type", "Bearer"),
                 }
             else:
                 raise Exception(f"Token exchange failed: {response.status_code}")
@@ -84,7 +85,7 @@ class ClickUpClient:
                 return {
                     "id": user.get("id"),
                     "username": user.get("username"),
-                    "email": user.get("email")
+                    "email": user.get("email"),
                 }
             else:
                 print(f"❌ Error getting user: {response.status_code}", flush=True)
@@ -113,16 +114,20 @@ class ClickUpClient:
                 for team in teams:
                     if not isinstance(team, dict):
                         continue
-                    workspaces.append({
-                        "id": team.get("id"),
-                        "name": team.get("name"),
-                        "color": team.get("color"),
-                        "avatar": team.get("avatar")
-                    })
+                    workspaces.append(
+                        {
+                            "id": team.get("id"),
+                            "name": team.get("name"),
+                            "color": team.get("color"),
+                            "avatar": team.get("avatar"),
+                        }
+                    )
 
                 return workspaces
             else:
-                print(f"❌ Error getting workspaces: {response.status_code}", flush=True)
+                print(
+                    f"❌ Error getting workspaces: {response.status_code}", flush=True
+                )
                 return []
 
         except Exception as e:
@@ -149,12 +154,14 @@ class ClickUpClient:
                 for space in spaces:
                     if not isinstance(space, dict):
                         continue
-                    space_list.append({
-                        "id": space.get("id"),
-                        "name": space.get("name"),
-                        "private": space.get("private", False),
-                        "color": space.get("color")
-                    })
+                    space_list.append(
+                        {
+                            "id": space.get("id"),
+                            "name": space.get("name"),
+                            "private": space.get("private", False),
+                            "color": space.get("color"),
+                        }
+                    )
 
                 return space_list
             else:
@@ -185,13 +192,17 @@ class ClickUpClient:
                 for lst in lists:
                     if not isinstance(lst, dict):
                         continue
-                    folder_obj = lst.get("folder") if isinstance(lst.get("folder"), dict) else {}
-                    list_data.append({
-                        "id": lst.get("id"),
-                        "name": lst.get("name"),
-                        "space_id": space_id,
-                        "folder_id": folder_obj.get("id") if folder_obj else None
-                    })
+                    folder_obj = (
+                        lst.get("folder") if isinstance(lst.get("folder"), dict) else {}
+                    )
+                    list_data.append(
+                        {
+                            "id": lst.get("id"),
+                            "name": lst.get("name"),
+                            "space_id": space_id,
+                            "folder_id": folder_obj.get("id") if folder_obj else None,
+                        }
+                    )
 
                 return list_data
             else:
@@ -270,7 +281,7 @@ class ClickUpClient:
         spaces = self.get_spaces(access_token, team_id)
 
         # Get lists for each space
-        for space in (spaces or []):
+        for space in spaces or []:
             if not isinstance(space, dict):
                 continue
             space_id = space.get("id")
@@ -280,7 +291,7 @@ class ClickUpClient:
 
             # Folderless lists
             lists = self.get_lists(access_token, space_id)
-            for lst in (lists or []):
+            for lst in lists or []:
                 if not isinstance(lst, dict):
                     continue
                 lst["space_name"] = space_name
@@ -293,20 +304,27 @@ class ClickUpClient:
                         continue
                     folder_lists = folder.get("lists")
                     if not isinstance(folder_lists, list):
-                        folder_lists = self.get_folder_lists(access_token, folder.get("id"))
-                    for lst in (folder_lists or []):
+                        folder_lists = self.get_folder_lists(
+                            access_token, folder.get("id")
+                        )
+                    for lst in folder_lists or []:
                         if not isinstance(lst, dict):
                             continue
-                        all_lists.append({
-                            "id": lst.get("id"),
-                            "name": lst.get("name"),
-                            "space_id": space_id,
-                            "space_name": space_name,
-                            "folder_id": folder.get("id"),
-                            "folder_name": folder.get("name")
-                        })
+                        all_lists.append(
+                            {
+                                "id": lst.get("id"),
+                                "name": lst.get("name"),
+                                "space_id": space_id,
+                                "space_name": space_name,
+                                "folder_id": folder.get("id"),
+                                "folder_name": folder.get("name"),
+                            }
+                        )
             except Exception as e:
-                print(f"❌ Error getting folder lists for space {space_id}: {e}", flush=True)
+                print(
+                    f"❌ Error getting folder lists for space {space_id}: {e}",
+                    flush=True,
+                )
                 return []
 
         return all_lists
@@ -334,14 +352,16 @@ class ClickUpClient:
                     user = member.get("user")
                     if not isinstance(user, dict) or not user.get("id"):
                         continue
-                    members.append({
-                        "id": user.get("id"),
-                        "username": user.get("username"),
-                        "email": user.get("email"),
-                        "initials": user.get("initials", ""),
-                        "color": user.get("color"),
-                        "profilePicture": user.get("profilePicture")
-                    })
+                    members.append(
+                        {
+                            "id": user.get("id"),
+                            "username": user.get("username"),
+                            "email": user.get("email"),
+                            "initials": user.get("initials", ""),
+                            "color": user.get("color"),
+                            "profilePicture": user.get("profilePicture"),
+                        }
+                    )
 
                 print(f"✅ Found {len(members)} workspace members", flush=True)
                 return members
@@ -363,7 +383,7 @@ class ClickUpClient:
         status: Optional[str] = None,
         due_date: Optional[Any] = None,
         timezone: str = "UTC",
-        assignees: Optional[List[Any]] = None
+        assignees: Optional[List[Any]] = None,
     ) -> Optional[dict]:
         """
         Create a task in ClickUp.
@@ -383,13 +403,11 @@ class ClickUpClient:
         try:
             headers = {
                 "Authorization": access_token,
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
             }
 
             # Build task data
-            task_data: dict = {
-                "name": str(name or "").strip()
-            }
+            task_data: dict = {"name": str(name or "").strip()}
 
             # Add description with "Created via Omi" footer
             if description:
@@ -431,18 +449,24 @@ class ClickUpClient:
                             task_data["due_date_time"] = True
                         else:
                             from datetime import datetime
+
                             try:
                                 import pytz
+
                                 tz = pytz.timezone(timezone)
                             except (ImportError, Exception):
                                 tz = None
 
-                            has_time = 'T' in due_str
+                            has_time = "T" in due_str
                             if has_time:
-                                iso = due_str[:-1] + '+00:00' if due_str.endswith('Z') else due_str
+                                iso = (
+                                    due_str[:-1] + "+00:00"
+                                    if due_str.endswith("Z")
+                                    else due_str
+                                )
                                 parsed = datetime.fromisoformat(iso)
                             else:
-                                parsed = datetime.fromisoformat(due_str + 'T23:59:59')
+                                parsed = datetime.fromisoformat(due_str + "T23:59:59")
 
                             if parsed.tzinfo is not None:
                                 dt = parsed
@@ -452,18 +476,31 @@ class ClickUpClient:
                             due_timestamp = int(dt.timestamp() * 1000)
                             task_data["due_date"] = due_timestamp
                             task_data["due_date_time"] = has_time
-                            print(f"📅 Due date set: {due_timestamp} (has_time={has_time})", flush=True)
+                            print(
+                                f"📅 Due date set: {due_timestamp} (has_time={has_time})",
+                                flush=True,
+                            )
                 except Exception as e:
-                    print(f"⚠️  Could not parse due date: {type(e).__name__}", flush=True)
+                    print(
+                        f"⚠️  Could not parse due date: {type(e).__name__}", flush=True
+                    )
 
-            print(f"📤 Creating task in list {list_id} (name_len={len(task_data['name'])})", flush=True)
-
-            response = requests.post(
-                f"{self.base_url}/list/{list_id}/task",
-                headers=headers,
-                json=task_data,
-                timeout=REQUEST_TIMEOUT,
+            print(
+                f"📤 Creating task in list {list_id} (name_len={len(task_data['name'])})",
+                flush=True,
             )
+
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.base_url}/list/{list_id}/task",
+                    headers=headers,
+                    json=task_data,
+                    timeout=(
+                        REQUEST_TIMEOUT[0]
+                        if isinstance(REQUEST_TIMEOUT, tuple)
+                        else REQUEST_TIMEOUT
+                    ),
+                )
 
             if response.status_code == 200:
                 data = _safe_json(response)
@@ -485,20 +522,13 @@ class ClickUpClient:
                     "task_name": task.get("name"),
                     "task_url": task.get("url"),
                     "status": status_val,
-                    "list_id": list_id
+                    "list_id": list_id,
                 }
             else:
                 error_msg = f"HTTP {response.status_code}"
                 print(f"❌ Error creating task: {error_msg}", flush=True)
-                return {
-                    "success": False,
-                    "error": error_msg
-                }
+                return {"success": False, "error": error_msg}
 
         except Exception as e:
             print(f"❌ Error creating task: {type(e).__name__}", flush=True)
-            return {
-                "success": False,
-                "error": type(e).__name__
-            }
-
+            return {"success": False, "error": type(e).__name__}
