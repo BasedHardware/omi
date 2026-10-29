@@ -14723,6 +14723,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return '$planを続けるにはカードを更新してください';
+    return '$planを再開するにはカードを更新してください';
   }
 }

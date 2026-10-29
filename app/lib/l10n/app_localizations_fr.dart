@@ -15059,6 +15059,6 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return 'Mettez-la à jour pour garder $plan';
+    return 'Mettez-la à jour pour retrouver $plan';
   }
 }

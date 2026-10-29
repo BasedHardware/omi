@@ -4551,5 +4551,5 @@
     "yearlySwitchDoneTitle": "Agora você está no plano anual",
     "yearlySwitchDoneBody": "{amount} cobrados hoje. Renova em {date}.",
     "paymentDeclinedTitle": "Seu cartão foi recusado",
-    "paymentDeclinedMessage": "Atualize-o para manter o {plan}"
+    "paymentDeclinedMessage": "Atualize o cartão para recuperar {plan}"
 }

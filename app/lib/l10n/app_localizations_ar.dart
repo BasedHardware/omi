@@ -14848,6 +14848,6 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return 'حدّث بطاقتك للاحتفاظ بـ $plan';
+    return 'حدّث بطاقتك لاستعادة $plan';
   }
 }

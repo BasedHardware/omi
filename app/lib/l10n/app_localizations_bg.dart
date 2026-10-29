@@ -14987,6 +14987,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return 'Обновете я, за да запазите $plan';
+    return 'Обновете картата, за да възстановите $plan';
   }
 }

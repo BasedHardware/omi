@@ -11942,5 +11942,5 @@
     "yearlySwitchDoneTitle": "Сада плаћате годишње",
     "yearlySwitchDoneBody": "Данас наплаћено {amount}. Обнавља се {date}.",
     "paymentDeclinedTitle": "Ваша картица је одбијена",
-    "paymentDeclinedMessage": "Ажурирајте је да бисте задржали {plan}"
+    "paymentDeclinedMessage": "Ажурирајте картицу да бисте вратили {plan}"
 }

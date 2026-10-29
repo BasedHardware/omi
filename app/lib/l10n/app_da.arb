@@ -4558,5 +4558,5 @@
     "yearlySwitchDoneTitle": "Du betaler nu årligt",
     "yearlySwitchDoneBody": "{amount} trukket i dag. Fornyes {date}.",
     "paymentDeclinedTitle": "Dit kort blev afvist",
-    "paymentDeclinedMessage": "Opdater det for at beholde {plan}"
+    "paymentDeclinedMessage": "Opdater kortet for at få {plan} tilbage"
 }

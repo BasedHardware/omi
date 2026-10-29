@@ -14940,6 +14940,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return 'Päivitä se, niin $plan säilyy';
+    return 'Päivitä kortti saadaksesi $plan takaisin';
   }
 }

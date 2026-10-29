@@ -4612,5 +4612,5 @@
     "yearlySwitchDoneTitle": "Mostantól évente fizet",
     "yearlySwitchDoneBody": "Ma terhelve: {amount}. Megújul: {date}.",
     "paymentDeclinedTitle": "A kártyáját elutasították",
-    "paymentDeclinedMessage": "Frissítse, hogy megtarthassa: {plan}"
+    "paymentDeclinedMessage": "Frissítse a kártyát a(z) {plan} visszaállításához"
 }

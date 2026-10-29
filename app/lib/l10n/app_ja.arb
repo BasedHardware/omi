@@ -4516,5 +4516,5 @@
     "yearlySwitchDoneTitle": "年払いに切り替わりました",
     "yearlySwitchDoneBody": "本日{amount}を請求しました。次回更新は{date}です。",
     "paymentDeclinedTitle": "カードが拒否されました",
-    "paymentDeclinedMessage": "{plan}を続けるにはカードを更新してください"
+    "paymentDeclinedMessage": "{plan}を再開するにはカードを更新してください"
 }

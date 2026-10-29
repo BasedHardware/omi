@@ -14930,6 +14930,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return 'Aktualizujte ju, aby ste si ponechali $plan';
+    return 'Aktualizujte kartu a obnovte $plan';
   }
 }

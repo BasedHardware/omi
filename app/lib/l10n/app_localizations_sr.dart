@@ -14943,6 +14943,6 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return 'Ажурирајте је да бисте задржали $plan';
+    return 'Ажурирајте картицу да бисте вратили $plan';
   }
 }

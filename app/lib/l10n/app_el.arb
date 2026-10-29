@@ -4516,5 +4516,5 @@
     "yearlySwitchDoneTitle": "Είστε πλέον σε ετήσια χρέωση",
     "yearlySwitchDoneBody": "Χρεώθηκαν σήμερα {amount}. Ανανέωση στις {date}.",
     "paymentDeclinedTitle": "Η κάρτα σας απορρίφθηκε",
-    "paymentDeclinedMessage": "Ενημερώστε την για να κρατήσετε το {plan}"
+    "paymentDeclinedMessage": "Ενημερώστε την κάρτα για να αποκτήσετε ξανά το {plan}"
 }

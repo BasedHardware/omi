@@ -14999,6 +14999,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return 'Actualizați-l pentru a păstra $plan';
+    return 'Actualizați cardul pentru a recupera $plan';
   }
 }

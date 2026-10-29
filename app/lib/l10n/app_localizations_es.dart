@@ -14981,6 +14981,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return 'Actualízala para conservar $plan';
+    return 'Actualízala para recuperar $plan';
   }
 }

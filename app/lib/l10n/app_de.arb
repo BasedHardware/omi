@@ -4516,5 +4516,5 @@
     "yearlySwitchDoneTitle": "Sie zahlen jetzt jährlich",
     "yearlySwitchDoneBody": "Heute {amount} abgebucht. Verlängerung am {date}.",
     "paymentDeclinedTitle": "Ihre Karte wurde abgelehnt",
-    "paymentDeclinedMessage": "Aktualisieren Sie sie, um {plan} zu behalten"
+    "paymentDeclinedMessage": "Karte aktualisieren, um {plan} zurückzubekommen"
 }

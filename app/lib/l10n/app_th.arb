@@ -4516,5 +4516,5 @@
     "yearlySwitchDoneTitle": "ตอนนี้คุณจ่ายแบบรายปีแล้ว",
     "yearlySwitchDoneBody": "เรียกเก็บ {amount} วันนี้ ต่ออายุ {date}",
     "paymentDeclinedTitle": "บัตรของคุณถูกปฏิเสธ",
-    "paymentDeclinedMessage": "อัปเดตบัตรเพื่อใช้ {plan} ต่อ"
+    "paymentDeclinedMessage": "อัปเดตบัตรเพื่อกลับมาใช้ {plan}"
 }

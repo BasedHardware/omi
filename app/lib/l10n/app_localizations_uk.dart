@@ -14967,6 +14967,6 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return 'Оновіть її, щоб зберегти $plan';
+    return 'Оновіть картку, щоб повернути $plan';
   }
 }

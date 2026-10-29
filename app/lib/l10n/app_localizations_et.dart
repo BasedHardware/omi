@@ -14929,6 +14929,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return 'Uuenda seda, et $plan alles jääks';
+    return 'Uuenda kaarti, et $plan tagasi saada';
   }
 }

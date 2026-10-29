@@ -11942,5 +11942,5 @@
     "yearlySwitchDoneTitle": "Цяпер у вас гадавая аплата",
     "yearlySwitchDoneBody": "Сёння спісана {amount}. Падаўжэнне {date}.",
     "paymentDeclinedTitle": "Вашу картку адхілілі",
-    "paymentDeclinedMessage": "Абнавіце яе, каб захаваць {plan}"
+    "paymentDeclinedMessage": "Абнавіце картку, каб вярнуць {plan}"
 }

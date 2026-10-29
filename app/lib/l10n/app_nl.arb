@@ -4516,5 +4516,5 @@
     "yearlySwitchDoneTitle": "Je betaalt nu jaarlijks",
     "yearlySwitchDoneBody": "Vandaag {amount} afgeschreven. Verlengt op {date}.",
     "paymentDeclinedTitle": "Uw kaart is geweigerd",
-    "paymentDeclinedMessage": "Werk deze bij om {plan} te behouden"
+    "paymentDeclinedMessage": "Werk je kaart bij om {plan} terug te krijgen"
 }

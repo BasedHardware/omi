@@ -11942,5 +11942,5 @@
     "yearlySwitchDoneTitle": "Taunan ka na",
     "yearlySwitchDoneBody": "{amount} ang siningil ngayon. Magre-renew sa {date}.",
     "paymentDeclinedTitle": "Tinanggihan ang iyong card",
-    "paymentDeclinedMessage": "I-update ito para manatili sa {plan}"
+    "paymentDeclinedMessage": "I-update ang card para maibalik ang {plan}"
 }

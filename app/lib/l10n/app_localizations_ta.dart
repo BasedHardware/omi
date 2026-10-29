@@ -15039,6 +15039,6 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return '$plan தொடர இதைப் புதுப்பிக்கவும்';
+    return '$plan மீண்டும் பெற கார்டைப் புதுப்பிக்கவும்';
   }
 }

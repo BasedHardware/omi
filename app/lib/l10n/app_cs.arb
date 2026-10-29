@@ -4516,5 +4516,5 @@
     "yearlySwitchDoneTitle": "Teď platíte ročně",
     "yearlySwitchDoneBody": "Dnes účtováno {amount}. Obnovení {date}.",
     "paymentDeclinedTitle": "Vaše karta byla zamítnuta",
-    "paymentDeclinedMessage": "Aktualizujte ji, abyste si ponechali {plan}"
+    "paymentDeclinedMessage": "Aktualizujte kartu a obnovte {plan}"
 }

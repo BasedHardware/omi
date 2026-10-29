@@ -4516,5 +4516,5 @@
     "yearlySwitchDoneTitle": "Anda kini membayar tahunan",
     "yearlySwitchDoneBody": "{amount} dicaj hari ini. Diperbaharui pada {date}.",
     "paymentDeclinedTitle": "Kad anda ditolak",
-    "paymentDeclinedMessage": "Kemas kini untuk terus menggunakan {plan}"
+    "paymentDeclinedMessage": "Kemas kini kad untuk mendapatkan semula {plan}"
 }

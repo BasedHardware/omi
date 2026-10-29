@@ -14931,6 +14931,6 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return '$plan রাখতে কার্ডটি আপডেট করুন';
+    return 'আবার $plan পেতে কার্ডটি আপডেট করুন';
   }
 }

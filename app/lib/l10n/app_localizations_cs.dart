@@ -14934,6 +14934,6 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return 'Aktualizujte ji, abyste si ponechali $plan';
+    return 'Aktualizujte kartu a obnovte $plan';
   }
 }

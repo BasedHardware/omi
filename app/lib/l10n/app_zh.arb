@@ -4516,5 +4516,5 @@
     "yearlySwitchDoneTitle": "已改为按年付费",
     "yearlySwitchDoneBody": "今日已扣款 {amount}。续订日期：{date}。",
     "paymentDeclinedTitle": "您的银行卡被拒绝",
-    "paymentDeclinedMessage": "请更新银行卡以继续使用 {plan}"
+    "paymentDeclinedMessage": "更新银行卡以恢复使用 {plan}"
 }

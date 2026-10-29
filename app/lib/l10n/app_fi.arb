@@ -4516,5 +4516,5 @@
     "yearlySwitchDoneTitle": "Maksat nyt vuosittain",
     "yearlySwitchDoneBody": "Tänään veloitettiin {amount}. Uusiutuu {date}.",
     "paymentDeclinedTitle": "Korttisi hylättiin",
-    "paymentDeclinedMessage": "Päivitä se, niin {plan} säilyy"
+    "paymentDeclinedMessage": "Päivitä kortti saadaksesi {plan} takaisin"
 }

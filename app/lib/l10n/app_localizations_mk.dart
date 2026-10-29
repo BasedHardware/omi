@@ -15000,6 +15000,6 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return 'Ажурирајте ја за да го задржите $plan';
+    return 'Ажурирајте ја картичката за да го вратите $plan';
   }
 }

@@ -14704,6 +14704,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return '请更新银行卡以继续使用 $plan';
+    return '更新银行卡以恢复使用 $plan';
   }
 }

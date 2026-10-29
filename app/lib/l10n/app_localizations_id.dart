@@ -14951,6 +14951,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return 'Perbarui agar tetap memakai $plan';
+    return 'Perbarui kartu untuk mendapatkan kembali $plan';
   }
 }

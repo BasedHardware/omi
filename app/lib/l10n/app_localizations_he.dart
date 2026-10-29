@@ -14826,6 +14826,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return 'עדכן אותו כדי לשמור על $plan';
+    return 'עדכנו את הכרטיס כדי לקבל שוב את $plan';
   }
 }

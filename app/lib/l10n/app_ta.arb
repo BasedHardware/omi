@@ -11942,5 +11942,5 @@
     "yearlySwitchDoneTitle": "நீங்கள் இப்போது ஆண்டுத் திட்டத்தில் உள்ளீர்கள்",
     "yearlySwitchDoneBody": "இன்று {amount} வசூலிக்கப்பட்டது. புதுப்பிப்பு {date}.",
     "paymentDeclinedTitle": "உங்கள் கார்டு நிராகரிக்கப்பட்டது",
-    "paymentDeclinedMessage": "{plan} தொடர இதைப் புதுப்பிக்கவும்"
+    "paymentDeclinedMessage": "{plan} மீண்டும் பெற கார்டைப் புதுப்பிக்கவும்"
 }

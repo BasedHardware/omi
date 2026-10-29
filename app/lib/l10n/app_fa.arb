@@ -11942,5 +11942,5 @@
     "yearlySwitchDoneTitle": "اکنون سالانه پرداخت می‌کنید",
     "yearlySwitchDoneBody": "امروز {amount} کسر شد. تمدید در {date}.",
     "paymentDeclinedTitle": "کارت شما رد شد",
-    "paymentDeclinedMessage": "برای حفظ {plan} آن را به‌روزرسانی کنید"
+    "paymentDeclinedMessage": "برای بازگرداندن {plan} کارت را به‌روزرسانی کنید"
 }

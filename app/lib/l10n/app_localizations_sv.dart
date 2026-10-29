@@ -14945,6 +14945,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return 'Uppdatera det för att behålla $plan';
+    return 'Uppdatera kortet för att få tillbaka $plan';
   }
 }

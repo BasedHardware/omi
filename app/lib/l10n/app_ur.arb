@@ -11942,5 +11942,5 @@
     "yearlySwitchDoneTitle": "اب آپ سالانہ پلان پر ہیں",
     "yearlySwitchDoneBody": "آج {amount} وصول کیے گئے۔ تجدید {date} کو۔",
     "paymentDeclinedTitle": "آپ کا کارڈ مسترد ہو گیا",
-    "paymentDeclinedMessage": "{plan} برقرار رکھنے کے لیے اسے اپ ڈیٹ کریں"
+    "paymentDeclinedMessage": "{plan} واپس حاصل کرنے کے لیے کارڈ اپ ڈیٹ کریں"
 }

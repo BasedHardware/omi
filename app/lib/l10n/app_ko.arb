@@ -4516,5 +4516,5 @@
     "yearlySwitchDoneTitle": "연간 결제로 전환되었습니다",
     "yearlySwitchDoneBody": "오늘 {amount}이 결제되었습니다. 갱신일은 {date}입니다.",
     "paymentDeclinedTitle": "카드가 거절되었습니다",
-    "paymentDeclinedMessage": "{plan} 이용을 유지하려면 카드를 업데이트하세요"
+    "paymentDeclinedMessage": "{plan}을 다시 이용하려면 카드를 업데이트하세요"
 }

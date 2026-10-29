@@ -4516,5 +4516,5 @@
     "yearlySwitchDoneTitle": "Ara pagues anualment",
     "yearlySwitchDoneBody": "Avui s'han cobrat {amount}. Es renova el {date}.",
     "paymentDeclinedTitle": "La teva targeta ha estat rebutjada",
-    "paymentDeclinedMessage": "Actualitza-la per mantenir {plan}"
+    "paymentDeclinedMessage": "Actualitza-la per recuperar {plan}"
 }

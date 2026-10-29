@@ -14938,6 +14938,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return 'Cập nhật thẻ để tiếp tục dùng $plan';
+    return 'Cập nhật thẻ để dùng lại $plan';
   }
 }

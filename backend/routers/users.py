@@ -1403,8 +1403,10 @@ def _user_subscription_response(
             phone_call_quota=unlimited_phone_quota,
         )
     # First, reconcile any "basic but actually unlimited" inconsistencies against Stripe once.
+    is_mobile = x_app_platform in ('ios', 'android')
     raw_subscription = get_user_subscription(uid)
-    reconcile_basic_plan_with_stripe(uid, raw_subscription)
+    stripe_snapshot = {} if is_mobile else None
+    reconcile_basic_plan_with_stripe(uid, raw_subscription, stripe_snapshot=stripe_snapshot)
 
     # Then re-evaluate using our normal "valid subscription" semantics.
     subscription = get_user_valid_subscription(uid)
@@ -1432,7 +1434,6 @@ def _user_subscription_response(
 
     # Populate dynamic fields for the response
     subscription.limits = get_plan_limits(subscription.plan)
-    is_mobile = x_app_platform in ('ios', 'android')
     subscription.features = get_plan_features(subscription.plan, simplified=is_mobile)
 
     new_plans_enabled = should_show_new_plans(x_app_platform, x_app_version)
@@ -1593,7 +1594,11 @@ def _user_subscription_response(
         chat_quota_reset_at=chat_snapshot['reset_at'],
         phone_call_quota=phone_call_quota,
         desktop_grandfather_until=desktop_grandfather_until,
-        payment_issue=billing_recovery.payment_issue_for(uid, subscription) if show_subscription_ui else None,
+        payment_issue=(
+            billing_recovery.payment_issue_for(uid, subscription, stripe_snapshot)
+            if is_mobile and show_subscription_ui
+            else None
+        ),
     )
 
 

@@ -14948,6 +14948,6 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return '$plan برقرار رکھنے کے لیے اسے اپ ڈیٹ کریں';
+    return '$plan واپس حاصل کرنے کے لیے کارڈ اپ ڈیٹ کریں';
   }
 }

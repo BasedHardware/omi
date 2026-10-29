@@ -15035,6 +15035,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return 'Ενημερώστε την για να κρατήσετε το $plan';
+    return 'Ενημερώστε την κάρτα για να αποκτήσετε ξανά το $plan';
   }
 }

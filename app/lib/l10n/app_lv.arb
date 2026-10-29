@@ -4516,5 +4516,5 @@
     "yearlySwitchDoneTitle": "Tagad jūs maksājat par gadu",
     "yearlySwitchDoneBody": "Šodien iekasēti {amount}. Atjaunojas {date}.",
     "paymentDeclinedTitle": "Jūsu karte tika noraidīta",
-    "paymentDeclinedMessage": "Atjauniniet to, lai saglabātu {plan}"
+    "paymentDeclinedMessage": "Atjauniniet karti, lai atgūtu {plan}"
 }

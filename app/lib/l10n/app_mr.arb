@@ -11942,5 +11942,5 @@
     "yearlySwitchDoneTitle": "तुम्ही आता वार्षिक प्लॅनवर आहात",
     "yearlySwitchDoneBody": "आज {amount} आकारले. नूतनीकरण {date} रोजी.",
     "paymentDeclinedTitle": "तुमचे कार्ड नाकारले गेले",
-    "paymentDeclinedMessage": "{plan} कायम ठेवण्यासाठी ते अपडेट करा"
+    "paymentDeclinedMessage": "{plan} परत मिळवण्यासाठी कार्ड अपडेट करा"
 }

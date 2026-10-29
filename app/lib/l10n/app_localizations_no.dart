@@ -14940,6 +14940,6 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return 'Oppdater det for å beholde $plan';
+    return 'Oppdater kortet for å få $plan tilbake';
   }
 }

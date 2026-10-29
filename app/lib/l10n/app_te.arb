@@ -11942,5 +11942,5 @@
     "yearlySwitchDoneTitle": "మీరు ఇప్పుడు వార్షిక ప్లాన్‌లో ఉన్నారు",
     "yearlySwitchDoneBody": "ఈరోజు {amount} వసూలు చేశాం. పునరుద్ధరణ {date}.",
     "paymentDeclinedTitle": "మీ కార్డ్ తిరస్కరించబడింది",
-    "paymentDeclinedMessage": "{plan} కొనసాగించడానికి దీన్ని అప్‌డేట్ చేయండి"
+    "paymentDeclinedMessage": "{plan} తిరిగి పొందడానికి కార్డును అప్‌డేట్ చేయండి"
 }

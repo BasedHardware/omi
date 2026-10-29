@@ -14973,6 +14973,6 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return 'Kemas kini untuk terus menggunakan $plan';
+    return 'Kemas kini kad untuk mendapatkan semula $plan';
   }
 }

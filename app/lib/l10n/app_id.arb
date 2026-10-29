@@ -4551,5 +4551,5 @@
     "yearlySwitchDoneTitle": "Anda sekarang bayar tahunan",
     "yearlySwitchDoneBody": "{amount} ditagih hari ini. Diperpanjang {date}.",
     "paymentDeclinedTitle": "Kartu Anda ditolak",
-    "paymentDeclinedMessage": "Perbarui agar tetap memakai {plan}"
+    "paymentDeclinedMessage": "Perbarui kartu untuk mendapatkan kembali {plan}"
 }

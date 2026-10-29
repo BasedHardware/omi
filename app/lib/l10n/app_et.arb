@@ -4516,5 +4516,5 @@
     "yearlySwitchDoneTitle": "Maksad nüüd kord aastas",
     "yearlySwitchDoneBody": "Täna võeti {amount}. Uueneb {date}.",
     "paymentDeclinedTitle": "Sinu kaart lükati tagasi",
-    "paymentDeclinedMessage": "Uuenda seda, et {plan} alles jääks"
+    "paymentDeclinedMessage": "Uuenda kaarti, et {plan} tagasi saada"
 }

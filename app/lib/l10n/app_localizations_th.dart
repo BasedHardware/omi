@@ -14863,6 +14863,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return 'อัปเดตบัตรเพื่อใช้ $plan ต่อ';
+    return 'อัปเดตบัตรเพื่อกลับมาใช้ $plan';
   }
 }

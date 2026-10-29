@@ -26286,7 +26286,7 @@ abstract class AppLocalizations {
   /// Home row line under 'Your card was declined'. it = the card; plan = a product name such as Omi Pro
   ///
   /// In en, this message translates to:
-  /// **'Update it to keep {plan}'**
+  /// **'Update it to get {plan} back'**
   String paymentDeclinedMessage(String plan);
 }
 

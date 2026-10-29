@@ -18259,5 +18259,5 @@
             }
         }
     },
-    "paymentDeclinedMessage": "Update it to keep {plan}"
+    "paymentDeclinedMessage": "Update it to get {plan} back"
 }

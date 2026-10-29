@@ -14995,6 +14995,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return 'Frissítse, hogy megtarthassa: $plan';
+    return 'Frissítse a kártyát a(z) $plan visszaállításához';
   }
 }

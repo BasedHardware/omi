@@ -14984,6 +14984,6 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return 'Обновите её, чтобы сохранить $plan';
+    return 'Обновите карту, чтобы вернуть $plan';
   }
 }

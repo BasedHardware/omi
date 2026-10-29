@@ -4551,5 +4551,5 @@
     "yearlySwitchDoneTitle": "Теперь вы платите раз в год",
     "yearlySwitchDoneBody": "Сегодня списано {amount}. Продление {date}.",
     "paymentDeclinedTitle": "Ваша карта отклонена",
-    "paymentDeclinedMessage": "Обновите её, чтобы сохранить {plan}"
+    "paymentDeclinedMessage": "Обновите карту, чтобы вернуть {plan}"
 }

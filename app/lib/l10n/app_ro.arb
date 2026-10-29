@@ -4516,5 +4516,5 @@
     "yearlySwitchDoneTitle": "Acum plătești anual",
     "yearlySwitchDoneBody": "Azi s-au încasat {amount}. Se reînnoiește pe {date}.",
     "paymentDeclinedTitle": "Cardul dvs. a fost refuzat",
-    "paymentDeclinedMessage": "Actualizați-l pentru a păstra {plan}"
+    "paymentDeclinedMessage": "Actualizați cardul pentru a recupera {plan}"
 }

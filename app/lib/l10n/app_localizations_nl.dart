@@ -14975,6 +14975,6 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return 'Werk deze bij om $plan te behouden';
+    return 'Werk je kaart bij om $plan terug te krijgen';
   }
 }

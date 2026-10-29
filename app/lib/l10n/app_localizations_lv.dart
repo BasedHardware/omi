@@ -14970,6 +14970,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return 'Atjauniniet to, lai saglabātu $plan';
+    return 'Atjauniniet karti, lai atgūtu $plan';
   }
 }

@@ -15055,6 +15055,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return 'I-update ito para manatili sa $plan';
+    return 'I-update ang card para maibalik ang $plan';
   }
 }

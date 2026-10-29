@@ -1,14 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/home/widgets/payment_issue_row.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+
+import '../../spine/c7_registry_test.dart' show RecordingAdapter;
 
 UserSubscriptionResponse _response({
   PlanType plan = PlanType.basic,
@@ -31,15 +37,18 @@ const _pastDue = PaymentIssue(status: 'past_due', plan: PlanType.unlimitedV2);
 
 /// The backend answer and the portal are fakes; the row, its opener and the refresh are real.
 class _FakeUsage extends UsageProvider {
-  _FakeUsage(this.backend, {this.portalUrl}) : super(subscriptionRequest: () async => backend.current);
+  _FakeUsage(this.backend, {this.portalUrl, this.portalReady})
+      : super(subscriptionRequest: () async => backend.current);
 
   final _Backend backend;
   final String? portalUrl;
+  final Completer<void>? portalReady;
   int portalOpens = 0;
 
   @override
   Future<Map<String, String>?> openCustomerPortal() async {
     portalOpens++;
+    await portalReady?.future;
     return portalUrl == null ? null : {'url': portalUrl!};
   }
 }
@@ -54,8 +63,9 @@ Future<_FakeUsage> _pump(
   UserSubscriptionResponse response, {
   String? portalUrl,
   double textScale = 1,
+  Completer<void>? portalReady,
 }) async {
-  final usage = _FakeUsage(_Backend(response), portalUrl: portalUrl);
+  final usage = _FakeUsage(_Backend(response), portalUrl: portalUrl, portalReady: portalReady);
   addTearDown(usage.dispose);
   await usage.fetchSubscription();
   await tester.pumpWidget(
@@ -70,10 +80,11 @@ Future<_FakeUsage> _pump(
         ),
         home: Scaffold(
           body: PaymentIssueRow(
-            portalPage: (url) => Scaffold(
+            portalPage: (url, onLoaded) => Scaffold(
               body: Column(
                 children: [
                   Text('portal $url'),
+                  TextButton(onPressed: onLoaded, child: const Text('Finish loading portal')),
                   Builder(
                     builder: (context) =>
                         TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Back to Omi')),
@@ -90,18 +101,36 @@ Future<_FakeUsage> _pump(
 }
 
 void main() {
+  late RecordingAdapter analytics;
   setUp(() async {
+    AnalyticsManager.resetForTesting();
     SharedPreferences.setMockInitialValues({});
+    PackageInfo.setMockInitialValues(
+      appName: 'Omi Test',
+      packageName: 'com.omi.test',
+      version: '1.0.0',
+      buildNumber: '1',
+      buildSignature: '',
+    );
     await SharedPreferencesUtil.init();
     PlatformManager.initializeForLocalHarness();
+    analytics = RecordingAdapter();
+    AnalyticsManager.configure(analytics);
+    await AnalyticsManager.init();
   });
+  tearDown(AnalyticsManager.resetForTesting);
+
+  Future<List<String>> events(WidgetTester tester) async {
+    await tester.runAsync(() => AnalyticsManager.flushPending(force: true));
+    return analytics.events.map((event) => event.$1).toList();
+  }
 
   testWidgets('a past_due renewal shows one row with Update', (tester) async {
     await _pump(tester, _response(issue: _pastDue));
 
     expect(find.byKey(const ValueKey('payment_issue_row')), findsOneWidget);
     expect(find.text('Your card was declined'), findsOneWidget);
-    expect(find.text('Update it to keep Omi Pro'), findsOneWidget);
+    expect(find.text('Update it to get Omi Pro back'), findsOneWidget);
     expect(find.text('Update'), findsOneWidget);
   });
 
@@ -113,7 +142,7 @@ void main() {
     await _pump(tester, _response(issue: _pastDue), portalUrl: 'https://billing.stripe.com/test', textScale: 3.2);
 
     expect(tester.takeException(), isNull);
-    final message = tester.getRect(find.text('Update it to keep Omi Pro'));
+    final message = tester.getRect(find.text('Update it to get Omi Pro back'));
     final update = tester.getRect(find.byKey(const ValueKey('payment_issue_update')));
     expect(update.top, greaterThanOrEqualTo(message.bottom));
     expect(update.right, lessThanOrEqualTo(402));
@@ -127,7 +156,7 @@ void main() {
   testWidgets('a legacy plan names that plan, not Omi Pro', (tester) async {
     await _pump(tester, _response(issue: const PaymentIssue(status: 'unpaid', plan: PlanType.operator)));
 
-    expect(find.text('Update it to keep Operator'), findsOneWidget);
+    expect(find.text('Update it to get Operator back'), findsOneWidget);
   });
 
   for (final (name, response) in [
@@ -141,6 +170,7 @@ void main() {
 
       expect(find.byKey(const ValueKey('payment_issue_row')), findsNothing);
       expect(find.text('Your card was declined'), findsNothing);
+      expect(await events(tester), isEmpty);
     });
   }
 
@@ -178,5 +208,49 @@ void main() {
 
     expect(json['payment_issue'], {'plan': 'unlimited_v2', 'status': 'past_due'});
     expect(UserSubscriptionResponse.fromJson(json).paymentIssue, _pastDue);
+  });
+
+  testWidgets('shown counts a visible issue once across refreshes and again after it reappears', (tester) async {
+    final usage = await _pump(tester, _response(issue: _pastDue));
+    await usage.fetchSubscription();
+    await tester.pump();
+    expect(await events(tester), ['Subscription Payment Issue Shown']);
+
+    usage.backend.current = _response();
+    await usage.fetchSubscription();
+    await tester.pump();
+    usage.backend.current = _response(issue: _pastDue);
+    await usage.fetchSubscription();
+    await tester.pump();
+    expect(await events(tester), ['Subscription Payment Issue Shown', 'Subscription Payment Issue Shown']);
+  });
+
+  testWidgets('tapped counts once and portal opened waits for successful page load', (tester) async {
+    final portalReady = Completer<void>();
+    await _pump(tester, _response(issue: _pastDue),
+        portalUrl: 'https://billing.stripe.com/test', portalReady: portalReady);
+    await tester.tap(find.byKey(const ValueKey('payment_issue_update')));
+    await tester.tap(find.byKey(const ValueKey('payment_issue_update')));
+    portalReady.complete();
+    await tester.pumpAndSettle();
+
+    expect(await events(tester), ['Subscription Payment Issue Shown', 'Subscription Payment Issue Update Tapped']);
+    await tester.tap(find.text('Finish loading portal'));
+    await tester.pump();
+    expect(await events(tester), [
+      'Subscription Payment Issue Shown',
+      'Subscription Payment Issue Update Tapped',
+      'Subscription Payment Issue Portal Opened',
+    ]);
+    expect(analytics.events.every((event) => event.$1.toLowerCase().contains('subscri')), isTrue);
+  });
+
+  testWidgets('a failed portal attempt has no opened event and keeps the visible issue', (tester) async {
+    await _pump(tester, _response(issue: _pastDue));
+    await tester.tap(find.byKey(const ValueKey('payment_issue_update')));
+    await tester.pumpAndSettle();
+
+    expect(await events(tester), ['Subscription Payment Issue Shown', 'Subscription Payment Issue Update Tapped']);
+    expect(find.byKey(const ValueKey('payment_issue_row')), findsOneWidget);
   });
 }

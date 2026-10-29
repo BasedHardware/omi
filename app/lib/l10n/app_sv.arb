@@ -4516,5 +4516,5 @@
     "yearlySwitchDoneTitle": "Du betalar nu årsvis",
     "yearlySwitchDoneBody": "{amount} drogs i dag. Förnyas {date}.",
     "paymentDeclinedTitle": "Ditt kort nekades",
-    "paymentDeclinedMessage": "Uppdatera det för att behålla {plan}"
+    "paymentDeclinedMessage": "Uppdatera kortet för att få tillbaka {plan}"
 }

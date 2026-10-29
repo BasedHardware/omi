@@ -14970,6 +14970,6 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return 'Абнавіце яе, каб захаваць $plan';
+    return 'Абнавіце картку, каб вярнуць $plan';
   }
 }

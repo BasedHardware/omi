@@ -14931,6 +14931,6 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return 'برای حفظ $plan آن را به‌روزرسانی کنید';
+    return 'برای بازگرداندن $plan کارت را به‌روزرسانی کنید';
   }
 }

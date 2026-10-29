@@ -14729,6 +14729,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return '$plan 이용을 유지하려면 카드를 업데이트하세요';
+    return '$plan을 다시 이용하려면 카드를 업데이트하세요';
   }
 }

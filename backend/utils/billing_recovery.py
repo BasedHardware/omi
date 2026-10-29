@@ -5,7 +5,7 @@ The webhook deliberately projects a past_due subscription to Basic
 payer is on Free. This module reads Stripe for that one case and reports a
 PaymentIssue only when the stored subscription is past_due or unpaid, the user
 did not choose to cancel, it is not a trial's first charge, and its latest
-invoice is open with money due. It never writes, never charges and never returns
+renewal invoice is open with money due. It never writes, never charges and never returns
 a payment URL: the client opens a Stripe-hosted page through
 POST /v1/payments/customer-portal.
 """
@@ -56,18 +56,20 @@ def payment_issue_from_stripe(
         return None
     if not invoice or invoice.get('status') != 'open' or not invoice.get('attempted'):
         return None
+    if invoice.get('billing_reason') != 'subscription_cycle':
+        return None
     if (invoice.get('amount_remaining') or 0) <= 0:
         return None
     return PaymentIssue(status=status, plan=plan)
 
 
-def payment_issue_for(uid: str, stored: Optional[Subscription]) -> Optional[PaymentIssue]:
+def payment_issue_for(
+    uid: str, stored: Optional[Subscription], stripe_subscription: Optional[Mapping[str, Any]]
+) -> Optional[PaymentIssue]:
     """The user's payable failed renewal, or None.
 
-    Reads Stripe only for a stored Basic plan that still points at a Stripe
-    subscription: the shape the webhook leaves for a past_due payer. A stored
-    period end cannot distinguish an unpaid renewal from a cancellation;
-    Stripe's current status and latest invoice decide. Any Stripe failure answers None.
+    Reuses reconciliation's subscription snapshot and only reads its invoice for
+    a stored Basic plan. A failed reconciliation lookup never triggers a retry here.
     """
     if not stored or stored.plan != PlanType.basic:
         return None
@@ -75,11 +77,12 @@ def payment_issue_for(uid: str, stored: Optional[Subscription]) -> Optional[Paym
     # Organization grants store a one-time PaymentIntent here, not a subscription.
     if not subscription_id or subscription_id.startswith('pi_'):
         return None
+    if not stripe_subscription or stripe_subscription.get('id') != subscription_id:
+        return None
+    if stripe_subscription.get('status') not in RECOVERABLE_STATUSES:
+        return None
     try:
-        subscription = stripe.Subscription.retrieve(subscription_id).to_dict()  # type: ignore[reportDeprecated]  # stripe public serialization API
-        if subscription.get('status') not in RECOVERABLE_STATUSES:
-            return None
-        invoice_id = subscription.get('latest_invoice')
+        invoice_id = stripe_subscription.get('latest_invoice')
         invoice = (
             stripe.Invoice.retrieve(invoice_id).to_dict()  # type: ignore[reportDeprecated]  # stripe public serialization API
             if isinstance(invoice_id, str) and invoice_id
@@ -96,4 +99,4 @@ def payment_issue_for(uid: str, stored: Optional[Subscription]) -> Optional[Paym
             outcome='degraded',
         )
         return None
-    return payment_issue_from_stripe(uid, subscription, invoice)
+    return payment_issue_from_stripe(uid, stripe_subscription, invoice)

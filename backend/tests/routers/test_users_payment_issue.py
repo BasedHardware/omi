@@ -26,7 +26,14 @@ class _Obj:
         return dict(self._data)
 
 
-def _client(monkeypatch, stripe_status='past_due', hide_subscription_ui=False, period_end=NOW + 29 * 86400):
+def _client(
+    monkeypatch,
+    stripe_status='past_due',
+    hide_subscription_ui=False,
+    period_end=NOW + 29 * 86400,
+    platform='ios',
+    billing_reason='subscription_cycle',
+):
     stored = users_router.Subscription(
         plan=users_router.PlanType.basic,
         status=users_router.SubscriptionStatus.active,
@@ -50,7 +57,15 @@ def _client(monkeypatch, stripe_status='past_due', hide_subscription_ui=False, p
 
     def retrieve_invoice(invoice_id):
         stripe_calls.append(invoice_id)
-        return _Obj({'id': invoice_id, 'status': 'open', 'attempted': True, 'amount_remaining': 2999})
+        return _Obj(
+            {
+                'id': invoice_id,
+                'status': 'open',
+                'attempted': True,
+                'amount_remaining': 2999,
+                'billing_reason': billing_reason,
+            }
+        )
 
     monkeypatch.setattr(billing_recovery.stripe.Subscription, 'retrieve', retrieve_sub)
     monkeypatch.setattr(billing_recovery.stripe.Invoice, 'retrieve', retrieve_invoice)
@@ -58,7 +73,10 @@ def _client(monkeypatch, stripe_status='past_due', hide_subscription_ui=False, p
     monkeypatch.setattr(users_router.users_db, 'get_stripe_customer_id', lambda uid: 'cus_1')
     monkeypatch.setattr(users_router, 'get_user_subscription', lambda uid: stored.model_copy())
     monkeypatch.setattr(users_router, 'get_user_valid_subscription', lambda uid: stored.model_copy())
-    monkeypatch.setattr(users_router, 'reconcile_basic_plan_with_stripe', lambda *args: None)
+    monkeypatch.setattr(
+        users_router, 'reconcile_basic_plan_with_stripe', subscription_module.reconcile_basic_plan_with_stripe
+    )
+    monkeypatch.setattr(subscription_module, 'find_active_paid_subscription_for_user', lambda uid: None)
     monkeypatch.setattr(users_router, 'get_monthly_usage_for_subscription', lambda uid: {'transcription_seconds': 10})
     monkeypatch.setattr(users_router, 'get_paid_plan_definitions', lambda *args, **kwargs: [])
     monkeypatch.setattr(users_router, 'should_hide_subscription_ui', lambda *args: hide_subscription_ui)
@@ -85,7 +103,9 @@ def _client(monkeypatch, stripe_status='past_due', hide_subscription_ui=False, p
         response_model=users_router.UserSubscriptionResponse,
     )
     app.dependency_overrides[users_router.auth.get_current_user_uid_no_byok_validation] = lambda: 'fixture-user'
-    headers = {'X-App-Platform': 'ios', 'X-App-Version': '1.0.600', 'X-Omi-Plan-Identity': '1'}
+    headers = {'X-App-Version': '1.0.600', 'X-Omi-Plan-Identity': '1'}
+    if platform is not None:
+        headers['X-App-Platform'] = platform
     with TestClient(app) as client:
         response = client.get('/v1/users/me/subscription', headers=headers)
     assert response.status_code == 200
@@ -115,8 +135,34 @@ def test_no_payment_issue_unless_stripe_says_past_due_or_unpaid(monkeypatch, str
     assert 'payment_issue' not in body
 
 
-def test_hidden_subscription_ui_never_reports_or_reads_stripe(monkeypatch):
+def test_hidden_subscription_ui_never_reports_or_reads_an_invoice(monkeypatch):
     body, stripe_calls = _client(monkeypatch, hide_subscription_ui=True)
 
     assert 'payment_issue' not in body
-    assert stripe_calls == []
+    assert stripe_calls == ['sub_1']
+
+
+@pytest.mark.parametrize('platform', ['ios', 'android', 'macos', 'windows', 'web', None])
+def test_canceled_former_subscriber_reuses_the_real_reconcile_lookup(monkeypatch, platform):
+    body, stripe_calls = _client(monkeypatch, stripe_status='canceled', platform=platform)
+
+    assert 'payment_issue' not in body
+    assert stripe_calls == ['sub_1']
+
+
+@pytest.mark.parametrize('platform', ['ios', 'android', 'macos', 'windows', 'web', None])
+def test_only_mobile_reads_a_recovery_invoice_without_a_second_subscription_lookup(monkeypatch, platform):
+    body, stripe_calls = _client(monkeypatch, platform=platform)
+
+    if platform in ('ios', 'android'):
+        assert body['payment_issue']['status'] == 'past_due'
+        assert stripe_calls == ['sub_1', 'in_1']
+    else:
+        assert 'payment_issue' not in body
+        assert stripe_calls == ['sub_1']
+
+
+def test_failed_upgrade_does_not_show_a_renewal_recovery_row(monkeypatch):
+    body, _ = _client(monkeypatch, billing_reason='subscription_update')
+
+    assert 'payment_issue' not in body

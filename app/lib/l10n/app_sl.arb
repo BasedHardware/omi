@@ -11942,5 +11942,5 @@
     "yearlySwitchDoneTitle": "Zdaj plačujete letno",
     "yearlySwitchDoneBody": "Danes zaračunano {amount}. Podaljšanje {date}.",
     "paymentDeclinedTitle": "Vaša kartica je bila zavrnjena",
-    "paymentDeclinedMessage": "Posodobite jo, da obdržite {plan}"
+    "paymentDeclinedMessage": "Posodobite kartico, da znova dobite {plan}"
 }

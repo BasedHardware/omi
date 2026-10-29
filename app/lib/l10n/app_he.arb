@@ -11942,5 +11942,5 @@
     "yearlySwitchDoneTitle": "עברת לתשלום שנתי",
     "yearlySwitchDoneBody": "חויבו היום {amount}. מתחדש ב-{date}.",
     "paymentDeclinedTitle": "הכרטיס שלך נדחה",
-    "paymentDeclinedMessage": "עדכן אותו כדי לשמור על {plan}"
+    "paymentDeclinedMessage": "עדכנו את הכרטיס כדי לקבל שוב את {plan}"
 }

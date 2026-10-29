@@ -14958,6 +14958,6 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return 'Atnaujinkite ją, kad išsaugotumėte $plan';
+    return 'Atnaujinkite kortelę, kad vėl naudotumėte $plan';
   }
 }

@@ -14949,6 +14949,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return '$plan planınızı korumak için kartınızı güncelleyin';
+    return '$plan planınızı geri almak için kartınızı güncelleyin';
   }
 }

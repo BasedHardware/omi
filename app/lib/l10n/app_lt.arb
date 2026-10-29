@@ -4516,5 +4516,5 @@
     "yearlySwitchDoneTitle": "Dabar mokate kas metus",
     "yearlySwitchDoneBody": "Šiandien nuskaičiuota {amount}. Atnaujinama {date}.",
     "paymentDeclinedTitle": "Jūsų kortelė atmesta",
-    "paymentDeclinedMessage": "Atnaujinkite ją, kad išsaugotumėte {plan}"
+    "paymentDeclinedMessage": "Atnaujinkite kortelę, kad vėl naudotumėte {plan}"
 }

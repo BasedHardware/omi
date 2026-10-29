@@ -4516,5 +4516,5 @@
     "yearlySwitchDoneTitle": "अब आप सालाना प्लान पर हैं",
     "yearlySwitchDoneBody": "आज {amount} चार्ज किए गए। नवीनीकरण {date} को।",
     "paymentDeclinedTitle": "आपका कार्ड अस्वीकार हो गया",
-    "paymentDeclinedMessage": "{plan} बनाए रखने के लिए इसे अपडेट करें"
+    "paymentDeclinedMessage": "{plan} वापस पाने के लिए कार्ड अपडेट करें"
 }

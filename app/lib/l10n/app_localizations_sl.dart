@@ -14964,6 +14964,6 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return 'Posodobite jo, da obdržite $plan';
+    return 'Posodobite kartico, da znova dobite $plan';
   }
 }

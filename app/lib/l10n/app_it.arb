@@ -4516,5 +4516,5 @@
     "yearlySwitchDoneTitle": "Ora sei sull'annuale",
     "yearlySwitchDoneBody": "Addebitati {amount} oggi. Rinnovo il {date}.",
     "paymentDeclinedTitle": "La tua carta è stata rifiutata",
-    "paymentDeclinedMessage": "Aggiornala per mantenere {plan}"
+    "paymentDeclinedMessage": "Aggiornala per riavere {plan}"
 }

@@ -4551,5 +4551,5 @@
     "yearlySwitchDoneTitle": "Artık yıllık ödüyorsunuz",
     "yearlySwitchDoneBody": "Bugün {amount} tahsil edildi. Yenilenme: {date}.",
     "paymentDeclinedTitle": "Kartınız reddedildi",
-    "paymentDeclinedMessage": "{plan} planınızı korumak için kartınızı güncelleyin"
+    "paymentDeclinedMessage": "{plan} planınızı geri almak için kartınızı güncelleyin"
 }

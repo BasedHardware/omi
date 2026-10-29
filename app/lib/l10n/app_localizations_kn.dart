@@ -14985,6 +14985,6 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return '$plan ಉಳಿಸಿಕೊಳ್ಳಲು ಇದನ್ನು ನವೀಕರಿಸಿ';
+    return '$plan ಮರಳಿ ಪಡೆಯಲು ಕಾರ್ಡ್ ನವೀಕರಿಸಿ';
   }
 }

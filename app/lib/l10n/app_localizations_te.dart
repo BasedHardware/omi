@@ -14999,6 +14999,6 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String paymentDeclinedMessage(String plan) {
-    return '$plan కొనసాగించడానికి దీన్ని అప్‌డేట్ చేయండి';
+    return '$plan తిరిగి పొందడానికి కార్డును అప్‌డేట్ చేయండి';
   }
 }

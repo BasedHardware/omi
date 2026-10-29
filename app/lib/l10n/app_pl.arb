@@ -4551,5 +4551,5 @@
     "yearlySwitchDoneTitle": "Płacisz teraz rocznie",
     "yearlySwitchDoneBody": "Dziś pobrano {amount}. Odnowienie {date}.",
     "paymentDeclinedTitle": "Twoja karta została odrzucona",
-    "paymentDeclinedMessage": "Zaktualizuj ją, aby zachować {plan}"
+    "paymentDeclinedMessage": "Zaktualizuj kartę, aby odzyskać {plan}"
 }

@@ -11942,5 +11942,5 @@
     "yearlySwitchDoneTitle": "আপনি এখন বার্ষিক প্ল্যানে",
     "yearlySwitchDoneBody": "আজ {amount} চার্জ করা হয়েছে। নবায়ন {date}।",
     "paymentDeclinedTitle": "আপনার কার্ড প্রত্যাখ্যাত হয়েছে",
-    "paymentDeclinedMessage": "{plan} রাখতে কার্ডটি আপডেট করুন"
+    "paymentDeclinedMessage": "আবার {plan} পেতে কার্ডটি আপডেট করুন"
 }
