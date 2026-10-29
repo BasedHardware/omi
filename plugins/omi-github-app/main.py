@@ -867,8 +867,27 @@ async def tool_add_comment(request: Request):
 # ============================================
 
 @app.get("/")
-async def root(uid: str = Query(None)):
+async def root(
+    request: Request,
+    uid: str = Query(None),
+    github_settings_token: str = Query(None),
+    github_tools_token: str = Query(None),
+):
     """Root endpoint - Homepage with repo selection (mobile-first UI)."""
+    settings_token = (
+        github_settings_token
+        or github_tools_token
+        or request.query_params.get("github_settings_token")
+        or request.query_params.get("github_tools_token")
+        or ""
+    )
+    if not settings_token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.lower().startswith("bearer "):
+            settings_token = auth_header[7:].strip()
+    safe_settings_token = html.escape(quote(str(settings_token or ""), safe=""), quote=True)
+    token_query = f"&github_settings_token={quote(settings_token, safe='')}" if settings_token else ""
+
     if not uid:
         return {
             "app": "OMI GitHub Issues Integration",
@@ -887,7 +906,7 @@ async def root(uid: str = Query(None)):
     if not user or not user.get("access_token"):
         # Not authenticated - show auth page
         safe_uid = html.escape(quote(str(uid or ""), safe=""), quote=True)
-        auth_url = f"/auth?uid={safe_uid}"
+        auth_url = f"/auth?uid={safe_uid}{token_query}"
         return HTMLResponse(content=f"""
         <html>
             <head>
@@ -1119,6 +1138,23 @@ async def root(uid: str = Query(None)):
             </div>
 
             <script>
+                const urlParams = new URLSearchParams(window.location.search);
+                const settingsToken = urlParams.get('github_settings_token') || urlParams.get('github_tools_token') || '{safe_settings_token}';
+
+                function authHeaders(headers = {{}}) {{
+                    const h = Object.assign({{}}, headers);
+                    if (settingsToken) {{
+                        h['Authorization'] = 'Bearer ' + settingsToken;
+                    }}
+                    return h;
+                }}
+
+                function withSettingsAuth(url) {{
+                    if (!settingsToken) return url;
+                    const sep = url.includes('?') ? '&' : '?';
+                    return url + sep + 'github_settings_token=' + encodeURIComponent(settingsToken);
+                }}
+
                 async function updateRepo() {{
                     const select = document.getElementById('repoSelect');
                     const repo = select.value;
@@ -1129,8 +1165,9 @@ async def root(uid: str = Query(None)):
                     }}
 
                     try {{
-                        const response = await fetch('/update-repo?uid={safe_uid}&repo=' + encodeURIComponent(repo), {{
-                            method: 'POST'
+                        const response = await fetch(withSettingsAuth('/update-repo?uid={safe_uid}&repo=' + encodeURIComponent(repo)), {{
+                            method: 'POST',
+                            headers: authHeaders()
                         }});
 
                         const data = await response.json();
@@ -1149,15 +1186,16 @@ async def root(uid: str = Query(None)):
                     if (!confirm('Refresh your repository list from GitHub?')) return;
 
                     try {{
-                        const response = await fetch('/refresh-repos?uid={safe_uid}', {{
-                            method: 'POST'
+                        const response = await fetch(withSettingsAuth('/refresh-repos?uid={safe_uid}'), {{
+                            method: 'POST',
+                            headers: authHeaders()
                         }});
 
                         const data = await response.json();
 
                         if (data.success) {{
                             alert('Repositories refreshed! Reloading page...');
-                            window.location.reload();
+                            window.location.href = withSettingsAuth('/?uid={safe_uid}');
                         }} else {{
                             alert('Failed to refresh: ' + data.error);
                         }}
@@ -1176,8 +1214,9 @@ async def root(uid: str = Query(None)):
                     }}
 
                     try {{
-                        const response = await fetch('/check-repo-access?uid={safe_uid}&repo=' + encodeURIComponent(repo), {{
-                            method: 'POST'
+                        const response = await fetch(withSettingsAuth('/check-repo-access?uid={safe_uid}&repo=' + encodeURIComponent(repo)), {{
+                            method: 'POST',
+                            headers: authHeaders()
                         }});
                         const data = await response.json();
 
@@ -1210,8 +1249,9 @@ async def root(uid: str = Query(None)):
                 async function saveAgentProvider() {{
                     const provider = getSelectedProvider();
                     try {{
-                        const response = await fetch('/save-agent-provider?uid={safe_uid}&provider=' + encodeURIComponent(provider), {{
-                            method: 'POST'
+                        const response = await fetch(withSettingsAuth('/save-agent-provider?uid={safe_uid}&provider=' + encodeURIComponent(provider)), {{
+                            method: 'POST',
+                            headers: authHeaders()
                         }});
                         const data = await response.json();
 
@@ -1236,8 +1276,9 @@ async def root(uid: str = Query(None)):
                     }}
 
                     try {{
-                        await fetch('/save-agent-key?uid={safe_uid}&provider=' + encodeURIComponent(provider) + '&key=' + encodeURIComponent(apiKey), {{
-                            method: 'POST'
+                        await fetch(withSettingsAuth('/save-agent-key?uid={safe_uid}&provider=' + encodeURIComponent(provider) + '&key=' + encodeURIComponent(apiKey)), {{
+                            method: 'POST',
+                            headers: authHeaders()
                         }});
 
                         alert('API key saved successfully!');
@@ -1251,8 +1292,9 @@ async def root(uid: str = Query(None)):
                     if (!confirm('Remove the API key for this provider?')) return;
 
                     try {{
-                        await fetch('/delete-agent-key?uid={safe_uid}&provider=' + encodeURIComponent(provider), {{
-                            method: 'POST'
+                        await fetch(withSettingsAuth('/delete-agent-key?uid={safe_uid}&provider=' + encodeURIComponent(provider)), {{
+                            method: 'POST',
+                            headers: authHeaders()
                         }});
 
                         document.getElementById('agentKey').value = '';
@@ -1277,17 +1319,18 @@ async def root(uid: str = Query(None)):
                     }}
 
                     try {{
-                        const response = await fetch('/test-agent', {{
+                        const response = await fetch(withSettingsAuth('/test-agent'), {{
                             method: 'POST',
-                            headers: {{
+                            headers: authHeaders({{
                                 'Content-Type': 'application/json'
-                            }},
+                            }}),
                             body: JSON.stringify({{
                                 uid: '{safe_uid}',
                                 prompt,
                                 provider,
                                 repo,
-                                all: sendAll
+                                all: sendAll,
+                                github_settings_token: settingsToken
                             }})
                         }});
                         const data = await response.json();
@@ -1327,14 +1370,19 @@ async def root(uid: str = Query(None)):
 
 
 @app.get("/auth")
-async def auth_start(uid: str = Query(..., description="User ID from OMI")):
+async def auth_start(
+    uid: str = Query(..., description="User ID from OMI"),
+    github_settings_token: str = Query(None),
+    github_tools_token: str = Query(None),
+):
     """Start OAuth flow for GitHub authentication."""
     redirect_uri = os.getenv("OAUTH_REDIRECT_URL", "http://localhost:8000/auth/callback")
 
     try:
         # Generate state parameter for CSRF protection
         state = secrets.token_urlsafe(32)
-        oauth_states[state] = uid
+        settings_token = github_settings_token or github_tools_token or ""
+        oauth_states[state] = {"uid": uid, "token": settings_token}
 
         # Get authorization URL
         auth_url = github_client.get_authorization_url(redirect_uri, state)
@@ -1375,8 +1423,8 @@ async def auth_callback(
         )
 
     # Verify state and get uid
-    uid = oauth_states.get(state)
-    if not uid:
+    state_payload = oauth_states.get(state)
+    if not state_payload:
         return HTMLResponse(
             content=f"""
             <html>
@@ -1396,6 +1444,14 @@ async def auth_callback(
             """,
             status_code=400
         )
+
+    if isinstance(state_payload, dict):
+        uid = state_payload.get("uid")
+        settings_token = state_payload.get("token") or ""
+    else:
+        uid = state_payload
+        settings_token = ""
+    token_suffix = f"&github_settings_token={quote(settings_token, safe='')}" if settings_token else ""
 
     try:
         # Exchange code for access token
@@ -1448,7 +1504,7 @@ async def auth_callback(
                             </p>
                         </div>
 
-                        <a href="/?uid={safe_uid}" class="btn btn-primary btn-block" style="font-size: 17px; padding: 16px; margin-top: 24px;">
+                        <a href="/?uid={safe_uid}{token_suffix}" class="btn btn-primary btn-block" style="font-size: 17px; padding: 16px; margin-top: 24px;">
                             Continue to Settings
                         </a>
 
@@ -1484,7 +1540,7 @@ async def auth_callback(
                         <div class="error-box" style="margin-top: 40px; padding: 40px 24px;">
                             <h2 style="font-size: 24px; margin-bottom: 12px;">Authentication Error</h2>
                             <p style="margin-bottom: 16px;">Failed to complete authentication. Please try again.</p>
-                            <a href="/auth?uid={safe_uid}" class="btn btn-primary">Try again</a>
+                            <a href="/auth?uid={safe_uid}{token_suffix}" class="btn btn-primary">Try again</a>
                         </div>
                     </div>
                 </body>

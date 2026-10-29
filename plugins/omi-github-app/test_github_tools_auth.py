@@ -242,6 +242,19 @@ class TestGitHubToolsRouteWiring(unittest.TestCase):
         main_source = (APP_DIR / "main.py").read_text(encoding="utf-8")
         self.assertNotIn("require_github_tools_auth = lambda", main_source)
 
+    def test_settings_page_sends_token_on_all_settings_fetch_calls(self):
+        """Assert all 7 settings fetch calls use withSettingsAuth and authHeaders."""
+        main_source = (APP_DIR / "main.py").read_text(encoding="utf-8")
+        self.assertIn("withSettingsAuth('/update-repo", main_source)
+        self.assertIn("withSettingsAuth('/refresh-repos", main_source)
+        self.assertIn("withSettingsAuth('/check-repo-access", main_source)
+        self.assertIn("withSettingsAuth('/save-agent-provider", main_source)
+        self.assertIn("withSettingsAuth('/save-agent-key", main_source)
+        self.assertIn("withSettingsAuth('/delete-agent-key", main_source)
+        self.assertIn("withSettingsAuth('/test-agent')", main_source)
+        self.assertIn("function withSettingsAuth(url)", main_source)
+        self.assertIn("function authHeaders(headers", main_source)
+
 
 if __name__ == "__main__":
     unittest.main()
