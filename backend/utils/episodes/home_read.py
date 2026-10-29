@@ -4,6 +4,13 @@ from database import conversations
 from utils.episodes import service
 
 
+def wire_episode(episode: dict | None) -> dict | None:
+    """Additive read fields, without changing the shared lifecycle service's wire helper."""
+    if episode is None:
+        return None
+    return {**service.to_wire(episode), 'emoji': episode.get('emoji') or '', 'members': []}
+
+
 def project_episode(uid: str, episode: dict | None) -> dict | None:
     if episode is None:
         return None
@@ -46,7 +53,7 @@ def project_episode(uid: str, episode: dict | None) -> dict | None:
     if not members:
         return None
     ids = {member['id'] for member in members}
-    wire = service.to_wire(episode)
+    wire = wire_episode(episode)
     wire.update(
         emoji=episode.get('emoji') or '',
         members=members,

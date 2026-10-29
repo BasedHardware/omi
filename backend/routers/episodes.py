@@ -85,13 +85,13 @@ def get_live_episode(
     episode = service.live_episode(uid)
     response = {
         'enabled': True,
-        'episode': service.to_wire(episode),
+        'episode': home_read.wire_episode(episode),
     }
     # Without a live episode this response is the recovery-navigation answer, so the
     # recap is read fresh; alongside a live episode it comes from the poll cache.
     closed = service.last_closed_episode(uid, fresh=episode is None)
     if closed is not None:
-        response['last_closed_episode'] = service.to_wire(closed)
+        response['last_closed_episode'] = home_read.wire_episode(closed)
     return response
 
 
@@ -141,7 +141,7 @@ def wrap_up_episode(
     episode = service.wrap_up(uid, episode_id, conversation_id=body.conversation_id if body else None)
     if episode is None:
         raise HTTPException(status_code=404, detail='Episode not found')
-    return service.to_wire(episode)
+    return home_read.wire_episode(episode)
 
 
 @router.post('/v1/episodes/{episode_id}/items/{item_id}/dismiss', response_model=Episode)
@@ -155,4 +155,4 @@ def dismiss_episode_item(
     episode = service.dismiss_item(uid, episode_id, item_id)
     if episode is None:
         raise HTTPException(status_code=404, detail='Episode not found')
-    return service.to_wire(episode)
+    return home_read.wire_episode(episode)

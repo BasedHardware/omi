@@ -912,8 +912,6 @@ def test_reads_close_idle_episodes_lazily_and_wire_projection_hides_internals():
         'sources',
         'state_updated_at',
         'timer_started_at',
-        'emoji',
-        'members',
     }
     assert Episode.model_validate(wire).provisional_items[0].text == 'Book lunch table'
     idle = _collaborators(model, now=T0 + timedelta(hours=2), store=store)
