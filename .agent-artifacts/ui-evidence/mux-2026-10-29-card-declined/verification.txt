@@ -1,46 +1,35 @@
-Proposal 4: verified on an iPhone 17 Pro simulator with the real Flutter app and backend.
-BEFORE: main 92bff3c2d5d121d0a02c5ce8932bb73f159ebb62 (current when this run began).
-AFTER: app/backend cf7dd7655d41c66e2d08d96e5a7e31d5b75a94d4, including main e0cc9e1309 and expired-period fix 35ce0e45e3.
-Build receipt: final-build-receipt.json, Flutter 3.44.5, simulator debug local_dev. Only local build configuration was dirty; both tracked iOS configuration files were restored and excluded from commits.
-Environment: loopback backend, Auth/Firestore emulators, offline Stripe stub, synthetic month-2 Omi Pro subscriber. No real payment or live flag change.
+Round 1, source 4e7904d217f77309af5e37dec83522a2581b8838; dev/local_dev iPhone 17 Pro simulator, iOS 26.2.
+Backend: 578 passed. App: 16 passed. Changed Dart sources/tests: static analysis clean.
+All 51 selected repository checks passed across initial/resumed runs and the pinned-SDK l10n rerun.
+l10n: 49 locales, 4350 keys; generated output current under Flutter 3.44.5.
 
-Check | Main | Proposal
-Past_due, open attempted invoice | Basic; no recovery row | One recovery row above Today
-Expired stored period | no recovery UI | Server still reads current Stripe status; row shown
-Update + return unpaid, twice | no Update | Portal route opens; row remains after each return
-Third Update + paid fixture + return | unavailable | First app refresh restores Pro and removes the declined row
-Relaunch after paying | unavailable | Declined row stays absent
-Money calls during the three-visit run | unavailable | Exactly 3 portal sessions; 0 charge/subscription-change calls
-Portal 503 + retry | unavailable | Error feedback; row remains; retry loads the portal
-Dark / largest text | no recovery row | Recovery row and Update readable and within viewport
-German / Japanese / Arabic | unavailable | Localized copy; Arabic right-to-left placement
-Portal content | unavailable | Native web view reports loading=false/error=false; offline portal text visible
+Observed user path:
+- Light Home: Your card was declined / Update it to get Omi Pro back; one Update pill above Today.
+- Open attempted subscription_update invoice, $255.27: backend returns payment_issue=None; real Home row absent.
+- Restore subscription_cycle invoice: row returns.
+- Update and unpaid return, twice: native portal HTML loaded and row stays both times.
+- Third Update: native portal loads; inject paid only through offline fixture; app return refresh restores unlimited_v2 and removes payment_issue.
+- Relaunch: backend remains unlimited_v2 with no payment_issue and row stays absent.
+- All three portal visits had the native page's onLoaded callback reported; no payment outcome event is claimed.
+- All non-GET Stripe stub paths were enumerated: only offline fixture controls and 3 existing customer-portal session POSTs; zero charge/subscription-change calls.
 
-73 focused/related tests passed, files run separately: backend decision 37, HTTP route 6, row 10, shared OmiButton 5, model/provider 15. Row tests reran after merging main. The expired-period tests failed before removing the incorrect time gate. The largest-text test failed before responsive stacking was added.
-Localization: 49 locales, 4350 keys; scripts/l10n.py check passed after main merge. PR metadata: five contracts passed. CI results are tracked on PR #23953; this report makes no claim about pending CI.
+Image inspection:
+- before/light/01-home.png: original main 92bff3c2d5, no recovery row, retained baseline.
+- after/light/01-home-row.png: accurate copy, red dot, semibold title, black Update pill.
+- after/light/02-failed-upgrade-hidden.png: conversation-list view after failed-upgrade exclusion; header collapsed. Kept as diagnostic, omitted from PR gallery; backend assertion is in checks.txt.
+- after/light/03-portal.png: actual native web view, visible Billing portal (offline stub), no spinner.
+- after/light/04-home-row-after-unpaid-visit.png: accurate copy still present.
+- after/light/05-home-after-paid.png: recovery absent, existing main yearly offer visible.
+- after/light/06-home-relaunch.png: conversation-list view, recovery absent, backend still Pro.
+- after/light/07-locale-de.png: translated get-back copy fits; existing small bottom/input overflow outside this row remains.
+- after/light/08-locale-ja.png: Japanese copy wraps naturally and Update remains reachable.
+- after/light/09-locale-ar.png: Arabic RTL and LTR product name fit; Update on the left.
+- after/dark/01-home-row.png: dark surfaces and white Update pill, accurate secondary copy readable.
+- after/xxxl/01-home-row.png: recovery headline/message/button fit and stack; existing surrounding Home/Tasks header, conversation and input overflows remain, as on main.
+- demo.mp4: 20.48 seconds, unmodified continuous native recording. Frames 0,5,10,15,20 and final inspected; start has recovery, middle has loaded portal, final has Pro restored and recovery absent.
+- before-after.png: unmodified native before/after screenshots placed side by side, inspected.
 
-Image inspection (all final PNGs opened):
-before/light/01-home.png: Home/Tasks, Today and conversations; no recovery row.
-before/dark/01-home.png: Dark Home without recovery row.
-before/xxxl/01-home.png: Main already overflows its header, conversation metadata and chat input at maximum text size.
-after/light/01-home-row.png: White row, red dot, full declined-card copy and black Update pill above Today.
-after/light/02-portal.png: Final loaded portal proof, copied from the dedicated demo after a first capture showed a spinner. Shows Manage Payment Method and Billing portal (offline stub).
-after/light/03-home-row-after-unpaid-visit.png: Returning without paying retains the row.
-after/light/04-home-after-paid.png: Declined-card row absent; main's existing yearly-switch offer is visible.
-after/light/05-home-relaunch.png: Declined-card row still absent after relaunch; existing yearly offer visible.
-after/light/06-locale-de.png: German copy and button fit. Existing small bottom Home/input overflow remains outside this row.
-after/light/07-locale-ja.png: Japanese title, message and Update fit.
-after/light/08-locale-ar.png: Arabic right-to-left copy, red dot on right, Update on left.
-after/dark/01-home-row.png: Dark recovery row with white Update pill, readable copy.
-after/xxxl/01-home-row.png: Full recovery copy and Update fit at largest text. Existing surrounding Home overflows remain.
-after/error/01-home-row.png: Recovery row before portal-failure injection.
-after/error/02-portal-error-row-stays.png: Error feedback and recovery row both visible.
-after/demo/01-home-row.png: English declined-card row at the start of the final demo.
-after/demo/02-portal.png: Loaded offline billing portal, verified after the native page-loading state completed.
-after/demo/03-home-after-paid.png: Home without the declined-card row after paid fixture and app refresh.
-before-after.png: Real main and proposal captures side by side; the recovery row is the intended visible change.
+Tooling: shared lane sim.2 and public resource guard throughout. After one Auth-emulator timeout, local pipeline commit 9e70478 added opt-in bounded MUX_FIREBASE_HEALTH_TIMEOUT (1..300s); this run used 180s. Default deadlines, resource limits and lane ports are unchanged. No private pipeline copy or foreground app/browser control used this round.
+Original capture-script cleanup error was corrected; attempt1-light is retained as diagnostics. Final light, dark and maximum-text runs all exited 0.
 
-Existing main limitation: maximum text overflows Home/Tasks, conversation rows and the chat input; German also has a small bottom/input overflow. The added recovery row fits. Surrounding UI is outside this proposal.
-UNVERIFIED: real Stripe card entry/payment/retry/webhook timing; physical iPhone; Android runtime; production behavior and churn impact. No real payment attempted. Draft PR only, not merged or deployed.
-
-Video inspection: native prefix 0-8s preserves the full flow; frames inspected at 0, 2.25, 3.25, 3.75 and 5s. Portal HTML is visible around 3.25s; paid Home appears around 3.75s. Removed only the idle paid-Home tail. Raw capture retained at after/demo/demo.mp4. Final MP4 is 8s; GIF is below 8MB.
+UNVERIFIED: real Stripe portal/card entry/payment retry/webhooks; physical iPhone; Android; production impact. Draft only. No merge, release, rollout, live flag or live Stripe/Firestore writes.

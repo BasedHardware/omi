@@ -1,53 +1,38 @@
-# Money-safety review: proposal #4 (card declined row on Home)
+# Money-safety review: proposal #4, review round 1
 
-Branch `mux/2026-10-29-card-declined` (worktree ~/projects/omi-mux-p4-card-declined), merged with origin/main e0cc9e1309; reviewed and exercised on cf7dd7655d (includes backend fix 35ce0e45e3).
-Verdict: **no charge path.** The new recovery path never charges, retries, cancels or changes a subscription. It reads one new
-optional field and opens the existing Stripe-hosted billing portal; card details and payment happen only on Stripe's page.
+Reviewed source: 4e7904d217f77309af5e37dec83522a2581b8838.
 
-## What the backend does (read-only)
-`backend/utils/billing_recovery.py` (new), called once from `_user_subscription_response` (`routers/users.py`):
-- Runs only when the stored plan is Basic, the stored row still points at a Stripe subscription (`sub_`, never an
-  org-grant `pi_`), and subscription UI is shown (`show_subscription_ui`).
-  An expired stored period can still have an open failed renewal; Stripe status decides whether it is recoverable.
-- Stripe calls: `Subscription.retrieve(stored id)` and, only for past_due/unpaid, `Invoice.retrieve(latest_invoice)`.
-  No `modify`, `pay`, `cancel`, `create`, checkout or schedule call anywhere in the diff
-  (`git diff origin/main...HEAD -- backend | grep -E "\.(modify|pay|cancel|create|delete)\("` = nothing).
-- Reports `payment_issue {status, plan}` only if ALL hold: status past_due or unpaid; no `cancel_at_period_end` /
-  `cancel_at` (chose to cancel); `collection_method` charge_automatically (not an emailed invoice); `metadata.uid`
-  matches when present; price resolves to a paid Omi plan in the catalog; not a trial's first charge
-  (`trial_end` set and period start <= trial_end); latest invoice `open`, `attempted`, `amount_remaining > 0`.
-- Any Stripe error: no field (fail-open to "no row"), `record_fallback(other, stripe_payment_issue -> none)`, log
-  carries the error type only.
-- No payment URL in the response; nothing stored. Entitlement unchanged: past_due still projects to Basic
-  (`utils/subscription_state_machine.py` untouched); `payment.py` untouched.
+Verdict: **no charge path**. The recovery row only opens the existing customer billing portal. This revision excludes failed plan-change invoices and makes the copy accurate for a user already on Free. No live state was changed.
 
-## What the app does
-- `PaymentIssueRow` (Home, above Today) renders only when `showSubscriptionUI` and `paymentIssue != null`.
-- Update -> `UsageProvider.openCustomerPortal()` -> existing `POST /v1/payments/customer-portal` (unchanged; same
-  call Plans & Billing uses) -> `PaymentWebViewPage` (Stripe-hosted portal) -> on return `fetchSubscription()`.
-- Double tap: `OmiButton` ignores taps while its future runs; `openCustomerPortal` also returns early while a payment
-  call is loading. A portal that cannot open shows "Could not open payment settings. Please try again." and the row stays.
-- Copy states a fact the backend verified ("Your card was declined"); no price, no discount, no new offer.
+## Eligibility and Stripe reads
 
-## Compatibility (contracts/client-compat)
-- Old app + new backend: `payment_issue` is optional and omitted when absent (serializer pop), so every unaffected
-  body is byte-identical; affected bodies add one key that released decoders ignore.
-  `check_app_client_openapi_compatibility.py --base-ref origin/main`: passed.
-- New app + old backend: no field -> no row. Nothing else changes.
+- Only iOS/Android with visible billing UI can receive `payment_issue`.
+- The stored Basic row must reference the same Stripe subscription as the snapshot already retrieved by `reconcile_basic_plan_with_stripe`. No recovery Subscription.retrieve call remains. Missing/failed/foreign snapshots produce no row and no retry.
+- Stripe status must be past_due/unpaid, with no chosen cancellation, automatic collection, a matching uid when metadata contains one, and a paid Omi catalog price. A trial's first charge stays excluded.
+- The latest invoice must be open, attempted, have money remaining, and have `billing_reason == subscription_cycle`. Failed upgrades (`subscription_update`), new subscriptions, manual invoices and missing reasons are excluded.
+- Recovery adds only Invoice.retrieve for past_due/unpaid mobile readers. Canceled former subscribers have no extra recovery call. Reconciliation's existing entitlement repair and fallback customer search are unchanged.
+- Stripe invoice failure suppresses the row and records the existing fallback without logging provider payloads.
 
-## Edge cases checked in tests
-backend `tests/unit/test_billing_recovery.py` (37) + `tests/routers/test_users_payment_issue.py` (6): past_due and
-unpaid report; active/trialing/canceled/incomplete/incomplete_expired/paused do not; cancel_at_period_end, cancel_at,
-send_invoice, other uid, unknown price, no items do not; trial first charge does not, renewal after a converted trial
-does; invoice none/paid/draft/not attempted/zero remaining/void/uncollectible do not; non-basic, no sub id and `pi_` grants cost no Stripe call; expired stored periods still report past_due/unpaid open renewals, while canceled subscriptions do not; Stripe failure -> no field + fallback; hidden subscription UI -> no field, no call;
-entitlement stays `basic` in the HTTP body.
-app `test/pages/home/payment_issue_row_test.dart` (10): row for past_due; legacy plan named; no row for active,
-no issue, hidden UI; Update opens the portal and the row leaves after the invoice is paid; portal failure keeps the row. The largest-text regression failed on the original row and passes with the Update action stacked below the copy. The shared OmiButton supports an opt-in pill shape; its 5 existing behavior tests pass.
+## Portal and copy
 
-## Simulator proof (offline Stripe stub, local backend)
-Verified again on cf7dd7655d with an expired stored billing period: three Update visits created exactly 3 portal sessions and 0 charge or subscription-change calls. Two unpaid returns keep the row. A paid invoice fixture removes it on the first app refresh, and it remains absent after relaunch. A 503 portal error keeps the row and shows an error; retry opens it. Proof: runs/2026-10-29/p4/after/light/{checks.txt,stripe-requests.jsonl}, after/error/{checks.txt,stripe-requests.jsonl}, and result.txt. The dedicated demo waits for the payment web view to finish loading and shows its offline portal content. Main PR #23764 may show its existing yearly-switch row after the failed invoice is paid; this proposal does not introduce that row. The app never calls invoice pay or changes the Stripe subscription; paid state is injected only through the offline fixture control.
+- Home says “Your card was declined” / “Update it to get Omi Pro back”. Legacy renewals name their actual plan. Every locale was updated through scripts/l10n.py.
+- Update calls UsageProvider.openCustomerPortal -> existing POST /v1/payments/customer-portal -> native PaymentWebViewPage. Return refreshes the subscription. There is no new pay, retry, cancel, subscription change, Checkout, price, coupon or schedule write.
+- OmiButton blocks a second tap while the portal request is pending. A failed request shows existing feedback and retains the row.
+- Updating a card or paying on Stripe's page can settle an existing renewal under the user's existing subscription. No payment action is performed by this new app/backend path.
+- Three typed events use Subscription wire names to match the `subscri` ingestion keep rule: Payment Issue Shown, Update Tapped and Portal Opened. Shown deduplicates unchanged refreshes; Portal Opened requires a successfully finished web-page load and is not a payment outcome. The events contain no billing identifiers, portal URLs, card data or invoice amounts.
 
-## Not verified
-- Real Stripe portal UI for a past_due customer (the stub serves a placeholder page). Stripe documents that the
-  portal lets customers update payment methods and pay open invoices; Smart Retries also retry after a new card.
-- A user with more than one Stripe customer: the portal opens for the stored `stripe_customer_id` (existing behavior).
+## Regression evidence
+
+- Backend decision: 44 passed. subscription_update/subscription_create/manual/missing billing-reason cases failed before the fix and pass after it.
+- Real users router + real reconciliation: 19 passed, with Stripe call counting across iOS, Android, macOS, Windows, web and missing platform. The 12 duplicate/platform regressions failed before the fix and now pass. Canceled readers make exactly the one existing Subscription.retrieve; only mobile past_due reads the invoice. Hidden billing UI adds no invoice call.
+- Related backend: 515 passed (plans 69, lapsed-paid heal 6, users router 327, BYOK security 43, subscription caches 70).
+- Home row: 13 passed, covering the accurate copy, largest text, legacy plan, shown deduplication, pending double tap, loaded-portal timing, paid refresh and failure.
+- Native web view: 3 passed; a successful page reports loaded once, about:blank and resource/HTTP error pages do not.
+- Native iPhone simulator proof on the committed source: failed-upgrade invoice is hidden; three portal visits load successfully; two unpaid returns keep the row; paid fixture plus app refresh restores Pro and removes it, including after relaunch. Light, dark, largest text and German/Japanese/Arabic copy were viewed. The unmodified 20.48-second MP4 ends with recovery absent.
+- All non-GET stub requests were audited: 7 offline fixture controls and 3 existing billing-portal session POSTs during the full light path; zero charge or subscription-change calls. Dark and largest-text runs created no portal sessions. Evidence: p4/round1/after/*/{checks.txt,stripe-requests.jsonl}, money-requests.json and result.txt. No real card entry or payment was attempted.
+
+## Unverified and outside this proposal
+
+- Real Stripe portal/card entry, payment retries and webhook timing; physical iPhone and Android runtime; actual recovered churn.
+- The independent review found an existing old-subscription retry risk across multiple subscriptions. This revision excludes failed upgrade invoices from the row; it does not change the existing checkout transition, retry policy or entitlement projection.
+- Draft only. No merge, release, rollout, feature flag, live Stripe or Firestore mutation.

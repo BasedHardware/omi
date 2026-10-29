@@ -4,84 +4,77 @@
     {
       "file": "001-mobile-ios-home-before.png",
       "platform": "mobile-ios",
-      "description": "Main: same past_due month-2 payer, Home has no payment recovery row",
+      "description": "Main: the same failed-renewal scenario has no recovery row",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
       "file": "002-mobile-ios-home-card-declined.png",
       "platform": "mobile-ios",
-      "description": "Past_due payer: approved Home row above Today with Update",
+      "description": "Failed renewal: accurate get Omi Pro back copy above Today",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
       "file": "003-mobile-ios-home-card-declined-dark.png",
       "platform": "mobile-ios",
-      "description": "The payment recovery row in dark mode",
+      "description": "Accurate recovery copy in dark mode",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
       "file": "004-mobile-ios-home-card-declined-xxxl.png",
       "platform": "mobile-ios",
-      "description": "The row at the largest accessibility text size",
+      "description": "Recovery row and Update fit at the largest accessibility text size",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
       "file": "005-mobile-ios-billing-portal-stub.png",
       "platform": "mobile-ios",
-      "description": "Update opens the existing payment web view and offline billing portal",
+      "description": "The real native payment web view loaded the offline portal and reported its loaded callback",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
       "file": "006-mobile-ios-home-invoice-paid.png",
       "platform": "mobile-ios",
-      "description": "Paid invoice removes the declined-card row; the yearly offer shown here already belongs to main PR 23764",
+      "description": "Paid fixture: the app refresh restores Pro and removes recovery; the yearly offer is inherited from main",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
       "file": "007-mobile-ios-home-card-declined-de.png",
       "platform": "mobile-ios",
-      "description": "German localized payment recovery row",
+      "description": "Accurate recovery copy in German",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
       "file": "008-mobile-ios-home-card-declined-ja.png",
       "platform": "mobile-ios",
-      "description": "Japanese localized payment recovery row",
+      "description": "Accurate recovery copy in Japanese",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
       "file": "009-mobile-ios-home-card-declined-ar.png",
       "platform": "mobile-ios",
-      "description": "Arabic right-to-left payment recovery row",
-      "captured_by": "agent",
-      "source": "screencapture"
-    },
-    {
-      "file": "010-mobile-ios-home-portal-unavailable.png",
-      "platform": "mobile-ios",
-      "description": "Portal error shows feedback and retains the recovery row",
+      "description": "Accurate recovery copy in Arabic RTL",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
       "file": "011-mobile-ios-home-before-after.png",
       "platform": "mobile-ios",
-      "description": "Same seeded payer on main and this branch, before and after",
+      "description": "Main and revised failed-renewal Home row",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
       "file": "012-mobile-ios-home-before-xxxl.png",
       "platform": "mobile-ios",
-      "description": "Main at largest text: existing header, conversation and chat input overflows are outside this proposal",
+      "description": "Main at largest text: pre-existing surrounding Home overflows",
       "captured_by": "agent",
       "source": "screencapture"
     }
