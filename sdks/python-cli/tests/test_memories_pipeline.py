@@ -100,6 +100,39 @@ class TestMemoriesPipeline(unittest.TestCase):
             self.assertEqual(len(res), 1)
             self.assertEqual(res[0]["id"], "mem-1111")
 
+    def test_privacy_and_category_filters_apply_after_deduplication(self):
+        older_public = {
+            "id": "mem-1111",
+            "content": "Was public in page 1",
+            "category": "work",
+            "visibility": "public",
+            "created_at": "2026-09-20T10:00:00Z",
+            "updated_at": "2026-09-20T10:00:00Z",
+        }
+        newer_private = {
+            "id": "mem-1111",
+            "content": "Marked private in page 2",
+            "category": "personal",
+            "visibility": "private",
+            "created_at": "2026-09-20T10:00:00Z",
+            "updated_at": "2026-09-21T10:00:00Z",
+        }
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            p1 = Path(tmp_dir) / "page1.json"
+            p2 = Path(tmp_dir) / "page2.json"
+            p1.write_text(json.dumps([older_public]), encoding="utf-8")
+            p2.write_text(json.dumps([newer_private]), encoding="utf-8")
+
+            # Newer private state must not leak the stale public snapshot in either page order
+            self.assertEqual(mp.load_and_deduplicate([str(p1), str(p2)], include_private=False), [])
+            self.assertEqual(mp.load_and_deduplicate([str(p2), str(p1)], include_private=False), [])
+
+            # Category filter must evaluate the latest category ('personal'), not stale 'work'
+            self.assertEqual(mp.load_and_deduplicate([str(p1), str(p2)], categories={"work"}), [])
+            res_personal = mp.load_and_deduplicate([str(p1), str(p2)], categories={"personal"})
+            self.assertEqual(len(res_personal), 1)
+            self.assertEqual(res_personal[0]["content"], "Marked private in page 2")
+
     def test_jsonl_raw_format(self):
         jsonl = mp.format_as_jsonl([self.mem_1, self.mem_2], schema_mode="raw")
         lines = [json.loads(line) for line in jsonl.strip().split("\n")]

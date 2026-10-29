@@ -81,7 +81,9 @@ def unwrap_memories_data(raw_data: Any, source_name: str = "input") -> List[Dict
     memories: List[Dict[str, Any]] = []
     for idx, item in enumerate(raw_data):
         if not isinstance(item, dict):
-            raise ValueError(f"{source_name}: memory item at index {idx} must be a JSON object, got {type(item).__name__}")
+            raise ValueError(
+                f"{source_name}: memory item at index {idx} must be a JSON object, got {type(item).__name__}"
+            )
         memories.append(item)
 
     return memories
@@ -120,31 +122,34 @@ def load_and_deduplicate(
                 # Use content hash if ID is missing
                 mem_id = f"anon-{hash(json.dumps(item, sort_keys=True))}"
 
-            # Category filtering
-            item_cat = str(item.get("category") or "").strip().lower()
-            if categories and item_cat not in categories:
-                continue
-
-            # Privacy filtering
-            vis = str(item.get("visibility") or "").strip().lower()
-            if not include_private and vis == "private":
-                continue
-
             if mem_id in dedup_map:
                 # Retain the newest record by updated_at or created_at
                 existing = dedup_map[mem_id]
                 new_dt = parse_utc_timestamp(item.get("updated_at") or item.get("created_at"))
                 old_dt = parse_utc_timestamp(existing.get("updated_at") or existing.get("created_at"))
                 if new_dt and old_dt:
-                    if new_dt > old_dt:
+                    if new_dt >= old_dt:
                         dedup_map[mem_id] = item
-                else:
+                elif not old_dt:
                     dedup_map[mem_id] = item
             else:
                 dedup_map[mem_id] = item
                 ordered_ids.append(mem_id)
 
-    return [dedup_map[m_id] for m_id in ordered_ids]
+    results: List[Dict[str, Any]] = []
+    for m_id in ordered_ids:
+        item = dedup_map[m_id]
+        # Category filtering on the deduplicated state
+        item_cat = str(item.get("category") or "").strip().lower()
+        if categories and item_cat not in categories:
+            continue
+        # Privacy filtering on the deduplicated state
+        vis = str(item.get("visibility") or "").strip().lower()
+        if not include_private and vis == "private":
+            continue
+        results.append(item)
+
+    return results
 
 
 def format_as_jsonl(memories: Iterable[Dict[str, Any]], schema_mode: str = "raw") -> str:
@@ -277,9 +282,7 @@ def run_pipeline(
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     """CLI entrypoint."""
-    parser = argparse.ArgumentParser(
-        description="Batch processing pipeline for Omi memories exports to JSONL and CSV."
-    )
+    parser = argparse.ArgumentParser(description="Batch processing pipeline for Omi memories exports to JSONL and CSV.")
     parser.add_argument(
         "inputs",
         nargs="*",
