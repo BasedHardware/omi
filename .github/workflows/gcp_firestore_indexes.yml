@@ -157,10 +157,14 @@ jobs:
           service_account: omi-ci-index-check@based-hardware.iam.gserviceaccount.com
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
+      # vars.RUNTIME_GCP_PROJECT_ID is environment-scoped (prod/development
+      # only; not defined at repository level), and this job deliberately
+      # binds no environment -- so the prod project id is pinned literally.
+      # The PR check is prod-only by design.
       - name: Plan additive PR indexes read-only (no writes)
         run: |
           python3 backend/scripts/reconcile_firestore_indexes.py \
-            --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
+            --project "based-hardware" \
             --manifest "$RUNNER_TEMP/pr-indexes.json" \
             --add-only-base "$RUNNER_TEMP/base-indexes.json" \
             --dry-run
