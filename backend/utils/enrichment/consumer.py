@@ -114,7 +114,12 @@ class EnrichmentConsumer:
             else None
         )
         if context is not None:
-            context.update(sync_hold=bool(row.get('sync_hold')), first_pending_at=row['first_pending_at'])
+            context.update(
+                sync_hold=bool(row.get('sync_hold')),
+                merge_hold=bool(row.get('merge_hold')),
+                sync_hold_requested=bool(row.get('sync_hold_requested')),
+                first_pending_at=row['first_pending_at'],
+            )
         summary_seen = superseded = empty_blocked = False
         retry_revision = None
         lost = threading.Event()

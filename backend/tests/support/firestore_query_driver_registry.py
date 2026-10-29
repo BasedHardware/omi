@@ -143,6 +143,7 @@ _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
     'database.batch_pipeline_store.FirestoreStore.ready_for_capacity': '975eabd92f43ba5da3d847439f4d8e3592525ccd31c11dcac6463365535eac10',
+    'database.batch_pipeline_projection_release.release_page': '9f5875cb08b271ad83fd1da1785bef66074919d494ae1a73590f2e02baa64edf',
     'database.monthly_usage_totals._rebuild': '2c9be83589399a6824fbb2ef7376cd7baf8492e8a780671e31b67a8294b40db0',
     'database.batch_pipeline_shadow.ShadowStore._busy': '3be03e458c8e65c535fed1475cbfae9c97421970c89dc751e2f4eaa4a46a4467',
     'database.batch_pipeline_shadow.ShadowStore.reap': 'e5ea33125389c09c8ad556fab4a6319142f223e4dfa655095dcd89c64e976a8d',
@@ -190,7 +191,7 @@ BODY_DIGEST = {
     # refresh a document read, while post-commit bridge logging adds no query.
     # Encoded-size preflight and the size backstop add no serving query; the
     # discarded-barrier scan is still covered by the same two driven callees.
-    'database.smart_merge.absorb_conversation': 'fdf7e55e3f9795791e5abcf02752dcbe2c9d04d978ae22921cf5d35434fc6b23',
+    'database.smart_merge.absorb_conversation': '447f59e9acea150e7fa53a927c7d1f6bf983c13a44723781d254d5d39392d7c5',
     'database.client_telemetry.recent_owner_ids': '65fe8200d7ad9418b793ccb0fa53a172b2576a80bba644caa3b36cdb53b74510',
     'database.client_telemetry_ops.purge_expired_observations': '8526c30b11ad8548356a136220232a607937bc464628c0eb5326e0a2e928897f',
     # Open-loop store: whole-subcollection stream by document id, filtered in Python.

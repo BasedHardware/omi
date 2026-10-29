@@ -285,6 +285,7 @@ def mark(
     effects_only: bool = False,
     snapshot_summary: bool = False,
     sync_hold: bool = False,
+    merge_hold: bool = False,
 ) -> None:
     """Record one enrichment obligation.
 
@@ -308,6 +309,7 @@ def mark(
         snapshot_summary=snapshot_summary,
         stamps=stamps,
         sync_hold=sync_hold,
+        merge_hold=merge_hold,
     )
     document_id = key(uid, conversation_id + ('\0effects' if effects_only else ''))
     row, coalesced = (mutate or _mutate)(document_id, update)
@@ -335,6 +337,7 @@ def mark_update(
     snapshot_summary: bool = False,
     stamps: list[tuple[str, str]] | None = None,
     sync_hold: bool = False,
+    merge_hold: bool = False,
 ) -> Callable[[Row | None], tuple[Row, tuple[Row, bool]]]:
     """The CAS operation behind ``mark`` and ``Outbox.enqueue``: one obligation per key, coalesced.
 
@@ -401,8 +404,17 @@ def mark_update(
             ceiling = 3540 if demand_enabled else 3600
             row['due_at'] = min(row['due_at'], row['first_pending_at'] + ceiling)
 
-        if sync_hold:
+        if old and not old.get('dormant') and old.get('sync_hold') and not old.get('merge_hold'):
+            row['sync_hold_requested'] = True
+        if old and old.get('dormant'):
+            row.pop('merge_hold', None)
+            row.pop('sync_hold_requested', None)
+        if sync_hold or merge_hold:
             row['sync_hold'] = True
+            if sync_hold and not merge_hold:
+                row['sync_hold_requested'] = True
+            if merge_hold:
+                row['merge_hold'] = True
             row['due_at'] = min(
                 max(row.get('due_at') or 0, current + processing_hold.QUIET_SECONDS),
                 row['first_pending_at'] + processing_hold.MAX_HOLD_SECONDS,
@@ -523,7 +535,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
             return old, ('busy', None)
         row = dict(old)
         stamp_claim_policy(row, cache, stamps)
-        if row.get('sync_hold') and not processing_hold.enabled():
+        if row.get('sync_hold') and not processing_hold.enabled_for(row):
             row['due_at'] = current
         if row['due_at'] > current and (not effects_may_run_early(row) or not enabled(row['uid'])):
             row.update(task_token=uuid.uuid4().hex, task_due_at=row['due_at'])
@@ -576,7 +588,12 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
             else None
         )
         if process_context is not None:
-            process_context.update(sync_hold=bool(row.get('sync_hold')), first_pending_at=row['first_pending_at'])
+            process_context.update(
+                sync_hold=bool(row.get('sync_hold')),
+                merge_hold=bool(row.get('merge_hold')),
+                sync_hold_requested=bool(row.get('sync_hold_requested')),
+                first_pending_at=row['first_pending_at'],
+            )
         process_token = summary_delivery.PROCESS_CONTEXT.set(process_context)
         accept_token = summary_delivery.ACCEPT_CONTEXT.set(row.get('first_pending_at'))
         context_token = summary_delivery.REPAIR_CONTEXT.set(row if row.get('summary_repair') else None)
@@ -783,7 +800,7 @@ def sweep(
     injected = wake is not None
     # One range/order field uses the automatic single-field index.
     previous, start = enrichment_scan.begin(client, COLLECTION) if cursor else (None, None)
-    rollback = not processing_hold.enabled()
+    rollback = not processing_hold.enabled() or not processing_hold.merge_before_processing_enabled()
     query = (
         client.collection(COLLECTION)
         .where('due_at', '<=', current + processing_hold.MAX_HOLD_SECONDS if rollback else current)
@@ -819,7 +836,9 @@ def sweep(
                 return old, ('skipped', None)
             row = dict(old)
             release_hold = (
-                rollback and row.get('sync_hold') and (row['due_at'] > current or row.get('task_due_at', 0) > current)
+                not processing_hold.enabled_for(row)
+                and row.get('sync_hold')
+                and (row['due_at'] > current or row.get('task_due_at', 0) > current)
             )
             if row['due_at'] > current and not release_hold:
                 return old, ('skipped', None)

@@ -1,5 +1,144 @@
 # Real-upload batch shadow
 
+## 2026-10-29 projection planning and proposed 25% window
+
+The worker's successful result now makes one private OIDC
+`/v2/batch-pipeline/shadow-project` call on the existing recovery CPU role.
+The transcript exists only in the HTTPS body and request memory. There is no
+task queue, application retry, transcript artifact or result document. The
+intake reserves at most 200 shadow attempts per UTC hour across replicas in
+the existing `_shadow_spend` TTL collection using disjoint `projection-<hour>`
+keys, before copying/decoding/staging or GPU compute. Quota-denied offers are
+dropped, not artificial speech loss. The CPU endpoint consumes that unit's
+reservation once, with a fresh normal privacy check; already admitted work
+keeps its permission across hour rollover. Lost replies consume the attempt.
+At most three plans execute per CPU process. Admission and execution hours can
+differ; the admission cap is not a hard execution-time dollar ceiling.
+
+Planning uses the real VAD result partitioner, incoming-conversation builder
+and `assign_in_transaction` body. Its reference adapter can read only the
+bound owner's supported document collections, at most 16 reads with one-second
+RPC timeouts and a two-second read/part boundary budget. Planned sets/updates
+are counted and discarded. No SDK reference, client, writer or commit is
+available to the assignment body. Commit/delete attempts fail. The adapter
+clears cached transcript reads when the request ends; no planned payload is
+retained. Normal projection still refuses all shadow jobs before side effects.
+
+This covers result geometry and assignment planning against bounded real
+snapshots. It does not cover the whole owner-chain walk, transactional
+contention, durable projection, claims, enrichment or publication. Multi-part
+plans each see the same real snapshot, without simulating prior discarded
+parts. Replay remains required for owner-chain ordering and structural gates.
+A planner error is an observation; it cannot fall through to normal serving.
+Worker errors and paid recovery retain their existing isolated outcome path.
+
+The RPC client allows at most 8 MiB and 50,000 words, a 4 KiB receipt and a
+five-second transport timeout. A transport timeout is not a server cancellation
+or a hard CPU-time limit. The call currently runs in the worker's result sink,
+so up to that timeout adds to a non-preemptible shadow flight; measure ordinary
+queue latency and shadow GPU wall time before expanding. No additional GPU
+nodes or autoscaler capacity are requested.
+
+Lead-only proposed change, after deploying compatible CPU and worker images:
+
+```text
+BATCH_PIPELINE_SHADOW_PERCENT=25
+BATCH_PIPELINE_SHADOW_LANGUAGE_ONLY=false
+BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR=0
+```
+
+Apply the same shadow settings to all four intake/recovery Cloud Run roles and
+the batch workers. Keep serving batch admission at its separately approved
+percentage and keep the existing three L4 workers/node cap unchanged. The
+shadow cohort is 25% of eligible non-serving owners, not 25% guaranteed audio.
+Busy/late offers still drop. Roll back with `BATCH_PIPELINE_SHADOW_PERCENT=0`
+on those same roles. Already running CUDA/RPC work drains; normal cleanup and
+privacy erasure stay active. This proposal does not authorize a production flip.
+
+For a 30-minute first window, use existing isolated staging qualification,
+zero customer-data writes/publication tests, then bind metrics to exact running
+image/config identity. Measure
+`omi_batch_shadow_projection_total{status}`, `_cpu_seconds_total`,
+`_wall_seconds_total`, `_reads_total` and `_payload_bytes_total` alongside
+normal queue latency, shadow outcome/speech/GPU counters and node count.
+No identifiers are metric labels. Fresh hard-three and errclass/replay entry
+checks remain owned by the batch rollout owner; shadow does not prove them.
+
+Lead41be4b requires T2 qualification from at least3,600 measured shadow speech
+seconds while serving remains0%. The read-only collector
+`backend/scripts/rollout/batch_shadow_t2.py` uses masked numeric/state fields
+from the shadow control table, complete bounded pagination and one server
+readTime across settled and overdue reads. It emits aggregate counts only,
+never owner/job IDs, audio or transcript. Dropped offers do not enter the
+denominator. Recovered speech requires a machine-written `projection_status=planned`
+receipt; an old inference-only outcome cannot qualify projection. Unknown VAD,
+malformed receipts or unfinished attempts older than
+15 minutes make T2UNKNOWN; a page/read failure makes the sample BLIND.
+Speech lost to the cap0 paid-recovery refusal remains loss, never clean.
+
+After actual25% activation, run every two minutes with a new output directory
+and that activation's timestamp, under ro-prod:
+
+```bash
+python3 -I backend/scripts/rollout/batch_shadow_t2.py \
+  --source-observer "$SERVING_OBSERVER_OUT/watch-latest.json" \
+  --since "$ACTUAL_SHADOW_START" --out "$SHADOW_ENTRY_OBSERVER_OUT"
+```
+
+This composes **serving T1/T4 plus shadow T2** explicitly; it does not claim
+shadow custody/language or full owner-chain qualification. Any known serving
+T2 harm remains hard. Both source clocks must be fresh; the earlier readTime
+bounds continuity. Lead44cf37 confirms that the30m clock is actual serving
+T1/T4 continuity with no serving T2 harm. The collector reconstructs it from
+`watch-samples.jsonl`; a supplied timestamp or current row cannot fill history.
+Shadow T2 needs its complete measured census, without an additional30m wait
+after reaching the speech floor. Use the combined `watch-latest.json` for the single entry packet;
+retain exact CPU/worker artifact/config identity
+as separate provenance. There are no pins/markers or production writes in the
+collector. It must never write into the serving observer's output directory.
+
+### Conditional list-price budget, checked 2026-10-29
+
+Read-only infrastructure inspection found the existing recovery role in
+`us-central1` with 2 vCPU, 2 GiB and concurrency 40. At 200 accepted plans/hour,
+assuming five billed wall seconds per plan, charging the entire instance with
+no concurrency sharing gives **$0.05308/hour** (about $0.02654/30 minutes), using
+$0.000024/vCPU-second, $0.0000025/GiB-second and $0.40/million requests.
+These are [Cloud Run list prices](https://cloud.google.com/run/pricing), before
+free tier/discounts. This is a sizing scenario, not a hard dollar ceiling:
+startup, failed/denied requests, transaction retries and work past a client
+timeout add cost. Use the measured wall counter and actual billing allocation
+to replace this assumption before expansion.
+
+At most 3,200 planner document reads/hour add about $0.00096/hour at the
+regional [Firestore read price](https://cloud.google.com/firestore/pricing)
+of $0.03/100,000. Privacy/reservation reads and two metadata writes per accepted
+plan are additional, as are transaction retries and denied attempts.
+No customer transcript is stored. The extra budget documents expire after two
+days under the already declared shadow-spend TTL policy; confirm that policy
+is installed before activation.
+
+Shadow duplicates encrypted mono 16 kHz/16-bit staging audio, approximately
+0.1073 GiB per shadow audio-hour. Cleanup is due after one hour, with normal
+cleanup delay/custody rules; it is not a hard one-hour storage cap. For an
+illustrative 100 eligible audio-hours and uniform cohort/no drops, 25 shadow
+hours add 2.682 GiB-hours if removed after one hour: about **$0.000074–0.000096**
+at $0.020–$0.026/GiB-month, plus object operations, metadata and transfer.
+These [Cloud Storage list prices](https://cloud.google.com/storage/pricing)
+bracket regional US versus US multi-region Standard; bucket metadata was
+unavailable to the read-only tier (403), so verify actual location/class and
+cleanup lag before the flip. One regional PUT plus GET per staged unit is
+about $0.0000054/unit at listed Standard flat-namespace operation prices;
+other operations and cross-region transfer are additional.
+
+Incremental GPU node-hours are zero only while the existing fixed three-node
+fleet stays fixed. Paid STT calls must be zero under the proposed recovery cap;
+the existing providers' production traffic is unrelated baseline spend.
+No vendor usage data was read for this proposal and no total-spend claim is
+made. Existing staging VAD/decode CPU, object churn and ordinary traffic
+contention must be measured in the first window, so the estimate above is
+explicitly a projection/storage scenario rather than an all-in bill.
+
 Shadow is shipped off. `BATCH_PIPELINE_SHADOW_PERCENT=0` is the kill switch;
 `BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR=200` caps the combined number of
 Modulate and Deepgram unit calls per UTC hour, fleet-wide. Invalid values deny

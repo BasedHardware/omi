@@ -11925,5 +11925,20 @@
     "activityAttentionSyncStalledTitle": "Omi не сінхранізуецца",
     "activityAttentionSyncStalledSubtitle": "Запісы не сінхранізаваліся больш за {hours} гадзін",
     "dailyRecapsOnHome": "Штодзённыя рэзюмэ на галоўнай",
-    "dailyRecapsOnHomeDescription": "Паказваць апошнія рэзюмэ ўверсе галоўнай."
+    "dailyRecapsOnHomeDescription": "Паказваць апошнія рэзюмэ ўверсе галоўнай.",
+    "yearlySwitchTitle": "Перайсці на гадавы",
+    "yearlySwitchRowSavings": "Зэканомце {amount} за год",
+    "yearlySwitchHomeTitle": "Зэканомце {amount} за год з гадавой аплатай",
+    "yearlySwitchHomeSubtitle": "Той жа план, аплата раз на год",
+    "yearlySwitchPlanLabel": "План",
+    "yearlySwitchPlanValue": "{plan}, {price} за год",
+    "yearlySwitchDueToday": "Да аплаты сёння",
+    "yearlySwitchRenews": "Падаўжэнне",
+    "yearlySwitchCreditNote": "Уключае крэдыт за астатак гэтага месяца.",
+    "yearlySwitchDeclined": "Аплата адхілена. Вы застаяцеся на штомесячнай аплаце.",
+    "yearlySwitchFailed": "Не ўдалося перайсці. Вы застаяцеся на штомесячнай аплаце.",
+    "yearlySwitchPreviewFailed": "Не ўдалося загрузіць цану.",
+    "yearlySwitchUnavailable": "Гадавая аплата зараз недаступная для вашага плана.",
+    "yearlySwitchDoneTitle": "Цяпер у вас гадавая аплата",
+    "yearlySwitchDoneBody": "Сёння спісана {amount}. Падаўжэнне {date}."
 }
