@@ -49,7 +49,12 @@ class _Backend {
   UserSubscriptionResponse current;
 }
 
-Future<_FakeUsage> _pump(WidgetTester tester, UserSubscriptionResponse response, {String? portalUrl}) async {
+Future<_FakeUsage> _pump(
+  WidgetTester tester,
+  UserSubscriptionResponse response, {
+  String? portalUrl,
+  double textScale = 1,
+}) async {
   final usage = _FakeUsage(_Backend(response), portalUrl: portalUrl);
   addTearDown(usage.dispose);
   await usage.fetchSubscription();
@@ -59,6 +64,10 @@ Future<_FakeUsage> _pump(WidgetTester tester, UserSubscriptionResponse response,
       child: MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: const [Locale('en')],
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child!,
+        ),
         home: Scaffold(
           body: PaymentIssueRow(
             portalPage: (url) => Scaffold(
@@ -94,6 +103,25 @@ void main() {
     expect(find.text('Your card was declined'), findsOneWidget);
     expect(find.text('Update it to keep Omi Pro'), findsOneWidget);
     expect(find.text('Update'), findsOneWidget);
+  });
+
+  testWidgets('largest text keeps the copy readable and Update reachable on iPhone', (tester) async {
+    tester.view.physicalSize = const Size(402, 874);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await _pump(tester, _response(issue: _pastDue), portalUrl: 'https://billing.stripe.com/test', textScale: 3.2);
+
+    expect(tester.takeException(), isNull);
+    final message = tester.getRect(find.text('Update it to keep Omi Pro'));
+    final update = tester.getRect(find.byKey(const ValueKey('payment_issue_update')));
+    expect(update.top, greaterThanOrEqualTo(message.bottom));
+    expect(update.right, lessThanOrEqualTo(402));
+    expect(update.bottom, lessThanOrEqualTo(874));
+
+    await tester.tap(find.byKey(const ValueKey('payment_issue_update')));
+    await tester.pumpAndSettle();
+    expect(find.text('portal https://billing.stripe.com/test'), findsOneWidget);
   });
 
   testWidgets('a legacy plan names that plan, not Omi Pro', (tester) async {

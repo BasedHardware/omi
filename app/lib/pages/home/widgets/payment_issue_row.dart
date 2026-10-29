@@ -29,6 +29,39 @@ class PaymentIssueRow extends StatelessWidget {
     if (issue == null) return const SizedBox.shrink();
     final l10n = context.l10n;
     final plans = context.read<UsageProvider>().subscription?.availablePlans ?? const <SubscriptionPlan>[];
+    final headlineSize = OmiType.headline.fontSize!;
+    final stackAction = MediaQuery.textScalerOf(context).scale(headlineSize) > headlineSize * 1.3;
+    final message = Row(
+      children: [
+        ExcludeSemantics(
+          child: SizedBox.square(
+            dimension: 10,
+            child: DecoratedBox(decoration: BoxDecoration(color: OmiColors.danger, shape: BoxShape.circle)),
+          ),
+        ),
+        const SizedBox(width: OmiSpacing.sm),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(l10n.paymentDeclinedTitle, style: OmiType.headline),
+              Text(
+                l10n.paymentDeclinedMessage(planDisplayName(issue.plan, plans, l10n)),
+                style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+    final update = OmiButton(
+      key: const ValueKey('payment_issue_update'),
+      label: l10n.update,
+      size: OmiButtonSize.compact,
+      pill: true,
+      onPressed: () => openPaymentIssuePortal(context, portalPage: portalPage),
+    );
     return Padding(
       padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, 0),
       child: MergeSemantics(
@@ -37,38 +70,13 @@ class PaymentIssueRow extends StatelessWidget {
           decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.sm, OmiSpacing.sm),
-            child: Row(
-              children: [
-                ExcludeSemantics(
-                  child: SizedBox.square(
-                    dimension: 10,
-                    child: DecoratedBox(decoration: BoxDecoration(color: OmiColors.danger, shape: BoxShape.circle)),
-                  ),
-                ),
-                const SizedBox(width: OmiSpacing.sm),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            child: stackAction
+                ? Column(
                     mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(l10n.paymentDeclinedTitle, style: OmiType.headline),
-                      Text(
-                        l10n.paymentDeclinedMessage(planDisplayName(issue.plan, plans, l10n)),
-                        style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: OmiSpacing.sm),
-                OmiButton(
-                  key: const ValueKey('payment_issue_update'),
-                  label: l10n.update,
-                  size: OmiButtonSize.compact,
-                  pill: true,
-                  onPressed: () => openPaymentIssuePortal(context, portalPage: portalPage),
-                ),
-              ],
-            ),
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [message, const SizedBox(height: OmiSpacing.sm), update],
+                  )
+                : Row(children: [Expanded(child: message), const SizedBox(width: OmiSpacing.sm), update]),
           ),
         ),
       ),
