@@ -61,6 +61,8 @@ POISON_PAYLOAD_KINDS = frozenset(
         'payload:no-words',
         'payload:vad-spans-missing',
         'payload:source-manifest',
+        'payload:corrupt-artifact',
+        'payload:non-object-result',
     }
 )
 
@@ -95,6 +97,12 @@ def poison_payload(kind: str, head: str):
             return {**SUCCESS_PAYLOAD, 'words': []}
         if kind == 'payload:vad-spans-missing':
             return {key: value for key, value in SUCCESS_PAYLOAD.items() if key != 'speech_spans'}
+        if kind == 'payload:corrupt-artifact':
+            # The real ArtifactStore seam: envelope/size/reference violations.
+            raise ValueError('invalid batch artifact envelope')
+        if kind == 'payload:non-object-result':
+            # load_result is json.loads: a valid non-object body.
+            return ['not', 'an', 'object']
         return dict(SUCCESS_PAYLOAD)
 
     return load

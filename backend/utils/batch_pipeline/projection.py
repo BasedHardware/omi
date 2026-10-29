@@ -797,11 +797,16 @@ class Projector:
         from utils.batch_pipeline.context import ResolvedContext, resolve_context, require_repair_manifest
         from utils.batch_pipeline.projection_parts import split_result
 
-        with projection_phase('load_result', policy):
-            payload = self._payload(item, entry, hint)
-        if payload.get('recovery_version') == 1 and entry.get('recovery_version') != 1:
-            raise ProjectionBlocked('recovery result requires recovery handoff')
         try:
+            with projection_phase('load_result', policy):
+                payload = self._payload(item, entry, hint)
+            if not isinstance(payload, dict):
+                # load_result is json.loads over the committed artifact: a
+                # valid non-object body must take the contract disposition,
+                # not an AttributeError that wedges the chain head.
+                raise ValueError('batch result must be a JSON object')
+            if payload.get('recovery_version') == 1 and entry.get('recovery_version') != 1:
+                raise ProjectionBlocked('recovery result requires recovery handoff')
             speech = payload.get('speech_seconds')
             if (
                 not isinstance(speech, (int, float))
