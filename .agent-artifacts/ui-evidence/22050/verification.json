@@ -12,8 +12,8 @@
     "desktop/macos/Desktop/Sources/Rewind/Core/MemoryStorage.swift": "d3e9a5b72d93f6377d04e0c89dec44b07fd4acf6c1c95ef840276999b6fde870",
     "desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Memories.swift": "876a52a332156b3b51ead7640dc765960d442bab23a1e8aff668a8ab7a6eb874",
     "desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Settings.swift": "9199de7af732f89321c98977a7cc56b706967718c5d99d63febad5423316e99a",
-    "desktop/windows/src/main/ipc/assistantSettings.ts": "b3d0528cc9f3e817c7668a1642c5788deb6837da6dbc67a1a9e5859ce0b74794",
-    "desktop/windows/src/main/ipc/pimono.ts": "bf74dc01d0c0d4ecab615ac8fd0fe6b401d36c84078be2c66a1415c685680a4a",
+    "desktop/windows/src/main/ipc/assistantSettings.ts": "dc4cca07c8b5cd27bc73ea4e34653dc3d8e276a428fd01ad442f0d63c3ccac4d",
+    "desktop/windows/src/main/ipc/pimono.ts": "1d78460d56141680a349772e4e86f37012b986c759010ef0e82a4782e4a77c41",
     "desktop/windows/src/preload/index.ts": "68d1a6a4d385a5eecb42c47d15bfdc131bee62abf33b3a662228ed922527296a",
     "desktop/windows/src/renderer/src/components/memories/MemoryDetailSheet.tsx": "a1123cfaa65f6fc8d0c8592114a7ba9225240a2fcb1261da620380b4e7b12171",
     "desktop/windows/src/renderer/src/components/settings/tabs/GeneralTab.tsx": "72ed23c5603588aae379130b2946dbcd9cab0e5cdbfbd11860ae601af7f74bff",
@@ -25,7 +25,8 @@
     "desktop/windows/src/renderer/src/lib/authSessionScope.ts": "23056ad9646c63977250aae7b90d79ee33853598c9892935b842914587f169f6",
     "desktop/windows/src/renderer/src/lib/memoriesBulk.ts": "e7162c916b676060d60dde7a1d12b60488ab496c90cfa0f08ea163ab5ac94860",
     "desktop/windows/src/renderer/src/pages/Memories.tsx": "22650212bf6e59f4bd69f70e01c179706a7bdd29d288dd790442f93beb63283c",
-    "desktop/windows/src/shared/types.ts": "5f8a278e5227e463046fdd9a8b938029accbaf8e650032b7d76d9a44d5d50c8e"
+    "desktop/windows/src/shared/types.ts": "5f8a278e5227e463046fdd9a8b938029accbaf8e650032b7d76d9a44d5d50c8e",
+    "desktop/windows/src/main/ipc/assistantSettingsOwner.ts": "dae5ae0eed37a4c80ba0413a512cbf721800deb9773c33af4dcd89b45293104f"
   },
   "macos": {
     "bundle": "com.omi.omi-profile-20956",
@@ -63,7 +64,7 @@
       "skipped": 33,
       "source_revision": "80c5418c7cca7a9f187047db5415b4387a3b6395"
     },
-    "focused_tests": 120,
+    "focused_tests": 155,
     "functional": {
       "passed": 1,
       "transport": "real HTTP loopback fixture and unchanged built assets on one origin; production CSP/webSecurity enabled",
@@ -91,15 +92,17 @@
     "independent account-isolation approval"
   ],
   "validation_main_revision": "92bff3c2d5d121d0a02c5ce8932bb73f159ebb62",
-  "evidence_reuse": "Mac production and all other Electron production files retain the tested hashes. Three Electron callsite compatibility refinements from the contributor were rebuilt and reverified with 120 focused tests, typecheck/lint and a built-app HTTP + real settings IPC journey. The full 5567-test suite from 80c5418c7c covers unchanged modules; exact-head required CI remains separate.",
+  "evidence_reuse": "Mac production and all other Electron production files retain their tested hashes. The contributor legacy-call refinements and Electron-free owner-state extraction were rebuilt and reverified with 155 focused tests, typecheck/lint and a built-app HTTP + real settings IPC journey. The full 5567-test suite from 80c5418c7c covers unchanged modules; exact-head required CI remains separate.",
   "contributor_integration": {
-    "commit": "368b3a6a783e96215067ec843ac2d726462aa10f",
-    "review": "18 of 25 incoming paths byte-identical to the earlier contribution; seven rebased/main integrations reviewed",
+    "commit": "c7cdf57d575079031b1802287cab32fb8a3b6227",
+    "review": "Reviewed refreshed c7cdf57d57 against 368b3a6a78: seven paths differ, containing the Electron-free owner-state extraction and its import rewiring. Retained the pure state module with verified-session-only production admission; raw auth-store/audio owner rebinding remains removed.",
     "retained_refinements": [
       "omit absent owner argument in preload IPC",
       "keep exact legacy untagged General settings calls",
-      "keep exact legacy untagged Notification settings calls"
+      "keep exact legacy untagged Notification settings calls",
+      "Electron-free assistant settings owner-state module"
     ],
-    "histories_preserved": true
+    "histories_preserved": true,
+    "prior_commit": "368b3a6a783e96215067ec843ac2d726462aa10f"
   }
 }

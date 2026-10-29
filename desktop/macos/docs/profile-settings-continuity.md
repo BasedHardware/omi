@@ -84,3 +84,5 @@ account-wide Electron settings sync or key portability.
 These workflows do not implement atomic task recurrence, reminder delivery,
 automatic task execution, additional account-sync fields or secret-key
 portability. Those remain separate stages of issue #20956.
+
+The contributor’s Electron-free `assistantSettingsOwner` module is retained. Only the signature-verified session relay binds production settings ownership; raw auth-store and audio-start paths do not. The combined extraction passes 155 affected tests, a fresh build/typecheck/lint, and the real IPC plus memory failure/retry/offline-restart replay.

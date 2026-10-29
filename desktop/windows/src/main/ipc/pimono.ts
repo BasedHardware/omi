@@ -11,7 +11,7 @@ import { ipcMain } from 'electron'
 import { configurePiMonoSession, getPiMonoSession } from '../codingAgent/piMonoSession'
 import { ensurePiMonoAdapterRegistered, setControlPlaneOwner } from '../agentKernel/controlPlane'
 import { verifyFirebaseIdToken } from '../auth/firebaseIdToken'
-import { setAssistantSettingsOwner } from './assistantSettings'
+import { setAssistantSettingsOwner } from './assistantSettingsOwner'
 
 /** Registers the `pimono:*` IPC handlers backing the session store. */
 export function registerPiMonoHandlers(): void {
