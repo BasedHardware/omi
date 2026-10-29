@@ -175,15 +175,29 @@ class CallbackExceptionEscapingTest(unittest.TestCase):
         def bad_post(*args, **kwargs):
             raise RuntimeError("<script>alert('error_xss')</script>")
 
-        old_post = MAIN.requests.post
-        MAIN.requests.post = bad_post
+        # Try to patch httpx.AsyncClient if available (for async version), fallback to requests.post
+        try:
+            old_post = MAIN.httpx.AsyncClient.post
+
+            async def bad_post_async(*args, **kwargs):
+                raise RuntimeError("<script>alert('error_xss')</script>")
+
+            MAIN.httpx.AsyncClient.post = bad_post_async
+            is_async = True
+        except AttributeError:
+            old_post = MAIN.requests.post
+            MAIN.requests.post = bad_post
+            is_async = False
         try:
             MAIN.get_oauth_state = lambda uid: "valid_uid:secret"
             body = _body(MAIN.google_callback(code="auth_code", state="valid_uid:secret", error=None))
             self.assertNotIn("<script>alert('error_xss')</script>", body)
             self.assertIn(html.escape("<script>alert('error_xss')</script>"), body)
         finally:
-            MAIN.requests.post = old_post
+            if is_async:
+                MAIN.httpx.AsyncClient.post = old_post
+            else:
+                MAIN.requests.post = old_post
 
 
 if __name__ == "__main__":

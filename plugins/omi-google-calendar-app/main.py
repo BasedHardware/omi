@@ -4,6 +4,7 @@ Google Calendar Integration App for Omi
 This app provides Google Calendar integration through OAuth2 authentication
 and chat tools for managing calendar events.
 """
+
 import html
 import os
 import re
@@ -14,6 +15,7 @@ from typing import Optional, List, Any
 from urllib.parse import quote, urlencode
 
 import requests
+import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Query, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
@@ -45,7 +47,9 @@ def log(msg: str):
 # Google OAuth2 Configuration
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
-GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8080/auth/google/callback")
+GOOGLE_REDIRECT_URI = os.getenv(
+    "GOOGLE_REDIRECT_URI", "http://localhost:8080/auth/google/callback"
+)
 
 # Google API endpoints
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -64,13 +68,14 @@ GOOGLE_SCOPES = [
 app = FastAPI(
     title="Google Calendar Omi Integration",
     description="Google Calendar integration for Omi - Manage your calendar with chat",
-    version="1.0.0"
+    version="1.0.0",
 )
 
 
 # ============================================
 # Helper Functions
 # ============================================
+
 
 def _coerce_int(value, default: int, minimum: int, maximum: int) -> int:
     """
@@ -135,7 +140,10 @@ def get_valid_access_token(uid: str) -> Optional[str]:
                 new_token = refresh_access_token(refresh_token)
                 if new_token:
                     access_token = new_token["access_token"]
-                    new_expires_at = (datetime.now(timezone.utc) + timedelta(seconds=new_token.get("expires_in", 3600))).strftime("%Y-%m-%dT%H:%M:%SZ")
+                    new_expires_at = (
+                        datetime.now(timezone.utc)
+                        + timedelta(seconds=new_token.get("expires_in", 3600))
+                    ).strftime("%Y-%m-%dT%H:%M:%SZ")
                     update_google_tokens(uid, access_token, new_expires_at)
                 else:
                     return None
@@ -154,7 +162,7 @@ def refresh_access_token(refresh_token: str) -> Optional[dict]:
                 "client_id": GOOGLE_CLIENT_ID,
                 "client_secret": GOOGLE_CLIENT_SECRET,
                 "refresh_token": refresh_token,
-                "grant_type": "refresh_token"
+                "grant_type": "refresh_token",
             },
             timeout=REQUEST_TIMEOUT,
         )
@@ -169,7 +177,9 @@ def refresh_access_token(refresh_token: str) -> Optional[dict]:
         return None
 
 
-def calendar_api_request(uid: str, method: str, endpoint: str, params: dict = None, json_data: dict = None) -> Optional[dict]:
+def calendar_api_request(
+    uid: str, method: str, endpoint: str, params: dict = None, json_data: dict = None
+) -> Optional[dict]:
     """Make an authenticated request to the Google Calendar API."""
     access_token = get_valid_access_token(uid)
     if not access_token:
@@ -178,18 +188,26 @@ def calendar_api_request(uid: str, method: str, endpoint: str, params: dict = No
     url = f"{GOOGLE_CALENDAR_API}{endpoint}"
     headers = {
         "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
     }
 
     try:
         if method == "GET":
-            response = requests.get(url, headers=headers, params=params, timeout=REQUEST_TIMEOUT)
+            response = requests.get(
+                url, headers=headers, params=params, timeout=REQUEST_TIMEOUT
+            )
         elif method == "POST":
-            response = requests.post(url, headers=headers, json=json_data, timeout=REQUEST_TIMEOUT)
+            response = requests.post(
+                url, headers=headers, json=json_data, timeout=REQUEST_TIMEOUT
+            )
         elif method == "PUT":
-            response = requests.put(url, headers=headers, json=json_data, timeout=REQUEST_TIMEOUT)
+            response = requests.put(
+                url, headers=headers, json=json_data, timeout=REQUEST_TIMEOUT
+            )
         elif method == "PATCH":
-            response = requests.patch(url, headers=headers, json=json_data, timeout=REQUEST_TIMEOUT)
+            response = requests.patch(
+                url, headers=headers, json=json_data, timeout=REQUEST_TIMEOUT
+            )
         elif method == "DELETE":
             response = requests.delete(url, headers=headers, timeout=REQUEST_TIMEOUT)
         else:
@@ -201,7 +219,10 @@ def calendar_api_request(uid: str, method: str, endpoint: str, params: dict = No
             return response.json()
         else:
             log(f"Calendar API error: {response.status_code}")
-            return {"error": f"HTTP {response.status_code}", "status_code": response.status_code}
+            return {
+                "error": f"HTTP {response.status_code}",
+                "status_code": response.status_code,
+            }
 
     except Exception as e:
         log(f"Calendar API request error: {e}")
@@ -233,7 +254,9 @@ def parse_datetime(dt_str: str) -> tuple[datetime, bool]:
     for fmt in time_formats:
         try:
             time_part = datetime.strptime(dt_str, fmt)
-            return now.replace(hour=time_part.hour, minute=time_part.minute, second=0, microsecond=0), False
+            return now.replace(
+                hour=time_part.hour, minute=time_part.minute, second=0, microsecond=0
+            ), False
         except ValueError:
             continue
 
@@ -300,10 +323,11 @@ def get_user_calendars(uid: str) -> Optional[list]:
             "id": cal.get("id", ""),
             "name": cal.get("summary", "Unnamed"),
             "primary": cal.get("primary", False),
-            "access_role": cal.get("accessRole", "")
+            "access_role": cal.get("accessRole", ""),
         }
         for cal in calendars
-        if cal.get("accessRole") in ("owner", "writer")  # Only show calendars user can write to
+        if cal.get("accessRole")
+        in ("owner", "writer")  # Only show calendars user can write to
     ]
 
 
@@ -350,6 +374,7 @@ def format_event_time(event: dict) -> str:
 # Chat Tools Manifest
 # ============================================
 
+
 @app.get("/.well-known/omi-tools.json")
 async def get_omi_tools_manifest():
     """
@@ -366,21 +391,21 @@ async def get_omi_tools_manifest():
                     "properties": {
                         "days": {
                             "type": "integer",
-                            "description": "Number of days to look ahead (default: 7, max: 30)"
+                            "description": "Number of days to look ahead (default: 7, max: 30)",
                         },
                         "max_results": {
                             "type": "integer",
-                            "description": "Maximum number of events to return (default: 10, max: 50)"
+                            "description": "Maximum number of events to return (default: 10, max: 50)",
                         },
                         "calendar_id": {
                             "type": "string",
-                            "description": "Calendar ID to list events from (default: primary calendar)"
-                        }
+                            "description": "Calendar ID to list events from (default: primary calendar)",
+                        },
                     },
-                    "required": []
+                    "required": [],
                 },
                 "auth_required": True,
-                "status_message": "Getting your calendar events..."
+                "status_message": "Getting your calendar events...",
             },
             {
                 "name": "create_event",
@@ -391,42 +416,42 @@ async def get_omi_tools_manifest():
                     "properties": {
                         "title": {
                             "type": "string",
-                            "description": "Event title/summary. Required."
+                            "description": "Event title/summary. Required.",
                         },
                         "start": {
                             "type": "string",
-                            "description": "Event start time. Supports: 'tomorrow', '2pm', 'Jan 15 3pm', '2026-01-25T14:00:00'. Required."
+                            "description": "Event start time. Supports: 'tomorrow', '2pm', 'Jan 15 3pm', '2026-01-25T14:00:00'. Required.",
                         },
                         "end": {
                             "type": "string",
-                            "description": "Event end time. If not provided, defaults to 1 hour after start for timed events."
+                            "description": "Event end time. If not provided, defaults to 1 hour after start for timed events.",
                         },
                         "description": {
                             "type": "string",
-                            "description": "Event description or notes."
+                            "description": "Event description or notes.",
                         },
                         "location": {
                             "type": "string",
-                            "description": "Event location (address, room name, or video call link)."
+                            "description": "Event location (address, room name, or video call link).",
                         },
                         "attendees": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "List of attendee email addresses to invite."
+                            "description": "List of attendee email addresses to invite.",
                         },
                         "all_day": {
                             "type": "boolean",
-                            "description": "If true, create an all-day event."
+                            "description": "If true, create an all-day event.",
                         },
                         "calendar_id": {
                             "type": "string",
-                            "description": "Calendar ID to create event in (default: primary)"
-                        }
+                            "description": "Calendar ID to create event in (default: primary)",
+                        },
                     },
-                    "required": ["title", "start"]
+                    "required": ["title", "start"],
                 },
                 "auth_required": True,
-                "status_message": "Creating calendar event..."
+                "status_message": "Creating calendar event...",
             },
             {
                 "name": "get_event",
@@ -437,17 +462,17 @@ async def get_omi_tools_manifest():
                     "properties": {
                         "event_id": {
                             "type": "string",
-                            "description": "The event ID to get details for. Required."
+                            "description": "The event ID to get details for. Required.",
                         },
                         "calendar_id": {
                             "type": "string",
-                            "description": "Calendar ID the event is in (default: primary)"
-                        }
+                            "description": "Calendar ID the event is in (default: primary)",
+                        },
                     },
-                    "required": ["event_id"]
+                    "required": ["event_id"],
                 },
                 "auth_required": True,
-                "status_message": "Getting event details..."
+                "status_message": "Getting event details...",
             },
             {
                 "name": "update_event",
@@ -458,37 +483,25 @@ async def get_omi_tools_manifest():
                     "properties": {
                         "event_id": {
                             "type": "string",
-                            "description": "The event ID to update. Required."
+                            "description": "The event ID to update. Required.",
                         },
-                        "title": {
-                            "type": "string",
-                            "description": "New event title."
-                        },
-                        "start": {
-                            "type": "string",
-                            "description": "New start time."
-                        },
-                        "end": {
-                            "type": "string",
-                            "description": "New end time."
-                        },
+                        "title": {"type": "string", "description": "New event title."},
+                        "start": {"type": "string", "description": "New start time."},
+                        "end": {"type": "string", "description": "New end time."},
                         "description": {
                             "type": "string",
-                            "description": "New description."
+                            "description": "New description.",
                         },
-                        "location": {
-                            "type": "string",
-                            "description": "New location."
-                        },
+                        "location": {"type": "string", "description": "New location."},
                         "calendar_id": {
                             "type": "string",
-                            "description": "Calendar ID (default: primary)"
-                        }
+                            "description": "Calendar ID (default: primary)",
+                        },
                     },
-                    "required": ["event_id"]
+                    "required": ["event_id"],
                 },
                 "auth_required": True,
-                "status_message": "Updating event..."
+                "status_message": "Updating event...",
             },
             {
                 "name": "delete_event",
@@ -499,30 +512,27 @@ async def get_omi_tools_manifest():
                     "properties": {
                         "event_id": {
                             "type": "string",
-                            "description": "The event ID to delete. Required."
+                            "description": "The event ID to delete. Required.",
                         },
                         "calendar_id": {
                             "type": "string",
-                            "description": "Calendar ID (default: primary)"
-                        }
+                            "description": "Calendar ID (default: primary)",
+                        },
                     },
-                    "required": ["event_id"]
+                    "required": ["event_id"],
                 },
                 "auth_required": True,
-                "status_message": "Deleting event..."
+                "status_message": "Deleting event...",
             },
             {
                 "name": "list_calendars",
                 "description": "List all calendars available to the user. Use this when the user wants to see their calendars, check which calendars they have access to, or find a calendar ID.",
                 "endpoint": "/tools/list_calendars",
                 "method": "POST",
-                "parameters": {
-                    "properties": {},
-                    "required": []
-                },
+                "parameters": {"properties": {}, "required": []},
                 "auth_required": True,
-                "status_message": "Getting your calendars..."
-            }
+                "status_message": "Getting your calendars...",
+            },
         ]
     }
 
@@ -530,6 +540,7 @@ async def get_omi_tools_manifest():
 # ============================================
 # Chat Tool Endpoints
 # ============================================
+
 
 @app.post("/tools/list_events", tags=["chat_tools"], response_model=ChatToolResponse)
 async def tool_list_events(request: Request):
@@ -542,14 +553,18 @@ async def tool_list_events(request: Request):
 
         uid = body.get("uid")
         days = _coerce_int(body.get("days"), default=7, minimum=1, maximum=30)
-        max_results = _coerce_int(body.get("max_results"), default=10, minimum=1, maximum=50)
+        max_results = _coerce_int(
+            body.get("max_results"), default=10, minimum=1, maximum=50
+        )
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
 
         access_token = get_valid_access_token(uid)
         if not access_token:
-            return ChatToolResponse(error="Please connect your Google Calendar first in the app settings.")
+            return ChatToolResponse(
+                error="Please connect your Google Calendar first in the app settings."
+            )
 
         # Use provided calendar_id or fall back to user's default
         calendar_id = body.get("calendar_id") or get_default_calendar(uid)
@@ -559,16 +574,23 @@ async def tool_list_events(request: Request):
         time_min = now.strftime("%Y-%m-%dT%H:%M:%SZ")
         time_max = (now + timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-        result = calendar_api_request(uid, "GET", f"/calendars/{calendar_id}/events", params={
-            "timeMin": time_min,
-            "timeMax": time_max,
-            "maxResults": max_results,
-            "singleEvents": True,
-            "orderBy": "startTime"
-        })
+        result = calendar_api_request(
+            uid,
+            "GET",
+            f"/calendars/{calendar_id}/events",
+            params={
+                "timeMin": time_min,
+                "timeMax": time_max,
+                "maxResults": max_results,
+                "singleEvents": True,
+                "orderBy": "startTime",
+            },
+        )
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to get events: {result.get('error', 'Unknown error')}")
+            return ChatToolResponse(
+                error=f"Failed to get events: {result.get('error', 'Unknown error')}"
+            )
 
         events = result.get("items", [])
         if not isinstance(events, list):
@@ -598,6 +620,7 @@ async def tool_list_events(request: Request):
     except Exception as e:
         log(f"Error listing events: {e}")
         import traceback
+
         traceback.print_exc()
         return ChatToolResponse(error=f"Failed to list events: {str(e)}")
 
@@ -635,7 +658,9 @@ async def tool_create_event(request: Request):
 
         access_token = get_valid_access_token(uid)
         if not access_token:
-            return ChatToolResponse(error="Please connect your Google Calendar first in the app settings.")
+            return ChatToolResponse(
+                error="Please connect your Google Calendar first in the app settings."
+            )
 
         # Parse start time
         try:
@@ -682,10 +707,14 @@ async def tool_create_event(request: Request):
 
         log(f"Creating event: {event_data}")
 
-        result = calendar_api_request(uid, "POST", f"/calendars/{calendar_id}/events", json_data=event_data)
+        result = calendar_api_request(
+            uid, "POST", f"/calendars/{calendar_id}/events", json_data=event_data
+        )
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to create event: {result.get('error', 'Unknown error')}")
+            return ChatToolResponse(
+                error=f"Failed to create event: {result.get('error', 'Unknown error')}"
+            )
 
         event_id = result.get("id", "")
         html_link = result.get("htmlLink", "")
@@ -710,6 +739,7 @@ async def tool_create_event(request: Request):
     except Exception as e:
         log(f"Error creating event: {e}")
         import traceback
+
         traceback.print_exc()
         return ChatToolResponse(error=f"Failed to create event: {str(e)}")
 
@@ -728,19 +758,27 @@ async def tool_get_event(request: Request):
             return ChatToolResponse(error="User ID is required")
 
         if not event_id:
-            return ChatToolResponse(error="Event ID is required. Use 'list events' to find event IDs.")
+            return ChatToolResponse(
+                error="Event ID is required. Use 'list events' to find event IDs."
+            )
 
         access_token = get_valid_access_token(uid)
         if not access_token:
-            return ChatToolResponse(error="Please connect your Google Calendar first in the app settings.")
+            return ChatToolResponse(
+                error="Please connect your Google Calendar first in the app settings."
+            )
 
         # Use provided calendar_id or fall back to user's default
         calendar_id = body.get("calendar_id") or get_default_calendar(uid)
 
-        result = calendar_api_request(uid, "GET", f"/calendars/{calendar_id}/events/{event_id}")
+        result = calendar_api_request(
+            uid, "GET", f"/calendars/{calendar_id}/events/{event_id}"
+        )
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Event not found: {result.get('error', 'Unknown error')}")
+            return ChatToolResponse(
+                error=f"Event not found: {result.get('error', 'Unknown error')}"
+            )
 
         summary = result.get("summary", "No title")
         description = result.get("description", "")
@@ -811,19 +849,27 @@ async def tool_update_event(request: Request):
             return ChatToolResponse(error="User ID is required")
 
         if not event_id:
-            return ChatToolResponse(error="Event ID is required. Use 'list events' to find event IDs.")
+            return ChatToolResponse(
+                error="Event ID is required. Use 'list events' to find event IDs."
+            )
 
         access_token = get_valid_access_token(uid)
         if not access_token:
-            return ChatToolResponse(error="Please connect your Google Calendar first in the app settings.")
+            return ChatToolResponse(
+                error="Please connect your Google Calendar first in the app settings."
+            )
 
         # Use provided calendar_id or fall back to user's default
         calendar_id = body.get("calendar_id") or get_default_calendar(uid)
 
         # Get existing event first
-        existing = calendar_api_request(uid, "GET", f"/calendars/{calendar_id}/events/{event_id}")
+        existing = calendar_api_request(
+            uid, "GET", f"/calendars/{calendar_id}/events/{event_id}"
+        )
         if not existing or "error" in existing:
-            return ChatToolResponse(error=f"Event not found: {existing.get('error', 'Unknown error')}")
+            return ChatToolResponse(
+                error=f"Event not found: {existing.get('error', 'Unknown error')}"
+            )
 
         # Build update data
         update_data = {}
@@ -842,7 +888,10 @@ async def tool_update_event(request: Request):
                 if is_all_day:
                     update_data["start"] = {"date": start_dt.strftime("%Y-%m-%d")}
                 else:
-                    update_data["start"] = {"dateTime": start_dt.isoformat(), "timeZone": "UTC"}
+                    update_data["start"] = {
+                        "dateTime": start_dt.isoformat(),
+                        "timeZone": "UTC",
+                    }
                 updates.append(f"Start: {start_str}")
             except ValueError as e:
                 return ChatToolResponse(error=f"Invalid start time: {e}")
@@ -853,7 +902,10 @@ async def tool_update_event(request: Request):
                 if is_all_day:
                     update_data["end"] = {"date": end_dt.strftime("%Y-%m-%d")}
                 else:
-                    update_data["end"] = {"dateTime": end_dt.isoformat(), "timeZone": "UTC"}
+                    update_data["end"] = {
+                        "dateTime": end_dt.isoformat(),
+                        "timeZone": "UTC",
+                    }
                 updates.append(f"End: {end_str}")
             except ValueError as e:
                 return ChatToolResponse(error=f"Invalid end time: {e}")
@@ -875,12 +927,21 @@ async def tool_update_event(request: Request):
             updates.append(f"Attendees: {', '.join(attendees)}")
 
         if not update_data:
-            return ChatToolResponse(error="No updates provided. Specify title, start, end, description, location, or attendees.")
+            return ChatToolResponse(
+                error="No updates provided. Specify title, start, end, description, location, or attendees."
+            )
 
-        result = calendar_api_request(uid, "PATCH", f"/calendars/{calendar_id}/events/{event_id}", json_data=update_data)
+        result = calendar_api_request(
+            uid,
+            "PATCH",
+            f"/calendars/{calendar_id}/events/{event_id}",
+            json_data=update_data,
+        )
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to update event: {result.get('error', 'Unknown error')}")
+            return ChatToolResponse(
+                error=f"Failed to update event: {result.get('error', 'Unknown error')}"
+            )
 
         result_parts = ["**Event Updated!**", ""] + updates
 
@@ -905,23 +966,37 @@ async def tool_delete_event(request: Request):
             return ChatToolResponse(error="User ID is required")
 
         if not event_id:
-            return ChatToolResponse(error="Event ID is required. Use 'list events' to find event IDs.")
+            return ChatToolResponse(
+                error="Event ID is required. Use 'list events' to find event IDs."
+            )
 
         access_token = get_valid_access_token(uid)
         if not access_token:
-            return ChatToolResponse(error="Please connect your Google Calendar first in the app settings.")
+            return ChatToolResponse(
+                error="Please connect your Google Calendar first in the app settings."
+            )
 
         # Use provided calendar_id or fall back to user's default
         calendar_id = body.get("calendar_id") or get_default_calendar(uid)
 
         # Get event title first for confirmation message
-        existing = calendar_api_request(uid, "GET", f"/calendars/{calendar_id}/events/{event_id}")
-        event_title = existing.get("summary", "Event") if existing and "error" not in existing else "Event"
+        existing = calendar_api_request(
+            uid, "GET", f"/calendars/{calendar_id}/events/{event_id}"
+        )
+        event_title = (
+            existing.get("summary", "Event")
+            if existing and "error" not in existing
+            else "Event"
+        )
 
-        result = calendar_api_request(uid, "DELETE", f"/calendars/{calendar_id}/events/{event_id}")
+        result = calendar_api_request(
+            uid, "DELETE", f"/calendars/{calendar_id}/events/{event_id}"
+        )
 
         if result and "error" in result:
-            return ChatToolResponse(error=f"Failed to delete event: {result.get('error', 'Unknown error')}")
+            return ChatToolResponse(
+                error=f"Failed to delete event: {result.get('error', 'Unknown error')}"
+            )
 
         return ChatToolResponse(result=f"**Event Deleted**\n\nDeleted: {event_title}")
 
@@ -944,12 +1019,16 @@ async def tool_list_calendars(request: Request):
 
         access_token = get_valid_access_token(uid)
         if not access_token:
-            return ChatToolResponse(error="Please connect your Google Calendar first in the app settings.")
+            return ChatToolResponse(
+                error="Please connect your Google Calendar first in the app settings."
+            )
 
         result = calendar_api_request(uid, "GET", "/users/me/calendarList")
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to list calendars: {result.get('error', 'Unknown error')}")
+            return ChatToolResponse(
+                error=f"Failed to list calendars: {result.get('error', 'Unknown error')}"
+            )
 
         calendars = result.get("items", [])
         if not isinstance(calendars, list):
@@ -984,6 +1063,7 @@ async def tool_list_calendars(request: Request):
 # OAuth & Setup Endpoints
 # ============================================
 
+
 @app.get("/")
 async def root(uid: str = Query(None)):
     """Root endpoint - Homepage."""
@@ -995,8 +1075,8 @@ async def root(uid: str = Query(None)):
             "endpoints": {
                 "auth": "/auth/google?uid=<user_id>",
                 "setup_check": "/setup/google?uid=<user_id>",
-                "tools_manifest": "/.well-known/omi-tools.json"
-            }
+                "tools_manifest": "/.well-known/omi-tools.json",
+            },
         }
 
     tokens = get_google_tokens(uid)
@@ -1005,7 +1085,8 @@ async def root(uid: str = Query(None)):
         # uid is client-controlled and lands in href/action attributes below;
         # percent-encode once so a quote cannot break out of the attribute.
         auth_url = f"/auth/google?uid={quote(uid, safe='')}"
-        return HTMLResponse(content=f"""
+        return HTMLResponse(
+            content=f"""
         <html>
             <head>
                 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1043,7 +1124,8 @@ async def root(uid: str = Query(None)):
                 </div>
             </body>
         </html>
-        """)
+        """
+        )
 
     # User is connected - fetch calendars for selection
     calendars = get_user_calendars(uid)
@@ -1056,7 +1138,12 @@ async def root(uid: str = Query(None)):
         for cal in calendars:
             cal_id = str(cal.get("id", ""))
             cal_name = str(cal.get("name", ""))
-            selected = "selected" if cal_id == current_calendar or (current_calendar == "primary" and cal.get("primary")) else ""
+            selected = (
+                "selected"
+                if cal_id == current_calendar
+                or (current_calendar == "primary" and cal.get("primary"))
+                else ""
+            )
             primary_badge = " (Primary)" if cal.get("primary") else ""
             safe_id = html.escape(cal_id, quote=True)
             safe_name = html.escape(cal_name)
@@ -1066,7 +1153,8 @@ async def root(uid: str = Query(None)):
     else:
         calendar_options = '<option value="primary" selected>Primary Calendar</option>'
 
-    return HTMLResponse(content=f"""
+    return HTMLResponse(
+        content=f"""
     <html>
         <head>
             <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1099,7 +1187,7 @@ async def root(uid: str = Query(None)):
                     <div class="example">"What do I have scheduled for Friday?"</div>
                 </div>
 
-                <a href="/disconnect?uid={quote(uid, safe='')}" class="btn btn-secondary btn-block">
+                <a href="/disconnect?uid={quote(uid, safe="")}" class="btn btn-secondary btn-block">
                     Disconnect Google Calendar
                 </a>
 
@@ -1107,14 +1195,17 @@ async def root(uid: str = Query(None)):
             </div>
         </body>
     </html>
-    """)
+    """
+    )
 
 
 @app.get("/auth/google")
 async def google_auth(uid: str = Query(...)):
     """Start Google OAuth2 flow."""
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
-        raise HTTPException(status_code=500, detail="Google OAuth credentials not configured")
+        raise HTTPException(
+            status_code=500, detail="Google OAuth credentials not configured"
+        )
 
     state = f"{uid}:{secrets.token_urlsafe(32)}"
     store_oauth_state(uid, state)
@@ -1126,7 +1217,7 @@ async def google_auth(uid: str = Query(...)):
         "scope": " ".join(GOOGLE_SCOPES),
         "access_type": "offline",
         "prompt": "consent",
-        "state": state
+        "state": state,
     }
 
     auth_url = f"{GOOGLE_AUTH_URL}?{urlencode(params)}"
@@ -1135,13 +1226,12 @@ async def google_auth(uid: str = Query(...)):
 
 @app.get("/auth/google/callback")
 async def google_callback(
-    code: str = Query(None),
-    state: str = Query(None),
-    error: str = Query(None)
+    code: str = Query(None), state: str = Query(None), error: str = Query(None)
 ):
     """Handle Google OAuth2 callback."""
     if error:
-        return HTMLResponse(content=f"""
+        return HTMLResponse(
+            content=f"""
         <html>
             <head><style>{get_css()}</style></head>
             <body>
@@ -1153,10 +1243,13 @@ async def google_callback(
                 </div>
             </body>
         </html>
-        """, status_code=400)
+        """,
+            status_code=400,
+        )
 
     if not code or not state:
-        return HTMLResponse(content=f"""
+        return HTMLResponse(
+            content=f"""
         <html>
             <head><style>{get_css()}</style></head>
             <body>
@@ -1168,7 +1261,9 @@ async def google_callback(
                 </div>
             </body>
         </html>
-        """, status_code=400)
+        """,
+            status_code=400,
+        )
 
     # Extract uid from state
     try:
@@ -1185,21 +1280,24 @@ async def google_callback(
 
     # Exchange code for tokens
     try:
-        response = requests.post(
-            GOOGLE_TOKEN_URL,
-            data={
-                "client_id": GOOGLE_CLIENT_ID,
-                "client_secret": GOOGLE_CLIENT_SECRET,
-                "code": code,
-                "grant_type": "authorization_code",
-                "redirect_uri": GOOGLE_REDIRECT_URI
-            },
-            timeout=REQUEST_TIMEOUT,
-        )
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT[1]) as client:
+            response = await client.post(
+                GOOGLE_TOKEN_URL,
+                data={
+                    "client_id": GOOGLE_CLIENT_ID,
+                    "client_secret": GOOGLE_CLIENT_SECRET,
+                    "code": code,
+                    "grant_type": "authorization_code",
+                    "redirect_uri": GOOGLE_REDIRECT_URI,
+                },
+            )
 
         if response.status_code != 200:
             log(f"Token exchange failed: {response.status_code}")
-            return HTMLResponse(content=f"Token exchange failed: {response.status_code}", status_code=400)
+            return HTMLResponse(
+                content=f"Token exchange failed: {response.status_code}",
+                status_code=400,
+            )
 
         token_data = response.json()
         access_token = token_data.get("access_token")
@@ -1209,11 +1307,14 @@ async def google_callback(
         if not access_token:
             return HTMLResponse(content="No access token received", status_code=400)
 
-        expires_at = (datetime.utcnow() + timedelta(seconds=expires_in)).isoformat() + "Z"
+        expires_at = (
+            datetime.utcnow() + timedelta(seconds=expires_in)
+        ).isoformat() + "Z"
 
         store_google_tokens(uid, access_token, refresh_token or "", expires_at)
 
-        return HTMLResponse(content=f"""
+        return HTMLResponse(
+            content=f"""
         <html>
             <head>
                 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1228,7 +1329,7 @@ async def google_callback(
                         <p>Your Google Calendar is now linked to Omi</p>
                     </div>
 
-                    <a href="/?uid={quote(uid, safe='')}" class="btn btn-primary btn-block">
+                    <a href="/?uid={quote(uid, safe="")}" class="btn btn-primary btn-block">
                         Continue to Settings
                     </a>
 
@@ -1242,13 +1343,17 @@ async def google_callback(
                 </div>
             </body>
         </html>
-        """)
+        """
+        )
 
     except Exception as e:
         log(f"OAuth error: {e}")
         import traceback
+
         traceback.print_exc()
-        return HTMLResponse(content=f"Authentication error: {html.escape(str(e))}", status_code=500)
+        return HTMLResponse(
+            content=f"Authentication error: {html.escape(str(e))}", status_code=500
+        )
 
 
 @app.get("/setup/google")
@@ -1291,6 +1396,7 @@ async def health_check():
 # ============================================
 # CSS Styles
 # ============================================
+
 
 def get_css() -> str:
     """Returns Google-inspired dark theme CSS."""
@@ -1413,6 +1519,7 @@ def get_css() -> str:
 
 if __name__ == "__main__":
     import uvicorn
+
     port = int(os.getenv("PORT", 8080))
     host = os.getenv("HOST", "0.0.0.0")
 
