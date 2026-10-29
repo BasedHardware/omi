@@ -191,7 +191,10 @@ def update_folder(uid: str, folder_id: str, update_data: Dict[str, Any]) -> bool
     # Add updated_at timestamp
     sanitized_data['updated_at'] = datetime.now(timezone.utc)
 
-    folder_ref.update(sanitized_data)
+    try:
+        folder_ref.update(sanitized_data)
+    except NotFound:
+        return False
     return True
 
 
@@ -365,7 +368,10 @@ def move_conversation_to_folder(
     # Update the conversation's folder_id. folder_user_set marks this as an
     # explicit user decision so processing upserts preserve it even when the
     # user cleared the folder (folder_id None).
-    conv_ref.update({'folder_id': folder_id, 'folder_user_set': True})
+    try:
+        conv_ref.update({'folder_id': folder_id, 'folder_user_set': True})
+    except NotFound:
+        return False
 
     # Update folder counts
     if old_folder_id:
