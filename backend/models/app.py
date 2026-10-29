@@ -362,3 +362,7 @@ class UsageHistoryItem(BaseModel):
     memory_id: Optional[str] = None
     timestamp: datetime
     type: UsageHistoryType
+
+
+class AppRejectRequest(BaseModel):
+    reason: str
