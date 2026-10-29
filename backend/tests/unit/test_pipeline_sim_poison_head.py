@@ -26,8 +26,15 @@ from contextlib import contextmanager
 import pytest
 
 # The assignment seam's monkeypatch string targets resolve database.conversations
-# on first use; import it at collection so no test's call phase pays that graph.
+# on first use, and build_incoming's function-level imports (pre_recorded pulls
+# the deepgram SDK, deterministic_minimum, models.conversation, sync.capture)
+# land in whichever test calls them first. Import them at collection so no
+# test's duration-guard call phase pays that graph.
 from database import conversations  # noqa: F401
+import models.conversation  # noqa: F401
+import utils.conversations.deterministic_minimum  # noqa: F401
+import utils.stt.pre_recorded  # noqa: F401
+import utils.sync.capture  # noqa: F401
 from database.batch_pipeline_projection_protocol import ProjectionGenerationAmbiguous
 from tests.unit.test_batch_pipeline_owner_chain_projection import (
     BURST,
