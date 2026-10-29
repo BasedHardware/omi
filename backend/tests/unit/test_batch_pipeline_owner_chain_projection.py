@@ -17,6 +17,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from database.firestore_transaction_retry import FirestoreContentionExhausted
 from google.api_core import exceptions as api_exceptions
 
 from config.policy import ProjectionPolicy
@@ -435,6 +436,9 @@ def test_retired_record_target_quarantines_even_on_fresh_rows(monkeypatch):
     [
         (ConnectionError('synthetic'), True),
         (TimeoutError('synthetic'), True),
+        (PermissionError('authorization wait'), True),
+        (OSError('storage error'), True),
+        (FirestoreContentionExhausted('exhausted'), True),
         (api_exceptions.BadGateway('502'), True),
         (api_exceptions.ServiceUnavailable('503'), True),
         (api_exceptions.Aborted('409'), True),
@@ -445,8 +449,9 @@ def test_retired_record_target_quarantines_even_on_fresh_rows(monkeypatch):
     ],
 )
 def test_head_retry_classification(error, transient):
-    """Review r1 P1: every availability-shaped API error retries; only content
-    poison and unknown permanent kinds hold."""
+    """Review r1/r2: every availability-shaped API error, storage error and
+    authorization wait retries (the taxonomy-declared kinds included); only
+    content poison and unknown permanent kinds hold."""
     assert projection.projection_exception_transient(error) is transient
     assert projection.head_holds_without_retry(error, None) is not transient
 
@@ -488,8 +493,6 @@ def test_generic_poison_head_holds_and_unblocks_the_chain():
 def test_transient_head_failure_retries_then_holds_at_the_bound():
     """Infrastructure contention retries, but not forever: past the durable
     bound the head takes the held disposition so the chain can advance."""
-    # imported at module level for the classification matrix above
-
     log = ResultLog()
     ids = chain(log, BURST, 'a', 2)
     projector = projection.Projector(log, Mock(), clock=lambda: 1000.0)

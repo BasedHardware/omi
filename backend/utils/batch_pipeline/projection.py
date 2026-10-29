@@ -182,10 +182,16 @@ PROJECTION_HEAD_BLOCK_TYPE = 'projection_block_type'
 
 
 def projection_exception_transient(error: BaseException) -> bool:
-    """Whether a failing step is infrastructure contention, not content poison."""
+    """Whether a failing step is infrastructure contention, not content poison.
+
+    Keeps the exception taxonomy's declared retryable kinds waiting (#23946):
+    storage/authorization OSErrors (PermissionError included) wait for the
+    sweep, under this rule's durable bound, never a first-failure hold.
+    """
+    from database.firestore_transaction_retry import FirestoreContentionExhausted
     from google.api_core import exceptions as api_exceptions
 
-    if isinstance(error, (ConnectionError, TimeoutError)):
+    if isinstance(error, (ConnectionError, TimeoutError, OSError, FirestoreContentionExhausted)):
         return True
     if isinstance(
         error,
