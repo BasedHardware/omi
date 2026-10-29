@@ -75,6 +75,7 @@ from utils.episodes import client_gate, incremental, metrics, policy, recovery
 from utils.episodes.recovery import segment_end as _segment_end, segment_start as _segment_start
 from utils.episodes.moment import MomentInput
 from utils.episodes.state import apply_update, clean_text, provisional_items, render_state
+from utils.episodes.visibility import visible_episode
 
 logger = logging.getLogger(__name__)
 
@@ -1808,7 +1809,7 @@ def live_episode(uid: str, *, collaborators: Optional[Collaborators] = None) -> 
     episode = episodes_db.get_current_episode(uid, firestore_client=c.firestore_client)
     now = _now(c)
     episode = _close_stale_current(uid, episode, c, now)
-    return episode if policy.is_live(episode) else None
+    return visible_episode(uid, episode, firestore_client=c.firestore_client) if policy.is_live(episode) else None
 
 
 def episode_for_conversation(
@@ -1819,7 +1820,7 @@ def episode_for_conversation(
     if episode and policy.idle_close_due(episode, _now(c)):
         _close(uid, episode, 'idle', c, now=_now(c))
         episode = episodes_db.get_episode(uid, str(episode['id']), firestore_client=c.firestore_client)
-    return episode
+    return visible_episode(uid, episode, firestore_client=c.firestore_client)
 
 
 def last_closed_episode(
@@ -1842,14 +1843,14 @@ def last_closed_episode(
         with _last_closed_lock:
             cached = _last_closed_cache.get(uid)
         if cached is not None and wall - cached[1] < LAST_CLOSED_CACHE_SECONDS:
-            return cached[0]
+            return visible_episode(uid, cached[0], firestore_client=(collaborators or Collaborators()).firestore_client)
     c = collaborators or Collaborators()
     episode = episodes_db.get_last_closed_episode(uid, firestore_client=c.firestore_client)
     with _last_closed_lock:
         if len(_last_closed_cache) > _LAST_CLOSED_CACHE_MAX:
             _last_closed_cache.clear()
         _last_closed_cache[uid] = (episode, wall)
-    return episode
+    return visible_episode(uid, episode, firestore_client=c.firestore_client)
 
 
 def reset_for_tests() -> None:
@@ -1863,7 +1864,8 @@ def episode_by_id(
     uid: str, episode_id: str, *, collaborators: Optional[Collaborators] = None
 ) -> Optional[dict[str, Any]]:
     c = collaborators or Collaborators()
-    return episodes_db.get_episode(uid, episode_id, firestore_client=c.firestore_client)
+    episode = episodes_db.get_episode(uid, episode_id, firestore_client=c.firestore_client)
+    return visible_episode(uid, episode, firestore_client=c.firestore_client)
 
 
 def to_wire(episode: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:

@@ -65,26 +65,42 @@ def adjacent_conversation(
 def occasion_retention(uid: str, conversation: Any, conversation_id: Optional[str] = None) -> Optional[str]:
     """Prove isolation before admitting a standalone discard; metadata only.
 
-    Ownership includes an existing closed occasion at recorded time, even when
-    this member's asynchronous attachment has not run yet. Lookup failure keeps
-    the content; it is never evidence that the clip is isolated.
+    Another kept member must support recorded-time ownership, before or after
+    this clip attaches. A singleton created by this clip cannot prove its own
+    relevance. Lookup failure keeps content, never proves isolation.
     """
     from config.occasion_relevance import enabled
 
     if not enabled():
         return None
     from database import episodes
-    from utils.episodes.timeline import episode_owning_recorded_time
+    from utils.episodes.timeline import episode_owning_recorded_time, choose_recorded_episode
 
     cid = conversation_id or getattr(conversation, 'id', None)
     start, end = getattr(conversation, 'started_at', None), getattr(conversation, 'finished_at', None)
     if start is None or end is None:
         return None
     try:
-        if cid and episodes.get_episode_for_conversation(uid, cid):
-            return 'occasion_member'
-        if episode_owning_recorded_time(uid, start, ended_at=end):
-            return 'occasion_member'
+        member = episodes.get_episode_for_conversation(uid, cid) if cid else None
+        owner = episode_owning_recorded_time(uid, start, ended_at=end)
+        for episode in [member, owner]:
+            if not episode:
+                continue
+            for other_id in episode.get('conversation_ids') or []:
+                if other_id == cid:
+                    continue
+                other = conversations_db.get_conversation_raw_snapshot(
+                    uid,
+                    other_id,
+                    field_paths=['started_at', 'finished_at', 'discarded', 'deleted', 'sync_merged_into'],
+                )
+                if not other or any(other.get(key) for key in ('discarded', 'deleted', 'sync_merged_into')):
+                    continue
+                # Check the other member's span, not an envelope this clip may
+                # already have extended. Attachment order cannot widen proof.
+                evidence = dict(episode, started_at=other.get('started_at'), last_activity_at=other.get('finished_at'))
+                if choose_recorded_episode([evidence], start, end):
+                    return 'occasion_member'
         if adjacent_conversation(uid, conversation, cid, require_complete=True):
             return 'occasion_neighbor'
     except Exception:

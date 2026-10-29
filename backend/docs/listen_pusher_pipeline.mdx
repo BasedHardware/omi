@@ -7954,6 +7954,14 @@ pack receipt processing still owns release of original audio.
 Episodes use the recorded-time ownership function and four-hour / thirty-minute
 rules documented in `utils/episodes/ARCHITECTURE.md`. The additive
 `timer_started_at` field fixes Home's elapsed-time anchor without new UI.
+Late-audio intake and occasion-aware discard apply globally; episode storage
+and timer fields retain the existing beta cohort and client-capability gates.
+The default-on `CONVERSATION_OCCASION_RELEVANCE_ENABLED` kill switch retains
+short fragments only when another non-discarded member supports recorded-time
+ownership within the episode gap/cap rules, or a kept conversation is adjacent.
+A clip's self-created singleton never proves relevance. Episode API projections
+hide episodes whose members are all discarded, deleted or absorbed, including
+when a relevance decision arrives after the episode poll cache was populated.
 
 ### Occasion step 2 merge-path audit
 

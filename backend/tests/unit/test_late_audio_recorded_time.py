@@ -295,6 +295,7 @@ def test_morning_shape_34_fragments_replayed_through_sync_intake(monkeypatch, ti
     from utils.conversations.relevance_io import occasion_retention
 
     monkeypatch.setattr(episodes, 'get_firestore_client', lambda: store)
+    monkeypatch.setattr(service.conversations_db, 'get_firestore_client', lambda: store)
     for row in kept:
         reason = occasion_retention('u', SimpleNamespace(**row))
         assert reason == 'occasion_member'

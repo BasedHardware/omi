@@ -10,7 +10,7 @@ from config import occasion_relevance
 from utils.conversations import relevance_io
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.relevance import Neighbor, decide_relevance
-from tests.unit.test_late_audio_recorded_time import T0
+from tests.unit.test_late_audio_recorded_time import T0, NOW, timeline_store, _attach  # noqa: F401
 from tests.unit.test_sync_cross_job_assignment import chunk, intake
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
@@ -63,8 +63,9 @@ def test_kill_switch_restores_independent_rules_and_intake(monkeypatch):
 @pytest.mark.parametrize(
     'membership,covering,neighbor,reason',
     [
-        ({'id': 'e'}, None, None, 'occasion_member'),
-        (None, {'id': 'closed'}, None, 'occasion_member'),
+        ({'id': 'e', 'conversation_ids': ['other']}, None, None, 'occasion_member'),
+        (None, {'id': 'closed', 'conversation_ids': ['other']}, None, 'occasion_member'),
+        ({'id': 'self', 'conversation_ids': ['c']}, None, None, None),
         (None, None, Neighbor('kept', 10, 'before'), 'occasion_neighbor'),
         (None, None, None, None),
     ],
@@ -75,9 +76,68 @@ def test_production_context_reads_recorded_ownership_and_neighbors(monkeypatch, 
 
     monkeypatch.setattr(episodes, 'get_episode_for_conversation', lambda *a: membership)
     monkeypatch.setattr(timeline, 'episode_owning_recorded_time', lambda *a, **kw: covering)
+    monkeypatch.setattr(
+        relevance_io.conversations_db,
+        'get_conversation_raw_snapshot',
+        lambda *a, **kw: {'started_at': T0, 'finished_at': T0 + timedelta(seconds=20)},
+    )
     monkeypatch.setattr(relevance_io, 'adjacent_conversation', lambda *a, **kw: neighbor)
     conversation = SimpleNamespace(id='c', started_at=T0, finished_at=T0 + timedelta(seconds=18))
     assert relevance_io.occasion_retention('u', conversation) == reason
+
+
+@pytest.mark.parametrize('order', ['attach_first', 'relevance_first'])
+@pytest.mark.parametrize('context', ['isolated', 'adjacent', 'discarded_neighbor', 'outside_gap'])
+def test_attachment_order_cannot_supply_its_own_retention(monkeypatch, timeline_store, order, context):
+    from database import episodes
+    from utils.episodes import service
+
+    store = timeline_store
+    monkeypatch.setattr(episodes, 'get_firestore_client', lambda: store)
+    monkeypatch.setattr(relevance_io.conversations_db, 'get_firestore_client', lambda: store)
+    monkeypatch.setattr(relevance_io.conversations_db, 'get_conversations_finished_after', lambda *a, **kw: [])
+    start, end = T0, T0 + timedelta(seconds=5)
+    if context != 'isolated':
+        before = 31 * 60 if context == 'outside_gap' else 60
+        other = dict(
+            id='real',
+            started_at=T0 - timedelta(seconds=before),
+            finished_at=T0 - timedelta(seconds=before - 30),
+            discarded=context == 'discarded_neighbor',
+            status='completed',
+        )
+        store.rows[('users', 'u', 'conversations', 'real')] = other
+        _attach(store, 'real', other['started_at'], other['finished_at'])
+    clip = dict(id='clip', started_at=start, finished_at=end, discarded=False, status='completed')
+    store.rows[('users', 'u', 'conversations', 'clip')] = clip
+    if order == 'attach_first':
+        _attach(store, 'clip', start, end)
+    reason = relevance_io.occasion_retention('u', SimpleNamespace(**clip))
+    assert reason == ('occasion_member' if context == 'adjacent' else None)
+    result = decide(
+        member=reason,
+        text='Coming over there in a second.' if context == 'adjacent' else 'Mm-hmm.',
+        model=Mock(return_value=True),
+    )
+    assert result.discard == (context != 'adjacent')
+    clip['discarded'] = result.discard
+    if order == 'relevance_first':
+        _attach(store, 'clip', start, end)
+    c = service.Collaborators(firestore_client=store, now=lambda: NOW)
+    episode = service.episode_for_conversation('u', 'clip', collaborators=c)
+    assert (episode is not None) == (context == 'adjacent')
+    stored = episodes.get_episode_for_conversation('u', 'clip', firestore_client=store)
+    assert (service.episode_by_id('u', stored['id'], collaborators=c) is not None) == (context == 'adjacent')
+    # The poll cache must re-check member visibility after relevance commits.
+    store.rows[('users', 'u', 'episode_links', 'last_closed')] = {'episode_id': stored['id']}
+    service.reset_for_tests()
+    assert (service.last_closed_episode('u', collaborators=c) is not None) == (context == 'adjacent')
+    if context == 'adjacent':
+        clip['discarded'] = True
+        store.rows[('users', 'u', 'conversations', 'real')]['discarded'] = True
+        assert service.last_closed_episode('u', collaborators=c) is None
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')
+    assert service.episode_by_id('u', stored['id'], collaborators=c) is not None
 
 
 def test_missing_ownership_read_is_not_proof_of_isolation(monkeypatch):
