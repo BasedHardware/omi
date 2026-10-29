@@ -215,6 +215,30 @@ void main() {
       expect(await adapter.getFeatureFlagPayload('off'), isNull);
     });
 
+    test("account A's late Omi answer cannot land after account B took over", () async {
+      final pendingA = Completer<Map<String, OmiFlag>?>();
+      var calls = 0;
+      final adapter = omiAdapter(() {
+        calls++;
+        if (calls == 1) return pendingA.future;
+        return Future.value({'screen-kill': (enabled: true, variant: null, payloadJson: null)});
+      });
+      final reloadA = adapter.reloadFeatureFlags();
+      adapter.identify(userId: 'b');
+      await adapter.reloadFeatureFlags();
+      pendingA.complete({'screen-kill': (enabled: false, variant: null, payloadJson: null)});
+      await reloadA;
+      expect(await adapter.resolvedFeatureEnabled('screen-kill'), isTrue);
+    });
+
+    test('an identity change drops the Omi answers', () async {
+      final adapter = omiAdapter(() async => {'omi-only': (enabled: true, variant: null, payloadJson: null)});
+      await adapter.reloadFeatureFlags();
+      expect(adapter.isBooleanFeatureEnabledCached('omi-only'), isTrue);
+      adapter.identify(userId: 'someone-else');
+      expect(adapter.isBooleanFeatureEnabledCached('omi-only'), isFalse);
+    });
+
     test('a failed Omi fetch leaves every key on PostHog', () async {
       final adapter = omiAdapter(() async => null);
       expect(await adapter.reloadFeatureFlags(), isTrue);

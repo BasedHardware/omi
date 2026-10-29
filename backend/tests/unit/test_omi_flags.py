@@ -29,8 +29,14 @@ class FakeStore:
         self.fail = False
         self.reads = 0
         self.configured = True
+        self.client_error = None
+
+    def store_target(self):
+        return ('flags-project', '(default)') if self.configured else None
 
     def flags_client(self):
+        if self.client_error:
+            raise self.client_error
         return object() if self.configured else None
 
     def read_version(self, _client):
@@ -132,6 +138,17 @@ def test_store_failure_keeps_last_known_good(store, monkeypatch):
     assert recorded.call_args.kwargs['to_mode'] == 'last_known_good'
 
 
+def test_client_construction_failure_degrades_like_a_read_failure(store, monkeypatch):
+    recorded = Mock()
+    monkeypatch.setattr(omi_flags, 'record_fallback', recorded)
+    store.client_error = ValueError('no default credentials')
+    assert omi_flags.resolve('proactivity_v2', 'u') is None
+    assert recorded.call_args.kwargs['to_mode'] == 'none'
+    store.client_error = None
+    store.now[0] += 60
+    assert omi_flags.resolve('proactivity_v2', 'u') == omi_flags.Resolved(True)
+
+
 def test_first_load_failure_resolves_none(store, monkeypatch):
     monkeypatch.setattr(omi_flags, 'record_fallback', Mock())
     store.fail = True
@@ -216,8 +233,11 @@ def test_mirror_keeps_kill_rows_active_at_zero_and_refuses_what_posthog_cannot_e
     killed = cli.merge_rule(None, ENTRY, {'active': False})
     assert cli.posthog_mirror_body(row, killed) == {
         'active': True,
-        'filters': {'groups': [{'properties': [], 'rollout_percentage': 0}]},
+        'filters': {'groups': [{'properties': [], 'rollout_percentage': 0}], 'payloads': {}},
     }
+    with_payload = {**row, 'filters': {**row['filters'], 'payloads': {'true': '{"v":1}'}}}
+    ramped = cli.merge_rule(None, ENTRY, {'active': True, 'rollout_percentage': 50, 'payload': '{"v":2}'})
+    assert cli.posthog_mirror_body(with_payload, ramped)['filters']['payloads'] == {'true': '{"v":2}'}
     with pytest.raises(cli.FlagCliError):
         cli.posthog_mirror_body(row, {**killed, 'allow_uids': ['u']})
 

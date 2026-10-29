@@ -121,6 +121,10 @@ def posthog_mirror_body(row: dict[str, Any], rule: dict[str, Any] | None) -> dic
     if rule['allow_uids'] or rule['deny_uids'] or rule['variant']:
         raise FlagCliError('allow/deny lists and variants cannot be mirrored to PostHog')
     filters['groups'] = [{**groups[0], 'properties': [], 'rollout_percentage': rule['rollout_percentage']}]
+    payloads = {k: v for k, v in (filters.get('payloads') or {}).items() if k != 'true'}
+    if rule.get('payload') is not None:
+        payloads['true'] = rule['payload']
+    filters['payloads'] = payloads
     # A kill row stays an active 0% group: an inactive PostHog row reads unknown on released clients.
     if not rule['active']:
         filters['groups'][0]['rollout_percentage'] = 0

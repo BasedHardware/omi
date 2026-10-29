@@ -120,8 +120,7 @@ class _SnapshotCache:
             self._lock.release()
 
     def _refresh(self, now: float) -> None:
-        client = store.flags_client()
-        if client is None:
+        if store.store_target() is None:
             self._snapshot = EMPTY
             self._redis_checked_at = self._store_checked_at = now
             return
@@ -131,6 +130,8 @@ class _SnapshotCache:
             self._redis_checked_at = now
             remote = store.read_redis_version()
         try:
+            # Inside the try: client construction (ADC, database id) fails like a read and keeps the snapshot.
+            client = store.flags_client()
             if now - self._store_checked_at >= STORE_POLL_SECONDS or (remote is not None and remote != current):
                 self._store_checked_at = now
                 version, docs = store.read_all(client) if current is None else (store.read_version(client), None)

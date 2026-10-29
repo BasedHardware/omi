@@ -22,7 +22,7 @@ from typing import Any
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
-from database import redis_db
+from database.redis_connection import create_bounded_redis_client
 
 FLAGS_COLLECTION = 'omi_flags'
 META_COLLECTION = 'omi_flags_meta'
@@ -31,6 +31,7 @@ AUDIT_COLLECTION = 'omi_flags_audit'
 REDIS_VERSION_KEY = 'omi_flags:version'
 # Serving reads are bounded: a slow store must not stall the request that triggered the refresh.
 READ_TIMEOUT_SECONDS = 3.0
+REDIS_TIMEOUT_SECONDS = 0.25
 
 
 def store_target() -> tuple[str, str] | None:
@@ -68,10 +69,16 @@ def read_all(client: Any) -> tuple[int, dict[str, dict[str, Any]]]:
     return version, rules
 
 
+@lru_cache(maxsize=1)
+def _redis() -> Any:
+    # Bounded sockets: a blackholed Redis must not hang the refresh that holds the snapshot lock.
+    return create_bounded_redis_client(REDIS_TIMEOUT_SECONDS)
+
+
 def read_redis_version() -> int | None:
     """Fast-path change signal. None on a miss or any Redis error (the Firestore poll still runs)."""
     try:
-        raw = redis_db.r.get(REDIS_VERSION_KEY)
+        raw = _redis().get(REDIS_VERSION_KEY)
     except Exception:
         return None
     if raw is None:
@@ -84,7 +91,7 @@ def read_redis_version() -> int | None:
 
 def publish_redis_version(version: int) -> bool:
     try:
-        redis_db.r.set(REDIS_VERSION_KEY, str(version))
+        _redis().set(REDIS_VERSION_KEY, str(version))
         return True
     except Exception:
         return False
