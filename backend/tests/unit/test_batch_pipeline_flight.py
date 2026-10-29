@@ -510,3 +510,36 @@ def test_packed_out_of_memory_falls_back_to_serial_pyannote(pyannote_pair, monke
     # Packed group, then each unit's per-file shared trunk, then segmentation:
     # every OOM lands on pyannote's own serial calls.
     assert packed.counts['oom_fallbacks'] == 4
+
+
+def test_packed_error_falls_back_to_serial_pyannote(pyannote_pair, monkeypatch):
+    _, diarizer, vad = pyannote_pair
+    from diarizer.batch_pipeline_models import PyannoteDiarizer
+
+    clips = [synthetic_audio(s, i) for i, s in enumerate((12.25, 26.0))]
+    serial = [PyannoteDiarizer(diarizer)(c) for c in clips]
+    packed = flight.FlightPyannote(diarizer, vad, budget_seconds=1800)
+    features = packed.segment(clips)
+
+    def broken(*args, **kwargs):
+        raise ValueError('Some arbitrary error')
+
+    monkeypatch.setattr(packed, 'embed_group', broken)
+    assert packed.diarize_many(list(zip(clips, features))) == serial
+    monkeypatch.setattr(packed, '_segment_group', broken)
+    assert packed.segment(clips) == [None, None]
+    assert packed.counts['error_fallbacks'] == 4
+
+def test_packed_fatal_cuda_error_is_unrecoverable(pyannote_pair, monkeypatch):
+    _, diarizer, vad = pyannote_pair
+
+    clips = [synthetic_audio(s, i) for i, s in enumerate((12.25, 26.0))]
+    packed = flight.FlightPyannote(diarizer, vad, budget_seconds=1800)
+
+    def fatal(*args, **kwargs):
+        raise RuntimeError('CUDA error: device-side assert triggered')
+
+    monkeypatch.setattr(packed, '_segment_group', fatal)
+    import pytest
+    with pytest.raises(RuntimeError, match='device-side assert'):
+        packed.segment(clips)
