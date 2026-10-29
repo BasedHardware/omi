@@ -14,11 +14,12 @@ from utils.conversations import lifecycle
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
 from utils.conversations.recorded_time import recorded_span
 from utils.enrichment import outbox
-from utils.episodes.finalize import schedule_synced_intake_attach
 from utils.sync import processing_hold
 
 
 def ingest_late_transcript(uid: str, row: dict, segments: list[dict]) -> dict:
+    from utils.episodes.finalize import schedule_synced_intake_attach
+
     span = recorded_span(row.get('started_at'), segments)
     if span is None:
         raise ValueError('late transcript has no recorded span')

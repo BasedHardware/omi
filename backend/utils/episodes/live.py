@@ -46,7 +46,6 @@ from typing import Any, Mapping, Optional, Sequence
 from config.recorded_time import recorded_episodes_enabled
 from database import conversations as conversations_db
 from utils.conversations.recorded_time import recorded_span, is_late
-from utils.episodes.finalize import schedule_synced_intake_attach
 
 from config.episodes import (
     FIRST_MOMENT_MIN_SECONDS,
@@ -453,6 +452,8 @@ async def on_realtime_segments(
                 # Pusher and listen share this guard, so transport cannot turn
                 # a delayed batch into an arrival-timed live occasion.
                 row = dict(row, transcript_segments=list(segments), finished_at=recorded[1])
+                from utils.episodes.finalize import schedule_synced_intake_attach
+
                 schedule_synced_intake_attach(uid, conversation_id, row)
                 return
         spoken = any(str(s.get('text') or '').strip() for s in segments)

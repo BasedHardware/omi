@@ -468,7 +468,8 @@ def test_flatten_off_donor_with_ancestry_is_ineligible(world, reads):
     assert not any(path[-1] in ('g1', 'g2') for _, path in reads)
 
 
-def test_flatten_off_plain_pair_keeps_baseline_write_shape(world, reads):
+def test_flatten_off_plain_pair_keeps_baseline_write_shape(world, reads, monkeypatch):
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')
     world.add('p', 0, 10)
     world.add('n', 15, 10)
     world.raw('n')['sync_content_revision'] = 7

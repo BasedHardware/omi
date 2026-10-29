@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 import pytest
+from utils.episodes import finalize as episode_finalize
 from config import episodes as config
 from config import recorded_time as flags
 from database import episode_timeline, episodes
@@ -62,7 +63,7 @@ def test_late_listen_batches_use_real_temporal_assignment_and_retry_enrichment(m
     marks, attachments = [], []
     monkeypatch.setattr(late_audio.lifecycle, 'ingest_sync_conversation', lambda uid, incoming: intake(store, incoming))
     monkeypatch.setattr(late_audio.outbox, 'mark', lambda *a, **k: marks.append((a, k)))
-    monkeypatch.setattr(late_audio, 'schedule_synced_intake_attach', lambda *a: attachments.append(a))
+    monkeypatch.setattr(episode_finalize, 'schedule_synced_intake_attach', lambda *a: attachments.append(a))
     row = {
         'id': 'live-generation',
         'source': 'omi',
@@ -211,7 +212,7 @@ def test_morning_shape_34_fragments_replayed_through_sync_intake(monkeypatch, ti
     # Exercise production repointing, including closed episodes, on each append.
     monkeypatch.setattr(service, '_record_recovered', lambda *a: 'skipped_applied')
     monkeypatch.setattr(
-        late_audio,
+        episode_finalize,
         'schedule_synced_intake_attach',
         lambda uid, cid, row: service._attach_synced(uid, cid, row, c),
     )
@@ -344,7 +345,7 @@ def test_listen_persistence_uses_late_intake_before_live_writes(monkeypatch, tra
     store = StrictFirestore()
     monkeypatch.setattr(late_audio.lifecycle, 'ingest_sync_conversation', lambda uid, incoming: intake(store, incoming))
     monkeypatch.setattr(late_audio.outbox, 'mark', lambda *a, **kw: None)
-    monkeypatch.setattr(late_audio, 'schedule_synced_intake_attach', lambda *a: None)
+    monkeypatch.setattr(episode_finalize, 'schedule_synced_intake_attach', lambda *a: None)
     processor = TranscriptProcessor.__new__(TranscriptProcessor)
 
     async def call(fn, *a, **kw):
@@ -427,7 +428,7 @@ def test_realtime_transport_does_not_open_arrival_time_episode_for_late_speech(m
         live.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **kw: {'started_at': T0, 'source': 'omi'}
     )
     calls = []
-    monkeypatch.setattr(live, 'schedule_synced_intake_attach', lambda *a: calls.append(a))
+    monkeypatch.setattr(episode_finalize, 'schedule_synced_intake_attach', lambda *a: calls.append(a))
 
     def reject(*a, **kw):
         raise AssertionError('historical speech reached live tracker')
