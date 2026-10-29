@@ -90,12 +90,12 @@ def test_release_resets_held_unit_when_target_restored():
     job = client.rows[('batch_pipeline_prod_jobs', 'held')]
     assert result['projection_state'] == 'pending'
     assert result['projection_redriven_at'] == 500.0
-    assert 'projection' not in result
-    assert 'projection_blocked_since' not in result
-    assert 'projection_block_type' not in result
-    assert 'lineage_quarantine_version' not in result
+    assert result['projection'] == {}
+    assert result['projection_blocked_since'] is None
+    assert result['projection_block_type'] is None
+    assert result['lineage_quarantine_version'] == 0
     assert result['protocol_version'] == 1
-    assert 'recovery_state' not in job
+    assert job['recovery_state'] is None
     # Audio is never touched by the reset.
     assert job['audio_uri'] == 'gs://synthetic/audio'
     # The owner watermark stays where the chain already is.

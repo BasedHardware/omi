@@ -7,6 +7,10 @@ merely undiscarded-but-unfinalized) and returns the row to the ordinary pending
 state for the next assignment pass. Audio is never touched, and the reset marks
 the row ``projection_redriven_at`` so the re-assignment cannot drag the owner
 watermark backward onto already-terminal rows.
+
+The reset writes falsy tombstones (empty receipt map, ``None`` stamps) rather
+than field deletes: every consumer reads these fields through truthiness, and
+tombstones keep the strict Firestore test fixture's sentinel contract intact.
 """
 
 import logging
@@ -84,19 +88,19 @@ class ProjectionReleaseStore:
             reset: dict[str, Any] = {
                 'projection_state': 'pending',
                 'projection_redriven_at': now,
-                'projection': firestore.DELETE_FIELD,
-                'projection_blocked_since': firestore.DELETE_FIELD,
-                'projection_block_type': firestore.DELETE_FIELD,
+                'projection': {},
+                'projection_blocked_since': None,
+                'projection_block_type': None,
             }
             if entry.get('lineage_quarantine_version') == 1:
                 # Old-binaries fence for the held receipt; the receipt is gone.
                 reset['protocol_version'] = 1
-                reset['lineage_quarantine_version'] = firestore.DELETE_FIELD
+                reset['lineage_quarantine_version'] = 0
             if entry.get('projection_parts'):
-                reset['projection_parts'] = firestore.DELETE_FIELD
-                reset['projection_part_count'] = firestore.DELETE_FIELD
+                reset['projection_parts'] = {}
+                reset['projection_part_count'] = 0
             transaction.update(self.store.ref('results', segment_id), reset)
-            transaction.update(self.store.ref('jobs', segment_id), {'recovery_state': firestore.DELETE_FIELD})
+            transaction.update(self.store.ref('jobs', segment_id), {'recovery_state': None})
             released_owner.append(binding.owner_id)
             return True
 

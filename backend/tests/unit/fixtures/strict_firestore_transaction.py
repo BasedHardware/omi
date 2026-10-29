@@ -28,7 +28,6 @@ from copy import deepcopy
 from threading import RLock
 from typing import Any
 
-from google.cloud.firestore_v1.transforms import DELETE_FIELD as _DELETE_FIELD
 from google.cloud.firestore_v1.transforms import Increment
 
 
@@ -282,17 +281,13 @@ class StrictFirestoreTransaction:
 
     def update(self, ref: StrictFirestoreDocument, patch: dict[str, Any]) -> None:
         self._assert_reference_belongs(ref)
-        _assert_storable({key: value for key, value in patch.items() if value is not _DELETE_FIELD})
+        _assert_storable(patch)
         self.has_written = True
         if ref.path not in self._database.rows:
             raise RuntimeError('missing row')
         payload = deepcopy(patch)
         self.updates.append((ref.path, payload))
-        for key, value in payload.items():
-            if value is _DELETE_FIELD:
-                self._database.rows[ref.path].pop(key, None)
-            else:
-                self._database.rows[ref.path][key] = value
+        self._database.rows[ref.path].update(payload)
 
     def delete(self, *args: Any, **kwargs: Any) -> None:
         raise UnsupportedFirestoreOperationError(f'StrictFirestore supports only {_SUPPORTED_OPERATIONS}')
