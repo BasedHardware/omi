@@ -1,6 +1,6 @@
 from typing import Any, List
 
-from fastapi import Depends, HTTPException, Request, APIRouter, Form
+from fastapi import Depends, HTTPException, Request, APIRouter, Form, Query
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
@@ -279,10 +279,15 @@ def is_setup_completed(uid: str):
 
 
 @router.post('/zapier/memories', tags=['zapier'], response_model=EndpointResponse)
-def zapier_conversations(conversation: Conversation, uid: str = Depends(require_zapier_webhook_auth)):
+def zapier_conversations(conversation: Conversation, uid: str = Query(...)):
     """
-    The actual plugin that gets triggered when a conversation gets created, and adds the conversation to the Zapier.
+    Internal webhook receiver invoked by backend/utils/webhooks.py (conversation_created_webhook)
+    when a conversation is created, forwarding it to active Zapier subscriptions.
+    Kept out of require_zapier_webhook_auth because the backend webhook dispatcher only provides ?uid=.
     """
+    if not uid or not uid.strip():
+        raise HTTPException(status_code=422, detail="Missing or empty uid")
+    uid = uid.strip()
 
     # Not enabled Zapier plugin
     status = get_zapier_user_status(uid)

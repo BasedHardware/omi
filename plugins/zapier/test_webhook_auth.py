@@ -147,7 +147,6 @@ class TestRouteWiring(unittest.TestCase):
         "unsubscribe_zapier_trigger",
         "get_trigger_conversation_sample",
         "auth_zapier_me",
-        "zapier_conversations",
         "zapier_action_conversations",
     )
 
@@ -156,6 +155,7 @@ class TestRouteWiring(unittest.TestCase):
         "disconnect",
         "setup_zapier_workflow",
         "is_setup_completed",
+        "zapier_conversations",
     )
 
     @classmethod
