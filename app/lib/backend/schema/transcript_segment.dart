@@ -152,10 +152,10 @@ class TranscriptSegment {
       // TODO: bad edge case because of using deepgram
       // - previous segments before ws2 is switched on the backend, (duration of speech profile) will not be assigned.
       bool isNotEmpty = joinedSimilarSegments.isNotEmpty;
-      bool isSameUser = isNotEmpty && joinedSimilarSegments.last.isUser == newSegment.isUser;
       bool isSameSpeaker = isNotEmpty && joinedSimilarSegments.last.speaker == newSegment.speaker;
 
-      if (isNotEmpty && isSameSpeaker && isSameUser) {
+      if (isNotEmpty && isSameSpeaker) {
+        joinedSimilarSegments.last.isUser = joinedSimilarSegments.last.isUser || newSegment.isUser;
         joinedSimilarSegments.last.text += ' ${newSegment.text}';
         joinedSimilarSegments.last.end = newSegment.end;
       } else {
@@ -166,11 +166,11 @@ class TranscriptSegment {
     if (joinedSimilarSegments.isEmpty) return;
 
     bool isNotEmpty = segments.isNotEmpty;
-    bool isSameUser = isNotEmpty && segments.last.isUser == joinedSimilarSegments[0].isUser;
     bool isSameSpeaker = isNotEmpty && segments.last.speaker == joinedSimilarSegments[0].speaker;
     bool withinThreshold = isNotEmpty && (joinedSimilarSegments[0].start - segments.last.end < 30);
 
-    if (isNotEmpty && isSameSpeaker && isSameUser && withinThreshold) {
+    if (isNotEmpty && isSameSpeaker && withinThreshold) {
+      segments.last.isUser = segments.last.isUser || joinedSimilarSegments[0].isUser;
       segments.last.text += ' ${joinedSimilarSegments[0].text}';
       segments.last.end = joinedSimilarSegments[0].end;
       joinedSimilarSegments.removeAt(0);

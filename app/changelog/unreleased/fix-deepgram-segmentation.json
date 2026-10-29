@@ -1,0 +1,5 @@
+{
+    "kind": "none",
+    "change": "Fix an issue with transcript segmentation assigning incorrect speaker attributes",
+    "platforms": ["android", "ios"]
+}
