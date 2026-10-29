@@ -115,7 +115,8 @@ def _verify_admin_key(x_admin_key: str = Header(..., alias='X-Admin-Key')) -> st
 
     Returns a short hash of the key for audit logging (not the key itself).
     """
-    if not ADMIN_KEY or not hmac.compare_digest(x_admin_key, ADMIN_KEY):
+    configured = (ADMIN_KEY or '').strip()
+    if not configured or not x_admin_key or not hmac.compare_digest(x_admin_key.encode(), configured.encode()):
         raise HTTPException(status_code=403, detail='Invalid admin key')
     return f'admin:{hashlib.sha256(x_admin_key.encode()).hexdigest()[:8]}'
 

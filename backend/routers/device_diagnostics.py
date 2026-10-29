@@ -80,8 +80,8 @@ def _admin_key(
     x_admin_key: str = Header(..., alias='X-Admin-Key'),
     x_admin_user: str | None = Header(None, alias='X-Admin-User'),
 ) -> str:
-    expected = os.getenv('ADMIN_KEY', '')
-    if not expected or not hmac.compare_digest(x_admin_key, expected):
+    expected = (os.getenv('ADMIN_KEY') or '').strip()
+    if not expected or not x_admin_key or not hmac.compare_digest(x_admin_key.encode(), expected.encode()):
         raise HTTPException(status_code=403, detail='Invalid admin key')
     key_id = hashlib.sha256(x_admin_key.encode()).hexdigest()[:8]
     return f'admin:{key_id}/{x_admin_user[:64] if x_admin_user else "unattributed"}'

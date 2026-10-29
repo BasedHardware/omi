@@ -126,4 +126,4 @@ def test_verify_uses_constant_time_compare(announcements_router):
     with mock.patch.dict(os.environ, {"ADMIN_KEY": "s3cr3t"}):
         with mock.patch("routers.announcements.hmac.compare_digest", return_value=True) as spy:
             announcements_router._verify_admin_key("anything")
-        spy.assert_called_once_with("anything", "s3cr3t")
+        spy.assert_called_once_with(b"anything", b"s3cr3t")

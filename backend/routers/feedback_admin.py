@@ -51,7 +51,8 @@ def _verify_admin_key(
     holding the key could set it) but it is not a second gate — it is the
     attribution that makes an authorized read traceable to a person.
     """
-    if not ADMIN_KEY or not hmac.compare_digest(x_admin_key, ADMIN_KEY):
+    configured = (ADMIN_KEY or '').strip()
+    if not configured or not x_admin_key or not hmac.compare_digest(x_admin_key.encode(), configured.encode()):
         raise HTTPException(status_code=403, detail='Invalid admin key')
     key_id = hashlib.sha256(x_admin_key.encode()).hexdigest()[:8]
     if x_admin_user:
