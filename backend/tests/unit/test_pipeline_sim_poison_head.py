@@ -63,6 +63,7 @@ POISON_PAYLOAD_KINDS = frozenset(
         'payload:source-manifest',
         'payload:corrupt-artifact',
         'payload:non-object-result',
+        'payload:tampered-artifact',
     }
 )
 
@@ -103,6 +104,12 @@ def poison_payload(kind: str, head: str):
         if kind == 'payload:non-object-result':
             # load_result is json.loads: a valid non-object body.
             return ['not', 'an', 'object']
+        if kind == 'payload:tampered-artifact':
+            # Authenticated decryption of altered ciphertext: InvalidTag, not
+            # ValueError (Luna round 2).
+            from cryptography.exceptions import InvalidTag
+
+            raise InvalidTag()
         return dict(SUCCESS_PAYLOAD)
 
     return load
@@ -152,16 +159,20 @@ def test_permanent_poison_head_advances_or_waits_observably(monkeypatch, kind, l
 
             monkeypatch.setattr(audio_module, 'read_context', read_context)
     elif kind == 'contention-value-error':
+        # Luna round 2: the load seam's Firestore-backed authorization can
+        # exhaust Aborted retries, surfacing the contention ValueError inside
+        # the disposition's scope. It must stay retryable — no quarantine.
         from database.firestore_transaction_retry import FirestoreAborted
 
-        def contention(uid, incoming, **_):
-            error = ValueError('Failed to commit transaction in 5 attempts')
-            error.__cause__ = FirestoreAborted('synthetic contention')
-            raise error
+        def load(item, uri):
+            if item.segment_id == head:
+                error = ValueError('Failed to commit transaction in 5 attempts')
+                error.__cause__ = FirestoreAborted('synthetic contention')
+                raise error
+            return dict(SUCCESS_PAYLOAD)
 
-        monkeypatch.setattr('database.conversations.assign_sync_conversation', contention)
-        monkeypatch.setattr('database.conversations.get_closest_conversation_to_timestamps', lambda *args, **_: None)
-        projector = projector_for(log, lambda item, uri: dict(SUCCESS_PAYLOAD))
+        patch_conversation_assignment(monkeypatch, None, fail_first_n=0)
+        projector = projector_for(log, load)
     else:  # generation-ambiguous: the head's first transactional prepare fails
         patch_conversation_assignment(monkeypatch, None, fail_first_n=0)
         real_session = log.session
@@ -250,6 +261,9 @@ def test_contention_shaped_value_error_stays_retryable_at_the_unit_level():
     contention.__cause__ = FirestoreAborted('synthetic contention')
     assert not projection.payload_contract_violation(contention)
     assert not projection.payload_contract_violation(RuntimeError('synthetic'))
+    from cryptography.exceptions import InvalidTag
+
+    assert projection.payload_contract_violation(InvalidTag())  # tampered artifact body
     for permanent in (
         ValueError('result audio duration differs from admitted capture'),
         ValueError('successful batch result must contain words'),

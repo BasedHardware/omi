@@ -8,6 +8,7 @@ from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_
 from config.policy import ProjectionPolicy
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
+from cryptography.exceptions import InvalidTag
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import threading
@@ -169,15 +170,23 @@ def quarantines_assignment_conflict(error: BaseException, job: dict | None) -> b
 
 
 def payload_contract_violation(error: BaseException) -> bool:
-    """Whether retrying the same committed bytes cannot fix this ValueError.
+    """Whether retrying the same committed bytes cannot fix this error.
 
     Every other ValueError on the assignment path is a contract violation of
     the committed result or manifest (spans, split, word bounding, source
-    decode). Firestore commit contention also surfaces as ``ValueError`` and
-    must stay retryable; ``error_type`` names that shape
-    ``FirestoreContentionExhausted``.
+    decode). A tampered or wrongly-keyed artifact body fails authenticated
+    decryption as ``InvalidTag`` — equally permanent. Firestore commit
+    contention also surfaces as ``ValueError`` and must stay retryable;
+    ``error_type`` names that shape ``FirestoreContentionExhausted``.
     """
+    if isinstance(error, InvalidTag):
+        return True
     return isinstance(error, ValueError) and error_type(error) != 'FirestoreContentionExhausted'
+
+
+# The contract catch shape: both classes can carry a permanent payload
+# violation; payload_contract_violation decides which instances disposition.
+PAYLOAD_CONTRACT_ERRORS = (ValueError, InvalidTag)
 
 
 @contextmanager
@@ -833,7 +842,9 @@ class Projector:
                     else:
                         manifest = read_context(self.fetch_audio(item))
             require_repair_manifest(item, binding, manifest, self.require_lineage_fence)
-        except ValueError as error:
+        except PAYLOAD_CONTRACT_ERRORS as error:
+            if not payload_contract_violation(error):
+                raise
             # The committed result/manifest itself violates the contract: no
             # retry can fix those bytes, and an unhandled raise would wedge
             # every later capture behind this chain head.
@@ -966,7 +977,7 @@ class Projector:
                         )
                     raise
                 receipt = persist_disposition(session, privacy_deleted=True)
-            except ValueError as error:
+            except PAYLOAD_CONTRACT_ERRORS as error:
                 if not payload_contract_violation(error):
                     raise
                 receipt = self._quarantine_payload_contract(item, binding, policy, error, session=session)

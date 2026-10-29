@@ -38,6 +38,7 @@ SCANNED_MODULES = {
     'utils/batch_pipeline/projection_parts.py': {},
     'utils/batch_pipeline/context.py': {'_blocked': 'ProjectionBlocked'},
     'utils/batch_pipeline/contracts.py': {},
+    'utils/batch_pipeline/artifacts.py': {},
     'database/batch_pipeline_projection_protocol.py': {},
     'database/batch_pipeline_projection_session.py': {},
 }
@@ -60,8 +61,15 @@ TAXONOMY = {
     'ProjectionBlocked': 'blocked wait (claim busy / evidence / fences; observable, not dispositioned)',
     'StepDeadline': 'resume next walk step (multipart budget)',
     # Payload-contract violations quarantine-hold via payload_contract_violation;
-    # Firestore contention-shaped ValueError stays retryable.
+    # Firestore contention-shaped ValueError stays retryable. A tampered
+    # artifact body fails authenticated decryption as InvalidTag — permanent.
     'ValueError': 'payload contract: quarantine_held | contention retry',
+    'InvalidTag': 'payload contract: quarantine_held (tampered artifact body)',
+    # Artifact authorization refusals (expired voice evidence, privacy
+    # generation drift) are observable waits on the sweep, not dispositions.
+    'PermissionError': 'authorization wait (observable, retried by the sweep)',
+    'TimeoutError': 'transient storage timeout: retryable, never dispositioned',
+    'OSError': 'transient storage error: retryable, never dispositioned',
 }
 
 
