@@ -1187,7 +1187,7 @@ def _finalize_closes(uid: str, trigger: str, source: Any) -> bool:
     conversation is never a boundary: its finalize is when offline sync processed it, not when
     its speech ended.
     """
-    if trigger == SYNC_UPDATE:
+    if trigger in {SYNC_UPDATE, 'capture_group'}:
         return False
     return trigger == CLIENT_FINALIZE or client_gate.occasion_mode(uid, source)
 
@@ -1579,7 +1579,7 @@ def _on_finalized(
         if outcome == 'conflict':
             return outcome
         episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
-    if segments and not absorbed_from and trigger != SYNC_UPDATE:
+    if segments and not absorbed_from and trigger not in {SYNC_UPDATE, 'capture_group'}:
         # Sync members use content receipts at attachment instead of this live cursor.
         span = conversation_span(row)
         ended = span.recorded_end if span else _wall(started, max(_segment_end(s) for s in segments))
