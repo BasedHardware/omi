@@ -50,7 +50,7 @@ def entries():
             covered_by=('database.batch_pipeline_shadow.stale_jobs',),
             reason='bounded orchestration delegates its only query to stale_jobs; finish uses document transactions',
             expect_observed=False,
-            body_digest='e5ea33125389c09c8ad556fab4a6319142f223e4dfa655095dcd89c64e976a8d',
+            body_digest='014a779e64fb2ab2baded6c4baef3ae9528bd080b8b7bafbd0e68948e8c418d4',
         ),
         CoveredByEntry(
             'database.batch_ramp.ramp_admission_policy',
