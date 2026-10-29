@@ -904,6 +904,11 @@ affinity:
     # fallback nodes 24/7 (11 nodes ≈ $52/day, 2026-10-29) because listen
     # pods never reschedule on their own and the nodes stay above the
     # autoscaler's scale-down utilization threshold.
+    # Deploy gate: this is a pod-template change, so per
+    # backend/docs/runbooks/audio-fleet.md it must NOT be rolled onto active
+    # sessions — only a verified traffic-free window or a qualified
+    # admission drain (audio-fleet.md "Retire one node/pool" steps) makes
+    # the reschedule safe; a plain off-peak window is not sufficient.
     preferredDuringSchedulingIgnoredDuringExecution:
       - weight: 100
         preference:
