@@ -1,0 +1,6 @@
+{
+  "changes": [
+    "The main chat window now shows the same animated spinner as the floating bar while waiting for a reply, instead of a plain '…'.",
+    "Background-agent cards in chat now show which agent (Hermes, OpenClaw, Claude Code, Codex, or Omi) ran, instead of a generic bot icon."
+  ]
+}

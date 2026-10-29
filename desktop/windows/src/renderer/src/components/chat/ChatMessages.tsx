@@ -119,12 +119,13 @@ const MessageRow = memo(function MessageRow({
       )
     }
   }
-  // Bar chat (overlay): while Omi's reply is still pending — the last
-  // assistant turn exists as an empty placeholder — show a standalone
-  // spinning Omi mark instead of a bubble of dots. A distinct element type means
-  // the real bubble mounts fresh (bubble-in pop-in) the moment content lands and
-  // this loader is unmounted. The main window keeps its own indicators.
-  if (variant === 'overlay' && isLast && sending && m.role === 'assistant' && !m.content) {
+  // While Omi's reply is still pending — the last assistant turn exists as an
+  // empty placeholder — show a standalone spinning Omi mark instead of a
+  // bubble of dots. A distinct element type means the real bubble mounts
+  // fresh (bubble-in pop-in) the moment content lands and this loader is
+  // unmounted. Both surfaces are dark (main's assistant bubble is white-on-
+  // dark, same as overlay's), so the spinner's dot color reads fine on either.
+  if (isLast && sending && m.role === 'assistant' && !m.content) {
     return <OmiThinkingSpinner />
   }
   // Never offer copy on the reply that is still streaming in (or on an
