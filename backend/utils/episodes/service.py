@@ -1431,8 +1431,8 @@ def _record_recovered(uid: str, episode_id: str, conversation_id: str, row: Mapp
 def _attach_synced(
     uid: str, conversation_id: str, row: Mapping[str, Any], c: Collaborators, *, absorbed_from: Optional[str] = None
 ) -> str:
-    primary = episode_groups.primary_id(row)
     if canonical := episode_groups.canonical_row(uid, conversation_id, row, firestore_client=c.firestore_client):
+        primary = str(canonical.get('id') or episode_groups.primary_id(row))
         owner = episodes_db.get_episode_for_conversation(uid, primary, firestore_client=c.firestore_client)
         if owner and primary in (owner.get('recovered_conversation_ids') or []):
             episode_groups.join_duplicates(uid, owner, primary, canonical, firestore_client=c.firestore_client)
