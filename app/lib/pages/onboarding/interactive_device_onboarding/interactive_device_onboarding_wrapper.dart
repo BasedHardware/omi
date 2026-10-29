@@ -13,7 +13,6 @@ import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/voice_r
 import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/power_cycle_step.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/double_press_config_step.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/all_set_step.dart';
-import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_intro_screen.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
@@ -34,7 +33,6 @@ class InteractiveDeviceOnboardingWrapper extends StatefulWidget {
 class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOnboardingWrapper> {
   late DeviceOnboardingProvider _onboardingProvider;
   CaptureProvider? _captureProvider;
-  bool _showIntro = true;
   bool _started = false;
   bool _completed = false;
   bool _saving = false;
@@ -42,7 +40,8 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
   @override
   void initState() {
     super.initState();
-    _onboardingProvider = DeviceOnboardingProvider();
+    // The tour opens straight on its first step ("Speak Into Your Omi"), with no intro screen before it.
+    _onboardingProvider = DeviceOnboardingProvider()..startOnboarding();
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
@@ -55,23 +54,14 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
     });
   }
 
-  void _startTutorial() {
-    setState(() => _showIntro = false);
-    _onboardingProvider.startOnboarding();
-  }
-
   @override
   void dispose() {
     if (_started && !_completed) {
       AnalyticsManager().deviceOnboardingAbandoned(_onboardingProvider.currentStep);
     }
-    // Cancel only a tutorial-owned voice session. Opening Settings → Device
-    // Tutorial attaches CaptureProvider in the post-frame callback before the
-    // user starts the flow; exiting the intro must not discard an unrelated
-    // in-flight Omi voice command. `_showIntro` stays true until `_startTutorial`.
-    if (!_showIntro) {
-      _captureProvider?.cancelTutorialOwnedVoiceSession();
-    }
+    // Cancel only a tutorial-owned voice session: an Omi voice command started
+    // before the tour opened is not the tour's and keeps running.
+    _captureProvider?.cancelTutorialOwnedVoiceSession();
     _captureProvider?.restoreBatchModeAfterOnboarding();
     _captureProvider?.deviceOnboardingProvider = null;
     _onboardingProvider.dispose();
@@ -183,62 +173,52 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
               ),
             ),
             child: SafeArea(
-              child: AnimatedSwitcher(
-                duration: OmiMotion.of(context).standard,
-                child: _showIntro
-                    ? OnboardingIntroScreen(
-                        key: const ValueKey('intro'),
-                        onStart: _startTutorial,
-                        onSkip: _skipOnboarding,
-                      )
-                    : Column(
-                        key: const ValueKey('steps'),
-                        children: [
-                          // Always dismissible: a stuck step (e.g. the mic-test
-                          // waiting on a response) must never trap the user. The
-                          // tutorial floats over the app, so it leaves by a trailing
-                          // close X, never a back chevron (docs/ux-contract.md §1).
-                          SizedBox(
-                            height: 48,
-                            child: Align(
-                              alignment: AlignmentDirectional.centerEnd,
-                              child: OmiCloseButton(
-                                key: const Key('device_onboarding_close_button'),
-                                onPressed: _skipOnboarding,
-                              ),
-                            ),
-                          ),
-                          // Persistent progress indicator — stays fixed and animates the
-                          // active dot in place while only the content below transitions.
-                          Consumer<DeviceOnboardingProvider>(
-                            builder: (_, provider, __) => OnboardingProgressDots(currentStep: provider.currentStep),
-                          ),
-                          Expanded(
-                            child: Consumer<DeviceOnboardingProvider>(
-                              builder: (context, provider, _) => AnimatedSwitcher(
-                                duration: const Duration(milliseconds: 320),
-                                switchInCurve: Curves.easeOutCubic,
-                                switchOutCurve: Curves.easeInCubic,
-                                layoutBuilder: (currentChild, previousChildren) => Stack(
-                                  alignment: Alignment.topCenter,
-                                  children: [...previousChildren, if (currentChild != null) currentChild],
-                                ),
-                                transitionBuilder: (child, animation) {
-                                  final slide = Tween<Offset>(
-                                    begin: const Offset(0.08, 0),
-                                    end: Offset.zero,
-                                  ).animate(animation);
-                                  return FadeTransition(
-                                    opacity: animation,
-                                    child: SlideTransition(position: slide, child: child),
-                                  );
-                                },
-                                child: _buildStep(provider.currentStep),
-                              ),
-                            ),
-                          ),
-                        ],
+              child: Column(
+                children: [
+                  // Always dismissible: a stuck step (e.g. the mic-test
+                  // waiting on a response) must never trap the user. The
+                  // tutorial floats over the app, so it leaves by a trailing
+                  // close X, never a back chevron (docs/ux-contract.md §1).
+                  SizedBox(
+                    height: 48,
+                    child: Align(
+                      alignment: AlignmentDirectional.centerEnd,
+                      child: OmiCloseButton(
+                        key: const Key('device_onboarding_close_button'),
+                        onPressed: _skipOnboarding,
                       ),
+                    ),
+                  ),
+                  // Persistent progress indicator — stays fixed and animates the
+                  // active dot in place while only the content below transitions.
+                  Consumer<DeviceOnboardingProvider>(
+                    builder: (_, provider, __) => OnboardingProgressDots(currentStep: provider.currentStep),
+                  ),
+                  Expanded(
+                    child: Consumer<DeviceOnboardingProvider>(
+                      builder: (context, provider, _) => AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 320),
+                        switchInCurve: Curves.easeOutCubic,
+                        switchOutCurve: Curves.easeInCubic,
+                        layoutBuilder: (currentChild, previousChildren) => Stack(
+                          alignment: Alignment.topCenter,
+                          children: [...previousChildren, if (currentChild != null) currentChild],
+                        ),
+                        transitionBuilder: (child, animation) {
+                          final slide = Tween<Offset>(
+                            begin: const Offset(0.08, 0),
+                            end: Offset.zero,
+                          ).animate(animation);
+                          return FadeTransition(
+                            opacity: animation,
+                            child: SlideTransition(position: slide, child: child),
+                          );
+                        },
+                        child: _buildStep(provider.currentStep),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
