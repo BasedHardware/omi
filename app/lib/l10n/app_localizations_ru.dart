@@ -14925,4 +14925,57 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Показывать последние сводки вверху главной.';
+
+  @override
+  String get yearlySwitchTitle => 'Перейти на годовой';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Экономьте $amount в год';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Экономьте $amount в год с годовой оплатой';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Тот же план, оплата раз в год';
+
+  @override
+  String get yearlySwitchPlanLabel => 'План';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price в год';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'К оплате сегодня';
+
+  @override
+  String get yearlySwitchRenews => 'Продление';
+
+  @override
+  String get yearlySwitchCreditNote => 'Включает кредит за остаток этого месяца.';
+
+  @override
+  String get yearlySwitchDeclined => 'Платёж отклонён. Вы по-прежнему платите ежемесячно.';
+
+  @override
+  String get yearlySwitchFailed => 'Не удалось перейти. Вы по-прежнему платите ежемесячно.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Не удалось загрузить цену.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Годовая оплата сейчас недоступна для вашего плана.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Теперь вы платите раз в год';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Сегодня списано $amount. Продление $date.';
+  }
 }

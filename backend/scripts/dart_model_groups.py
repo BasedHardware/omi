@@ -578,6 +578,7 @@ SCHEMA_GROUPS = {
             'PaymentUpgradeSubscriptionResponse',
             'CustomerPortalSessionResponse',
             'RetentionOfferResponse',
+            'YearlySwitchResponse',
             'PlanLimits',
             'routers__payment__PricingOption',
             'AvailablePlansResponse',

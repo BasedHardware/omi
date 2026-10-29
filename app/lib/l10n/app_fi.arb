@@ -4499,5 +4499,20 @@
     "activityAttentionSyncStalledTitle": "Omi ei synkronoi",
     "activityAttentionSyncStalledSubtitle": "Tallenteita ei synkronoitu yli {hours} tuntiin",
     "dailyRecapsOnHome": "Päivittäiset yhteenvedot Koti-näkymässä",
-    "dailyRecapsOnHomeDescription": "Näytä uusimmat yhteenvedot Koti-näkymän yläosassa."
+    "dailyRecapsOnHomeDescription": "Näytä uusimmat yhteenvedot Koti-näkymän yläosassa.",
+    "yearlySwitchTitle": "Vaihda vuosimaksuun",
+    "yearlySwitchRowSavings": "Säästä {amount} vuodessa",
+    "yearlySwitchHomeTitle": "Säästä {amount} vuodessa vuosimaksulla",
+    "yearlySwitchHomeSubtitle": "Sama tilaus, maksu kerran vuodessa",
+    "yearlySwitchPlanLabel": "Tilaus",
+    "yearlySwitchPlanValue": "{plan}, {price} vuodessa",
+    "yearlySwitchDueToday": "Maksettava tänään",
+    "yearlySwitchRenews": "Uusiutuu",
+    "yearlySwitchCreditNote": "Sisältää hyvityksen tämän kuun jäljellä olevasta ajasta.",
+    "yearlySwitchDeclined": "Maksu hylättiin. Maksat edelleen kuukausittain.",
+    "yearlySwitchFailed": "Vaihto epäonnistui. Maksat edelleen kuukausittain.",
+    "yearlySwitchPreviewFailed": "Hintaa ei voitu ladata.",
+    "yearlySwitchUnavailable": "Vuosimaksu ei ole juuri nyt saatavilla tilauksellesi.",
+    "yearlySwitchDoneTitle": "Maksat nyt vuosittain",
+    "yearlySwitchDoneBody": "Tänään veloitettiin {amount}. Uusiutuu {date}."
 }

@@ -14872,4 +14872,57 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'نمایش جدیدترین خلاصه‌ها در بالای صفحه خانه.';
+
+  @override
+  String get yearlySwitchTitle => 'تغییر به سالانه';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'سالانه $amount صرفه‌جویی کنید';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'با پرداخت سالانه، $amount در سال صرفه‌جویی کنید';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'همان طرح، سالی یک بار پرداخت';
+
+  @override
+  String get yearlySwitchPlanLabel => 'طرح';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan، سالانه $price';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'قابل پرداخت امروز';
+
+  @override
+  String get yearlySwitchRenews => 'تمدید';
+
+  @override
+  String get yearlySwitchCreditNote => 'شامل اعتبار باقی‌ماندهٔ این ماه است.';
+
+  @override
+  String get yearlySwitchDeclined => 'پرداخت رد شد. همچنان ماهانه پرداخت می‌کنید.';
+
+  @override
+  String get yearlySwitchFailed => 'تغییر انجام نشد. همچنان ماهانه پرداخت می‌کنید.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'قیمت بارگیری نشد.';
+
+  @override
+  String get yearlySwitchUnavailable => 'پرداخت سالانه اکنون برای طرح شما در دسترس نیست.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'اکنون سالانه پرداخت می‌کنید';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'امروز $amount کسر شد. تمدید در $date.';
+  }
 }

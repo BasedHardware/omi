@@ -14879,4 +14879,57 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get dailyRecapsOnHomeDescription => 'Hiển thị các tóm tắt mới nhất ở đầu Trang chủ.';
+
+  @override
+  String get yearlySwitchTitle => 'Chuyển sang gói năm';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Tiết kiệm $amount mỗi năm';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Tiết kiệm $amount mỗi năm khi trả theo năm';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Cùng gói, thanh toán mỗi năm một lần';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Gói';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price mỗi năm';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Thanh toán hôm nay';
+
+  @override
+  String get yearlySwitchRenews => 'Gia hạn';
+
+  @override
+  String get yearlySwitchCreditNote => 'Đã gồm khoản tín dụng cho phần còn lại của tháng này.';
+
+  @override
+  String get yearlySwitchDeclined => 'Thanh toán bị từ chối. Bạn vẫn trả theo tháng.';
+
+  @override
+  String get yearlySwitchFailed => 'Không thể chuyển. Bạn vẫn trả theo tháng.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Không tải được giá của bạn.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Hiện chưa thể trả theo năm cho gói của bạn.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Bạn đã chuyển sang trả theo năm';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Đã thu $amount hôm nay. Gia hạn vào $date.';
+  }
 }

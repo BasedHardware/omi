@@ -11925,5 +11925,20 @@
     "activityAttentionSyncStalledTitle": "Omi ಸಿಂಕ್ ಆಗುತ್ತಿಲ್ಲ",
     "activityAttentionSyncStalledSubtitle": "{hours} ಗಂಟೆಗಳಿಗಿಂತ ಹೆಚ್ಚು ಕಾಲ ಯಾವುದೇ ರೆಕಾರ್ಡಿಂಗ್ ಸಿಂಕ್ ಆಗಿಲ್ಲ",
     "dailyRecapsOnHome": "ಮುಖಪುಟದಲ್ಲಿ ದೈನಿಕ ಸಾರಾಂಶಗಳು",
-    "dailyRecapsOnHomeDescription": "ಮುಖಪುಟದ ಮೇಲ್ಭಾಗದಲ್ಲಿ ನಿಮ್ಮ ಇತ್ತೀಚಿನ ಸಾರಾಂಶಗಳನ್ನು ತೋರಿಸಿ."
+    "dailyRecapsOnHomeDescription": "ಮುಖಪುಟದ ಮೇಲ್ಭಾಗದಲ್ಲಿ ನಿಮ್ಮ ಇತ್ತೀಚಿನ ಸಾರಾಂಶಗಳನ್ನು ತೋರಿಸಿ.",
+    "yearlySwitchTitle": "ವಾರ್ಷಿಕಕ್ಕೆ ಬದಲಿಸಿ",
+    "yearlySwitchRowSavings": "ವರ್ಷಕ್ಕೆ {amount} ಉಳಿಸಿ",
+    "yearlySwitchHomeTitle": "ವಾರ್ಷಿಕ ಪಾವತಿಯಿಂದ ವರ್ಷಕ್ಕೆ {amount} ಉಳಿಸಿ",
+    "yearlySwitchHomeSubtitle": "ಅದೇ ಯೋಜನೆ, ವರ್ಷಕ್ಕೊಮ್ಮೆ ಪಾವತಿ",
+    "yearlySwitchPlanLabel": "ಯೋಜನೆ",
+    "yearlySwitchPlanValue": "{plan}, ವರ್ಷಕ್ಕೆ {price}",
+    "yearlySwitchDueToday": "ಇಂದು ಪಾವತಿ",
+    "yearlySwitchRenews": "ನವೀಕರಣ",
+    "yearlySwitchCreditNote": "ಈ ತಿಂಗಳ ಉಳಿದ ಅವಧಿಯ ಕ್ರೆಡಿಟ್ ಒಳಗೊಂಡಿದೆ.",
+    "yearlySwitchDeclined": "ಪಾವತಿ ನಿರಾಕರಿಸಲಾಗಿದೆ. ನೀವು ಇನ್ನೂ ಮಾಸಿಕ ಯೋಜನೆಯಲ್ಲಿದ್ದೀರಿ.",
+    "yearlySwitchFailed": "ಬದಲಿಸಲು ಆಗಲಿಲ್ಲ. ನೀವು ಇನ್ನೂ ಮಾಸಿಕ ಯೋಜನೆಯಲ್ಲಿದ್ದೀರಿ.",
+    "yearlySwitchPreviewFailed": "ನಿಮ್ಮ ಬೆಲೆಯನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ.",
+    "yearlySwitchUnavailable": "ಈಗ ನಿಮ್ಮ ಯೋಜನೆಗೆ ವಾರ್ಷಿಕ ಪಾವತಿ ಲಭ್ಯವಿಲ್ಲ.",
+    "yearlySwitchDoneTitle": "ನೀವು ಈಗ ವಾರ್ಷಿಕ ಯೋಜನೆಯಲ್ಲಿದ್ದೀರಿ",
+    "yearlySwitchDoneBody": "ಇಂದು {amount} ಶುಲ್ಕ ವಿಧಿಸಲಾಗಿದೆ. ನವೀಕರಣ {date}."
 }
