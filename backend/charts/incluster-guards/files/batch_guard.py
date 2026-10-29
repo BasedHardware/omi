@@ -142,7 +142,11 @@ def snapshot(cloud):
 
 
 def decision(sample, identity, since, now, first_write_since=None):
-    """P90 fast-mode safety only. Unknown is BLIND; quality remains WATCH."""
+    """Custody and proven lost speech only; latency/wedges are alert-only.
+
+    Language T4 remains owned by the external language observer. This aggregate
+    schema has no language input, so this consumer cannot claim T4 coverage.
+    """
     if sample.get('schema_version') != 1 or sample.get('identity') != identity or sample.get('arm_since') != since:
         return 'BLIND', ['aggregate_identity_or_epoch_mismatch']
     first_write = sample.get('since')
@@ -163,8 +167,6 @@ def decision(sample, identity, since, now, first_write_since=None):
         'custody_missing': custody.get('missing'),
         'terminal_speech': sample.get('proven_terminal_loss_speech_seconds'),
         'failed_held_speech': sample.get('proven_failed_held_speech_seconds'),
-        'projection_wedge': sample.get('since_t0_projection_obligations_over_15m'),
-        'stuck_jobs': sample.get('since_t0_stuck_jobs_over_30m'),
     }
     unknowns = [
         custody.get('unknown'),
@@ -185,6 +187,21 @@ def decision(sample, identity, since, now, first_write_since=None):
     if trips:
         return 'TRIP', trips
     return 'CLEAN', []
+
+
+def soft_alerts(sample):
+    """David 2026-10-29: neither wedge age nor absent latency data can trip."""
+    alerts = []
+    for reason, key in (
+        ('projection_wedge', 'since_t0_projection_obligations_over_15m'),
+        ('stuck_jobs', 'since_t0_stuck_jobs_over_30m'),
+    ):
+        value = sample.get(key)
+        if not finite(value) or isinstance(value, bool) or value < 0:
+            alerts.append(reason + '_unknown')
+        elif value > 0:
+            alerts.append(reason)
+    return alerts
 
 
 class Cloud:
@@ -318,15 +335,25 @@ def run(kube, cloud, sample_path, dry_run=False, now=None):
         try:
             sample = json.loads(Path(sample_path).read_text())
             verdict, reasons = decision(sample, identity, state['since'], now, state.get('first_write_since'))
+            alerts = soft_alerts(sample)
             if verdict in {'WARMUP', 'CLEAN', 'TRIP'}:
                 state['first_write_since'] = sample['since']
         except (OSError, ValueError, TypeError, KeyError):
             verdict, reasons = 'BLIND', ['aggregate_unavailable']
+            alerts = []
         if verdict == 'TRIP' and not dry_run:
             nonce = os.urandom(6).hex()
             state['pending'] = {key: dict(pin, candidate=key + '-guard-' + nonce) for key, pin in fleet.items()}
         persist(kube, cm, state, verdict)
-        log('batch_guard', verdict=verdict, reasons=reasons, dry_run=dry_run, identity=identity, since=state['since'])
+        log(
+            'batch_guard',
+            verdict=verdict,
+            reasons=reasons,
+            alerts=alerts,
+            dry_run=dry_run,
+            identity=identity,
+            since=state['since'],
+        )
         if not state.get('pending'):
             return 1 if verdict in {'TRIP', 'BLIND'} else 0
     if dry_run:

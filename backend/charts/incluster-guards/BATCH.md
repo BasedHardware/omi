@@ -128,8 +128,14 @@ Require `0 <= since <= arm_since <= observed_at <= read_completed_at <= now` and
 <=600s. Missing/changed first-write clocks, wrong arming epoch/identity, negative, nonfinite, boolean, denied or
 stale safety values remain BLIND. Before the full new-state 30m window, valid
 input is WARMUP. After it, positive pinned-custody missing, per-unit proven
-terminal/failed-held VAD speech, new projection obligations older15m, or new
-stuck jobs older30m trip. Independently proven trips win over other unknowns.
+terminal/failed-held VAD speech trip. Independently proven trips win over other unknowns.
+David's 2026-10-29 ruling makes projection obligations older15m and stuck jobs
+older30m alert-only, including missing/malformed latency measurements; the guard
+logs these in `alerts` without creating a rollback intent. This consumer covers
+T1 custody and T2 proven speech loss. T4 language remains with the external
+language observer: this aggregate schema has no language fields and must never
+be described as complete T4 coverage. See the [batch entry runbook](../../docs/operational/batch-quality-entry.md)
+for the replacement external observer and single entry gate.
 Fallback VAD/duration and missing safety evidence hold clean assessment; quality
 p95/first-summary/log errors remain WATCH and do not auto-trip. Blindness does
 not itself roll admission back (P90 fast-mode ruling).
