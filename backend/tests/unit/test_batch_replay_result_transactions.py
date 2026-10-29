@@ -4,8 +4,8 @@ from copy import deepcopy
 
 import pytest
 
-from testing.batch_replay.runner import ResultTransactionLog
-from tests.unit.fixtures.strict_firestore_transaction import ReadAfterWriteError
+from testing.batch_replay.gate import adapter_digest
+from testing.batch_replay.runner import ResultTransactionLog, fixed_transaction_fixture
 
 
 class BaseLog:
@@ -55,8 +55,33 @@ def test_failed_callback_never_publishes_partial_result_mutations(failure):
             ref.get(transaction=transaction)
         log.ref('jobs', 'synthetic-head')
 
-    expected = {'callback': ValueError, 'read_after_write': ReadAfterWriteError, 'outside_results': NotImplementedError}
+    expected = {
+        'callback': ValueError,
+        'read_after_write': fixed_transaction_fixture().ReadAfterWriteError,
+        'outside_results': NotImplementedError,
+    }
     with pytest.raises(expected[failure]):
         log.run(operation)
     assert log.results == before
     assert log.ref('results', 'synthetic-head') == ('nontransactional', 'results', 'synthetic-head')
+
+
+def test_selected_snapshot_fixture_is_not_transaction_authority(monkeypatch):
+    from tests.unit.fixtures import strict_firestore_transaction as selected_fixture
+
+    def refuse_selected_fixture(*args, **kwargs):
+        raise AssertionError('selected snapshot must not supply fixed replay transaction rules')
+
+    monkeypatch.setattr(selected_fixture, 'StrictFirestore', refuse_selected_fixture)
+    log = Log()
+    assert log.run(lambda transaction: transaction.update(log.ref('results', 'synthetic-head'), {'stamp': 17})) is None
+    assert log.results['synthetic-head']['stamp'] == 17
+
+
+def test_fixed_transaction_fixture_changes_adapter_identity(tmp_path):
+    files = [tmp_path / name for name in ('gate', 'runner', 'incidents', 'transaction_fixture')]
+    for path in files:
+        path.write_bytes(path.name.encode())
+    before = adapter_digest(*files)
+    files[-1].write_bytes(b'changed transaction semantics')
+    assert adapter_digest(*files) != before
