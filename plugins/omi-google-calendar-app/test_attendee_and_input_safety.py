@@ -1,10 +1,10 @@
 """Tests for attendee normalization, input safety, and time bounds validation."""
 import asyncio
 import importlib.util
-from pathlib import Path
 import sys
 import types
 import unittest
+from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
 
@@ -39,6 +39,7 @@ def module(name, **attributes):
 
 stubs = {
     "requests": module("requests", RequestException=OSError),
+    "httpx": module("httpx"),
     "dotenv": module("dotenv", load_dotenv=lambda *args, **kwargs: None),
     "fastapi": module(
         "fastapi",
