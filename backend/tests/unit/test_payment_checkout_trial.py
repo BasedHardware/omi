@@ -48,6 +48,8 @@ def _checkout(trial_days, existing_customer_id):
         patch.object(payment.subscription_utils, 'new_buyer_single_plan_violation', return_value=None),
         patch.object(payment, '_try_reactivate_subscription', return_value=None),
         patch.object(payment.users_db, 'get_stripe_customer_id', return_value=existing_customer_id),
+        # A former subscriber's Stripe customer holds nothing that can still charge it.
+        patch.object(payment.subscription_overlap, 'chargeable_plan_subscriptions', return_value=[]),
         patch.object(payment.stripe_utils, 'create_subscription_checkout_session', side_effect=create_session),
     ):
         result = payment.create_checkout_session_endpoint(
