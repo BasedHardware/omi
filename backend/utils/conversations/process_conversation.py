@@ -17,7 +17,7 @@ from collections.abc import Mapping, Sequence
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union, cast
 
-from functools import wraps
+from functools import cache, wraps
 
 from fastapi import HTTPException
 
@@ -117,6 +117,7 @@ from utils.conversations.relevance_io import (
     emit_recorded_decision,
     record_decision,
     rules_only_relevance,
+    occasion_retention,
 )
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.projection_payload import (
@@ -377,6 +378,11 @@ def _get_structured(
         if is_recovery_trigger(trigger) and not recovery_transcript_decoded:
             # An unreadable stored blob is never evidence of an empty capture.
             return Structured(), False
+
+        @cache
+        def occasion_reason():
+            return occasion_retention(uid, conversation, conversation_id)
+
         # refactor: superseded by utils.conversations.relevance_media when MEDIA_NOISE_MODE=serve
         media_minimum = None if is_release_probe_uid(uid) else content_minimum(uid, conversation, user_kept=user_kept)
         if media_minimum is not None:
@@ -386,6 +392,7 @@ def _get_structured(
                 user_kept=user_kept,
                 client_supports_discarded=getattr(conversation, 'client_platform', None) in ('ios', 'android'),
             )
+            hidden = hidden and not occasion_reason()
             if relevance_observer is not None:
                 relevance_observer(RelevanceDecision('discard' if hidden else 'keep', 'rule', 'content_kind', trigger))
             return media_minimum, hidden
@@ -544,6 +551,7 @@ def _get_structured(
                 exempt=is_release_probe_uid(uid),
                 trusted_wake_word=has_wake_word_marker,
                 model_discards=None,
+                occasion_retains=occasion_reason,
                 calendar_retains=lambda: _calendar_overlap_retains_conversation(
                     uid, main_conv.started_at, main_conv.finished_at
                 ),
@@ -602,6 +610,7 @@ def _get_structured(
             exempt=is_release_probe_uid(uid),
             trusted_wake_word=has_wake_word_marker,
             model_discards=model_discards,
+            occasion_retains=occasion_reason,
             calendar_retains=lambda: _calendar_overlap_retains_conversation(
                 uid, main_conv.started_at, main_conv.finished_at
             ),

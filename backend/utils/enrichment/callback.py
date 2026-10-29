@@ -15,6 +15,7 @@ from utils.enrichment.admission import run_created_webhook as _run_conversation_
 import logging
 import time
 
+from config.occasion_relevance import enabled as occasion_relevance_enabled
 from database import conversations as conversations_db
 from database._client import get_firestore_client
 from database.summary_processing import claim_from_snapshot
@@ -129,6 +130,7 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
     status = getattr(conversation_data.get('status'), 'value', conversation_data.get('status'))
     if (
         status == 'completed'
+        and not occasion_relevance_enabled()
         and conversation_data.get('sync_relevance') == 'review'
         and not is_user_curated(conversation_data)
     ):

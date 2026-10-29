@@ -136,7 +136,9 @@ def test_sync_speech_partition_equals_realtime_reference(seed, reconnect_targets
 
 
 @pytest.mark.parametrize('seed', range(12))
-def test_nine_reconnect_ids_honor_existing_targets_and_leave_hint_stubs_untouched(seed):
+def test_nine_reconnect_ids_honor_existing_targets_and_leave_hint_stubs_untouched(seed, monkeypatch):
+    # Rollback contract: arbitrary old live stamps retain identity authority.
+    monkeypatch.setenv('LATE_AUDIO_SYNC_INTAKE_ENABLED', 'false')
     # Four existing IDs keep live lifecycle authority; five missing IDs carry no
     # identity. The latter's temporal convergence is also proven by the headline
     # test. Live targets can absorb sync donors, but never each other, so this

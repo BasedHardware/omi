@@ -2514,6 +2514,7 @@ export interface Episode {
   started_at: string;
   state_updated_at?: string | null;
   status: "live" | "closed";
+  timer_started_at?: string | null;
   title?: string;
 }
 

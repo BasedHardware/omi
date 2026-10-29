@@ -174,8 +174,8 @@ CONTINUE_GAP_SECONDS = 120
 # a new episode (reason ``gap``), and a read that finds an episode this idle
 # closes it (reason ``idle``). In between, Jev decides whether the user moved on.
 CLOSE_GAP_SECONDS = 30 * 60
-# Hard cap on one episode's wall-clock span (smart merge's conservative cap).
-MAX_EPISODE_SECONDS = 3 * 60 * 60
+# Hard cap on one episode's recorded span (David, 2026-10-29).
+MAX_EPISODE_SECONDS = 4 * 60 * 60
 MAX_MOMENTS = 48
 
 # Jev answers P(same occasion); below this the user moved on. Deliberately low:

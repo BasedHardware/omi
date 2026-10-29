@@ -1041,6 +1041,43 @@ _add(
         neutrals={'diagnostics': (None, 'caller-owned diagnostic sink; no filter, order or projection effect')},
     )
 )
+_add(
+    DriverEntry(
+        'database.episode_timeline.recorded_candidates',
+        base={'uid': UID, 'started': T0, 'finished': T1},
+        neutrals={'transaction': (None, 'same query shape inside or outside a transaction')},
+    )
+)
+_add(
+    DriverEntry(
+        'database.episode_timeline.attach_recorded',
+        base={
+            'uid': UID,
+            'conversation_id': 'recorded-1',
+            'source': 'omi',
+            'started': T0,
+            'finished': T1,
+            'choose': lambda rows, start, end: None,
+            'new_episode': {'id': 'recorded-1'},
+        },
+        patchers=(_stub('database.episodes.seal', {'id': 'recorded-1'}),),
+    )
+)
+_add(
+    DriverEntry(
+        'database.episode_timeline._attach_recorded_window',
+        base={
+            'uid': UID,
+            'conversation_id': 'recorded-1',
+            'source': 'omi',
+            'started': T0,
+            'finished': T1,
+            'choose': lambda rows, start, end: None,
+            'new_episode': {'id': 'recorded-1'},
+        },
+        patchers=(_stub('database.episodes.seal', {'id': 'recorded-1'}),),
+    )
+)
 _add(DriverEntry('database.conversations.get_conversation_ids', base={'uid': UID}))
 _add(DriverEntry('database.conversations.get_conversation_photos', base={'uid': UID, 'conversation_id': 'conv-1'}))
 _add(
@@ -1073,7 +1110,7 @@ _add(
     DriverEntry(
         'database.conversations.get_conversations_finished_after',
         base={'uid': UID, 'status': 'completed', 'finished_after': T0},
-        neutrals={'limit': _LIMIT},
+        neutrals={'limit': _LIMIT, 'include_hidden': (True, 'result filtering only; same serving query')},
     )
 )
 _add(DriverEntry('database.conversations.get_conversations_to_migrate', base={'uid': UID, 'target_level': 'level-2'}))

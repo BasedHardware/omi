@@ -606,4 +606,14 @@ def absorb_payloads(
         },
         DECISION_FIELD: dict(decision),
     }
+    from config.occasion_relevance import enabled as occasion_relevance_enabled
+
+    if occasion_relevance_enabled():
+        donor_update['relevance_decision'] = {
+            'verdict': 'absorbed',
+            'decided_by': 'policy',
+            'reason': 'smart_merge',
+            'neighbor_id': str(survivor['id']),
+            'trigger': decision.get('trigger', 'capture_end'),
+        }
     return survivor_update, donor_update
