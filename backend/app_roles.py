@@ -35,6 +35,7 @@ from routers import (
     dream_cohort,
     dream_report,
     dream_sweep,
+    error_class_sweep,
     review,
     proactivity,
     chat,
@@ -181,6 +182,7 @@ ROUTER_MOUNTS: tuple[Mount, ...] = (
     Mount(dream_report),
     Mount(dream_sweep, roles=API_WORKERS),  # Scheduler: /v2/dream-agent/sweep, canary
     Mount(candidate_integration_sweep, roles=API_WORKERS),  # Scheduler: /v2/candidate-integrations/sweep
+    Mount(error_class_sweep, roles=API_WORKERS),  # Scheduler: /v2/error-class-alerts/sweep
     Mount(transcribe, roles=API_REALTIME),  # /v4/listen websocket
     Mount(static_map),
     Mount(omni_relay, roles=API_REALTIME),  # websockets

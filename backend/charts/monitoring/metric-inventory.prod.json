@@ -1984,9 +1984,13 @@
     "workqueue_work_duration_seconds_sum"
   ],
   "declared_metrics": [
+    "omi_audio_custody_failures_total",
     "omi_audio_custody_last_risk_timestamp_seconds",
     "omi_audio_custody_would_drop_total",
-    "omi_audio_custody_failures_total",
+    "omi_error_class_alert_fired_total",
+    "omi_error_class_alert_firing",
+    "omi_error_class_last_fired_timestamp_seconds",
+    "omi_error_class_sweep_total",
     "omi_listen_demand_failure_detail_total",
     "omi_listen_lb_attached_ready_endpoints",
     "omi_listen_lb_exporter_errors_total",
