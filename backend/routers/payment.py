@@ -488,11 +488,11 @@ def get_available_plans_endpoint(
         scheduled_price_id = None
         billing_currency = None
 
-        # Read currency for current paid subscriptions, including pending cancellation.
+        # Read currency for current paid subscriptions, including pending cancellation and active trials.
         if (
             current_subscription
             and is_paid_plan(current_subscription.plan)
-            and current_subscription.status == SubscriptionStatus.active
+            and (current_subscription.status == SubscriptionStatus.active or str(current_subscription.status) == 'trialing')
             and current_subscription.stripe_subscription_id
             and current_subscription.stripe_subscription_id.startswith('sub_')
             and (
@@ -886,9 +886,18 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         try:
             currency = subscription_currency(stripe_sub)
             if target_price.currency != currency:
-                raise BillingCurrencyUnavailable(
-                    'Please reopen Plans & Billing to select a price in your billing currency.'
-                )
+                try:
+                    resolved_price = price_for_currency(target_price, currency)
+                    target_price = resolved_price
+                    request.price_id = resolved_price.id
+                    currency_binding = management_binding(resolved_price.id)
+                    target_plan = get_plan_type_from_price_id(resolved_price.id)
+                    target_recurring = resolved_price.recurring
+                    target_interval = target_recurring.interval
+                except Exception:
+                    raise BillingCurrencyUnavailable(
+                        'Please reopen Plans & Billing to select a price in your billing currency.'
+                    )
             if currency_binding is not None:
                 plan, interval, expected_currency = currency_binding
                 if stripe_sub.get('status') not in ('active', 'trialing'):
