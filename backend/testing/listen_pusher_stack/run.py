@@ -40,10 +40,10 @@ from testing.listen_pusher_stack.cloud_tasks import FINALIZATION_HANDLER_PATH, L
 ROOT = Path(__file__).resolve().parents[3]
 BACKEND = ROOT / 'backend'
 PYTHON = BACKEND / '.venv' / 'bin' / 'python'
-ADMIN_KEY = 'omi-listen-pusher-stack-admin-'
+ADMIN_KEY = 'omi-listen-pusher-stack-admin-'  # nosec B105
 PROJECT = 'demo-omi-listen-stack'
-LOCAL_TASK_TOKEN = 'listen-pusher-stack-loopback-task'
-METRICS_SECRET = 'listen-pusher-stack-metrics'
+LOCAL_TASK_TOKEN = 'listen-pusher-stack-loopback-task'  # nosec B105
+METRICS_SECRET = 'listen-pusher-stack-metrics'  # nosec B105
 REST_FINALIZATION_RACE_ENV = (
     'OMI_STACK_FINALIZATION_RACE_UID',
     'OMI_STACK_FINALIZATION_RACE_CONVERSATION_ID',
@@ -1884,7 +1884,7 @@ def main() -> int:
         )
         print(f'listen-pusher stack gauntlet passed; evidence: {state_dir}')
         return 0
-    except Exception as error:
+    except Exception:
         print(f'listen-pusher stack gauntlet failed; evidence retained: {state_dir}', file=sys.stderr)
         raise
     finally:
