@@ -481,7 +481,9 @@ def test_artifact_sink_cannot_persist_shadow_transcript(repository):
         authorize=Mock(),
         key_for_owner=Mock(),
         register_artifact=Mock(),
-        shadow_result=lambda work, payload: shadow_result(repository.store, work, payload),
+        shadow_result=lambda work, payload: shadow_result(
+            repository.store, work, payload, projection=lambda *args: {'status': 'planned'}
+        ),
     )
     artifacts._write = Mock(side_effect=AssertionError('no durable transcript writes'))
     assert artifacts.persist_result(item, {'words': [{'word': 'secret'}], 'speech_seconds': 20}).startswith('shadow:')
@@ -490,6 +492,41 @@ def test_artifact_sink_cannot_persist_shadow_transcript(repository):
     assert 'secret' not in repr(repository.store.client.rows)
     with pytest.raises(PermissionError):
         artifacts.persist_recovery_result(item, {'words': []}, 'token')
+
+
+def test_projection_attempt_is_once_and_has_a_distributed_hourly_cap(repository):
+    item = running(repository)
+    # GPU success reaches projection while running, before the normal finish.
+    repository.store.run(
+        lambda tx: tx.put(
+            'shadow_jobs', item.segment_id, {**tx.get('shadow_jobs', item.segment_id), 'state': 'running'}
+        )
+    )
+    assert repository.projection_input(item.segment_id)['shadow'] is True
+    assert repository.projection_input(item.segment_id) is None
+    budget = repository.store.run(lambda tx: tx.get('shadow_spend', 'projection-2'))
+    assert budget['units'] == 1 and budget['expires_at'].timestamp() == 7200 + 2 * 86400
+    next_item = running(repository, 'another')
+    repository.store.run(
+        lambda tx: tx.put(
+            'shadow_jobs', next_item.segment_id, {**tx.get('shadow_jobs', next_item.segment_id), 'state': 'running'}
+        )
+    )
+    repository.store.run(lambda tx: tx.put('shadow_spend', 'projection-2', {**budget, 'units': 200}))
+    assert repository.projection_input(next_item.segment_id) is None
+
+
+def test_projection_failure_never_falls_back_to_normal_publication(repository):
+    from utils.batch_pipeline.artifact_policy import shadow_result
+
+    item = running(repository)
+    shadow_result(
+        repository.store,
+        item,
+        {'words': [{'word': 'synthetic'}], 'speech_seconds': 1},
+        projection=Mock(side_effect=RuntimeError('unavailable')),
+    )
+    assert row(repository, item.segment_id)['outcome'] == 'error'
 
 
 def test_projection_and_normal_scheduler_refuse_shadow_before_any_side_effect():

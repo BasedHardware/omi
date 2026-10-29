@@ -10,9 +10,26 @@ OUTCOME = Counter('omi_batch_shadow_outcome_total', 'Terminal shadow units', ['o
 SPEECH = Counter('omi_batch_shadow_speech_seconds_total', 'Original VAD speech in shadow units', ['vad', 'class'])
 LOSS = Counter('omi_batch_shadow_speech_loss_seconds_total', 'VAD speech without recovered words', ['vad', 'class'])
 GPU = Counter('omi_batch_shadow_gpu_seconds_total', 'Shadow GPU chain wall seconds')
+PROJECTION = Counter('omi_batch_shadow_projection_total', 'Ephemeral projection plans', ['status'])
+PROJECTION_CPU = Counter('omi_batch_shadow_projection_cpu_seconds_total', 'Projection planner thread CPU seconds')
+PROJECTION_WALL = Counter('omi_batch_shadow_projection_wall_seconds_total', 'Projection RPC wall seconds')
+PROJECTION_READS = Counter('omi_batch_shadow_projection_reads_total', 'Projection planner document reads')
+PROJECTION_BYTES = Counter('omi_batch_shadow_projection_payload_bytes_total', 'Ephemeral projection RPC payload bytes')
 PAID = Counter('omi_batch_shadow_paid_calls_total', 'Reserved shadow recovery calls', ['provider'])
 PAID_AUDIO = Counter('omi_batch_shadow_paid_audio_seconds_total', 'Reserved recovery audio', ['provider'])
-COLLECTORS = (OUTCOME, SPEECH, LOSS, GPU, PAID, PAID_AUDIO)
+COLLECTORS = (
+    OUTCOME,
+    SPEECH,
+    LOSS,
+    GPU,
+    PAID,
+    PAID_AUDIO,
+    PROJECTION,
+    PROJECTION_CPU,
+    PROJECTION_WALL,
+    PROJECTION_READS,
+    PROJECTION_BYTES,
+)
 
 
 def record(row):

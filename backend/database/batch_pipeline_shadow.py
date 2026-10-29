@@ -199,7 +199,7 @@ class ShadowStore:
             record(row)
         return reservation
 
-    def ready(self, reservation, item, language):
+    def ready(self, reservation, item, language, *, projection_context=None):
         segment, index = reservation
         now = self.clock()
 
@@ -222,11 +222,55 @@ class ShadowStore:
             tx.check_privacy(
                 item.owner_id, (item.conversation_id,) if item.conversation_id else (), item.privacy_generation
             )
-            tx.put('shadow_jobs', segment, {**job, 'state': 'ready', 'item': asdict(item), 'language': language})
+            tx.put(
+                'shadow_jobs',
+                segment,
+                {
+                    **job,
+                    'state': 'ready',
+                    'item': asdict(item),
+                    'language': language,
+                    'projection_context': projection_context or {},
+                },
+            )
             tx.put('shadow_slots', index, {**slot, 'state': 'ready', 'until': now + OFFER_SECONDS})
             return True
 
         return self.store.run(publish)
+
+    def projection_input(self, segment):
+        """At most 200 dry-run plans/hour, once per unit; shadow metadata only."""
+        if not shadow_percent():
+            return None
+        now = self.clock()
+        # Reuse the existing shadow-spend TTL collection, with a disjoint key.
+        hour = 'projection-' + str(int(now // 3600))
+
+        def reserve(tx):
+            job, budget = tx.get('shadow_jobs', segment), tx.get('shadow_spend', hour)
+            if (
+                job.get('shadow') is not True
+                or job.get('state') != 'running'
+                or 'projection_attempted_at' in job
+                or budget.get('units', 0) >= 200
+            ):
+                return None
+            item = WorkItem(**job['item'])
+            tx.check_privacy(
+                item.owner_id, (item.conversation_id,) if item.conversation_id else (), item.privacy_generation
+            )
+            tx.put('shadow_jobs', segment, {**job, 'projection_attempted_at': now})
+            tx.put(
+                'shadow_spend',
+                hour,
+                {
+                    'units': budget.get('units', 0) + 1,
+                    'expires_at': datetime.fromtimestamp(now, timezone.utc) + timedelta(days=2),
+                },
+            )
+            return job
+
+        return self.store.run(reserve)
 
     def take(self, worker):
         if not shadow_percent() or self.busy():

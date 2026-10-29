@@ -208,7 +208,18 @@ async def stage_upload(
             )
             uri = await run_blocking(storage_executor, artifacts.stage_audio, item, wav)
             ready = await run_blocking(
-                db_executor, repository.ready, reservation, replace(item, audio_uri=uri), language
+                db_executor,
+                repository.ready,
+                reservation,
+                replace(item, audio_uri=uri),
+                language,
+                projection_context={
+                    'source': source,
+                    'client_device_id': device_id,
+                    'is_locked': should_lock,
+                    'language': language,
+                    'data_protection_level': context.level,
+                },
             )
             if not ready:
                 await run_blocking(db_executor, repository.finish, item.segment_id, 'dropped')

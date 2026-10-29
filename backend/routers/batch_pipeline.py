@@ -18,6 +18,7 @@ from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
 from utils.batch_pipeline.admission import authorize
 from utils.batch_pipeline.enrichment import run_enrichment
 from utils.batch_pipeline.serving import serving_for_stage
+from utils.batch_pipeline.shadow_projection import run as run_shadow_projection
 from utils.executors import db_executor, postprocess_executor, run_blocking, sync_executor
 from utils.observability.reasons import RetryReason
 from utils.workers.retry import retry_response
@@ -70,7 +71,7 @@ def verify_worker(request: Request) -> int:
     if request.url.path == '/v2/batch-pipeline/recover-quarantine':
         audience = os.getenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', '').strip()
         invoker = os.getenv('SYNC_TASKS_INVOKER_SA', '').strip()
-    elif request.url.path == '/v2/batch-pipeline/shadow-recover':
+    elif request.url.path in {'/v2/batch-pipeline/shadow-recover', '/v2/batch-pipeline/shadow-project'}:
         # Same CPU role/policy as paid record recovery, with the GPU worker's
         # existing service principal rather than the Cloud Tasks invoker.
         audience = os.getenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', '').strip()
@@ -226,6 +227,16 @@ async def shadow_recover(body: RedriveRequest):
     artifacts = await run_blocking(sync_executor, artifacts_for, store)
     outcome = await recover_async(repository, artifacts, body.segment_id)
     return {'status': outcome}
+
+
+class ShadowProjectionRequest(WorkerRequest):
+    segment_id: str = Field(min_length=1, max_length=128, pattern=r'^[^/]+$')
+    payload: dict
+
+
+@router.post('/shadow-project', include_in_schema=False)
+async def shadow_project(body: ShadowProjectionRequest):
+    return await run_blocking(sync_executor, run_shadow_projection, body.service().store, body.segment_id, body.payload)
 
 
 @router.post('/gpu-idle', include_in_schema=False)
