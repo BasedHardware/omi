@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
@@ -25,6 +26,62 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
+  });
+
+  test('Home collects every page, including empty filtered pages, before publishing membership', () async {
+    final cursorCalls = <String?>[];
+    final lastPage = Completer<ApiResult<EpisodePageRead>>();
+    final provider = EpisodeProvider(fetchPage: (from, to, {cursor}) async {
+      cursorCalls.add(cursor);
+      if (cursor == null) return const ApiSuccess(EpisodePageRead(enabled: true, nextCursor: 'page-2'));
+      return lastPage.future;
+    })
+      ..debugSetLive(null);
+    addTearDown(provider.dispose);
+    final reading = provider.refreshHome(_t0, _t0.add(const Duration(days: 1)));
+    await Future<void>.delayed(Duration.zero);
+    expect(cursorCalls, [null, 'page-2']);
+    expect(provider.homeEpisodes, isEmpty);
+    lastPage.complete(ApiSuccess(EpisodePageRead(enabled: true, episodes: [_episode(live: false)])));
+    await reading;
+    expect(provider.homeEpisodes.single.id, 'ep1');
+    await provider.refreshHome(_t0, _t0.add(const Duration(days: 1)));
+    expect(cursorCalls.length, 2, reason: 'rebuilds coalesce within the poll interval');
+  });
+
+  test('disabled episodes never request Home history', () async {
+    final provider = EpisodeProvider(fetchPage: (from, to, {cursor}) async => throw StateError('not admitted'));
+    addTearDown(provider.dispose);
+    await provider.refreshHome(_t0, _t0);
+    expect(provider.homeEpisodes, isEmpty);
+  });
+
+  test('an account switch rejects an old Home response and hides cached episodes immediately', () async {
+    SharedPreferencesUtil().uid = 'first';
+    final response = Completer<ApiResult<EpisodePageRead>>();
+    final provider = EpisodeProvider(fetchPage: (from, to, {cursor}) => response.future)
+      ..debugSetLive(null)
+      ..debugSetHomeEpisodes([_episode(live: false)]);
+    addTearDown(provider.dispose);
+    final reading = provider.refreshHome(_t0, _t0);
+    SharedPreferencesUtil().uid = 'second';
+    expect(provider.enabled, isFalse);
+    expect(provider.homeEpisodes, isEmpty);
+    response.complete(ApiSuccess(EpisodePageRead(enabled: true, episodes: [_episode(live: false)])));
+    await reading;
+    expect(provider.homeEpisodes, isEmpty);
+  });
+
+  test('a failed later page preserves the last complete Home snapshot', () async {
+    final provider = EpisodeProvider(
+        fetchPage: (from, to, {cursor}) async => cursor == null
+            ? ApiSuccess(EpisodePageRead(enabled: true, episodes: [_episode(id: 'partial')], nextCursor: 'next'))
+            : const ApiFailure(ApiProblem(ApiProblemKind.transport)))
+      ..debugSetLive(null)
+      ..debugSetHomeEpisodes([_episode(id: 'complete', live: false)]);
+    addTearDown(provider.dispose);
+    await provider.refreshHome(_t0, _t0);
+    expect(provider.homeEpisodes.single.id, 'complete');
   });
 
   test('cold launch recovers an idle-closed episode from the account-scoped live pointer', () async {

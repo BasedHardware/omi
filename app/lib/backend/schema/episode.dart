@@ -1,3 +1,5 @@
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/gen/episodes_wire.g.dart' as wire;
 
 /// One stretch of speech inside an episode's conversation, with Omi's short heading for it.
@@ -107,6 +109,8 @@ class Episode {
     this.closedAt,
     this.closeReason,
     this.title = '',
+    this.emoji = '',
+    this.members = const [],
     this.bullets = const [],
     this.people = const [],
     this.items = const [],
@@ -124,6 +128,8 @@ class Episode {
   final DateTime? closedAt;
   final String? closeReason;
   final String title;
+  final String emoji;
+  final List<ServerConversation> members;
   final List<String> bullets;
   final List<String> people;
   final List<EpisodeItem> items;
@@ -138,7 +144,7 @@ class Episode {
           if (item.visible) item
       ];
 
-  Episode copyWith({List<EpisodeItem>? items, bool? live}) => Episode(
+  Episode copyWith({List<EpisodeItem>? items, bool? live, List<ServerConversation>? members}) => Episode(
         id: id,
         live: live ?? this.live,
         startedAt: startedAt,
@@ -146,6 +152,8 @@ class Episode {
         closedAt: closedAt,
         closeReason: closeReason,
         title: title,
+        emoji: emoji,
+        members: members ?? this.members,
         bullets: bullets,
         people: people,
         items: items ?? this.items,
@@ -164,6 +172,19 @@ class Episode {
         closedAt: e.closedAt?.toLocal(),
         closeReason: e.closeReason,
         title: e.title,
+        emoji: e.emoji,
+        members: [
+          for (final m in e.members ?? const <wire.GeneratedEpisodeMember>[])
+            ServerConversation(
+              id: m.id,
+              createdAt: m.startedAt.toLocal(),
+              startedAt: m.startedAt.toLocal(),
+              finishedAt: m.finishedAt?.toLocal(),
+              structured: Structured(m.title, '', emoji: m.emoji),
+              status: ConversationStatus.values
+                  .firstWhere((s) => s.name == m.status, orElse: () => ConversationStatus.completed),
+            )
+        ],
         bullets: e.bullets ?? const [],
         people: e.people ?? const [],
         items: [for (final item in e.provisionalItems ?? const []) EpisodeItem.fromGenerated(item)],
@@ -184,4 +205,11 @@ class EpisodeRead {
   final Episode? episode;
 
   static const disabled = EpisodeRead(enabled: false);
+}
+
+class EpisodePageRead {
+  const EpisodePageRead({required this.enabled, this.episodes = const [], this.nextCursor});
+  final bool enabled;
+  final List<Episode> episodes;
+  final String? nextCursor;
 }

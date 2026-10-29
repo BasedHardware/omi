@@ -4514,5 +4514,6 @@
     "yearlySwitchPreviewFailed": "No s'ha pogut carregar el preu.",
     "yearlySwitchUnavailable": "El pagament anual no està disponible per al teu pla ara mateix.",
     "yearlySwitchDoneTitle": "Ara pagues anualment",
-    "yearlySwitchDoneBody": "Avui s'han cobrat {amount}. Es renova el {date}."
+    "yearlySwitchDoneBody": "Avui s'han cobrat {amount}. Es renova el {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} parts} one{{count} part} two{{count} parts} few{{count} parts} many{{count} parts} other{{count} parts}}"
 }

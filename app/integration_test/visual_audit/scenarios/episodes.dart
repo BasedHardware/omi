@@ -1,4 +1,10 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/pages/conversations/conversations_page.dart';
+import 'package:omi/pages/episodes/episode_page.dart';
+import 'package:omi/providers/conversation_provider.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api_result.dart';
@@ -41,6 +47,69 @@ class _EpisodeCapture extends AuditCaptureProvider {
 
 final episodeScenarios = <AuditScenario>[
   AuditScenario(
+    id: 'episodes-home-closed',
+    title: 'Home with closed episodes in the conversation row style',
+    page: 'lib/pages/conversations/conversations_page.dart (ConversationsPage)',
+    state: 'Fictional dinner episode with two retained parts, a single-member episode and an unrelated conversation',
+    run: (a) async {
+      final closed = _closedFixture();
+      final morning = ServerConversation(
+          id: 'morning',
+          createdAt: DateTime(2026, 10, 29, 9, 15),
+          startedAt: DateTime(2026, 10, 29, 9, 15),
+          finishedAt: DateTime(2026, 10, 29, 9, 42),
+          structured: Structured('Coffee and a new book', '', emoji: '☕'));
+      final unrelated = ServerConversation(
+          id: 'unrelated',
+          createdAt: DateTime(2026, 10, 29, 15, 20),
+          startedAt: DateTime(2026, 10, 29, 15, 20),
+          finishedAt: DateTime(2026, 10, 29, 15, 38),
+          structured: Structured('A quick call about the garden', '', emoji: '🌱'));
+      final single = Episode(
+          id: 'single',
+          live: false,
+          startedAt: morning.startedAt!,
+          lastActivityAt: morning.finishedAt!,
+          conversationIds: ['morning'],
+          members: [morning]);
+      final items = [...closed.members, unrelated, morning];
+      final history =
+          ConversationProvider(isSignedIn: () => true, conversationListFetcher: () async => (items: items, ok: true))
+            ..conversations = items
+            ..groupConversationsByDate();
+      final episodes = EpisodeProvider(
+        fetchLive: () async => const ApiSuccess(EpisodeRead(enabled: true)),
+        fetchPage: (from, to, {cursor}) async => ApiSuccess(EpisodePageRead(enabled: true, episodes: [closed, single])),
+      )
+        ..debugSetLive(null)
+        ..debugSetHomeEpisodes([closed, single]);
+      addTearDown(history.dispose);
+      addTearDown(episodes.dispose);
+      await a.pump(const ConversationsPage(requestInitialLoad: false), providers: [
+        ChangeNotifierProvider<ConversationProvider>.value(value: history),
+        ChangeNotifierProvider<EpisodeProvider>.value(value: episodes),
+      ]);
+      expect(find.text('Dinner and plans for the weekend'), findsOneWidget);
+      expect(find.textContaining('2 parts'), findsOneWidget);
+      expect(find.text('Dinner at the noodle house'), findsNothing);
+      expect(find.text('Coffee and a new book'), findsOneWidget);
+      await a.shot('Open Home with closed episode rows');
+    },
+  ),
+  AuditScenario(
+    id: 'episodes-closed-page',
+    title: 'Closed episode summary, tasks and member conversations',
+    page: 'lib/pages/episodes/episode_page.dart (EpisodePage)',
+    state: 'Fictional 6:56–9:43 PM dinner episode with its summary, a retained task and two conversations',
+    run: (a) async {
+      await a.pump(EpisodePage(episode: _closedFixture()), scaffold: false);
+      expect(find.text('Conversations'), findsOneWidget);
+      expect(find.text('Dinner at the noodle house'), findsOneWidget);
+      expect(find.text('Pack the picnic for Saturday'), findsOneWidget);
+      await a.shot('Open the multi-part dinner episode');
+    },
+  ),
+  AuditScenario(
     id: 'episodes-live-transcript',
     title: 'Live episode transcript and elapsed seconds',
     page: 'lib/pages/episodes/live_episode_page.dart (LiveEpisodePage)',
@@ -68,3 +137,43 @@ final episodeScenarios = <AuditScenario>[
     },
   ),
 ];
+
+Episode _closedFixture() {
+  final start = DateTime(2026, 10, 29, 18, 56);
+  final end = DateTime(2026, 10, 29, 21, 43);
+  return Episode(
+    id: 'evening-episode',
+    live: false,
+    startedAt: start,
+    lastActivityAt: end,
+    title: 'Dinner and plans for the weekend',
+    emoji: '🍜',
+    conversationIds: const ['dinner', 'weekend'],
+    members: [
+      ServerConversation(
+          id: 'dinner',
+          createdAt: start,
+          startedAt: start,
+          finishedAt: DateTime(2026, 10, 29, 20, 5),
+          structured: Structured('Dinner at the noodle house', '', emoji: '🍜')),
+      ServerConversation(
+          id: 'weekend',
+          createdAt: DateTime(2026, 10, 29, 20, 5),
+          startedAt: DateTime(2026, 10, 29, 20, 5),
+          finishedAt: end,
+          structured: Structured('A weekend in the mountains', '', emoji: '🏕️')),
+    ],
+    bullets: const [
+      'Caught up over dinner and picked a trail for Saturday.',
+      'Leave early, bring a picnic, and check the weather on Friday.',
+    ],
+    items: [
+      EpisodeItem(
+          id: 'picnic',
+          text: 'Pack the picnic for Saturday',
+          createdAt: start,
+          conversationId: 'weekend',
+          status: EpisodeItemStatus.kept)
+    ],
+  );
+}

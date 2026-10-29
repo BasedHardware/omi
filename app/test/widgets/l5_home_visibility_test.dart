@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -163,7 +164,9 @@ void main() {
           lastActivityAt: now,
           title: 'Live episode',
           conversationIds: ['active', 'finished', 'highlight']);
-      final episodes = EpisodeProvider(fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: live)))
+      final episodes = EpisodeProvider(
+          fetchPage: (from, to, {cursor}) async => const ApiSuccess(EpisodePageRead(enabled: true)),
+          fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: live)))
         ..debugSetLive(live, enabled: true);
       final capture = _LiveCapture();
       addTearDown(conversations.dispose);
@@ -217,56 +220,83 @@ void main() {
       debugDefaultTargetPlatformOverride = null;
     });
   }
-  testWidgets('once the episode closes, its members return as ordinary Home rows', (tester) async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
-    addTearDown(() {
+  for (final searching in [false, true]) {
+    testWidgets('closed episode Home and search open the episode page (search=$searching)', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() {
+        debugDefaultTargetPlatformOverride = null;
+        AnalyticsManager.resetForTesting();
+      });
+      tester.view.physicalSize = const Size(393, 852);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      VisibilityDetectorController.instance.updateInterval = Duration.zero;
+      OmiColors.active = OmiColors.forBrightness(Brightness.dark);
+      SharedPreferences.setMockInitialValues({});
+      await SharedPreferencesUtil.init();
+      final now = DateTime.now();
+      final items = [
+        for (final id in ['active', 'finished'])
+          ServerConversation(
+              id: id,
+              createdAt: now,
+              startedAt: now.subtract(const Duration(minutes: 10)),
+              finishedAt: id == 'active' ? null : now,
+              structured: Structured(id == 'finished' ? 'Finished meeting' : 'Was in progress', '',
+                  emoji: '', category: 'personal'),
+              status: id == 'active' ? ConversationStatus.in_progress : ConversationStatus.completed)
+      ];
+      final conversations =
+          ConversationProvider(conversationListFetcher: () async => (items: items, ok: true), isSignedIn: () => true)
+            ..conversations = items
+            ..groupConversationsByDate();
+      final closed = Episode(
+          id: 'closed',
+          live: false,
+          startedAt: now.subtract(const Duration(minutes: 10)),
+          lastActivityAt: now,
+          title: 'Planning the garden',
+          conversationIds: ['active', 'finished'],
+          members: items);
+      if (searching) conversations.previousQuery = 'meeting';
+      // The closed snapshot owns both members even with no streaming capture.
+      final episodes = EpisodeProvider(
+          fetchPage: (from, to, {cursor}) async => ApiSuccess(EpisodePageRead(enabled: true, episodes: [closed])),
+          fetchLive: () async => const ApiSuccess(EpisodeRead(enabled: true, episode: null)),
+          lookup: (_) async => ApiSuccess(EpisodeRead(enabled: true, episode: closed)))
+        ..debugSetLive(null, enabled: true)
+        ..debugSetHomeEpisodes([closed]);
+      final capture = _IdleCapture();
+      addTearDown(conversations.dispose);
+      addTearDown(episodes.dispose);
+      addTearDown(capture.dispose);
+      final screen = await buildTypedConversationScreen(conversations,
+          captureProvider: capture,
+          episodes: episodes,
+          initializePreferences: false,
+          theme: buildOmiTheme(brightness: Brightness.dark));
+      await tester.pumpWidget(ChangeNotifierProvider<ConversationProvider>.value(value: conversations, child: screen));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byKey(const Key('home_live_episode_row')), findsNothing);
+      if (searching) {
+        expect(find.text('Planning the garden'), findsNothing);
+        await tester.tap(find.text('Finished meeting'));
+      } else {
+        expect(find.text('Finished meeting'), findsNothing);
+        expect(find.text('Was in progress'), findsNothing);
+        expect(find.text('Planning the garden'), findsOneWidget);
+        expect(find.textContaining('2 parts'), findsOneWidget);
+        expect(find.byType(ConversationListItem), findsOneWidget);
+        await tester.tap(find.text('Planning the garden'));
+      }
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('episode_page')), findsOneWidget);
+      expect(find.text('Finished meeting'), findsOneWidget);
+      expect(find.text('Was in progress'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
       debugDefaultTargetPlatformOverride = null;
-      AnalyticsManager.resetForTesting();
     });
-    tester.view.physicalSize = const Size(393, 852);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    VisibilityDetectorController.instance.updateInterval = Duration.zero;
-    OmiColors.active = OmiColors.forBrightness(Brightness.dark);
-    SharedPreferences.setMockInitialValues({});
-    await SharedPreferencesUtil.init();
-    final now = DateTime.now();
-    final items = [
-      for (final id in ['active', 'finished'])
-        ServerConversation(
-            id: id,
-            createdAt: now,
-            startedAt: now.subtract(const Duration(minutes: 10)),
-            finishedAt: id == 'active' ? null : now,
-            structured: Structured(id == 'finished' ? 'Finished meeting' : 'Was in progress', '',
-                emoji: '', category: 'personal'),
-            status: id == 'active' ? ConversationStatus.in_progress : ConversationStatus.completed)
-    ];
-    final conversations =
-        ConversationProvider(conversationListFetcher: () async => (items: items, ok: true), isSignedIn: () => true)
-          ..conversations = items
-          ..groupConversationsByDate();
-    // The episode closed server-side: nothing streams, no live episode, so nothing hides.
-    final episodes = EpisodeProvider(fetchLive: () async => const ApiSuccess(EpisodeRead(enabled: true, episode: null)))
-      ..debugSetLive(null, enabled: true);
-    final capture = _IdleCapture();
-    addTearDown(conversations.dispose);
-    addTearDown(episodes.dispose);
-    addTearDown(capture.dispose);
-    final screen = await buildTypedConversationScreen(conversations,
-        captureProvider: capture,
-        episodes: episodes,
-        initializePreferences: false,
-        theme: buildOmiTheme(brightness: Brightness.dark));
-    await tester.pumpWidget(screen);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(find.byKey(const Key('home_live_episode_row')), findsNothing);
-    expect(find.text('Finished meeting'), findsOneWidget);
-    expect(find.text('Was in progress'), findsOneWidget);
-    expect(find.byType(ConversationListItem), findsNWidgets(2));
-    expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox.shrink());
-    debugDefaultTargetPlatformOverride = null;
-  });
+  }
 }

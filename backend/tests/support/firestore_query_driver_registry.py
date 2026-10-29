@@ -1043,6 +1043,14 @@ _add(
 )
 _add(
     DriverEntry(
+        'database.episode_home.list_episode_window',
+        base={'uid': UID, 'start': T0, 'end': T1},
+        domains={'limit': [1, 50, 100], 'cursor': [None, 'episode-1']},
+        setup=_seed(f'users/{UID}/episodes/episode-1', {'started_at': T0}),
+    )
+)
+_add(
+    DriverEntry(
         'database.episode_timeline.recorded_candidates',
         base={'uid': UID, 'started': T0, 'finished': T1},
         neutrals={'transaction': (None, 'same query shape inside or outside a transaction')},

@@ -1883,6 +1883,8 @@ def to_wire(episode: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
         'closed_at': episode.get('closed_at'),
         'close_reason': episode.get('close_reason'),
         'title': clean_text(episode.get('title'), 240),
+        'emoji': clean_text(episode.get('emoji'), 20),
+        'members': [],
         'bullets': [clean_text(line, 400) for line in episode.get('bullets') or []],
         'people': [clean_text(name, 60) for name in episode.get('people') or [] if clean_text(name, 60) != 'a speaker'],
         'provisional_items': [

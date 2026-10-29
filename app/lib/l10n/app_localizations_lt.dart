@@ -14952,4 +14952,19 @@ class AppLocalizationsLt extends AppLocalizations {
   String yearlySwitchDoneBody(String amount, String date) {
     return 'Šiandien nuskaičiuota $amount. Atnaujinama $date.';
   }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count dalių',
+      many: '$count dalies',
+      few: '$count dalys',
+      two: '$count dalių',
+      one: '$count dalis',
+      zero: '$count dalių',
+    );
+    return '$_temp0';
+  }
 }

@@ -14915,4 +14915,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String yearlySwitchDoneBody(String amount, String date) {
     return '$amount charged today. Renews $date.';
   }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count parts',
+      many: '$count parts',
+      few: '$count parts',
+      two: '$count parts',
+      one: '$count part',
+      zero: '$count parts',
+    );
+    return '$_temp0';
+  }
 }
