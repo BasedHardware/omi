@@ -130,6 +130,32 @@
       "scope": "explicit-bridge"
     },
     {
+      "expression": "time() - max(omi_error_class_last_fired_timestamp_seconds) < 900",
+      "file": "alerts/error-classes.json",
+      "issues": [],
+      "metrics": [
+        "omi_error_class_last_fired_timestamp_seconds"
+      ],
+      "owner_title": "Error classes - a new or surging error class is firing",
+      "owner_uid": "omi-error-class-firing",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "max((sum(increase(omi_error_class_sweep_total{outcome!=\"ok\"}[1h])) > bool 0) + (sum(increase(omi_error_class_sweep_total[1h])) < bool 4))",
+      "file": "alerts/error-classes.json",
+      "issues": [],
+      "metrics": [
+        "omi_error_class_sweep_total"
+      ],
+      "owner_title": "Error classes - sentinel sweep is silent or failing",
+      "owner_uid": "omi-error-class-sweep-silent",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "(sum by (family) (rate(omi_firestore_documents_per_operation_sum[2h])) > 2 * sum by (family) (rate(omi_firestore_documents_per_operation_sum[2h] offset 24h))) and (sum by (family) (rate(omi_firestore_documents_per_operation_sum[2h])) > 100)",
       "file": "alerts/firestore.json",
       "issues": [],
@@ -3145,7 +3171,7 @@
   ],
   "counts": {
     "explicit_bridge": 23,
-    "query_consumers": 207
+    "query_consumers": 209
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"
