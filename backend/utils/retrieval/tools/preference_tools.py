@@ -49,7 +49,11 @@ def preference_duplicate_message(preference: str, hits: Optional[list]) -> Optio
     the search result actually carries a relevance field.
     """
     preferred = " ".join((preference or "").split()).casefold()
-    for hit in hits or []:
+    if not isinstance(hits, (list, tuple, set)):
+        return None
+    for hit in hits:
+        if not isinstance(hit, dict):
+            continue
         memory_id = str(hit.get('memory_id') or hit.get('id') or '').strip()
         existing = f" (memory_id={memory_id})" if memory_id else ""
         raw_score = hit.get("score", hit.get("relevance_score", hit.get("vector_score")))
@@ -83,22 +87,46 @@ def _agent_config() -> Optional[Dict[str, Any]]:
         return None
 
 
+_FALSE_USER_STATED = frozenset({"false", "0", "no", "off", "n", ""})
+_TRUE_USER_STATED = frozenset({"true", "1", "yes", "on", "y"})
+
+
+def _coerce_user_stated(value: Any) -> bool:
+    """Deterministically coerce user_stated from bool, numeric, or string inputs."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        norm = value.strip().lower()
+        if norm in _FALSE_USER_STATED:
+            return False
+        if norm in _TRUE_USER_STATED:
+            return True
+    return False
+
+
+def _normalize_replace_memory_id(value: Any) -> str:
+    """Normalize replace_memory_id from string or integer input; reject booleans and other types."""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, int) and not isinstance(value, bool):
+        return str(value).strip()
+    return ""
+
+
 def _get_uid(config: RunnableConfig) -> str:
     """Extract user ID from config or context variable."""
-    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
-    if cfg and 'configurable' in cfg:
-        raw_configurable = cfg.get('configurable')
-        if isinstance(raw_configurable, dict):
-            configurable: Dict[str, Any] = cast(Dict[str, Any], raw_configurable)
-            uid = configurable.get('user_id')
-            if uid:
-                return uid
-    ctx = _agent_config()
-    if ctx and 'configurable' in ctx:
-        raw_configurable = ctx.get('configurable')
-        if isinstance(raw_configurable, dict):
-            configurable = cast(Dict[str, Any], raw_configurable)
-            return configurable.get('user_id', '')
+    for candidate in (config, _agent_config()):
+        if isinstance(candidate, dict):
+            raw_configurable = candidate.get('configurable')
+            if isinstance(raw_configurable, dict):
+                uid = raw_configurable.get('user_id') or raw_configurable.get('uid')
+                if isinstance(uid, str) and uid.strip():
+                    return uid.strip()
+            top_uid = candidate.get('user_id') or candidate.get('uid')
+            if isinstance(top_uid, str) and top_uid.strip():
+                return top_uid.strip()
     return ''
 
 
@@ -108,7 +136,7 @@ def _write_provenance(uid: str, preference: str, config: RunnableConfig) -> Ledg
     configurable = cfg.get('configurable') if isinstance(cfg, dict) else None
     configurable = configurable if isinstance(configurable, dict) else {}
     source_id = str(configurable.get('chat_session_id') or configurable.get('thread_id') or 'direct-agent-tool').strip()
-    normalized_preference = ' '.join(preference.split())
+    normalized_preference = ' '.join((preference or '').split()) if isinstance(preference, str) else ''
     action_id = (
         "agent-preference:"
         + deterministic_contract_id(
@@ -205,6 +233,11 @@ def save_user_preference_tool(
         replace_memory_id: Existing memory ID to correct instead of appending.
         user_stated: Whether the user directly asserted this preference.
     """
+    if not isinstance(preference, str) or not preference.strip():
+        return "Error: Preference must be a non-empty string"
+    preference = " ".join(preference.split())
+    user_stated = _coerce_user_stated(user_stated)
+
     uid = _get_uid(config)
     if not uid:
         return "Error: Could not determine user ID"
@@ -215,7 +248,7 @@ def save_user_preference_tool(
         logger.error("Failed to resolve preference storage error_type=%s", type(e).__name__)
         return "Error saving preference"
 
-    replacement = replace_memory_id.strip()
+    replacement = _normalize_replace_memory_id(replace_memory_id)
     if replacement:
         try:
             prior = read_canonical_memory_item(uid, replacement, db_client=firestore_client)
