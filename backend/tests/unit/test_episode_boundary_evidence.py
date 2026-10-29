@@ -1,6 +1,7 @@
 """Meeting edges are shared by storage, conversation, episode and merge policy."""
 
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import pytest
 
@@ -14,6 +15,8 @@ ACCOUNT = 'test-account'
 
 @pytest.fixture
 def store(monkeypatch):
+    # Signal retention must use the same clock as the fixed recorded fixtures.
+    monkeypatch.setattr(boundary_store, 'datetime', SimpleNamespace(now=lambda tz: NOW))
     monkeypatch.setenv('EPISODE_BOUNDARIES_MODE_SHADOW_PERCENT', '100')
     db = StrictFirestore()
     monkeypatch.setenv('EPISODE_BOUNDARIES_MODE', 'serve')
@@ -170,7 +173,7 @@ async def test_off_mode_never_offloads_boundary_storage(monkeypatch):
 
 
 def test_full_index_evicts_old_terminal_edges_but_preserves_active_signals(store):
-    current = datetime.now(timezone.utc)
+    current = NOW
     state = ('users', ACCOUNT, 'capture_boundary_state', 'v1')
     store.rows[state] = {
         'entries': {
@@ -184,6 +187,15 @@ def test_full_index_evicts_old_terminal_edges_but_preserves_active_signals(store
     assert len(known) == boundary_store.MAX_SIGNALS
     assert boundary_store.signal_id(fresh) in known
     assert 'old-000' not in known
+
+
+def test_seven_day_retention_evicts_expired_edges_with_the_explicit_store_clock(store):
+    expired = signal(ended_at=NOW - timedelta(days=8)).model_copy(update={'started_at': NOW - timedelta(days=9)})
+    boundary_store.record(ACCOUNT, [expired], firestore_client=store)
+    assert boundary_store.signal_id(expired) not in boundary_store.windows(ACCOUNT, firestore_client=store)
+    fresh = signal(ended_at=NOW + timedelta(minutes=20)).model_copy(update={'external_id': 'fresh-retention'})
+    boundary_store.record(ACCOUNT, [fresh], firestore_client=store)
+    assert boundary_store.signal_id(fresh) in boundary_store.windows(ACCOUNT, firestore_client=store)
 
 
 def test_shadow_tick_reads_and_context_ingest_are_bounded_to_sixty_seconds(store, monkeypatch):
