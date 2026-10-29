@@ -278,3 +278,8 @@ def test_new_import_stamps_real_arrival_instead_of_its_historical_created_date(m
     assert payload['arrival_at'] == arrived
     assert payload['recorded_start'] == T0 and payload['recorded_end'] == T0 + timedelta(seconds=20)
     assert payload['clock'] == 'imported'
+
+    unknown = imported.model_copy(update={'started_at': None, 'finished_at': None}).model_dump()
+    conversation_recorded_time.stamp_for_write(unknown)
+    assert unknown['recorded_start'] is None and unknown['recorded_end'] is None
+    assert unknown['arrival_at'] == arrived and unknown['clock'] == 'imported'

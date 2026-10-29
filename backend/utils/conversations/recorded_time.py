@@ -115,7 +115,8 @@ def write_span(row: Mapping[str, Any], *, arrival_at: datetime | None = None) ->
         evidence.pop(key, None)
     fields = span_fields(evidence)
     if not fields:
-        return {}
+        # Unknown origins stay unknown, but every create still has arrival and provenance.
+        fields = {'recorded_start': None, 'recorded_end': None}
     if row.get('audio_timeline'):
         clock = RecordedClock.frame
     elif row.get('sync_content_revision') or row.get('sync_recorded_end_at'):
