@@ -535,6 +535,10 @@ def test_flatten_off_persisted_patches_equal_absorb_payloads_output(world, monke
         UID, survivor_patch['transcript_segments'], bool(survivor_patch.get('transcript_segments_compressed'))
     )
     decoded_patch.pop('transcript_segments_compressed', None)
+    # Recording metadata is global even when ancestor flattening is disabled.
+    expected_survivor.update(
+        recorded_start=T0, recorded_end=T0 + timedelta(minutes=25), arrival_at=survivor_in['arrival_at'], clock='device'
+    )
     assert decoded_patch == expected_survivor
     assert donor_patch == expected_donor
     audit = world.store.rows[_audit_path('n')]
