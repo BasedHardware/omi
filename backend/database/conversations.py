@@ -3075,7 +3075,7 @@ def get_action_items(
     for conversation in conversations:
         conversation_id = conversation['id']
         conversation_title = conversation.get('structured', {}).get('title', 'Untitled')
-        conversation_created_at = ensure_timezone_aware(conversation['created_at'])
+        conversation_created_at = ensure_timezone_aware(conversation.get('created_at'))
 
         raw_items = conversation.get('structured', {}).get('action_items', [])
 
@@ -3129,7 +3129,11 @@ def get_action_items(
             action_items.append(action_item_data)
 
     # Sort by newest first
-    action_items.sort(key=lambda x: -x['conversation_created_at'].timestamp())
+    action_items.sort(
+        key=lambda x: -(
+            x['conversation_created_at'].timestamp() if isinstance(x.get('conversation_created_at'), datetime) else 0.0
+        )
+    )
 
     # Apply pagination
     start_idx = offset
@@ -4440,6 +4444,27 @@ def eligible_merge_target(conversation: Optional[dict]) -> bool:
     return bool(conversation) and not is_soft_deleted(conversation)
 
 
+def _coerce_conversation_timestamp(val: Any) -> Optional[float]:
+    if val is None or isinstance(val, bool):
+        return None
+    if isinstance(val, (int, float)):
+        return float(val)
+    if isinstance(val, datetime):
+        return val.timestamp()
+    if isinstance(val, str) and val.strip():
+        try:
+            dt = datetime.fromisoformat(val.strip().replace('Z', '+00:00'))
+            return dt.timestamp()
+        except (ValueError, TypeError):
+            return None
+    if hasattr(val, 'timestamp') and callable(val.timestamp):
+        try:
+            return float(val.timestamp())
+        except Exception:
+            return None
+    return None
+
+
 def select_closest_conversation(conversations, start_timestamp: int, end_timestamp: int) -> Optional[dict]:
     """Pure closest-by-boundary choice among eligible merge targets (#10033)."""
     closest_conversation = None
@@ -4447,8 +4472,10 @@ def select_closest_conversation(conversations, start_timestamp: int, end_timesta
     for conversation in conversations:
         if not eligible_merge_target(conversation):
             continue
-        conversation_start_timestamp = conversation['started_at'].timestamp()
-        conversation_end_timestamp = conversation['finished_at'].timestamp()
+        conversation_start_timestamp = _coerce_conversation_timestamp(conversation.get('started_at'))
+        conversation_end_timestamp = _coerce_conversation_timestamp(conversation.get('finished_at'))
+        if conversation_start_timestamp is None or conversation_end_timestamp is None:
+            continue
         diff1 = abs(conversation_start_timestamp - start_timestamp)
         diff2 = abs(conversation_end_timestamp - end_timestamp)
         if diff1 < min_diff or diff2 < min_diff:
