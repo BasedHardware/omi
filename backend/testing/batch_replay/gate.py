@@ -94,6 +94,7 @@ def gate(repo, corpus, ref, base, output, allow_incomplete=False):
         'schema': 1,
         'refs': resolved,
         'corpus_sha256': hashlib.sha256(corpus.read_bytes()).hexdigest(),
+        'adapter_sha256': hashlib.sha256(Path(__file__).read_bytes() + runner.read_bytes()).hexdigest(),
         **diff,
         'incomplete': incomplete,
         'diagnostic_only': allow_incomplete,
