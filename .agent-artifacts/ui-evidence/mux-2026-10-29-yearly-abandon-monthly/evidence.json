@@ -35,6 +35,20 @@
       "description": "The third yearly checkout return after Not now shows no second fallback.",
       "captured_by": "agent",
       "source": "screencapture"
+    },
+    {
+      "file": "006-mobile-ios-monthly-offer-large-text.png",
+      "platform": "mobile-ios",
+      "description": "Largest iOS accessibility text size at the start of the scrollable offer. Scrolling and accepting still opens monthly checkout.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "007-mobile-ios-monthly-offer-locales.png",
+      "platform": "mobile-ios",
+      "description": "The real monthly offer in German, Japanese and Arabic.",
+      "captured_by": "agent",
+      "source": "screencapture"
     }
   ]
 }
