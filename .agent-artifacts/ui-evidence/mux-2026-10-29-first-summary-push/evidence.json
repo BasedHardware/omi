@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-first-summary-push-before-after.png",
+      "platform": "mobile-ios",
+      "description": "A brand-new free Omi owner's first conversation is processed by the local backend. Left: main builds no push, the locked phone shows nothing. Second: this change, the lock screen shows \"Your first summary is ready\" with the conversation title. Third: opening it shows that conversation on its Summary tab. Right: reading 3s and going back shows PR #23762's trial page with live prices. The push is the FCM message this branch's backend built, delivered with xcrun simctl push. iPhone 17 Pro simulator.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-cold-start-push-opens-summary.png",
+      "platform": "mobile-ios",
+      "description": "The other tap path: the app was killed, the same push is opened from the lock screen, and the app launches straight onto the conversation's Summary tab. iPhone 17 Pro simulator.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}
