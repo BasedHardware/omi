@@ -180,9 +180,10 @@ def test_parakeet_scales_conservatively_without_relaxing_admission():
     objects = render('parakeet')
     hpa = objects['HorizontalPodAutoscaler']['spec']
     # 2026-10-29 retire100: live windows stop at batch-100%; one warm failover
-    # spare remains (batch-pressure overflow can still scale it out).
+    # spare remains (batch-pressure overflow can still scale it out). Cap 12
+    # stays: failover surge absorber + the guard's build_rollback contract.
     assert hpa['minReplicas'] == 1
-    assert hpa['maxReplicas'] == 6
+    assert hpa['maxReplicas'] == 12
     assert hpa['behavior']['scaleUp'] == {
         'stabilizationWindowSeconds': 0,
         'selectPolicy': 'Max',

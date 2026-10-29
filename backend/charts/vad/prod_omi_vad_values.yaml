@@ -122,13 +122,12 @@ startupProbe:
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
-  # 2026-10-29 retire100 (David 10-28 ruling): with batch at 100% the live leg
-  # moves to Soniox built-ins and the live VAD gate is local ONNX, so the only
-  # remaining callers are async sync-path VAD requests, which tolerate
-  # scale-from-zero cold starts. Supersedes the #23672 two-warm-replica anti-
-  # flap floor (flap source is gone with the live consumers).
-  # Rollback: minReplicas back to 1 (2 if latency flapping returns) and redeploy.
-  minReplicas: 0
+  # 2026-10-29 retire100 (review r1): floor 1, aligning the chart with the
+  # live HPA (live has run min 1 since ~10-27). The intended retirement to 0
+  # is blocked: GKE documents HPA scale-to-zero from 1.37 and the compat
+  # fixture pins 1.35, so a 0 floor cannot be trusted to scale back up here.
+  # Revisit the 0 floor on a 1.37+ cluster. Rollback: 2 (the #23672 floor).
+  minReplicas: 1
   maxReplicas: 10
   behavior:
     scaleDown:

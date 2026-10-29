@@ -134,11 +134,7 @@ startupProbe:
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
-  # 2026-10-29 retire100 (David 10-28 ruling): this service is the live speaker-
-  # embedding endpoint; with batch at 100% the live leg moves to Soniox built-in
-  # labels, leaving no caller (batch diarization is in-worker pyannate on
-  # diarizer-batch). Rollback: minReplicas back to 1 and redeploy.
-  minReplicas: 0
+  minReplicas: 1
   maxReplicas: 10
   behavior:
     scaleDown:

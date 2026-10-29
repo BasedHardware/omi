@@ -200,10 +200,13 @@ autoscaling:
   # lane and the residual live leg (opt-outs + desktop) to Soniox built-in
   # labels, so live windows stop; one warm replica stays as the failover /
   # burst spare (PARAKEET_BATCH_PRESSURE overflow can still scale it up;
-  # raise the floor to 3 if batch pressure demands it).
+  # raise the floor to 3 if batch pressure demands it). Cap stays 12: it is
+  # not a floor (costs nothing idle), it absorbs a Soniox-failover surge
+  # (residual ~86-125 concurrent sessions > 6 x 16), and the guard's
+  # build_rollback contract expects maxReplicas == 12 (review r1).
   # Supersedes the P77r floor-8 warm-headroom sizing. Rollback: 8/12.
   minReplicas: 1
-  maxReplicas: 6
+  maxReplicas: 12
   behavior:
     scaleUp:
       stabilizationWindowSeconds: 0
