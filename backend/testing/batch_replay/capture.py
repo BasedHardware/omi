@@ -190,6 +190,9 @@ def sanitize(job, entry, owner, target, digest):
         'watermark': digest(owner.get('projection_watermark')),
         'sequence': number(entry.get('log_sequence')),
         'duration': number(job.get('duration_seconds')),
+        'unit_kind': (
+            job.get('unit_kind') if job.get('unit_kind') in {'conversation', 'capture_span'} else 'conversation'
+        ),
         'decoded_duration': number(job.get('audio_seconds', entry.get('audio_seconds'))),
         'captured_samples': number(receipt.get('captured_samples')),
         'speech_samples': number(receipt.get('speech_samples')),

@@ -73,6 +73,8 @@ It preserves recorded states in the corpus, rather than letting an existing
 ready receipt bypass the candidate's validation. Summary, notification,
 enrichment, search indexing and playback network side effects are not run.
 Production claims are advisory; this gate does not prove Firestore concurrency.
+Recorded success/silence outcomes select the real projection branch. A terminal
+empty-recovery result without its artifact proof is incomplete coverage.
 
 **Coverage matters:** production VAD spans/manifests generally live in encrypted
 artifacts, not queue metadata. A Firestore-only corpus can have missing shapes.

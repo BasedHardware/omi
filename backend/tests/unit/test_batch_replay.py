@@ -109,3 +109,12 @@ def test_invalid_source_slice_is_detected(backend_tree):
     broken = replay(corpus, backend_tree)
     assert broken['exceptions']['source_audio:ValueError:utils.batch_pipeline.source_audio.materialize'] == 1
     assert compare(broken, {'exceptions': {}, 'unit_issues': {}, 'chain_blocks': []})['regression']
+
+
+def test_recorded_silence_runs_the_empty_projection_branch(backend_tree):
+    corpus = json.loads((backend_tree / 'testing/batch_replay/regressions.json').read_text())
+    corpus['units'] = [corpus['units'][-1]]
+    corpus['units'][0].update(outcome='silence', spans=[], speech_seconds=0.0)
+    result = replay(corpus, backend_tree)
+    assert result['persisted'] == 1 and result['coverage']['followup_exercised'] == 1
+    assert not result['exceptions'] and not result['chain_blocks']

@@ -87,6 +87,10 @@ def _replay(corpus):
         def policy(self, sid):
             return ProjectionPolicy.from_dict(self.jobs[sid]['policy_parts']['projection'])
 
+        def read(self, sid):
+            active[0] = sid
+            return super().read(sid)
+
         def session(self, sid, binding, now, **part):
             log = self
             index = part.get('part_index')
@@ -161,6 +165,7 @@ def _replay(corpus):
             continue
         chains[owner].append(sid)
         duration = unit['duration']
+        outcome = unit.get('outcome') or 'success'
         item = WorkItem(
             sid,
             owner,
@@ -169,6 +174,7 @@ def _replay(corpus):
             duration,
             Priority.DEEP,
             conversation_id=unit.get('conversation'),
+            unit_kind=unit.get('unit_kind', 'conversation'),
         )
         log.jobs[sid] = {**asdict(item), 'fresh_capture': unit['lane'] != 'backfill', 'policy_parts': log.policy_parts}
         log.bindings[sid] = ProjectionBinding(
@@ -185,10 +191,10 @@ def _replay(corpus):
             'previous_segment_id': unit.get('previous'),
             'committed_at': ordinal,
             'projection_state': 'pending',
-            'result': {'outcome': 'success', 'result_uri': 'synthetic:result'},
+            'result': {'outcome': outcome, 'result_uri': 'synthetic:result'},
         }
         spans = unit.get('spans')
-        if spans is None:
+        if spans is None and outcome != 'silence':
             coverage['missing_vad_spans'] += 1
         decoded = unit.get('decoded_duration')
         if decoded is None:
@@ -206,7 +212,11 @@ def _replay(corpus):
             'words': [{'word': 'synthetic.', 'timestamp': [0.0, min(duration, decoded)]}],
             'diarization': {'turns': [{'start': 0.0, 'end': min(duration, decoded), 'speaker': 'a'}]},
         }
-        if unit.get('spans') is not None:
+        if outcome not in {'success', 'silence'}:
+            coverage['missing_terminal_empty_evidence'] += 1
+        if outcome == 'silence':
+            payloads[sid].update(speech_seconds=0.0, speech_spans=[], words=[], diarization={'turns': []})
+        if unit.get('spans') is not None and outcome == 'success':
             try:
                 projection_speech_spans(payloads[sid], duration)
                 coverage['vad_validated'] += 1
