@@ -90,9 +90,16 @@ def test_missing_ownership_read_is_not_proof_of_isolation(monkeypatch):
     )
 
 
-def test_neighbor_prompt_cannot_reject_unabsorbed_content(monkeypatch):
+@pytest.fixture(scope='module')
+def discard_prompt_module():
+    # Import/setup cost is separate from the fast policy behavior under test.
     from utils.llm import conversation_processing
 
+    return conversation_processing
+
+
+def test_neighbor_prompt_cannot_reject_unabsorbed_content(monkeypatch, discard_prompt_module):
+    conversation_processing = discard_prompt_module
     model = Mock(side_effect=AssertionError('continuation must never buy a discard call'))
     monkeypatch.setattr(conversation_processing, 'get_llm', model)
     assert not conversation_processing.should_discard_conversation('Coming over there.', neighbor_gap_seconds=10)
