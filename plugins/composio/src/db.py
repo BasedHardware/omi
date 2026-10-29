@@ -1,7 +1,6 @@
 import os
 import sqlite3
 from contextlib import contextmanager
-import json
 
 # Database setup
 DB_PATH = os.getenv("DB_PATH", "plugins/composio/data/composio.db")

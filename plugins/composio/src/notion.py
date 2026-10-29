@@ -1,10 +1,9 @@
-import os
-import json
 import base64
 import hashlib
 import hmac
 import requests
-from typing import List, Dict, Any, Optional
+import httpx
+from typing import Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, Depends, Request, status, Form, BackgroundTasks
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -143,103 +142,105 @@ def split_into_chunks(content_blocks):
 async def extract_all_pages(access_token: str, uid: str):
     """Extract all pages from Notion and store them as facts"""
     try:
-        # Search for all pages
-        response = requests.post(
-            "https://api.notion.com/v1/search",
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Notion-Version": "2022-06-28",
-                "Content-Type": "application/json",
-            },
-            json={},  # Empty search to get all pages
-            timeout=REQUEST_TIMEOUT,
-        )
-        response.raise_for_status()
-        pages = response.json().get("results", [])
+        # Use httpx.AsyncClient for non-blocking I/O
+        # Ensure timeout handles tuples or floats correctly
+        timeout = httpx.Timeout(REQUEST_TIMEOUT[1], connect=REQUEST_TIMEOUT[0]) if isinstance(REQUEST_TIMEOUT, tuple) else httpx.Timeout(REQUEST_TIMEOUT)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            # Search for all pages
+            response = await client.post(
+                "https://api.notion.com/v1/search",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Notion-Version": "2022-06-28",
+                    "Content-Type": "application/json",
+                },
+                json={},  # Empty search to get all pages
+            )
+            response.raise_for_status()
+            pages = response.json().get("results", [])
 
-        logger.info(f"Found {len(pages)} pages to process")
-        total_facts_stored = 0
+            logger.info(f"Found {len(pages)} pages to process")
+            total_facts_stored = 0
 
-        # Process pages in smaller batches
-        batch_size = 5  # Process 5 pages at a time
-        for i in range(0, len(pages), batch_size):
-            batch = pages[i : i + batch_size]
-            for page in batch:
-                try:
-                    # Get page content
-                    page_id = page["id"]
+            # Process pages in smaller batches
+            batch_size = 5  # Process 5 pages at a time
+            for i in range(0, len(pages), batch_size):
+                batch = pages[i : i + batch_size]
+                for page in batch:
+                    try:
+                        # Get page content
+                        page_id = page["id"]
 
-                    # Get page title
-                    title = ""
-                    if "properties" in page:
-                        title_prop = page["properties"].get("title", {})
-                        if "title" in title_prop and len(title_prop["title"]) > 0:
-                            title = title_prop["title"][0].get("plain_text", "Untitled")
-                        else:
-                            title = "Untitled"
+                        # Get page title
+                        title = ""
+                        if "properties" in page:
+                            title_prop = page["properties"].get("title", {})
+                            if "title" in title_prop and len(title_prop["title"]) > 0:
+                                title = title_prop["title"][0].get("plain_text", "Untitled")
+                            else:
+                                title = "Untitled"
 
-                    logger.info(f"\n=== Processing page: {title} ({page_id}) ===")
+                        logger.info(f"\n=== Processing page: {title} ({page_id}) ===")
 
-                    # Get all blocks with pagination
-                    all_blocks = []
-                    has_more = True
-                    next_cursor = None
+                        # Get all blocks with pagination
+                        all_blocks = []
+                        has_more = True
+                        next_cursor = None
 
-                    while has_more:
-                        # Prepare URL and params for pagination
-                        url = f"https://api.notion.com/v1/blocks/{page_id}/children"
-                        params = {"page_size": 100}
-                        if next_cursor:
-                            params["start_cursor"] = next_cursor
+                        while has_more:
+                            # Prepare URL and params for pagination
+                            url = f"https://api.notion.com/v1/blocks/{page_id}/children"
+                            params = {"page_size": 100}
+                            if next_cursor:
+                                params["start_cursor"] = next_cursor
 
-                        blocks_response = requests.get(
-                            url,
-                            params=params,
-                            headers={"Authorization": f"Bearer {access_token}", "Notion-Version": "2022-06-28"},
-                            timeout=REQUEST_TIMEOUT,
-                        )
-                        blocks_response.raise_for_status()
-                        blocks_data = blocks_response.json()
-
-                        # Add blocks to our collection
-                        all_blocks.extend(blocks_data.get("results", []))
-
-                        # Check if there are more blocks
-                        has_more = blocks_data.get("has_more", False)
-                        next_cursor = blocks_data.get("next_cursor")
-
-                        if has_more:
-                            logger.info(
-                                f"Fetching more blocks for page: {title} (collected {len(all_blocks)} blocks so far)"
+                            blocks_response = await client.get(
+                                url,
+                                params=params,
+                                headers={"Authorization": f"Bearer {access_token}", "Notion-Version": "2022-06-28"},
                             )
+                            blocks_response.raise_for_status()
+                            blocks_data = blocks_response.json()
 
-                    # Split content into chunks
-                    content_chunks = split_into_chunks(all_blocks)
-                    logger.info(f"\nSplit content into {len(content_chunks)} chunks")
+                            # Add blocks to our collection
+                            all_blocks.extend(blocks_data.get("results", []))
 
-                    # Store each chunk as a separate fact
-                    facts_stored = 0
-                    for i, chunk in enumerate(content_chunks, 1):
-                        if chunk.strip():
-                            # Add title and chunk number to each fact
-                            fact_text = f"Title: {title} (Part {i}/{len(content_chunks)})\n\n{chunk}"
+                            # Check if there are more blocks
+                            has_more = blocks_data.get("has_more", False)
+                            next_cursor = blocks_data.get("next_cursor")
 
-                            # Store as fact in OMI
-                            await store_fact(uid, fact_text, source_type="notion", source_id=f"{page_id}_chunk_{i}")
-                            facts_stored += 1
-                            total_facts_stored += 1
+                            if has_more:
+                                logger.info(
+                                    f"Fetching more blocks for page: {title} (collected {len(all_blocks)} blocks so far)"
+                                )
 
-                    logger.info(f"✓ Successfully stored {facts_stored} facts from page: {title}")
+                        # Split content into chunks
+                        content_chunks = split_into_chunks(all_blocks)
+                        logger.info(f"\nSplit content into {len(content_chunks)} chunks")
 
-                except Exception as e:
-                    logger.error(f"Error processing page {page_id}: {type(e).__name__}")
-                    continue  # Continue with next page even if one fails
+                        # Store each chunk as a separate fact
+                        facts_stored = 0
+                        for j, chunk in enumerate(content_chunks, 1):
+                            if chunk.strip():
+                                # Add title and chunk number to each fact
+                                fact_text = f"Title: {title} (Part {j}/{len(content_chunks)})\n\n{chunk}"
 
-            # Small delay between batches to prevent overload
-            await asyncio.sleep(1)
+                                # Store as fact in OMI
+                                await store_fact(uid, fact_text, source_type="notion", source_id=f"{page_id}_chunk_{j}")
+                                facts_stored += 1
+                                total_facts_stored += 1
 
-        logger.info(f"✓ Total facts stored: {total_facts_stored}")
-        return total_facts_stored
+                        logger.info(f"✓ Successfully stored {facts_stored} facts from page: {title}")
+
+                    except Exception as e:
+                        logger.error(f"Error processing page {page_id}: {type(e).__name__}")
+                        continue  # Continue with next page even if one fails
+
+                # Small delay between batches to prevent overload
+                await asyncio.sleep(1)
+
+            logger.info(f"✓ Total facts stored: {total_facts_stored}")
+            return total_facts_stored
 
     except Exception as e:
         logger.error(f"Error in extract_all_pages: {type(e).__name__}")
