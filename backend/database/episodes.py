@@ -37,7 +37,7 @@ from utils.encryption import decrypt, encrypt
 CURRENT = 'current'
 LAST_CLOSED = 'last_closed'
 CONTENT_FIELDS = ('title', 'bullets', 'people', 'open_questions', 'provisional_items', 'moments')
-_LINK_BATCH_LIMIT = 50
+MEMBERSHIP_BATCH_LIMIT = 50
 
 
 class EpisodeConflict(RuntimeError):
@@ -218,7 +218,7 @@ def _drop_legacy_receipts(merged: dict[str, Any], segment_receipts: Optional[Map
 
 def read_memberships(transaction, client, uid, conversation_ids):
     ids = [cid for cid in dict.fromkeys(conversation_ids) if cid and cid not in {CURRENT, LAST_CLOSED}]
-    if len(ids) > _LINK_BATCH_LIMIT:
+    if len(ids) > MEMBERSHIP_BATCH_LIMIT:
         raise EpisodeConflict('membership_batch_exhausted')
     root = client.collection('users').document(uid)
     return {

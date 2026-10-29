@@ -21,10 +21,11 @@ import math
 import os
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping
 
 from config.capture_shared_speech import shared_speech_mode
+from config.recorded_time_tolerances import CLOCK_SKEW_SECONDS
 from utils.capture.coverage_crossdevice import reconcile as reconcile_cross_device
 from database import capture_groups as capture_groups_db
 from database import conversations as conversations_db
@@ -141,7 +142,12 @@ def link_duplicate_captures(uid: str, conversation: Any) -> None:
         seconds = _threshold('CROSS_DEVICE_DEDUP_MIN_OVERLAP_SECONDS', MIN_OVERLAP_SECONDS)
         ratio = _threshold('CROSS_DEVICE_DEDUP_MIN_OVERLAP_RATIO', MIN_WINDOW_COVERAGE, 1.0)
         rows = conversations_db.get_conversations_finished_after(
-            uid, status='completed', finished_after=candidate.started_at, limit=CANDIDATE_PAGE_LIMIT
+            uid,
+            status='completed',
+            # Only candidate discovery uses the legacy clock. Recorded spans
+            # and the transaction recheck remain the overlap authority.
+            finished_after=candidate.started_at - timedelta(seconds=CLOCK_SKEW_SECONDS),
+            limit=CANDIDATE_PAGE_LIMIT,
         )
         if len(rows) == CANDIDATE_PAGE_LIMIT:
             _record_degraded()

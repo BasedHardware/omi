@@ -190,3 +190,58 @@ def test_reverse_prefixes_repartition_new_historical_caps_without_moving_live_na
         assert (
             root.collection('conversations').document(f'prefix-{i}').get().to_dict()['episode_id'] == rows[i // 4]['id']
         )
+
+
+def test_more_than_fifty_captures_repartition_with_atomic_reverse_membership(store):
+    client, uid = store
+    root = client.collection('users').document(uid)
+    facts = {
+        f'c{i:02}': {
+            'start': T0 + timedelta(seconds=30 * i),
+            'end': T0 + timedelta(seconds=30 * i + 20),
+            'source': 'omi',
+        }
+        for i in range(50)
+    }
+    original = dict(
+        id='original',
+        status='closed',
+        close_reason='gap',
+        started_at=T0,
+        last_activity_at=T0 + timedelta(seconds=1490),
+        recorded_members=facts,
+        conversation_ids=list(facts),
+        state_version=1,
+    )
+    batch = client.batch()
+    batch.set(root.collection('episodes').document('original'), episodes.seal(uid, original))
+    for cid in facts:
+        batch.set(root.collection('conversations').document(cid), {'id': cid, 'episode_id': 'original'})
+        batch.set(
+            root.collection('episode_links').document(cid), {'episode_id': 'original', 'episode_ids': ['original']}
+        )
+    batch.set(root.collection('conversations').document('c50'), {'id': 'c50'})
+    batch.commit()
+
+    result = episode_timeline.attach_recorded(
+        uid,
+        'c50',
+        'omi',
+        T0 + timedelta(seconds=1500),
+        T0 + timedelta(seconds=1520),
+        choose=choose_recorded_episode,
+        new_episode={},
+        firestore_client=client,
+    )
+
+    assert set(result['conversation_ids']) == {*facts, 'c50'}
+    assert episodes.get_episode(uid, 'original', firestore_client=client)['id'] == result['id']
+    refs = [
+        root.collection(collection).document(cid)
+        for cid in result['conversation_ids']
+        for collection in ('conversations', 'episode_links')
+    ]
+    snapshots = list(client.get_all(refs))
+    assert len(snapshots) == 2 * len(result['conversation_ids'])
+    for snapshot in snapshots:
+        assert snapshot.to_dict()['episode_id'] == result['id']

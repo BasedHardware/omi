@@ -194,7 +194,13 @@ def attach(uid, cid, source, start, end, *, candidates, template, choose, firest
             window['id']: collection.document(window['id']).get(transaction=transaction).to_dict() or {}
             for window in windows
         }
-        members = episodes.read_memberships(transaction, client, uid, facts)
+        members: dict[str, tuple[bool, dict[str, Any]]] = {}
+        member_ids = sorted(facts)
+        # A connected component may contain many short captures. Keep each
+        # membership read bounded, with every chunk in the transaction's read phase.
+        for index in range(0, len(member_ids), episodes.MEMBERSHIP_BATCH_LIMIT):
+            chunk = member_ids[index : index + episodes.MEMBERSHIP_BATCH_LIMIT]
+            members.update(episodes.read_memberships(transaction, client, uid, chunk))
         result = [_state(template, window, list(previous.values()), facts) for window in windows]
         for row in result:
             row['state_version'] = max(row['state_version'], int(targets[row['id']].get('state_version') or 0) + 1)

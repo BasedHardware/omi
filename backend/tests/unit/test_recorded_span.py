@@ -275,6 +275,61 @@ def test_attach_before_create_membership_is_adopted_without_a_ghost_row():
     assert conversation_recorded_time.create_if_absent('u', payload, firestore_client=store) == (False, False)
 
 
+def test_recorded_component_larger_than_membership_batch_commits_all_reverse_links(monkeypatch):
+    store = StrictFirestore()
+    facts = {
+        f'c{i:02}': {
+            'start': T0 + timedelta(seconds=30 * i),
+            'end': T0 + timedelta(seconds=30 * i + 20),
+            'source': 'omi',
+        }
+        for i in range(50)
+    }
+    store.rows[('users', 'u', 'episodes', 'original')] = dict(
+        id='original',
+        started_at=T0,
+        last_activity_at=T0 + timedelta(seconds=1490),
+        status='closed',
+        close_reason='gap',
+        recorded_members=facts,
+        conversation_ids=list(facts),
+        state_version=1,
+    )
+    for i in range(51):
+        store.rows[('users', 'u', 'conversations', f'c{i:02}')] = {'id': f'c{i:02}'}
+    monkeypatch.setattr(episodes, 'seal', lambda uid, row: dict(row))
+    monkeypatch.setattr(episodes, 'unseal', lambda uid, row: row)
+    monkeypatch.setattr(
+        episode_timeline,
+        'recorded_candidates',
+        lambda *a, **kw: [dict(v, id=k[-1]) for k, v in store.rows.items() if k[2] == 'episodes'],
+    )
+    read = episodes.read_memberships
+    batches = []
+
+    def bounded_read(transaction, client, uid, ids):
+        ids = list(ids)
+        batches.append(len(ids))
+        return read(transaction, client, uid, ids)
+
+    monkeypatch.setattr(episodes, 'read_memberships', bounded_read)
+    result = episode_timeline.attach_recorded(
+        'u',
+        'c50',
+        'omi',
+        T0 + timedelta(seconds=1500),
+        T0 + timedelta(seconds=1520),
+        choose=timeline.choose_recorded_episode,
+        new_episode={},
+        firestore_client=store,
+    )
+    assert sum(batches) == 51 and max(batches) <= 50
+    assert len(result['conversation_ids']) == 51
+    for i in range(51):
+        assert store.rows[('users', 'u', 'conversations', f'c{i:02}')]['episode_id'] == result['id']
+        assert store.rows[('users', 'u', 'episode_links', f'c{i:02}')]['episode_id'] == result['id']
+
+
 def test_arrival_cannot_manufacture_a_missing_recorded_origin():
     assert (
         conversation_span({'created_at': T0, 'finished_at': T0 + timedelta(hours=5), 'status': 'in_progress'}) is None

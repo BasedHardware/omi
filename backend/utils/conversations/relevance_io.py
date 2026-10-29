@@ -10,6 +10,7 @@ import logging
 from datetime import timedelta
 from typing import Any, Callable, Optional
 
+from config.recorded_time_tolerances import CLOCK_SKEW_SECONDS
 from database import conversations as conversations_db
 from models.conversation_continuity import DEFAULT_GAP_SECONDS
 from utils.conversations.processing_trigger import ProcessingTrigger
@@ -45,7 +46,9 @@ def adjacent_conversation(
         rows = conversations_db.get_conversations_finished_after(
             uid,
             status='completed',
-            finished_after=started_at - timedelta(seconds=DEFAULT_GAP_SECONDS),
+            # Legacy finished_at can lag the recording clock. Widen discovery;
+            # find_neighbor still proves adjacency from recorded spans below.
+            finished_after=started_at - timedelta(seconds=DEFAULT_GAP_SECONDS + CLOCK_SKEW_SECONDS),
             limit=NEIGHBOR_CANDIDATE_LIMIT,
             **({'include_hidden': True} if require_complete else {}),
         )

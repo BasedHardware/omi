@@ -350,3 +350,9 @@ counts actual refresh processing attempts by assigned/unassigned membership;
 counts. Retries count as attempts. These measurements do not change LLM work,
 read production data, or add persistent measurement writes. Labels have fixed
 vocabularies; no user/conversation/episode ID appears in a metric label.
+
+Recorded-component membership reads use batches of at most 50 inside the same
+transaction, before any writes, so a busy component can retain all reverse
+links. Relevance and duplicate-capture discovery widen legacy `finished_at`
+prefilters by the shared clock-skew tolerance; recorded spans still decide
+adjacency and overlap, including delayed ingestion.
