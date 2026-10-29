@@ -146,6 +146,39 @@ def test_enabled_release_scrapes_but_waits_for_live_series_before_autoscaling():
     assert render(*enabled_arguments(), '--set', 'replicaCount=0').returncode != 0
 
 
+def test_worker_metrics_are_scraped_into_the_hpa_prometheus():
+    """The adapter reads the in-cluster Prometheus, not GMP; without this job
+    the omi_batch_pipeline_* external rules match zero series and the worker
+    HPA cannot scale (#23891). Mirrors the diarizer-batch-metrics contract."""
+    monitoring = CHART.parents[0] / 'monitoring'
+    values = yaml.safe_load((monitoring / 'kube-prometheus-stack/prod_omi_monitoring_values.yaml').read_text())
+    scrape = next(
+        s
+        for s in values['prometheus']['prometheusSpec']['additionalScrapeConfigs']
+        if s['job_name'] == 'batch-pipeline-worker-metrics'
+    )
+    keeps = {r['source_labels'][0]: r['regex'] for r in scrape['relabel_configs'] if r.get('action') == 'keep'}
+    assert keeps == {
+        '__meta_kubernetes_pod_label_app_kubernetes_io_name': 'batch-pipeline-worker',
+        '__meta_kubernetes_pod_container_port_name': 'http',
+        '__meta_kubernetes_pod_phase': 'Running',
+    }
+    # The adapter joins freshness on (namespace, worker_release, pod): relabels
+    # must add exactly namespace+pod, never touch priority/worker_release.
+    labels = {r['target_label']: r['source_labels'] for r in scrape['relabel_configs'] if 'target_label' in r}
+    assert labels == {'namespace': ['__meta_kubernetes_namespace'], 'pod': ['__meta_kubernetes_pod_name']}
+    assert 'metric_relabel_configs' not in scrape
+    # Freshness cutoff is 60s; 15s keeps two samples in window and matches the
+    # chart's GMP PodMonitoring cadence.
+    assert scrape['scrape_interval'] == '15s'
+    assert scrape['kubernetes_sd_configs'][0]['namespaces']['names'] == ['prod-omi-backend']
+    inventory = yaml.safe_load((monitoring / 'expected-targets.prod.yaml').read_text())['scrape_jobs']
+    entry = next(job for job in inventory if job['name'] == 'batch-pipeline-worker-metrics')
+    assert entry['mechanism'] == 'additionalScrapeConfigs'
+    assert entry['namespace'] == 'prod-omi-backend'
+    assert entry['auth'] is None and entry['coverage_status'] == 'declared'
+
+
 @pytest.mark.parametrize(
     'environment,stage,namespace,project,bucket,gsa,secret',
     [
