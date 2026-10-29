@@ -4,6 +4,11 @@ A class is ``exception type + raising site + logger`` when the entry carries an
 exception, else ``app level + normalized message template + logger``. Ids,
 numbers, addresses, quoted values and digit-bearing slugs are normalized out so
 one code defect maps to one class regardless of the per-instance payload.
+Identifier-shaped tokens - Firebase-UID-shaped 28-char alnum, base62 ids,
+hex blobs, emails, UUIDs - are stripped before fingerprinting and again from
+the composed fingerprint/label (lead privacy rule 2026-10-29): fingerprints and
+labels become Redis keys, GMP label values and log lines, so they must never
+carry a user- or document-identifiable token.
 
 Container logs arrive one line per entry, so multi-line tracebacks are stitched
 back together per source before fingerprinting. Everything here operates on
@@ -23,12 +28,44 @@ UUID_RE = re.compile(r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{
 EMAIL_RE = re.compile(r'[\w.+-]+@[\w-]+\.[\w.-]+')
 IP_RE = re.compile(r'\b\d{1,3}(?:\.\d{1,3}){3}\b')
 HEX_RE = re.compile(r'\b[0-9a-fA-F]{12,}\b')
+# Firebase UIDs are 28 mixed-case alnum chars with digits scattered (rarely a
+# 4+ run), and Firestore auto-ids / other base62 identifiers are 20+ chars -
+# both escape HEX_RE (non-hex letters) and SLUG_RE (no digit run), so they get
+# dedicated shape rules (lead privacy rule 2026-10-29).
+FIREBASE_UID_RE = re.compile(r'\b[A-Za-z0-9]{28}\b')
+B62_ID_RE = re.compile(r'\b(?=[A-Za-z0-9]*\d)[A-Za-z0-9]{20,}\b')
 # A slug carries a 4+ digit run AND at least one letter; pure numbers stay
 # numbers and pure hex falls through to HEX_RE above.
 SLUG_RE = re.compile(r'\b(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]*\d{4,}[A-Za-z0-9_-]*\b')
 QUOTED_RE = re.compile(r"'[^']*'|\"[^\"]*\"")
 NUM_RE = re.compile(r'\b\d+(?:\.\d+)?\b')
 WS_RE = re.compile(r'\s+')
+
+# Order matters: emails before their local parts match the base62 rule, UUIDs
+# before their hex runs, and the 28-char shape before the >=20 base62 rule so
+# Firebase UIDs keep their own placeholder.
+IDENTIFIER_RES: tuple[tuple[re.Pattern[str], str], ...] = (
+    (UUID_RE, '<uid>'),
+    (EMAIL_RE, '<email>'),
+    (FIREBASE_UID_RE, '<fuid>'),
+    (B62_ID_RE, '<id>'),
+    (IP_RE, '<ip>'),
+    (HEX_RE, '<hex>'),
+)
+
+
+def strip_identifiers(text: str) -> str:
+    """Replace every identifier-shaped token, wherever it appears.
+
+    Covers emails, UUIDs, Firebase-UID-shaped 28-char alnum tokens, base62
+    ids (Firestore auto-ids, job/document ids, base64 blobs) and hex blobs -
+    including when they sit inside a path (``users/<fuid>/x``): separators are
+    token boundaries. Ordinary words and numbers survive.
+    """
+    for pattern, placeholder in IDENTIFIER_RES:
+        text = pattern.sub(placeholder, text)
+    return text
+
 
 LEVEL_LOGGER_RE = re.compile(r'^(DEBUG|INFO|WARNING|ERROR|CRITICAL)(?::|\s)\s*([A-Za-z_][\w.]*)?(?::|\s)\s*(.*)')
 EXC_SUFFIX = 'Error|Exception|Conflict|Interrupt|Exit|Failure|Cancelled|Timeout|Refused|Denied|Expired|Reset'
@@ -47,10 +84,7 @@ FP_LABEL_MAX = 120
 
 def normalize(text: str) -> str:
     """Replace id-like tokens so templates stay stable across instances."""
-    text = UUID_RE.sub('<uid>', text)
-    text = EMAIL_RE.sub('<email>', text)
-    text = IP_RE.sub('<ip>', text)
-    text = HEX_RE.sub('<hex>', text)
+    text = strip_identifiers(text)
     text = SLUG_RE.sub('<id>', text)
     text = QUOTED_RE.sub('<q>', text)
     text = NUM_RE.sub('<n>', text)
@@ -73,21 +107,27 @@ def extract_exception(text: str) -> str | None:
 
 
 def extract_site(text: str, payload: Mapping[str, Any] | None = None) -> str | None:
-    """Raising site: innermost traceback frame, ``site=`` field, or file:line."""
+    """Raising site: innermost traceback frame, ``site=`` field, or file:line.
+
+    Every return value is identifier-stripped: a ``site=`` value or frame path
+    embedding a user/document id must not reach the fingerprint or label.
+    """
     frames = FRAME_RE.findall(text)
     if frames:
         path, line, _ = frames[-1]
-        return '%s:%s' % (path.rsplit('/', 1)[-1].rsplit('\\', 1)[-1], line)
+        base = path.rsplit('/', 1)[-1].rsplit('\\', 1)[-1]
+        return '%s:%s' % (strip_identifiers(base), line)
     match = SITE_FIELD_RE.search(text)
     if match:
-        return match.group(1)
+        return strip_identifiers(match.group(1))
     for key in ('site', 'location', 'where'):
         value = (payload or {}).get(key)
         if value:
-            return str(value)
+            return strip_identifiers(str(value))
     match = PYLOC_RE.search(text)
     if match:
-        return '%s:%s' % (match.group(1).rsplit('/', 1)[-1], match.group(2))
+        base = match.group(1).rsplit('/', 1)[-1]
+        return '%s:%s' % (strip_identifiers(base), match.group(2))
     return None
 
 
@@ -139,20 +179,23 @@ def fingerprint_entry(entry: Mapping[str, Any]) -> ErrorClassFingerprint:
     exc = extract_exception(text)
     site = extract_site(text, entry.get('jsonPayload') or {})
     if exc:
-        source = logger or log_name
+        source = strip_identifiers(logger or log_name)
+        site = site if site is None else strip_identifiers(site)
+        # Final defense: the composed strings are what reach Redis records,
+        # GMP label values and log lines, so they are scrubbed whole.
         return ErrorClassFingerprint(
-            fingerprint=('%s|%s|%s' % (exc, site or '-', source))[:FP_LABEL_MAX],
-            label='%s at %s [%s]' % (exc, site or '?', source),
+            fingerprint=strip_identifiers('%s|%s|%s' % (exc, site or '-', source))[:FP_LABEL_MAX],
+            label=strip_identifiers('%s at %s [%s]' % (exc, site or '?', source)),
             # Keep the parsed app level so warning-threshold gating still
             # applies to exceptions logged at WARNING.
             level=level,
             exception=exc,
         )
     template = normalize(rest or first)[:TEMPLATE_MAX] or '<empty>'
-    source = logger or log_name
+    source = strip_identifiers(logger or log_name)
     return ErrorClassFingerprint(
-        fingerprint=('%s|%s|%s' % (level, template, source))[:FP_LABEL_MAX],
-        label='%s %s: %s' % (level, source, template[:LABEL_TEMPLATE_MAX]),
+        fingerprint=strip_identifiers('%s|%s|%s' % (level, template, source))[:FP_LABEL_MAX],
+        label=strip_identifiers('%s %s: %s' % (level, source, template[:LABEL_TEMPLATE_MAX])),
         level=level,
         exception=None,
     )
