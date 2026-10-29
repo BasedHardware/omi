@@ -2,7 +2,7 @@ import pytest
 from pathlib import Path
 from omi_cli.auth.store import store_api_key
 import threading
-import tomli
+import tomllib
 
 def test_concurrent_store_api_key_different_profiles_both_survive(config_path: Path):
     """Verify that concurrent calls to store_api_key do not lose data.
@@ -32,7 +32,7 @@ def test_concurrent_store_api_key_different_profiles_both_survive(config_path: P
 
     assert not errors, f"Concurrent store_api_key raised: {errors}"
 
-    data = tomli.loads(config_path.read_text(encoding="utf-8"))
+    data = tomllib.loads(config_path.read_text(encoding="utf-8"))
     
     assert "profiles" in data
     assert "alpha" in data["profiles"]
