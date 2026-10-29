@@ -768,3 +768,31 @@ class TestDownloadBatchBlobs:
         )
 
         assert len(result) == len(single_pcm) + len(batch_pcm)
+
+
+def test_list_audio_chunk_paths_after_probes_both_sources_with_start_offset(monkeypatch):
+    calls = []
+
+    def fake_list_blobs(**kwargs):
+        calls.append(kwargs)
+        blob = MagicMock()
+        blob.name = f'chunks/synthetic-owner/synthetic-conversation/{1700000000.500 + len(calls)}.opus.enc'
+        return [blob]
+
+    bucket = MagicMock()
+    bucket.list_blobs.side_effect = fake_list_blobs
+    storage_mod.storage_client.bucket.return_value = bucket
+    monkeypatch.setenv('BUCKET_AUDIO_DERIVED', 'derived-bucket')
+    names = storage_mod.list_audio_chunk_paths_after(
+        'synthetic-owner',
+        'synthetic-conversation',
+        'chunks/synthetic-owner/synthetic-conversation/1700000000.000.opus.enc',
+    )
+    assert len(names) == 2
+    for kwargs in calls:
+        assert kwargs['start_offset'] == 'chunks/synthetic-owner/synthetic-conversation/1700000000.000.opus.enc'
+        assert kwargs['prefix'] == 'chunks/synthetic-owner/synthetic-conversation/'
+    assert {c.args[0] for c in storage_mod.storage_client.bucket.call_args_list} == {
+        storage_mod.private_cloud_sync_bucket,
+        'derived-bucket',
+    }

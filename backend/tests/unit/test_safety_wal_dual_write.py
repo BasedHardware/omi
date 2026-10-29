@@ -28,10 +28,10 @@ def load_dependencies():
 
 
 @pytest.fixture(autouse=True)
-def clear_coverage_probe_cache():
-    coverage._coverage_cache.clear()
+def clear_coverage_listing_cache():
+    coverage._listing_cache.clear()
     yield
-    coverage._coverage_cache.clear()
+    coverage._listing_cache.clear()
 
 
 def pcm_envelope(seed, seconds=20):
@@ -722,72 +722,93 @@ def test_anonymous_live_window_requires_a_shared_scoped_voice():
 @pytest.fixture()
 def coverage_store(monkeypatch):
     monkeypatch.setattr(coverage.storage, 'storage_client', MagicMock())
-    calls = {'list': 0, 'download': 0}
+    calls = {'list': 0, 'freshness': 0, 'download': 0, 'grew': False, 'freshness_raises': False}
 
     def fake_list(uid, conversation_id, **_kwargs):
         calls['list'] += 1
         return [
-            dict(timestamp=T, path=f'chunks/{uid}/{conversation_id}/1760000000.000.opus.enc', size=2048, is_batch=False)
+            dict(
+                timestamp=T, path=f'chunks/{uid}/{conversation_id}/1760000000.000.opus.enc', size=2048, is_batch=False
+            ),
+            dict(
+                timestamp=T + 1000,
+                path=f'chunks/{uid}/{conversation_id}/1760001000.000.opus.enc',
+                size=2048,
+                is_batch=False,
+            ),
         ]
+
+    def fake_freshness(uid, conversation_id, after_path, **_kwargs):
+        calls['freshness'] += 1
+        if calls['freshness_raises']:
+            raise TimeoutError('probe budget')
+        return [f'chunks/{uid}/{conversation_id}/1760000100.000.opus.enc'] if calls['grew'] else []
 
     def fake_download(uid, path, rate):
         calls['download'] += 1
         return pcm_envelope(3)
 
     monkeypatch.setattr(coverage.storage, 'list_audio_chunks', fake_list)
+    monkeypatch.setattr(coverage.storage, 'list_audio_chunk_paths_after', fake_freshness)
     monkeypatch.setattr(coverage.storage, 'download_audio_chunk_pcm', fake_download)
-    coverage._coverage_cache.clear()
+    coverage._listing_cache.clear()
     yield calls
-    coverage._coverage_cache.clear()
+    coverage._listing_cache.clear()
 
 
-def test_historical_batches_reuse_snapshot_across_jobs(coverage_store):
-    batch_start, batch_end = T, T + 20
-    first = coverage.load_live_coverage('uid', {'id': 'conv'}, batch_start, batch_end)
-    second = coverage.load_live_coverage('uid', {'id': 'conv'}, batch_start + 5, batch_end + 5)
+def test_unchanged_prefix_reuses_listing_but_rebuilds_probes_per_job(coverage_store):
+    first = coverage.load_live_coverage('uid', {'id': 'conv'}, T, T + 20)
+    second = coverage.load_live_coverage('uid', {'id': 'conv'}, T + 1100, T + 1120)
+    # One full listing, one one-page freshness probe; probes rebuilt per job.
     assert coverage_store['list'] == 1
-    assert [p[0] for p in second.probes] == [p[0] for p in first.probes]
-    # A reused snapshot is a copy: assigning one job's clock offset must never
-    # leak into the next job's cut.
+    assert coverage_store['freshness'] == 1
+    # Selection ran per batch window on the shared listing: the later window
+    # reaches the 3600s-lookback chunk too, exactly as a fresh listing would.
+    assert [p[0] for p in first.probes] == [T]
+    assert sorted(p[0] for p in second.probes) == [T, T + 1000]
+    # Each job gets its own snapshot: offsets never leak across jobs.
     second.offset = 12.5
-    third = coverage.load_live_coverage('uid', {'id': 'conv'}, batch_start + 10, batch_end + 10)
-    assert coverage_store['list'] == 1
+    third = coverage.load_live_coverage('uid', {'id': 'conv'}, T, T + 20)
     assert third.offset is None
 
 
-def test_fresh_batches_keep_exact_per_job_listings(coverage_store):
-    now = coverage.time.time()
-    coverage.load_live_coverage('uid', {'id': 'conv'}, now - 40, now - 30)
-    coverage.load_live_coverage('uid', {'id': 'conv'}, now - 35, now - 25)
-    assert coverage_store['list'] == 2
-    assert coverage._coverage_cache == {}
-
-
-def test_expired_or_distant_cache_entries_are_not_reused(coverage_store):
+def test_new_chunk_objects_bust_the_listing_cache(coverage_store):
     coverage.load_live_coverage('uid', {'id': 'conv'}, T, T + 20)
-    # Distant batch window: outside the reuse window, must re-list.
-    coverage.load_live_coverage('uid', {'id': 'conv'}, T + coverage._COVERAGE_REUSE_WINDOW_SECONDS + 5, T + 25)
-    assert coverage_store['list'] == 2
-    # Expired entry: must re-list.
-    with coverage._coverage_cache_lock:
-        key = next(iter(coverage._coverage_cache))
-        expires_at, cached_start, snapshot = coverage._coverage_cache[key]
-        coverage._coverage_cache[key] = (coverage.time.monotonic() - 1, cached_start, snapshot)
+    coverage_store['grew'] = True
     coverage.load_live_coverage('uid', {'id': 'conv'}, T + 5, T + 25)
-    assert coverage_store['list'] == 3
+    assert coverage_store['freshness'] == 1
+    assert coverage_store['list'] == 2
 
 
-def test_coverage_cache_is_bounded(coverage_store):
-    expires_at = coverage.time.monotonic() + coverage._COVERAGE_CACHE_TTL_SECONDS
-    with coverage._coverage_cache_lock:
-        for index in range(coverage._COVERAGE_CACHE_MAX_ENTRIES):
-            coverage._coverage_cache[(f'uid{index}', f'conv{index}')] = (
+def test_freshness_probe_failure_falls_back_to_exact_listing(coverage_store):
+    coverage.load_live_coverage('uid', {'id': 'conv'}, T, T + 20)
+    coverage_store['freshness_raises'] = True
+    coverage.load_live_coverage('uid', {'id': 'conv'}, T + 5, T + 25)
+    assert coverage_store['list'] == 2
+
+
+def test_expired_listing_is_not_reused(coverage_store):
+    coverage.load_live_coverage('uid', {'id': 'conv'}, T, T + 20)
+    with coverage._listing_cache_lock:
+        key = next(iter(coverage._listing_cache))
+        expires_at, last_path, chunks = coverage._listing_cache[key]
+        coverage._listing_cache[key] = (coverage.time.monotonic() - 1, last_path, chunks)
+    coverage.load_live_coverage('uid', {'id': 'conv'}, T + 5, T + 25)
+    assert coverage_store['list'] == 2
+    assert coverage_store['freshness'] == 0
+
+
+def test_listing_cache_is_bounded(coverage_store):
+    expires_at = coverage.time.monotonic() + coverage._COVERAGE_LISTING_TTL_SECONDS
+    with coverage._listing_cache_lock:
+        for index in range(coverage._COVERAGE_LISTING_MAX_ENTRIES):
+            coverage._listing_cache[(f'uid{index}', f'conv{index}')] = (
                 expires_at,
-                T,
-                coverage.LiveCoverage(),
+                f'chunks/uid{index}/conv{index}/last.opus.enc',
+                [dict(timestamp=T, path=f'chunks/uid{index}/conv{index}/last.opus.enc', size=1, is_batch=False)],
             )
     coverage.load_live_coverage('uid_new', {'id': 'conv_new'}, T, T + 20)
     assert coverage_store['list'] == 1
-    assert len(coverage._coverage_cache) == coverage._COVERAGE_CACHE_MAX_ENTRIES
-    assert ('uid0', 'conv0') not in coverage._coverage_cache
-    assert ('uid_new', 'conv_new') in coverage._coverage_cache
+    assert len(coverage._listing_cache) == coverage._COVERAGE_LISTING_MAX_ENTRIES
+    assert ('uid0', 'conv0') not in coverage._listing_cache
+    assert ('uid_new', 'conv_new') in coverage._listing_cache

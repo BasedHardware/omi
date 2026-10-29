@@ -1218,6 +1218,40 @@ def list_audio_chunks(
     return sorted(chunks, key=lambda x: x['timestamp'])
 
 
+def list_audio_chunk_paths_after(
+    uid: str, conversation_id: str, after_path: str, *, timeout: Optional[float] = 5
+) -> List[str]:
+    """Freshness probe for a cached chunk listing: object names at or after ``after_path``.
+
+    Mirrors the two listing sources of a timeouted ``list_audio_chunks`` call
+    (primary plus derived bucket when configured; the raw-pack merge is skipped
+    there, so it is skipped here too). An empty result proves no chunk object
+    beyond ``after_path`` exists in either source, so a cached listing ending at
+    ``after_path`` is still complete. Returns at most a handful of names; callers
+    only need to know whether any exist.
+    """
+    names: List[str] = []
+    bucket_names = [private_cloud_sync_bucket]
+    regional = os.getenv('BUCKET_AUDIO_DERIVED', '').strip()
+    if regional and regional != private_cloud_sync_bucket:
+        bucket_names.append(regional)
+    for bucket_name in bucket_names:
+        bucket = _get_storage_client().bucket(bucket_name)
+        for blob in bucket.list_blobs(
+            prefix=f'chunks/{uid}/{conversation_id}/',
+            start_offset=after_path,
+            page_size=8,
+            timeout=timeout,
+            retry=None,
+        ):
+            names.append(blob.name)
+            if len(names) >= 8:
+                break
+        if len(names) >= 8:
+            break
+    return names
+
+
 def delete_conversation_audio_files(uid: str, conversation_id: str, *, merged_into: str | None = None) -> None:
     """Purge canonical and derived conversation objects, including old generations."""
     if os.getenv('BUCKET_CANONICAL_AUDIO') and merged_into:

@@ -156,62 +156,73 @@ class LiveCoverage:
     offset: float | None = None
 
 
-# Cross-job probe reuse for historical batches. The per-job snapshots dict in
-# apply_safety_wal_coverage dedupes listings inside one job only, so a backfill
-# wave pays the full chunk-prefix listing (up to 10k results) again for every
-# few-file batch of the same conversation, 24/7. A stale snapshot can only miss
-# newer live chunks: intervals then fail their envelope match and the WAL is
-# retained, the same fail-safe fallback as an unreliable clock, so reuse never
-# authorizes a cut that a fresh listing would refuse. Only batches at least
-# COVERAGE_CACHE_MIN_AGE_SECONDS old are cached: an open capture session keeps
-# exact per-job listings.
-_COVERAGE_CACHE_TTL_SECONDS = 120
-_COVERAGE_REUSE_WINDOW_SECONDS = 600
-_COVERAGE_CACHE_MIN_AGE_SECONDS = 600
-_COVERAGE_CACHE_MAX_ENTRIES = 128
-_coverage_cache_lock = threading.Lock()
-_coverage_cache: dict[tuple[str, str], tuple[float, float, LiveCoverage]] = {}
+# Cross-job listing reuse. The per-job snapshots dict in apply_safety_wal_coverage
+# dedupes listings inside one job only, so a backfill wave pays the full
+# chunk-prefix listing (up to 10k results, several ListObjects pages for large
+# conversations) again for every few-file batch of the same conversation, 24/7.
+# The cached value is the LISTING, never a derived snapshot: probe selection and
+# ambiguity rejection stay per job, and reuse happens only after a one-page
+# start_offset probe proves no chunk object exists beyond the cached listing's
+# last path in either listing source. A reused listing is therefore identical to
+# a fresh one by construction; any doubt (probe failure, new object, expiry)
+# falls back to the exact per-job listing.
+_COVERAGE_LISTING_TTL_SECONDS = 120
+_COVERAGE_LISTING_MAX_ENTRIES = 16
+_listing_cache_lock = threading.Lock()
+_listing_cache: dict[tuple[str, str], tuple[float, str, list[dict]]] = {}
 
 
-def _coverage_cache_get(uid: str, conversation_id: str, batch_start: float) -> LiveCoverage | None:
-    with _coverage_cache_lock:
-        cached = _coverage_cache.get((uid, conversation_id))
+def _cached_chunk_listing(uid: str, conversation_id: str) -> list[dict] | None:
+    with _listing_cache_lock:
+        cached = _listing_cache.get((uid, conversation_id))
         if not cached:
             return None
-        expires_at, cached_start, snapshot = cached
-        if time.monotonic() >= expires_at or abs(batch_start - cached_start) > _COVERAGE_REUSE_WINDOW_SECONDS:
-            _coverage_cache.pop((uid, conversation_id), None)
+        expires_at, last_path, chunks = cached
+        if time.monotonic() >= expires_at:
+            _listing_cache.pop((uid, conversation_id), None)
             return None
-        # cut_live_coverage assigns snapshot.offset for its own WAL; a reused
-        # snapshot must not leak one job's offset into another. Probe arrays are
-        # read-only after build, so sharing them is safe.
-        return LiveCoverage(probes=list(snapshot.probes), offset=None)
+    try:
+        grew = storage.list_audio_chunk_paths_after(uid, conversation_id, last_path)
+    except Exception:
+        grew = ['unproven']  # Freshness not provable: take the exact listing.
+    if grew:
+        with _listing_cache_lock:
+            _listing_cache.pop((uid, conversation_id), None)
+        return None
+    return chunks
 
 
-def _coverage_cache_put(uid: str, conversation_id: str, batch_start: float, snapshot: LiveCoverage) -> None:
-    with _coverage_cache_lock:
-        if len(_coverage_cache) >= _COVERAGE_CACHE_MAX_ENTRIES:
-            _coverage_cache.pop(next(iter(_coverage_cache)))
-        _coverage_cache[(uid, conversation_id)] = (
-            time.monotonic() + _COVERAGE_CACHE_TTL_SECONDS,
-            batch_start,
-            snapshot,
+def _remember_chunk_listing(uid: str, conversation_id: str, chunks: list[dict]) -> None:
+    if not chunks:
+        return  # An empty listing cannot prove freshness; rebuild is one page.
+    with _listing_cache_lock:
+        if len(_listing_cache) >= _COVERAGE_LISTING_MAX_ENTRIES:
+            _listing_cache.pop(next(iter(_listing_cache)))
+        _listing_cache[(uid, conversation_id)] = (
+            time.monotonic() + _COVERAGE_LISTING_TTL_SECONDS,
+            max(chunk['path'] for chunk in chunks),
+            list(chunks),
         )
+
+
+def _conversation_chunks(uid: str, conversation_id: str) -> list[dict]:
+    cached = _cached_chunk_listing(uid, conversation_id)
+    if cached is not None:
+        return cached
+    chunks = storage.list_audio_chunks(uid, conversation_id, timeout=5, max_count=10000)
+    _remember_chunk_listing(uid, conversation_id, chunks)
+    return chunks
 
 
 def load_live_coverage(uid: str, row: dict, batch_start: float, batch_end: float) -> LiveCoverage:
     """One bounded listing/decode pass per conversation per job.
 
-    Historical batches may instead reuse a fresh probe snapshot for the same
-    conversation (see _coverage_cache_get); both paths build identical evidence
-    or retain the WAL.
+    The listing itself may be reused across jobs when a one-page freshness probe
+    proves it unchanged (see _cached_chunk_listing); probe selection, ambiguity
+    rejection and offset estimation always run per job on identical evidence.
     """
-    if batch_end <= time.time() - _COVERAGE_CACHE_MIN_AGE_SECONDS:
-        cached = _coverage_cache_get(uid, row['id'], batch_start)
-        if cached is not None:
-            return cached
     snapshot = LiveCoverage()
-    chunks = storage.list_audio_chunks(uid, row['id'], timeout=5, max_count=10000)
+    chunks = _conversation_chunks(uid, row['id'])
     budget, attempts, deadline = 0, 0, time.monotonic() + 15
     for chunk in sorted(chunks, key=lambda c: abs(float(c['timestamp']) - batch_start)):
         span = chunk.get('span')
@@ -239,8 +250,6 @@ def load_live_coverage(uid: str, row: dict, batch_start: float, batch_end: float
         budget += len(pcm)
         # Never extrapolate un-downloaded span bytes into suppression evidence.
         snapshot.probes.append((left, energy_envelope(pcm)))
-    if batch_end <= time.time() - _COVERAGE_CACHE_MIN_AGE_SECONDS:
-        _coverage_cache_put(uid, row['id'], batch_start, snapshot)
     return snapshot
 
 
