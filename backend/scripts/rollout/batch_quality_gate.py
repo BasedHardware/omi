@@ -167,6 +167,7 @@ def observer_record(sample, at, alerts=()):
         hard3 = {key: value if value == 'TRIP' else 'UNKNOWN' for key, value in hard3.items()}
     return dict(
         at=at,
+        observed_through=sample.get('rows_read_at'),
         verdict='TRIP' if reasons else 'CLEAN',
         reasons=sorted(reasons),
         alerts=sorted(set(alerts) | set(soft_signals(sample))),
@@ -268,7 +269,8 @@ def entry_check(packet, now):
     if guard['verdict'] != 'CLEAN':
         errors.extend('hard3:' + reason for reason in guard['reasons'])
     try:
-        if not 1800 <= now - epoch(packet['observer']['observation_since']):
+        through = epoch(packet['observer']['observed_through'])
+        if not through <= now or through - epoch(packet['observer']['observation_since']) < 1800:
             raise ValueError('lookback')
     except (KeyError, TypeError, ValueError, AttributeError):
         errors.append('hard3_full_30m_lookback_required')

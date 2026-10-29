@@ -56,7 +56,7 @@ contract, not the truth of a caller-supplied receipt.
 | --- | --- |
 | `errclass` | `complete=true`, `serving_sha`, `at`, `evidence_ref`, `baseline_hours>=24`, `includes_zero_percent_traffic=true`, `untriaged_new_classes=0`. No count threshold may hide a new class. Include all batch traffic that continues at 0%. |
 | `replay` | `complete=true`, `serving_sha`, `at`, `evidence_ref`, `verdict="PASS"`. State real corpus coverage, synthetic-only coverage and unsupported concurrency separately. Missing required coverage cannot be waived by changing the verdict string. |
-| `observer` | The fresh `watch-latest.json` from the new observer, with measured T1/T2/T4 all CLEAN and `observation_since` at least 30 minutes ago. No hard harm in `reasons`; soft alerts remain visible. |
+| `observer` | The fresh `watch-latest.json` from the new observer, with measured T1/T2/T4 all CLEAN and at least 30 minutes from `observation_since` through the collector's `observed_through` readTime. Post-read wall time does not fill missing observation. No hard harm in `reasons`; soft alerts remain visible. |
 
 Errclass/replay receipts expire after 15 minutes; observer evidence after five.
 An expired receipt asks its owner to refresh evidence, never to reseal a packet.

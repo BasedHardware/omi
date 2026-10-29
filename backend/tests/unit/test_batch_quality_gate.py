@@ -34,6 +34,7 @@ def packet():
         replay=dict(common, verdict='PASS'),
         observer=dict(
             at=common['at'],
+            observed_through=common['at'],
             verdict='CLEAN',
             reasons=[],
             observation_since='2026-10-29T03:30:00Z',
@@ -195,6 +196,7 @@ class HardThreeTest(unittest.TestCase):
             lambda p: p['observer'].update(verdict='TRIP', reasons=['T4_unsafe_parakeet_route']),
             lambda p: p['observer'].update(at='2026-10-29T03:00:00Z'),
             lambda p: p['observer'].update(observation_since='2026-10-29T03:59:00Z'),
+            lambda p: p['observer'].update(observed_through='2026-10-29T03:59:59Z'),
         ]
         for mutate in mutations:
             with self.subTest(mutation=mutate):
