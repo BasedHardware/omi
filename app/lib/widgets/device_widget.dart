@@ -32,7 +32,10 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
 
   @override
   void initState() {
-    _controller = AnimationController(duration: const Duration(milliseconds: 2000), vsync: this)..repeat(reverse: true);
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 2000),
+      vsync: this,
+    )..repeat(reverse: true);
     _animation = Tween<double>(begin: 1, end: 0.8).animate(_controller);
     super.initState();
   }
@@ -56,7 +59,10 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
                     child: AnimatedBuilder(
                       animation: _animation,
                       builder: (context, child) {
-                        return Transform.scale(scale: _animation.value, child: child);
+                        return Transform.scale(
+                          scale: _animation.value,
+                          child: child,
+                        );
                       },
                       child: Image.asset(
                         Assets.images.blob.path,
@@ -81,37 +87,6 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
     final pixelRatio = MediaQuery.of(context).devicePixelRatio;
     final double imageHeight = (MediaQuery.sizeOf(context).height <= 700 ? 130 : 160) * widget.sizeMultiplier;
     final double imageWidth = (MediaQuery.sizeOf(context).height <= 700 ? 130 : 160) * widget.sizeMultiplier;
-
-    // Special handling for Omi device with connection indicator
-    if ((widget.deviceType == DeviceType.omi || widget.deviceName == 'Omi') && !widget.isConnected) {
-      return Stack(
-        alignment: Alignment.center,
-        children: [
-          // Base image
-          Image.asset(
-            Assets.images.omiWithoutRopeTurnedOff.path,
-            height: imageHeight,
-            width: imageWidth,
-            cacheHeight: (imageHeight * pixelRatio).round(),
-            cacheWidth: (imageWidth * pixelRatio).round(),
-          ),
-          // Blue light overlay when connected TODO: improve this or just use the image itself
-          AnimatedOpacity(
-            opacity: widget.isConnected ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 300),
-            child: Container(
-              width: imageWidth * 0.06,
-              height: imageHeight * 0.06,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.blue.withValues(alpha: 0.8),
-                boxShadow: [BoxShadow(color: Colors.blue.withValues(alpha: 0.5), blurRadius: 8, spreadRadius: 2)],
-              ),
-            ),
-          ),
-        ],
-      );
-    }
 
     return Image.asset(
       DeviceUtils.getDeviceImagePathWithState(
