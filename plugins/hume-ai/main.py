@@ -136,9 +136,8 @@ async def handle_audio_stream(
         audio_dir.mkdir(exist_ok=True)
 
         timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S_%f")
-        filename = f"{uid}_{timestamp}.wav"
-        import re
-        filename = re.sub(r'[^a-zA-Z0-9_.-]', '', filename)
+        uid_safe = "".join(c for c in uid if c.isalnum() or c in ('-', '_'))
+        filename = f"{uid_safe}_{timestamp}.wav"
         local_file_path = audio_dir / filename
 
         # Write WAV file with header
