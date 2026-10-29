@@ -109,3 +109,18 @@ def test_full_neighbor_page_cannot_prove_isolation(monkeypatch):
         relevance_io.adjacent_conversation(
             'u', SimpleNamespace(id='c', started_at=T0, finished_at=T0), 'c', require_complete=True
         )
+
+
+def test_hidden_neighbor_candidates_count_toward_isolation_proof(monkeypatch):
+    seen = {}
+
+    def read(*a, **kw):
+        seen.update(kw)
+        return [dict(id=f'donor-{i}', deleted=True) for i in range(10)]
+
+    monkeypatch.setattr(relevance_io.conversations_db, 'get_conversations_finished_after', read)
+    with pytest.raises(RuntimeError, match='neighbor_window_incomplete'):
+        relevance_io.adjacent_conversation(
+            'u', SimpleNamespace(id='c', started_at=T0, finished_at=T0), 'c', require_complete=True
+        )
+    assert seen['include_hidden'] is True

@@ -2725,6 +2725,7 @@ def get_conversations_finished_after(
     status: str,
     finished_after: datetime,
     limit: int = 25,
+    include_hidden: bool = False,
     firestore_client=None,
 ) -> List[Dict[str, Any]]:
     """Conversations in ``status`` whose last activity is at or after ``finished_after``.
@@ -2748,8 +2749,8 @@ def get_conversations_finished_after(
     conversations: List[Dict[str, Any]] = []
     for doc in conversations_ref.stream():
         data = doc.to_dict()
-        if data and not is_soft_deleted(data):
-            conversations.append(data)
+        if data and (include_hidden or not is_soft_deleted(data)):
+            conversations.append({**data, 'id': doc.id} if include_hidden else data)
     return conversations
 
 

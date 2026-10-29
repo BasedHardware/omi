@@ -472,7 +472,7 @@ def test_sync_target_processing_end_never_extends_recorded_extent_or_search(empt
     future.update(sync_content_revision=1)
     store.rows[('users', 'u', 'conversations', 'unrelated')] = future
     result, _, _ = intake(store, chunk('offline', T0.timestamp() + 30), target_id='target')
-    assert result['id'] == 'target'
+    assert result['id'] == ('offline' if empty else 'target')
     assert result['finished_at'] == T0 + timedelta(seconds=39.5)
     assert len(result['transcript_segments']) == (1 if empty else 2)
     assert not store.rows[('users', 'u', 'conversations', 'unrelated')].get('deleted')
@@ -498,3 +498,16 @@ def test_sync_extent_rollback_restores_live_target_wall_clock(monkeypatch):
     store.rows[('users', 'u', 'conversations', 'target')] = target
     result, _, _ = intake(store, chunk('offline', T0.timestamp() + 30), target_id='target')
     assert result['finished_at'] == NOW
+
+
+def test_wal_for_empty_upload_socket_joins_already_transcribed_recording():
+    store = StrictFirestore()
+    first, _, _ = intake(store, chunk('transcribed', T0.timestamp()))
+    socket = chunk('socket', T0.timestamp())
+    socket.update(status='in_progress', created_at=NOW, finished_at=NOW, transcript_segments=[])
+    store.rows[('users', 'u', 'conversations', 'socket')] = socket
+    row, created, _ = intake(store, chunk('wal', T0.timestamp() + 30), target_id='socket')
+    assert row['id'] == first['id'] and not created
+    assert len(row['transcript_segments']) == 2
+    assert row['finished_at'] == T0 + timedelta(seconds=39.5)
+    assert store.rows[('users', 'u', 'conversations', 'socket')]['transcript_segments'] == []

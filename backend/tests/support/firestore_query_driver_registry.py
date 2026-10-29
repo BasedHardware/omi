@@ -1095,7 +1095,7 @@ _add(
     DriverEntry(
         'database.conversations.get_conversations_finished_after',
         base={'uid': UID, 'status': 'completed', 'finished_after': T0},
-        neutrals={'limit': _LIMIT},
+        neutrals={'limit': _LIMIT, 'include_hidden': (True, 'result filtering only; same serving query')},
     )
 )
 _add(DriverEntry('database.conversations.get_conversations_to_migrate', base={'uid': UID, 'target_level': 'level-2'}))

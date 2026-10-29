@@ -43,6 +43,7 @@ def adjacent_conversation(
             status='completed',
             finished_after=started_at - timedelta(seconds=DEFAULT_GAP_SECONDS),
             limit=NEIGHBOR_CANDIDATE_LIMIT,
+            **({'include_hidden': True} if require_complete else {}),
         )
     except Exception as error:
         if require_complete:
