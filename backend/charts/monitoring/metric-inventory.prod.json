@@ -1987,6 +1987,7 @@
     "omi_audio_custody_failures_total",
     "omi_audio_custody_last_risk_timestamp_seconds",
     "omi_audio_custody_would_drop_total",
+    "omi_error_class_alert_fired_total",
     "omi_error_class_alert_firing",
     "omi_error_class_sweep_total",
     "omi_listen_demand_failure_detail_total",

@@ -2,9 +2,10 @@
 
 Stores counts and sanitized fingerprints only - never raw log content. The
 baseline hash expires after ``BASELINE_TTL_SECONDS`` of no refreshes so idle
-classes drop out on their own; the alerted hash entries carry a 6-hour TTL that
-*is* the per-class dedupe window, so an unrefreshed entry cannot suppress a
-later alert.
+classes drop out on their own, and buckets older than the 7-day window are
+pruned by age on every write, so a long-idle class returns as new. Each
+alerted class is its own string key whose 6-hour TTL *is* the dedupe window,
+so one class alerting cannot extend another's suppression.
 """
 
 from __future__ import annotations
@@ -38,12 +39,16 @@ def record_window(
 
     Overlapping 15-minute reads of the same hour re-observe entries, so a
     bucket keeps the largest count seen rather than accumulating duplicates.
+    Buckets older than the 7-day window are dropped by age, so a class that
+    goes silent for a week loses its history and returns as new.
     """
     raw = client.hget(BASELINE_KEY, fingerprint)
-    record: dict[str, Any] = json.loads(raw) if raw else {'first_seen': now_epoch, 'buckets': {}}
+    record: dict = json.loads(raw) if raw else {'first_seen': now_epoch, 'buckets': {}}
     record['label'] = label
     record['level'] = level
     buckets = {int(k): v for k, v in record.get('buckets', {}).items()}
+    age_cutoff = now_epoch // 3600 - KEEP_BUCKETS
+    buckets = {bucket: count for bucket, count in buckets.items() if bucket > age_cutoff}
     for bucket, count in window_buckets.items():
         buckets[bucket] = max(int(buckets.get(bucket, 0)), count)
     ordered = sorted(buckets.items())[-KEEP_BUCKETS:]
@@ -65,20 +70,22 @@ def baseline_mean(
     before_bucket: int,
     record: dict | None = None,
 ) -> float | None:
-    """Mean hourly count over buckets strictly before ``before_bucket``.
+    """Mean hourly count over the span since the class first appeared.
 
-    The caller passes the current window's start bucket so the window being
-    evaluated cannot dilute its own baseline.
+    The divisor is the hour span from the earliest prior bucket to
+    ``before_bucket`` (capped at the 7-day window), not the number of buckets
+    with observations: a class that logged once and then went silent must trend
+    toward zero, not keep the rate of its one active hour.
     """
     data = record if record is not None else _load_record(client, fingerprint)
     if data is None:
         return None
-    prior = [
-        count for bucket, count in ((int(k), v) for k, v in data.get('buckets', {}).items()) if bucket < before_bucket
-    ]
+    prior = [(int(k), v) for k, v in data.get('buckets', {}).items() if int(k) < before_bucket]
     if not prior:
         return None
-    return sum(prior) / len(prior)
+    total = sum(count for _, count in prior)
+    span = before_bucket - min(bucket for bucket, _ in prior) + 1
+    return total / min(span, KEEP_BUCKETS)
 
 
 def first_seen_epoch(client: Any, fingerprint: str, record: dict | None = None) -> int | None:
@@ -90,10 +97,11 @@ def first_seen_epoch(client: Any, fingerprint: str, record: dict | None = None) 
 
 
 def mark_alerted(client: Any, fingerprint: str, *, now_epoch: int) -> None:
-    client.hset(ALERTED_KEY, fingerprint, str(now_epoch))
-    client.expire(ALERTED_KEY, ALERT_TTL_SECONDS)
+    # One key per class: a per-key TTL cannot be extended by another class's
+    # alert the way a shared hash expiry would be.
+    client.set('%s:%s' % (ALERTED_KEY, fingerprint), str(now_epoch), ex=ALERT_TTL_SECONDS)
 
 
 def recently_alerted(client: Any, fingerprint: str) -> bool:
     """True while the 6-hour dedupe TTL is still running for this class."""
-    return client.hexists(ALERTED_KEY, fingerprint)
+    return bool(client.exists('%s:%s' % (ALERTED_KEY, fingerprint)))

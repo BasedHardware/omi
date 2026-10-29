@@ -48,7 +48,8 @@ def test_below_new_threshold_does_not_fire(client):
 def test_surging_class_fires_against_baseline(client):
     hour = 3600
     now = int(datetime(2026, 10, 29, 12, 0, tzinfo=timezone.utc).timestamp())
-    # Two prior hours at ~5/h establish the baseline mean.
+    # Two prior hours at ~5/h; the mean divides by the hour span since the
+    # class first appeared, not by the number of observed buckets.
     for offset, ts in ((2, '2026-10-29T09:10:00Z'), (1, '2026-10-29T10:10:00Z')):
         evaluate_window(
             [entry('ERROR routers.x: boom for 42', ts=ts) for _ in range(5)],
@@ -58,7 +59,58 @@ def test_surging_class_fires_against_baseline(client):
     result = evaluate_window(error_entries(60), now_epoch=now, client=client)
     assert len(result['fired']) == 1
     assert result['fired'][0]['disposition'] == 'surge'
-    assert result['fired'][0]['baseline_mean'] == 5.0
+    assert result['fired'][0]['baseline_mean'] == 2.5  # 10 counted over a 4h span
+
+
+def test_new_class_below_threshold_alerts_when_it_crosses(client):
+    now = int(datetime(2026, 10, 29, 4, 0, tzinfo=timezone.utc).timestamp())
+    below = evaluate_window(error_entries(19), now_epoch=now, client=client)
+    assert below['fired'] == []
+    # The record exists now, but there is still no baseline before the new
+    # window, so crossing the new-class threshold on a later sweep fires.
+    crossed = evaluate_window(error_entries(22, ts='2026-10-29T04:30:00Z'), now_epoch=now + 1800, client=client)
+    assert len(crossed['fired']) == 1
+    assert crossed['fired'][0]['disposition'] == 'new'
+
+
+def test_once_active_class_decays_to_a_span_baseline(client):
+    hour = 3600
+    now = int(datetime(2026, 10, 29, 12, 0, tzinfo=timezone.utc).timestamp())
+    # One quiet hour (19/h, below the new threshold so no dedupe key is set) a
+    # hundred hours ago, silent since: the span mean is ~0.2/h, so 50/h is a 5x
+    # surge rather than a comparison against the one observed bucket.
+    evaluate_window(
+        [entry('ERROR routers.x: boom for 42', ts='2026-10-28T02:10:00Z') for _ in range(19)],
+        now_epoch=now - 100 * hour,
+        client=client,
+    )
+    result = evaluate_window(error_entries(50), now_epoch=now, client=client)
+    assert len(result['fired']) == 1
+    assert result['fired'][0]['disposition'] == 'surge'
+    assert result['fired'][0]['baseline_mean'] < 1.0
+
+
+def test_idle_class_returns_as_new_after_a_week(client):
+    hour = 3600
+    now = int(datetime(2026, 10, 29, 12, 0, tzinfo=timezone.utc).timestamp())
+    evaluate_window(
+        [entry('ERROR routers.x: boom for 42', ts='2026-10-21T02:10:00Z') for _ in range(19)],
+        now_epoch=now - 200 * hour,
+        client=client,
+    )
+    # Buckets older than the 7-day window age out, leaving no baseline.
+    result = evaluate_window(error_entries(30), now_epoch=now, client=client)
+    assert len(result['fired']) == 1
+    assert result['fired'][0]['disposition'] == 'new'
+
+
+def test_warning_exception_uses_doubled_thresholds(client):
+    text = 'WARNING routers.y: bad thing\nValueError: nope'
+    now = int(datetime(2026, 10, 29, 4, 0, tzinfo=timezone.utc).timestamp())
+    below = evaluate_window([entry(text) for _ in range(30)], now_epoch=now, client=client)
+    assert below['fired'] == []
+    fires = evaluate_window([entry(text) for _ in range(45)], now_epoch=now, client=client)
+    assert len(fires['fired']) == 1
 
 
 def test_warning_level_needs_doubled_thresholds(client):
@@ -91,21 +143,26 @@ def test_alert_dedupe_suppresses_refire_within_ttl(client):
     assert again['fired'] == []
 
 
-def test_baseline_keeps_only_seven_days_of_buckets(client):
+def test_baseline_drops_buckets_older_than_seven_days(client):
+    import json as _json
+
     now = 1_800_000_000
-    for step in range(170):
-        baseline_db.record_window(
-            client,
-            fingerprint='f',
-            label='l',
-            level='ERROR',
-            window_buckets={now // 3600 - step: 3},
-            now_epoch=now - step * 3600,
-        )
-    record = baseline_db.record_window(
-        client, fingerprint='f', label='l', level='ERROR', window_buckets={now // 3600: 1}, now_epoch=now
+    # A stored record carrying a 200h-old bucket (from a long-ago window).
+    client.hset(
+        baseline_db.BASELINE_KEY,
+        'f',
+        _json.dumps({'first_seen': now - 200 * 3600, 'buckets': {str(now // 3600 - 200): 9}}),
     )
-    assert len(record['buckets']) == baseline_db.KEEP_BUCKETS
+    recent = baseline_db.record_window(
+        client,
+        fingerprint='f',
+        label='l',
+        level='ERROR',
+        window_buckets={now // 3600 - 5: 3},
+        now_epoch=now,
+    )
+    # The 200h-old bucket ages out; only the in-window bucket survives.
+    assert recent['buckets'] == {str(now // 3600 - 5): 3}
 
 
 def test_window_bounds_skip_the_view_lag():

@@ -70,7 +70,14 @@ def test_exception_fingerprint_uses_innermost_site():
     fp = fingerprint_entry({'textPayload': text, 'resource': {'labels': {}}, 'logName': 'x/stderr'})
     assert fp.exception == 'ValueError'
     assert fp.fingerprint == 'ValueError|contracts.py:45|services.batch'
-    assert fp.level == 'EXC'
+    assert fp.level == 'ERROR'
+
+
+def test_warning_exception_keeps_warning_level_for_thresholds():
+    text = 'WARNING routers.y: bad thing\nValueError: nope'
+    fp = fingerprint_entry({'textPayload': text, 'resource': {'labels': {}}, 'logName': 's'})
+    assert fp.exception == 'ValueError'
+    assert fp.level == 'WARNING'
 
 
 def test_extract_exception_takes_the_last_exception_line():

@@ -143,7 +143,9 @@ def fingerprint_entry(entry: Mapping[str, Any]) -> ErrorClassFingerprint:
         return ErrorClassFingerprint(
             fingerprint=('%s|%s|%s' % (exc, site or '-', source))[:FP_LABEL_MAX],
             label='%s at %s [%s]' % (exc, site or '?', source),
-            level='EXC',
+            # Keep the parsed app level so warning-threshold gating still
+            # applies to exceptions logged at WARNING.
+            level=level,
             exception=exc,
         )
     template = normalize(rest or first)[:TEMPLATE_MAX] or '<empty>'

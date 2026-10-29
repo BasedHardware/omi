@@ -782,6 +782,14 @@ OMI_ERROR_CLASS_ALERT_FIRING = Gauge(
     'Error classes currently firing a new/surge alert (1) on the last sweep tick',
     ['fingerprint', 'service'],
 )
+# Monotonic firing signal the Grafana rule keys on (display gauge above cannot
+# be cleared reliably across instances). No pre-zeroed labels: a series appears
+# the first time that class fires.
+OMI_ERROR_CLASS_ALERT_FIRED_TOTAL = Counter(
+    'omi_error_class_alert_fired_total',
+    'Error-class new/surge alert firings by class',
+    ['fingerprint', 'service'],
+)
 
 
 LISTEN_FINALIZATION_JOB_STATUS = Gauge(

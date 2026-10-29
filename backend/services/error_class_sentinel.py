@@ -5,10 +5,10 @@ trailing hour of ERROR+ Cloud Logging entries for the transcription fleet
 (backend, backend-sync, backend-sync-backfill, backend-integration,
 backend-listen, and the prod-omi-gke batch/pusher/listen pods), fingerprints
 each entry into an error class, compares hourly counts against a 7-day Redis
-baseline, and raises the firing gauge for classes that are new (>= 20/h) or
-surging (>= 50/h and >= 5x their baseline mean). The Grafana rule
-``omi-error-class-firing`` pages on that gauge; ``omi-error-class-sweep-silent``
-is the dead-man.
+baseline, and bumps the firing counter for classes that are new (>= 20/h) or
+surging (>= 50/h and >= 5x their span-decayed baseline mean). The Grafana rule
+``omi-error-class-firing`` pages on that counter's increase; the firing gauge
+is display-only, and ``omi-error-class-sweep-silent`` is the dead-man.
 
 Why a scheduled job and not a log-based metric: a fingerprint needs multi-line
 traceback stitching and id-normalized message templates, which log-metric label
@@ -38,7 +38,7 @@ from google.auth.transport.requests import AuthorizedSession
 from database import error_class_baseline as baseline_db
 from utils.error_class_fingerprint import fingerprint_entry, stitch_tracebacks
 from utils.executors import db_executor, run_blocking
-from utils.metrics import OMI_ERROR_CLASS_ALERT_FIRING, OMI_ERROR_CLASS_SWEEP_TOTAL
+from utils.metrics import OMI_ERROR_CLASS_ALERT_FIRED_TOTAL, OMI_ERROR_CLASS_ALERT_FIRING, OMI_ERROR_CLASS_SWEEP_TOTAL
 
 logger = logging.getLogger(__name__)
 
@@ -186,7 +186,10 @@ def evaluate_window(
         first_seen = baseline_db.first_seen_epoch(client, fp, record=record) or now_epoch
         threshold_new, threshold_surge = _thresholds(levels[fp])
         disposition = 'ok'
-        if first_seen == now_epoch and count >= threshold_new:
+        # "New" keys on absent baseline, not on record age: a class that first
+        # appears below the new threshold and then crosses it still has no
+        # prior buckets, so it must alert on the later sweep.
+        if mean is None and count >= threshold_new:
             disposition = 'new'
         elif mean is not None and count >= threshold_surge and count >= SURGE_MULT * mean:
             disposition = 'surge'
@@ -208,18 +211,28 @@ def evaluate_window(
 
 
 def _thresholds(level: str) -> tuple[int, int]:
-    if level in ('ERROR', 'CRITICAL', 'EXC'):
-        return NEW_THRESH, SURGE_THRESH
     if level == 'WARNING':
+        # Doubled for warning-level classes (exceptions included): container
+        # stderr is severity=ERROR at the Cloud Logging level regardless.
         return 2 * NEW_THRESH, 2 * SURGE_THRESH
-    return 10**9, 10**9  # INFO and unknown levels never alert
+    if level in ('INFO', 'DEBUG'):
+        return 10**9, 10**9
+    # ERROR, CRITICAL, and unknown ('?' - bare tracebacks, request-log 5xx)
+    # all alert at the standard thresholds.
+    return NEW_THRESH, SURGE_THRESH
 
 
 def fire_alerts(fired: list[dict[str, Any]]) -> int:
-    """Raise the firing gauge and emit one ERROR line per firing class."""
+    """Count the firing signal, raise the display gauge, log one line per class.
+
+    The alert rule keys on the monotonic fired counter: a gauge held at 1 by an
+    instance that stops running sweeps would page forever, while a frozen
+    counter's increase decays to zero within the rule window.
+    """
     global _firing_labels
     active: set[tuple[str, str]] = set()
     for alert in fired:
+        OMI_ERROR_CLASS_ALERT_FIRED_TOTAL.labels(fingerprint=alert['fingerprint'], service=alert['service']).inc()
         OMI_ERROR_CLASS_ALERT_FIRING.labels(fingerprint=alert['fingerprint'], service=alert['service']).set(1)
         active.add((alert['fingerprint'], alert['service']))
         logger.error(
