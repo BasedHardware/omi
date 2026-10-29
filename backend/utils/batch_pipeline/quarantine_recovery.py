@@ -419,6 +419,7 @@ class QuarantineRecovery:
                         not language_guarded(job)
                         and policy.terminal_empty_disposition
                         and padded_empty(job)
+                        and bool(error.spans)
                         and terminal_empty_allowed(error.spans)
                     ):
                         payload = terminal_empty_payload(error.duration, error.spans)

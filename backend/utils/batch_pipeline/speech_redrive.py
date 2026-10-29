@@ -242,6 +242,7 @@ def redrive_one(
             and not repair
             and policy.terminal_empty_disposition
             and isinstance(error, MultilingualEmpty)
+            and bool(error.spans)
             and terminal_empty_allowed(error.spans)
             and not padded_skipped(job)
             and (padded_empty(job) or marker.get('gpu_padded_retry_empty') is True)

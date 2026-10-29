@@ -18,6 +18,51 @@ def ordinary(setup, monkeypatch, legacy_dependencies, *, automatic=True):
     return values
 
 
+@pytest.mark.parametrize('route', ['automatic', 'redrive'])
+@pytest.mark.parametrize('safety_net', ['true', 'false'])
+def test_terminal_empty_policy_cannot_dispose_positive_worker_speech_without_cpu_spans(
+    setup, monkeypatch, legacy_dependencies, route, safety_net
+):
+    monkeypatch.setenv('BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED', 'true')
+    client, store, binding, artifacts, modulate, soniox, recovery, _ = ordinary(
+        setup, monkeypatch, legacy_dependencies, automatic=route == 'automatic'
+    )
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', safety_net)
+    worker_receipt(client, 1.5)
+    job = row(client)
+    job['worker_empty_evidence'] = {'padded_retry': 'empty', 'version': 1}
+    prior = deepcopy(job.get('recovery'))
+    modulate.return_value = ([], 'vi')
+
+    def apply():
+        if route == 'automatic':
+            return recovery.recover('bad', binding.owner_id)
+        return redrive_one(
+            store,
+            artifacts,
+            'bad',
+            binding.owner_id,
+            'reviewed-empty-plan',
+            prior,
+            server_flags=SERVING_ENV,
+            clock=lambda: 100,
+        )
+
+    assert apply() == 'failed_held'
+    job = row(client)
+    intent = job['recovery'] if route == 'automatic' else job['speech_redrive']
+    assert intent['failure'] == {'stage': 'response_validation', 'reason': 'empty_asr'}
+    assert job['recovery_state'] == 'failed_held'
+    assert job['state'] == 'quarantined' and not job.get('result')
+    assert job['measured_held_vad_speech_seconds'] == 1.5
+    assert apply() == ('held' if route == 'automatic' else 'failed_held')
+    if route == 'redrive':
+        assert row(client)['recovery'] == prior
+    artifacts.persist_recovery_result.assert_not_called()
+    modulate.assert_called_once()
+    soniox.assert_not_called()
+
+
 @pytest.mark.parametrize('seconds', [0.032, 1.5, 4.384])
 def test_ordinary_worker_speech_survives_zero_cpu_vad(setup, monkeypatch, legacy_dependencies, seconds):
     client, _, binding, artifacts, modulate, soniox, recovery, _ = ordinary(setup, monkeypatch, legacy_dependencies)
