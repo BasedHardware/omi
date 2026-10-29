@@ -13,6 +13,7 @@ import { isSignLanguageEnabled } from './integrations'
 import { ByokKeyStore } from '../agentKernel/byokStore'
 import { isByokActive, withByokHeaders } from '../../shared/byok'
 import { decodeUidFromIdToken } from '../auth/omiAuth'
+import { setAssistantSettingsOwner } from './assistantSettingsOwner'
 
 // Lazy so this module stays import-pure (ByokKeyStore's default path needs
 // app.getPath('userData'), only ready after the app is).
@@ -331,7 +332,10 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
     // header). Official docs require `uid` as a query param; backend source reads
     // the token from the Authorization header too — send both.
     const uid = decodeUidFromIdToken(args.token)
-    if (uid) url = `${base}&uid=${encodeURIComponent(uid)}`
+    if (uid) {
+      url = `${base}&uid=${encodeURIComponent(uid)}`
+      setAssistantSettingsOwner(uid)
+    }
   }
   // PTT is header-auth only (no uid query param, matching the macOS client) since
   // there's no per-uid conversation to key.

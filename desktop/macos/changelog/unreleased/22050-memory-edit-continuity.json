@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Keep edited memories open when saving fails and select the canonical memory returned after a successful edit."
+  ]
+}
