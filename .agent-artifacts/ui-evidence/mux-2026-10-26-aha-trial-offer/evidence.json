@@ -28,6 +28,13 @@
       "description": "Dark appearance: the summary, then the trial offer on Home (the trial page keeps its light canvas). iPhone 17 Pro simulator, this change.",
       "captured_by": "agent",
       "source": "screencapture"
+    },
+    {
+      "file": "005-mobile-ios-aha-rating-ask-no-stack.png",
+      "platform": "mobile-ios",
+      "description": "This change, a 9s read: iOS shows its rating ask on the summary; after Back, Home still shows the rating ask and the trial offer is not stacked on it (the moment waits for a later session). iPhone 17 Pro simulator.",
+      "captured_by": "agent",
+      "source": "screencapture"
     }
   ]
 }
