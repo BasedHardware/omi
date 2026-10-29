@@ -35,6 +35,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 from websockets.exceptions import ConnectionClosed
 
+from testing.listen_pusher_stack.recorded_clock import age_conversation
 from testing.listen_pusher_stack.cloud_tasks import FINALIZATION_HANDLER_PATH, LOCAL_TASK_TOKEN_ENV, TASK_EVENTS_FILE
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -634,24 +635,7 @@ class Stack:
         )
 
     def age_conversation(self, uid: str, conversation_id: str) -> None:
-        from utils.conversations.recorded_time import conversation_span
-
-        ref = self.firestore.collection('users').document(uid).collection('conversations').document(conversation_id)
-        row = ref.get().to_dict()
-        span = conversation_span(row)
-        if span is None:
-            raise StackFailure('cannot age a conversation without recorded evidence')
-        end = datetime.now(timezone.utc) - timedelta(seconds=121)
-        shift = end - span.recorded_end
-        ref.update(
-            {
-                'started_at': row['started_at'] + shift,
-                'recorded_start': span.recorded_start + shift,
-                'recorded_end': end,
-                'last_speech_at': end,
-                'finished_at': end,
-            }
-        )
+        age_conversation(self.firestore, uid, conversation_id)
 
     def release_inline_finalization(self) -> None:
         if not self.hold_inline_finalization:
