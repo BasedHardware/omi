@@ -91,7 +91,7 @@
     "production rollout or store release",
     "independent account-isolation approval"
   ],
-  "validation_main_revision": "92bff3c2d5d121d0a02c5ce8932bb73f159ebb62",
+  "validation_main_revision": "fde7178a43d3da3b7ce3b64a50ed03301747a7e6",
   "evidence_reuse": "Mac production and all other Electron production files retain their tested hashes. The contributor legacy-call refinements and Electron-free owner-state extraction were rebuilt and reverified with 155 focused tests, typecheck/lint and a built-app HTTP + real settings IPC journey. The full 5567-test suite from 80c5418c7c covers unchanged modules; exact-head required CI remains separate.",
   "contributor_integration": {
     "commit": "c7cdf57d575079031b1802287cab32fb8a3b6227",
