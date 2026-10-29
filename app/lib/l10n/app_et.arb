@@ -4053,6 +4053,7 @@
     "firstCaptureConnectTitle": "Ühenda oma Omi",
     "firstCaptureConnectDescription": "Paarista Omi ja see salvestab vestlused käed-vabalt kogu päeva.",
     "firstCaptureConnect": "Ühenda minu Omi",
+    "firstCaptureConnectSteps": "Vajuta ja hoia Omi all, kuni see vibreerib. Seejärel puuduta Ühenda.",
     "firstCaptureNoDevice": "Mul ei ole veel Omit",
     "firstCaptureSkip": "Skip for Now",
     "firstCapturePrompt": "Tell Omi what you're working on today, or what's on your mind. Talk for about 30 seconds.",

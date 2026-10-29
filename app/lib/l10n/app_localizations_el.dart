@@ -13319,6 +13319,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get firstCaptureConnect => 'Σύνδεσε το Omi μου';
 
   @override
+  String get firstCaptureConnectSteps => 'Πάτησε παρατεταμένα το Omi σου μέχρι να δονηθεί. Μετά πάτησε Σύνδεσε.';
+
+  @override
   String get firstCaptureNoDevice => 'Δεν έχω Omi ακόμα';
 
   @override

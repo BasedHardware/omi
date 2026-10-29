@@ -13282,6 +13282,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get firstCaptureConnect => 'Свържи моя Omi';
 
   @override
+  String get firstCaptureConnectSteps => 'Натиснете и задръжте Omi, докато завибрира. След това докоснете Свържи.';
+
+  @override
   String get firstCaptureNoDevice => 'Все още нямам Omi';
 
   @override

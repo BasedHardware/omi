@@ -16,11 +16,13 @@ import 'first_capture_layout.dart';
 /// The last onboarding step puts the device first: pair an Omi (the one main action), get one if
 /// the reader has none (the store, in-app), or skip and go straight to Home without waiting.
 /// Keeps completion at persisted index 9; pairing never marks onboarding complete until it
-/// succeeds or the reader explicitly skips.
+/// succeeds or the reader explicitly skips. The connect_first arm shows it first instead, where
+/// [onComplete] moves on to the next step.
 class OnboardingCompleteScreen extends StatefulWidget {
   const OnboardingCompleteScreen({
     super.key,
     required this.onComplete,
+    this.description,
     this.emit,
     this.setProperty,
     this.pairDevice,
@@ -28,6 +30,9 @@ class OnboardingCompleteScreen extends StatefulWidget {
     this.onSkipped,
   });
   final VoidCallback onComplete;
+
+  /// Replaces the subtitle (connect_first says what to press).
+  final String? description;
   final VoidCallback? onSkipped;
   final void Function(RegisteredEvent)? emit;
   final void Function(String, Object)? setProperty;
@@ -130,7 +135,7 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> {
           const SizedBox(height: OmiSpacing.lg),
           Text(context.l10n.firstCaptureConnectTitle, style: OmiType.title1, textAlign: TextAlign.center),
           const SizedBox(height: OmiSpacing.md),
-          Text(context.l10n.firstCaptureConnectDescription,
+          Text(widget.description ?? context.l10n.firstCaptureConnectDescription,
               style: OmiType.body.copyWith(color: OmiColors.textSecondary), textAlign: TextAlign.center),
           const SizedBox(height: OmiSpacing.xxl),
         ], actions: [

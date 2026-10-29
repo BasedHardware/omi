@@ -13340,6 +13340,10 @@ class AppLocalizationsFr extends AppLocalizations {
   String get firstCaptureConnect => 'Connecter mon Omi';
 
   @override
+  String get firstCaptureConnectSteps =>
+      'Appuyez longuement sur votre Omi jusqu\'à ce qu\'il vibre. Puis touchez Connecter.';
+
+  @override
   String get firstCaptureNoDevice => 'Je n\'ai pas encore d\'Omi';
 
   @override

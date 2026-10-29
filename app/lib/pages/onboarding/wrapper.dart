@@ -14,6 +14,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/onboarding/ai_consent_widget.dart';
@@ -131,6 +132,13 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   ProductAttempt? _onboardingAttempt;
   bool _finishing = false;
   bool _signupPaywallShown = false;
+
+  /// The `connect_first` arm of `onboarding-variant`: Connect your Omi is the first step, right after
+  /// sign-up, then control's steps in control's order. Every other arm leaves this false.
+  bool _connectFirst = false;
+
+  /// connect_first only: an Omi is saved for this account, so the phone voice intro is skipped.
+  bool _pairedOmi = false;
   late final _stepTelemetry = MobileOnboardingStepTelemetry(
     emit: const TypedEvents().emit,
     platform: () => switch (Theme.of(context).platform) {
@@ -176,8 +184,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       if (_controller!.index == kSpeechProfilePage && _knowledgeGraphPrebuildFuture == null) {
         _knowledgeGraphPrebuildFuture = KnowledgeGraphApi.prebuildForOnboarding().catchError((_) {});
       }
-      // Read the flag two steps ahead so the decision is ready when the reader taps Continue.
-      if (_controller!.index == kSpeechProfilePage) {
+      // Read the flag two steps ahead so the decision is ready when the reader taps Continue
+      // (connect_first may skip the voice intro, so it reads on Permissions too).
+      if (_controller!.index == kSpeechProfilePage || (_connectFirst && _controller!.index == kPermissionsPage)) {
         _ensureSetupPageFlag();
       }
     });
@@ -354,6 +363,17 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           await _finishOnboarding();
           return;
         }
+      case OnboardingVariant.connectFirst:
+        setState(() {
+          _connectFirst = true;
+          _pairedOmi = _hasSavedOmi();
+        });
+        final step = _resumeStep();
+        // A relaunch opened on control's saved step while the arm resolved: moving to this arm's own
+        // step is not an exit from that one.
+        if (_isResumableStep(_controller!.index)) _stepTelemetry.seed(step);
+        _controller!.animateTo(step);
+        return;
       case OnboardingVariant.control:
         break;
     }
@@ -361,10 +381,88 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   }
 
   void _goNext() {
+    if (_connectFirst) {
+      _advanceConnectFirst(_controller!.index);
+      return;
+    }
     if (_controller!.index < _controller!.length - 1) {
       _controller!.animateTo(_controller!.index + 1);
     }
   }
+
+  /// An Omi saved for this account: a pairing writes it, so it also holds after a relaunch.
+  static bool _hasSavedOmi() =>
+      SharedPreferencesUtil().btDevices.any((device) => device.id.isNotEmpty && device.type == DeviceType.omi);
+
+  /// connect_first: Connect is done (paired or skipped); a saved Omi now skips the voice intro.
+  void _leaveConnectFirst() {
+    setState(() => _pairedOmi = _hasSavedOmi());
+    _advanceConnectFirst(kCompletePage);
+  }
+
+  /// connect_first: on from [from] to [connectFirstNextStep], reading the setup-page flag only when
+  /// it changes the answer; after the last step, onboarding is done.
+  Future<void> _advanceConnectFirst(int from) async {
+    var next = connectFirstNextStep(from, pairedOmi: _pairedOmi, setupPageEnabled: false);
+    if (next != connectFirstNextStep(from, pairedOmi: _pairedOmi, setupPageEnabled: true)) {
+      _ensureSetupPageFlag();
+      final enabled = await _setupPageEnabled!;
+      _setupPageEnabledResolved = enabled;
+      if (!mounted || _controller!.index != from) return;
+      next = connectFirstNextStep(from, pairedOmi: _pairedOmi, setupPageEnabled: enabled);
+    }
+    if (next != null) {
+      _controller!.animateTo(next);
+      return;
+    }
+    final saved = await _finishOnboarding();
+    // The setup page has no button: a failed save steps back to a step that has one.
+    if (!saved && !_finishing && mounted && _controller!.index == kSetupPage) _goBack();
+  }
+
+  /// connect_first's step after [current], or null when onboarding is done: Connect, then control's
+  /// steps without the Connect step at the end. A paired Omi skips the voice intro.
+  static int? connectFirstNextStep(int current, {required bool pairedOmi, required bool setupPageEnabled}) {
+    final afterKnowledgeGraph = setupPageEnabled ? kSetupPage : null;
+    final afterVoiceIntro = kKnowledgeGraphStepEnabled ? kKnowledgeGraphPage : afterKnowledgeGraph;
+    return switch (current) {
+      kCompletePage => kNamePage,
+      kNamePage => kPrimaryLanguagePage,
+      kPrimaryLanguagePage => kFoundOmiPage,
+      kFoundOmiPage => kPermissionsPage,
+      kPermissionsPage => pairedOmi ? afterVoiceIntro : kSpeechProfilePage,
+      kSpeechProfilePage => afterVoiceIntro,
+      kKnowledgeGraphPage => afterKnowledgeGraph,
+      _ => null,
+    };
+  }
+
+  /// connect_first's Back target. Connect has none (nothing comes before it) and neither does Name,
+  /// so the reader never lands on Connect again.
+  static int? connectFirstPreviousStep(int current, {required bool pairedOmi}) {
+    final voiceIntroOrPermissions = pairedOmi ? kPermissionsPage : kSpeechProfilePage;
+    return switch (current) {
+      kSetupPage => kKnowledgeGraphStepEnabled ? kKnowledgeGraphPage : voiceIntroOrPermissions,
+      kKnowledgeGraphPage => voiceIntroOrPermissions,
+      kSpeechProfilePage => kPermissionsPage,
+      kPermissionsPage => kFoundOmiPage,
+      kFoundOmiPage => kPrimaryLanguagePage,
+      kPrimaryLanguagePage => kNamePage,
+      _ => null,
+    };
+  }
+
+  /// connect_first's counted steps (progress dots): control's, without the voice intro once paired.
+  static List<int> connectFirstProgressSteps({required bool pairedOmi}) => [
+        for (final step in kProgressSteps)
+          if (!pairedOmi || step != kSpeechProfilePage) step,
+      ];
+
+  /// connect_first's step after a relaunch: the saved one, or Connect.
+  static int connectFirstResumeStep(int saved) =>
+      isResumableStepForTesting(saved) && (kKnowledgeGraphStepEnabled || saved != kKnowledgeGraphPage)
+          ? saved
+          : kCompletePage;
 
   /// After the knowledge graph: the setup page when its flag is on, otherwise straight to the
   /// completion screen exactly as before the page existed.
@@ -372,6 +470,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 
   Future<void> _leaveKnowledgeGraph() async {
     PlatformManager.instance.analytics.onboardingStepCompleted('Knowledge Graph');
+    if (_connectFirst) return _advanceConnectFirst(kKnowledgeGraphPage);
     await _continueAfterKnowledgeGraph();
   }
 
@@ -394,6 +493,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   }
 
   void _leaveSpeechProfile() {
+    if (_connectFirst) {
+      _advanceConnectFirst(kSpeechProfilePage);
+      return;
+    }
     if (kKnowledgeGraphStepEnabled) {
       _controller!.animateTo(kKnowledgeGraphPage);
     } else {
@@ -403,8 +506,11 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 
   // ---- Resume and back ----------------------------------------------------------------------
 
-  /// Per-account key so a different account signing in on this phone starts at the Name step.
-  String get _resumeKey => 'onboarding/resumeStep/${SharedPreferencesUtil().uid}';
+  /// Per-account key so a different account signing in on this phone starts at the Name step. The
+  /// connect_first arm keeps its own, so its first step (Connect) is never read as control's last.
+  String get _resumeKey => _connectFirst
+      ? 'onboarding/connectFirst/resumeStep/${SharedPreferencesUtil().uid}'
+      : 'onboarding/resumeStep/${SharedPreferencesUtil().uid}';
 
   bool _isResumableStep(int index) => index >= kNamePage && index <= kCompletePage;
 
@@ -416,6 +522,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   /// The step to reopen after the app was killed mid-onboarding: the last step the reader reached,
   /// or Name.
   int _resumeStep() {
+    if (_connectFirst) {
+      return connectFirstResumeStep(SharedPreferencesUtil().getInt(_resumeKey, defaultValue: kCompletePage));
+    }
     final saved = SharedPreferencesUtil().getInt(_resumeKey, defaultValue: kNamePage);
     return resolveResumeStep(saved);
   }
@@ -432,6 +541,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   /// Name).
   int? get _previousStep {
     final current = _controller!.index;
+    if (_connectFirst) return connectFirstPreviousStep(current, pairedOmi: _pairedOmi);
     if (current == kCompletePage) {
       return _setupPageEnabledResolved == true
           ? kSetupPage
@@ -649,9 +759,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       ),
       PermissionsWidget(
         goNext: () {
-          // Straight to the voice introduction (phone mic; no device step). The review step was
-          // removed from onboarding to comply with App Store Guideline 5.6.3 (no rating prompts
-          // during onboarding).
+          // Straight to the voice introduction (phone mic; connect_first skips it once an Omi is
+          // paired). The review step was removed from onboarding to comply with App Store Guideline
+          // 5.6.3 (no rating prompts during onboarding).
           _goNext();
           PlatformManager.instance.analytics.onboardingStepCompleted('Permissions');
         },
@@ -681,12 +791,18 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         pendingWork: _knowledgeGraphPrebuildFuture,
         onFinished: () {
           PlatformManager.instance.analytics.onboardingStepCompleted('Setup');
-          _controller!.animateTo(kCompletePage);
+          if (_connectFirst) {
+            _advanceConnectFirst(kSetupPage);
+          } else {
+            _controller!.animateTo(kCompletePage);
+          }
         },
       ),
+      // Control's last step; connect_first's first, which says what to press and moves on instead.
       OnboardingCompleteScreen(
+        description: _connectFirst ? context.l10n.firstCaptureConnectSteps : null,
         onSkipped: () => _stepTelemetry.skipped = true,
-        onComplete: _finishOnboarding,
+        onComplete: _connectFirst ? _leaveConnectFirst : _finishOnboarding,
       ),
     ];
 
@@ -694,6 +810,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     // matching the Settings redo page; the setup and completion screens draw their own.
     final showBackground = index != kCompletePage && index != kSetupPage && index != kSpeechProfilePage;
     final previous = _previousStep;
+    final progressSteps = _connectFirst ? connectFirstProgressSteps(pairedOmi: _pairedOmi) : kProgressSteps;
 
     return PopScope(
       // System back and the iOS swipe step back one step, like the on-screen back button. On the
@@ -712,8 +829,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
               OnboardingStepLayout(
                 reserveHeader: index == kSpeechProfilePage,
                 onBack: previous == null ? null : _goBack,
-                progress: kProgressSteps.contains(index)
-                    ? OnboardingProgressDots(current: kProgressSteps.indexOf(index), total: kProgressSteps.length)
+                progress: progressSteps.contains(index)
+                    ? OnboardingProgressDots(current: progressSteps.indexOf(index), total: progressSteps.length)
                     : null,
                 child: pages[index],
               ),
@@ -723,6 +840,25 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       ),
     );
   }
+}
+
+/// The connect_first arm's step order for tests, with the page indices it moves between.
+@visibleForTesting
+abstract final class OnboardingConnectFirstStepsForTest {
+  static int get connect => _OnboardingWrapperState.kCompletePage;
+  static int get name => _OnboardingWrapperState.kNamePage;
+  static int get language => _OnboardingWrapperState.kPrimaryLanguagePage;
+  static int get foundOmi => _OnboardingWrapperState.kFoundOmiPage;
+  static int get permissions => _OnboardingWrapperState.kPermissionsPage;
+  static int get voiceIntro => _OnboardingWrapperState.kSpeechProfilePage;
+  static int get setup => _OnboardingWrapperState.kSetupPage;
+  static int? next(int current, {required bool pairedOmi, required bool setupPageEnabled}) =>
+      _OnboardingWrapperState.connectFirstNextStep(current, pairedOmi: pairedOmi, setupPageEnabled: setupPageEnabled);
+  static int? previous(int current, {required bool pairedOmi}) =>
+      _OnboardingWrapperState.connectFirstPreviousStep(current, pairedOmi: pairedOmi);
+  static List<int> progressSteps({required bool pairedOmi}) =>
+      _OnboardingWrapperState.connectFirstProgressSteps(pairedOmi: pairedOmi);
+  static int resume(int saved) => _OnboardingWrapperState.connectFirstResumeStep(saved);
 }
 
 /// Exposes the counted steps to tests without widening the wrapper's state class.

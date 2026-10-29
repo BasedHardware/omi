@@ -4053,6 +4053,7 @@
     "firstCaptureConnectTitle": "Yhdistä Omi",
     "firstCaptureConnectDescription": "Yhdistä Omi, niin se tallentaa keskustelusi hands-free koko päivän.",
     "firstCaptureConnect": "Yhdistä Omi",
+    "firstCaptureConnectSteps": "Paina Omia pohjassa, kunnes se värisee. Napauta sitten Yhdistä.",
     "firstCaptureNoDevice": "Minulla ei ole vielä Omia",
     "firstCaptureSkip": "Skip for Now",
     "firstCapturePrompt": "Tell Omi what you're working on today, or what's on your mind. Talk for about 30 seconds.",

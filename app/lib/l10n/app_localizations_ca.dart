@@ -13302,6 +13302,9 @@ class AppLocalizationsCa extends AppLocalizations {
   String get firstCaptureConnect => 'Connecta el meu Omi';
 
   @override
+  String get firstCaptureConnectSteps => 'Mantén premut el teu Omi fins que vibri. Després toca Connecta.';
+
+  @override
   String get firstCaptureNoDevice => 'Encara no tinc un Omi';
 
   @override

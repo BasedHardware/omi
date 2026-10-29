@@ -13295,6 +13295,10 @@ class AppLocalizationsMk extends AppLocalizations {
   String get firstCaptureConnect => 'Поврзи го мојот Omi';
 
   @override
+  String get firstCaptureConnectSteps =>
+      'Притиснете го и држете го вашиот Omi додека не завибрира. Потоа допрете Поврзи.';
+
+  @override
   String get firstCaptureNoDevice => 'Сè уште немам Omi';
 
   @override

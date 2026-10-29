@@ -13270,6 +13270,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get firstCaptureConnect => 'Verbind mijn Omi';
 
   @override
+  String get firstCaptureConnectSteps => 'Houd je Omi ingedrukt tot hij trilt. Tik daarna op Verbind.';
+
+  @override
   String get firstCaptureNoDevice => 'Ik heb nog geen Omi';
 
   @override

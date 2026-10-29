@@ -13244,6 +13244,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get firstCaptureConnect => 'Hubungkan Omi saya';
 
   @override
+  String get firstCaptureConnectSteps => 'Tekan dan tahan Omi Anda hingga bergetar. Lalu ketuk Hubungkan.';
+
+  @override
   String get firstCaptureNoDevice => 'Saya belum punya Omi';
 
   @override

@@ -11476,6 +11476,7 @@
     "firstCaptureConnectTitle": "Omi خود را متصل کنید",
     "firstCaptureConnectDescription": "Omi خود را جفت کنید تا مکالمات شما را تمام روز و بدون نیاز به دست ضبط کند.",
     "firstCaptureConnect": "Omi من را متصل کن",
+    "firstCaptureConnectSteps": "Omi را فشار دهید و نگه دارید تا بلرزد. سپس روی متصل کن بزنید.",
     "firstCaptureNoDevice": "هنوز Omi ندارم",
     "firstCaptureSkip": "Skip for Now",
     "firstCapturePrompt": "Tell Omi what you're working on today, or what's on your mind. Talk for about 30 seconds.",

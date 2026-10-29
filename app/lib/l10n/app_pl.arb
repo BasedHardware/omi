@@ -4088,6 +4088,7 @@
     "firstCaptureConnectTitle": "Połącz swoje Omi",
     "firstCaptureConnectDescription": "Sparuj swoje Omi, a będzie nagrywać Twoje rozmowy bez użycia rąk przez cały dzień.",
     "firstCaptureConnect": "Połącz moje Omi",
+    "firstCaptureConnectSteps": "Naciśnij i przytrzymaj swoje Omi, aż zawibruje. Potem dotknij Połącz.",
     "firstCaptureNoDevice": "Nie mam jeszcze Omi",
     "firstCaptureSkip": "Skip for Now",
     "firstCapturePrompt": "Tell Omi what you're working on today, or what's on your mind. Talk for about 30 seconds.",

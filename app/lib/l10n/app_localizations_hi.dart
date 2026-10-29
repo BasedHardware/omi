@@ -13216,6 +13216,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String get firstCaptureConnect => 'मेरे Omi को कनेक्ट करें';
 
   @override
+  String get firstCaptureConnectSteps =>
+      'अपने Omi को तब तक दबाकर रखें जब तक वह वाइब्रेट न करे। फिर कनेक्ट करें पर टैप करें।';
+
+  @override
   String get firstCaptureNoDevice => 'मेरे पास अभी तक Omi नहीं है';
 
   @override

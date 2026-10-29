@@ -13238,6 +13238,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get firstCaptureConnect => 'Yhdistä Omi';
 
   @override
+  String get firstCaptureConnectSteps => 'Paina Omia pohjassa, kunnes se värisee. Napauta sitten Yhdistä.';
+
+  @override
   String get firstCaptureNoDevice => 'Minulla ei ole vielä Omia';
 
   @override

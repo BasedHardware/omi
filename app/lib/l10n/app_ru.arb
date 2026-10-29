@@ -4088,6 +4088,7 @@
     "firstCaptureConnectTitle": "Подключите ваш Omi",
     "firstCaptureConnectDescription": "Подключите ваш Omi, и он будет записывать разговоры без рук весь день.",
     "firstCaptureConnect": "Подключить мой Omi",
+    "firstCaptureConnectSteps": "Нажмите и удерживайте ваш Omi, пока он не завибрирует. Затем нажмите Подключить.",
     "firstCaptureNoDevice": "У меня пока нет Omi",
     "firstCaptureSkip": "Skip for Now",
     "firstCapturePrompt": "Tell Omi what you're working on today, or what's on your mind. Talk for about 30 seconds.",

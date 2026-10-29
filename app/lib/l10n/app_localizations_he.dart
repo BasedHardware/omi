@@ -13139,6 +13139,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get firstCaptureConnect => 'חבר את Omi שלי';
 
   @override
+  String get firstCaptureConnectSteps => 'לחץ והחזק את Omi עד שהוא רוטט. אחר כך הקש על חבר.';
+
+  @override
   String get firstCaptureNoDevice => 'אין לי Omi עדיין';
 
   @override

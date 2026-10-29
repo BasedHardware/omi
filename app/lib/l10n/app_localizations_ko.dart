@@ -13051,6 +13051,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get firstCaptureConnect => '내 Omi 연결하기';
 
   @override
+  String get firstCaptureConnectSteps => 'Omi가 진동할 때까지 길게 누르세요. 그런 다음 연결하기를 탭하세요.';
+
+  @override
   String get firstCaptureNoDevice => '아직 Omi가 없어요';
 
   @override

@@ -13240,6 +13240,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get firstCaptureConnect => 'Anslut min Omi';
 
   @override
+  String get firstCaptureConnectSteps => 'Tryck och håll in din Omi tills den vibrerar. Tryck sedan på Anslut.';
+
+  @override
   String get firstCaptureNoDevice => 'Jag har ingen Omi än';
 
   @override

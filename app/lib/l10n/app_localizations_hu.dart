@@ -13286,6 +13286,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get firstCaptureConnect => 'Omi-m csatlakoztatása';
 
   @override
+  String get firstCaptureConnectSteps =>
+      'Tartsa nyomva az Omi-t, amíg rezeg. Ezután koppintson a Csatlakoztatás gombra.';
+
+  @override
   String get firstCaptureNoDevice => 'Még nincs Omi-m';
 
   @override

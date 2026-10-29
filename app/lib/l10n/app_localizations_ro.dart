@@ -13291,6 +13291,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get firstCaptureConnect => 'Conectează-mi Omi';
 
   @override
+  String get firstCaptureConnectSteps => 'Ține apăsat pe Omi până vibrează. Apoi atinge Conectează.';
+
+  @override
   String get firstCaptureNoDevice => 'Nu am încă un Omi';
 
   @override

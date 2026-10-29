@@ -13230,6 +13230,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get firstCaptureConnect => 'Omi من را متصل کن';
 
   @override
+  String get firstCaptureConnectSteps => 'Omi را فشار دهید و نگه دارید تا بلرزد. سپس روی متصل کن بزنید.';
+
+  @override
   String get firstCaptureNoDevice => 'هنوز Omi ندارم';
 
   @override

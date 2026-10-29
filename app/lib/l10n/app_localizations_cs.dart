@@ -13235,6 +13235,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get firstCaptureConnect => 'Připojit můj Omi';
 
   @override
+  String get firstCaptureConnectSteps => 'Stiskněte a podržte Omi, dokud nezavibruje. Pak klepněte na Připojit.';
+
+  @override
   String get firstCaptureNoDevice => 'Ještě nemám Omi';
 
   @override

@@ -4053,6 +4053,7 @@
     "firstCaptureConnectTitle": "Savienot savu Omi",
     "firstCaptureConnectDescription": "Savienojiet savu Omi, un tas visu dienu brīvroku režīmā tvers jūsu sarunas.",
     "firstCaptureConnect": "Savienot manu Omi",
+    "firstCaptureConnectSteps": "Nospiediet un turiet savu Omi, līdz tas vibrē. Pēc tam pieskarieties Savienot.",
     "firstCaptureNoDevice": "Man vēl nav Omi",
     "firstCaptureSkip": "Skip for Now",
     "firstCapturePrompt": "Tell Omi what you're working on today, or what's on your mind. Talk for about 30 seconds.",

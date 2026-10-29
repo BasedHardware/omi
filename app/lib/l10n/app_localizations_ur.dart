@@ -13248,6 +13248,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get firstCaptureConnect => 'میری اومی کو جوڑیں';
 
   @override
+  String get firstCaptureConnectSteps => 'اپنی اومی کو کمپن ہونے تک دبائے رکھیں۔ پھر جوڑیں پر ٹیپ کریں۔';
+
+  @override
   String get firstCaptureNoDevice => 'میرے پاس ابھی اومی نہیں ہے۔';
 
   @override

@@ -13263,6 +13263,9 @@ class AppLocalizationsBs extends AppLocalizations {
   String get firstCaptureConnect => 'Poveži moj Omi';
 
   @override
+  String get firstCaptureConnectSteps => 'Pritisnite i držite Omi dok ne zavibrira. Zatim dodirnite Poveži.';
+
+  @override
   String get firstCaptureNoDevice => 'Još nemam Omi';
 
   @override
