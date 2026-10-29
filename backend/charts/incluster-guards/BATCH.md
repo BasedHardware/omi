@@ -1,5 +1,12 @@
 # Batch admission rollback
 
+The batch percentage source is now the runtime `_ramp` document. This guard's
+env-only writer cannot override a seeded remote percentage, and its snapshot
+requires an env entry which new deploys no longer declare. Keep this guard
+disabled until a remote rollback path and its access/epoch/readback are separately
+qualified; retain an effective external safety owner in the meantime. See the
+[runtime ramp cutover](../../docs/runbooks/batch-runtime-ramp.md).
+
 With `batch.enabled: true`, production values install a separate five-minute
 CronJob, `prod-omi-incluster-guards-batch`, using a dedicated KSA with
 annotation

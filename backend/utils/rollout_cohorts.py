@@ -28,7 +28,7 @@ from config.rollout_cohorts import (
 from database.rollout_cohorts import read_memberships, read_cohort_members
 from utils import executors
 from utils.observability.fallback import record_fallback
-from utils.rollout.runtime_percent import configure_runtime_percent
+from utils.rollout.runtime_percent import configure_runtime_percent, ramp_snapshot, warm_ramp
 from utils.stt_cap_cohort import runtime_cohort
 
 TTL_SECONDS = 60
@@ -154,6 +154,7 @@ def _in_rollout_cohort(
 def _load_rollout_cohorts(uid: str) -> None:
     """Preload in a synchronous request dependency (already on a worker thread)."""
     if valid_uid(uid):
+        ramp_snapshot()
         runtime_cohort.tokens()
         _cache.get(uid)
 
@@ -163,11 +164,11 @@ async def _warm_rollout_cohorts(uid: str) -> None:
     if not valid_uid(uid):
         return
     runtime_cohort.tokens()
+    # Admission snapshots both membership and percentage. Warm them together so a
+    # fresh deploy cannot use env fallback merely because the remote read is pending.
     future = _cache.request(uid, background=True)
-    if future.done():
-        return
     try:
-        await asyncio.wait_for(asyncio.shield(asyncio.wrap_future(future)), timeout=1.25)
+        await asyncio.wait_for(asyncio.gather(warm_ramp(), asyncio.shield(asyncio.wrap_future(future))), timeout=1.25)
     except asyncio.TimeoutError:
         pass  # The pending cache entry denies admission until its read completes.
 
