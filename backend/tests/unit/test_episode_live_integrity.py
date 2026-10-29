@@ -414,7 +414,17 @@ def test_paired_desktop_pendant_group_recovers_once_without_duplicate_moments(la
         lambda uid, cid, row, **kw: finalized(uid, cid, row, collaborators=c, **kw),
     )
     monkeypatch.setattr(service.conversations_db, 'get_conversation', lambda uid, cid, **kw: captures.get(cid))
-    finalize._after_group_join('u', ['desktop', 'pendant'])
+    raw_snapshot = service.conversations_db.get_conversation_raw_snapshot
+    monkeypatch.setattr(
+        service.conversations_db,
+        'get_conversation_raw_snapshot',
+        lambda uid, cid, **kw: (
+            {'capture_group': group} if kw.get('field_paths') == ['capture_group'] else raw_snapshot(uid, cid, **kw)
+        ),
+    )
+    monkeypatch.setattr(finalize.client_gate, 'client_seen_cached', lambda uid: True)
+    monkeypatch.setattr(finalize, 'submit_with_context', lambda executor, fn, *args: fn(*args))
+    finalize.schedule_group_attachments('u', ['desktop', 'pendant'])
     assert recovered == ['pendant']
     # A secondary's separate finalizer must not recover its copy or rerun the canonical recovery.
     finalized('u', 'desktop', captures['desktop'], trigger='capture_group', collaborators=c)
