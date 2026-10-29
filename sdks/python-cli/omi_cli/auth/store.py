@@ -1,8 +1,8 @@
 """Persistent storage for auth credentials inside :class:`omi_cli.config.Profile`.
 
-This module is intentionally thin — the actual TOML I/O lives in
-:mod:`omi_cli.config` so the on-disk layout is centralized. We provide
-convenience helpers that the auth flows and command handlers call into.
+This module provides the core locking primitive used to serialize read-modify-write
+cycles for the OMI configuration file, preventing data loss during concurrent
+updates.
 """
 
 from __future__ import annotations
