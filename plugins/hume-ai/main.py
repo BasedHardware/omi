@@ -4,53 +4,42 @@ Main file with API endpoints only. Helper functions are in app.py
 """
 
 import os
-import tempfile
 from datetime import datetime
-from typing import Optional
 from pathlib import Path
 
 # Load environment variables
 from dotenv import load_dotenv
+
 load_dotenv()
 
 # FastAPI imports
-from fastapi import FastAPI, Request, Query, HTTPException
-from fastapi.responses import JSONResponse, HTMLResponse
-from fastapi.templating import Jinja2Templates
 import uvicorn
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.templating import Jinja2Templates
 
 # Import all helper functions from app.py
 from app import (
-    # Config and globals
-    audio_stats,
     EMOTION_CONFIG,
-    load_emotion_config,
-
-    # Rizz functions
-    update_rizz_score,
-    get_rizz_status_text,
-    get_rizz_notification_message,
-    can_send_notification,
-    update_notification_time,
-    NOTIFICATION_COOLDOWN_SECONDS,
-
-    # Audio processing
-    create_wav_header,
-    cleanup_old_audio_files,
-
-    # Omi integration
-    send_omi_notification,
-    create_omi_memory,
-    save_emotion_memory,
-    emotion_memory_background_task,
-    generate_emotion_summary,
-
-    # Emotion detection
-    check_emotion_triggers,
-
+    analyze_audio_with_hume,
     # Hume AI
     analyze_text_with_hume,
-    analyze_audio_with_hume,
+    # Config and globals
+    audio_stats,
+    can_send_notification,
+    # Emotion detection
+    check_emotion_triggers,
+    cleanup_old_audio_files,
+    create_wav_header,
+    emotion_memory_background_task,
+    get_rizz_notification_message,
+    get_rizz_status_text,
+    save_emotion_memory,
+    # Omi integration
+    send_omi_notification,
+    update_notification_time,
+    # Rizz functions
+    update_rizz_score,
 )
 
 # Initialize FastAPI app
@@ -63,6 +52,7 @@ templates = Jinja2Templates(directory="templates")
 # ============================================================================
 # STARTUP EVENT
 # ============================================================================
+
 
 @app.on_event("startup")
 async def startup_event():
@@ -80,14 +70,23 @@ async def startup_event():
 # API ENDPOINTS
 # ============================================================================
 
+
 @app.post("/audio")
 async def handle_audio_stream(
     request: Request,
     sample_rate: int = Query(..., description="Audio sample rate in Hz"),
     uid: str = Query(..., description="User ID"),
-    analyze_emotion: bool = Query(True, description="Whether to analyze emotions with Hume AI"),
-    send_notification: Optional[bool] = Query(None, description="Override notification setting (uses config default if not specified)"),
-    emotion_filters: Optional[str] = Query(None, description="Override emotion filters (uses config default if not specified)")
+    analyze_emotion: bool = Query(
+        True, description="Whether to analyze emotions with Hume AI"
+    ),
+    send_notification: bool | None = Query(
+        None,
+        description="Override notification setting (uses config default if not specified)",
+    ),
+    emotion_filters: str | None = Query(
+        None,
+        description="Override emotion filters (uses config default if not specified)",
+    ),
 ):
     """
     Endpoint to receive audio bytes from Omi device and analyze with Hume AI.
@@ -119,7 +118,9 @@ async def handle_audio_stream(
     try:
         # Update stats
         audio_stats["total_requests"] += 1
-        audio_stats["last_request_time"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+        audio_stats["last_request_time"] = datetime.utcnow().strftime(
+            "%Y-%m-%d %H:%M:%S UTC"
+        )
         audio_stats["last_uid"] = uid
 
         # Read audio bytes from request body
@@ -128,7 +129,9 @@ async def handle_audio_stream(
         if not audio_data:
             raise HTTPException(status_code=400, detail="No audio data received")
 
-        print(f"Received {len(audio_data)} bytes of audio from user {uid} at {sample_rate}Hz")
+        print(
+            f"Received {len(audio_data)} bytes of audio from user {uid} at {sample_rate}Hz"
+        )
 
         # Create temporary WAV file
         audio_dir = Path("audio_files")
@@ -139,21 +142,27 @@ async def handle_audio_stream(
         local_file_path = audio_dir / filename
 
         # Write WAV file with header
+        import asyncio
+
         wav_header = create_wav_header(sample_rate, len(audio_data))
-        with open(local_file_path, 'wb') as f:
-            f.write(wav_header)
-            f.write(audio_data)
+
+        def save_audio(path, header, data):
+            with open(path, "wb") as f:
+                f.write(header)
+                f.write(data)
+
+        await asyncio.to_thread(save_audio, local_file_path, wav_header, audio_data)
 
         print(f"Saved audio file: {local_file_path}")
 
         # Analyze with Hume AI if requested
         hume_results = None
         if analyze_emotion:
-            hume_api_key = os.getenv('HUME_API_KEY')
+            hume_api_key = os.getenv("HUME_API_KEY")
             if not hume_api_key:
                 print("Warning: HUME_API_KEY not set, skipping emotion analysis")
             else:
-                print(f"Analyzing audio with Hume AI...")
+                print("Analyzing audio with Hume AI...")
                 hume_results = await analyze_audio_with_hume(str(local_file_path))
 
                 if hume_results.get("success"):
@@ -169,18 +178,26 @@ async def handle_audio_stream(
                         for emotion in top_3:
                             emotion_name = emotion.get("name")
                             if emotion_name:
-                                audio_stats["emotion_counts"][emotion_name] = \
-                                    audio_stats["emotion_counts"].get(emotion_name, 0) + 1
+                                audio_stats["emotion_counts"][emotion_name] = (
+                                    audio_stats["emotion_counts"].get(emotion_name, 0)
+                                    + 1
+                                )
 
                     if all_top_emotions:
                         audio_stats["recent_emotions"] = all_top_emotions[:10]
                         update_rizz_score(all_top_emotions)
 
                     # Check if should send notification
-                    should_notify = send_notification if send_notification is not None else EMOTION_CONFIG.get("notification_enabled", True)
+                    should_notify = (
+                        send_notification
+                        if send_notification is not None
+                        else EMOTION_CONFIG.get("notification_enabled", True)
+                    )
                     has_predictions = len(predictions) > 0
 
-                    print(f"🔔 Notification check: should_notify={should_notify}, has_predictions={has_predictions}")
+                    print(
+                        f"🔔 Notification check: should_notify={should_notify}, has_predictions={has_predictions}"
+                    )
 
                     if should_notify and has_predictions:
                         import json
@@ -191,15 +208,25 @@ async def handle_audio_stream(
                                 custom_filters = json.loads(emotion_filters)
                                 print(f"Using custom emotion filters: {custom_filters}")
                             except json.JSONDecodeError:
-                                print(f"Warning: Invalid emotion_filters JSON, using config default")
-                                custom_filters = EMOTION_CONFIG.get("emotion_thresholds", {})
+                                print(
+                                    "Warning: Invalid emotion_filters JSON, using config default"
+                                )
+                                custom_filters = EMOTION_CONFIG.get(
+                                    "emotion_thresholds", {}
+                                )
                         else:
-                            custom_filters = EMOTION_CONFIG.get("emotion_thresholds", {})
+                            custom_filters = EMOTION_CONFIG.get(
+                                "emotion_thresholds", {}
+                            )
                             print(f"Using config emotion filters: {custom_filters}")
 
                         # Check trigger conditions
-                        trigger_result = check_emotion_triggers(predictions, custom_filters)
-                        print(f"📊 Trigger check result: triggered={trigger_result['triggered']}, count={trigger_result['count']}")
+                        trigger_result = check_emotion_triggers(
+                            predictions, custom_filters
+                        )
+                        print(
+                            f"📊 Trigger check result: triggered={trigger_result['triggered']}, count={trigger_result['count']}"
+                        )
 
                         if trigger_result["triggered"]:
                             triggered_emotions = trigger_result["emotions"]
@@ -207,20 +234,30 @@ async def handle_audio_stream(
 
                             # Check cooldown before sending notification
                             if can_send_notification():
-                                message = get_rizz_notification_message(audio_stats["rizz_score"], triggered_emotions)
+                                message = get_rizz_notification_message(
+                                    audio_stats["rizz_score"], triggered_emotions
+                                )
 
-                                notification_result = await send_omi_notification(uid, message)
+                                notification_result = await send_omi_notification(
+                                    uid, message
+                                )
 
                                 if notification_result.get("success"):
                                     update_notification_time()
-                                    audio_stats["recent_notifications"].append({
-                                        "uid": uid,
-                                        "emotions": emotion_names,
-                                        "timestamp": datetime.utcnow().isoformat()
-                                    })
-                                    audio_stats["recent_notifications"] = audio_stats["recent_notifications"][-10:]
+                                    audio_stats["recent_notifications"].append(
+                                        {
+                                            "uid": uid,
+                                            "emotions": emotion_names,
+                                            "timestamp": datetime.utcnow().isoformat(),
+                                        }
+                                    )
+                                    audio_stats["recent_notifications"] = audio_stats[
+                                        "recent_notifications"
+                                    ][-10:]
                             else:
-                                print(f"⏳ Notification cooldown active. Skipping notification.")
+                                print(
+                                    "⏳ Notification cooldown active. Skipping notification."
+                                )
 
                 else:
                     audio_stats["failed_analyses"] += 1
@@ -232,89 +269,95 @@ async def handle_audio_stream(
             "sample_rate": sample_rate,
             "data_size_bytes": len(audio_data),
             "timestamp": timestamp,
-            "local_file_path": str(local_file_path.absolute())
+            "local_file_path": str(local_file_path.absolute()),
         }
 
         # Add Hume results if available
         if hume_results:
             response_data["hume_analysis"] = hume_results
 
-        return JSONResponse(
-            status_code=200,
-            content=response_data
-        )
+        return JSONResponse(status_code=200, content=response_data)
 
     except Exception as e:
         print(f"Error processing audio: {e}")
         import traceback
+
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {e!s}")
 
 
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
     """Root endpoint with web interface"""
-    hume_configured = bool(os.getenv('HUME_API_KEY'))
-    omi_configured = bool(os.getenv('OMI_APP_ID') and os.getenv('OMI_API_KEY'))
+    hume_configured = bool(os.getenv("HUME_API_KEY"))
+    omi_configured = bool(os.getenv("OMI_APP_ID") and os.getenv("OMI_API_KEY"))
 
     # Build emotion statistics data
     emotion_stats = []
-    if audio_stats['emotion_counts']:
+    if audio_stats["emotion_counts"]:
         sorted_emotions = sorted(
-            audio_stats['emotion_counts'].items(),
-            key=lambda x: x[1],
-            reverse=True
+            audio_stats["emotion_counts"].items(), key=lambda x: x[1], reverse=True
         )[:10]
 
-        total_count = sum(audio_stats['emotion_counts'].values())
+        total_count = sum(audio_stats["emotion_counts"].values())
 
         for emotion, count in sorted_emotions:
             percentage = (count / total_count) * 100
             bar_width = int(percentage * 2)
-            bar = '█' * bar_width
+            bar = "█" * bar_width
             emotion_stats.append((emotion, count, percentage, bar))
 
     # Rizz meter display
     rizz_score = audio_stats.get("rizz_score", 75)
     rizz_status = get_rizz_status_text(rizz_score)
-    rizz_color = "#4CAF50" if rizz_score >= 60 else "#ff9800" if rizz_score >= 40 else "#f44336"
-    rizz_bg_color = "#2ecc71" if rizz_score >= 60 else "#f39c12" if rizz_score >= 40 else "#e74c3c"
+    rizz_color = (
+        "#4CAF50" if rizz_score >= 60 else "#ff9800" if rizz_score >= 40 else "#f44336"
+    )
+    rizz_bg_color = (
+        "#2ecc71" if rizz_score >= 60 else "#f39c12" if rizz_score >= 40 else "#e74c3c"
+    )
 
-    return templates.TemplateResponse("dashboard.html", {
-        "request": request,
-        "hume_configured": hume_configured,
-        "omi_configured": omi_configured,
-        "stats": audio_stats,
-        "emotion_stats": emotion_stats,
-        "rizz_score": rizz_score,
-        "rizz_status": rizz_status,
-        "rizz_color": rizz_color,
-        "rizz_bg_color": rizz_bg_color,
-        "ngrok_url": os.getenv('NGROK_URL', 'https://your-ngrok-url.ngrok-free.app')
-    })
+    return templates.TemplateResponse(
+        "dashboard.html",
+        {
+            "request": request,
+            "hume_configured": hume_configured,
+            "omi_configured": omi_configured,
+            "stats": audio_stats,
+            "emotion_stats": emotion_stats,
+            "rizz_score": rizz_score,
+            "rizz_status": rizz_status,
+            "rizz_color": rizz_color,
+            "rizz_bg_color": rizz_bg_color,
+            "ngrok_url": os.getenv(
+                "NGROK_URL", "https://your-ngrok-url.ngrok-free.app"
+            ),
+        },
+    )
 
 
 @app.get("/status")
 async def get_status():
     """Get current server status and stats"""
-    hume_configured = bool(os.getenv('HUME_API_KEY'))
-    omi_configured = bool(os.getenv('OMI_APP_ID') and os.getenv('OMI_API_KEY'))
+    hume_configured = bool(os.getenv("HUME_API_KEY"))
+    omi_configured = bool(os.getenv("OMI_APP_ID") and os.getenv("OMI_API_KEY"))
 
-    return JSONResponse({
-        "status": "online",
-        "service": "omi-audio-streaming",
-        "configuration": {
-            "hume_ai": hume_configured,
-            "omi_integration": omi_configured
-        },
-        "stats": audio_stats
-    })
+    return JSONResponse(
+        {
+            "status": "online",
+            "service": "omi-audio-streaming",
+            "configuration": {
+                "hume_ai": hume_configured,
+                "omi_integration": omi_configured,
+            },
+            "stats": audio_stats,
+        }
+    )
 
 
 @app.post("/analyze-text")
 async def analyze_text_emotion(
-    request: Request,
-    uid: Optional[str] = Query(None, description="User ID (optional)")
+    request: Request, uid: str | None = Query(None, description="User ID (optional)")
 ):
     """
     Analyze emotion from text using Hume AI Language model.
@@ -337,17 +380,19 @@ async def analyze_text_emotion(
     try:
         # Parse JSON body
         body = await request.json()
-        text = body.get('text')
-        metadata = body.get('metadata', {})
+        text = body.get("text")
+        metadata = body.get("metadata", {})
 
         if not text:
-            raise HTTPException(status_code=400, detail="Missing 'text' field in request body")
+            raise HTTPException(
+                status_code=400, detail="Missing 'text' field in request body"
+            )
 
         # Check text length (API limit is 10,000 characters)
         if len(text) > 10000:
             raise HTTPException(
                 status_code=400,
-                detail=f"Text too long ({len(text)} characters). Maximum is 10,000 characters."
+                detail=f"Text too long ({len(text)} characters). Maximum is 10,000 characters.",
             )
 
         print(f"Analyzing text emotion for user: {uid or 'anonymous'}")
@@ -362,29 +407,25 @@ async def analyze_text_emotion(
             "text_length": len(text),
             "uid": uid,
             "hume_analysis": hume_results,
-            "metadata": metadata
+            "metadata": metadata,
         }
 
-        return JSONResponse(
-            status_code=200,
-            content=response_data
-        )
+        return JSONResponse(status_code=200, content=response_data)
 
     except HTTPException:
         raise
     except Exception as e:
         print(f"Error analyzing text: {e}")
         import traceback
+
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {e!s}")
 
 
 @app.get("/emotion-config")
 async def get_emotion_config():
     """Get current emotion notification configuration"""
-    return JSONResponse({
-        "current_config": EMOTION_CONFIG
-    })
+    return JSONResponse({"current_config": EMOTION_CONFIG})
 
 
 @app.post("/emotion-config")
@@ -409,14 +450,14 @@ async def update_emotion_config(request: Request):
     }
     """
     # Check if running in single-worker mode
-    if os.getenv('RENDER') or os.getenv('RAILWAY') or os.getenv('FLY_APP_NAME'):
+    if os.getenv("RENDER") or os.getenv("RAILWAY") or os.getenv("FLY_APP_NAME"):
         return JSONResponse(
             status_code=400,
             content={
                 "error": "Runtime configuration updates are disabled in cloud deployments",
                 "message": "Update the EMOTION_NOTIFICATION_CONFIG environment variable and redeploy instead",
-                "documentation": "See README for configuration instructions"
-            }
+                "documentation": "See README for configuration instructions",
+            },
         )
 
     global EMOTION_CONFIG
@@ -427,35 +468,49 @@ async def update_emotion_config(request: Request):
         # Validate config
         if "notification_enabled" in new_config:
             if not isinstance(new_config["notification_enabled"], bool):
-                raise HTTPException(status_code=400, detail="notification_enabled must be boolean")
+                raise HTTPException(
+                    status_code=400, detail="notification_enabled must be boolean"
+                )
 
         if "emotion_thresholds" in new_config:
             if not isinstance(new_config["emotion_thresholds"], dict):
-                raise HTTPException(status_code=400, detail="emotion_thresholds must be a dict")
+                raise HTTPException(
+                    status_code=400, detail="emotion_thresholds must be a dict"
+                )
 
             # Validate thresholds are numbers between 0 and 1
             for emotion, threshold in new_config["emotion_thresholds"].items():
-                if not isinstance(threshold, (int, float)) or threshold < 0 or threshold > 1:
+                if (
+                    not isinstance(threshold, (int, float))
+                    or threshold < 0
+                    or threshold > 1
+                ):
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Threshold for {emotion} must be between 0 and 1"
+                        detail=f"Threshold for {emotion} must be between 0 and 1",
                     )
 
         # Update configuration
         EMOTION_CONFIG.update(new_config)
 
         # Save to file (local development only)
+        import asyncio
         import json
+
         config_file = Path("emotion_config.json")
-        with open(config_file, 'w') as f:
-            json.dump(EMOTION_CONFIG, f, indent=2)
+
+        def save_config(file_path, config_data):
+            with open(file_path, "w") as f:
+                json.dump(config_data, f, indent=2)
+
+        await asyncio.to_thread(save_config, config_file, EMOTION_CONFIG.copy())
 
         print(f"✓ Updated emotion config (local): {EMOTION_CONFIG}")
 
         return {
             "message": "Configuration updated successfully (local development only)",
             "new_config": EMOTION_CONFIG,
-            "warning": "Changes will be lost on restart. Use environment variables for persistent config."
+            "warning": "Changes will be lost on restart. Use environment variables for persistent config.",
         }
 
     except HTTPException:
@@ -496,7 +551,9 @@ async def reset_stats(request: Request):
 
 
 @app.post("/save-emotion-memory")
-async def manual_save_emotion_memory(uid: Optional[str] = Query(None, description="User ID (optional)")):
+async def manual_save_emotion_memory(
+    uid: str | None = Query(None, description="User ID (optional)"),
+):
     """
     Manually save current emotion statistics to Omi memories.
 
@@ -508,23 +565,22 @@ async def manual_save_emotion_memory(uid: Optional[str] = Query(None, descriptio
     if result.get("success"):
         return JSONResponse(
             status_code=200,
-            content={
-                "message": "Emotion memory saved successfully",
-                "result": result
-            }
+            content={"message": "Emotion memory saved successfully", "result": result},
         )
     else:
         return JSONResponse(
             status_code=400,
             content={
                 "message": "Failed to save emotion memory",
-                "error": result.get("error")
-            }
+                "error": result.get("error"),
+            },
         )
 
 
 @app.post("/force-send-notification")
-async def force_send_notification_endpoint(uid: Optional[str] = Query(None, description="User ID (optional)")):
+async def force_send_notification_endpoint(
+    uid: str | None = Query(None, description="User ID (optional)"),
+):
     """
     Force send a notification immediately, bypassing cooldown.
 
@@ -538,8 +594,8 @@ async def force_send_notification_endpoint(uid: Optional[str] = Query(None, desc
             status_code=400,
             content={
                 "message": "No user ID available. Please provide a UID or speak into your Omi device first.",
-                "success": False
-            }
+                "success": False,
+            },
         )
 
     # Get recent emotions for the notification
@@ -550,8 +606,8 @@ async def force_send_notification_endpoint(uid: Optional[str] = Query(None, desc
             status_code=400,
             content={
                 "message": "No recent emotions detected. Please speak into your Omi device first.",
-                "success": False
-            }
+                "success": False,
+            },
         )
 
     # Generate message with current rizz score
@@ -566,12 +622,14 @@ async def force_send_notification_endpoint(uid: Optional[str] = Query(None, desc
 
         # Log notification
         emotion_names = [e.get("name") for e in recent_emotions]
-        audio_stats["recent_notifications"].append({
-            "uid": target_uid,
-            "emotions": emotion_names,
-            "timestamp": datetime.utcnow().isoformat(),
-            "forced": True
-        })
+        audio_stats["recent_notifications"].append(
+            {
+                "uid": target_uid,
+                "emotions": emotion_names,
+                "timestamp": datetime.utcnow().isoformat(),
+                "forced": True,
+            }
+        )
         audio_stats["recent_notifications"] = audio_stats["recent_notifications"][-10:]
 
         return JSONResponse(
@@ -581,8 +639,8 @@ async def force_send_notification_endpoint(uid: Optional[str] = Query(None, desc
                 "success": True,
                 "uid": target_uid,
                 "notification_message": message,
-                "emotions": emotion_names
-            }
+                "emotions": emotion_names,
+            },
         )
     else:
         return JSONResponse(
@@ -590,8 +648,8 @@ async def force_send_notification_endpoint(uid: Optional[str] = Query(None, desc
             content={
                 "message": "Failed to send notification",
                 "success": False,
-                "error": notification_result.get("error")
-            }
+                "error": notification_result.get("error"),
+            },
         )
 
 
