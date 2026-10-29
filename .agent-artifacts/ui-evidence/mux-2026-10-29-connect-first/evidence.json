@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-connect-first-step.png",
+      "platform": "mobile-ios",
+      "description": "Connect your Omi. BEFORE: control, step 9, after the voice intro (Back button, pairing subtitle). AFTER: connect_first, step 4 right after the trial paywall, no Back, subtitle says what to press. Real simulator shots, iPhone 17 Pro, iOS 26.2.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-onboarding-order-before-after.png",
+      "platform": "mobile-ios",
+      "description": "Every step, light mode. BEFORE: control as shipped (this branch with the flag unassigned). AFTER: connect_first with no Omi paired: Connect is step 4 and the voice intro stays at the end. Real simulator shots.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-paired-skips-voice-intro.png",
+      "platform": "mobile-ios",
+      "description": "AFTER, Omi paired at Connect: 4 progress dots, Permissions leads straight to Home, no voice intro. SIMULATED pairing: the simulator has no Bluetooth, so the shoot writes the saved, connected Omi a real pairing leaves.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-mobile-ios-connect-first-dark.png",
+      "platform": "mobile-ios",
+      "description": "AFTER in dark mode: Connect (step 4), Name, voice intro. Real simulator shots.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}
