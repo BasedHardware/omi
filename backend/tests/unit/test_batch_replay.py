@@ -9,30 +9,39 @@ from types import SimpleNamespace
 
 import pytest
 
-from testing.batch_replay.capture import sanitize
-from testing.batch_replay.gate import compare
+from testing.batch_replay.capture import JOB_FIELDS, RESULT_FIELDS, ReadOnlyFirestore, sanitize
+from testing.batch_replay.gate import compare, count_synthetic_failures
 from testing.batch_replay.runner import geometry_boundaries, replay
 
 
 def test_capture_constructs_allowlist_and_hashes_related_identities():
     salt = b'synthetic-per-corpus-salt'
     digest = lambda value: hmac.new(salt, value.encode(), hashlib.sha256).hexdigest() if value else None
-    job = {
-        'owner_id': 'private-owner',
-        'duration_seconds': 1,
-        'conversation_id': 'private-target',
-        'transcript': 'must not escape',
-        'email': 'must not escape',
-        'retry_at': 'private-clock',
-        'fresh_capture': False,
-        'projection_binding': {'target_conversation_id': 'private-target'},
-        'speech_spans': [{'start': 0.0, 'end': 1.0, 'text': 'must not escape'}],
-        'manifest': {
-            'references': [
-                {'start_frame': 0, 'offset_frame': 2, 'frames': 3, 'source_frames': 5, 'path': 'must not escape'}
-            ]
-        },
-    }
+
+    class NoGeometryReads(dict):
+        def get(self, key, *args):
+            if key in {'speech_spans', 'manifest'}:
+                raise AssertionError('capture must not inspect nested geometry')
+            return super().get(key, *args)
+
+    job = NoGeometryReads(
+        {
+            'owner_id': 'private-owner',
+            'duration_seconds': 1,
+            'conversation_id': 'private-target',
+            'transcript': 'must not escape',
+            'email': 'must not escape',
+            'retry_at': 'private-clock',
+            'fresh_capture': False,
+            'projection_binding': {'target_conversation_id': 'private-target'},
+            'speech_spans': [{'start': 0.0, 'end': 1.0, 'text': 'must not escape'}],
+            'manifest': {
+                'references': [
+                    {'start_frame': 0, 'offset_frame': 2, 'frames': 3, 'source_frames': 5, 'path': 'must not escape'}
+                ]
+            },
+        }
+    )
     entry = {
         'segment_id': 'private-unit',
         'previous_segment_id': 'private-predecessor',
@@ -51,8 +60,25 @@ def test_capture_constructs_allowlist_and_hashes_related_identities():
     assert unit['previous'] == unit['watermark']
     assert unit['projection_state'] == 'other' and unit['retry_present'] is True
     assert unit['lane'] == 'backfill'
-    assert unit['references'] == [{'start_frame': 0, 'offset_frame': 2, 'frames': 3, 'source_frames': 5}]
-    assert unit['spans'] == [{'start': 0.0, 'end': 1.0}]
+    assert unit['references'] is None and unit['spans'] is None
+
+
+def test_rpc_masks_never_request_arrays_with_nested_text_or_paths():
+    client = ReadOnlyFirestore.__new__(ReadOnlyFirestore)
+    calls = []
+    client.post = lambda operation, body: calls.append((operation, body)) or []
+    client.latest(RESULT_FIELDS, 2000)
+    client.read(['batch_pipeline_prod_jobs/synthetic'], JOB_FIELDS)
+    fields = [row['fieldPath'] for row in calls[0][1]['structuredQuery']['select']['fields']]
+    fields += calls[1][1]['mask']['fieldPaths']
+    assert not any('speech_spans' in field or 'manifest' in field or 'references' in field for field in fields)
+
+
+def test_fixture_only_synthetic_boundary_failure_is_always_blocking():
+    report = {'exceptions': {}, 'chain_blocks': [], 'boundaries': {'failures': []}}
+    incidents = deepcopy(report)
+    incidents['boundaries']['failures'] = [{'case': 'fixture-only', 'exception': 'ValueError'}]
+    assert count_synthetic_failures(report, incidents) == 1
 
 
 def test_gate_detects_known_exception_spreading_and_chain_backlog_growth():
@@ -68,6 +94,20 @@ def test_gate_detects_known_exception_spreading_and_chain_backlog_growth():
     assert delta['regression'] and delta['new_unit_failures'] == {'b': ['vad:ValueError:validator']}
     assert len(delta['new_chain_blocks']) == 1 and not delta['new_exception_sites']
     assert not compare(baseline, baseline)['regression']
+
+
+def test_gate_detects_repeated_exception_on_the_same_unit():
+    baseline = {
+        'exceptions': {'walk:ValueError:site': 1},
+        'unit_issues': {'a': ['walk:ValueError:site']},
+        'unit_exception_counts': {'a': {'walk:ValueError:site': 1}},
+        'chain_blocks': [],
+    }
+    candidate = deepcopy(baseline)
+    candidate['exceptions']['walk:ValueError:site'] = 2
+    candidate['unit_exception_counts']['a']['walk:ValueError:site'] = 2
+    delta = compare(candidate, baseline)
+    assert delta['regression'] and delta['increased_unit_exception_counts']['a']
 
 
 def test_gate_accepts_an_earlier_head_fix_that_exposes_a_later_existing_block():
@@ -102,6 +142,17 @@ def test_boundary_oracle_rejects_validators_that_accept_invalid_geometry():
     assert result['expected_rejections'] == 0
     assert len(result['failures']) == 4
     assert all(failure['exception'] == 'MissingExpectedRejection' for failure in result['failures'])
+
+
+def test_boundary_quantiles_preserve_observed_duration_frequency():
+    source = SimpleNamespace(MAGIC=b'synthetic', materialize=lambda *args: b'')
+    item = lambda sid, owner, capture, uri, duration, priority, **kwargs: SimpleNamespace(
+        owner_id=owner, capture_at=capture, **kwargs
+    )
+    units = [{'duration': value} for value in [1.0] * 90 + [30.0] * 9 + [600.0]]
+    result = geometry_boundaries(units, lambda *args: [], source, item, None)
+    points = {point['quantile']: point['duration'] for point in result['quantiles']}
+    assert points[0.5] == points[0.9] == 1.0 and points[0.99] == 30.0
 
 
 @pytest.fixture
@@ -139,3 +190,20 @@ def test_recorded_silence_runs_the_empty_projection_branch(backend_tree):
     result = replay(corpus, backend_tree)
     assert result['persisted'] == 1 and result['coverage']['followup_exercised'] == 1
     assert not result['exceptions'] and not result['chain_blocks']
+
+
+@pytest.mark.parametrize(
+    'field,value,gap',
+    [
+        ('outcome', None, 'missing_outcome'),
+        ('outcome', 'no_recoverable_speech', 'missing_terminal_empty_evidence'),
+        ('lane', 'unknown', 'missing_lane'),
+    ],
+)
+def test_unknown_dispatch_evidence_never_synthesizes_success(backend_tree, field, value, gap):
+    corpus = json.loads((backend_tree / 'testing/batch_replay/regressions.json').read_text())
+    corpus['units'] = [corpus['units'][-1]]
+    corpus['units'][0][field] = value
+    result = replay(corpus, backend_tree)
+    assert result['persisted'] == 0 and result['coverage'][gap] == 1
+    assert result['chain_blocks'][0]['blocked_units'] == 1

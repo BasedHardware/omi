@@ -21,17 +21,21 @@ from unittest.mock import patch
 def geometry_boundaries(units, validate_spans, source_audio, item_type, priority):
     """Synthetic boundary distribution, labelled separately from captured shapes."""
     durations = sorted(
-        {
+        [
             unit['duration']
             for unit in units
             if type(unit.get('duration')) in (int, float) and 0 < unit['duration'] <= 7200
-        }
+        ]
     )
-    samples = (
-        sorted({durations[round((len(durations) - 1) * quantile)] for quantile in (0, 0.25, 0.5, 0.75, 0.9, 0.99, 1)})
+    quantiles = (
+        [
+            {'quantile': quantile, 'duration': durations[round((len(durations) - 1) * quantile)]}
+            for quantile in (0, 0.25, 0.5, 0.75, 0.9, 0.99, 1)
+        ]
         if durations
         else []
     )
+    samples = sorted({point['duration'] for point in quantiles})
     failures = []
     cases = expected_rejections = 0
 
@@ -106,6 +110,7 @@ def geometry_boundaries(units, validate_spans, source_audio, item_type, priority
     return {
         'source': 'synthetic-boundaries-from-duration-quantiles',
         'durations': samples,
+        'quantiles': quantiles,
         'cases': cases,
         'expected_rejections': expected_rejections,
         'failures': failures,
@@ -153,6 +158,7 @@ def _replay(corpus):
 
     exceptions = Counter()
     issues = defaultdict(set)
+    unit_counts = defaultdict(Counter)
     active = [None]
 
     def record(error, stage, unit=None):
@@ -165,7 +171,9 @@ def _replay(corpus):
         site = frames[-1] if frames else stage
         key = f'{stage}:{type(error).__name__}:{site}'
         exceptions[key] += 1
-        issues[unit or active[0] or 'claim'].add(key)
+        identity = unit or active[0] or 'claim'
+        issues[identity].add(key)
+        unit_counts[identity][key] += 1
 
     class ErrorCollector(logging.Handler):
         def emit(self, event):
@@ -183,6 +191,8 @@ def _replay(corpus):
 
         def read(self, sid):
             active[0] = sid
+            if sid in untestable:
+                raise ProjectionBlocked('recorded outcome and lane evidence required')
             return super().read(sid)
 
         def session(self, sid, binding, now, **part):
@@ -261,6 +271,7 @@ def _replay(corpus):
     if not units:
         coverage['invalid_empty_corpus'] = 1
     payloads = {}
+    untestable = set()
     for ordinal, unit in enumerate(units):
         sid, owner = unit['unit'], unit['owner']
         if not sid or not owner or not unit.get('duration'):
@@ -268,7 +279,7 @@ def _replay(corpus):
             continue
         chains[owner].append(sid)
         duration = unit['duration']
-        outcome = unit.get('outcome') or 'success'
+        outcome = unit.get('outcome')
         try:
             item = WorkItem(
                 sid,
@@ -285,7 +296,12 @@ def _replay(corpus):
             record(error, 'work_item', sid)
             chains[owner].remove(sid)
             continue
-        log.jobs[sid] = {**asdict(item), 'fresh_capture': unit['lane'] != 'backfill', 'policy_parts': log.policy_parts}
+        lane = unit.get('lane')
+        log.jobs[sid] = {
+            **asdict(item),
+            'policy_parts': log.policy_parts,
+            **({'fresh_capture': lane == 'fresh'} if lane in {'fresh', 'backfill'} else {}),
+        }
         log.bindings[sid] = ProjectionBinding(
             owner,
             sid,
@@ -300,8 +316,21 @@ def _replay(corpus):
             'previous_segment_id': unit.get('previous'),
             'committed_at': ordinal,
             'projection_state': 'pending',
-            'result': {'outcome': outcome, 'result_uri': 'synthetic:result'},
+            'result': {'outcome': outcome or 'unknown', 'result_uri': 'synthetic:result'},
         }
+        if lane not in {'fresh', 'backfill'}:
+            coverage['missing_lane'] += 1
+            untestable.add(sid)
+        if outcome not in {'success', 'silence'}:
+            gap = (
+                'missing_outcome'
+                if outcome is None
+                else 'missing_terminal_empty_evidence' if outcome == 'no_recoverable_speech' else 'invalid_outcome'
+            )
+            coverage[gap] += 1
+            untestable.add(sid)
+        if sid in untestable:
+            continue
         spans = unit.get('spans')
         if spans is None and outcome != 'silence':
             coverage['missing_vad_spans'] += 1
@@ -331,8 +360,6 @@ def _replay(corpus):
             'words': [{'word': 'synthetic.', 'timestamp': [s['start'], s['end']]} for s in synthetic_spans],
             'diarization': {'turns': [{**s, 'speaker': 'a'} for s in synthetic_spans]},
         }
-        if outcome not in {'success', 'silence'}:
-            coverage['missing_terminal_empty_evidence'] += 1
         if outcome == 'silence':
             payloads[sid].update(speech_seconds=0.0, speech_spans=[], words=[], diarization={'turns': []})
         if unit.get('spans') is not None and outcome == 'success':
@@ -420,6 +447,8 @@ def _replay(corpus):
 
     def load(item, uri):
         active[0] = item.segment_id
+        if item.segment_id in untestable:
+            raise ProjectionBlocked('recorded outcome and lane evidence required')
         return payloads[item.segment_id]
 
     def forbid_firestore(*args, **kwargs):
@@ -494,11 +523,13 @@ def _replay(corpus):
         key = f"synthetic_boundary:{failure['exception']}:{failure['case']}"
         exceptions[key] += 1
         issues['synthetic-boundaries'].add(key)
+        unit_counts['synthetic-boundaries'][key] += 1
     return {
         'schema': 1,
         'units': len(units),
         'exceptions': dict(sorted(exceptions.items())),
         'unit_issues': {key: sorted(value) for key, value in sorted(issues.items())},
+        'unit_exception_counts': {unit: dict(sorted(counts.items())) for unit, counts in sorted(unit_counts.items())},
         'chain_blocks': blocks,
         'persisted': len(log.persist_order),
         'coverage': dict(sorted(coverage.items())),

@@ -20,7 +20,7 @@ backend/.venv/bin/python -I backend/testing/batch_replay/capture.py \
 `gate.json` contains the SHAs and corpus SHA256, new exception class/site
 counts, per-unit failures and owner chain blocks. `candidate.json` and
 `baseline.json` contain counts, hashed chain heads and coverage. A failure is
-a new exception/site, a regression on a previously exercised unit, newly blocked units,
+a new exception/site, repeated exceptions on a previously exercised unit, newly blocked units,
 or unexpected synthetic boundary/incident failures. Reports/logs stay outside Git. Diagnostic
 `gate.py --allow-incomplete` comparisons are explicitly **not deploy receipts**.
 Known exceptions exposed behind a repaired head are reported separately as
@@ -48,12 +48,11 @@ allowlist):
 
 - Results: owner key, segment/predecessor IDs, sequence and committed time for
   ordering; projection state, receipt state/conversation ID, result outcome;
-  optional numeric decoded duration, speech seconds, VAD span arrays and
-  manifest reference geometry.
+  optional numeric decoded duration and speech seconds.
 - Jobs: owner/conversation IDs, duration/unit kind/fresh lane, state/attempt,
   recovery state/attempt, retry presence; VAD receipt captured/speech sample
   counts; binding target/content/sibling IDs and record/native booleans;
-  optional numeric decoded duration, speech seconds, VAD/reference geometry.
+  optional numeric decoded duration and speech seconds.
 - Owners: projection watermark only. Targets and one referenced redirect target:
   discarded/deleted/status, redirect, route owner and privacy flags. No user
   document is read.
@@ -62,6 +61,11 @@ Stored values are constructed field by field: HMAC identifiers, numeric
 geometry, booleans, and closed state enums. No names, emails, text, URIs,
 raw error strings, exact capture times or GCS generations are persisted.
 No salt, corpus or captured report belongs in Git.
+Firestore cannot project subfields inside array elements, so capture never
+requests `speech_spans` or `manifest.references`: nested text or paths must
+not be read even transiently. Corpus geometry slots remain null and the
+exact RPC field allowlist is stored with the corpus. Only the synthetic
+fixture/runner supplies VAD arrays and source slice geometry.
 Delete the private corpus and salt after the program, per David's `a5c4f6`
 ruling. The lead owns the program-end disposal handoff.
 
@@ -89,9 +93,13 @@ enrichment, search indexing and playback network side effects are not run.
 Production claims are advisory; this gate does not prove Firestore concurrency.
 Recorded success/silence outcomes select the real projection branch. A terminal
 empty-recovery result without its artifact proof is incomplete coverage.
+Missing outcomes and unknown lanes block replay with a coverage gap; neither
+is converted into a successful fresh unit.
 
 **Coverage matters:** production VAD spans/manifests generally live in encrypted
 artifacts, not queue metadata. A Firestore-only corpus can have missing shapes.
+The synthetic quantiles use every captured duration's observed frequency;
+duplicate selected quantile values share one boundary execution.
 Those fields are counted as missing; assignment uses labelled model inputs
 for such units. A normal PASS establishes the approved structure plus synthetic
 scope. It does not establish correctness on captured VAD/source shapes.

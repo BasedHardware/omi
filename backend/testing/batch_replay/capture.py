@@ -29,8 +29,6 @@ RESULT_FIELDS = (
     'result.outcome',
     'audio_seconds',
     'speech_seconds',
-    'speech_spans',
-    'manifest.references',
 )
 JOB_FIELDS = (
     'owner_id',
@@ -52,8 +50,6 @@ JOB_FIELDS = (
     'projection_binding.segment_ids',
     'audio_seconds',
     'speech_seconds',
-    'speech_spans',
-    'manifest.references',
 )
 TARGET_FIELDS = (
     'discarded',
@@ -206,8 +202,6 @@ def sanitize(job, entry, owner, target, digest):
     """Allowlist construction, never recursive copying/redaction of a document."""
     binding = job.get('projection_binding') or {}
     receipt = job.get('worker_vad_receipt') or {}
-    spans = job.get('speech_spans', entry.get('speech_spans'))
-    references = (job.get('manifest') or entry.get('manifest') or {}).get('references')
     target_id = binding.get('target_conversation_id') or job.get('conversation_id')
     return {
         'unit': digest(entry['segment_id']),
@@ -226,20 +220,10 @@ def sanitize(job, entry, owner, target, digest):
         'captured_samples': number(receipt.get('captured_samples')),
         'speech_samples': number(receipt.get('speech_samples')),
         'speech_seconds': number(job.get('speech_seconds', entry.get('speech_seconds'))),
-        'spans': (
-            [{'start': number(s.get('start')), 'end': number(s.get('end'))} for s in spans if isinstance(s, dict)]
-            if isinstance(spans, list)
-            else None
-        ),
-        'references': (
-            [
-                {k: number(r.get(k)) for k in ('start_frame', 'offset_frame', 'frames', 'source_frames')}
-                for r in references
-                if isinstance(r, dict)
-            ]
-            if isinstance(references, list)
-            else None
-        ),
+        # Firestore arrays cannot project element subfields. Never request or
+        # inspect them: nested entries may carry transcript text or paths.
+        'spans': None,
+        'references': None,
         'lane': (
             'backfill'
             if job.get('fresh_capture') is False
@@ -308,7 +292,19 @@ def capture(output, limit):
         field: sum(unit[field] is not None for unit in units)
         for field in ('duration', 'decoded_duration', 'spans', 'references', 'target_state')
     }
-    data = {'schema': 1, 'source': 'firestore-structure-only', 'units': units, 'coverage': coverage}
+    data = {
+        'schema': 1,
+        'source': 'firestore-structure-only',
+        'units': units,
+        'coverage': coverage,
+        'geometry_capture': 'not-requested-by-policy',
+        'field_allowlist': {
+            'results': RESULT_FIELDS,
+            'jobs': JOB_FIELDS,
+            'targets': TARGET_FIELDS,
+            'owners': ['projection_watermark'],
+        },
+    }
     for name, body in (('salt', salt.hex()), ('corpus.json', json.dumps(data, sort_keys=True))):
         fd = os.open(output / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, 'w') as stream:

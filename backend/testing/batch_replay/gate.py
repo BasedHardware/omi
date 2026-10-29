@@ -39,13 +39,48 @@ def compare(candidate, baseline):
         if unit in old_blocked and not set(sites).intersection(new_exceptions)
     }
     new_units = {unit: sites for unit, sites in changed_units.items() if unit not in newly_reached}
+
+    def unit_counts(report, unit):
+        return report.get('unit_exception_counts', {}).get(
+            unit, {site: 1 for site in report['unit_issues'].get(unit, [])}
+        )
+
+    increased_units = {
+        unit: {
+            site: {'baseline': unit_counts(baseline, unit).get(site, 0), 'candidate': count}
+            for site, count in unit_counts(candidate, unit).items()
+            if count > unit_counts(baseline, unit).get(site, 0)
+        }
+        for unit in candidate['unit_issues']
+        if unit not in newly_reached
+    }
+    increased_units = {unit: sites for unit, sites in increased_units.items() if sites}
+    increased_counts = {
+        site: {'baseline': baseline['exceptions'].get(site, 0), 'candidate': count}
+        for site, count in candidate['exceptions'].items()
+        if count
+        > baseline['exceptions'].get(site, 0) + sum(unit_counts(candidate, unit).get(site, 0) for unit in newly_reached)
+    }
     return {
         'new_exception_sites': new_exceptions,
         'new_chain_blocks': new_blocks,
         'new_unit_failures': new_units,
         'newly_reached_known_failures': newly_reached,
-        'regression': bool(new_exceptions or new_blocks or new_units),
+        'increased_unit_exception_counts': increased_units,
+        'increased_exception_counts': increased_counts,
+        'regression': bool(new_exceptions or new_blocks or new_units or increased_units or increased_counts),
     }
+
+
+def count_synthetic_failures(report, incidents):
+    # Check both boundary lists explicitly, independent of the runner also
+    # recording boundary failures in its exception map.
+    return (
+        len(incidents['exceptions'])
+        + len(incidents['chain_blocks'])
+        + len(report['boundaries']['failures'])
+        + len(incidents['boundaries']['failures'])
+    )
 
 
 GEOMETRY_LIMITS = frozenset(
@@ -139,11 +174,7 @@ def gate(repo, corpus, ref, base, output, allow_incomplete=False, require_captur
     }
     if require_captured_geometry:
         incomplete.update(limits)
-    synthetic_failures = (
-        len(incidents['candidate']['exceptions'])
-        + len(incidents['candidate']['chain_blocks'])
-        + len(reports['candidate']['boundaries']['failures'])
-    )
+    synthetic_failures = count_synthetic_failures(reports['candidate'], incidents['candidate'])
     result = {
         'schema': 1,
         'refs': resolved,
