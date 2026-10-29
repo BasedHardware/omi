@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "issue": 20956,
+  "pull_request": 22050,
+  "evidence_class": "LOCAL_EMULATOR_DEV",
+  "activation_eligible": false,
+  "tested_source_revision": "83fe829c500c8ff90234f7d7720877eb49640625",
+  "production_source_sha256": {
+    "desktop/macos/Desktop/Sources/APIClient.swift": "52c1af6bd77ab5422d499d10fd91f0ac8d541e1ee1990626d61c3c08b76e8737",
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": "d8349450244ee14d8cc8d8995968f5757082272e0b519024a54956b1edea4837",
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/Services/SettingsSyncManager.swift": "d10e86b9cfbebc238cfba81adceef3cdff6a14ee84ac3dddd6c61b5e7e506a1b",
+    "desktop/macos/Desktop/Sources/Rewind/Core/MemoryStorage.swift": "d3e9a5b72d93f6377d04e0c89dec44b07fd4acf6c1c95ef840276999b6fde870",
+    "desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Memories.swift": "876a52a332156b3b51ead7640dc765960d442bab23a1e8aff668a8ab7a6eb874",
+    "desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Settings.swift": "9199de7af732f89321c98977a7cc56b706967718c5d99d63febad5423316e99a",
+    "desktop/windows/src/main/ipc/assistantSettings.ts": "b3d0528cc9f3e817c7668a1642c5788deb6837da6dbc67a1a9e5859ce0b74794",
+    "desktop/windows/src/main/ipc/pimono.ts": "bf74dc01d0c0d4ecab615ac8fd0fe6b401d36c84078be2c66a1415c685680a4a",
+    "desktop/windows/src/preload/index.ts": "203258bacd015796656dbb1d05cbc2689844f5fbd31f752917173643dbeb681e",
+    "desktop/windows/src/renderer/src/components/memories/MemoryDetailSheet.tsx": "a1123cfaa65f6fc8d0c8592114a7ba9225240a2fcb1261da620380b4e7b12171",
+    "desktop/windows/src/renderer/src/components/settings/tabs/GeneralTab.tsx": "22138145a34a57561c3442310c9a38ca0486b8572e368316882e15ed22f830de",
+    "desktop/windows/src/renderer/src/components/settings/tabs/NotificationsTab.tsx": "4d34c5ef95b5d9249122a9ec348780599ea585131f524ebb19f8a988feb6165e",
+    "desktop/windows/src/renderer/src/env.d.ts": "b2e0ebbb526bea679379dc6049e78b7005944eb47e35698daaad198a70d2606d",
+    "desktop/windows/src/renderer/src/hooks/useMemories.ts": "d0aecd93ac8b13d13d5aa8fb34756be96cc1d34e91917b2255b4b3dd7294b2fd",
+    "desktop/windows/src/renderer/src/lib/apiClient.ts": "78893c1ff42a6591e6126e8186200b0295270f2d5149e05bbda80aeeb32059e4",
+    "desktop/windows/src/renderer/src/lib/authSession.ts": "72c90e88f0cf61e90bb4c17c0d7471f778d2401a865fca1aa933b163e0a5f190",
+    "desktop/windows/src/renderer/src/lib/authSessionScope.ts": "23056ad9646c63977250aae7b90d79ee33853598c9892935b842914587f169f6",
+    "desktop/windows/src/renderer/src/lib/memoriesBulk.ts": "e7162c916b676060d60dde7a1d12b60488ab496c90cfa0f08ea163ab5ac94860",
+    "desktop/windows/src/renderer/src/pages/Memories.tsx": "22650212bf6e59f4bd69f70e01c179706a7bdd29d288dd790442f93beb63283c",
+    "desktop/windows/src/shared/types.ts": "5f8a278e5227e463046fdd9a8b938029accbaf8e650032b7d76d9a44d5d50c8e"
+  },
+  "macos": {
+    "bundle": "com.omi.omi-profile-20956",
+    "synthetic_uid": "alice",
+    "api_origins": [
+      "http://127.0.0.1:8000",
+      "http://127.0.0.1:10201"
+    ],
+    "flows": [
+      "cancel leaves original",
+      "offline failure preserves draft and error",
+      "canonical save updates list and detail",
+      "same-record retry after outage",
+      "correction persists across harness relaunch and auth bootstrap",
+      "task notification preference reaches emulator true then false; original false restored"
+    ],
+    "limitations": [
+      "Emulator bootstrap, not a live Apple/Google login",
+      "No production account or deployment",
+      "Canned read fixtures are not writable canonical-generation fixtures"
+    ]
+  },
+  "electron": {
+    "runtime": "Electron on macOS",
+    "node": "22.23.1",
+    "pnpm": "10.23.0",
+    "unit_tests": {
+      "passed": 5567,
+      "skipped": 33
+    },
+    "focused_tests": 110,
+    "functional": {
+      "passed": 1,
+      "transport": "real HTTP loopback fixture and unchanged built assets on one origin; production CSP/webSecurity enabled",
+      "flows": [
+        "HTTP 400 preserves draft",
+        "retry publishes replacement ID",
+        "persisted cache holds only canonical replacement",
+        "app restart with API request failure preserves canonical cache"
+      ]
+    },
+    "limitations": [
+      "Synthetic auth, not live Firebase provider login",
+      "Native Windows/Linux packaging remains an exact-head CI gate"
+    ]
+  },
+  "harness_tests": {
+    "passed": 574,
+    "skipped": 6,
+    "xfailed": 20
+  },
+  "not_verified": [
+    "production rollout or store release",
+    "independent account-isolation approval"
+  ]
+}

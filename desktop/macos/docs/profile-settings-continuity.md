@@ -63,13 +63,16 @@ account-wide Electron settings sync or key portability.
   survives a rolled-back transaction. Failed HTTP edits retain the draft.
 - From `desktop/windows`, use pinned Node 22 and pnpm 10, then run
   `pnpm typecheck`, `pnpm lint`, and `pnpm test --maxWorkers=2`. Build with
-  `pnpm exec electron-vite build`, then run
+  `VITE_OMI_API_BASE=http://127.0.0.1:49601 pnpm build`, then run
   `node --test e2e/memory-edit-continuity.spec.mjs`. That built-app check uses
-  synthetic auth and intercepted HTTP; it verifies failed-save/retry/canonical
+  synthetic auth and a real loopback HTTP fixture serving unchanged built assets
+  under the same origin, with CSP and web security enabled. It verifies failed-save/retry/canonical
   replacement and offline restart, not a live Firebase provider login.
 - Build an isolated named app against the offline local harness and synthetic
   users. Verify the actual memory Save/error/retry controls and settings sync;
-  record the app's source identity and screenshots. The local harness must use
+  record the app's source identity and screenshots. Create a fresh memory through
+  New Memory for write checks; the canned read-scenario rows are not a substitute
+  for a current canonical apply-control generation. The local harness must use
   `MEMORY_ENABLED=on`; the retired `MEMORY_MODE` no longer permits writes. Do not seed production auth
   into the emulator profile or mutate production/customer memories.
 - Review the final diff, run component checks and normal preflight/pre-push, and
