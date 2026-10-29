@@ -22,7 +22,17 @@ from urllib.request import Request, urlopen
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from scripts.rollout.batch_quality_gate import observer_record, observed_clock, epoch  # noqa: E402
 
-MASK = ('shadow', 'state', 'outcome', 'speech_seconds', 'speech_loss_seconds', 'vad', 'settled_at', 'created_at')
+MASK = (
+    'shadow',
+    'state',
+    'outcome',
+    'projection_status',
+    'speech_seconds',
+    'speech_loss_seconds',
+    'vad',
+    'settled_at',
+    'created_at',
+)
 STATES = frozenset({'recovered', 'empty', 'failed_held', 'error', 'paid_skipped'})
 
 
@@ -49,6 +59,14 @@ def census(rows, overdue):
         if row.get('outcome') == 'dropped':
             dropped += 1
             continue
+        if (
+            row.get('outcome') == 'recovered'
+            and row.get('projection_status') != 'planned'
+            or row.get('outcome') == 'empty'
+            and row.get('projection_status') != 'empty'
+        ):
+            unknown += 1
+            continue  # Old inference-only outcomes cannot certify projection.
         measured, lost = row.get('speech_seconds'), row.get('speech_loss_seconds')
         if (
             row.get('outcome') not in STATES

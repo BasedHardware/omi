@@ -18,6 +18,7 @@ def terminal(speech, outcome='recovered', **extra):
             vad='worker',
             speech_seconds=speech,
             speech_loss_seconds=0 if outcome == 'recovered' else speech,
+            projection_status='planned' if outcome == 'recovered' else 'empty' if outcome == 'empty' else None,
         ),
         **extra,
     }
@@ -112,6 +113,13 @@ def test_serving_clock_uses_actual_history_not_unknown_serving_t2_floor():
 def test_missing_serving_history_never_claims_continuity():
     result = _combine(base(), census([terminal(4000)], []), NOW, START, NOW)
     assert set(result['hard3'].values()) == {'UNKNOWN'}
+
+
+def test_inference_only_success_never_certifies_projection_speech():
+    old = terminal(4000)
+    old.pop('projection_status')
+    result = combine(base(), census([old], []), NOW, START, NOW)
+    assert result['hard3']['T2'] == 'UNKNOWN' and result['t2_speech_denominator_seconds'] == 0
 
 
 def test_queries_use_masks_stable_read_time_and_no_identifier_output():

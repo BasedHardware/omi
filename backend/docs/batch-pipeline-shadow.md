@@ -6,10 +6,14 @@ The worker's successful result now makes one private OIDC
 `/v2/batch-pipeline/shadow-project` call on the existing recovery CPU role.
 The transcript exists only in the HTTPS body and request memory. There is no
 task queue, application retry, transcript artifact or result document. The
-endpoint reserves at most 200 plans per UTC hour across replicas, once per
-shadow unit, in the existing `_shadow_spend` TTL collection using disjoint
-`projection-<hour>` keys. The reservation performs the normal privacy check.
-Lost replies consume the attempt. At most three plans execute per CPU process.
+intake reserves at most 200 shadow attempts per UTC hour across replicas in
+the existing `_shadow_spend` TTL collection using disjoint `projection-<hour>`
+keys, before copying/decoding/staging or GPU compute. Quota-denied offers are
+dropped, not artificial speech loss. The CPU endpoint consumes that unit's
+reservation once, with a fresh normal privacy check; already admitted work
+keeps its permission across hour rollover. Lost replies consume the attempt.
+At most three plans execute per CPU process. Admission and execution hours can
+differ; the admission cap is not a hard execution-time dollar ceiling.
 
 Planning uses the real VAD result partitioner, incoming-conversation builder
 and `assign_in_transaction` body. Its reference adapter can read only the
@@ -66,7 +70,9 @@ seconds while serving remains0%. The read-only collector
 from the shadow control table, complete bounded pagination and one server
 readTime across settled and overdue reads. It emits aggregate counts only,
 never owner/job IDs, audio or transcript. Dropped offers do not enter the
-denominator. Unknown VAD, malformed receipts or unfinished attempts older than
+denominator. Recovered speech requires a machine-written `projection_status=planned`
+receipt; an old inference-only outcome cannot qualify projection. Unknown VAD,
+malformed receipts or unfinished attempts older than
 15 minutes make T2UNKNOWN; a page/read failure makes the sample BLIND.
 Speech lost to the cap0 paid-recovery refusal remains loss, never clean.
 

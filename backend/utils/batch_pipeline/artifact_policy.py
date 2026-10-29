@@ -71,4 +71,9 @@ def shadow_result(store, item, payload, *, projection=None):
         ('recovered' if payload.get('words') else 'empty') if valid else 'error',
         speech=float(payload.get('speech_seconds', 0)),
         vad='worker',
+        projection_status=(
+            receipt.get('status')
+            if receipt.get('status') in {'planned', 'empty', 'not_eligible', 'budget_skipped', 'busy', 'error'}
+            else 'error'
+        ),
     )

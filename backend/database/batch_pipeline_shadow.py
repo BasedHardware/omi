@@ -58,7 +58,7 @@ class ShadowStore:
         # ordinary GPU work wins, including a flight prefetched by another lane.
         return pool_busy(self.store.client, self.store.namespace)
 
-    def _finish(self, tx, segment, outcome, *, speech=0.0, vad='unknown', recognizers=None):
+    def _finish(self, tx, segment, outcome, *, speech=0.0, vad='unknown', recognizers=None, projection_status=None):
         job = tx.get('shadow_jobs', segment)
         if job.get('shadow') is not True or job.get('state') == 'settled':
             return None
@@ -93,6 +93,7 @@ class ShadowStore:
             'owner_key': job['owner_key'],
             'class': job['class'],
             'outcome': outcome,
+            **({'projection_status': projection_status} if projection_status is not None else {}),
             'vad': vad,
             **({'recognizers': recognizers, 'paid_providers': job.get('paid', [])} if recognizers is not None else {}),
             **({'reason_code': 'shadow_paid_skipped'} if outcome == 'paid_skipped' else {}),
@@ -104,11 +105,28 @@ class ShadowStore:
         tx.put('shadow_jobs', segment, row)
         return row
 
-    def finish(self, segment, outcome, *, speech=0.0, vad='unknown', recognizers=None):
+    def finish(self, segment, outcome, *, speech=0.0, vad='unknown', recognizers=None, projection_status=None):
         if outcome not in OUTCOMES:
             raise ValueError('closed shadow outcome required')
+        if projection_status is not None and projection_status not in {
+            'planned',
+            'empty',
+            'not_eligible',
+            'budget_skipped',
+            'busy',
+            'error',
+        }:
+            raise ValueError('closed shadow projection status required')
         row = self.store.run(
-            lambda tx: self._finish(tx, segment, outcome, speech=speech, vad=vad, recognizers=recognizers)
+            lambda tx: self._finish(
+                tx,
+                segment,
+                outcome,
+                speech=speech,
+                vad=vad,
+                recognizers=recognizers,
+                projection_status=projection_status,
+            )
         )
         if row:
             record(row)
@@ -155,15 +173,20 @@ class ShadowStore:
     def reserve(self, uid, content_id, class_name):
         now, segment = self.clock(), identity(uid, content_id)
         busy = not shadow_percent() or self.busy()
+        hour = 'projection-' + str(int(now // 3600))
 
         def claim(tx):
             prior = tx.get('shadow_jobs', segment)
             slots = [tx.get('shadow_slots', str(i)) for i in range(MAX_OFFERS)]
+            budget = tx.get('shadow_spend', hour)
             if prior:
                 return None, None
+            used = budget.get('units', 0)
+            if type(used) is not int or used < 0:
+                return None, None  # Uncertain cost authority never admits work.
             index = (
                 None
-                if busy
+                if busy or used >= 200
                 else next(
                     (i for i, slot in enumerate(slots) if slot.get('state') == 'idle' and slot['until'] > now), None
                 )
@@ -177,11 +200,17 @@ class ShadowStore:
                     'class': class_name,
                     'state': 'staging',
                     'created_at': now,
+                    **({'projection_reserved_at': now} if index is not None else {}),
                     'expires_at': datetime.fromtimestamp(now, timezone.utc) + timedelta(hours=2),
                 },
             )
             if index is None:
                 return None, self._finish(tx, segment, 'dropped')
+            tx.put(
+                'shadow_spend',
+                hour,
+                {'units': used + 1, 'expires_at': datetime.fromtimestamp(now, timezone.utc) + timedelta(days=2)},
+            )
             tx.put(
                 'shadow_slots',
                 str(index),
@@ -239,20 +268,18 @@ class ShadowStore:
         return self.store.run(publish)
 
     def projection_input(self, segment):
-        """At most 200 dry-run plans/hour, once per unit; shadow metadata only."""
+        """Use the intake reservation once, even across an hour rollover."""
         if not shadow_percent():
             return None
         now = self.clock()
-        # Reuse the existing shadow-spend TTL collection, with a disjoint key.
-        hour = 'projection-' + str(int(now // 3600))
 
         def reserve(tx):
-            job, budget = tx.get('shadow_jobs', segment), tx.get('shadow_spend', hour)
+            job = tx.get('shadow_jobs', segment)
             if (
                 job.get('shadow') is not True
                 or job.get('state') != 'running'
                 or 'projection_attempted_at' in job
-                or budget.get('units', 0) >= 200
+                or 'projection_reserved_at' not in job
             ):
                 return None
             item = WorkItem(**job['item'])
@@ -260,14 +287,6 @@ class ShadowStore:
                 item.owner_id, (item.conversation_id,) if item.conversation_id else (), item.privacy_generation
             )
             tx.put('shadow_jobs', segment, {**job, 'projection_attempted_at': now})
-            tx.put(
-                'shadow_spend',
-                hour,
-                {
-                    'units': budget.get('units', 0) + 1,
-                    'expires_at': datetime.fromtimestamp(now, timezone.utc) + timedelta(days=2),
-                },
-            )
             return job
 
         return self.store.run(reserve)

@@ -489,6 +489,7 @@ def test_artifact_sink_cannot_persist_shadow_transcript(repository):
     assert artifacts.persist_result(item, {'words': [{'word': 'secret'}], 'speech_seconds': 20}).startswith('shadow:')
     artifacts._write.assert_not_called()
     artifacts.register_artifact.assert_not_called()
+    assert row(repository, item.segment_id)['projection_status'] == 'planned'
     assert 'secret' not in repr(repository.store.client.rows)
     with pytest.raises(PermissionError):
         artifacts.persist_recovery_result(item, {'words': []}, 'token')
@@ -513,6 +514,14 @@ def test_projection_attempt_is_once_and_has_a_distributed_hourly_cap(repository)
         )
     )
     repository.store.run(lambda tx: tx.put('shadow_spend', 'projection-2', {**budget, 'units': 200}))
+    repository.offer('over-budget-worker')
+    assert repository.reserve('synthetic-owner', 'over-budget', 'deep') is None
+    denied = row(repository, identity('synthetic-owner', 'over-budget'))
+    assert denied['outcome'] == 'dropped' and 'item' not in denied
+    # A later hour or exhausted quota cannot reject speech already computed
+    # under an admission reservation and fabricate quality loss.
+    repository.clock = lambda: 10801
+    assert repository.projection_input(next_item.segment_id)['shadow'] is True
     assert repository.projection_input(next_item.segment_id) is None
 
 
