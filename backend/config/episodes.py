@@ -170,10 +170,10 @@ MOMENT_MIN_INTERVAL_SECONDS = 60
 # Below this gap a new conversation simply continues the episode (it is the
 # live split itself, ``models/conversation_continuity.DEFAULT_GAP_SECONDS``).
 from config.recorded_time_tolerances import (
-    CONTINUE_GAP_SECONDS,
-    CLOSE_GAP_SECONDS,
-    MAX_EPISODE_SECONDS,
-    FALLBACK_CLOSE_GAP_SECONDS,
+    CONTINUE_GAP_SECONDS as CONTINUE_GAP_SECONDS,
+    CLOSE_GAP_SECONDS as CLOSE_GAP_SECONDS,
+    MAX_EPISODE_SECONDS as MAX_EPISODE_SECONDS,
+    FALLBACK_CLOSE_GAP_SECONDS as FALLBACK_CLOSE_GAP_SECONDS,
 )
 
 # At or above this gap the episode is over without asking: the next speech opens

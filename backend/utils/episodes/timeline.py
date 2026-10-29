@@ -60,9 +60,10 @@ def ownership_end(row: dict) -> datetime | None:
 
 def episode_at(uid: str, at: datetime, *, firestore_client: Any = None) -> dict | None:
     """Which persisted episode owns recorded time T? Read-only, half-open windows."""
-    at = utc(at)
-    if at is None:
+    point = utc(at)
+    if point is None:
         raise ValueError('recorded time must be a datetime')
+    at = point
     rows = episode_timeline.between(uid, at, at, firestore_client=firestore_client)
     owners = [
         r
@@ -79,9 +80,10 @@ def episode_at(uid: str, at: datetime, *, firestore_client: Any = None) -> dict 
 
 def episodes_between(uid: str, start: datetime, end: datetime, *, firestore_client: Any = None) -> list[dict]:
     """Episodes whose ownership windows intersect [start, end), in recorded order."""
-    start, end = utc(start), utc(end)
-    if start is None or end is None or end < start:
+    first, last = utc(start), utc(end)
+    if first is None or last is None or last < first:
         raise ValueError('episode window must contain ordered datetimes')
+    start, end = first, last
     if end == start:
         owner = episode_at(uid, start, firestore_client=firestore_client)
         return [owner] if owner else []

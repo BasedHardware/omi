@@ -7,6 +7,7 @@ boundaries are immutable fences and keep the established attachment path.
 """
 
 from datetime import timedelta
+from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
 from google.cloud import firestore
@@ -85,7 +86,7 @@ def _state(template, window, previous, facts):
         if row['started_at'] <= window['last_activity_at'] and row['last_activity_at'] >= window['started_at']
     ]
     exact = next((row for row in previous if row['id'] == window['id']), None)
-    result = {
+    result: dict[str, Any] = {
         **template,
         **(exact or {}),
         **window,
@@ -193,7 +194,7 @@ def attach(uid, cid, source, start, end, *, candidates, template, choose, firest
             window['id']: collection.document(window['id']).get(transaction=transaction).to_dict() or {}
             for window in windows
         }
-        members = episodes._membership_reads(transaction, client, uid, facts)
+        members = episodes.read_memberships(transaction, client, uid, facts)
         result = [_state(template, window, list(previous.values()), facts) for window in windows]
         for row in result:
             row['state_version'] = max(row['state_version'], int(targets[row['id']].get('state_version') or 0) + 1)

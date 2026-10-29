@@ -67,7 +67,7 @@ def _attach_recorded_window(
         fence_row = fence.get(transaction=transaction).to_dict() or {}
         member = links.document(conversation_id)
         member_row = member.get(transaction=transaction).to_dict() or {}
-        members = episodes._membership_reads(transaction, client, uid, [conversation_id])
+        members = episodes.read_memberships(transaction, client, uid, [conversation_id])
         rows = recorded_candidates(uid, started, finished, firestore_client=client, transaction=transaction)
         rows = [row for row in rows if not row.get('recorded_merged_into')]
         selected = choose(rows, started, finished) or choose(rows, started, started)
@@ -133,7 +133,7 @@ def _attach_recorded_window(
                 recovered_conversation_ids=[conversation_id],
             )
         transaction.set(root.collection('episodes').document(result['id']), episodes.seal(uid, result))
-        episodes._write_memberships(transaction, client, uid, result['id'], members, datetime.now(timezone.utc))
+        episodes.write_memberships(transaction, client, uid, result['id'], members, datetime.now(timezone.utc))
         transaction.set(fence, {'version': int(fence_row.get('version') or 0) + 1})
         # Never modify current/last_closed navigation pointers for late audio.
         return {**result, '_window_end': window_end}

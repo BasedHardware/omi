@@ -216,7 +216,7 @@ def _drop_legacy_receipts(merged: dict[str, Any], segment_receipts: Optional[Map
         merged.pop('applied_segment_ids', None)
 
 
-def _membership_reads(transaction, client, uid, conversation_ids):
+def read_memberships(transaction, client, uid, conversation_ids):
     ids = [cid for cid in dict.fromkeys(conversation_ids) if cid and cid not in {CURRENT, LAST_CLOSED}]
     if len(ids) > _LINK_BATCH_LIMIT:
         raise EpisodeConflict('membership_batch_exhausted')
@@ -230,7 +230,7 @@ def _membership_reads(transaction, client, uid, conversation_ids):
     }
 
 
-def _write_memberships(transaction, client, uid, episode_id, members, arrival_at):
+def write_memberships(transaction, client, uid, episode_id, members, arrival_at):
     """The reverse field and overlay link commit with the same membership CAS.
 
     Missing live stubs are not fabricated: their create transaction adopts the
@@ -282,7 +282,7 @@ def _commit(
         snapshot = current_ref.get(transaction=transaction)
         current_raw = snapshot.to_dict() if snapshot.exists else None
     receipts_raw = _read_receipts(transaction, client, uid, segment_receipts)
-    members = _membership_reads(transaction, client, uid, link_conversation_ids)
+    members = read_memberships(transaction, client, uid, link_conversation_ids)
     if current_id != expected_episode_id:
         raise EpisodeConflict('current_episode_changed')
     if expected_episode_id is not None:
@@ -310,7 +310,7 @@ def _commit(
     _write_receipts(transaction, client, uid, segment_receipts, receipts_raw, now)
     if timeline_enabled:
         transaction.set(timeline_ref, {'version': int(timeline_row.get('version') or 0) + 1})
-    _write_memberships(transaction, client, uid, episode_id, members, now)
+    write_memberships(transaction, client, uid, episode_id, members, now)
     return result
 
 
@@ -368,7 +368,7 @@ def _reopen(
         raise EpisodeConflict('state_version_changed')
     if _link_target(client, uid, CURRENT, transaction):
         return None  # A newer episode went live: the closed one stays closed.
-    members = _membership_reads(transaction, client, uid, link_conversation_ids)
+    members = read_memberships(transaction, client, uid, link_conversation_ids)
     last_closed_id = _link_target(client, uid, LAST_CLOSED, transaction)
     if last_closed_id != episode_id:
         return None  # A newer episode opened and closed since the read: only the latest reopens.
@@ -389,7 +389,7 @@ def _reopen(
     transaction.set(_links(client, uid).document(CURRENT), {'episode_id': episode_id, 'updated_at': now})
     # The recap must not advertise a live episode as the last closed one.
     transaction.set(_links(client, uid).document(LAST_CLOSED), {'episode_id': None, 'updated_at': now})
-    _write_memberships(transaction, client, uid, episode_id, members, now)
+    write_memberships(transaction, client, uid, episode_id, members, now)
     return merged
 
 
@@ -490,7 +490,7 @@ def _update(
     snapshot = ref.get(transaction=transaction)
     raw = snapshot.to_dict() if snapshot.exists else None
     receipts_raw = _read_receipts(transaction, client, uid, segment_receipts)
-    members = _membership_reads(transaction, client, uid, link_conversation_ids)
+    members = read_memberships(transaction, client, uid, link_conversation_ids)
     if not raw or raw.get('state_version') != expected_version:
         raise EpisodeConflict('state_version_changed')
     merged = _merge_state(unseal(uid, raw) or {}, updates)
@@ -499,7 +499,7 @@ def _update(
     transaction.set(ref, seal(uid, merged))
     now = datetime.now(timezone.utc)
     _write_receipts(transaction, client, uid, segment_receipts, receipts_raw, now)
-    _write_memberships(transaction, client, uid, episode_id, members, now)
+    write_memberships(transaction, client, uid, episode_id, members, now)
     return merged
 
 

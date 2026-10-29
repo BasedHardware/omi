@@ -1,7 +1,7 @@
 """Pure audio bounds. A processing clock is never evidence of recorded duration."""
 
 import math
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any, Mapping, Sequence
 
 from models.conversation_continuity import DEFAULT_GAP_SECONDS

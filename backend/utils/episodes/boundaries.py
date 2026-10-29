@@ -104,7 +104,7 @@ def conversation_decision(
     known = boundary_store.windows(uid, firestore_client=firestore_client)
     span = conversation_span(row)
     start = span.recorded_start if span else None
-    if start is None:
+    if start is None or span is None:
         return 'legacy'
     speech = span.recorded_end
     decision = 'legacy'

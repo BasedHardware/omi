@@ -101,12 +101,12 @@ MERGE_THRESHOLD = 0.35
 # (``models/conversation_continuity.DEFAULT_GAP_SECONDS``); both the recorded gap
 # and the speech gap must reach it, which also skips sync shards whose start
 # drifted. Above one hour only 2 of 9 pairs were continuations.
-from config.recorded_time_tolerances import (
-    CONTINUE_GAP_SECONDS as MIN_GAP_SECONDS,
-    CLOSE_GAP_SECONDS as STRETCH_LINK_SECONDS,
-    MERGE_ELIGIBILITY_GAP_SECONDS as MAX_GAP_SECONDS,
-    MERGE_STORAGE_SPAN_SECONDS as MAX_MERGED_SPAN_SECONDS,
-)
+from config import recorded_time_tolerances as tolerances
+
+MIN_GAP_SECONDS = tolerances.CONTINUE_GAP_SECONDS
+STRETCH_LINK_SECONDS = tolerances.CLOSE_GAP_SECONDS
+MAX_GAP_SECONDS = tolerances.MERGE_ELIGIBILITY_GAP_SECONDS
+MAX_MERGED_SPAN_SECONDS = tolerances.MERGE_STORAGE_SPAN_SECONDS
 
 # Both sides need this many transcript words; the benchmark sampled only such
 # pairs, and near-empty fragments were its main missed-merge class.
