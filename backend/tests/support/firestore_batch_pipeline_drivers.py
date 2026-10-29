@@ -282,4 +282,16 @@ def entries():
             'database.batch_pipeline_store.oldest',
             domains={'namespace': namespaces, 'priority': [0, 1, 2], 'ready_only': [False, True]},
         ),
+        DriverEntry(
+            'database.batch_pipeline_projection_release.held_page_ids',
+            domains={'namespace': namespaces, 'after_id': [None, 'result-100']},
+            neutrals={'limit': (32, 'bounded page size only; equality is served by the automatic single-field index')},
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_projection_release.release_page',
+            covered_by=('database.batch_pipeline_projection_release.held_page_ids',),
+            reason='bounded release scan delegates its only query to held_page_ids; resets are document transactions',
+            expect_observed=False,
+            body_digest='9f5875cb08b271ad83fd1da1785bef66074919d494ae1a73590f2e02baa64edf',
+        ),
     )

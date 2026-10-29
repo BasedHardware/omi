@@ -143,6 +143,7 @@ _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
     'database.batch_pipeline_store.FirestoreStore.ready_for_capacity': '975eabd92f43ba5da3d847439f4d8e3592525ccd31c11dcac6463365535eac10',
+    'database.batch_pipeline_projection_release.release_page': '9f5875cb08b271ad83fd1da1785bef66074919d494ae1a73590f2e02baa64edf',
     'database.monthly_usage_totals._rebuild': '2c9be83589399a6824fbb2ef7376cd7baf8492e8a780671e31b67a8294b40db0',
     'database.batch_pipeline_shadow.ShadowStore._busy': '3be03e458c8e65c535fed1475cbfae9c97421970c89dc751e2f4eaa4a46a4467',
     'database.batch_pipeline_shadow.ShadowStore.reap': 'e5ea33125389c09c8ad556fab4a6319142f223e4dfa655095dcd89c64e976a8d',

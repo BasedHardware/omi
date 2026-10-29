@@ -169,6 +169,48 @@ def quarantines_assignment_conflict(error: BaseException, job: dict | None) -> b
     )
 
 
+# Bounded retry for a failing owner-chain head. Infrastructure contention and
+# fresh awaiting-writer conflicts may keep a head waiting, but not forever:
+# once a head has failed for this long it takes the held disposition so the
+# chain can advance (audio retained; a reviewed redrive owns the unit).
+PROJECTION_HEAD_RETRY_SECONDS = 24 * 3600.0
+
+# Result-row fields stamping a bounded-retry head's first failure. Written
+# once per failure episode; the release redrive clears them with the receipt.
+PROJECTION_HEAD_BLOCKED_SINCE = 'projection_blocked_since'
+PROJECTION_HEAD_BLOCK_TYPE = 'projection_block_type'
+
+
+def projection_exception_transient(error: BaseException) -> bool:
+    """Whether a failing step is infrastructure contention, not content poison.
+
+    Keeps the exception taxonomy's declared retryable kinds waiting (#23946):
+    storage/authorization OSErrors (PermissionError included) wait for the
+    sweep, under this rule's durable bound, never a first-failure hold.
+    """
+    from database.firestore_transaction_retry import FirestoreContentionExhausted
+    from google.api_core import exceptions as api_exceptions
+
+    if isinstance(error, (ConnectionError, TimeoutError, OSError, FirestoreContentionExhausted)):
+        return True
+    if isinstance(
+        error,
+        (
+            api_exceptions.Aborted,
+            api_exceptions.BadGateway,
+            api_exceptions.DeadlineExceeded,
+            api_exceptions.ServiceUnavailable,
+            api_exceptions.TooManyRequests,
+            api_exceptions.ResourceExhausted,
+            api_exceptions.InternalServerError,
+            api_exceptions.GatewayTimeout,
+        ),
+    ):
+        return True
+    # google-cloud-firestore's exhausted commit retry: contention, not content.
+    return type(error) is ValueError and isinstance(error.__cause__, api_exceptions.Aborted)
+
+
 def payload_contract_violation(error: BaseException) -> bool:
     """Whether retrying the same committed bytes cannot fix this error.
 
@@ -187,6 +229,30 @@ def payload_contract_violation(error: BaseException) -> bool:
 # The contract catch shape: both classes can carry a permanent payload
 # violation; payload_contract_violation decides which instances disposition.
 PAYLOAD_CONTRACT_ERRORS = (ValueError, InvalidTag)
+
+
+def head_holds_without_retry(error: BaseException, job: dict | None) -> bool:
+    """The generic poison-head rule: only a writer or infrastructure may keep
+    a chain head waiting. Everything else holds the unit on first failure.
+
+    The assign seams already disposition payload-contract violations and
+    structural conflicts (#23946, #23932); this walk/sweep-level rule is the
+    floor beneath every other escaping kind, and the backstop for a contract
+    ValueError raised outside those seams.
+    """
+    if payload_contract_violation(error):
+        return True
+    if projection_exception_transient(error):
+        return False
+    if isinstance(error, SyncAssignmentConflict) and not quarantines_assignment_conflict(error, job):
+        # Awaiting-writer on a fresh row: the writer may still land.
+        return False
+    return True
+
+
+def head_retry_bound_exceeded(entry: dict, now: float) -> bool:
+    since = entry.get(PROJECTION_HEAD_BLOCKED_SINCE)
+    return isinstance(since, (int, float)) and now - since > PROJECTION_HEAD_RETRY_SECONDS
 
 
 @contextmanager
@@ -437,6 +503,8 @@ class Projector:
         # Upload dedupe of the held-partial pass in flight; spans budget stops
         # and wraps only when the scan's cursor does.
         self.held_pass_seen: set[tuple[str, str]] = set()
+        # Resume point of the held-release scan; a short page wraps it.
+        self.release_after: str | None = None
 
     def request_drain(self, owner_id: str) -> None:
         with self.handoff:
@@ -771,6 +839,23 @@ class Projector:
             if max_pages is not None and pages >= max_pages:
                 return counts
 
+    def release_held_scan(self, limit: int = HELD_PARTIAL_PAGE) -> dict[str, int]:
+        """One bounded page of held units whose record target may be restored."""
+        from database.batch_pipeline_projection_release import release_page
+
+        counts, self.release_after = release_page(
+            self.store, limit=limit, after_id=self.release_after, now=self.clock()
+        )
+        if counts.get('released'):
+            logger.info(
+                'event=batch_projection action=release_held outcome=summary released=%d examined=%d waiting=%d error=%d',
+                counts['released'],
+                counts['examined'],
+                counts['waiting'],
+                counts['error'],
+            )
+        return counts
+
     def assign_record_silence(self, item, binding, session, *, hint=None):
         incoming = {
             'id': binding.target_conversation_id,
@@ -799,6 +884,59 @@ class Projector:
 
     def _mirror_assignment(self, session) -> None:
         mirror_assignment(self.store, session)
+
+    def _note_head_blocked(self, segment_id: str, error: BaseException) -> None:
+        """Stamp a bounded-retry head's first failure time; one write per episode."""
+
+        def commit(transaction):
+            row = self.store.ref('results', segment_id).get(transaction=transaction).to_dict() or {}
+            if row.get(PROJECTION_HEAD_BLOCKED_SINCE) is not None or row.get('projection_state') not in (
+                'pending',
+                'persisted',
+                'ready',
+            ):
+                return False
+            transaction.update(
+                self.store.ref('results', segment_id),
+                {PROJECTION_HEAD_BLOCKED_SINCE: self.clock(), PROJECTION_HEAD_BLOCK_TYPE: error_type(error)},
+            )
+            return True
+
+        try:
+            self.store.run(commit)
+        except Exception as note_error:
+            logger.warning(
+                'event=batch_projection action=head_block_note outcome=retry exception_type=%s',
+                error_type(note_error),
+            )
+
+    def _hold_failing_head(self, segment_id: str, job: dict, binding: ProjectionBinding) -> bool:
+        """Hold a poison head: quarantine_held receipt, audio retained, watermark advanced."""
+        try:
+            policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
+            session = self.store.session(segment_id, binding, self.clock(), policy=policy)
+            persist_disposition(session, quarantined=True)
+            return True
+        except Exception as error:
+            logger.error(
+                'event=batch_projection action=poison_hold outcome=retry exception_type=%s%s',
+                error_type(error),
+                error_site_field(error),
+            )
+            return False
+
+    def resolve_failing_head(self, segment_id, job, entry, binding, error: BaseException) -> bool:
+        """The generic poison-head rule at a chain head (lead ruling 5d2ae7).
+
+        A non-transient exception nothing can resolve holds this unit and
+        advances the watermark; transient failures and fresh awaiting-writer
+        conflicts retry with a durable bound. ``ProjectionBlocked`` and privacy
+        fences keep their own, more precise dispositions and never pass here.
+        """
+        if head_holds_without_retry(error, job) or head_retry_bound_exceeded(entry, self.clock()):
+            return self._hold_failing_head(segment_id, job, binding)
+        self._note_head_blocked(segment_id, error)
+        return False
 
     def assign_parts(self, item, entry, binding, *, finish=True, policy=None, hint=None, job=None):
         policy = policy or self.store.policy(item.segment_id)
@@ -1312,6 +1450,7 @@ class Projector:
                 # The predecessor check walks erased receipts; so does discovery.
                 previous = segment_id
                 continue
+            job = entry = binding = None
             try:
                 prefetched = None
                 if prefetch is not None:
@@ -1350,7 +1489,19 @@ class Projector:
                 break
             except Exception as error:
                 failed(error)
-                break
+                if binding is None or not self.resolve_failing_head(segment_id, job, entry, binding, error):
+                    break
+                # Held (or already terminal): continue iff the chain advanced.
+                try:
+                    watermark = self.store.projection_watermark(key)
+                except Exception as watermark_error:
+                    failed(watermark_error)
+                    break
+                if watermark != segment_id:
+                    break  # the hold did not land; the sweep retries this head
+                previous = segment_id
+                advanced.append(segment_id)
+                continue
             try:
                 watermark = self.store.projection_watermark(key)
             except Exception as error:
@@ -1405,6 +1556,7 @@ class Projector:
             if segment_id in chained:
                 continue
             binding = None
+            job = entry = None
             try:
                 job, entry, binding = self.store.read(segment_id)
                 if drain and (binding.owner_id in self.draining or binding.owner_id in handed):
@@ -1466,6 +1618,12 @@ class Projector:
                     error_type(error),
                     error_site_field(error),
                 )
+                if job is not None and binding is not None:
+                    # Same generic poison-head rule as the walk: a page row
+                    # whose step fails terminally holds instead of re-erroring
+                    # on every pass.
+                    if self.resolve_failing_head(segment_id, job, entry, binding, error):
+                        counts['blocked'] += 1
                 continue
             if chain and entry.get('projection_state') == 'pending':
                 # This row was assignable and passed every fence: keep walking
