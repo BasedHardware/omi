@@ -767,11 +767,13 @@ def create_checkout_session_endpoint(
     # Normal checkout flow for new subscriptions (Scenario B or first-time subscribers)
     idempotency_key = str(uuid.uuid4())
     existing_customer_id = users_db.get_stripe_customer_id(uid)
+    # When a promotion code is applied, suppress any requested trial period so Stripe evaluates
+    # minimum_amount against the recurring price rather than a $0 upfront trial total (#23982, #23300).
+    trial_period_days = None if resolved_checkout_promo_id else (request.trial_days or None)
     # A trial is only for a first-time subscriber. A client that asked for one on behalf of a former
     # subscriber promised something this checkout cannot give, so refuse rather than charge at once.
-    if request.trial_days and existing_customer_id:
+    if trial_period_days and existing_customer_id:
         raise HTTPException(status_code=400, detail="trial_unavailable")
-    trial_period_days = request.trial_days or None
     try:
         session = stripe_utils.create_subscription_checkout_session(
             uid,

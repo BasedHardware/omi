@@ -100,7 +100,10 @@ def create_subscription_checkout_session(
             session_params['custom_text'] = {'submit': {'message': 'All amounts are in USD (US dollars).'}}
 
         if trial_period_days:
-            session_params['subscription_data']['trial_period_days'] = trial_period_days
+            # Suppress trial when a promotion code is provided to prevent Stripe minimum_amount evaluation
+            # against a $0 trial upfront invoice (#23982, #23300).
+            if not promotion_code_id:
+                session_params['subscription_data']['trial_period_days'] = trial_period_days
 
         if promotion_code_id:
             session_params['discounts'] = [{'promotion_code': promotion_code_id}]
