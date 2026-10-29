@@ -31,16 +31,22 @@ combinations had ever run together.
   `budget` can never exceed the seeded 170.
 - Literal names in positional and `key=` keyword form are both counted
   (`config/policy/guard.py:env_reads`).
+- A helper-backed default-on kill switch outside the scoped env surface may be
+  recorded as an owned `registry` entry. The flag-budget test verifies those
+  entries against `config/feature-flags.yaml`; they do not consume seeded
+  pipeline slots.
 - Changed-file CI selects the test for any scoped path
   (`scripts/select_backend_unit_tests.py:FLAG_BUDGET_PREFIXES`).
 
 ## Consequences
 
 - Growth is visible and owned; shrinkage ratchets.
-- Not counted: names read through helpers (`serving_for`, kill-switch registry
-  lookups), names computed at runtime, and reads outside the scope. The
-  batch-stage env ratchet (`tests/unit/test_batch_stage_env_ratchet.py`) still
-  covers dynamic reads under `utils/batch_pipeline`.
+- Not counted in the scoped env inventory: names read through helpers
+  (`serving_for`, kill-switch registry lookups), names computed at runtime,
+  and reads outside the scope. Explicit helper-backed default-on kill switches
+  can still be listed as owned registry entries. The batch-stage env ratchet
+  (`tests/unit/test_batch_stage_env_ratchet.py`) still covers dynamic reads
+  under `utils/batch_pipeline`.
 - `config/feature-flags.yaml` stays the authority for what each gate means;
   this budget only bounds how many names exist.
 

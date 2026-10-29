@@ -51,6 +51,34 @@ export interface AccountCutoverManifestSummary {
 
 export type AccountCutoverState = "legacy" | "migrating" | "new" | "rolled_back_stranded";
 
+export interface AccountDeletionActionResponse {
+  message: string;
+  pending_deletion?: boolean;
+  status: string;
+  wipe_at?: string | null;
+}
+
+export interface AccountDeletionLossSummary {
+  backlog_conversations?: number;
+  backlog_seconds?: number;
+  held_audio_seconds?: number;
+  held_recordings?: number;
+}
+
+export interface AccountDeletionRestoreResponse {
+  billing_cancelled?: boolean;
+  restored: boolean;
+  status: string;
+}
+
+export interface AccountDeletionStatusResponse {
+  grace_period_days?: number;
+  loss_summary: AccountDeletionLossSummary;
+  pending_deletion?: boolean;
+  status?: string | null;
+  wipe_at?: string | null;
+}
+
 export interface Action {
   action: ActionType;
 }
@@ -2093,6 +2121,7 @@ export interface DeferralReceipt {
 }
 
 export interface DeleteAccountRequest {
+  erase_now?: boolean;
   reason?: string | null;
   reason_details?: string | null;
 }
@@ -6372,6 +6401,10 @@ export interface OmiApiSchemas {
   "AccountCutoverControl": AccountCutoverControl;
   "AccountCutoverManifestSummary": AccountCutoverManifestSummary;
   "AccountCutoverState": AccountCutoverState;
+  "AccountDeletionActionResponse": AccountDeletionActionResponse;
+  "AccountDeletionLossSummary": AccountDeletionLossSummary;
+  "AccountDeletionRestoreResponse": AccountDeletionRestoreResponse;
+  "AccountDeletionStatusResponse": AccountDeletionStatusResponse;
   "Action": Action;
   "ActionItem": ActionItem;
   "ActionItemCreateRequest": ActionItemCreateRequest;
@@ -11211,7 +11244,17 @@ export interface OmiApiPaths {
     delete: {
       operationId: "delete_account_v1_users_delete_account_delete";
       responses: {
-        "200": UserStatusResponse;
+        "200": AccountDeletionActionResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/deletion-status": {
+    get: {
+      operationId: "get_account_deletion_status_endpoint_v1_users_deletion_status_get";
+      responses: {
+        "200": AccountDeletionStatusResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -11713,6 +11756,16 @@ export interface OmiApiPaths {
       operationId: "record_channel_v1_users_release_channel_put";
       responses: {
         "204": void;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/restore-account": {
+    post: {
+      operationId: "restore_account_deletion_endpoint_v1_users_restore_account_post";
+      responses: {
+        "200": AccountDeletionRestoreResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -20344,10 +20397,13 @@ export async function test_daily_summary_v1_users_daily_summary_settings_test_po
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function delete_account_v1_users_delete_account_delete(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: DeleteAccountRequest, init?: OmiApiClientInit): Promise<UserStatusResponse> {
+export async function delete_account_v1_users_delete_account_delete(query: { grace?: boolean }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: DeleteAccountRequest, init?: OmiApiClientInit): Promise<AccountDeletionActionResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/delete-account`;
-  const _search = "";
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "DELETE",
     headers: {
@@ -20360,6 +20416,25 @@ export async function delete_account_v1_users_delete_account_delete(header: { au
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_account_deletion_status_endpoint_v1_users_deletion_status_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AccountDeletionStatusResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/deletion-status`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -21425,6 +21500,25 @@ export async function record_channel_v1_users_release_channel_put(header: { auth
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return;
+}
+
+export async function restore_account_deletion_endpoint_v1_users_restore_account_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AccountDeletionRestoreResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/restore-account`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
 export async function get_chat_message_count_v1_users_stats_chat_messages_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ChatMessageCountResponse> {
@@ -23152,4 +23246,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 532 client methods generated.
+// Total: 534 client methods generated.

@@ -27,6 +27,7 @@ from config.policy import resolve_batch_policy
 from config.policy.ramp import audio_span
 from database.batch_ramp import ramp_admission_policy
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from utils.batch_pipeline.intake import (
     accept_upload as accept_batch_upload,
     get_durable_job_status,
@@ -3207,6 +3208,10 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
         payload = await request.json()
         job_id = payload['job_id']
         uid = payload['uid']
+        if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
+            # Keep the original task and staged capture available for restore or
+            # the final wipe. Acknowledging here would permanently drop it.
+            return JSONResponse(status_code=503, content={'status': 'account_pending_deletion'})
         blob_paths = list(payload['raw_blob_paths'])
         source = ConversationSource(payload.get('source') or 'omi')
         should_lock = bool(payload.get('should_lock', False))
@@ -3781,6 +3786,11 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
     except Exception as e:
         logger.error(f'audio_merge handler: invalid payload, dropping task: {e}')
         return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_payload'})
+
+    task_uid = payload.get('uid')
+    if isinstance(task_uid, str) and await run_blocking(db_executor, account_deletion_blocks_user_work, task_uid):
+        # Cloud Tasks retains the task; a restore can resume processing.
+        return JSONResponse(status_code=503, content={'status': 'account_pending_deletion'})
 
     # The v2 conversation-merge dispatch runs OUTSIDE the payload-parse guard so its
     # transient GCS/Firestore failures (during the doc read, artifact upload, or doc

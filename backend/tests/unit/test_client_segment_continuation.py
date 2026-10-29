@@ -165,6 +165,14 @@ def test_chunk_write_is_fenced_by_account_and_conversation_deletion(store):
         assert not any(key[:2] == ('users', owner) and key[2] == 'from_segments_chunks' for key in store.rows)
 
 
+def test_restored_owner_can_resume_chunk_staging(store):
+    owner = uuid4().hex
+    store.rows[('account_deletions', owner)] = {'wipe_status': 'cancelled'}
+
+    assert intake.stage_chunk(owner, 'c', chunk(count=1)) is not None
+    assert ('users', owner, 'from_segments_chunks', 'c-000') in store.rows
+
+
 def test_shadow_metric_outcomes_are_closed():
     intake.observe('bounded_test', 'unrecognized')
     samples = [sample for metric in intake.SHADOW.collect() for sample in metric.samples]

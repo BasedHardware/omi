@@ -37,6 +37,7 @@ def _posthog(monkeypatch):
     monkeypatch.setenv('POSTHOG_PROJECT_API_KEY', 'fake-key')
     fake = _FakePosthog()
     set_product_telemetry_client_for_tests(fake)
+    monkeypatch.setattr(day3_reengagement, 'account_deletion_blocks_user_work', lambda _uid: False)
     yield fake
     set_product_telemetry_client_for_tests(None)
 
@@ -287,6 +288,24 @@ def test_collect_day3_candidates_maps_signup_os_and_excludes_off_window_and_off_
         already_sent=False,
     )
     assert day3_reengagement.evaluate_candidate(windows_facts, now=NOW).reason == 'not_macos'
+
+
+def test_pending_deletion_candidate_is_not_selected_or_sent(monkeypatch, _resend):
+    docs = {'users/uid-pending': _user_doc('macos')}
+    _fake_get_user_from_uid(monkeypatch, {'uid-pending': 'pending@example.com'})
+    monkeypatch.setattr(day3_reengagement, 'account_deletion_blocks_user_work', lambda uid: uid == 'uid-pending')
+
+    candidates = day3_reengagement.collect_day3_candidates(now=NOW, firestore_client=FakeFirestore(docs=docs))
+    summary = day3_reengagement.run_day3_reengagement(
+        candidates=[_eligible_facts('uid-pending')],
+        now=NOW,
+        authority=day3_reengagement.Day3Authority(enabled=True),
+        display_name_for=lambda _uid: 'Pending',
+    )
+
+    assert candidates == []
+    assert summary.considered == 0
+    assert _resend.calls == []
 
 
 def test_collect_day3_candidates_does_not_let_non_macos_signups_consume_the_page(monkeypatch):

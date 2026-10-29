@@ -133,6 +133,10 @@ def integration_harness() -> Iterator[SimpleNamespace]:
         'utils.llms': _package('utils.llms', BACKEND_DIR / 'utils' / 'llms'),
         'utils.conversations': _package('utils.conversations', BACKEND_DIR / 'utils' / 'conversations'),
         'database': _package('database', BACKEND_DIR / 'database'),
+        'database.account_deletion_marker': _module(
+            'database.account_deletion_marker',
+            account_deletion_blocks_user_work=lambda _uid: False,
+        ),
         'models': _package('models', BACKEND_DIR / 'models'),
         'langchain_core': _package('langchain_core', BACKEND_DIR),
         'langchain_core.callbacks': _module(
@@ -393,7 +397,10 @@ async def test_trial_paywall_read_uses_db_executor_and_preserves_errors(integrat
         with pytest.raises(RuntimeError, match='paywall store unavailable'):
             await app.trigger_realtime_integrations('user-paywall', [{'text': 'hello'}], 'conv-1', source='desktop')
 
-    assert calls == [(app.db_executor, failing_paywall, ('user-paywall', 'desktop'), {})]
+    assert calls == [
+        (app.db_executor, app.account_deletion_blocks_user_work, ('user-paywall',), {}),
+        (app.db_executor, failing_paywall, ('user-paywall', 'desktop'), {}),
+    ]
 
 
 @pytest.mark.asyncio

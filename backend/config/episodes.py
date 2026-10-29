@@ -51,6 +51,9 @@ EPISODES_PERCENT_ENV = 'EPISODES_PERCENT'
 EPISODES_UID_ALLOWLIST_ENV = 'EPISODES_UID_ALLOWLIST'
 EPISODES_CLIENT_CHANNELS_ENV = 'EPISODES_CLIENT_CHANNELS'
 EPISODE_OUTPUT_LANGUAGE_PIN_ENV = 'EPISODE_OUTPUT_LANGUAGE_PIN'
+EPISODE_HARD_CAP_ACROSS_CONVERSATIONS_ENV = 'EPISODE_HARD_CAP_ACROSS_CONVERSATIONS'
+EPISODE_CARRY_ON_SESSION_END_ENV = 'EPISODE_CARRY_ON_SESSION_END'
+EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV = 'EPISODE_MOMENT_OUTPUT_VALIDATOR'
 APP_CHANNEL_HEADER = 'X-Omi-App-Channel'
 APP_CHANNELS = frozenset({'beta', 'store'})
 _DEFAULT_CLIENT_CHANNELS = frozenset({'beta'})
@@ -102,6 +105,21 @@ def episode_output_language_pinned() -> bool:
     return modes_default_on(EPISODE_OUTPUT_LANGUAGE_PIN_ENV)
 
 
+def episode_hard_cap_across_conversations_enabled() -> bool:
+    """Whether the strict episode-wide hard cap runs on attachment and moment boundaries."""
+    return modes_default_on(EPISODE_HARD_CAP_ACROSS_CONVERSATIONS_ENV)
+
+
+def episode_carry_on_session_end_enabled() -> bool:
+    """Whether a session-end buffer flushes after the bounded reconnect window."""
+    return modes_default_on(EPISODE_CARRY_ON_SESSION_END_ENV)
+
+
+def episode_moment_output_validator_enabled() -> bool:
+    """Whether live moment output validation and its one bounded repair call are enabled."""
+    return modes_default_on(EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV)
+
+
 def client_channel_admitted(raw: str | None) -> bool:
     """A missing or unknown channel is never admitted."""
     channel = app_channel(raw)
@@ -126,9 +144,11 @@ LAST_CLOSED_CACHE_SECONDS = 30
 
 # --------------------------------------------------------------------------- moments
 
-# A moment ends when the live stream pauses for this long, or when it grows past
-# MOMENT_MAX_WORDS (a rollover), or after MOMENT_MAX_SECONDS of steady speech (an
-# interval), or when its conversation finalizes or its live session ends.
+# A moment ends when the live stream pauses for this long, when it grows past
+# MOMENT_MAX_WORDS (a rollover), after MOMENT_MAX_SECONDS of steady speech (an
+# interval), or when finalize/wrap-up consumes the remaining buffer. A session
+# end preserves speech for one reconnect window before flushing the tail; a
+# conversation change carries speech into the next same-episode moment.
 MOMENT_PAUSE_SECONDS = 45
 MOMENT_MAX_WORDS = 600
 # Continuous talk never pauses for 45 s and rarely reaches 600 words quickly; without a

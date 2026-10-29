@@ -424,12 +424,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get autoSync => 'المزامنة التلقائية';
 
   @override
-  String get syncHealthAlerts => 'تنبيهات سلامة المزامنة';
-
-  @override
-  String get syncHealthAlertsDescription => 'تنبيه إذا لم تتم مزامنة التسجيلات من Omi لأكثر من يوم';
-
-  @override
   String get autoSyncDescription => 'مزامنة التسجيلات دون اتصال تلقائيًا عند توصيل جهازك';
 
   @override
@@ -8665,6 +8659,27 @@ class AppLocalizationsAr extends AppLocalizations {
   String get deleteReasonOther => 'غير ذلك';
 
   @override
+  String get deletePauseInsteadTitle => 'هل تريد إيقاف Omi مؤقتًا بدلًا من حذفه؟';
+
+  @override
+  String get deletePauseInsteadSubtitle => 'أوقف التسجيل واحتفظ بكل شيء. يمكنك العودة في أي وقت.';
+
+  @override
+  String get deletePauseRecordingLine => 'سيتوقف التسجيل. لن يُسجَّل أي شيء جديد أثناء غيابك.';
+
+  @override
+  String get deletePauseKeepLine => 'ستبقى ذكرياتك ومحادثاتك وتطبيقاتك كما هي تمامًا.';
+
+  @override
+  String get deletePauseReturnLine => 'ستظل مسجّلًا للدخول. يمكنك استئناف التسجيل في أي وقت. سيستمر اشتراكك دون تغيير.';
+
+  @override
+  String get pauseOmiButton => 'إيقاف Omi مؤقتًا';
+
+  @override
+  String get continueDeletingButton => 'متابعة الحذف';
+
+  @override
   String get deleteFlowFeedbackTitle => 'أخبرنا المزيد';
 
   @override
@@ -8684,6 +8699,28 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get deleteConsequenceNoRecovery => 'لا يمكن استعادة حسابك — ولا حتى من قبل الدعم.';
+
+  @override
+  String deletePendingRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'لديك $count تسجيلات لا تزال قيد المعالجة. سيؤدي حذفها الآن إلى فقدانها.',
+      one: 'لديك تسجيل واحد لا يزال قيد المعالجة. سيؤدي حذفه الآن إلى فقدانه.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String deleteGracePeriodNotice(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'سجّل الدخول مرة أخرى خلال $days يومًا لاستعادة حسابك.',
+      one: 'سجّل الدخول مرة أخرى خلال يوم واحد لاستعادة حسابك.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get deleteTypeToConfirm => 'اكتب DELETE للتأكيد';
@@ -8990,14 +9027,6 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get syncCardWaitingInternet => 'بانتظار الاتصال بالإنترنت';
-
-  @override
-  String get syncStallAlertTitle => 'Omi لا يتزامن';
-
-  @override
-  String syncStallAlertBody(int hours) {
-    return 'لم تتم مزامنة أي تسجيلات من Omi الخاص بك لأكثر من $hours ساعة. افتح Omi للتحقق من اتصال جهازك.';
-  }
 
   @override
   String syncCardNeedsAttention(int count) {
@@ -13615,14 +13644,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get activityAttentionStorageSubtitle => 'تم إيقاف التسجيلات مؤقتًا';
 
   @override
-  String get activityAttentionSyncStalledTitle => 'Omi لا يتزامن';
-
-  @override
-  String activityAttentionSyncStalledSubtitle(int hours) {
-    return 'لم تتم مزامنة أي تسجيلات لأكثر من $hours ساعة';
-  }
-
-  @override
   String get activityAttentionUploadStalledTitle => 'توقف الرفع';
 
   @override
@@ -14647,6 +14668,120 @@ class AppLocalizationsAr extends AppLocalizations {
       one: 'إخفاء مقطع صوتي قصير واحد',
     );
     return '$_temp0';
+  }
+
+  @override
+  String deleteLocalRecordingsWarning(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'لم تُرفع $count تسجيلات بعد. سيؤدي حذفها الآن إلى فقدانها — اترك التطبيق مفتوحًا حتى يكتمل الرفع.',
+      one: 'لم يُرفع تسجيل واحد بعد. سيؤدي حذفه الآن إلى فقدانه — اترك التطبيق مفتوحًا حتى يكتمل الرفع.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConfirmGraceSubtitle => 'راجع ما سيحدث لبياناتك قبل المغادرة.';
+
+  @override
+  String get deletePauseConfirmation => 'تم إيقاف Omi مؤقتًا. يمكنك استئناف التسجيل في أي وقت.';
+
+  @override
+  String deleteProcessingKept(int count, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count تسجيلات لا تزال قيد المعالجة. سيُحتفظ بها في حسابك لمدة ',
+      one: 'لا يزال تسجيل واحد قيد المعالجة. سيُحتفظ به في حسابك لمدة ',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days يومًا.',
+      one: '1 يوم.',
+    );
+    return '$_temp0$_temp1';
+  }
+
+  @override
+  String deleteDataErasedAfterDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'سيتم محو ذكرياتك ومحادثاتك بعد $days يومًا.',
+      one: 'سيتم محو ذكرياتك ومحادثاتك بعد يوم واحد.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteAppsDisconnectImmediately => 'سيتم قطع الاتصال بتطبيقاتك وعمليات التكامل فورًا.';
+
+  @override
+  String get deleteSubscriptionImmediately => 'سيتم إلغاء اشتراكك فورًا.';
+
+  @override
+  String get deleteRestoreTitle => 'حسابك بانتظار الحذف';
+
+  @override
+  String get deleteRestoreSubtitle => 'هل غيّرت رأيك؟ استعد حسابك قبل محوه.';
+
+  @override
+  String get deleteRestoreKeepData => 'استعد ذكرياتك ومحادثاتك.';
+
+  @override
+  String get deleteRestoreBillingNotice => 'سيظل اشتراكك ملغى. أعد ربط التطبيقات وعمليات التكامل بعد استعادة حسابك.';
+
+  @override
+  String deleteRestoreDaysRemaining(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'لديك $days من الأيام المتبقية لاستعادة حسابك.',
+      one: 'لديك يوم واحد متبقٍ لاستعادة حسابك.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteRestoreButton => 'استعادة حسابي';
+
+  @override
+  String get deleteFinishButton => 'إنهاء الحذف';
+
+  @override
+  String get deleteFinishNowButton => 'محو حسابي الآن';
+
+  @override
+  String get deleteFinishNowWarning => 'سينهي هذا فترة الاستعادة. سيتم محو حسابك والتسجيلات الموجودة فيه نهائيًا.';
+
+  @override
+  String get deleteRestoreLessThanDayRemaining => 'لديك أقل من يوم لاستعادة حسابك.';
+
+  @override
+  String get deleteFinishNowTitle => 'حذف حسابك؟';
+
+  @override
+  String get syncHealthAlerts => 'تنبيهات سلامة المزامنة';
+
+  @override
+  String get syncHealthAlertsDescription => 'تنبيه إذا لم تتم مزامنة التسجيلات من Omi لأكثر من يوم';
+
+  @override
+  String get syncStallAlertTitle => 'Omi لا يتزامن';
+
+  @override
+  String syncStallAlertBody(int hours) {
+    return 'لم تتم مزامنة أي تسجيلات من Omi الخاص بك لأكثر من $hours ساعة. افتح Omi للتحقق من اتصال جهازك.';
+  }
+
+  @override
+  String get activityAttentionSyncStalledTitle => 'Omi لا يتزامن';
+
+  @override
+  String activityAttentionSyncStalledSubtitle(int hours) {
+    return 'لم تتم مزامنة أي تسجيلات لأكثر من $hours ساعة';
   }
 
   @override

@@ -439,6 +439,7 @@ and an explicit empty literal renders as `''`.
 
 | key | summary | surfaces | kind | fail | _base | dev | prod | PostHog row | decision | terminal | review_by | owner |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `ACCOUNT_DELETION_GRACE_ENABLED` | Default-on account deletion grace; explicit false restores immediate erasure | backend | env | open | — | — | — | — | keep | keep | — | unowned |
 | `ACTION_ITEMS_LIST_STALE_CLIENT_REFUSE` | Refuse stale action-items list clients | backend | env | open | — | — | 1 | — | keep | keep | — | unowned |
 | `ACTION_ITEM_SOURCE_LINKS_ENABLED` | Default on; shared app/tool create validates supplied conversation sources within the authenticated account | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `ADMIN_KEY_AUTH_ENABLED` | Allow administrator-key authentication | backend | env | open | — | — | — | — | keep | keep | — | unowned |
@@ -508,6 +509,9 @@ and an explicit empty literal renders as `''`.
 | `DREAM_GATEWAY_PROBE_ENABLED` | Default-on 3.8 reservation probe through the LLM gateway's reserved Dream route; 0/false/off/no makes no probe call and admission relies on fresh evidence from real Dream turns | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `DREAM_TELEMETRY_V2_ENABLED` | Default-on structured dream_pass/dream_sweep JSON records (counts, durations, uuid run/sweep ids, allowlisted labels); 0/false/off/no stops them, leaving the legacy text lines | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODES_ENABLED` | Default on unless set to a non-on value; live episodes overlay (per-moment gpt-5-nano update, provisional items, /v1/episodes capability). Off reports enabled=false and apps keep today's per-conversation UI | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `EPISODE_CARRY_ON_SESSION_END` | Default on; wait one moment-pause window after a pusher session ends, then flush its carried transcript if no reconnect arrives | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `EPISODE_HARD_CAP_ACROSS_CONVERSATIONS` | Default on; enforce the strict episode-wide hard cap during attachment and moment rotation, carrying the running summary and unresolved items to the successor | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `EPISODE_MOMENT_OUTPUT_VALIDATOR` | Default on; retry once when live moment bullets are mostly verbatim transcript or contain speaker labels | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `EPISODE_OUTPUT_LANGUAGE_PIN` | Default on unless set off (0/false/off/no); pins generated output to a safe language for live episodes, provisional topics, daily recaps, and proactive notifications; multi/auto captures use dominant in-memory segment language | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `FAIR_USE_ENABLED` | Enforce fair-use metering; set false to stop enforcement | backend | env | closed | — | true (backend-listen (chart)) | true (backend-listen (chart)) | — | keep | keep | — | unowned |
 | `FAIR_USE_KILL_SWITCH` | Emergency stop for fair-use enforcement | backend | env | inverted | — | false (backend-listen (chart)) | false (backend-listen (chart)) | — | keep | keep | — | unowned |
@@ -618,6 +622,7 @@ and an explicit empty literal renders as `''`.
 | key | summary | surfaces | kind | fail | _base | dev | prod | PostHog row | decision | terminal | review_by | owner |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `ACCOUNT_DELETION_DISPATCH_MODE` | Select Cloud Tasks for account deletion | backend | env | closed | — | — | cloud_tasks (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | keep | keep | — | unowned |
+| `ACCOUNT_DELETION_GRACE_WINDOW_DAYS` | Account deletion grace window in whole days; defaults to 14 and clamps to 0..365 | backend | env | open | — | — | — | — | keep | keep | — | unowned |
 | `ACTION_ITEM_VALIDITY_MODE_SERVE_PERCENT` | Consistent uid serving percentage for task validity shadow mode; default zero | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `ACTION_ITEM_VALIDITY_MODE_SERVE_UID_SHA256S` | Optional task validity serving uid digests; default empty | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `AUDIO_CLEANUP_HOLD_WINDOWS` | Inclusive capture preservation windows, comma-separated timezone-qualified start..end pairs; defaults to 2026-10-22T13:36:30Z..2026-10-24T07:16:00Z. Empty/malformed configuration holds cleanup | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
@@ -832,6 +837,8 @@ and an explicit empty literal renders as `''`.
 Env flags with no declaration in `runtime_env` or any chart; they run on
 their code default (`fail` tells you which way a missing value resolves).
 
+- `ACCOUNT_DELETION_GRACE_ENABLED` — Default-on account deletion grace; explicit false restores immediate erasure (fail: open)
+- `ACCOUNT_DELETION_GRACE_WINDOW_DAYS` — Account deletion grace window in whole days; defaults to 14 and clamps to 0..365 (fail: open)
 - `ACTION_ITEMS_V2_MODE` — Owner-involved commitments, social-intent admission and exact capture contradiction checks; default shadow (fail: closed)
 - `ACTION_ITEMS_V2_MODE_SERVE_PERCENT` — Serve cohort percentage; default zero (fail: closed)
 - `ACTION_ITEMS_V2_MODE_SERVE_UID_SHA256S` — Serve cohort digest selector; default empty (fail: closed)
@@ -957,6 +964,9 @@ their code default (`fail` tells you which way a missing value resolves).
 - `EPISODE_BOUNDARIES_MODE_SERVE_PERCENT` — Serve cohort percentage in shadow mode, default 0 (fail: closed)
 - `EPISODE_BOUNDARIES_MODE_SERVE_UID_SHA256S` — Serve cohort account digests in shadow mode, default empty; never raw account identifiers (fail: closed)
 - `EPISODE_BOUNDARIES_MODE_SHADOW_PERCENT` — Boundary evidence database writes sampled in shadow; default 5 percent, serve cohort always writes (fail: closed)
+- `EPISODE_CARRY_ON_SESSION_END` — Default on; wait one moment-pause window after a pusher session ends, then flush its carried transcript if no reconnect arrives (fail: open)
+- `EPISODE_HARD_CAP_ACROSS_CONVERSATIONS` — Default on; enforce the strict episode-wide hard cap during attachment and moment rotation, carrying the running summary and unresolved items to the successor (fail: open)
+- `EPISODE_MOMENT_OUTPUT_VALIDATOR` — Default on; retry once when live moment bullets are mostly verbatim transcript or contain speaker labels (fail: open)
 - `EPISODE_OUTPUT_LANGUAGE_PIN` — Default on unless set off (0/false/off/no); pins generated output to a safe language for live episodes, provisional topics, daily recaps, and proactive notifications; multi/auto captures use dominant in-memory segment language (fail: open)
 - `FIRESTORE_CACHE_ENABLED` — Enable Firestore response cache (fail: closed)
 - `FIRST_SUMMARY_DEADLINE_SECONDS` — First required summary dispatch budget; default 120 seconds, bounded 60 to 120 (fail: closed)
