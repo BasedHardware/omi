@@ -11896,5 +11896,7 @@
     "onTheWayDetailsForSupport": "समर्थनासाठी तपशील",
     "homeNoiseFoldHidden": "{count, plural, =1{1 लहान क्लिप लपवले आहे} other{{count} लहान क्लिप्स लपवली आहेत}}",
     "homeNoiseFoldShow": "दाखवा",
-    "homeNoiseFoldHide": "{count, plural, =1{1 लहान क्लिप लपवा} other{{count} लहान क्लिप्स लपवा}}"
+    "homeNoiseFoldHide": "{count, plural, =1{1 लहान क्लिप लपवा} other{{count} लहान क्लिप्स लपवा}}",
+    "dailyRecapsOnHome": "मुख्यपृष्ठावर दैनिक रीकॅप्स",
+    "dailyRecapsOnHomeDescription": "मुख्यपृष्ठाच्या वर तुमचे नवीनतम रीकॅप्स दाखवा."
 }

@@ -161,6 +161,8 @@ def test_default_budget_write_that_fits_is_exactly_the_unbounded_assignment(monk
     The unbounded run (budget lifted far past any document) is the pre-PR
     assignment: same canonical, receipt owner, donor redirect, index and rows.
     """
+    # Compare the byte-budget variants at the same hold-clock instant.
+    monkeypatch.setattr(assignment, 'time', SimpleNamespace(time=lambda: 1760000000.0))
     stored = 750 * 1024
     unbounded = _receipt_bridge_store(stored)
     with monkeypatch.context() as patch:
@@ -335,6 +337,8 @@ def test_full_explicit_live_target_is_left_untouched(monkeypatch, caplog):
 def test_full_smart_merge_survivor_keeps_its_donor_redirect(monkeypatch):
     store = StrictFirestore()
     _smart_merge_pair(store)
+    # A full parent must be larger than a fresh row including its hold receipt.
+    _row(store, 'p')['structured'] = {'overview': 'Retained synthetic summary. ' * 100}
     survivor, donor = deepcopy(_row(store, 'p')), deepcopy(_row(store, 'n'))
     monkeypatch.setattr(
         assignment, 'SYNC_CONVERSATION_BYTE_BUDGET', estimate_firestore_document_bytes(survivor, None) + 32

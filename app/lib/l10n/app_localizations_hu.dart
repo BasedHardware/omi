@@ -14790,4 +14790,10 @@ class AppLocalizationsHu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get dailyRecapsOnHome => 'Napi összefoglalók a Kezdőlapon';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'A legújabb összefoglalók megjelenítése a Kezdőlap tetején.';
 }

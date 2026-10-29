@@ -14726,4 +14726,10 @@ class AppLocalizationsSk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get dailyRecapsOnHome => 'Denné súhrny na domovskej obrazovke';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Zobraziť najnovšie súhrny v hornej časti domovskej obrazovky.';
 }

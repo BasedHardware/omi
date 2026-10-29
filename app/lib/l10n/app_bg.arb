@@ -4470,5 +4470,7 @@
     "onTheWayDetailsForSupport": "Подробности за поддръжката",
     "homeNoiseFoldHidden": "{count, plural, =1{Скрит е 1 кратък запис} other{Скрити кратки записи: {count}}}",
     "homeNoiseFoldShow": "Показвай",
-    "homeNoiseFoldHide": "{count, plural, =1{Скрий 1 кратък запис} other{Скрий кратки записи: {count}}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Скрий 1 кратък запис} other{Скрий кратки записи: {count}}}",
+    "dailyRecapsOnHome": "Дневни резюмета в Начало",
+    "dailyRecapsOnHomeDescription": "Показвай последните резюмета в горната част на Начало."
 }

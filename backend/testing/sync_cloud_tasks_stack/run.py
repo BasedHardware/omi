@@ -149,6 +149,39 @@ def _read_events(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def _processor_gate_diagnostics(state_dir: Path, deliveries: list[httpx.Response]) -> str:
+    """Bounded failure stages, never response text, paths or fixture identities."""
+    http_status = str(deliveries[0].status_code) if deliveries else 'pending'
+    response_status = 'unknown'
+    if deliveries:
+        with suppress(ValueError):
+            body = deliveries[0].json()
+            candidate = body.get('status') if isinstance(body, dict) else None
+            if isinstance(candidate, str) and candidate in {
+                'done',
+                'failed',
+                'locked',
+                'acked',
+                'retry',
+                'queued',
+                'processing',
+                'completed',
+                'partial',
+            }:
+                response_status = candidate
+    fields = [f'first_delivery_http={http_status}', f'first_delivery_status={response_status}']
+    for channel, stages in (
+        ('worker', ('local_oidc_verified',)),
+        ('providers', ('vad_result', 'stt_completed', 'processor_gate_entered', 'conversation_persisted')),
+    ):
+        try:
+            names = {row.get('event') for row in _read_events(state_dir / 'evidence' / f'{channel}.jsonl')}
+            fields.extend(f'{stage}={int(stage in names)}' for stage in stages)
+        except OSError:
+            fields.extend(f'{stage}=unknown' for stage in stages)
+    return ' '.join(fields)
+
+
 def postgres_requested() -> bool:
     return os.getenv('OMI_STACK_POSTGRES', '').strip().lower() in {'1', 'true', 'yes', 'on'}
 
@@ -163,6 +196,7 @@ class Stack:
         pre_ledger_failures: int = 0,
         post_ledger_failures: int = 0,
         cleanup_failures: int = 0,
+        hold_processor: bool = False,
         hold_worker_pipeline: bool = False,
         process_persistence_fenced: bool = False,
     ):
@@ -172,6 +206,7 @@ class Stack:
         self.storage_dir = state_dir / 'local-storage'
         # A retained --state-dir may contain an earlier run's entered/release
         # markers. Keep that evidence, but never treat it as this run's gate.
+        self.gate_dir = state_dir / f'processor-gate-{secrets.token_hex(8)}' if hold_processor else None
         self.pipeline_gate_dir = (
             state_dir / f'worker-pipeline-gate-{secrets.token_hex(8)}' if hold_worker_pipeline else None
         )
@@ -208,8 +243,9 @@ class Stack:
             raise StackFailure('FIRESTORE_EMULATOR_HOST must be loopback; run via run.sh')
         for directory in (self.logs_dir, self.evidence_dir, self.storage_dir):
             directory.mkdir(parents=True, exist_ok=True)
-        if self.pipeline_gate_dir is not None:
-            self.pipeline_gate_dir.mkdir(parents=True, exist_ok=True)
+        for gate_dir in (self.gate_dir, self.pipeline_gate_dir):
+            if gate_dir is not None:
+                gate_dir.mkdir(parents=True, exist_ok=True)
 
         # Inherit no provider keys, proxy configuration, ADC paths, or cloud CLI state.
         env = {key: os.environ[key] for key in ('PATH', 'LANG', 'LC_ALL', 'TZ', 'TMPDIR') if os.getenv(key)}
@@ -283,6 +319,7 @@ class Stack:
                 'OMI_SYNC_STACK_POST_LEDGER_FAILURES': str(self.post_ledger_failures),
                 'OMI_SYNC_STACK_CLEANUP_FAILURES': str(self.cleanup_failures),
                 'OMI_SYNC_STACK_PROCESS_PERSISTENCE_FENCED': ('true' if self.process_persistence_fenced else 'false'),
+                'OMI_SYNC_STACK_PROCESS_GATE_DIR': str(self.gate_dir) if self.gate_dir is not None else '',
                 'OMI_SYNC_STACK_WORKER_PIPELINE_GATE_DIR': (
                     str(self.pipeline_gate_dir) if self.pipeline_gate_dir is not None else ''
                 ),
@@ -935,6 +972,9 @@ def _retry_budget_terminalizes_truthfully(stack: Stack) -> None:
 
 
 def _concurrent_delivery_is_lease_fenced(stack: Stack) -> None:
+    """Prove the run lease fences duplicates before pipeline work and paid STT."""
+    if stack.gate_dir is None:
+        raise StackFailure('concurrent scenario requires a processor gate')
     if stack.pipeline_gate_dir is None:
         raise StackFailure('concurrent scenario requires a worker pipeline gate')
     uid = stack.scenario_uid('concurrent')
@@ -973,8 +1013,20 @@ def _concurrent_delivery_is_lease_fenced(stack: Stack) -> None:
         raise StackFailure(f'{error}; diagnostics={json.dumps(diagnostics, sort_keys=True)}') from error
     second = _deliver_task(task, retry_count=1)
     if second.status_code != 409 or second.json().get('status') != 'locked':
-        raise StackFailure('concurrent worker delivery did not observe the real run lock')
+        raise StackFailure('concurrent worker delivery did not observe the real run lock before pipeline work')
     (stack.pipeline_gate_dir / 'release').write_text('release', encoding='utf-8')
+    try:
+        _wait_until(lambda: (stack.gate_dir / 'entered').exists() or bool(first_result), label='first worker STT gate')
+    except StackFailure as exc:
+        raise StackFailure(f'{exc}; {_processor_gate_diagnostics(stack.state_dir, first_result)}') from None
+    if not (stack.gate_dir / 'entered').exists():
+        raise StackFailure(
+            'first worker returned before STT gate; ' + _processor_gate_diagnostics(stack.state_dir, first_result)
+        )
+    second = _deliver_task(task, retry_count=1)
+    if second.status_code != 409 or second.json().get('status') != 'locked':
+        raise StackFailure('concurrent worker delivery did not observe the real run lock while paid STT was held')
+    (stack.gate_dir / 'release').write_text('release', encoding='utf-8')
     thread.join(timeout=35.0)
     if thread.is_alive() or len(first_result) != 1:
         raise StackFailure('first gated worker delivery did not finish')
@@ -1079,6 +1131,7 @@ def _run_scenario(
     pre_ledger_failures: int = 0,
     post_ledger_failures: int = 0,
     cleanup_failures: int = 0,
+    hold_processor: bool = False,
     hold_worker_pipeline: bool = False,
     process_persistence_fenced: bool = False,
     scenario: Callable[[Stack], None],
@@ -1090,6 +1143,7 @@ def _run_scenario(
         pre_ledger_failures=pre_ledger_failures,
         post_ledger_failures=post_ledger_failures,
         cleanup_failures=cleanup_failures,
+        hold_processor=hold_processor,
         hold_worker_pipeline=hold_worker_pipeline,
         process_persistence_fenced=process_persistence_fenced,
     )
@@ -1142,7 +1196,10 @@ def main() -> int:
                 state_dir / 'terminal-failure', worker_failures=2, scenario=_retry_budget_terminalizes_truthfully
             )
             _run_scenario(
-                state_dir / 'concurrent', hold_worker_pipeline=True, scenario=_concurrent_delivery_is_lease_fenced
+                state_dir / 'concurrent',
+                hold_processor=True,
+                hold_worker_pipeline=True,
+                scenario=_concurrent_delivery_is_lease_fenced,
             )
             _run_scenario(
                 state_dir / 'nonprod-legacy-backfill',
@@ -1155,6 +1212,29 @@ def main() -> int:
             from .batch import run_batch_scenarios
 
             run_batch_scenarios(state_dir / 'batch')
+            # Keep the sparse-shard concurrency regression in the existing
+            # CI emulator gate, after the process-level batch scenarios drain.
+            subprocess.run(
+                [
+                    str(PYTHON),
+                    '-m',
+                    'pytest',
+                    '-p',
+                    'no:langsmith_plugin',
+                    '-q',
+                    '-rP',
+                    str(BACKEND / 'tests/integration/test_batch_pipeline_shard_spread_firestore.py'),
+                ],
+                cwd=ROOT,
+                env={
+                    **os.environ,
+                    'PYTHONPATH': str(BACKEND),
+                    'OPENAI_API_KEY': 'test-openai-key-not-real',
+                    'ENCRYPTION_SECRET': ENCRYPTION_SECRET,
+                },
+                timeout=240,
+                check=True,
+            )
         succeeded = True
         print(f'Sync Cloud Tasks stack gauntlet passed; sanitized evidence: {state_dir}')
         return 0

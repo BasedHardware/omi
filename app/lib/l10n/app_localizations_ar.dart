@@ -14648,4 +14648,10 @@ class AppLocalizationsAr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get dailyRecapsOnHome => 'الملخصات اليومية في الرئيسية';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'اعرض أحدث ملخصاتك أعلى الشاشة الرئيسية.';
 }

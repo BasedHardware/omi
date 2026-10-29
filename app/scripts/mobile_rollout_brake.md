@@ -34,6 +34,11 @@ halted release's What's New and append `BRAKE_NOTES_LINE` (replacing the last li
 appending would pass Play's 500-character limit) to en-US and to every locale
 holding the identical English text; real translations stay unchanged. Completed releases
 stay untouched. Read status of the halted code first and of the new code afterwards.
+The daily train has the narrower held-mode sibling of this operation (2026-10-29,
+`plan_held_supersede` in `mobile_daily_train.py`): while Play holds changes for review it
+replaces a train-written held (not halted) staged release with the gate-pinned newer
+build at the same fraction. A halted release still needs this brake — the train never
+touches one.
 
 Halt and resume change status only. Country-targeted mutations are explicitly unsupported:
 Play allows `countryTargeting` only on `inProgress` releases, and stripping it would change

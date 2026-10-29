@@ -14759,4 +14759,10 @@ class AppLocalizationsPt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get dailyRecapsOnHome => 'Resumos diários no Início';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Mostre seus resumos mais recentes no topo do Início.';
 }

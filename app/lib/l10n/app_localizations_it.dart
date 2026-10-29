@@ -14806,4 +14806,10 @@ class AppLocalizationsIt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get dailyRecapsOnHome => 'Riepiloghi giornalieri nella Home';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Mostra i riepiloghi più recenti in cima alla Home.';
 }

@@ -742,8 +742,18 @@ is unknown. Both block widening. Include transferred donor speech in both the
 doubled-speech numerator and denominator, counted once per source segment. Sum
 `appended_seconds_overlapping_live` plus `donor_seconds_retained_overlapping_live`
 for the numerator, and `appended_seconds` plus `donor_seconds_retained` for the
-denominator. Incomplete or missing measurements block widening;
-bridge observations have a separate denominator from resolver decisions and
+denominator. Incomplete or missing measurements block widening.
+Both legacy intake and batch projection emit fresh append and stamp markers
+through one post-commit consumer. Append timing observes final survivors
+independently of the dedupe policy, including fleet safety dedupe. Filter append
+lines to `lineage_admitted=true` for the cohort widening formula. On cohort live
+targets, capture-proof plus lexical lineage dedupe composes with fleet fuzzy
+dedupe: lineage lexical drops and exact retries run first, then the unchanged
+fleet pass runs on their survivors. Refactor proposals may not override lineage
+lexical abstentions; non-cohort fleet policy is unchanged.
+Finite zero-length donor intervals contribute zero seconds without invalidating
+the bridge; inverted/nonfinite donor timing remains unknown.
+Bridge observations have a separate denominator from resolver decisions and
 new-row observations. Field values and caps live in
 [`utils/sync/ARCHITECTURE.md`](../utils/sync/ARCHITECTURE.md).
 
@@ -752,10 +762,12 @@ outcomes `created_clear|created_overlap|created_unknown`. Only lineage-admitted,
 S1-validated creates emit; unknown includes a closed `incomplete_reason` field,
 and every reason remains unmeasured and blocks widening. Clear/overlap omit it.
 Classification reuses assignment's transactional read cache. A lineage-eligible
-stamp-gap reroute with retained new speech first runs bounded metadata discovery
+stamp-gap reroute with retained new speech, or a rejected explicit target falling
+to temporal assignment, first runs bounded metadata discovery
 once outside the transaction, then restarts with its candidate hints and diagnostics.
 The reroute rechecks all fences and live candidates transactionally, using the same
-live-overlap selector as untargeted intake. Targets that remain valid and repeat-only
+bounded lookup as untargeted intake. Candidate hints are observation-only and
+never become reroute targets. Retained explicit targets and stamp-gap repeat-only
 acknowledgments add no discovery query. Creates that never run discovery report
 `discovery_skipped`; `not_recorded` is reserved for missing diagnostics. See `utils/sync/ARCHITECTURE.md` for the closed count buckets and
 lookup-completeness rules and ordered reason set.
@@ -6152,6 +6164,23 @@ budget checks precede each percentage flip. Close admission everywhere to roll
 back, retaining worker, integration and recovery drain paths. Unsetting producer
 flags does not remove persisted label authority or reset paid recovery intents.
 
+### Batch pull shard ownership
+
+`BATCH_SHARD_SPREAD_ENABLED` defaults on. Pullers first acquire a separate,
+token-fenced 30-second claim for a control shard using a single conditional
+create/update-time write (no transaction retry loop), then verify it in the actual
+queue/job transaction. A successful pull (including an owned empty/blocked
+visit) releases the claim atomically with its metadata changes. A crashed or
+failed pull leaves it for bounded expiry; a resumed old token cannot mutate
+the queue after takeover. Claim hints are read-only and never authorize work.
+Equal-service shards use a stable hash of the scheduler instance and shard;
+virtual service remains the first ordering key, DRR and privacy/cap/job fences
+remain authoritative, and a busy fresh shard cannot cause a backfill bypass.
+Contention logs use bounded `operation=batch_claim|batch_pull` and
+`shard=scheduler_NN` fields. No user or worker IDs are logged. Set
+`worker.shardSpreadEnabled=false` in the worker Helm values to restore legacy
+selection; the lead owns deployment and live contention qualification.
+
 ### Batch projection contention and replay
 
 `BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED=false` is a dark control on integration.
@@ -7814,3 +7843,66 @@ regardless of V2 mode, preserving prior tasks and retryability. Conversion keeps
 existing valid cited IDs; staged provenance is not invented. No source-less history
 or old descriptions are rewritten. The reported null-row writer and staged source
 lineage remain evidence work under ANX step `fbreview-p4-task-integrity-1028`.
+
+### Sync full-processing settle window (occasion architecture step 1)
+
+`SYNC_PROCESSING_HOLD_ENABLED` is a default-on kill switch. WAL assignment stamps
+`sync_processing_hold.pending_since` and `last_content_at` in the existing
+content-revision transaction. Sync enrichment enrolls the durable enrichment
+outbox, waits 600 seconds after the last content append or smart merge, and
+rechecks the current row before any full notes/title/memory/task work. The
+shared outbox remains production/emulator-only; dev hosts keep local eager
+processing rather than writing the production outbox. The first pending instant bounds the wait to 3600 seconds even with continuous
+uploads. The existing rule-discard, live-in-progress, deletion, lease, account
+and revision fences still apply. Cheap server-minimum titles and episode
+attachment stay at intake.
+
+A held donor's worker transfers custody to its canonical parent before
+acknowledging; it never processes the donor. Smart-merge survivor refreshes
+for sync-touched rows hand off to this same outbox, then persist a
+`smart_merge.delegated_revision` receipt. Only that committed handoff permits
+another absorb while a refresh is owed. The settled worker still uses the
+smart-merge refresh lease, processing checkpoint and vector completion. Ordinary
+live-only refreshes retain their existing path. This step does not move the
+smart-merge decision before the donor's first processing; that is step 2.
+
+Successful automatic processing stores a content digest, word count and union
+speech duration in `sync_processing_hold.full_snapshot`, after processing and its existing effects return, through a
+revision-fenced completion transaction that rechecks the account-deletion marker before writing. Failures retain the normal retry debt. A paid-budget denial on an already summarized row reschedules the held obligation, preserving the only wake for late content until funding allows processing. Raw captures keep the existing budget-waiting/backlog-choice path. Unchanged content buys no further run. Late content
+must add at least 30 seconds of speech or 80 words; it receives the same quiet
+window and at most one automatic re-finalization per canonical conversation.
+Small changes accumulate against the last processed snapshot. Explicit Process
+Now, client finalize, first-open and user reprocess retain their immediate
+paths and satisfy a pending hold when they succeed, without consuming the automatic late budget. A full snapshot receipt survives lost outbox acknowledgements and
+subsequent appends. Content is always retained even after the automatic cap.
+
+Lazy memory/task effects reload the row and defer while its sync hold remains
+active, including when late content arrives near the old effects deadline.
+Passing the quiet deadline alone is insufficient: full processing must settle
+first. Demand priority cannot bypass this prerequisite. A new settled effects
+mark clears the deferral and uses the updated notes/transcript fingerprint.
+
+No current WAL producer provides a contiguous device upload watermark. A
+future `sync_processing_hold.upload_watermark_at`, if supplied, must pass
+`finished_at + 600 seconds`; a lagging value waits up to the same maximum hold.
+Until that producer exists, quiet time plus the hard ceiling are the available
+settling evidence; one uploaded file is never treated as a watermark.
+
+Rollback: set `SYNC_PROCESSING_HOLD_ENABLED=false`. New intake resumes legacy
+coalescing configuration. On its next bounded discovery pass, the sweeper
+shortens queued holds to now and rotates their future task names, preserving
+active leases and unrelated schedules. Successful automatic and explicit
+processing still settle existing hold receipts with the switch off so lazy
+effects can resume. Smart-merge refresh returns to its immediate path.
+No backfill or historical-data mutation is required.
+
+`omi_sync_processing_hold_total{outcome}` reports bounded admission outcomes
+(`quiet_wait`, `watermark_wait`, `ready`, `max_hold`, `unchanged`, `immaterial`,
+`late_cap`). Existing notes-agent metrics lack a source/conversation dimension
+and Cloud Run sync does not export their run counter to this Prometheus scrape;
+they cannot reconstruct a historical sync/live runs-per-final multiplier.
+
+Home acceptance remains occasion architecture step 3b: intake still stores its
+legacy completed minimum, so released clients can show a held piece as a
+finished row. This backend change does not claim to fix that UI or to prevent
+smart merges after a row has been seen. No UI is changed here.

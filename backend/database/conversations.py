@@ -1,5 +1,6 @@
 from database import conversation_visibility_counts, processing_backlog, speaker_auto_enroll, capture_group_notes
 from utils.conversations import summary_delivery, lifecycle_clocks
+from utils.sync import processing_hold
 from config.refactor_modes import serving_for, shadow_or_serve
 import copy
 import hashlib
@@ -70,6 +71,7 @@ from .conversation_revisions import ensure_timezone_aware, firestore_revision_da
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from .people_stats_cache import invalidate_people_stats_cache
 from .read_boundary import parse_payload_strict
+from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from utils.other.list_budget import (
     ListReadBudget,
     ListReadBudgetExhausted,
@@ -4590,3 +4592,47 @@ def promote_final_pass_if_current(
     if written:
         invalidate_people_stats_cache(uid)
     return bool(written)
+
+
+def complete_sync_processing_hold(
+    uid: str,
+    conversation_id: str,
+    expected_revision: int | None,
+    snapshot: dict | None,
+    *,
+    automatic: bool = True,
+    firestore_client: Any = None,
+) -> bool:
+    """Finish a hold epoch only after processing and its existing effects succeeded.
+
+    A failure before this receipt leaves normal worker retries owed. A newer
+    append wins; completing an older run cannot clear its quiet/max-hold clock.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
+
+    deletion = client.collection('account_deletions').document(uid)
+
+    @firestore.transactional
+    def finish(transaction):
+        existing = ref.get(transaction=transaction).to_dict() or {}
+        deleting = deletion.get(transaction=transaction)
+        deletion_status = normalize_account_deletion_status(
+            marker_exists=deleting.exists, raw_status=(deleting.to_dict() or {}).get('wipe_status')
+        )
+        if (
+            account_deletion_blocks_access(deletion_status)
+            or not existing
+            or existing.get('deleted')
+            or existing.get('sync_content_revision') != expected_revision
+        ):
+            return False
+        state = dict(existing.get(processing_hold.FIELD) or {})
+        if snapshot is not None:
+            state = processing_hold.completion_patch(existing, snapshot, automatic=automatic)
+        else:
+            state.update(pending_since=None, held=False)
+        transaction.update(ref, {processing_hold.FIELD: state})
+        return True
+
+    return run_transactional(client, finish)

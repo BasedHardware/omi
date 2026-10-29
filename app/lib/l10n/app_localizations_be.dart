@@ -14765,4 +14765,10 @@ class AppLocalizationsBe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get dailyRecapsOnHome => 'Штодзённыя рэзюмэ на галоўнай';
+
+  @override
+  String get dailyRecapsOnHomeDescription => 'Паказваць апошнія рэзюмэ ўверсе галоўнай.';
 }

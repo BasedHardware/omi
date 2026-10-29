@@ -4505,5 +4505,7 @@
     "onTheWayDetailsForSupport": "Detail untuk dukungan",
     "homeNoiseFoldHidden": "{count, plural, =1{1 klip pendek disembunyikan} other{{count} klip pendek disembunyikan}}",
     "homeNoiseFoldShow": "Tampilkan",
-    "homeNoiseFoldHide": "{count, plural, =1{Sembunyikan 1 klip pendek} other{Sembunyikan {count} klip pendek}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Sembunyikan 1 klip pendek} other{Sembunyikan {count} klip pendek}}",
+    "dailyRecapsOnHome": "Ringkasan Harian di Beranda",
+    "dailyRecapsOnHomeDescription": "Tampilkan ringkasan terbaru di bagian atas Beranda."
 }

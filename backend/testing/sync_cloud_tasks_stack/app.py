@@ -241,6 +241,8 @@ elif ROLE == 'worker':
     _post_ledger_failures_remaining = _nonnegative_int('OMI_SYNC_STACK_POST_LEDGER_FAILURES')
     _cleanup_failures_remaining = _nonnegative_int('OMI_SYNC_STACK_CLEANUP_FAILURES')
     _process_persistence_fenced = os.getenv('OMI_SYNC_STACK_PROCESS_PERSISTENCE_FENCED', 'false').lower() == 'true'
+    _process_gate_dir_raw = os.getenv('OMI_SYNC_STACK_PROCESS_GATE_DIR', '').strip()
+    _process_gate_dir = Path(_process_gate_dir_raw) if _process_gate_dir_raw else None
     _worker_pipeline_gate_dir_raw = os.getenv('OMI_SYNC_STACK_WORKER_PIPELINE_GATE_DIR', '').strip()
     _worker_pipeline_gate_dir = Path(_worker_pipeline_gate_dir_raw) if _worker_pipeline_gate_dir_raw else None
 
@@ -261,6 +263,9 @@ elif ROLE == 'worker':
     def _local_prerecorded(audio_url: str, *, return_language: bool = False, **_kwargs: Any) -> Any:
         """Deterministic STT leaf; it emits no transcript into evidence."""
         job_id = audio_url.rsplit('/', 1)[-1]
+        # The upload worker owns paid STT. Full note processing can be held
+        # for merge settlement and no longer runs inside this worker lease.
+        _wait_for_process_gate(job_id)
         write_event('providers', {'event': 'stt_completed', 'job_id': job_id, 'word_count': 1})
         words = [
             {
@@ -270,6 +275,20 @@ elif ROLE == 'worker':
             }
         ]
         return (words, 'en') if return_language else words
+
+    def _wait_for_process_gate(job_id: str) -> None:
+        if _process_gate_dir is None:
+            return
+        _process_gate_dir.mkdir(parents=True, exist_ok=True)
+        entered = _process_gate_dir / 'entered'
+        release = _process_gate_dir / 'release'
+        entered.write_text('entered', encoding='utf-8')
+        write_event('providers', {'event': 'processor_gate_entered', 'job_id': job_id})
+        deadline = time.monotonic() + 15.0
+        while not release.exists():
+            if time.monotonic() >= deadline:
+                raise RuntimeError('controlled Sync processor gate timed out')
+            time.sleep(0.01)
 
     async def _wait_for_worker_pipeline_gate() -> None:
         if _worker_pipeline_gate_dir is None:

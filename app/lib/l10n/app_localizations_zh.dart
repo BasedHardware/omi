@@ -14504,4 +14504,10 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get dailyRecapsOnHome => '首页每日回顾';
+
+  @override
+  String get dailyRecapsOnHomeDescription => '在首页顶部显示最新的回顾。';
 }

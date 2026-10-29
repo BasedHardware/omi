@@ -18010,5 +18010,13 @@
                 "type": "int"
             }
         }
+    },
+    "dailyRecapsOnHome": "Daily Recaps on Home",
+    "@dailyRecapsOnHome": {
+        "description": "Developer Settings toggle title: show the Daily Recaps row on Home"
+    },
+    "dailyRecapsOnHomeDescription": "Show your latest recaps at the top of Home.",
+    "@dailyRecapsOnHomeDescription": {
+        "description": "Subtitle for the Daily Recaps on Home toggle in Developer Settings"
     }
 }

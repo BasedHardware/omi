@@ -17,6 +17,7 @@ import 'package:omi/pages/conversations/on_the_way_page.dart';
 import 'package:omi/pages/conversations/sync_pending_work.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart' show NoConversationsHero;
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
+import 'package:omi/pages/home/widgets/home_daily_recaps_setting.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -582,6 +583,9 @@ void main() {
       final screen = await tester.runAsync(
         () => buildTypedConversationScreen(provider, sync: sync, loadRecaps: recaps),
       );
+      // Daily Recaps on Home is opt-in; these cases check where the row sits when it is on.
+      HomeDailyRecapsSetting.enabled = true;
+      addTearDown(() => HomeDailyRecapsSetting.enabled = false);
       await tester.pumpWidget(screen!);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
