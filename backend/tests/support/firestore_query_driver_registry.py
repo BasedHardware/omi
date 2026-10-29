@@ -192,7 +192,7 @@ BODY_DIGEST = {
     # Encoded-size preflight and the size backstop add no serving query; the
     # discarded-barrier scan is still covered by the same two driven callees.
     # Recorded-span recomputation is pure; barrier queries still run under the covered callees.
-    'database.smart_merge.absorb_conversation': 'e935f2e46c78c37727b0f1e3c392db1807d71a95af6cdf04715b5c7016021e31',
+    'database.smart_merge.absorb_conversation': '531806c3dc28aa6d728effd0a0ff8037b7621128037ed7350cf06beb3bd5674b',
     'database.client_telemetry.recent_owner_ids': '65fe8200d7ad9418b793ccb0fa53a172b2576a80bba644caa3b36cdb53b74510',
     'database.client_telemetry_ops.purge_expired_observations': '8526c30b11ad8548356a136220232a607937bc464628c0eb5326e0a2e928897f',
     # Open-loop store: whole-subcollection stream by document id, filtered in Python.
