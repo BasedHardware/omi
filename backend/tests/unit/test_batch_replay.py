@@ -5,12 +5,13 @@ import hashlib
 import hmac
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from testing.batch_replay.capture import sanitize
 from testing.batch_replay.gate import compare
-from testing.batch_replay.runner import replay
+from testing.batch_replay.runner import geometry_boundaries, replay
 
 
 def test_capture_constructs_allowlist_and_hashes_related_identities():
@@ -81,6 +82,18 @@ def test_gate_accepts_an_earlier_head_fix_that_exposes_a_later_existing_block():
         'chain_blocks': [{'owner': 'owner', 'head': 'b', 'blocked_units': 2, 'units': ['b', 'c']}],
     }
     assert not compare(candidate, baseline)['regression']
+
+
+def test_boundary_oracle_rejects_validators_that_accept_invalid_geometry():
+    source = SimpleNamespace(MAGIC=b'synthetic', materialize=lambda *args: b'')
+
+    def item(sid, owner, capture, uri, duration, priority, **kwargs):
+        return SimpleNamespace(owner_id=owner, capture_at=capture, **kwargs)
+
+    result = geometry_boundaries([{'duration': 1.0}], lambda *args: [], source, item, None)
+    assert result['expected_rejections'] == 0
+    assert len(result['failures']) == 4
+    assert all(failure['exception'] == 'MissingExpectedRejection' for failure in result['failures'])
 
 
 @pytest.fixture
