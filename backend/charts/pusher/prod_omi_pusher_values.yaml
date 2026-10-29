@@ -608,7 +608,12 @@ startupProbe:
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
-  minReplicas: 12
+  # 2026-10-29 retire100: mirror the post-queue-storm operating floor. The 10-28
+  # live-only raise (12 -> 36) handled the sync-jobs-fresh 4.5k spike; depth is
+  # back to ~1.5k and batch at 100% collapses the fresh queue's input. 16 keeps
+  # headroom over the old 12 while n2rescue drains. Rollback: restore 12 (36 if
+  # the storm returns).
+  minReplicas: 16
   maxReplicas: 40
   behavior:
     scaleDown:
