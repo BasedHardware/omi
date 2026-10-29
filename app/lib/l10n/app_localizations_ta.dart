@@ -14982,6 +14982,59 @@ class AppLocalizationsTa extends AppLocalizations {
   String get dailyRecapsOnHomeDescription => 'முகப்பின் மேலே உங்கள் சமீபத்திய சுருக்கங்களைக் காட்டு.';
 
   @override
+  String get yearlySwitchTitle => 'ஆண்டுக்கு மாறவும்';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'ஆண்டுக்கு $amount சேமிக்கவும்';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'ஆண்டுக் கட்டணத்தில் ஆண்டுக்கு $amount சேமிக்கவும்';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'அதே திட்டம், ஆண்டுக்கு ஒருமுறை கட்டணம்';
+
+  @override
+  String get yearlySwitchPlanLabel => 'திட்டம்';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, ஆண்டுக்கு $price';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'இன்று செலுத்த வேண்டியது';
+
+  @override
+  String get yearlySwitchRenews => 'புதுப்பிப்பு';
+
+  @override
+  String get yearlySwitchCreditNote => 'இந்த மாதத்தின் மீதி நாட்களுக்கான கிரெடிட் சேர்க்கப்பட்டுள்ளது.';
+
+  @override
+  String get yearlySwitchDeclined => 'கட்டணம் நிராகரிக்கப்பட்டது. நீங்கள் இன்னும் மாதாந்திர திட்டத்தில் உள்ளீர்கள்.';
+
+  @override
+  String get yearlySwitchFailed => 'மாற்ற முடியவில்லை. நீங்கள் இன்னும் மாதாந்திர திட்டத்தில் உள்ளீர்கள்.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'உங்கள் விலையை ஏற்ற முடியவில்லை.';
+
+  @override
+  String get yearlySwitchUnavailable => 'இப்போது உங்கள் திட்டத்திற்கு ஆண்டுக் கட்டணம் கிடைக்கவில்லை.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'நீங்கள் இப்போது ஆண்டுத் திட்டத்தில் உள்ளீர்கள்';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'இன்று $amount வசூலிக்கப்பட்டது. புதுப்பிப்பு $date.';
+  }
+
+  @override
   String get paymentDeclinedTitle => 'உங்கள் கார்டு நிராகரிக்கப்பட்டது';
 
   @override

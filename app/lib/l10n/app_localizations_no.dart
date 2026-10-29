@@ -14883,6 +14883,59 @@ class AppLocalizationsNo extends AppLocalizations {
   String get dailyRecapsOnHomeDescription => 'Vis de nyeste oppsummeringene øverst på Hjem.';
 
   @override
+  String get yearlySwitchTitle => 'Bytt til årlig';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Spar $amount i året';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Spar $amount i året med årlig betaling';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Samme abonnement, betalt én gang i året';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Abonnement';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price i året';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Forfaller i dag';
+
+  @override
+  String get yearlySwitchRenews => 'Fornyes';
+
+  @override
+  String get yearlySwitchCreditNote => 'Inkluderer kreditt for resten av denne måneden.';
+
+  @override
+  String get yearlySwitchDeclined => 'Betalingen ble avvist. Du betaler fortsatt månedlig.';
+
+  @override
+  String get yearlySwitchFailed => 'Kunne ikke bytte. Du betaler fortsatt månedlig.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Kunne ikke laste inn prisen.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Årlig betaling er ikke tilgjengelig for abonnementet ditt akkurat nå.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Du betaler nå årlig';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return '$amount belastet i dag. Fornyes $date.';
+  }
+
+  @override
   String get paymentDeclinedTitle => 'Kortet ditt ble avvist';
 
   @override

@@ -14954,6 +14954,59 @@ class AppLocalizationsCa extends AppLocalizations {
   String get dailyRecapsOnHomeDescription => 'Mostra els teus resums més recents a dalt de l\'Inici.';
 
   @override
+  String get yearlySwitchTitle => 'Canvia a anual';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Estalvia $amount l\'any';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Estalvia $amount l\'any amb el pagament anual';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'El mateix pla, un sol pagament l\'any';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Pla';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price l\'any';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'A pagar avui';
+
+  @override
+  String get yearlySwitchRenews => 'Es renova';
+
+  @override
+  String get yearlySwitchCreditNote => 'Inclou crèdit per a la resta d\'aquest mes.';
+
+  @override
+  String get yearlySwitchDeclined => 'Pagament rebutjat. Continues amb el pagament mensual.';
+
+  @override
+  String get yearlySwitchFailed => 'No s\'ha pogut canviar. Continues amb el pagament mensual.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'No s\'ha pogut carregar el preu.';
+
+  @override
+  String get yearlySwitchUnavailable => 'El pagament anual no està disponible per al teu pla ara mateix.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Ara pagues anualment';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Avui s\'han cobrat $amount. Es renova el $date.';
+  }
+
+  @override
   String get paymentDeclinedTitle => 'La teva targeta ha estat rebutjada';
 
   @override

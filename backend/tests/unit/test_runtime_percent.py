@@ -161,7 +161,8 @@ def test_event_loop_cold_path_never_blocks(monkeypatch, clock):
     async def call():
         return rp.runtime_percent('batch-pipeline', env_default=5.0)
 
-    assert asyncio.run(call()) == 5.0  # read scheduled, not awaited
+    assert asyncio.run(call()) == 0.0  # pending remote state cannot admit via a stale env fallback
+    assert rp.ramp_snapshot().source == 'pending'
     assert len(submitted) == 1
     submitted[0]()
     assert rp.runtime_percent('batch-pipeline', env_default=5.0) == 10.0

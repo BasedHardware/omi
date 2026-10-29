@@ -14998,6 +14998,59 @@ class AppLocalizationsTl extends AppLocalizations {
   String get dailyRecapsOnHomeDescription => 'Ipakita ang pinakabagong recaps sa itaas ng Home.';
 
   @override
+  String get yearlySwitchTitle => 'Lumipat sa Taunan';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Makatipid ng $amount bawat taon';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Makatipid ng $amount bawat taon kapag taunan';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Parehong plan, isang bayad bawat taon';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Plan';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price bawat taon';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Babayaran ngayon';
+
+  @override
+  String get yearlySwitchRenews => 'Magre-renew';
+
+  @override
+  String get yearlySwitchCreditNote => 'Kasama ang credit para sa natitirang bahagi ng buwang ito.';
+
+  @override
+  String get yearlySwitchDeclined => 'Tinanggihan ang bayad. Buwanan ka pa rin.';
+
+  @override
+  String get yearlySwitchFailed => 'Hindi nakalipat. Buwanan ka pa rin.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Hindi ma-load ang presyo mo.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Hindi pa available ang taunang bayad para sa plan mo ngayon.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Taunan ka na';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return '$amount ang siningil ngayon. Magre-renew sa $date.';
+  }
+
+  @override
   String get paymentDeclinedTitle => 'Tinanggihan ang iyong card';
 
   @override

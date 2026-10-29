@@ -14918,6 +14918,59 @@ class AppLocalizationsNl extends AppLocalizations {
   String get dailyRecapsOnHomeDescription => 'Toon je nieuwste samenvattingen bovenaan Home.';
 
   @override
+  String get yearlySwitchTitle => 'Overstappen naar jaarlijks';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'Bespaar $amount per jaar';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'Bespaar $amount per jaar met jaarlijks betalen';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'Hetzelfde abonnement, één keer per jaar betaald';
+
+  @override
+  String get yearlySwitchPlanLabel => 'Abonnement';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price per jaar';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'Vandaag te betalen';
+
+  @override
+  String get yearlySwitchRenews => 'Verlengt';
+
+  @override
+  String get yearlySwitchCreditNote => 'Inclusief tegoed voor de rest van deze maand.';
+
+  @override
+  String get yearlySwitchDeclined => 'Betaling geweigerd. Je betaalt nog steeds maandelijks.';
+
+  @override
+  String get yearlySwitchFailed => 'Overstappen is niet gelukt. Je betaalt nog steeds maandelijks.';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'Je prijs kon niet worden geladen.';
+
+  @override
+  String get yearlySwitchUnavailable => 'Jaarlijks betalen is nu niet beschikbaar voor je abonnement.';
+
+  @override
+  String get yearlySwitchDoneTitle => 'Je betaalt nu jaarlijks';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'Vandaag $amount afgeschreven. Verlengt op $date.';
+  }
+
+  @override
   String get paymentDeclinedTitle => 'Uw kaart is geweigerd';
 
   @override

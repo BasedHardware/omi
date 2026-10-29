@@ -687,9 +687,6 @@ overlay:
           BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED:
             value: 'false'
             category: rollout
-          BATCH_PIPELINE_PERCENT:
-            value: '0'
-            category: rollout
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
             value: 'false'
             category: rollout
@@ -996,9 +993,6 @@ overlay:
             category: rollout
           BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED:
             value: 'false'
-            category: rollout
-          BATCH_PIPELINE_PERCENT:
-            value: '0'
             category: rollout
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
             value: 'false'
@@ -1329,9 +1323,6 @@ overlay:
           BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED:
             value: 'false'
             category: rollout
-          BATCH_PIPELINE_PERCENT:
-            value: '0'
-            category: rollout
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
             value: 'false'
             category: rollout
@@ -1613,9 +1604,6 @@ overlay:
             category: rollout
           BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED:
             value: 'true'
-            category: rollout
-          BATCH_PIPELINE_PERCENT:
-            value: '0'
             category: rollout
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
             value: 'true'

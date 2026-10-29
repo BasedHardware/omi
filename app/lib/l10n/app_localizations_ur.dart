@@ -14891,6 +14891,59 @@ class AppLocalizationsUr extends AppLocalizations {
   String get dailyRecapsOnHomeDescription => 'ہوم کے اوپر اپنے تازہ ترین خلاصے دکھائیں۔';
 
   @override
+  String get yearlySwitchTitle => 'سالانہ پر منتقل کریں';
+
+  @override
+  String yearlySwitchRowSavings(String amount) {
+    return 'سال میں $amount بچائیں';
+  }
+
+  @override
+  String yearlySwitchHomeTitle(String amount) {
+    return 'سالانہ ادائیگی سے سال میں $amount بچائیں';
+  }
+
+  @override
+  String get yearlySwitchHomeSubtitle => 'وہی پلان، سال میں ایک بار ادائیگی';
+
+  @override
+  String get yearlySwitchPlanLabel => 'پلان';
+
+  @override
+  String yearlySwitchPlanValue(String plan, String price) {
+    return '$plan، سالانہ $price';
+  }
+
+  @override
+  String get yearlySwitchDueToday => 'آج واجب الادا';
+
+  @override
+  String get yearlySwitchRenews => 'تجدید';
+
+  @override
+  String get yearlySwitchCreditNote => 'اس مہینے کے باقی دنوں کا کریڈٹ شامل ہے۔';
+
+  @override
+  String get yearlySwitchDeclined => 'ادائیگی مسترد ہو گئی۔ آپ اب بھی ماہانہ پلان پر ہیں۔';
+
+  @override
+  String get yearlySwitchFailed => 'تبدیلی نہیں ہو سکی۔ آپ اب بھی ماہانہ پلان پر ہیں۔';
+
+  @override
+  String get yearlySwitchPreviewFailed => 'آپ کی قیمت لوڈ نہیں ہو سکی۔';
+
+  @override
+  String get yearlySwitchUnavailable => 'اس وقت آپ کے پلان کے لیے سالانہ بلنگ دستیاب نہیں ہے۔';
+
+  @override
+  String get yearlySwitchDoneTitle => 'اب آپ سالانہ پلان پر ہیں';
+
+  @override
+  String yearlySwitchDoneBody(String amount, String date) {
+    return 'آج $amount وصول کیے گئے۔ تجدید $date کو۔';
+  }
+
+  @override
   String get paymentDeclinedTitle => 'آپ کا کارڈ مسترد ہو گیا';
 
   @override
