@@ -220,7 +220,7 @@ def test_absorb_commit_aborted_by_real_sync_rejects_then_converges(sdk_world):
 def sdk_bridge_world(sdk_world, monkeypatch):
     test = sdk_world
     world = test.world
-    world.add('d', 21, 2, sync_content_revision=1)
+    world.add('d', 21, 2, sync_content_revision=1, structured={})
     _seed_index(world, 'd')
     for cid in ('p', 'n', 'd'):
         world.raw(cid)['private_cloud_sync_enabled'] = True

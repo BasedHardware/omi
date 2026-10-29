@@ -35,7 +35,16 @@ record. Live transcription is a preview; the batch result is the record.
 - **Projection**: `projection.py:Projector` follows the capture-ordered log from
   `merge.py:OrderedMerge`; late captures keep their clock and append after the
   committed tail. Per-part receipts in `projection_parts.py`; only complete
-  multipart projection advances the owner cursor.
+  multipart projection advances the owner cursor. A chain head nothing can
+  resolve takes the held disposition instead of wedging every later capture:
+  structural record-target conflicts (strike rule,
+  `utils/sync/assignment_errors.py`), ambiguous generation, and committed
+  payloads that violate the result/manifest contract (`ValueError` from spans,
+  split, word bounding or source decode; Firestore contention-shaped
+  `ValueError` stays retryable). Fresh awaiting-writer conflicts keep waiting
+  for their writer; `tests/unit/test_pipeline_sim_poison_head.py` pins every
+  kind, and `tests/unit/test_batch_projection_exception_taxonomy.py` fails
+  when a new raise site appears without a disposition.
 - **Contention**: `database/batch_pipeline_store.py:FirestoreStore.run` retries
   fresh Firestore transaction IDs on explicit `Aborted` contention and expired
   transaction errors (up to five chains; expired chains keep the three-chain

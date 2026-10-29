@@ -14,6 +14,7 @@ import os
 from typing import Any
 
 from prometheus_client import Counter, REGISTRY
+from config.merge_before_processing import enabled as merge_before_processing_enabled
 from utils.observability.reasons import ReasonFamily, SyncProcessingHoldOutcome, reason_label
 
 QUIET_SECONDS = 600
@@ -49,6 +50,20 @@ def record(outcome: str) -> None:
 
 def enabled() -> bool:
     return os.getenv('SYNC_PROCESSING_HOLD_ENABLED', 'true').strip().lower() not in {'false', '0', 'off', 'no'}
+
+
+def enabled_for(row: Mapping[str, Any]) -> bool:
+    # Outbox/context provenance owns this epoch. A mixed obligation remains
+    # held while either independently enabled producer still needs its window.
+    if 'sync_hold' in row:
+        sync_requested = row.get('sync_hold_requested') or not row.get('merge_hold')
+        return bool((row.get('merge_hold') and merge_before_processing_enabled()) or (sync_requested and enabled()))
+    state = row.get(FIELD) or {}
+    if state.get('merge_first'):
+        return merge_before_processing_enabled() or bool(
+            (row.get('sync_relevance') is not None or row.get('sync_live_target')) and enabled()
+        )
+    return enabled()
 
 
 def owns_runtime() -> bool:
@@ -117,12 +132,14 @@ def admission(row: Mapping[str, Any], obligation: Mapping[str, Any], *, now: flo
     previous = state.get('full_snapshot')
     if previous:
         current = content_snapshot(row)
-        if previous.get('digest') == current['digest']:
+        unprocessed_donor = bool(state.get('unprocessed_donor'))
+        if previous.get('digest') == current['digest'] and not unprocessed_donor:
             return 'unchanged', None
-        if int(state.get('late_runs') or 0) >= MAX_LATE_RUNS:
+        if not unprocessed_donor and int(state.get('late_runs') or 0) >= MAX_LATE_RUNS:
             return 'late_cap', None
         if (
-            current['speech_seconds'] - float(previous.get('speech_seconds') or 0) < 30
+            not unprocessed_donor
+            and current['speech_seconds'] - float(previous.get('speech_seconds') or 0) < 30
             and current['words'] - int(previous.get('words') or 0) < 80
         ):
             return 'immaterial', None
@@ -138,4 +155,5 @@ def completion_patch(
         automatic and bool(previous) and previous.get('digest') != snapshot.get('digest')
     )
     state.update(full_snapshot=dict(snapshot), pending_since=None, held=False)
+    state.pop('unprocessed_donor', None)
     return state
