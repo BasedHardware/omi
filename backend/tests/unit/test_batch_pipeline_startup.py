@@ -105,7 +105,9 @@ def test_load_pyannote_pair_missing_deps(monkeypatch):
 @patch("diarizer.batch_pipeline_startup.create_local_worker")
 @patch("diarizer.batch_pipeline_startup.load_pyannote_pair")
 @patch("diarizer.batch_pipeline_startup._model_batch_size_override")
-def test_load_worker(mock_override, mock_load_pyannote_pair, mock_create, mock_hf, mock_vad, mock_pipeline, mock_nemo, mock_torch):
+def test_load_worker(
+    mock_override, mock_load_pyannote_pair, mock_create, mock_hf, mock_vad, mock_pipeline, mock_nemo, mock_torch
+):
     mock_override.return_value = 16
     mock_torch.cuda.is_available.return_value = True
     mock_torch.cuda.device_count.return_value = 1
@@ -134,7 +136,7 @@ def test_load_worker(mock_override, mock_load_pyannote_pair, mock_create, mock_h
         persist_result="persist",
         vad_model=mock_vad_model,
         parakeet_model=mock_asr,
-        pyannote_model=mock_diarizer
+        pyannote_model=mock_diarizer,
     )
 
 
