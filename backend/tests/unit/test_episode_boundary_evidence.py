@@ -14,6 +14,14 @@ ACCOUNT = 'test-account'
 
 @pytest.fixture
 def store(monkeypatch):
+    class BoundaryClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return NOW.astimezone(tz) if tz is not None else NOW.replace(tzinfo=None)
+
+    # Retention is seven days; the fixture's fixed October22 windows must not
+    # age out as the real CI clock advances. Production retention is unchanged.
+    monkeypatch.setattr(boundary_store, 'datetime', BoundaryClock)
     monkeypatch.setenv('EPISODE_BOUNDARIES_MODE_SHADOW_PERCENT', '100')
     db = StrictFirestore()
     monkeypatch.setenv('EPISODE_BOUNDARIES_MODE', 'serve')
@@ -170,7 +178,7 @@ async def test_off_mode_never_offloads_boundary_storage(monkeypatch):
 
 
 def test_full_index_evicts_old_terminal_edges_but_preserves_active_signals(store):
-    current = datetime.now(timezone.utc)
+    current = NOW
     state = ('users', ACCOUNT, 'capture_boundary_state', 'v1')
     store.rows[state] = {
         'entries': {
