@@ -12,8 +12,9 @@ hermetic. The existing `BATCH_PIPELINE_ENABLED` master switch still applies.
 `utils/rollout_cohorts.py` warms the percentage and membership caches before
 admission, including HTTP worker preloads and async listen/sync warmups. Async
 warmup shares a 1.25-second budget and never blocks the event loop. An unavailable
-read can still use the documented fallback; a pending successful cold read no
-longer causes a new revision's initial admissions to choose an env default.
+read can still use the documented fallback after failure is confirmed. While a
+cold read is pending, the effective percentage stays at zero; a stale env
+fallback cannot admit traffic before the remote value arrives.
 
 Deploy manifests and listen charts omit `BATCH_PIPELINE_PERCENT`. Cloud Run's
 merge update preserves any old env value solely as a fallback. A fresh install
@@ -26,8 +27,9 @@ Allowlist membership is already independent runtime config:
 [cohort migration runbook](rollout-cohorts.md); do not move or union memberships
 as part of seeding a percentage. Explicit stored denials beat retained env
 fallbacks. A percentage rollback does not revoke separately granted members.
-The cohort migration verifier validates the reserved `_ramp` control document
-separately and retains its full member-inventory bound after seeding.
+The cohort migration verifier validates `_ramp`, `stt-cap-dispatch`, and
+`held-content` control documents separately and retains its full member-inventory
+bound after seeding.
 
 ## One-time migration (rollout lead)
 

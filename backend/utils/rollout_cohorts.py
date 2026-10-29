@@ -170,7 +170,7 @@ async def _warm_rollout_cohorts(uid: str) -> None:
     try:
         await asyncio.wait_for(asyncio.gather(warm_ramp(), asyncio.shield(asyncio.wrap_future(future))), timeout=1.25)
     except asyncio.TimeoutError:
-        pass  # The pending cache entry denies admission until its read completes.
+        pass  # Runtime percent stays at zero until the first read confirms config or fallback.
 
 
 _member_cache = _TTLReads(read_cohort_members, capacity=4 * len(COHORT_ENVS), discovery=True)

@@ -77,10 +77,14 @@ def test_verify_compares_sets_not_counts_and_never_writes(monkeypatch, capsys, e
 
 
 @pytest.mark.parametrize('member_count', [0, migration.LIMIT, migration.LIMIT + 1])
-def test_seeded_ramp_is_validated_separately_from_member_inventory(member_count):
+def test_seeded_control_documents_are_validated_separately_from_member_inventory(member_count):
     client = MagicMock()
     ramp = {'schema_version': 1, 'revision': 1, 'envs': {'prod': {'percents': {'batch-pipeline': 0}}}}
-    rows = [SimpleNamespace(id='_ramp', to_dict=lambda: ramp)]
+    rows = [
+        SimpleNamespace(id='_ramp', to_dict=lambda: ramp),
+        SimpleNamespace(id=migration.STT_CAP_DOCUMENT, to_dict=lambda: {'environment': 'prod', 'tokens': 'pct:5'}),
+        SimpleNamespace(id=migration.HELD_CONTENT_DOCUMENT, to_dict=lambda: {'environment': 'dev', 'tokens': ''}),
+    ]
     rows.extend(
         SimpleNamespace(id=f'synthetic-{i}', to_dict=lambda: {'cohorts': {'prod': {'batch-pipeline': True}}})
         for i in range(member_count)
@@ -91,7 +95,28 @@ def test_seeded_ramp_is_validated_separately_from_member_inventory(member_count)
             migration.validate_stored_documents(client)
     else:
         migration.validate_stored_documents(client)
-    client.collection.return_value.limit.assert_called_once_with(migration.LIMIT + 2)
+    client.collection.return_value.limit.assert_called_once_with(migration.LIMIT + 4)
+    client.batch.assert_not_called()
+
+
+@pytest.mark.parametrize('document_id', [migration.STT_CAP_DOCUMENT, migration.HELD_CONTENT_DOCUMENT])
+@pytest.mark.parametrize(
+    'payload',
+    [
+        None,
+        {},
+        {'environment': 'prod'},
+        {'environment': 'staging', 'tokens': ''},
+        {'environment': 'prod', 'tokens': 'bad'},
+    ],
+)
+def test_malformed_stored_cohort_control_documents_block_seed_validation(document_id, payload):
+    client = MagicMock()
+    client.collection.return_value.limit.return_value.stream.return_value = [
+        SimpleNamespace(id=document_id, to_dict=lambda: payload)
+    ]
+    with pytest.raises(ValueError, match='malformed stored cohort control document'):
+        migration.validate_stored_documents(client)
     client.batch.assert_not_called()
 
 

@@ -8,8 +8,13 @@ from dataclasses import dataclass
 
 from google.cloud.firestore_v1.base_query import FieldFilter
 
-from config.rollout_cohorts import COLLECTION, COHORT_ENVS, valid_uid
-from database.rollout_cohorts import RAMP_DOC_ID, normalize_ramp_document
+from config.rollout_cohorts import COLLECTION, COHORT_ENVS, parse_cohort, valid_uid
+from database.rollout_cohorts import (
+    HELD_CONTENT_DOCUMENT,
+    RAMP_DOC_ID,
+    STT_CAP_DOCUMENT,
+    normalize_ramp_document,
+)
 
 KEYS = {
     'batch-pipeline': 'BATCH_PIPELINE_UID_ALLOWLIST',
@@ -149,17 +154,31 @@ def inventory(sources):
     return desired, conflicts
 
 
+def _validate_stored_cohort_control_document(data):
+    tokens = data.get('tokens') if isinstance(data, dict) else None
+    if (
+        not isinstance(data, dict)
+        or data.get('environment') not in {'prod', 'dev'}
+        or not isinstance(tokens, str)
+        or (bool(tokens.strip()) and parse_cohort(tokens) is None)
+    ):
+        raise ValueError('malformed stored cohort control document')
+
+
 def validate_stored_documents(client):
     # Verify the same whole-document shape the serving adapter requires. A
     # malformed unrelated field can deny every cohort, including legacy all.
-    # `_ramp` shares the collection but is a control document, never a member.
-    # Reserve one extra slot so a seeded ramp does not reduce the member bound.
-    rows = list(client.collection(COLLECTION).limit(LIMIT + 2).stream(timeout=10.0, retry=None))
+    # Control documents share the collection but are never member records.
+    # Reserve their slots plus one overflow row so validation preserves LIMIT.
+    rows = list(client.collection(COLLECTION).limit(LIMIT + 4).stream(timeout=10.0, retry=None))
     member_count = 0
     for row in rows:
         data = row.to_dict()
         if row.id == RAMP_DOC_ID:
             normalize_ramp_document(data)
+            continue
+        if row.id in {STT_CAP_DOCUMENT, HELD_CONTENT_DOCUMENT}:
+            _validate_stored_cohort_control_document(data)
             continue
         member_count += 1
         if member_count > LIMIT:
