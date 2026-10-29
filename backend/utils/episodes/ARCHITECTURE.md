@@ -226,7 +226,9 @@ The close reasons are `user`, `gap`, `idle`, `hard_cap`, `source_change`,
   select the admitted cohort. The allowlist bypasses the percentage.
 
 Off makes `/v1/episodes/*` report `enabled: false`. Apps keep today's
-per-conversation UI, and no episode read, write or model call happens anywhere.
+per-conversation UI, and episode lifecycle reads, writes and model calls stop.
+The independent occasion-relevance policy may still read existing ownership
+metadata to retain captured evidence; its own kill switch controls those reads.
 
 **Client channel (the cohort).** The app sends `X-Omi-App-Channel` on every
 request (`app/lib/utils/app_channel.dart`). It sends `beta` from an iOS
