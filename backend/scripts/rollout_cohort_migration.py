@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from config.rollout_cohorts import COLLECTION, COHORT_ENVS, valid_uid
+from database.rollout_cohorts import RAMP_DOC_ID, normalize_ramp_document
 
 KEYS = {
     'batch-pipeline': 'BATCH_PIPELINE_UID_ALLOWLIST',
@@ -151,11 +152,18 @@ def inventory(sources):
 def validate_stored_documents(client):
     # Verify the same whole-document shape the serving adapter requires. A
     # malformed unrelated field can deny every cohort, including legacy all.
-    rows = list(client.collection(COLLECTION).limit(LIMIT + 1).stream(timeout=10.0, retry=None))
-    if len(rows) > LIMIT:
-        raise ValueError('stored cohort inventory exceeds migration bound')
+    # `_ramp` shares the collection but is a control document, never a member.
+    # Reserve one extra slot so a seeded ramp does not reduce the member bound.
+    rows = list(client.collection(COLLECTION).limit(LIMIT + 2).stream(timeout=10.0, retry=None))
+    member_count = 0
     for row in rows:
         data = row.to_dict()
+        if row.id == RAMP_DOC_ID:
+            normalize_ramp_document(data)
+            continue
+        member_count += 1
+        if member_count > LIMIT:
+            raise ValueError('stored cohort inventory exceeds migration bound')
         cohorts = data.get('cohorts') if isinstance(data, dict) else None
         if not isinstance(cohorts, dict) or any(
             not isinstance(flags, dict) or any(type(value) is not bool for value in flags.values())

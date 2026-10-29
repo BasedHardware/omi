@@ -26,6 +26,8 @@ Allowlist membership is already independent runtime config:
 [cohort migration runbook](rollout-cohorts.md); do not move or union memberships
 as part of seeding a percentage. Explicit stored denials beat retained env
 fallbacks. A percentage rollback does not revoke separately granted members.
+The cohort migration verifier validates the reserved `_ramp` control document
+separately and retains its full member-inventory bound after seeding.
 
 ## One-time migration (rollout lead)
 

@@ -71,6 +71,38 @@ def test_verify_compares_sets_not_counts_and_never_writes(monkeypatch, capsys, e
     # The shadow cohort is legacy-all, so extra grants match and only denials would narrow it.
     assert result == (0 if name in {'messaging-telegram', 'batch-pipeline-shadow'} else 1)
     factory.return_value.batch.assert_not_called()
+
+
+@pytest.mark.parametrize('member_count', [0, migration.LIMIT, migration.LIMIT + 1])
+def test_seeded_ramp_is_validated_separately_from_member_inventory(member_count):
+    client = MagicMock()
+    ramp = {'schema_version': 1, 'revision': 1, 'envs': {'prod': {'percents': {'batch-pipeline': 0}}}}
+    rows = [SimpleNamespace(id='_ramp', to_dict=lambda: ramp)]
+    rows.extend(
+        SimpleNamespace(id=f'synthetic-{i}', to_dict=lambda: {'cohorts': {'prod': {'batch-pipeline': True}}})
+        for i in range(member_count)
+    )
+    client.collection.return_value.limit.return_value.stream.return_value = rows
+    if member_count > migration.LIMIT:
+        with pytest.raises(ValueError, match='exceeds migration bound'):
+            migration.validate_stored_documents(client)
+    else:
+        migration.validate_stored_documents(client)
+    client.collection.return_value.limit.assert_called_once_with(migration.LIMIT + 2)
+    client.batch.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'payload', [{}, {'schema_version': 1, 'revision': 1, 'envs': {'prod': {'percents': {'batch-pipeline': 101}}}}]
+)
+def test_malformed_ramp_does_not_bypass_seed_validation(payload):
+    client = MagicMock()
+    client.collection.return_value.limit.return_value.stream.return_value = [
+        SimpleNamespace(id='_ramp', to_dict=lambda: payload)
+    ]
+    with pytest.raises(ValueError):
+        migration.validate_stored_documents(client)
+    client.batch.assert_not_called()
     output = capsys.readouterr().out
     assert 'private-one' not in output and 'private-two' not in output
     assert f'{name}: live_members=' in output
@@ -200,7 +232,7 @@ def test_missing_host_binding_is_not_silently_omitted_from_seed():
 @pytest.mark.parametrize('payload', [None, {}, {'cohorts': {'dev': {'unrelated': 'invalid'}}}])
 def test_malformed_unrelated_fields_block_seed_and_verification(payload):
     factory = MagicMock()
-    row = SimpleNamespace(to_dict=lambda: payload)
+    row = SimpleNamespace(id='synthetic-owner', to_dict=lambda: payload)
     factory.return_value.collection.return_value.limit.return_value.stream.return_value = [row]
     with pytest.raises(ValueError, match='malformed stored'):
         migration.migrate(args(apply=True), client_factory=factory, live_reader=lambda *_: sources())
