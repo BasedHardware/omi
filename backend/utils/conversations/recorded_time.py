@@ -68,7 +68,7 @@ def conversation_span(row: Mapping[str, Any]):
         return RecordedSpan(
             recorded_start=start, recorded_end=end, arrival_at=arrival, clock=row.get('clock') or RecordedClock.legacy
         )
-    origin = utc(row.get('started_at')) or utc(row.get('created_at'))
+    origin = utc(row.get('started_at'))
     segments = row.get('transcript_segments')
     segments = [s if isinstance(s, Mapping) else s.model_dump() for s in segments] if isinstance(segments, list) else []
     placed = recorded_span(origin, segments)
@@ -129,3 +129,18 @@ def write_span(row: Mapping[str, Any], *, arrival_at: datetime | None = None) ->
     fields['clock'] = clock
     fields['arrival_at'] = row.get('arrival_at') or arrival_at
     return fields
+
+
+def recorded_end(row: Mapping[str, Any]) -> datetime | None:
+    """Recorded end for metadata admission; old end-only projections stay legacy.
+
+    Full rows use the typed span. Metadata-only legacy projections cannot
+    reconstruct an origin and retain their old end until the writer fixes them
+    forward; a creation/arrival timestamp never fabricates a recorded origin.
+    """
+    span = conversation_span(row)
+    if span is not None:
+        return span.recorded_end
+    from utils.conversations.lifecycle_clocks import utc
+
+    return utc(row.get('last_speech_at')) or utc(row.get('finished_at'))

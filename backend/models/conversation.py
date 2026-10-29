@@ -472,15 +472,6 @@ class Conversation(BaseModel):
     clock: Optional[RecordedClock] = None
     episode_id: Optional[str] = None
 
-    @model_validator(mode='before')
-    @classmethod
-    def derive_legacy_recorded_span(cls, data):
-        if isinstance(data, dict):
-            from utils.conversations.recorded_time import span_fields
-
-            return {**data, **span_fields(data)}
-        return data
-
     source: Optional[ConversationSource] = ConversationSource.omi
     language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
 

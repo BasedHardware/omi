@@ -328,7 +328,11 @@ writes are global. No new composite index or reconciliation is required.
 Boundary arithmetic cannot read ambient wall time. Pollers supply `arrival_at`
 to evaluate recorded quiet deadlines; recorded coordinates determine edges and
 activity. Moment buffering receives both recorded time and arrival explicitly;
-only cache eviction uses arrival. Missing live cap-hold capture coordinates
+only cache eviction uses arrival. Live conversation cap checks and reconnect/
+calendar-continuation admission consume the same span; continuation timers
+receive explicit `arrival_at`. Missing recorded origins are never reconstructed
+from a creation/arrival timestamp. End-only legacy metadata keeps its declared
+legacy fallback until a normal writer supplies recording evidence. Missing live cap-hold capture coordinates
 fail closed before acknowledging audio custody.
 
 `LIFECYCLE_V2_MODE` remains: the flag registry still says pending/default-shadow

@@ -250,3 +250,31 @@ def test_attach_before_create_membership_is_adopted_without_a_ghost_row():
     assert saved['recorded_start'] == saved['recorded_end'] == T0
     assert saved['clock'] == 'live_capture' and saved['arrival_at'] is not None
     assert conversation_recorded_time.create_if_absent('u', payload, firestore_client=store) == (False, False)
+
+
+def test_arrival_cannot_manufacture_a_missing_recorded_origin():
+    assert (
+        conversation_span({'created_at': T0, 'finished_at': T0 + timedelta(hours=5), 'status': 'in_progress'}) is None
+    )
+
+
+def test_new_import_stamps_real_arrival_instead_of_its_historical_created_date(monkeypatch):
+    from database import conversation_recorded_time
+    from models.conversation import Conversation
+
+    arrived = T0 + timedelta(days=3)
+    monkeypatch.setattr(conversation_recorded_time, 'datetime', SimpleNamespace(now=lambda zone: arrived))
+    imported = Conversation(
+        id='new-import',
+        created_at=T0,
+        started_at=T0,
+        finished_at=T0 + timedelta(seconds=20),
+        structured={},
+        source='external_integration',
+    )
+    assert imported.arrival_at is None
+    payload = imported.model_dump()
+    conversation_recorded_time.stamp_for_write(payload)
+    assert payload['arrival_at'] == arrived
+    assert payload['recorded_start'] == T0 and payload['recorded_end'] == T0 + timedelta(seconds=20)
+    assert payload['clock'] == 'imported'
