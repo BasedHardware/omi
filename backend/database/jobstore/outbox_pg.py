@@ -164,11 +164,13 @@ class PostgresOutbox:
                     if self._fenced(owner_id, payload):
                         self._close(conn, row_id, 'privacy_fenced', now)
                         continue
-                    taken = conn.execute(
-                        f'UPDATE outbox SET lease_token = %s, lease_until = %s, attempts = attempts + 1, '
-                        f'wake_pending = false WHERE id = %s RETURNING {_COLUMNS}',
-                        (_token(), now + lease_seconds, row_id),
-                    ).fetchone()
+                    from psycopg.sql import SQL, Identifier  # pyright: ignore[reportMissingImports]
+
+                    query = SQL(
+                        'UPDATE outbox SET lease_token = %s, lease_until = %s, attempts = attempts + 1, '
+                        'wake_pending = false WHERE id = %s RETURNING {}'
+                    ).format(SQL(_COLUMNS))
+                    taken = conn.execute(query, (_token(), now + lease_seconds, row_id)).fetchone()
                     claims.append(self._claim_from(taken, ''))
         return claims
 
@@ -196,11 +198,13 @@ class PostgresOutbox:
                 conn.execute('UPDATE outbox SET wake_token = %s, wake_pending = true WHERE id = %s', (fresh, numeric))
                 rearmed = (fresh, row[4])
             else:
-                taken = conn.execute(
-                    f'UPDATE outbox SET lease_token = %s, lease_until = %s, attempts = attempts + 1, '
-                    f'wake_pending = false WHERE id = %s RETURNING {_COLUMNS}',
-                    (_token(), now + lease_seconds, numeric),
-                ).fetchone()
+                from psycopg.sql import SQL, Identifier  # pyright: ignore[reportMissingImports]
+
+                query = SQL(
+                    'UPDATE outbox SET lease_token = %s, lease_until = %s, attempts = attempts + 1, '
+                    'wake_pending = false WHERE id = %s RETURNING {}'
+                ).format(SQL(_COLUMNS))
+                taken = conn.execute(query, (_token(), now + lease_seconds, numeric)).fetchone()
         if rearmed is not None:
             self._try_wake(str(numeric), rearmed[0])
             return Outcome.DEFERRED
@@ -246,11 +250,13 @@ class PostgresOutbox:
         guard = 'AND lease_until > %s' if live else ''
         values = (*params, int(claim.row_id), self.store.namespace, claim.lease_token) + ((now,) if live else ())
         with self.store.pool.connection() as conn:
-            return conn.execute(
-                f'UPDATE outbox SET {sets} WHERE id = %s AND namespace = %s AND lease_token = %s '
-                f'AND done_at IS NULL {guard} RETURNING id',
-                values,
-            ).fetchone()
+            from psycopg.sql import SQL  # pyright: ignore[reportMissingImports]
+
+            query = SQL(
+                'UPDATE outbox SET {} WHERE id = %s AND namespace = %s AND lease_token = %s '
+                'AND done_at IS NULL {} RETURNING id'
+            ).format(SQL(sets), SQL(guard))
+            return conn.execute(query, values).fetchone()
 
     def heartbeat(self, claim: Claim, lease_seconds: float, *, now: float) -> bool:
         return self._fenced_update(claim, 'lease_until = %s', (now + lease_seconds,), live=True, now=now) is not None
