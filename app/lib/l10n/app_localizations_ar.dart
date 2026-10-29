@@ -13159,9 +13159,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get firstCaptureConnect => 'ربط جهاز Omi الخاص بي';
 
   @override
-  String get firstCaptureConnectSteps => 'اضغط مع الاستمرار على Omi حتى يهتز. ثم اضغط على ربط.';
-
-  @override
   String get firstCaptureNoDevice => 'ليس لدي جهاز Omi بعد';
 
   @override

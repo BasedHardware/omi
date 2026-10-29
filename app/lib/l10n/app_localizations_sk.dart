@@ -13230,9 +13230,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get firstCaptureConnect => 'Pripojiť môj Omi';
 
   @override
-  String get firstCaptureConnectSteps => 'Stlačte a podržte svoj Omi, kým nezavibruje. Potom ťuknite na Pripojiť.';
-
-  @override
   String get firstCaptureNoDevice => 'Ešte nemám Omi';
 
   @override

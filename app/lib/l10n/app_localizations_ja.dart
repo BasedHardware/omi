@@ -13046,9 +13046,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get firstCaptureConnect => 'Omiを接続する';
 
   @override
-  String get firstCaptureConnectSteps => 'Omiが振動するまで長押ししてください。次に「Omiを接続する」をタップしてください。';
-
-  @override
   String get firstCaptureNoDevice => 'まだOmiを持っていません';
 
   @override

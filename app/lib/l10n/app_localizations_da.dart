@@ -13221,9 +13221,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get firstCaptureConnect => 'Tilslut min Omi';
 
   @override
-  String get firstCaptureConnectSteps => 'Tryk og hold på din Omi, indtil den vibrerer. Tryk derefter på Tilslut.';
-
-  @override
   String get firstCaptureNoDevice => 'Jeg har ikke en Omi endnu';
 
   @override

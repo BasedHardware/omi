@@ -8,7 +8,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/l10n/app_localizations.dart';
-import 'package:omi/pages/onboarding/complete_screen.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -24,7 +23,7 @@ import 'package:omi/ui/ui.dart';
 
 typedef _Steps = OnboardingConnectFirstStepsForTest;
 
-const _connectSteps = 'Press and hold your Omi until it vibrates. Then tap Connect.';
+/// The arm keeps control's Connect copy: only the position changes.
 const _controlSubtitle = 'Pair your Omi and it captures your conversations hands-free, all day.';
 
 /// Every step a reader walks from Connect until onboarding is done.
@@ -170,31 +169,6 @@ void main() {
     });
   });
 
-  group('Connect step copy', () {
-    Widget host(Widget child) => MaterialApp(
-          theme: buildOmiTheme(brightness: Brightness.light),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(body: child),
-        );
-
-    setUp(() async {
-      SharedPreferences.setMockInitialValues({});
-      await SharedPreferencesUtil.init();
-    });
-
-    testWidgets('connect_first says what to press; control keeps its subtitle', (tester) async {
-      await tester.pumpWidget(host(OnboardingCompleteScreen(
-          description: _connectSteps, onComplete: () {}, emit: (_) {}, setProperty: (_, __) {})));
-      expect(find.text(_connectSteps), findsOneWidget);
-      expect(find.text(_controlSubtitle), findsNothing);
-
-      await tester.pumpWidget(host(OnboardingCompleteScreen(onComplete: () {}, emit: (_) {}, setProperty: (_, __) {})));
-      expect(find.text(_controlSubtitle), findsOneWidget);
-      expect(find.text(_connectSteps), findsNothing);
-    });
-  });
-
   group('wrapper', () {
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
@@ -210,7 +184,7 @@ void main() {
       await _agree(tester);
 
       expect(find.byKey(const Key('first_capture_omi')), findsOneWidget);
-      expect(find.text(_connectSteps), findsOneWidget);
+      expect(find.text(_controlSubtitle), findsOneWidget);
       expect(find.byKey(const Key('onboarding_back')), findsNothing);
       expect(find.byType(OnboardingProgressDots), findsNothing);
 

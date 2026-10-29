@@ -13340,10 +13340,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get firstCaptureConnect => 'Ikonekta ang aking Omi';
 
   @override
-  String get firstCaptureConnectSteps =>
-      'Pindutin nang matagal ang iyong Omi hanggang mag-vibrate. Pagkatapos, i-tap ang Ikonekta.';
-
-  @override
   String get firstCaptureNoDevice => 'Wala pa akong Omi';
 
   @override

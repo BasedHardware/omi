@@ -23505,12 +23505,6 @@ abstract class AppLocalizations {
   /// **'Connect my Omi'**
   String get firstCaptureConnect;
 
-  /// Subtitle of Connect your Omi when it is the first onboarding step (connect_first arm): what to press on the Omi, then the Connect my Omi button to tap.
-  ///
-  /// In en, this message translates to:
-  /// **'Press and hold your Omi until it vibrates. Then tap Connect.'**
-  String get firstCaptureConnectSteps;
-
   /// Onboarding device step secondary button, opens the store
   ///
   /// In en, this message translates to:

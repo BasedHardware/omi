@@ -4053,7 +4053,6 @@
     "firstCaptureConnectTitle": "Omiを接続",
     "firstCaptureConnectDescription": "Omiをペアリングすると、一日中ハンズフリーで会話を記録します。",
     "firstCaptureConnect": "Omiを接続する",
-    "firstCaptureConnectSteps": "Omiが振動するまで長押ししてください。次に「Omiを接続する」をタップしてください。",
     "firstCaptureNoDevice": "まだOmiを持っていません",
     "firstCaptureSkip": "Skip for Now",
     "firstCapturePrompt": "Tell Omi what you're working on today, or what's on your mind. Talk for about 30 seconds.",

@@ -13028,9 +13028,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get firstCaptureConnect => '连接我的 Omi';
 
   @override
-  String get firstCaptureConnectSteps => '按住你的 Omi 直到振动。然后点按连接。';
-
-  @override
   String get firstCaptureNoDevice => '我还没有 Omi';
 
   @override

@@ -13168,9 +13168,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get firstCaptureConnect => 'เชื่อมต่อ Omi ของฉัน';
 
   @override
-  String get firstCaptureConnectSteps => 'กด Omi ค้างไว้จนกว่าจะสั่น แล้วแตะเชื่อมต่อ';
-
-  @override
   String get firstCaptureNoDevice => 'ฉันยังไม่มี Omi';
 
   @override

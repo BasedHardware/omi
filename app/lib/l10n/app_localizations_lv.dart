@@ -13265,10 +13265,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get firstCaptureConnect => 'Savienot manu Omi';
 
   @override
-  String get firstCaptureConnectSteps =>
-      'Nospiediet un turiet savu Omi, līdz tas vibrē. Pēc tam pieskarieties Savienot.';
-
-  @override
   String get firstCaptureNoDevice => 'Man vēl nav Omi';
 
   @override

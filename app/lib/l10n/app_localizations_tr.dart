@@ -13248,9 +13248,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get firstCaptureConnect => 'Omi\'mi bağla';
 
   @override
-  String get firstCaptureConnectSteps => 'Omi\'nizi titreyene kadar basılı tutun. Ardından Bağla\'ya dokunun.';
-
-  @override
   String get firstCaptureNoDevice => 'Henüz bir Omi\'m yok';
 
   @override

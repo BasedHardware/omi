@@ -13257,10 +13257,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get firstCaptureConnect => 'Prijungti mano Omi';
 
   @override
-  String get firstCaptureConnectSteps =>
-      'Paspauskite ir palaikykite savo Omi, kol jis suvibruos. Tada bakstelėkite Prijungti.';
-
-  @override
   String get firstCaptureNoDevice => 'Dar neturiu Omi';
 
   @override

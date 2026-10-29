@@ -13275,9 +13275,6 @@ class AppLocalizationsPl extends AppLocalizations {
   String get firstCaptureConnect => 'Połącz moje Omi';
 
   @override
-  String get firstCaptureConnectSteps => 'Naciśnij i przytrzymaj swoje Omi, aż zawibruje. Potem dotknij Połącz.';
-
-  @override
   String get firstCaptureNoDevice => 'Nie mam jeszcze Omi';
 
   @override

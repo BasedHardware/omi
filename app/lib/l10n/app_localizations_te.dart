@@ -13287,9 +13287,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get firstCaptureConnect => 'నా Omiని కనెక్ట్ చేయండి';
 
   @override
-  String get firstCaptureConnectSteps => 'మీ Omi కంపించే వరకు నొక్కి పట్టుకోండి. తర్వాత కనెక్ట్ చేయండి నొక్కండి.';
-
-  @override
   String get firstCaptureNoDevice => 'నాకు ఇంకా Omi లేదు';
 
   @override

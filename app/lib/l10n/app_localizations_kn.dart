@@ -13274,9 +13274,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get firstCaptureConnect => 'ನನ್ನ Omi ಸಂಪರ್ಕಿಸಿ';
 
   @override
-  String get firstCaptureConnectSteps => 'ನಿಮ್ಮ Omi ಕಂಪಿಸುವವರೆಗೆ ಒತ್ತಿ ಹಿಡಿಯಿರಿ. ನಂತರ ಸಂಪರ್ಕಿಸಿ ಟ್ಯಾಪ್ ಮಾಡಿ.';
-
-  @override
   String get firstCaptureNoDevice => 'ನನ್ನ ಬಳಿ ಇನ್ನೂ Omi ಇಲ್ಲ';
 
   @override

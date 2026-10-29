@@ -13267,10 +13267,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get firstCaptureConnect => 'Падключыць мой Omi';
 
   @override
-  String get firstCaptureConnectSteps =>
-      'Націсніце і ўтрымлівайце Omi, пакуль ён не завібруе. Потым націсніце Падключыць.';
-
-  @override
   String get firstCaptureNoDevice => 'У мяне яшчэ няма Omi';
 
   @override

@@ -13265,9 +13265,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get firstCaptureConnect => 'Sambungkan Omi saya';
 
   @override
-  String get firstCaptureConnectSteps => 'Tekan dan tahan Omi anda sehingga ia bergetar. Kemudian ketik Sambungkan.';
-
-  @override
   String get firstCaptureNoDevice => 'Saya belum ada Omi';
 
   @override

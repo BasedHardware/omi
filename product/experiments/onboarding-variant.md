@@ -11,8 +11,8 @@ pay: today's steps, a device-first onboarding, or one that ends in a first real 
 - `yinka` — Yinka's onboarding (PR #21445): Name → Permissions → Language → Connect Omi → a first
   real conversation with its summary and to-dos, the paywall and a rating ask, native.
 - `connect_first` — the native steps with Connect your Omi first, right after the sign-up paywall
-  (no Back; the subtitle says what to press), then control's steps; an Omi paired there skips the
-  phone voice intro, and Connect is not asked again at the end.
+  (control's screen and copy, no Back), then control's steps; an Omi paired there skips the phone
+  voice intro, and Connect is not asked again at the end.
 New designs join as new arms; the split is set in PostHog, never in code.
 
 **Unit.** A signed-in reader who reaches the steps after consent. Exposure = `Onboarding Variant

@@ -13228,9 +13228,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get firstCaptureConnect => 'Ühenda minu Omi';
 
   @override
-  String get firstCaptureConnectSteps => 'Vajuta ja hoia Omi all, kuni see vibreerib. Seejärel puuduta Ühenda.';
-
-  @override
   String get firstCaptureNoDevice => 'Mul ei ole veel Omit';
 
   @override

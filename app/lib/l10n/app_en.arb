@@ -15993,10 +15993,6 @@
     "@firstCaptureConnect": {
         "description": "Onboarding device step primary button"
     },
-    "firstCaptureConnectSteps": "Press and hold your Omi until it vibrates. Then tap Connect.",
-    "@firstCaptureConnectSteps": {
-        "description": "Subtitle of Connect your Omi when it is the first onboarding step (connect_first arm): what to press on the Omi, then the Connect my Omi button to tap."
-    },
     "firstCaptureNoDevice": "I don't have an Omi yet",
     "@firstCaptureNoDevice": {
         "description": "Onboarding device step secondary button, opens the store"

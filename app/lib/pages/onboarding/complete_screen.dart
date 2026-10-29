@@ -22,7 +22,6 @@ class OnboardingCompleteScreen extends StatefulWidget {
   const OnboardingCompleteScreen({
     super.key,
     required this.onComplete,
-    this.description,
     this.emit,
     this.setProperty,
     this.pairDevice,
@@ -30,9 +29,6 @@ class OnboardingCompleteScreen extends StatefulWidget {
     this.onSkipped,
   });
   final VoidCallback onComplete;
-
-  /// Replaces the subtitle (connect_first says what to press).
-  final String? description;
   final VoidCallback? onSkipped;
   final void Function(RegisteredEvent)? emit;
   final void Function(String, Object)? setProperty;
@@ -135,7 +131,7 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> {
           const SizedBox(height: OmiSpacing.lg),
           Text(context.l10n.firstCaptureConnectTitle, style: OmiType.title1, textAlign: TextAlign.center),
           const SizedBox(height: OmiSpacing.md),
-          Text(widget.description ?? context.l10n.firstCaptureConnectDescription,
+          Text(context.l10n.firstCaptureConnectDescription,
               style: OmiType.body.copyWith(color: OmiColors.textSecondary), textAlign: TextAlign.center),
           const SizedBox(height: OmiSpacing.xxl),
         ], actions: [

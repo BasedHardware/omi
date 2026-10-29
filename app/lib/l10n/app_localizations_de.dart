@@ -13335,9 +13335,6 @@ class AppLocalizationsDe extends AppLocalizations {
   String get firstCaptureConnect => 'Mein Omi verbinden';
 
   @override
-  String get firstCaptureConnectSteps => 'Halte dein Omi gedrückt, bis es vibriert. Tippe dann auf Verbinden.';
-
-  @override
   String get firstCaptureNoDevice => 'Ich habe noch kein Omi';
 
   @override

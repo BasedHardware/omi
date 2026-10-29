@@ -798,9 +798,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           }
         },
       ),
-      // Control's last step; connect_first's first, which says what to press and moves on instead.
+      // Control's last step; connect_first's first, which moves on to Name instead of finishing.
       OnboardingCompleteScreen(
-        description: _connectFirst ? context.l10n.firstCaptureConnectSteps : null,
         onSkipped: () => _stepTelemetry.skipped = true,
         onComplete: _connectFirst ? _leaveConnectFirst : _finishOnboarding,
       ),

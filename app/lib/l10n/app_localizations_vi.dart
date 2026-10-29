@@ -13233,9 +13233,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get firstCaptureConnect => 'Kết nối Omi của tôi';
 
   @override
-  String get firstCaptureConnectSteps => 'Nhấn và giữ Omi cho đến khi rung. Sau đó chạm Kết nối.';
-
-  @override
   String get firstCaptureNoDevice => 'Tôi chưa có Omi';
 
   @override
