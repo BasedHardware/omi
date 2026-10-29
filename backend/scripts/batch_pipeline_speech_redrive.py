@@ -40,7 +40,7 @@ from database.batch_pipeline_store import FirestoreStore
 from database.sync_ledger import batch_ledger_owes_held_units
 from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.artifacts import ProtectionContext
-from utils.batch_pipeline.contracts import WorkItem
+from utils.batch_pipeline.contracts import WorkItem, held_silence_allowed, worker_vad_speech
 from utils.batch_pipeline.recovery_disposition import inspect_audio, STAGES, REASONS
 from utils.batch_pipeline.speech_redrive import prepared_independent_one, redrive_one
 from utils.batch_pipeline import redrive_scope as scope
@@ -259,17 +259,20 @@ def inspect_unit(
     job = checked_job(store, sid, uid, key, independent, repair)
     # Independent-language plans always buy a recognizer, even if local VAD
     # falls below one frame. Only its validated empty reply can close silence.
-    # A words repair is speech by its bound worker VAD receipt.
-    if independent or repair:
+    # Ordinary units and words repairs can use the same input-bound worker
+    # acoustic receipt; a later zero CPU VAD must not label that speech silent.
+    if independent or repair or worker_vad_speech(job) is not None:
         return 'speech'
     # Immutable intent attestations retain the original census on replay, even
     # after results have projected and audio has entered completion retention.
     if job.get('speech_redrive'):
         return 'speech'
     if (job.get('silence_disposition') or {}).get('state') == 'completed':
+        require(held_silence_allowed(job, 0), 'positive_held_speech_requires_worker_proof')
         return 'silent'
     item = WorkItem(**{f.name: job[f.name] for f in fields(WorkItem) if f.name in job})
     _, _, spans = inspect_audio(item, artifacts.fetch_audio(item))
+    require(bool(spans) or held_silence_allowed(job, 0), 'positive_held_speech_requires_worker_proof')
     return 'speech' if spans else 'silent'
 
 
