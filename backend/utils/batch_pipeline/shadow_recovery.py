@@ -98,6 +98,7 @@ def _recover_steps(repository, artifacts, segment, *, stt=None, second_stt=None,
     item = WorkItem(**job['item'])
     policy = RecoveryPolicy.from_dict(job['recovery_policy'])
     speech, vad, outcome, receipts, payload = 0.0, 'unknown', 'error', None, None
+    duration = 0.0
     try:
         audio = artifacts.fetch_audio(item)
         _, duration, spans = inspect(item, audio)

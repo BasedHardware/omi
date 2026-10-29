@@ -583,6 +583,7 @@ def test_paid_recovery_runs_real_discarded_projection(repository, monkeypatch, g
     )
     settled = row(repository, item.segment_id)
     assert settled['projection_status'] == 'planned'
+    assert settled['paid_providers'] == (['modulate'] if provider == 'modulate' else ['modulate', 'soniox'])
     assert settled['speech_seconds'] == 2 and settled['speech_loss_seconds'] == 0
     assert settled['created_at'] == 7200
     assert all(path[0].startswith('batch_pipeline_dev_shadow_') for path in repository.store.client.rows)

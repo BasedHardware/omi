@@ -9,6 +9,8 @@ import shutil
 import tempfile
 
 from config.batch_pipeline import Priority, priority_for
+from config.prerecorded_language import language_class, language_guard_enabled
+from config.stt_provider_policy import normalized_stt_language
 from config.batch_pipeline_shadow import language_only_enabled, selected, shadow_percent
 from config.batch_pipeline_providers import provider_config
 from database.batch_pipeline_store import FirestoreStore
@@ -167,6 +169,8 @@ async def stage_upload(
             await run_blocking(db_executor, repository.finish, first[0], 'dropped')
             return
         language = target.get('language') or user.get('language') or ''
+        prefs = user.get('transcription_preferences') or {}
+        input_language = normalized_stt_language(user.get('language')) if prefs.get('single_language_mode') else 'multi'
         artifacts = await run_blocking(storage_executor, artifacts_for, store)
         config = provider_config()
         if config.pool_kind != 'dedicated_batch':
@@ -184,6 +188,27 @@ async def stage_upload(
             if not shadow_percent():
                 await run_blocking(db_executor, repository.finish, reservation[0], 'dropped')
                 break
+            from utils.stt.batch_language import resolve_language
+            from config.stt_cap_dispatch import execution_admission_enabled
+            from utils.stt_cap_dispatch import sync_allowed
+
+            # Mirror serving intake's per-audio proof. A primary-language hint
+            # alone cannot authorize fixed-language GPU recognition in multi mode.
+            language_decision = await run_blocking(
+                sync_executor,
+                resolve_language,
+                input_language,
+                unit.wav,
+                surface='batch',
+                cohort_key=uid,
+                before_probe=lambda duration=unit.duration_seconds: not execution_admission_enabled(uid, 'batch')
+                or sync_allowed(uid, duration, 'modulate', lane='batch'),
+            )
+            frozen_language = (
+                language_decision.language
+                if language_decision.parakeet_safe or language_class(language_decision.language) == 'unsupported'
+                else 'und' if language_guard_enabled() else input_language
+            )
             item = replace(
                 seed,
                 segment_id=reservation[0],
@@ -198,12 +223,17 @@ async def stage_upload(
                 unit.wav,
                 {
                     'owner_id': uid,
+                    'job_id': reservation[0],
+                    'content_id': content_id,
                     'segment_id': item.segment_id,
                     'capture_at': item.capture_at,
                     'source': source,
                     'client_device_id': device_id,
                     'should_lock': should_lock,
-                    'stt_language': language,
+                    'stt_language': frozen_language,
+                    'stt_language_evidence': language_decision.evidence,
+                    'stt_language_confidence': language_decision.confidence,
+                    'stt_language_probe_seconds': language_decision.probe_seconds,
                 },
             )
             uri = await run_blocking(storage_executor, artifacts.stage_audio, item, wav)

@@ -111,6 +111,7 @@ async def test_runner_uses_full_worker_but_never_normal_publication(repository, 
     assert await pump.run_once(maintain=False) == 1
     assert words.calls and decoded and diarized and not failures
     assert row(repository, work.segment_id)['outcome'] == 'recovered'
+    assert row(repository, work.segment_id)['paid_providers'] == []
     assert all(path[0].startswith('batch_pipeline_dev_shadow_') for path in repository.store.client.rows)
     artifacts.register_artifact.assert_not_called()
     pump._publish_flight.assert_not_awaited()
@@ -350,16 +351,44 @@ def test_private_projection_runs_real_planner_and_only_writes_shadow_metadata(re
     assert 'A useful synthetic sentence.' not in repr(repository.store.client.rows)
 
 
-async def test_real_decode_encrypted_staging_preserves_legacy_files(repository, monkeypatch, tmp_path):
+@pytest.mark.parametrize('language_mode', ['declared', 'audio_lid', 'self_lid', 'unavailable', 'funding_denied'])
+async def test_real_decode_encrypted_staging_preserves_legacy_files(repository, monkeypatch, tmp_path, language_mode):
+    from diarizer.batch_pipeline_models import StagedAudio
+    from utils.batch_pipeline.audio import read_context
+    from utils.stt import batch_language
+    from utils import stt_cap_dispatch
+    from config import stt_cap_dispatch as cap_config
+
     original = Path(pcm(tmp_path, 1750000100, samples=16000))
     original_bytes = original.read_bytes()
     directory, copies = shadow_intake.copy_paths([str(original)])
 
     def privacy(*args, **kwargs):
         if kwargs.get('snapshots') is not None:
-            kwargs['snapshots'].update(user={'language': ''})
+            kwargs['snapshots'].update(
+                user={
+                    'language': 'en',
+                    'transcription_preferences': {'single_language_mode': language_mode == 'declared'},
+                }
+            )
         return 0
 
+    actual_resolver = batch_language.resolve_language
+    inputs = []
+
+    def resolve(language, audio, *, before_probe, **kwargs):
+        inputs.append(language)
+        if language_mode == 'declared':
+            return actual_resolver(language, audio, before_probe=before_probe, **kwargs)
+        assert language == 'multi'  # A primary app language is not a declaration.
+        assert before_probe() is (language_mode != 'funding_denied')
+        if language_mode in {'unavailable', 'funding_denied'}:
+            return batch_language.LanguageDecision('und', 0.0, 'unavailable')
+        return batch_language.LanguageDecision('en', 1.0, language_mode, 1.0)
+
+    monkeypatch.setattr(batch_language, 'resolve_language', resolve)
+    monkeypatch.setattr(cap_config, 'execution_admission_enabled', lambda *args: language_mode == 'funding_denied')
+    monkeypatch.setattr(stt_cap_dispatch, 'sync_allowed', lambda *args, **kwargs: False)
     monkeypatch.setattr(retention, 'assert_batch_write_allowed', privacy)
     objects = ObjectClient()
     artifacts = create_artifact_store(repository.store, objects, 'synthetic-bucket', b's' * 32)
@@ -385,6 +414,18 @@ async def test_real_decode_encrypted_staging_preserves_legacy_files(repository, 
     work = repository.take('worker-stage')
     assert work.duration_seconds == 1 and work.shadow
     assert artifacts.fetch_audio(work).startswith(b'RIFF')
+    context = read_context(artifacts.fetch_audio(work))
+    assert inputs == ['en' if language_mode == 'declared' else 'multi']
+    assert context['stt_language_evidence'] == (
+        language_mode if language_mode not in {'unavailable', 'funding_denied'} else 'unavailable'
+    )
+    staged_audio = StagedAudio(artifacts.fetch_audio)
+    worker, words, _, _, _, _ = setup_worker(decode=staged_audio.decode, language_of=staged_audio.language)
+    results = worker.process_batch([work])
+    if language_mode in {'declared', 'audio_lid', 'self_lid'}:
+        assert words.calls and isinstance(results[0], WorkResult)
+    else:
+        assert not words.calls  # Uncertain/denied evidence never becomes permission.
     assert objects.uploads == 1  # audio only, no transcript upload
     assert all(b'synthetic-owner' not in body for _, body in objects.objects.values())
     for path, record in repository.store.client.rows.items():
