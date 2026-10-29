@@ -108,6 +108,7 @@ STRANDED_SILENCE_SECONDS = 5.0
 # Answered-empty context may leave TDT only after the 90s capture replay horizon.
 ANSWERED_CONTEXT_RETENTION_SECONDS = 90.0
 FIRST_TEXT_DEADLINE_SECONDS = 12.0
+FIRST_POST_SECONDS = 8.0
 DEADLINE_CUT_POST_LATENCY_SECONDS = 1.2
 # Three times the observed 280ms admission; never suppress unresolved audio.
 SHORT_SPEECH_EPISODE_SECONDS = 1.0
@@ -312,6 +313,10 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._first_text_deadline = _positive_float_env(
             'PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS', FIRST_TEXT_DEADLINE_SECONDS
         )
+        self._first_post_seconds = min(
+            pace, _positive_float_env('PARAKEET_WINDOW_FIRST_POST_SECONDS', FIRST_POST_SECONDS)
+        )
+        self._first_text_cut_enabled = os.getenv('PARAKEET_WINDOW_FIRST_TEXT_CUT_ENABLED', 'true').lower() != 'false'
         self._deadline_cut_enabled = os.getenv('PARAKEET_WINDOW_DEADLINE_CUT_ENABLED', 'false').lower() == 'true'
         self._deadline_cut_post_latency = _positive_float_env(
             'PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS', DEADLINE_CUT_POST_LATENCY_SECONDS
@@ -851,14 +856,20 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         has_held_tail = cut_requested and len(
             decide_window(segments, job.duration, job.duration + 1.0, force=job.force, pause=job.pause).emit
         ) < len(segments)
-        # Sentence anchoring may hold a healthy nonempty answer until the
-        # context cap (24s), beyond the first/progress deadline (12s). If the
-        # remaining budget is within the qualified POST latency allowance,
-        # publish the held tail using the existing timestamp-preserving cut.
-        # A normal first POST after 6s of capture must still hold its sentence;
-        # neither a full pace nor the next pacing wait is a cut allowance.
-        # Empty answers and in-flight faults retain the original deadline.
-        deadline_cut = (
+        # Sentence anchoring can hold valid text past an armed startup or
+        # progress watchdog. Release a wholly held answer while that watchdog
+        # requires text; an ordinary emittable segment keeps its boundary.
+        # Empty answers and in-flight faults retain the deadline and replay.
+        deadline_text_cut = (
+            self._first_text_cut_enabled
+            and self._deadline_speech_at is not None
+            and (not self._first_text_recorded or self.progress_deadline_enabled)
+            and (not self.progress_deadline_enabled or self.allow_no_text_rescue())
+            and not decide_window(
+                segments, job.duration, self._max_context_seconds, force=job.force, pause=job.pause
+            ).emit
+        )
+        deadline_cut = deadline_text_cut or (
             self._deadline_cut_enabled
             and self._deadline_speech_at is not None
             and (not self._first_text_recorded or self.progress_deadline_enabled)
@@ -1069,6 +1080,8 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             stepped = self._now_bytes + self._pace_bytes
             if self._now_bytes <= self._anchor_bytes:
                 stepped = self._anchor_bytes + self._pace_bytes
+            if self._last_post_end < 0 and not self._first_text_recorded and self._deadline_speech_at is not None:
+                stepped = self._anchor_bytes + self._to_bytes(self._first_post_seconds)
             closing = self._closed
             pause = False
             if silence_flush or idle_flush or stranded_flush:
