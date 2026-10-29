@@ -38,12 +38,48 @@ def packet():
             verdict='CLEAN',
             reasons=[],
             observation_since='2026-10-29T03:30:00Z',
+            observation_started_at='2026-10-29T03:30:00Z',
+            observed_samples=16,
+            max_sample_gap_seconds=120,
             hard3=dict(T1='CLEAN', T2='CLEAN', T4='CLEAN'),
         ),
     )
 
 
 class HardThreeTest(unittest.TestCase):
+    def test_thin_speech_denominator_is_unknown_even_when_complete(self):
+        sample = self.sample()
+        sample.update(
+            terminal_unrecovered_vad_speech_seconds=10,
+            terminal_unrecovered_speech_max_unit_seconds=10,
+            terminal_unrecovered_speech_denominator_seconds=1000,
+        )
+        self.assertEqual(guard.observer_record(sample, '2026-10-29T04:00:00Z')['hard3']['T2'], 'UNKNOWN')
+
+    def test_backdated_query_scope_does_not_create_measured_soak(self):
+        record = packet()['observer']
+        fresh = {
+            key: value
+            for key, value in record.items()
+            if key not in ('observation_started_at', 'observed_samples', 'max_sample_gap_seconds')
+        }
+        first = guard.observed_clock(fresh)
+        self.assertEqual(first['observation_started_at'], first['observed_through'])
+        p = packet()
+        p['observer'] = first
+        self.assertEqual(guard.entry_check(p, NOW)['verdict'], 'WAIT')
+        prior = first
+        for minutes in range(2, 32, 2):
+            stamp = guard.dt.datetime.fromtimestamp(NOW + minutes * 60, guard.dt.timezone.utc).isoformat()
+            prior = guard.observed_clock(dict(fresh, at=stamp, observed_through=stamp), prior)
+        p['observer'] = prior
+        p['errclass']['at'] = p['replay']['at'] = prior['at']
+        self.assertEqual(guard.entry_check(p, NOW + 1800)['verdict'], 'READY_FOR_LEAD_ENTRY')
+        gap = guard.observed_clock(
+            dict(prior, at='2026-10-29T05:00:00Z', observed_through='2026-10-29T05:00:00Z'), prior
+        )
+        self.assertEqual(gap['observed_samples'], 1)
+
     def sample(self):
         return dict(
             rows_read_at='2026-10-29T04:00:00Z',
@@ -130,8 +166,9 @@ class HardThreeTest(unittest.TestCase):
             with tempfile.TemporaryDirectory() as directory:
                 root = pathlib.Path(directory)
                 sampler = root / 'sampler.py'
+                (root / 'sibling.py').write_text('VALUE=3\n')
                 sampler.write_text(
-                    "from pathlib import Path\nROOT=Path(__file__).parent\n"
+                    "from pathlib import Path\nimport sibling\nROOT=Path(__file__).parent\n"
                     "def sample(since, percent):\n"
                     "    return dict(marker=(ROOT/'t2-window.json').exists(), since=since, percent=percent)\n"
                 )

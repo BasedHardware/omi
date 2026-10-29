@@ -111,6 +111,7 @@ def observer_record(sample, at, alerts=()):
     )
     values = {key: number(sample, key) for key in keys}
     complete = all(value is not None for value in values.values())
+    denominator = None
     t2_reasons = []
     # Known harm still trips when another part of the sample is unknown.
     terminal_measured = values['terminal_unrecovered_speech_vad_fallback_units'] == 0
@@ -137,6 +138,9 @@ def observer_record(sample, at, alerts=()):
         else (
             'CLEAN'
             if complete
+            and denominator is not None
+            and math.isfinite(denominator)
+            and denominator >= 3600
             and values['terminal_unrecovered_speech_unknown_units'] == 0
             and values['held_vad_unknown_units'] == 0
             and values['terminal_unrecovered_speech_vad_fallback_units'] == 0
@@ -172,8 +176,38 @@ def observer_record(sample, at, alerts=()):
         reasons=sorted(reasons),
         alerts=sorted(set(alerts) | set(soft_signals(sample))),
         hard3=hard3,
+        t2_speech_denominator_seconds=denominator if denominator is not None and math.isfinite(denominator) else None,
         policy=POLICY,
     )
+
+
+def observed_clock(record, prior=None):
+    """Automatic measurement continuity from actual readTimes, never --since.
+
+    Missing/failed polls and hard-three UNKNOWN reset a clean measurement
+    window. Revision/source/percent alerts do not. This state grants no permit.
+    """
+    prior = prior if isinstance(prior, dict) else {}
+    out = dict(record)
+    through = epoch(record['observed_through'])
+    started, samples, gap = record['observed_through'], 1, 0
+    try:
+        old = epoch(prior['observed_through'])
+        clean = lambda row: row.get('verdict') == 'CLEAN' and set(row.get('hard3', {}).values()) == {'CLEAN'}
+        if (
+            clean(record)
+            and clean(prior)
+            and prior.get('observation_since') == record.get('observation_since')
+            and 0 <= through - old <= 300
+            and epoch(prior['observation_started_at']) <= old
+        ):
+            started = prior['observation_started_at']
+            samples = prior['observed_samples'] + (through > old)
+            gap = max(prior.get('max_sample_gap_seconds', 0), through - old)
+    except (KeyError, TypeError, ValueError, AttributeError):
+        pass
+    out.update(observation_started_at=started, observed_samples=samples, max_sample_gap_seconds=gap)
+    return out
 
 
 def epoch(value):
@@ -270,7 +304,15 @@ def entry_check(packet, now):
         errors.extend('hard3:' + reason for reason in guard['reasons'])
     try:
         through = epoch(packet['observer']['observed_through'])
-        if not through <= now or through - epoch(packet['observer']['observation_since']) < 1800:
+        measured = epoch(packet['observer']['observation_started_at'])
+        observer = packet['observer']
+        if (
+            not epoch(observer['observation_since']) <= measured <= through <= now
+            or through - measured < 1800
+            or type(observer['observed_samples']) is not int
+            or observer['observed_samples'] < 2
+            or not 0 <= observer['max_sample_gap_seconds'] <= 300
+        ):
             raise ValueError('lookback')
     except (KeyError, TypeError, ValueError, AttributeError):
         errors.append('hard3_full_30m_lookback_required')

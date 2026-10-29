@@ -21,6 +21,7 @@ import batch_quality_gate as batch_guard
 
 
 def collect(sampler_path, since, percent, marker_free_root):
+    sys.path.insert(0, str(sampler_path.resolve().parent))
     spec = importlib.util.spec_from_file_location('hard3_paged_collector', sampler_path)
     sampler = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = sampler
@@ -85,6 +86,7 @@ def main():
             prior = json.loads((args.out / 'watch-latest.json').read_text())
         except (OSError, ValueError):
             prior = {}
+        record = batch_guard.observed_clock(record, prior)
         for key, alert in (
             ('collector_sha256', 'observer_source_changed'),
             ('serving_fingerprint', 'serving_revision_changed_requalify'),
