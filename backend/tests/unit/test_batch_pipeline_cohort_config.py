@@ -45,12 +45,23 @@ def hosts(config):
     }
 
 
-def test_shadow_controls_ship_off_and_capped_on_every_cloud_run_host(manifest):
-    for config in manifest.values():
+def test_shadow_controls_match_the_batch_ladder_and_stay_prod_only(manifest, recovery_base_hosts):
+    # 2026-10-29 ladder ruling (David ~11Z): shadow 25 -> live 5 -> 25 -> 100, shadow stays on
+    # through the live rungs. Prod pins 25/0 in the manifest because the 11:13Z Cloud Run deploy
+    # reset the hand-applied values — manifest-pinned keys survive deploys, ops env does not.
+    expected = {'dev': ('0', '200'), 'prod': ('25', '0')}
+    for stage, config in manifest.items():
         for service in SERVICES:
             env = config['cloud_run']['services'][service]['env']
-            assert env['BATCH_PIPELINE_SHADOW_PERCENT']['value'] == '0'
-            assert env['BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR']['value'] == '200'
+            percent, recovery_cap = expected[stage]
+            assert env['BATCH_PIPELINE_SHADOW_PERCENT']['value'] == percent
+            assert env['BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR']['value'] == recovery_cap
+    # The pin is a prod-overlay override only: the shared base (dev, GKE charts, jobs, desktop)
+    # keeps shadow off and the paid recovery cap at its 200 default.
+    for service in SERVICES:
+        env = recovery_base_hosts[service]['env']
+        assert env['BATCH_PIPELINE_SHADOW_PERCENT']['value'] == '0'
+        assert env['BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR']['value'] == '200'
 
 
 def test_shadow_recovery_role_accepts_its_rendered_gpu_worker_identity(manifest):
