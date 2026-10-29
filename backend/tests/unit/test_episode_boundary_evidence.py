@@ -1,6 +1,7 @@
 """Meeting edges are shared by storage, conversation, episode and merge policy."""
 
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import pytest
 
@@ -14,14 +15,7 @@ ACCOUNT = 'test-account'
 
 @pytest.fixture
 def store(monkeypatch):
-    class BoundaryClock(datetime):
-        @classmethod
-        def now(cls, tz=None):
-            return NOW.astimezone(tz) if tz is not None else NOW.replace(tzinfo=None)
-
-    # Retention is seven days; the fixture's fixed October22 windows must not
-    # age out as the real CI clock advances. Production retention is unchanged.
-    monkeypatch.setattr(boundary_store, 'datetime', BoundaryClock)
+    monkeypatch.setattr(boundary_store, 'datetime', SimpleNamespace(now=lambda tz: NOW))
     monkeypatch.setenv('EPISODE_BOUNDARIES_MODE_SHADOW_PERCENT', '100')
     db = StrictFirestore()
     monkeypatch.setenv('EPISODE_BOUNDARIES_MODE', 'serve')
