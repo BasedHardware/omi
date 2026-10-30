@@ -1,0 +1,26 @@
+{
+  "note": "Invented people and lines. No customer records. Each person: the user's own lines (profile source), held-out real lines, and drafts a generic chat model wrote for the same intents.",
+  "people": [
+    {
+      "id": "p-sister",
+      "name": "Mia",
+      "user_lines": ["haha ok wait for me", "are you home yet", "我快到了 see you soon!", "lol that is so you", "yes!! 好的", "omg i forgot the cake", "hey can you grab milk", "i am on the train now", "明天一起吃饭吗", "love it haha", "ok ok coming", "send me the pic"],
+      "held_out": ["running late 10 min", "ok see you there", "can you call mom", "lol yes"],
+      "drafts": ["Running about 10 minutes late, sorry!", "Sounds great! See you there!", "Could you please call Mom when you get a chance.", "Yes! Absolutely!"]
+    },
+    {
+      "id": "p-manager",
+      "name": "Daniel Park",
+      "user_lines": ["Hi Daniel, I pushed the fix to staging.", "The review is ready for you.", "I can take the Thursday slot.", "Thanks, I will update the doc tonight.", "The numbers look right to me.", "Hi Daniel, quick update on the launch.", "I moved the sync to 3 pm.", "Let me know if you want the longer version.", "Sounds good, I will send it after lunch.", "The test suite passes on my side.", "I will be ten minutes late to standup.", "Shared the deck in the channel."],
+      "held_out": ["I will be a few minutes late.", "The draft is in the folder.", "Thanks, that works for me.", "I can cover the demo."],
+      "drafts": ["Running a few minutes late!", "The draft is in the folder!!", "Thanks so much! That works for me!", "Happy to cover the demo!"]
+    },
+    {
+      "id": "p-friend-zh",
+      "name": "小林",
+      "user_lines": ["好的 明天见", "哈哈哈 真的假的", "我到了", "你先吃吧", "周末去爬山吗", "可以呀", "等我一下", "刚下班", "这个好好吃", "下次一起", "收到", "没问题"],
+      "held_out": ["我晚点到", "周六可以", "谢谢你呀", "好的 收到"],
+      "drafts": ["我会晚一点到。", "周六可以！没问题！", "非常感谢你！", "好的，收到。"]
+    }
+  ]
+}
