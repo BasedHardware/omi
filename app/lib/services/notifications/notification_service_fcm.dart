@@ -138,7 +138,8 @@ class _FCMNotificationService implements NotificationInterface {
 
   @override
   Future<void> saveFcmToken(String? token) async {
-    if (token == null) return;
+    // Also covers a token refresh after a live switch away from Omi's backend.
+    if (token == null || !OutboundPolicy.thirdPartyServicesAllowed) return;
     String timeZone = await getTimeZone();
     if (FirebaseAuth.instance.currentUser != null && token.isNotEmpty) {
       await saveFcmTokenServer(token: token, timeZone: timeZone);

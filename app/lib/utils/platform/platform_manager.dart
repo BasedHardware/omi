@@ -37,16 +37,28 @@ class PlatformManager {
   static Future<void> initializeServices() async {
     _instance._packageInfo = await PackageInfo.fromPlatform();
     _instance._deviceIdHash = await _instance._getDeviceIdHash();
-    // Omi's analytics only while the app talks to Omi's backend (see OutboundPolicy).
-    if (OutboundPolicy.thirdPartyServicesAllowed) unawaited(AnalyticsManager.init());
+    // Omi's analytics only on Omi's data plane (see OutboundPolicy). Suspending also keeps
+    // device-health stats from being recorded on the device for a later upload.
+    if (OutboundPolicy.thirdPartyServicesAllowed) {
+      unawaited(AnalyticsManager.init());
+    } else {
+      AnalyticsManager.suspendForSession();
+    }
     await IntercomManager.instance.initIntercom();
   }
 
   /// Stops the services [OutboundPolicy.backendChanged] just turned off, for the rest of the session.
+  /// Each step is best-effort: a vendor SDK failure must not block the caller or skip the others.
   static Future<void> stopThirdPartyServices() async {
-    AnalyticsManager.suspendForSession();
-    await CrashlyticsManager.stopCollection();
-    await IntercomManager.instance.logout();
+    for (final stop in <FutureOr<void> Function()>[
+      AnalyticsManager.suspendForSession,
+      CrashlyticsManager.stopCollection,
+      IntercomManager.instance.logout,
+    ]) {
+      try {
+        await stop();
+      } catch (_) {}
+    }
   }
 
   /// Synchronous initialization for the local hermetic journey lane

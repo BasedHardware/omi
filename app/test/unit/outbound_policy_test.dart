@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -5,6 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/env/environment_profile.dart';
+import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/env/outbound_policy.dart';
 import 'package:omi/services/notifications/notification_service_fcm.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
@@ -43,6 +46,53 @@ void main() {
     }
   });
 
+  group('the rule', () {
+    test("production and beta builds on their own backend are Omi's data plane", () {
+      for (final profile in [AppEnvironmentProfile.production, AppEnvironmentProfile.mobileBeta]) {
+        expect(
+          OutboundPolicy.decide(profile: profile, hasOverride: false, baseUrl: profile.defaultApiBaseUrl),
+          isTrue,
+          reason: profile.name,
+        );
+      }
+    });
+
+    test("local_prod keeps them: production identity on a local backend is still Omi's plane", () {
+      expect(
+        OutboundPolicy.decide(
+          profile: AppEnvironmentProfile.localProd,
+          hasOverride: false,
+          baseUrl: 'http://127.0.0.1:8000/',
+        ),
+        isTrue,
+      );
+    });
+
+    test("the Auth emulator's accounts are not Omi's, whatever the backend", () {
+      expect(
+        OutboundPolicy.decide(
+            profile: AppEnvironmentProfile.localDev, hasOverride: false, baseUrl: 'https://api.omi.me/'),
+        isFalse,
+      );
+    });
+
+    test("a custom backend from Developer Settings turns them off unless it is Omi's API", () {
+      expect(
+        OutboundPolicy.decide(
+          profile: AppEnvironmentProfile.localProd,
+          hasOverride: true,
+          baseUrl: 'https://omi.example.test/',
+        ),
+        isFalse,
+      );
+      expect(
+        OutboundPolicy.decide(
+            profile: AppEnvironmentProfile.localProd, hasOverride: true, baseUrl: 'https://api.omi.me/'),
+        isTrue,
+      );
+    });
+  });
+
   group('resolve at boot', () {
     test('a saved custom backend turns third-party services off and is live before they start', () async {
       SharedPreferences.setMockInitialValues({'customBackendUrl': 'https://omi.example.test'});
@@ -56,21 +106,17 @@ void main() {
     test('a saved value of the wrong type does not stop the boot', () async {
       SharedPreferences.setMockInitialValues({'customBackendUrl': 42});
 
-      await OutboundPolicy.resolve();
-
+      await expectLater(OutboundPolicy.resolve(), completes);
       expect(Env.hasApiBaseUrlOverride, isFalse);
-    });
-
-    test("a saved override that is Omi's own backend leaves them on", () async {
-      SharedPreferences.setMockInitialValues({'customBackendUrl': 'https://api.omi.me'});
-
-      await OutboundPolicy.resolve();
-
-      expect(OutboundPolicy.thirdPartyServicesAllowed, isTrue);
     });
   });
 
   group('a backend change while the app runs', () {
+    test('a change without an override (cleared field) changes nothing', () {
+      expect(OutboundPolicy.backendChanged(), isFalse);
+      expect(OutboundPolicy.thirdPartyServicesAllowed, isTrue);
+    });
+
     test("switching away from Omi's backend turns them off at once", () {
       Env.overrideApiBaseUrl('https://omi.example.test/');
 
@@ -96,6 +142,23 @@ void main() {
 
   group('analytics', () {
     late _RecordingAdapter adapter;
+    final healthPolicy = <bool>[];
+
+    setUpAll(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('com.omi/device_health_policy'),
+        (call) async {
+          if (call.method == 'setPolicy') healthPolicy.add((call.arguments as Map)['enabled'] as bool);
+          return null;
+        },
+      );
+    });
+    tearDownAll(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('com.omi/device_health_policy'),
+        null,
+      );
+    });
 
     setUp(() async {
       AnalyticsManager.resetForTesting();
@@ -113,13 +176,22 @@ void main() {
     });
     tearDown(AnalyticsManager.resetForTesting);
 
-    test('does not start against a backend that is not Omi\'s', () async {
+    test('does not start against a backend that is not Omi\'s, and nothing is held for later', () async {
       OutboundPolicy.debugThirdPartyServicesAllowed = false;
 
       await PlatformManager.initializeServices();
       await pumpEventQueue();
+      healthPolicy.clear();
+      AnalyticsManager().bindIdentity('uid-1');
+      AnalyticsManager().track('Later');
+      await pumpEventQueue();
 
       expect(adapter.inits, 0);
+      expect(AnalyticsManager.queuedEventCountForTesting, 0);
+      // Device-health stats are recorded natively and uploaded later; the native store stays off.
+      expect(healthPolicy, isNotEmpty);
+      expect(healthPolicy, everyElement(isFalse));
+      expect(AnalyticsManager.deviceHealthRecordingEnabled, isFalse);
     });
 
     test("starts against Omi's backend", () async {
@@ -131,13 +203,20 @@ void main() {
 
     test('a running session stops sending when the backend changes away from Omi', () async {
       await AnalyticsManager.init();
+      final identities = <(String?, bool)>[];
+      AnalyticsManager.identityChanged = (id, enabled) => identities.add((id, enabled));
+      healthPolicy.clear();
 
       AnalyticsManager.suspendForSession();
+      await pumpEventQueue();
       AnalyticsManager().track('After Switch');
       await AnalyticsManager.flushPending(force: true);
 
       expect(adapter.disables, 1);
       expect(adapter.events, isEmpty);
+      // Session replay follows the settled identity; the native device-health store its policy.
+      expect(identities, [(null, false)]);
+      expect(healthPolicy, [false]);
     });
   });
 
@@ -170,6 +249,39 @@ void main() {
       await crashlytics.reportNonFatal(StateError('y'), StackTrace.current);
 
       expect(recorder.calls, isEmpty);
+    });
+
+    testWidgets('saving a custom backend in Developer Settings stops them at once', (tester) async {
+      await tester.pumpWidget(const MaterialApp(home: Scaffold()));
+      AnalyticsManager.resetForTesting();
+      SharedPreferences.setMockInitialValues({});
+      await SharedPreferencesUtil.init();
+      final provider = DeveloperModeProvider()..customBackendUrl.text = 'https://omi.example.test';
+
+      final saved = await tester.runAsync(provider.saveSettings);
+
+      expect(saved, isNotNull, reason: 'saveSettings completed instead of throwing');
+      expect(OutboundPolicy.thirdPartyServicesAllowed, isFalse);
+      expect(recorder.calls.map((c) => c.method), contains('Crashlytics#deleteUnsentReports'));
+      expect(provider.savingSettingsLoading, isFalse);
+    });
+
+    testWidgets('a vendor SDK failure while stopping does not wedge Save', (tester) async {
+      await tester.pumpWidget(const MaterialApp(home: Scaffold()));
+      AnalyticsManager.resetForTesting();
+      SharedPreferences.setMockInitialValues({});
+      await SharedPreferencesUtil.init();
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('plugins.flutter.io/firebase_crashlytics'),
+        (call) async => throw PlatformException(code: 'boom'),
+      );
+      addTearDown(() async => recorder = await installCrashlyticsRecorder());
+      final provider = DeveloperModeProvider()..customBackendUrl.text = 'https://omi.example.test';
+
+      final saved = await tester.runAsync(provider.saveSettings);
+
+      expect(saved, isNotNull, reason: 'saveSettings completed instead of throwing');
+      expect(provider.savingSettingsLoading, isFalse);
     });
 
     test('stopping the services for a backend change deletes stored reports', () async {
