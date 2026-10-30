@@ -6397,6 +6397,20 @@ the extra producer transaction runs only on its first accepted audio per drain.
 CPU reconciliation waits for a successful receipt and the completed, retained
 conversation. This is a durability barrier, not an upload-grace timer.
 
+The ship-on `record-seal-sweeper` CronJob in the batch worker chart reuses the
+existing worker image and identity, with only namespaced `pods: list` RBAC.
+Every five minutes it discovers at most 128 existing pending jobs and reuses the
+exact-state retained-tail repair for at most 64 token-bearing rows. Live/unknown
+producers, bare tokens, upload failures and stale/unavailable inventory never
+authorize a seal. It emits one content-free structured summary; sampled backlog,
+age, bare-token and missing-cycle alerts are defined in
+`backend/deploy/record-seal-sweeper/`. The lead first observes a production
+`mode=plan` cycle (no writes), then ships `mode=apply`; dev stays disabled because
+the proof is production-namespace scoped. Set `recordSealSweeper.enabled=false`
+or `RECORD_SEAL_SWEEPER_ENABLED=false` to stop future runs. It never creates jobs
+for legacy rows. See that directory's runbook for image, alert and first-cycle
+acceptance requirements.
+
 One-time stuck-job repair: `backend/scripts/repair_record_audio_seals.py
 --ids-file PRIVATE_JSON` takes 1..128 exact pending job IDs, with no discovery scan.
 Default dry-run accepts `ro-prod` or `prod-operator`; use `prod-operator` when

@@ -19,7 +19,11 @@ def _timestamp(value):
 
 
 def load_pusher_pod_proof(path, captured_at):
-    payload = Path(path).read_bytes()
+    return parse_pusher_pod_proof(Path(path).read_bytes(), captured_at)
+
+
+def parse_pusher_pod_proof(payload, captured_at):
+    """Shared file/API parser; callers never need to persist cluster inventory."""
     raw = json.loads(payload)
     captured = _timestamp(captured_at)
     if not math.isfinite(captured) or not 0 <= time.time() - captured <= 300:
@@ -28,6 +32,7 @@ def load_pusher_pod_proof(path, captured_at):
         raw.get('kind') not in {'List', 'PodList'}
         or raw.get('apiVersion') != 'v1'
         or not (raw.get('metadata') or {}).get('resourceVersion')
+        or (raw.get('metadata') or {}).get('continue')
         or not isinstance(raw.get('items'), list)
     ):
         raise ValueError('authoritative pod list required')
@@ -60,6 +65,7 @@ def load_pusher_pod_proof(path, captured_at):
     return {
         'namespace': NAMESPACE,
         'captured_at': captured,
+        'resource_version': raw['metadata']['resourceVersion'],
         'pods': pods,
         'file_sha256': hashlib.sha256(payload).hexdigest(),
     }
