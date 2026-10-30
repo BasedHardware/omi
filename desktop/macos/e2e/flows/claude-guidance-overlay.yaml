@@ -6,6 +6,7 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/CloudConnectorGuidanceOverlay.swift
   - desktop/macos/Desktop/Sources/CloudConnectorFormAutomation.swift
+  - desktop/macos/Desktop/Sources/CloudConnectorFormRequest.swift
   - desktop/macos/Desktop/Sources/SpatialOverlay/SpatialOverlayCore.swift
   - desktop/macos/Desktop/Sources/SpatialOverlay/SpatialOverlayDogfood.swift
 preconditions:
