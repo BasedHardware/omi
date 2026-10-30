@@ -410,13 +410,18 @@ clipped recorded boundary, so retained spans cannot extend it across the next
 episode. Hidden memberships remain for
 recovery and single ownership; they contribute no clocks or visible row.
 
-Recorded attachment preserves a cross-source overlap cutoff before adding the
+Recorded attachment preserves a cross-source overlap interval before adding the
 new member/source. Both recovered content and the desktop finalization tail skip
-segments already covered by the original device, even when relevance attached
-first. Later segments beyond that cutoff remain eligible for notes; confirmed
+segments fully inside the original device's recorded interval, even when relevance attached
+first. Earlier prefixes and later segments beyond that interval remain eligible for notes; confirmed
 capture groups continue to use their canonical member.
 
 A historical episode whose start advanced after discard keeps its original ID.
 Canonical partitioning checks every destination document before writing and uses
 a deterministic displaced ID when an unrelated episode or redirect occupies it.
 It never overwrites that episode's retained members, notes or reverse links.
+
+When atomic sync intake appends meaningful speech, its new content revision
+invalidates an older automatic model/Jev/deterministic discard. Transport replays
+and content still needing fragment review retain the assessment; user decisions remain authoritative.
+The final-discard predicate continues to ignore the intake hint itself.

@@ -648,7 +648,7 @@ def test_relevance_claim_survives_historical_repartition(lane):
         firestore_client=store,
     )
     assert set(joined['conversation_ids']) == {'first', 'desktop', 'later'}
-    assert joined['parallel_content_until'] == {'desktop': T0 + timedelta(minutes=2)}
+    assert joined['parallel_content_spans'] == {'desktop': {'start': T0, 'end': T0 + timedelta(minutes=2)}}
     assert {m['id'] for m in joined['moments']} == {'desktop-m'}
     assert episodes.get_episode_for_conversation('u', 'desktop', firestore_client=store)['id'] == joined['id']
 
@@ -913,3 +913,77 @@ def test_discarded_anchor_cannot_let_a_later_component_overwrite_its_old_id(lane
     assert replay['id'] == fresh['id']
     assert episodes.get_episode('u', repaired['id'], firestore_client=store) == repaired
     assert_timeline(store)
+
+
+@pytest.mark.parametrize('overlap', [False, True])
+def test_earlier_desktop_speech_survives_adjacency_and_partial_overlap(lane, overlap):
+    store, c, calls = lane
+    start = T0 + timedelta(minutes=10)
+    c.now = lambda: start
+    primary = row('pendant', start, seconds=120, has_photos=False)
+    store.rows[('users', 'u', 'conversations', 'pendant')] = primary
+    service.attach_conversation('u', 'pendant', 'omi', started_at=start, collaborators=c)
+    c.now = lambda: start + timedelta(minutes=2)
+    service.attach_conversation('u', 'pendant', 'omi', started_at=c.now(), collaborators=c)
+    desktop = row('desktop', T0, seconds=12 * 60 if overlap else 120, has_photos=False)
+    desktop['source'] = 'desktop'
+    desktop['transcript_segments'] = [
+        dict(
+            id='prefix',
+            start=0,
+            end=120,
+            text=' '.join(['Before the meeting I confirmed the customer migration schedule for next Monday.'] * 8),
+            is_user=True,
+        )
+    ]
+    if overlap:
+        desktop['transcript_segments'].append(
+            dict(
+                id='shared',
+                start=10 * 60,
+                end=12 * 60,
+                text='This speech overlaps the already captured meeting.',
+                is_user=True,
+            )
+        )
+    store.rows[('users', 'u', 'conversations', 'desktop')] = desktop
+    assert (
+        service.on_conversation_finalized('u', 'desktop', desktop, trigger='client_finalize', collaborators=c)
+        != 'error'
+    )
+    owner = episodes.get_episode_for_conversation('u', 'desktop', firestore_client=store)
+    assert 'desktop' in owner['conversation_ids']
+    assert {m['conversation_id'] for m in owner['moments']} == {'desktop'}
+    assert len(calls) == 1
+    assert 'customer migration schedule' in str(calls)
+    assert 'speech overlaps' not in str(calls)
+
+
+@pytest.mark.parametrize('decided_by', ['model', 'jev'])
+def test_meaningful_sync_append_is_admitted_after_old_model_discard(lane, monkeypatch, decided_by):
+    from tests.unit.test_sync_cross_job_assignment import chunk, intake
+    from utils.conversations.fragment_visibility import is_relevance_discarded
+
+    store, c, _ = lane
+    service.attach_conversation('u', 'pendant', 'omi', started_at=T0, collaborators=c)
+    first, _, _ = intake(store, chunk('fragment', (T0 + timedelta(minutes=1)).timestamp(), 'Mm-hmm.'))
+    stored = store.rows[('users', 'u', 'conversations', first['id'])]
+    stored.update(
+        discarded=True, relevance_decision=dict(verdict='discard', decided_by=decided_by, reason='model_discard')
+    )
+    expanded, _, _ = intake(
+        store,
+        chunk(
+            'speech',
+            (T0 + timedelta(minutes=2)).timestamp(),
+            'Please send the migration checklist to the team tomorrow.',
+        ),
+    )
+    monkeypatch.setattr(service.client_gate, 'client_seen_cached', lambda uid: True)
+    monkeypatch.setattr(service, '_record_recovered', lambda *a: 'skipped_applied')
+    c.now = lambda: T0 + timedelta(minutes=3)
+    assert not is_relevance_discarded(expanded)
+    assert service.attach_synced_intake('u', expanded['id'], expanded, collaborators=c) == 'recorded'
+    owner = episodes.get_episode_for_conversation('u', expanded['id'], firestore_client=store)
+    assert owner['id'] == episodes.get_episode_for_conversation('u', 'pendant', firestore_client=store)['id']
+    assert visible_episode('u', owner, firestore_client=store) is not None

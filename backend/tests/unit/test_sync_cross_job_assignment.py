@@ -721,3 +721,48 @@ def test_adapter_preserves_live_sync_target_quiet_check(monkeypatch):
     incoming['data_protection_level'] = 'standard'
     db.assign_sync_conversation('u', incoming, target_id='live', firestore_client=store)
     assert store.rows[job_path]['status'] == 'waiting_quiet'
+
+
+@pytest.mark.parametrize('decided_by', ['model', 'jev', 'deterministic', 'rule'])
+@pytest.mark.parametrize('initial_text', ['Mm-hmm.', 'We agreed to meet on Friday.'])
+def test_meaningful_append_invalidates_automatic_discard_of_older_content(decided_by, initial_text):
+    from utils.conversations.fragment_visibility import is_relevance_discarded
+
+    store = StrictFirestore()
+    first = chunk('filler', 1000, initial_text)
+    initial, _, _ = intake(store, first)
+    stored = store.rows[('users', 'u', 'conversations', initial['id'])]
+    stored.update(
+        discarded=True,
+        relevance_decision=dict(
+            verdict='discard',
+            decided_by=decided_by,
+            reason='filler_only' if decided_by == 'rule' else 'model_discard',
+            arm='jev',
+        ),
+    )
+    revision = stored['sync_content_revision']
+    # A transport replay is not new content and must retain its assessed verdict.
+    replay, _, _ = intake(store, first)
+    if decided_by != 'rule':
+        assert replay['relevance_decision'] == stored['relevance_decision']
+        assert is_relevance_discarded(replay)
+    promoted, _, _ = intake(store, chunk('meaningful', 1060, 'Please call the doctor tomorrow.'))
+    assert promoted['sync_content_revision'] > revision
+    assert promoted['sync_relevance'] == 'keep' and not promoted['discarded']
+    assert promoted['relevance_decision'] is None
+    assert not is_relevance_discarded(promoted)
+
+
+def test_more_filler_does_not_invalidate_a_final_model_discard():
+    from utils.conversations.fragment_visibility import is_relevance_discarded
+
+    store = StrictFirestore()
+    initial, _, _ = intake(store, chunk('filler', 1000, 'Mm-hmm.'))
+    stored = store.rows[('users', 'u', 'conversations', initial['id'])]
+    decision = dict(verdict='discard', decided_by='model', reason='model_discard')
+    stored.update(discarded=True, relevance_decision=decision)
+    expanded, _, _ = intake(store, chunk('more', 1060, 'Hmm.'))
+    assert expanded['sync_relevance'] == 'review'
+    assert expanded['relevance_decision'] == decision
+    assert is_relevance_discarded(expanded)

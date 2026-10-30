@@ -149,12 +149,13 @@ def _attach_recorded_window(
                 and source not in (existing.get('sources') or [])
                 and existing.get('conversation_ids')
                 and started < existing['last_activity_at']
+                and finished > existing['started_at']
             ):
                 # Preserve the parallel-content decision before membership and
                 # sources make the finalizer look like a same-member continue.
-                result['parallel_content_until'] = {
-                    **(existing.get('parallel_content_until') or {}),
-                    conversation_id: existing['last_activity_at'],
+                result['parallel_content_spans'] = {
+                    **(existing.get('parallel_content_spans') or {}),
+                    conversation_id: {'start': existing['started_at'], 'end': existing['last_activity_at']},
                 }
             result['started_at'] = min(existing['started_at'], started)
             result['last_activity_at'] = max(existing['last_activity_at'], window_end)

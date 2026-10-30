@@ -65,6 +65,24 @@ def is_rule_discard_decision(decision: Any) -> bool:
     )
 
 
+def superseded_intake_discard(data: Mapping[str, Any], content_changed: bool) -> bool:
+    """Meaningful appended speech supersedes an automatic verdict on older text.
+
+    Called only by the atomic intake writer after it constructs a new content
+    revision. Transport replays and content still needing fragment review retain
+    the previous model assessment.
+    Deterministic rule receipts keep their existing occasion-deferral behavior.
+    """
+    decision = data.get('relevance_decision')
+    return is_rule_discard_decision(decision) or bool(
+        content_changed
+        and data.get('sync_relevance') == 'keep'
+        and isinstance(decision, Mapping)
+        and decision.get('verdict') == 'discard'
+        and decision.get('decided_by') in {'model', 'jev', 'deterministic'}
+    )
+
+
 def is_completed_rule_discard(data: Mapping[str, Any] | None) -> bool:
     """Whether ``data`` is a finished, uncurated row the rules already discarded.
 

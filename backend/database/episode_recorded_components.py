@@ -93,10 +93,10 @@ def _state(template, window, previous, facts):
     result['recovered_conversation_ids'] = sorted(
         {cid for row in overlapping for cid in row.get('recovered_conversation_ids') or [] if cid in members}
     )
-    result['parallel_content_until'] = {
+    result['parallel_content_spans'] = {
         cid: at
         for row in overlapping
-        for cid, at in (row.get('parallel_content_until') or {}).items()
+        for cid, at in (row.get('parallel_content_spans') or {}).items()
         if cid in members
     }
     for field in ('bullets', 'people', 'open_questions'):
