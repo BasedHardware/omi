@@ -36,6 +36,12 @@ SCREEN_TASK_CLIENT_BYPASS_TOTAL = Counter(
     'omi_screen_task_client_bypass_total', 'Flagged screenshot requests that bypassed a usable client gate', []
 )
 
+OMI_FLAG_DUAL_READ_TOTAL = Counter(
+    'omi_flag_dual_read_total',
+    'Server flag reads in OMI_FLAGS_SOURCE=dual: Omi store answer compared with the serving PostHog answer',
+    ['flag', 'outcome'],
+)
+
 OMI_LISTEN_STT_UNAVAILABLE_TOTAL = Counter(
     'omi_listen_stt_unavailable_total',
     'Listen sessions rejected before STT setup because providers or reconnect budget are unavailable',
