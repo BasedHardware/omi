@@ -11,6 +11,16 @@ import tarfile
 import tempfile
 
 
+def adapter_digest(gate_path, runner_path, incident_path, transaction_fixture_path):
+    """Every fixed transaction capability is part of the comparison identity."""
+    return hashlib.sha256(
+        gate_path.read_bytes()
+        + runner_path.read_bytes()
+        + incident_path.read_bytes()
+        + transaction_fixture_path.read_bytes()
+    ).hexdigest()
+
+
 def compare(candidate, baseline):
     new_exceptions = sorted(set(candidate['exceptions']) - set(baseline['exceptions']))
     old_blocked = {sid for row in baseline['chain_blocks'] for sid in row.get('units', [])}
@@ -90,6 +100,7 @@ GEOMETRY_LIMITS = frozenset(
 
 def gate(repo, corpus, ref, base, output, allow_incomplete=False, require_captured_geometry=False):
     runner = Path(__file__).with_name('runner.py')
+    transaction_fixture = Path(__file__).resolve().parents[2] / 'tests/unit/fixtures/strict_firestore_transaction.py'
     resolved = {
         label: subprocess.check_output(
             ['git', '-C', str(repo), 'rev-parse', '--verify', f'{value}^{{commit}}'], text=True
@@ -179,9 +190,8 @@ def gate(repo, corpus, ref, base, output, allow_incomplete=False, require_captur
         'schema': 1,
         'refs': resolved,
         'corpus_sha256': hashlib.sha256(corpus.read_bytes()).hexdigest(),
-        'adapter_sha256': hashlib.sha256(
-            Path(__file__).read_bytes() + runner.read_bytes() + fixture.read_bytes()
-        ).hexdigest(),
+        'adapter_sha256': adapter_digest(Path(__file__), runner, fixture, transaction_fixture),
+        'transaction_fixture_sha256': hashlib.sha256(transaction_fixture.read_bytes()).hexdigest(),
         **diff,
         'synthetic_comparison': incident_diff,
         'synthetic_failures': synthetic_failures,

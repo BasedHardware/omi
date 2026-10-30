@@ -14993,4 +14993,19 @@ class AppLocalizationsTe extends AppLocalizations {
   String yearlySwitchDoneBody(String amount, String date) {
     return 'ఈరోజు $amount వసూలు చేశాం. పునరుద్ధరణ $date.';
   }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count భాగాలు',
+      many: '$count భాగాలు',
+      few: '$count భాగాలు',
+      two: '$count భాగాలు',
+      one: '$count భాగాలు',
+      zero: '$count భాగాలు',
+    );
+    return '$_temp0';
+  }
 }

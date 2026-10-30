@@ -11940,5 +11940,6 @@
     "yearlySwitchPreviewFailed": "Цена није могла да се учита.",
     "yearlySwitchUnavailable": "Годишње плаћање тренутно није доступно за ваш план.",
     "yearlySwitchDoneTitle": "Сада плаћате годишње",
-    "yearlySwitchDoneBody": "Данас наплаћено {amount}. Обнавља се {date}."
+    "yearlySwitchDoneBody": "Данас наплаћено {amount}. Обнавља се {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} делова} one{{count} део} two{{count} делова} few{{count} дела} many{{count} делова} other{{count} делова}}"
 }

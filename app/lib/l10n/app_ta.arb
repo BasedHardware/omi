@@ -11940,5 +11940,6 @@
     "yearlySwitchPreviewFailed": "உங்கள் விலையை ஏற்ற முடியவில்லை.",
     "yearlySwitchUnavailable": "இப்போது உங்கள் திட்டத்திற்கு ஆண்டுக் கட்டணம் கிடைக்கவில்லை.",
     "yearlySwitchDoneTitle": "நீங்கள் இப்போது ஆண்டுத் திட்டத்தில் உள்ளீர்கள்",
-    "yearlySwitchDoneBody": "இன்று {amount} வசூலிக்கப்பட்டது. புதுப்பிப்பு {date}."
+    "yearlySwitchDoneBody": "இன்று {amount} வசூலிக்கப்பட்டது. புதுப்பிப்பு {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} பகுதிகள்} one{{count} பகுதிகள்} two{{count} பகுதிகள்} few{{count} பகுதிகள்} many{{count} பகுதிகள்} other{{count} பகுதிகள்}}"
 }

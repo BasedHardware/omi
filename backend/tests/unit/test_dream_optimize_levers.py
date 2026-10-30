@@ -184,6 +184,34 @@ def test_sweep_record_counts_owners_not_retry_attempts(caplog):
     assert payload['scheduled_at'] == '2026-10-28T09:00:00+00:00'
 
 
+def test_sweep_record_keeps_the_scheduler_offset_and_splits_wait_causes(caplog):
+    reports = [
+        {'status': 'waiting', 'reason': 'reserved_capacity', 'wait_cause': 'gateway'},
+        {'status': 'waiting', 'reason': 'reserved_capacity', 'wait_cause': 'minute_headroom'},
+        {'status': 'waiting', 'reason': 'reserved_capacity'},
+    ]
+    # Cloud Scheduler sends the job's local offset; a 21:00Z tick once logged as 14:00.
+    sweep = {'scheduled_at': '2026-10-28T14:00:04.678160-07:00', 'finals': []}
+    with caplog.at_level(logging.INFO, logger='utils.dream_telemetry'):
+        dream_telemetry.record_sweep(sweep, reports)
+    payload = json.loads(caplog.records[-1].getMessage())
+    assert payload['scheduled_at'] == '2026-10-28T21:00:04.678160+00:00'
+    assert payload['waiting_causes'] == {'gateway': 1, 'minute_headroom': 1, 'drain': 1}
+
+
+def test_pass_record_splits_wait_time_by_cause(caplog):
+    report = _pass_report(
+        timing={'wait_ms': 1500, 'waits': 2, 'wait_gateway_ms': 900, 'wait_headroom_ms': 600},
+        status='waiting',
+        wait_cause='minute_headroom',
+    )
+    with caplog.at_level(logging.INFO, logger='utils.dream_telemetry'):
+        dream_telemetry.record_pass(report)
+    payload = json.loads(caplog.records[-1].getMessage())
+    assert (payload['wait_gateway_ms'], payload['wait_headroom_ms']) == (900, 600)
+    assert payload['wait_cause'] == 'minute_headroom'
+
+
 # --- defect reports -----------------------------------------------------------------------------
 
 
@@ -430,6 +458,48 @@ def test_material_budget_serve_shrinks_limits(runtime, monkeypatch):
     assert report['material'] == 0
 
 
+def test_material_budget_shadow_counts_the_tail_a_cap_would_cut(runtime, monkeypatch):
+    monkeypatch.setenv(dream_levers.MATERIAL_BUDGET_MODE_ENV, 'shadow')
+    monkeypatch.setattr(dream_agent, 'material_tokens', lambda material, current: 100000)
+    limits = SessionLimits(
+        bucket='heavy', turns=16, tools=16, read_bytes=640000, read_call_bytes=64000, tokens=HEAVY_TOKENS
+    )
+    owner_records = EvidenceRecords(records(runtime))
+    _scripted(owner_records, limits, monkeypatch)
+    count = []
+    report = asyncio.run(dream_agent.run_pass(UID, turn=_idle_reader(count), dry_run=True))
+    lever = report['levers']['material_budget']
+    assert report['token_limit'] == HEAVY_TOKENS and len(count) == 13
+    assert lever == {
+        'arm': 'shadow',
+        'tokens_before': HEAVY_TOKENS,
+        'tokens_after': 100000,
+        'crossed': True,
+        'staged_after_cap': 0,
+        'applied_after_cap': 0,
+    }
+
+
+def test_cap_tail_counts_only_work_staged_after_the_crossing():
+    staged = {'early': 1, 'late-applied': 2, 'late-rejected': 3}
+    outcomes = [
+        {'key': 'early', 'status': 'applied'},
+        {'key': 'late-applied', 'status': 'applied'},
+        {'key': 'late-rejected', 'status': 'verifier_disagree'},
+        'malformed',
+    ]
+    assert dream_agent.cap_tail(staged, {'early'}, outcomes) == {
+        'crossed': True,
+        'staged_after_cap': 2,
+        'applied_after_cap': 1,
+    }
+    assert dream_agent.cap_tail(staged, None, outcomes) == {
+        'crossed': False,
+        'staged_after_cap': 0,
+        'applied_after_cap': 0,
+    }
+
+
 # --- admission, parking and ordering (Firestore fake) -------------------------------------------
 
 from datetime import datetime, timedelta, timezone  # noqa: E402
@@ -508,7 +578,7 @@ def test_payoff_order_prefers_material_and_yield_but_ages_first(queue):
     queue.rows[('dream_users', 'fruitful')] = {'score': 2, 'last_yield': 8}
     queue.rows[('dream_users', 'aged')] = {'score': 0}
     rows = [
-        ('aged', now - timedelta(hours=7)),
+        ('aged', now - timedelta(days=8)),
         ('quiet', now - timedelta(hours=1)),
         ('busy', now - timedelta(minutes=30)),
         ('fruitful', now - timedelta(minutes=10)),
@@ -518,6 +588,20 @@ def test_payoff_order_prefers_material_and_yield_but_ages_first(queue):
     assert ordered[0] == 'aged'
     assert ordered[1:3] == ['fruitful', 'busy']
     assert sorted(ordered) == sorted(uid for uid, _ in rows)
+
+
+def test_payoff_order_reorders_a_deep_backlog(queue):
+    # 10-29 shadow: every row of a 3,900-owner backlog was past the old 6 h bound, so 0 reorders.
+    now = NOW
+    queue.rows[('dream_users', 'light')] = {'score': 0, 'last_yield': 0, 'size_bucket': 'light'}
+    queue.rows[('dream_users', 'heavy')] = {'score': 0, 'last_yield': 0, 'size_bucket': 'heavy'}
+    queue.rows[('dream_users', 'fruitful')] = {'score': 0, 'last_yield': 6, 'size_bucket': 'heavy'}
+    rows = [
+        ('light', now - timedelta(days=3)),
+        ('heavy', now - timedelta(days=2)),
+        ('fruitful', now - timedelta(days=1)),
+    ]
+    assert dream_scheduler.payoff_order(rows, now, firestore_client=queue) == ['fruitful', 'heavy', 'light']
 
 
 def test_discovery_parking_fails_open(monkeypatch):

@@ -17,6 +17,7 @@ from utils.observability.reasons import (
 
 STAGES = reason_values(RecoveryFailureStage)
 REASONS = reason_values(RecoveryFailureReason)
+AUDIO_DURATION_TOLERANCE_SECONDS = 0.1
 
 
 class RecoveryFailure(ValueError):
@@ -47,7 +48,7 @@ def inspect_audio(item, audio, *, vad=None):
             if (wav.getnchannels(), wav.getsampwidth(), wav.getframerate()) != (1, 2, 16000):
                 raise ValueError('shape')
             duration = wav.getnframes() / 16000
-            if not 0 < duration <= 7200 or abs(duration - item.duration_seconds) > 0.1:
+            if not 0 < duration <= 7200 or abs(duration - item.duration_seconds) > AUDIO_DURATION_TOLERANCE_SECONDS:
                 raise ValueError('duration')
             pcm = wav.readframes(wav.getnframes())
             if len(pcm) != wav.getnframes() * 2:

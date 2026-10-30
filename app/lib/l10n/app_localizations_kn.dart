@@ -14979,4 +14979,19 @@ class AppLocalizationsKn extends AppLocalizations {
   String yearlySwitchDoneBody(String amount, String date) {
     return 'ಇಂದು $amount ಶುಲ್ಕ ವಿಧಿಸಲಾಗಿದೆ. ನವೀಕರಣ $date.';
   }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ಭಾಗಗಳು',
+      many: '$count ಭಾಗಗಳು',
+      few: '$count ಭಾಗಗಳು',
+      two: '$count ಭಾಗಗಳು',
+      one: '$count ಭಾಗಗಳು',
+      zero: '$count ಭಾಗಗಳು',
+    );
+    return '$_temp0';
+  }
 }

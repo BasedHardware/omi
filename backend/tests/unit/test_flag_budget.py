@@ -49,6 +49,11 @@ BUDGET_PATH = BACKEND_DIR / 'config' / 'flag_budget.json'
 FEATURE_FLAGS_PATH = BACKEND_DIR.parent / 'config' / 'feature-flags.yaml'
 SEED_BUDGET = 170  # 2026-10-25 seed; lower it when the surface shrinks, never raise it.
 HELPER_KILL_SWITCHES = {
+    'CONVERSATION_OCCASION_RELEVANCE_ENABLED',
+    'LATE_AUDIO_SYNC_INTAKE_ENABLED',
+    'EPISODE_RECORDED_TIME_ENABLED',
+    'EPISODE_LIVE_TIMER_START_ENABLED',
+    'CONVERSATION_MERGE_BEFORE_PROCESSING',
     'EPISODE_CARRY_ON_SESSION_END',
     'EPISODE_HARD_CAP_ACROSS_CONVERSATIONS',
     'EPISODE_MOMENT_OUTPUT_VALIDATOR',
@@ -178,7 +183,11 @@ def test_helper_kill_switch_budget_entries_match_the_default_on_registry():
     helper_names = {name for name, entry in names.items() if entry.get('registry')}
     assert helper_names == HELPER_KILL_SWITCHES
 
-    registry = yaml.safe_load(FEATURE_FLAGS_PATH.read_text(encoding='utf-8'))
+    # Keep this inventory check inside the fast-unit CPU budget; the C safe
+    # loader has the same safe semantics and parses the full registry faster.
+    registry = yaml.load(
+        FEATURE_FLAGS_PATH.read_text(encoding='utf-8'), Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
+    )
     flags = {flag['key']: flag for flag in registry['flags']}
     for name in sorted(helper_names):
         entry = names[name]

@@ -4514,5 +4514,6 @@
     "yearlySwitchPreviewFailed": "Det gick inte att läsa in priset.",
     "yearlySwitchUnavailable": "Årsbetalning är inte tillgänglig för ditt abonnemang just nu.",
     "yearlySwitchDoneTitle": "Du betalar nu årsvis",
-    "yearlySwitchDoneBody": "{amount} drogs i dag. Förnyas {date}."
+    "yearlySwitchDoneBody": "{amount} drogs i dag. Förnyas {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} delar} one{{count} del} two{{count} delar} few{{count} delar} many{{count} delar} other{{count} delar}}"
 }

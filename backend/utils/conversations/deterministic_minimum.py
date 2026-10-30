@@ -18,6 +18,7 @@ from datetime import tzinfo
 from typing import Any, Callable, Iterable, List, Optional, cast
 
 from config.summary_guarantee import enabled
+from config.merge_before_processing import enabled as merge_before_processing_enabled
 from models.conversation_emoji import fallback_emoji
 from models.conversation_enums import CategoryEnum
 from models.structured import Structured
@@ -149,11 +150,13 @@ def build_deterministic_minimum_structured(
     the category's fallback emoji, no action items, no events. Every other field
     keeps its model default.
 
-    ``uid`` is the conversation owner. ``title_provenance`` is stamped only for an
-    owner in the first-summary cohort; an unknown owner (None) gets no stamp.
+    ``uid`` is the owner. Stamp raw-title provenance for the first-summary
+    cohort or pre-processing merge admission, so a minimum never masquerades
+    as historical full processing. An unknown owner (None) gets no stamp.
     """
     in_cohort = uid is not None and enabled(uid)
-    metadata: dict[str, Any] = {'title_provenance': 'server_minimum'} if in_cohort else {}
+    raw_provenance = in_cohort or (uid is not None and merge_before_processing_enabled())
+    metadata: dict[str, Any] = {'title_provenance': 'server_minimum'} if raw_provenance else {}
     return Structured(
         **metadata,
         title=deterministic_minimum_title(

@@ -9,6 +9,9 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/episode.dart';
+import 'package:omi/pages/episodes/episode_page.dart';
+import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart' show ConversationTab;
@@ -91,9 +94,16 @@ class ConversationListItem extends StatefulWidget {
   /// swipe-to-delete, selection).
   final bool inLockedRun;
 
+  /// Parent supplies outer spacing, while normal lock and row interactions remain intact.
+  final bool embedded;
+
   /// Seconds of audio offline sync is still adding to this conversation (episodes on). The row
   /// says so with a small spinner instead of a separate "catching up" row.
   final int? fillingSeconds;
+
+  /// Closed episode projection, drawn by the same conversation row widget.
+  final Episode? homeEpisode;
+  final bool openEpisodeFromSearch;
 
   const ConversationListItem({
     super.key,
@@ -104,7 +114,10 @@ class ConversationListItem extends StatefulWidget {
     this.reprocess,
     this.allowSelection = true,
     this.inLockedRun = false,
+    this.embedded = false,
     this.fillingSeconds,
+    this.homeEpisode,
+    this.openEpisodeFromSearch = true,
   });
 
   @override
@@ -116,7 +129,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
   bool isNew = false;
   bool _reprocessing = false;
 
-  int _visualSignature(ServerConversation conversation) => Object.hash(
+  int _visualSignature(ServerConversation conversation) => Object.hashAll([
         conversation.structured.title,
         conversation.structured.emoji,
         conversation.structured.category,
@@ -135,7 +148,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
         conversation.isLocked,
         conversation.processingDeferred,
         widget.fillingSeconds,
-      );
+        widget.homeEpisode?.members.length,
+      ]);
 
   @override
   void initState() {
@@ -222,6 +236,19 @@ class _ConversationListItemState extends State<ConversationListItem> {
       if (!context.read<UsageProvider>().showSubscriptionUI) return;
       routeToPage(context, const UsagePage());
       return;
+    }
+    if (widget.homeEpisode case final episode?) {
+      await routeToPage(context, EpisodePage(episode: episode));
+      return;
+    }
+    final episodes = context.read<EpisodeProvider?>();
+    if (widget.openEpisodeFromSearch && provider.previousQuery.isNotEmpty && episodes?.enabled == true) {
+      final episode = await episodes!.episodeFor(widget.conversation.id);
+      if (!context.mounted) return;
+      if (episode != null && !episode.live && episode.members.length >= 2) {
+        await routeToPage(context, EpisodePage(episode: episode));
+        return;
+      }
     }
     HapticFeedback.selectionClick();
     // The detail page seeds its provider from the supplied conversation
@@ -397,7 +424,9 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
           return GestureDetector(
             onTap: onTap,
-            onLongPress: isSelectionMode || isMerging ? null : () => _showActions(context, provider),
+            onLongPress: isSelectionMode || isMerging || widget.homeEpisode != null
+                ? null
+                : () => _showActions(context, provider),
             child: Stack(
               children: [
                 Padding(
@@ -408,7 +437,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                     child: Semantics(
                       selected: isSelectionMode ? isSelected : null,
                       child: _SwipeDeleteRow(
-                        enabled: !isSelectionMode && !isMerging,
+                        enabled: !isSelectionMode && !isMerging && widget.homeEpisode == null,
                         // One delete path (D5): confirm unless opted out, then Undo. The confirm
                         // pops from the row's delete button.
                         confirm: (anchor) async {
@@ -462,12 +491,13 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
   /// A row inside a [LockedConversationRun] takes its outer spacing from the run.
   EdgeInsets get _cardPadding {
-    if (widget.inLockedRun) return EdgeInsets.zero;
+    if (widget.inLockedRun || widget.embedded) return EdgeInsets.zero;
     final side = widget.isFromOnboarding ? 0.0 : 16.0;
     return EdgeInsets.only(top: 8, left: side, right: side);
   }
 
   static TextStyle get _metaStyle => TextStyle(color: OmiColors.textTertiary, fontSize: 14);
+  static const _metaSeparator = ' • ';
 
   Widget _buildCardContent(BuildContext context, Future<void> Function() onTap) {
     final content = Padding(
@@ -494,7 +524,14 @@ class _ConversationListItemState extends State<ConversationListItem> {
           style: _metaStyle,
           maxLines: 1,
         ),
-        if (duration.isNotEmpty) ...[Text(' • ', style: _metaStyle), Text(duration, style: _metaStyle, maxLines: 1)],
+        if (duration.isNotEmpty) ...[
+          Text(_metaSeparator, style: _metaStyle),
+          Text(duration, style: _metaStyle, maxLines: 1)
+        ],
+        if (widget.homeEpisode case final episode? when episode.members.length >= 2) ...[
+          Text(_metaSeparator, style: _metaStyle),
+          Text(context.l10n.episodePartsCount(episode.members.length), style: _metaStyle, maxLines: 1),
+        ],
         if (widget.fillingSeconds case final seconds?) ...[
           // The ring is the separator here: "34m  ◌ adding 12m from your Omi".
           const SizedBox(width: 6),
@@ -515,7 +552,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
         ],
         // One row stands for an event several devices recorded.
         if (_captureSources.length > 1) ...[
-          Text(' • ', style: _metaStyle),
+          Text(_metaSeparator, style: _metaStyle),
           CaptureSourceIcons(sources: _captureSources),
         ],
         if (isNew) ...[

@@ -4514,5 +4514,6 @@
     "yearlySwitchPreviewFailed": "आपकी कीमत लोड नहीं हो सकी।",
     "yearlySwitchUnavailable": "अभी आपके प्लान के लिए सालाना बिलिंग उपलब्ध नहीं है।",
     "yearlySwitchDoneTitle": "अब आप सालाना प्लान पर हैं",
-    "yearlySwitchDoneBody": "आज {amount} चार्ज किए गए। नवीनीकरण {date} को।"
+    "yearlySwitchDoneBody": "आज {amount} चार्ज किए गए। नवीनीकरण {date} को।",
+    "episodePartsCount": "{count, plural, zero{{count} भाग} one{{count} भाग} two{{count} भाग} few{{count} भाग} many{{count} भाग} other{{count} भाग}}"
 }

@@ -361,6 +361,8 @@ class _Stack:
     """One hermetic listen session wired to real pusher server tasks."""
 
     def __init__(self, monkeypatch, *, v2: bool, conversation_id: str, spans: bool = False):
+        # Historical-clock transport replay exercises the live persistence rollback.
+        monkeypatch.setenv('LATE_AUDIO_SYNC_INTAKE_ENABLED', 'false')
         # This fixture models the historical timeline algorithm. Custody's
         # default-on fault matrix and real ASGI stack are separate gates.
         monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')

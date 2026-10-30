@@ -183,7 +183,9 @@ def detect(audio: bytes, *, before_probe=None, **audio_options) -> LanguageDecis
             record_vendor_burn(ENDPOINT_LID, 'ok' if outcome == 'accepted' else 'error', seconds)
 
 
-def _self_gate(audio: bytes, surface: str, cohort_key, audio_options) -> tuple[bool, language_gate.SelfVerdict | None]:
+def _self_gate(
+    audio: bytes, surface: str, cohort_key, audio_options, *, before_probe=None
+) -> tuple[bool, language_gate.SelfVerdict | None]:
     """(enforced, verdict), using the shared percentage cohort on every intake surface."""
     try:
         probe, probe_seconds = probe_wav(audio, **audio_options)
@@ -192,6 +194,8 @@ def _self_gate(audio: bytes, surface: str, cohort_key, audio_options) -> tuple[b
     enforced = language_gate.enforced_for(cohort_key, probe)
     if not enforced and not language_gate_shadow_enabled():
         return False, None
+    if before_probe is not None and not before_probe():
+        return enforced, None
     verdict = language_gate.self_detect(probe, surface=surface)
     if verdict is not None:
         reported_seconds = verdict.audio_seconds
@@ -231,12 +235,23 @@ def compare_shadow_pair(audio: bytes, *, before_call, surface='batch_shadow') ->
 
 
 def resolve_language(
-    language, audio: bytes, *, before_probe=None, surface='prerecorded', cohort_key=None, **audio_options
+    language,
+    audio: bytes,
+    *,
+    before_probe=None,
+    before_self_probe=None,
+    surface='prerecorded',
+    cohort_key=None,
+    **audio_options,
 ) -> LanguageDecision:
     code = normalized_stt_language(language.strip() if isinstance(language, str) else None)
     if not language_guard_enabled() or language_class(language) != 'unknown':
         return LanguageDecision(code, 1.0, 'declared')
-    enforced, verdict = _self_gate(audio, surface, cohort_key, audio_options)
+    enforced, verdict = (
+        _self_gate(audio, surface, cohort_key, audio_options)
+        if before_self_probe is None
+        else _self_gate(audio, surface, cohort_key, audio_options, before_probe=before_self_probe)
+    )
     if enforced:
         language_gate.record_enforced(surface, verdict)
     if enforced and verdict is not None:

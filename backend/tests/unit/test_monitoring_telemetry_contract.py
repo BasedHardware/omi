@@ -244,6 +244,7 @@ CLOUD_RUN_SYNC_EXPORTER_PREFIXES = [
     'prometheus.googleapis.com/omi_client_journey_',
     'prometheus.googleapis.com/omi_owner_recognition_conversations_total/',
     'prometheus.googleapis.com/omi_conversation_duration_seconds/',
+    'prometheus.googleapis.com/omi_conversation_relevance_decision_total/',
     'prometheus.googleapis.com/omi_conversation_summary_vector_upserts_total/',
     'prometheus.googleapis.com/omi_firestore_documents_per_operation/',
     'prometheus.googleapis.com/omi_capture_finalization_',

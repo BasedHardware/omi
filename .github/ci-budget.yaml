@@ -1,10 +1,10 @@
 {
   "caps": {
     "internal_time_to_signal_minutes": 49,
-    "pr_linux_minutes_per_day": 13660,
+    "pr_linux_minutes_per_day": 14380,
     "pr_macos_minutes_per_day": 1600
   },
-  "caps_rationale": "#21237 six-shard rebalance follows run 38168319908: 1727 files, four shard contract walls 710/472/772/651s, and only 17s of Dream file spans on the failing shard. The 720-second per-shard regression budget stays unchanged. Forecast 8 minutes per runner over six runners versus the prior 9 over four adds 1428 Linux minutes/day at the existing 119 runs/day, yielding 13506.2 Linux minutes/day before fork Dart coverage. The 2026-10-13 contributor audit adds four fork Dart PR runs/day at the retained 17-minute p50 (+68), yielding 13574.2 Linux minutes/day. Set the Linux cap to 13620 to cover that forecast. The conservative matrix-multiplied dependency-path forecast and cap remain 49 minutes; actual shards execute in parallel. The macOS cap remains 1600 minutes/day. Nightly Dart is outside the PR cap. Re-seed from terminal executions in the next weekly audit. 2026-10-21 plan B B2 (named by David) adds role_images.yml: about one path-filtered PR run a day of the roles (25 min) and edge (12 min) jobs, +37 Linux minutes/day (13637.4 forecast); Linux cap 13660.",
+  "caps_rationale": "#21237 six-shard rebalance follows run 38168319908: 1727 files, four shard contract walls 710/472/772/651s, and only 17s of Dream file spans on the failing shard. The 720-second per-shard regression budget stays unchanged. Forecast 8 minutes per runner over six runners versus the prior 9 over four adds 1428 Linux minutes/day at the existing 119 runs/day, yielding 13506.2 Linux minutes/day before fork Dart coverage. The 2026-10-13 contributor audit adds four fork Dart PR runs/day at the retained 17-minute p50 (+68), yielding 13574.2 Linux minutes/day. Set the Linux cap to 13620 to cover that forecast. The conservative matrix-multiplied dependency-path forecast and cap remain 49 minutes; actual shards execute in parallel. The macOS cap remains 1600 minutes/day. Nightly Dart is outside the PR cap. Re-seed from terminal executions in the next weekly audit. 2026-10-21 plan B B2 (named by David) adds role_images.yml: about one path-filtered PR run a day of the roles (25 min) and edge (12 min) jobs, +37 Linux minutes/day (13637.4 forecast); Linux cap 13660. 2026-10-29 ghguards (named by David) runs both hermetic contract gauntlets on every backend PR instead of per-suite path filters (#23919 skipped the sync gauntlet on a sync-processing PR): listen 19->62 runs/day at p50 11 (+473) and sync 13->62 at p50 5 (+245), +718 Linux minutes/day (14367.4 forecast); Linux cap 14380.",
   "jobs": {
     "backend-checks.yml/changes": {
       "budget_p50_minutes": 2,
@@ -106,13 +106,13 @@
       "display_name": "Listen Pusher Stack Gauntlet",
       "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 19,
+      "expected_runs_per_day": 62,
       "if": "needs.scope.outputs.applies == 'true' && needs.scope.outputs.full_ci == 'true' && needs.scope.outputs.run_listen == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "scope",
       "owner": "CI maintainers",
-      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05 P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
+      "rationale": "2026-10-29 ghguards: run_listen now follows the full hermetic scope (the per-suite path filter let #23919-era sync-processing PRs and non-listen backend PRs skip this gauntlet), so expected runs match hermetic-e2e's 62 sampled backend-PR runs/day at the retained p50 (2026-10-29 measured median 8.3 min on main pushes).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -212,13 +212,13 @@
       "display_name": "Sync Cloud Tasks Stack Gauntlet",
       "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 13,
+      "expected_runs_per_day": 62,
       "if": "needs.scope.outputs.applies == 'true' && needs.scope.outputs.full_ci == 'true' && needs.scope.outputs.run_sync == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "scope",
       "owner": "CI maintainers",
-      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05 P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
+      "rationale": "2026-10-29 ghguards: run_sync now follows the full hermetic scope \u2014 the per-suite path filter missed backend/utils/sync/** and backend/database/, so #23919 shipped a sync-processing change with this gauntlet skipped and main went red unseen; expected runs match hermetic-e2e's 62 sampled backend-PR runs/day at the retained p50 (2026-10-29 measured median 7.1 min on PRs).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1233,7 +1233,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend_listen_helm.yml/deploy-neg-coverage-exporter": {
-      "budget_p50_minutes": 11,
+      "budget_p50_minutes": 12,
       "display_name": "Deploy NEG coverage exporter",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1,
@@ -1242,7 +1242,7 @@
       "matrix_size": 1,
       "needs": "helm-upgrade",
       "owner": "Omi backend maintainers",
-      "rationale": "Production-only follow-up after a successful listen rollout; the resolver emits its image-tag output only for explicit deploys, while kept-tag and rollback paths leave it empty. Budget covers WIF setup and the exporter Helm rollout capped at five minutes, with no PR-run cost. B5 (2026-10-19) adds the break_glass_lock dispatch input, no new trigger. 2026-10-22 plan D D2 adds the listen_edge_image_digest dispatch input; this job is unchanged and stays manual-only with no PR runs, and the one-minute bump records the trigger change",
+      "rationale": "Production-only follow-up after a successful listen rollout; the resolver emits its image-tag output only for explicit deploys, while kept-tag and rollback paths leave it empty. Budget covers WIF setup and the exporter Helm rollout capped at five minutes, with no PR-run cost. B5 (2026-10-19) adds the break_glass_lock dispatch input, no new trigger. 2026-10-22 plan D D2 adds the listen_edge_image_digest dispatch input; this job is unchanged and stays manual-only with no PR runs, and the one-minute bump records the trigger change. 2026-10-29 ghguards adds the expected_sha dispatch input upstream of this job; this job is unchanged, and the one-minute bump records the trigger change",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1251,7 +1251,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend_listen_helm.yml/helm-upgrade": {
-      "budget_p50_minutes": 15,
+      "budget_p50_minutes": 16,
       "display_name": "helm-upgrade",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1,
@@ -1260,7 +1260,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. B5 (2026-10-19) adds the break_glass_lock dispatch input, no new trigger. 2026-10-22 plan D D2 adds the listen_edge_image_digest dispatch input: when set, the job also admits the digest (one image-config read) and helm-upgrades backend/charts/listen-edge with a 600-second rollout wait after the listen rollout; manual-only, no PR runs, 15-minute placeholder p50",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. B5 (2026-10-19) adds the break_glass_lock dispatch input, no new trigger. 2026-10-22 plan D D2 adds the listen_edge_image_digest dispatch input: when set, the job also admits the digest (one image-config read) and helm-upgrades backend/charts/listen-edge with a 600-second rollout wait after the listen rollout; manual-only, no PR runs, 15-minute placeholder p50. 2026-10-29 ghguards adds the expected_sha dispatch input: the admission step gains a SHA format/object check plus one merge-base containment test before any mutation (seconds on the full clone); the one-minute bump records the trigger change",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1430,6 +1430,24 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "gcp_firestore_indexes.yml/check_pr_prod_indexes": {
+      "budget_p50_minutes": 2,
+      "display_name": "check_pr_prod_indexes",
+      "expected_runs_class": "planned-index-prs",
+      "expected_runs_per_day": 2,
+      "if": "needs.plan_pr_indexes.outputs.eligible == 'true' && github.event.pull_request.head.repo.full_name == github.repository",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "plan_pr_indexes",
+      "owner": "CI maintainers",
+      "rationale": "2026-10-29 wifidx: replaces the two PR prebuild jobs (prebuild_pr_prod_indexes + prebuild_pr_development_indexes, 2+2 minutes at the same 2 runs/day class), which have failed at Google Auth on every eligible PR since the 10-22 WIF tightening restricted both deploy pools to refs/heads/main. Read-only dry-run against prod with a dedicated index-reader identity: same trusted-main steps as the writer, one gcloud index list instead of provisioning in two projects. Same frequency and a 2-minute ceiling under the old pair's combined budget.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "gcp_firestore_indexes.yml/plan_pr_indexes": {
       "budget_p50_minutes": 1,
       "display_name": "plan_pr_indexes",
@@ -1441,42 +1459,6 @@
       "needs": [],
       "owner": "Backend schema maintainers",
       "rationale": "Credential-free JSON diff on registry/manifest PR events; two index PR updates/day budget.",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "gcp_firestore_indexes.yml/prebuild_pr_development_indexes": {
-      "budget_p50_minutes": 2,
-      "display_name": "prebuild_pr_development_indexes",
-      "expected_runs_class": "planned-index-prs",
-      "expected_runs_per_day": 2,
-      "if": "needs.plan_pr_indexes.outputs.eligible == 'true'",
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": "plan_pr_indexes",
-      "owner": "Backend schema maintainers",
-      "rationale": "P65: start only additive PR index builds asynchronously, two updates/day; no runner polling for READY. Existing deploy readiness enforces READY after merge. Automatic development schema writer.",
-      "reusable": null,
-      "runner": "linux",
-      "runner_counts": {
-        "linux": 1
-      },
-      "runs_on": "ubuntu-latest"
-    },
-    "gcp_firestore_indexes.yml/prebuild_pr_prod_indexes": {
-      "budget_p50_minutes": 2,
-      "display_name": "prebuild_pr_prod_indexes",
-      "expected_runs_class": "planned-index-prs",
-      "expected_runs_per_day": 2,
-      "if": "needs.plan_pr_indexes.outputs.eligible == 'true'",
-      "matrix": {},
-      "matrix_size": 1,
-      "needs": "plan_pr_indexes",
-      "owner": "Backend schema maintainers",
-      "rationale": "P65: start only additive PR index builds asynchronously, two updates/day; no runner polling for READY. Existing deploy readiness enforces READY after merge. Required prod Environment approval.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -4410,7 +4392,7 @@
     "gcp_backend_listen_helm.yml": {
       "name": "Upgrade Backend Listen Helm Chart",
       "owner": "CI maintainers",
-      "rationale": "B5 prod-train lock (2026-10-19): break_glass_lock dispatch input added; triggers otherwise unchanged. 2026-10-22 plan D D2 (lane p41-d2): listen_edge_image_digest dispatch input (blank by default) rolls backend/charts/listen-edge by admitted digest after the listen rollout; no new event trigger, no PR runs",
+      "rationale": "B5 prod-train lock (2026-10-19): break_glass_lock dispatch input added; triggers otherwise unchanged. 2026-10-22 plan D D2 (lane p41-d2): listen_edge_image_digest dispatch input (blank by default) rolls backend/charts/listen-edge by admitted digest after the listen rollout; no new event trigger, no PR runs. 2026-10-29 ghguards: expected_sha dispatch input (blank default) admits only a checked-out tree that contains the pinned commit before any mutation; no new event trigger, no PR runs",
       "triggers": {
         "push": {
           "branches": [
@@ -4465,6 +4447,12 @@
               ],
               "required": "true",
               "type": "choice"
+            },
+            "expected_sha": {
+              "default": "",
+              "description": "Full commit SHA the checked-out tree must contain before any mutation (blank keeps the unpinned behavior; prod dispatches should pin the reviewed SHA)",
+              "required": "false",
+              "type": "string"
             },
             "gateway_feature_mode": {
               "default": "chart-default",
@@ -4824,7 +4812,7 @@
     "gcp_firestore_indexes.yml": {
       "name": "Reconcile Firestore Indexes",
       "owner": "CI maintainers",
-      "rationale": "P65: prebuild additive same-repository index PRs during review; main/manual reconciliation and required prod approval remain. No new images or vendor calls.",
+      "rationale": "P65 planned additive index PRs during review; since the 10-22 WIF tightening the deploy pools admit only refs/heads/main, so 2026-10-29 wifidx converts the PR lane to a read-only dry-run plan under a dedicated index-reader identity (check_pr_prod_indexes) and drops the dev prebuild job. Main/manual reconciliation and required prod approval remain unchanged. No new images or vendor calls.",
       "triggers": {
         "pull_request": {
           "branches": [

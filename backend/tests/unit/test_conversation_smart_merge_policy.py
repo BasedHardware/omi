@@ -250,6 +250,13 @@ def test_absorb_payloads_rebase_reallocate_speakers_and_tombstone_the_donor():
         'sync_content_revision': 1,
         'smart_merge': {'role': 'donor', 'survivor_id': 'p', 'survivor_revision': 1, 'merged_at': merged_at},
         'smart_merge_decision': decision,
+        'relevance_decision': {
+            'verdict': 'absorbed',
+            'decided_by': 'policy',
+            'reason': 'smart_merge',
+            'trigger': 'capture_end',
+            'neighbor_id': 'p',
+        },
     }
 
 

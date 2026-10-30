@@ -15006,4 +15006,19 @@ class AppLocalizationsIt extends AppLocalizations {
   String yearlySwitchDoneBody(String amount, String date) {
     return 'Addebitati $amount oggi. Rinnovo il $date.';
   }
+
+  @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count parti',
+      many: '$count parti',
+      few: '$count parti',
+      two: '$count parti',
+      one: '$count parte',
+      zero: '$count parti',
+    );
+    return '$_temp0';
+  }
 }

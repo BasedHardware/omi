@@ -10,6 +10,7 @@ import {
   useCallback,
 } from 'react';
 import { User } from 'firebase/auth';
+import { setChatDraftOwner } from '@/components/chat/chatDraft';
 import {
   onAuthStateChange,
   signInWithGoogle,
@@ -60,6 +61,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onAuthStateChange((user) => {
       setUser(user);
       setLoading(false);
+      // Composer drafts are account-scoped: a switch or sign-out clears the
+      // previous account's unsent prompts.
+      setChatDraftOwner(user?.uid ?? null);
 
       // Identify user with Mixpanel when authenticated
       if (user && !previousUserRef.current) {
