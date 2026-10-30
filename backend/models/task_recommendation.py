@@ -110,6 +110,19 @@ class Recommendation(BaseModel):
     dedupe_key: StableId
     expires_at: AwareDatetime
 
+    @model_validator(mode='after')
+    def validate_non_blank_strings(self):
+        self.headline = self.headline.strip()
+        if not self.headline:
+            raise ValueError('headline cannot be blank')
+        self.why_now = self.why_now.strip()
+        if not self.why_now:
+            raise ValueError('why_now cannot be blank')
+        self.recommended_action = self.recommended_action.strip()
+        if not self.recommended_action:
+            raise ValueError('recommended_action cannot be blank')
+        return self
+
 
 class WhatMattersNowProjection(BaseModel):
     model_config = ConfigDict(extra='forbid')
@@ -121,6 +134,12 @@ class WhatMattersNowProjection(BaseModel):
     generated_at: AwareDatetime
     expires_at: AwareDatetime
     recommendations: list[Recommendation] = Field(max_length=3)
+
+    @model_validator(mode='after')
+    def validate_expiry(self):
+        if self.expires_at < self.generated_at:
+            raise ValueError('projection expires_at must not precede generated_at')
+        return self
 
 
 class FeedbackCreate(BaseModel):
@@ -219,6 +238,12 @@ class NormalizedContextSnapshot(BaseModel):
     generated_at: AwareDatetime
     expires_at: AwareDatetime
 
+    @model_validator(mode='after')
+    def validate_expiry(self):
+        if self.expires_at < self.generated_at:
+            raise ValueError('snapshot expires_at must not precede generated_at')
+        return self
+
 
 class OpenLoopDescriptor(BaseModel):
     model_config = ConfigDict(extra='forbid', frozen=True)
@@ -246,6 +271,12 @@ class OpenLoopSnapshot(BaseModel):
     open_loop_snapshot: list[OpenLoopDescriptor] = Field(default_factory=list, max_length=32)
     generated_at: AwareDatetime
     expires_at: AwareDatetime
+
+    @model_validator(mode='after')
+    def validate_expiry(self):
+        if self.expires_at < self.generated_at:
+            raise ValueError('snapshot expires_at must not precede generated_at')
+        return self
 
 
 class EvaluationRequest(BaseModel):
