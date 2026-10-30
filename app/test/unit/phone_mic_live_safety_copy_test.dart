@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -77,7 +76,6 @@ void main() {
       // The socket-send path marks the frame synced without any server receipt.
       sync.markFrameSynced(frame.syncKey);
     }
-    await Future<void>.delayed(const Duration(milliseconds: 150));
   }
 
   test('fully transport-synced phone-mic chunks are stored as safety copies, not dropped', () async {
@@ -87,7 +85,10 @@ void main() {
     expect(sync.testWals, isEmpty, reason: 'nothing stored before a drain runs');
 
     scheduler.elapse(const Duration(seconds: 10));
-    await Future<void>.delayed(const Duration(milliseconds: 150));
+    // Await the Future the drain callback returned (finalize, audio write,
+    // then WAL index save) instead of a fixed sleep: under CI load a 150 ms
+    // sleep ended before the flush landed and the copy still read as mem.
+    await scheduler.waitForCallbackIo();
 
     expect(sync.testWals, isNotEmpty);
     final wal = sync.testWals.first;
@@ -104,7 +105,11 @@ void main() {
     expect(sync.testWals, isEmpty);
 
     sync.didChangeAppLifecycleState(AppLifecycleState.paused);
-    await Future<void>.delayed(const Duration(milliseconds: 60));
+    // The pause seal is fire-and-forget, so no timer Future tracks it; await
+    // the buffer queue it was enqueued on instead of a fixed sleep. This only
+    // observes the seal — it must not drain anything itself, which is exactly
+    // the production contract under test.
+    await sync.testWalIoQuiescent;
 
     expect(sync.testWals, hasLength(1));
     final wal = sync.testWals.single;
@@ -118,7 +123,8 @@ void main() {
     await captureTransportSynced(6000);
     // One 10-second drain produces exactly one durable safety copy.
     scheduler.elapse(const Duration(seconds: 10));
-    await Future<void>.delayed(const Duration(milliseconds: 150));
+    // Same deterministic drain await as the first test — no wall-clock sleeps.
+    await scheduler.waitForCallbackIo();
     final wal = sync.testWals.single;
     expect(wal.syncedAt, 0);
     expect(wal.storage, WalStorage.disk);
