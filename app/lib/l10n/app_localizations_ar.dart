@@ -14648,4 +14648,8 @@ class AppLocalizationsAr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'تم حفظ الاسم على هذا الهاتف فقط. تعذّر تحديث جهاز Omi، حاول مرة أخرى أثناء اتصاله.';
 }

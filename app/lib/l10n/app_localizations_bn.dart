@@ -14727,4 +14727,8 @@ class AppLocalizationsBn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'নামটি শুধু এই ফোনে সংরক্ষিত হয়েছে। Omi আপডেট করা যায়নি — সংযুক্ত থাকা অবস্থায় আবার চেষ্টা করুন।';
 }

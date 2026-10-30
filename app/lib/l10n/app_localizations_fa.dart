@@ -14726,4 +14726,8 @@ class AppLocalizationsFa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'نام فقط در این تلفن ذخیره شد. به‌روزرسانی Omi ممکن نشد؛ وقتی متصل است دوباره امتحان کنید.';
 }

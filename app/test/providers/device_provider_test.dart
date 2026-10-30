@@ -447,19 +447,21 @@ void main() {
     provider.connectedDevice = device;
     provider.pairedDevice = device;
 
-    expect(await provider.renameDevice('Kitchen Omi'), isTrue);
+    expect(await provider.renameDevice('Kitchen Omi'), DeviceRenameResult.savedLocally);
     expect(provider.connectedDevice?.name, 'Kitchen Omi');
     expect(provider.pairedDevice?.name, 'Kitchen Omi');
     expect(SharedPreferencesUtil().deviceAlias(device.id), 'Kitchen Omi');
     expect(SharedPreferencesUtil().btDevice.name, 'Kitchen Omi');
   });
 
-  test('saveDeviceAlias rejects aliases longer than 40 characters', () async {
+  test('saveDeviceAlias rejects aliases over the 25-byte device budget', () async {
     SharedPreferences.setMockInitialValues({'uid': 'rename-user'});
     await SharedPreferencesUtil.init();
 
     const deviceId = 'AA:AA:AA:AA:AA:97';
-    final tooLong = 'A' * 41;
+    // 9 x 3-byte chars = 27 UTF-8 bytes, only 9 characters.
+    const tooLong = '一二三四五六七八九';
+    expect(await SharedPreferencesUtil().saveDeviceAlias(deviceId, 'A' * 26), isFalse);
 
     expect(
       await SharedPreferencesUtil().saveDeviceAlias(deviceId, tooLong),
@@ -506,9 +508,23 @@ void main() {
     );
     provider.pairedDevice = target;
 
-    expect(await provider.renameDevice('Bedroom Omi', deviceId: 'AA:AA:AA:AA:AA:96'), isTrue);
+    expect(await provider.renameDevice('Bedroom Omi', deviceId: 'AA:AA:AA:AA:AA:96'), DeviceRenameResult.savedLocally);
     expect(provider.pairedDevice?.name, 'Bedroom Omi');
     expect(SharedPreferencesUtil().deviceAlias('AA:AA:AA:AA:AA:96'), 'Bedroom Omi');
+  });
+
+  test('renameDevice rejects a name over 25 bytes without touching state', () async {
+    SharedPreferences.setMockInitialValues({'uid': 'rename-user'});
+    await SharedPreferencesUtil.init();
+
+    final provider = DeviceProvider();
+    addTearDown(provider.dispose);
+    final target = BtDevice(id: 'AA:AA:AA:AA:AA:93', name: 'Omi', type: DeviceType.omi, rssi: -50);
+    provider.pairedDevice = target;
+
+    expect(await provider.renameDevice('A' * 26, deviceId: target.id), DeviceRenameResult.failed);
+    expect(provider.pairedDevice?.name, 'Omi');
+    expect(SharedPreferencesUtil().deviceAlias(target.id), isEmpty);
   });
 
   test('removeDeviceAlias removes stored alias', () async {

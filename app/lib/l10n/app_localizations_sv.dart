@@ -14740,4 +14740,8 @@ class AppLocalizationsSv extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'Namnet sparades bara på den här telefonen. Det gick inte att uppdatera Omi – försök igen medan den är ansluten.';
 }

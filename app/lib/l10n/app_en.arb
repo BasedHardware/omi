@@ -18010,5 +18010,9 @@
                 "type": "int"
             }
         }
+    },
+    "deviceNameSaveFailed": "Name saved on this phone only. Couldn't update your Omi — try again while it's connected.",
+    "@deviceNameSaveFailed": {
+        "description": "Snackbar shown when a device rename was saved in the app but the Bluetooth write to the Omi (or its read-back check) failed."
     }
 }

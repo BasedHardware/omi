@@ -4470,5 +4470,6 @@
     "onTheWayDetailsForSupport": "Подробиці для підтримки",
     "homeNoiseFoldHidden": "{count, plural, =1{Приховано 1 короткий запис} other{Приховано {count} коротких записів}}",
     "homeNoiseFoldShow": "Показати",
-    "homeNoiseFoldHide": "{count, plural, =1{Приховати 1 короткий запис} other{Приховати {count} коротких записів}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Приховати 1 короткий запис} other{Приховати {count} коротких записів}}",
+    "deviceNameSaveFailed": "Назву збережено лише на цьому телефоні. Не вдалося оновити Omi — спробуйте ще раз, поки він підключений."
 }

@@ -14732,4 +14732,8 @@ class AppLocalizationsVi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'Tên chỉ được lưu trên điện thoại này. Không thể cập nhật Omi — hãy thử lại khi thiết bị đang kết nối.';
 }

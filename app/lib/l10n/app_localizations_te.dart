@@ -14793,4 +14793,8 @@ class AppLocalizationsTe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'పేరు ఈ ఫోన్‌లో మాత్రమే సేవ్ చేయబడింది. Omiని అప్‌డేట్ చేయడం సాధ్యపడలేదు — కనెక్ట్ అయి ఉన్నప్పుడు మళ్లీ ప్రయత్నించండి.';
 }

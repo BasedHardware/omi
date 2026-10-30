@@ -14764,4 +14764,8 @@ class AppLocalizationsLv extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'Nosaukums saglabāts tikai šajā tālrunī. Neizdevās atjaunināt Omi — mēģiniet vēlreiz, kamēr tas ir savienots.';
 }

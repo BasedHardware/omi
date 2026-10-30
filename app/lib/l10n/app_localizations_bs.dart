@@ -14759,4 +14759,8 @@ class AppLocalizationsBs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'Naziv je sačuvan samo na ovom telefonu. Omi nije ažuriran — pokušajte ponovo dok je povezan.';
 }

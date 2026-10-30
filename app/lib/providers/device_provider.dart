@@ -508,25 +508,23 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   bool _readoptPairMovedOn(String deviceId) =>
       _readoptExpectedPair == deviceId && SharedPreferencesUtil().btDevice.id != deviceId;
 
-  /// Sets a local user-defined alias for the device, persisting it to preferences.
-  Future<bool> renameDevice(String newName, {String? deviceId}) async {
+  /// Renames a device. The alias is always saved on this phone first; when the
+  /// device is connected and supports it, the name is also written onboard and
+  /// verified with a read-back so other phones see the same name.
+  Future<DeviceRenameResult> renameDevice(String newName, {String? deviceId}) async {
     final targetId = deviceId ?? (connectedDevice ?? pairedDevice)?.id;
-    if (targetId == null || targetId.isEmpty) return false;
+    if (targetId == null || targetId.isEmpty) return DeviceRenameResult.failed;
 
     final normalized = newName.trim();
-    if (normalized.isEmpty) return false;
+    if (!SharedPreferencesUtil.isValidDeviceName(normalized)) return DeviceRenameResult.failed;
 
     final saved = await SharedPreferencesUtil().saveDeviceAlias(targetId, normalized);
-    if (!saved) return false;
+    if (!saved) return DeviceRenameResult.failed;
 
-    // If the device is actively connected, persist onboard the hardware over BLE
+    var result = DeviceRenameResult.savedLocally;
     final activeConn = (_admittedLink?.$1.device.id == targetId) ? _admittedLink?.$1 : null;
-    if (activeConn != null) {
-      try {
-        await activeConn.setDeviceName(normalized);
-      } catch (e) {
-        Logger.debug('DeviceProvider: Error persisting device name to hardware: $e');
-      }
+    if (activeConn != null && activeConn.supportsOnboardDeviceName) {
+      result = await persistNameOnboard(activeConn, normalized);
     }
 
     if (connectedDevice?.id == targetId) {
@@ -543,7 +541,29 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
     SharedPreferencesUtil().deviceName = normalized;
     notifyListeners();
-    return true;
+    return result;
+  }
+
+  /// Writes the name onboard, then reads it back. Any write error, missing
+  /// characteristic (old firmware) or mismatch is reported, never swallowed.
+  @visibleForTesting
+  static Future<DeviceRenameResult> persistNameOnboard(DeviceConnection connection, String name) async {
+    try {
+      final written = await connection.setDeviceName(name);
+      if (!written) {
+        Logger.debug('DeviceProvider: onboard device-name write was rejected');
+        return DeviceRenameResult.deviceWriteFailed;
+      }
+      final readBack = await connection.getDeviceName();
+      if (readBack != name) {
+        Logger.debug('DeviceProvider: onboard device-name read-back mismatch');
+        return DeviceRenameResult.deviceWriteFailed;
+      }
+      return DeviceRenameResult.savedOnDevice;
+    } catch (e) {
+      Logger.debug('DeviceProvider: Error persisting device name to hardware: $e');
+      return DeviceRenameResult.deviceWriteFailed;
+    }
   }
 
   /// Hardware find-device LED. Not account publication; left unfenced.
@@ -1712,4 +1732,19 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
     notifyListeners();
   }
+}
+
+/// Outcome of [DeviceProvider.renameDevice].
+enum DeviceRenameResult {
+  /// Invalid name, unknown device, or the local alias could not be saved.
+  failed,
+
+  /// Saved on this phone; the device was not connected or cannot store a name.
+  savedLocally,
+
+  /// Saved on this phone and verified onboard via read-back.
+  savedOnDevice,
+
+  /// Saved on this phone, but the onboard write or its read-back failed.
+  deviceWriteFailed,
 }

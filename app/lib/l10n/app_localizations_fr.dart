@@ -14850,4 +14850,8 @@ class AppLocalizationsFr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'Nom enregistré sur ce téléphone uniquement. Impossible de mettre à jour votre Omi — réessayez pendant qu\'il est connecté.';
 }

@@ -14741,4 +14741,8 @@ class AppLocalizationsMr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'नाव फक्त या फोनवर जतन केले. Omi अपडेट करता आले नाही — कनेक्ट असताना पुन्हा प्रयत्न करा.';
 }

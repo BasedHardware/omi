@@ -14849,4 +14849,8 @@ class AppLocalizationsTl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'Na-save ang pangalan sa teleponong ito lang. Hindi ma-update ang iyong Omi — subukan ulit habang nakakonekta ito.';
 }

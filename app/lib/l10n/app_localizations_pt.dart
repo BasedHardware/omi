@@ -14759,4 +14759,8 @@ class AppLocalizationsPt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'Nome salvo apenas neste telefone. Não foi possível atualizar seu Omi — tente novamente enquanto ele estiver conectado.';
 }

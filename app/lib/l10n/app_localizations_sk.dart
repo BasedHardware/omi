@@ -14726,4 +14726,8 @@ class AppLocalizationsSk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'Názov bol uložený iba v tomto telefóne. Omi sa nepodarilo aktualizovať – skúste to znova, kým je pripojené.';
 }

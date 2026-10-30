@@ -14529,4 +14529,7 @@ class AppLocalizationsKo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed => '이름이 이 휴대폰에만 저장되었습니다. Omi를 업데이트하지 못했습니다. 연결된 상태에서 다시 시도하세요.';
 }

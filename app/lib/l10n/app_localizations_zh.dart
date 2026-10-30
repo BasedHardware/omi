@@ -14504,4 +14504,7 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed => '名称仅保存在此手机上。无法更新你的 Omi，请在保持连接时重试。';
 }

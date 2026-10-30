@@ -14832,4 +14832,8 @@ class AppLocalizationsTa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'பெயர் இந்த ஃபோனில் மட்டும் சேமிக்கப்பட்டது. Omi-ஐப் புதுப்பிக்க முடியவில்லை — இணைந்திருக்கும்போது மீண்டும் முயலவும்.';
 }

@@ -14724,4 +14724,8 @@ class AppLocalizationsEt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'Nimi salvestati ainult selles telefonis. Omi uuendamine ebaõnnestus — proovi uuesti, kui see on ühendatud.';
 }

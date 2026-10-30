@@ -14523,4 +14523,7 @@ class AppLocalizationsJa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed => '名前はこのスマートフォンにのみ保存されました。Omiを更新できませんでした。接続中にもう一度お試しください。';
 }

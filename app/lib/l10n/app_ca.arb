@@ -4470,5 +4470,6 @@
     "onTheWayDetailsForSupport": "Detalls per al suport",
     "homeNoiseFoldHidden": "{count, plural, =1{1 clip curt amagat} other{{count} clips curts amagats}}",
     "homeNoiseFoldShow": "Mostrar",
-    "homeNoiseFoldHide": "{count, plural, =1{Amagar 1 clip curt} other{Amagar {count} clips curts}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Amagar 1 clip curt} other{Amagar {count} clips curts}}",
+    "deviceNameSaveFailed": "El nom s'ha desat només en aquest telèfon. No s'ha pogut actualitzar l'Omi; torna-ho a provar mentre estigui connectat."
 }

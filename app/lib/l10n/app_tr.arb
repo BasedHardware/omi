@@ -4505,5 +4505,6 @@
     "onTheWayDetailsForSupport": "Destek için ayrıntılar",
     "homeNoiseFoldHidden": "{count, plural, =1{1 kısa kayıt gizlendi} other{{count} kısa kayıt gizlendi}}",
     "homeNoiseFoldShow": "Göster",
-    "homeNoiseFoldHide": "{count, plural, =1{1 kısa kaydı gizle} other{{count} kısa kaydı gizle}}"
+    "homeNoiseFoldHide": "{count, plural, =1{1 kısa kaydı gizle} other{{count} kısa kaydı gizle}}",
+    "deviceNameSaveFailed": "Ad yalnızca bu telefona kaydedildi. Omi güncellenemedi — bağlıyken tekrar deneyin."
 }

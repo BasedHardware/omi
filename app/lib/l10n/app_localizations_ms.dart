@@ -14768,4 +14768,8 @@ class AppLocalizationsMs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'Nama disimpan pada telefon ini sahaja. Omi tidak dapat dikemas kini — cuba lagi semasa ia disambungkan.';
 }

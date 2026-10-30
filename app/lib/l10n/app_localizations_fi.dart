@@ -14736,4 +14736,8 @@ class AppLocalizationsFi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'Nimi tallennettiin vain tähän puhelimeen. Omia ei voitu päivittää – yritä uudelleen, kun se on yhdistettynä.';
 }

@@ -11896,5 +11896,6 @@
     "onTheWayDetailsForSupport": "Детаљи за подршку",
     "homeNoiseFoldHidden": "{count, plural, =1{Скривен је 1 кратак снимак} other{{count} кратких снимака је скривено}}",
     "homeNoiseFoldShow": "Прикажи",
-    "homeNoiseFoldHide": "{count, plural, =1{Сакриј 1 кратак снимак} other{Сакриј {count} кратких снимака}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Сакриј 1 кратак снимак} other{Сакриј {count} кратких снимака}}",
+    "deviceNameSaveFailed": "Назив је сачуван само на овом телефону. Omi није ажуриран — покушајте поново док је повезан."
 }

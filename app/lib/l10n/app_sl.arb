@@ -11896,5 +11896,6 @@
     "onTheWayDetailsForSupport": "Podrobnosti za podporo",
     "homeNoiseFoldHidden": "{count, plural, =1{1 kratek posnetek skrit} other{{count} kratkih posnetkov skritih}}",
     "homeNoiseFoldShow": "Prikaži",
-    "homeNoiseFoldHide": "{count, plural, =1{Skrij 1 kratek posnetek} other{Skrij {count} kratkih posnetkov}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Skrij 1 kratek posnetek} other{Skrij {count} kratkih posnetkov}}",
+    "deviceNameSaveFailed": "Ime je shranjeno samo v tem telefonu. Omi ni bilo mogoče posodobiti — poskusite znova, ko je povezan."
 }

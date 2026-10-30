@@ -4470,5 +4470,6 @@
     "onTheWayDetailsForSupport": "サポート用の詳細",
     "homeNoiseFoldHidden": "{count, plural, =1{短いクリップ1件を非表示にしました} other{{count}件の短いクリップを非表示にしました}}",
     "homeNoiseFoldShow": "表示",
-    "homeNoiseFoldHide": "{count, plural, =1{短いクリップ1件を非表示にする} other{{count}件の短いクリップを非表示にする}}"
+    "homeNoiseFoldHide": "{count, plural, =1{短いクリップ1件を非表示にする} other{{count}件の短いクリップを非表示にする}}",
+    "deviceNameSaveFailed": "名前はこのスマートフォンにのみ保存されました。Omiを更新できませんでした。接続中にもう一度お試しください。"
 }

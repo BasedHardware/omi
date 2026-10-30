@@ -4470,5 +4470,6 @@
     "onTheWayDetailsForSupport": "Detaljer för support",
     "homeNoiseFoldHidden": "{count, plural, =1{1 kort klipp dolt} other{{count} korta klipp dolda}}",
     "homeNoiseFoldShow": "Visa",
-    "homeNoiseFoldHide": "{count, plural, =1{Dölj 1 kort klipp} other{Dölj {count} korta klipp}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Dölj 1 kort klipp} other{Dölj {count} korta klipp}}",
+    "deviceNameSaveFailed": "Namnet sparades bara på den här telefonen. Det gick inte att uppdatera Omi – försök igen medan den är ansluten."
 }

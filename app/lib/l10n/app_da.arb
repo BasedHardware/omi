@@ -4512,5 +4512,6 @@
     "onTheWayDetailsForSupport": "Detaljer til support",
     "homeNoiseFoldHidden": "{count, plural, =1{1 kort klip skjult} other{{count} korte klip skjult}}",
     "homeNoiseFoldShow": "Vis",
-    "homeNoiseFoldHide": "{count, plural, =1{Skjul 1 kort klip} other{Skjul {count} korte klip}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Skjul 1 kort klip} other{Skjul {count} korte klip}}",
+    "deviceNameSaveFailed": "Navnet er kun gemt på denne telefon. Omi kunne ikke opdateres – prøv igen, mens den er forbundet."
 }

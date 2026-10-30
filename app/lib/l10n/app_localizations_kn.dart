@@ -14780,4 +14780,8 @@ class AppLocalizationsKn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'ಹೆಸರನ್ನು ಈ ಫೋನ್‌ನಲ್ಲಿ ಮಾತ್ರ ಉಳಿಸಲಾಗಿದೆ. Omi ಅನ್ನು ನವೀಕರಿಸಲಾಗಲಿಲ್ಲ — ಸಂಪರ್ಕದಲ್ಲಿರುವಾಗ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
 }

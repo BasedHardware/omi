@@ -14806,4 +14806,8 @@ class AppLocalizationsCa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'El nom s\'ha desat només en aquest telèfon. No s\'ha pogut actualitzar l\'Omi; torna-ho a provar mentre estigui connectat.';
 }

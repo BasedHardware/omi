@@ -4470,5 +4470,6 @@
     "onTheWayDetailsForSupport": "고객지원용 세부 정보",
     "homeNoiseFoldHidden": "{count, plural, =1{짧은 클립 1개 숨겨짐} other{짧은 클립 {count}개 숨겨짐}}",
     "homeNoiseFoldShow": "표시",
-    "homeNoiseFoldHide": "{count, plural, =1{짧은 클립 1개 숨기기} other{짧은 클립 {count}개 숨기기}}"
+    "homeNoiseFoldHide": "{count, plural, =1{짧은 클립 1개 숨기기} other{짧은 클립 {count}개 숨기기}}",
+    "deviceNameSaveFailed": "이름이 이 휴대폰에만 저장되었습니다. Omi를 업데이트하지 못했습니다. 연결된 상태에서 다시 시도하세요."
 }

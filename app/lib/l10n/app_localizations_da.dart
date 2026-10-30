@@ -14723,4 +14723,8 @@ class AppLocalizationsDa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'Navnet er kun gemt på denne telefon. Omi kunne ikke opdateres – prøv igen, mens den er forbundet.';
 }

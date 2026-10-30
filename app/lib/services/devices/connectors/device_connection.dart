@@ -747,6 +747,11 @@ abstract class DeviceConnection {
 
   Future<int?> performGetMicGain();
 
+  /// Whether this connection type can persist a name onboard the device.
+  /// Old firmware without the name characteristic still reports true here; the
+  /// write/read-back then fails and the caller surfaces that.
+  bool get supportsOnboardDeviceName => false;
+
   Future<bool> setDeviceName(String name) async {
     if (await isConnected()) {
       return await performSetDeviceName(name);

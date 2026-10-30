@@ -14754,4 +14754,8 @@ class AppLocalizationsLt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'Pavadinimas išsaugotas tik šiame telefone. Nepavyko atnaujinti Omi — bandykite dar kartą, kol jis prijungtas.';
 }

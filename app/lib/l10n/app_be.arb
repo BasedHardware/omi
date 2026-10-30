@@ -11896,5 +11896,6 @@
     "onTheWayDetailsForSupport": "Падрабязнасці для падтрымкі",
     "homeNoiseFoldHidden": "{count, plural, =1{1 кароткі запіс схаваны} other{Схаваныя кароткія запісы: {count}}}",
     "homeNoiseFoldShow": "Паказаць",
-    "homeNoiseFoldHide": "{count, plural, =1{Схаваць 1 кароткі запіс} other{Схаваць кароткія запісы: {count}}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Схаваць 1 кароткі запіс} other{Схаваць кароткія запісы: {count}}}",
+    "deviceNameSaveFailed": "Назва захавана толькі на гэтым тэлефоне. Не ўдалося абнавіць Omi — паспрабуйце яшчэ раз, пакуль ён падключаны."
 }

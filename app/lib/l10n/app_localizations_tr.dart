@@ -14744,4 +14744,8 @@ class AppLocalizationsTr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'Ad yalnızca bu telefona kaydedildi. Omi güncellenemedi — bağlıyken tekrar deneyin.';
 }

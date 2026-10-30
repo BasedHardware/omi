@@ -14770,4 +14770,8 @@ class AppLocalizationsNl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'Naam alleen op deze telefoon opgeslagen. Je Omi kon niet worden bijgewerkt — probeer het opnieuw terwijl hij verbonden is.';
 }

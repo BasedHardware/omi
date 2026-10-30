@@ -14793,4 +14793,8 @@ class AppLocalizationsRo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'Numele a fost salvat doar pe acest telefon. Omi nu a putut fi actualizat — încearcă din nou cât timp este conectat.';
 }

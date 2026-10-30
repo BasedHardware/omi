@@ -14730,4 +14730,8 @@ class AppLocalizationsCs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'Název byl uložen jen v tomto telefonu. Omi se nepodařilo aktualizovat – zkuste to znovu, dokud je připojené.';
 }

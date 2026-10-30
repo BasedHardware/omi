@@ -4470,5 +4470,6 @@
     "onTheWayDetailsForSupport": "Informācija atbalsta komandai",
     "homeNoiseFoldHidden": "{count, plural, =1{Paslēpts 1 īss ieraksts} other{Paslēpti {count} īsi ieraksti}}",
     "homeNoiseFoldShow": "Rādīt",
-    "homeNoiseFoldHide": "{count, plural, =1{Slēpt 1 īsu ierakstu} other{Slēpt {count} īsus ierakstus}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Slēpt 1 īsu ierakstu} other{Slēpt {count} īsus ierakstus}}",
+    "deviceNameSaveFailed": "Nosaukums saglabāts tikai šajā tālrunī. Neizdevās atjaunināt Omi — mēģiniet vēlreiz, kamēr tas ir savienots."
 }

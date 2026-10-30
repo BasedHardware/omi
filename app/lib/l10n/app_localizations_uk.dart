@@ -14762,4 +14762,8 @@ class AppLocalizationsUk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'Назву збережено лише на цьому телефоні. Не вдалося оновити Omi — спробуйте ще раз, поки він підключений.';
 }

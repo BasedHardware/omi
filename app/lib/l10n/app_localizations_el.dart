@@ -14828,4 +14828,8 @@ class AppLocalizationsEl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'Το όνομα αποθηκεύτηκε μόνο σε αυτό το τηλέφωνο. Δεν ήταν δυνατή η ενημέρωση του Omi — δοκιμάστε ξανά όσο είναι συνδεδεμένο.';
 }

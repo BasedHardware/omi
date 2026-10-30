@@ -11896,5 +11896,6 @@
     "onTheWayDetailsForSupport": "Detalji za podršku",
     "homeNoiseFoldHidden": "{count, plural, =1{1 kratki isječak skriven} other{{count} kratkih isječaka skriveno}}",
     "homeNoiseFoldShow": "Prikaži",
-    "homeNoiseFoldHide": "{count, plural, =1{Skrij 1 kratki isječak} other{Skrij {count} kratkih isječaka}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Skrij 1 kratki isječak} other{Skrij {count} kratkih isječaka}}",
+    "deviceNameSaveFailed": "Naziv je spremljen samo na ovom telefonu. Omi nije ažuriran — pokušajte ponovno dok je povezan."
 }

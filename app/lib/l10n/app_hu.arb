@@ -4566,5 +4566,6 @@
     "onTheWayDetailsForSupport": "Részletek az ügyfélszolgálatnak",
     "homeNoiseFoldHidden": "{count, plural, =1{1 rövid felvétel elrejtve} other{{count} rövid felvétel elrejtve}}",
     "homeNoiseFoldShow": "Megjelenítés",
-    "homeNoiseFoldHide": "{count, plural, =1{1 rövid felvétel elrejtése} other{{count} rövid felvétel elrejtése}}"
+    "homeNoiseFoldHide": "{count, plural, =1{1 rövid felvétel elrejtése} other{{count} rövid felvétel elrejtése}}",
+    "deviceNameSaveFailed": "A név csak ezen a telefonon lett mentve. Az Omi frissítése nem sikerült – próbáld újra, amíg csatlakoztatva van."
 }

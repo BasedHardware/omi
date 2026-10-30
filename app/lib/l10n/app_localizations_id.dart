@@ -14745,4 +14745,8 @@ class AppLocalizationsId extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'Nama hanya disimpan di ponsel ini. Omi tidak dapat diperbarui — coba lagi saat masih terhubung.';
 }

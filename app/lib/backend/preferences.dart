@@ -638,13 +638,23 @@ class SharedPreferencesUtil {
   String get deviceName => getString('deviceName');
 
   // deviceAlias:<id> is the source of truth for the app-local device alias.
-  static const int maxDeviceAliasLength = 40;
+  // Same budget as the firmware's onboard name (MAX_DEVICE_NAME_PAYLOAD_LEN, 25 bytes
+  // of UTF-8), so the renaming phone never shows a longer name than other
+  // phones read back from the device.
+  static const int maxDeviceNameBytes = 25;
+
+  static int deviceNameByteLength(String name) => utf8.encode(name.trim()).length;
+
+  static bool isValidDeviceName(String name) {
+    final normalized = name.trim();
+    return normalized.isNotEmpty && utf8.encode(normalized).length <= maxDeviceNameBytes;
+  }
 
   String deviceAlias(String deviceId) => getString('deviceAlias:$deviceId');
 
   Future<bool> saveDeviceAlias(String deviceId, String alias) async {
     final normalized = alias.trim();
-    if (deviceId.isEmpty || normalized.isEmpty || normalized.length > maxDeviceAliasLength) {
+    if (deviceId.isEmpty || !isValidDeviceName(normalized)) {
       return false;
     }
     return saveString('deviceAlias:$deviceId', normalized);

@@ -14759,4 +14759,8 @@ class AppLocalizationsSl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'Ime je shranjeno samo v tem telefonu. Omi ni bilo mogoče posodobiti — poskusite znova, ko je povezan.';
 }

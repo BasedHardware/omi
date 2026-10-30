@@ -26012,6 +26012,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{Hide 1 short clip} other{Hide {count} short clips}}'**
   String homeNoiseFoldHide(int count);
+
+  /// Snackbar shown when a device rename was saved in the app but the Bluetooth write to the Omi (or its read-back check) failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Name saved on this phone only. Couldn\'t update your Omi — try again while it\'s connected.'**
+  String get deviceNameSaveFailed;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

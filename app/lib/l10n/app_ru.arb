@@ -4505,5 +4505,6 @@
     "onTheWayDetailsForSupport": "Подробности для поддержки",
     "homeNoiseFoldHidden": "{count, plural, =1{Скрыта 1 короткая запись} other{Скрыто {count} коротких записей}}",
     "homeNoiseFoldShow": "Показать",
-    "homeNoiseFoldHide": "{count, plural, =1{Скрыть 1 короткую запись} other{Скрыть {count} коротких записей}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Скрыть 1 короткую запись} other{Скрыть {count} коротких записей}}",
+    "deviceNameSaveFailed": "Название сохранено только на этом телефоне. Не удалось обновить Omi — попробуйте ещё раз, пока он подключён."
 }

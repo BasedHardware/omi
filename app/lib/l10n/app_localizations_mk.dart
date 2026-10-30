@@ -14795,4 +14795,8 @@ class AppLocalizationsMk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'Името е зачувано само на овој телефон. Omi не можеше да се ажурира — обидете се повторно додека е поврзан.';
 }

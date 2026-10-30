@@ -11896,5 +11896,6 @@
     "onTheWayDetailsForSupport": "সাপোর্টের জন্য বিস্তারিত",
     "homeNoiseFoldHidden": "{count, plural, =1{1টি ছোট ক্লিপ লুকানো হয়েছে} other{{count}টি ছোট ক্লিপ লুকানো হয়েছে}}",
     "homeNoiseFoldShow": "দেখান",
-    "homeNoiseFoldHide": "{count, plural, =1{1টি ছোট ক্লিপ লুকান} other{{count}টি ছোট ক্লিপ লুকান}}"
+    "homeNoiseFoldHide": "{count, plural, =1{1টি ছোট ক্লিপ লুকান} other{{count}টি ছোট ক্লিপ লুকান}}",
+    "deviceNameSaveFailed": "নামটি শুধু এই ফোনে সংরক্ষিত হয়েছে। Omi আপডেট করা যায়নি — সংযুক্ত থাকা অবস্থায় আবার চেষ্টা করুন।"
 }

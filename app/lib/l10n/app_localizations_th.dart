@@ -14659,4 +14659,8 @@ class AppLocalizationsTh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'บันทึกชื่อไว้ในโทรศัพท์เครื่องนี้เท่านั้น ไม่สามารถอัปเดต Omi ได้ — ลองอีกครั้งขณะที่เชื่อมต่ออยู่';
 }

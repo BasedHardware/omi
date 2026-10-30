@@ -14716,4 +14716,8 @@ class AppLocalizationsHi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'नाम केवल इस फ़ोन पर सहेजा गया। Omi अपडेट नहीं हो सका — कनेक्ट रहते हुए फिर से कोशिश करें।';
 }

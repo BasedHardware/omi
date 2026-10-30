@@ -4505,5 +4505,6 @@
     "onTheWayDetailsForSupport": "Detail untuk dukungan",
     "homeNoiseFoldHidden": "{count, plural, =1{1 klip pendek disembunyikan} other{{count} klip pendek disembunyikan}}",
     "homeNoiseFoldShow": "Tampilkan",
-    "homeNoiseFoldHide": "{count, plural, =1{Sembunyikan 1 klip pendek} other{Sembunyikan {count} klip pendek}}"
+    "homeNoiseFoldHide": "{count, plural, =1{Sembunyikan 1 klip pendek} other{Sembunyikan {count} klip pendek}}",
+    "deviceNameSaveFailed": "Nama hanya disimpan di ponsel ini. Omi tidak dapat diperbarui — coba lagi saat masih terhubung."
 }

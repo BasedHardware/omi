@@ -14790,4 +14790,8 @@ class AppLocalizationsHu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed =>
+      'A név csak ezen a telefonon lett mentve. Az Omi frissítése nem sikerült – próbáld újra, amíg csatlakoztatva van.';
 }

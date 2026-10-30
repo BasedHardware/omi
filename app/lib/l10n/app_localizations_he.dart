@@ -14625,4 +14625,7 @@ class AppLocalizationsHe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get deviceNameSaveFailed => 'השם נשמר בטלפון הזה בלבד. לא ניתן היה לעדכן את ה-Omi — נסו שוב כשהוא מחובר.';
 }

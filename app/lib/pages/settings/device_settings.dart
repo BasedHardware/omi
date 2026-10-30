@@ -48,6 +48,7 @@ import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+import 'package:omi/utils/utf8_byte_limit_formatter.dart';
 
 /// The one device page: status, controls, sync, firmware, device information and Forget Device.
 ///
@@ -602,7 +603,10 @@ class _DeviceSettingsState extends State<DeviceSettings> {
         content: TextField(
           controller: controller,
           autofocus: true,
-          maxLength: SharedPreferencesUtil.maxDeviceAliasLength,
+          inputFormatters: [Utf8ByteLimitFormatter(SharedPreferencesUtil.maxDeviceNameBytes)],
+          buildCounter: (context, {required currentLength, required isFocused, maxLength}) => Text(
+            '${SharedPreferencesUtil.deviceNameByteLength(controller.text)}/${SharedPreferencesUtil.maxDeviceNameBytes}',
+          ),
           textInputAction: TextInputAction.done,
           onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
         ),
@@ -621,8 +625,18 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     controller.dispose();
 
     if (newName == null || newName.trim().isEmpty || newName.trim() == device.name) return;
-    await provider.renameDevice(newName, deviceId: device.id);
-    if (mounted) setState(() {});
+    final result = await provider.renameDevice(newName, deviceId: device.id);
+    if (!mounted) return;
+    setState(() {});
+    switch (result) {
+      case DeviceRenameResult.deviceWriteFailed:
+        AppSnackbar.showSnackbarError(context.l10n.deviceNameSaveFailed);
+      case DeviceRenameResult.failed:
+        AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
+      case DeviceRenameResult.savedLocally:
+      case DeviceRenameResult.savedOnDevice:
+        break;
+    }
   }
 
   Widget _forgetGroup(DeviceProvider provider) {

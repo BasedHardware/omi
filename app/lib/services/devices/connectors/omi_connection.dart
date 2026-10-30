@@ -1284,10 +1284,16 @@ class OmiDeviceConnection extends DeviceConnection {
     return [];
   }
 
+  /// Firmware limit for the onboard name (MAX_DEVICE_NAME_PAYLOAD_LEN in settings.h).
+  static const int maxDeviceNameBytes = 25;
+
+  @override
+  bool get supportsOnboardDeviceName => true;
+
   @override
   Future<bool> performSetDeviceName(String name) async {
     try {
-      final bytes = truncateUtf8ToBytes(name.trim(), 25);
+      final bytes = truncateUtf8ToBytes(name.trim(), maxDeviceNameBytes);
       if (bytes.isEmpty) return false;
       await transport.writeCharacteristic(
         settingsServiceUuid,
