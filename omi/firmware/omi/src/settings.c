@@ -270,17 +270,19 @@ int app_settings_save_device_name(const char *name)
     if (len == 0 || len > MAX_DEVICE_NAME_PAYLOAD_LEN) {
         return -EINVAL;
     }
-    memset(device_name, 0, sizeof(device_name));
-    memcpy(device_name, name, len);
-    device_name[len] = '\0';
+    char new_name[MAX_DEVICE_NAME_PAYLOAD_LEN + 1] = {0};
+    memcpy(new_name, name, len);
 
-    int err = settings_save_one("omi/device_name", device_name, len);
+    /* Persist first; only adopt the name in RAM once flash accepted it, so a
+     * GATT read-back never reports a name that would be lost on reboot. */
+    int err = settings_save_one("omi/device_name", new_name, len);
     if (err) {
         LOG_ERR("Failed to save device_name (err %d)", err);
-    } else {
-        LOG_INF("Saved device_name: %s", device_name);
+        return err;
     }
-    return err;
+    memcpy(device_name, new_name, sizeof(device_name));
+    LOG_INF("Saved device_name: %s", device_name);
+    return 0;
 }
 
 const char *app_settings_get_device_name(void)
