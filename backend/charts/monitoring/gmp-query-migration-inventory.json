@@ -1564,6 +1564,38 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=\"stale\"}[3h]))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_journey_terminal_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 78,
+        "title": "Capture stale terminals (3h)"
+      },
+      "pointer": "/panels/2/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "100 * sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=\"stale\"}[3h])) / sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\"}[3h]))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_journey_terminal_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 78,
+        "title": "Capture stale terminals (3h)"
+      },
+      "pointer": "/panels/2/targets/1/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "100 * sum(rate(omi_journey_terminal_total{journey=\"pusher_session\",outcome=\"success\"}[$__range])) / sum(rate(omi_journey_terminal_total{journey=\"pusher_session\",outcome=~\"success|failure\"}[$__range]))",
       "file": "dashboards/general/omi-core-features.json",
       "issues": [
@@ -1578,7 +1610,7 @@
         "id": 3,
         "title": "Live session (pusher)"
       },
-      "pointer": "/panels/2/targets/0/expr",
+      "pointer": "/panels/3/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -1596,7 +1628,7 @@
         "id": 4,
         "title": "Chat response"
       },
-      "pointer": "/panels/3/targets/0/expr",
+      "pointer": "/panels/4/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -1614,7 +1646,7 @@
         "id": 5,
         "title": "Journeys reporting (of 3)"
       },
-      "pointer": "/panels/4/targets/0/expr",
+      "pointer": "/panels/5/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -1630,7 +1662,7 @@
         "id": 6,
         "title": "Terminal outcomes by journey"
       },
-      "pointer": "/panels/9/panels/0/targets/0/expr",
+      "pointer": "/panels/10/panels/0/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -1646,7 +1678,7 @@
         "id": 7,
         "title": "Accepted vs settled"
       },
-      "pointer": "/panels/9/panels/1/targets/0/expr",
+      "pointer": "/panels/10/panels/1/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -1662,7 +1694,7 @@
         "id": 7,
         "title": "Accepted vs settled"
       },
-      "pointer": "/panels/9/panels/1/targets/1/expr",
+      "pointer": "/panels/10/panels/1/targets/1/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -1676,9 +1708,9 @@
       "owner_uid": "omi-core-features",
       "panel": {
         "id": 8,
-        "title": "Attempts whose outcome was never recorded (stale)"
+        "title": "Stale terminal events by journey"
       },
-      "pointer": "/panels/9/panels/2/targets/0/expr",
+      "pointer": "/panels/10/panels/2/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -1694,7 +1726,7 @@
         "id": 9,
         "title": "Journey latency p95"
       },
-      "pointer": "/panels/9/panels/3/targets/0/expr",
+      "pointer": "/panels/10/panels/3/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -1712,7 +1744,7 @@
         "id": 12,
         "title": "Cancellation requests"
       },
-      "pointer": "/panels/10/panels/1/targets/0/expr",
+      "pointer": "/panels/11/panels/1/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -1730,7 +1762,7 @@
         "id": 13,
         "title": "New subscriptions"
       },
-      "pointer": "/panels/10/panels/2/targets/0/expr",
+      "pointer": "/panels/11/panels/2/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -1748,7 +1780,7 @@
         "id": 14,
         "title": "Net change"
       },
-      "pointer": "/panels/10/panels/3/targets/0/expr",
+      "pointer": "/panels/11/panels/3/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -1766,7 +1798,7 @@
         "id": 15,
         "title": "Saves"
       },
-      "pointer": "/panels/10/panels/4/targets/0/expr",
+      "pointer": "/panels/11/panels/4/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -1782,7 +1814,7 @@
         "id": 16,
         "title": "Lifecycle events over time"
       },
-      "pointer": "/panels/10/panels/5/targets/0/expr",
+      "pointer": "/panels/11/panels/5/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -1798,7 +1830,7 @@
         "id": 17,
         "title": "Cancellations by reason (voluntary vs involuntary)"
       },
-      "pointer": "/panels/10/panels/6/targets/0/expr",
+      "pointer": "/panels/11/panels/6/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -1814,7 +1846,7 @@
         "id": 18,
         "title": "Cancellation requests by plan"
       },
-      "pointer": "/panels/10/panels/7/targets/0/expr",
+      "pointer": "/panels/11/panels/7/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -1830,7 +1862,7 @@
         "id": 33,
         "title": "Retries, dead letters, reconciliations"
       },
-      "pointer": "/panels/17/panels/1/targets/2/expr",
+      "pointer": "/panels/18/panels/1/targets/2/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -1848,7 +1880,7 @@
         "id": 36,
         "title": "PTT transport success"
       },
-      "pointer": "/panels/18/panels/0/targets/0/expr",
+      "pointer": "/panels/19/panels/0/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -1866,7 +1898,7 @@
         "id": 37,
         "title": "PTT attempts"
       },
-      "pointer": "/panels/18/panels/1/targets/0/expr",
+      "pointer": "/panels/19/panels/1/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -1884,7 +1916,7 @@
         "id": 38,
         "title": "PTT duration p95 (success)"
       },
-      "pointer": "/panels/18/panels/2/targets/0/expr",
+      "pointer": "/panels/19/panels/2/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -1902,7 +1934,7 @@
         "id": 39,
         "title": "PTT issues"
       },
-      "pointer": "/panels/18/panels/3/targets/0/expr",
+      "pointer": "/panels/19/panels/3/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -1918,7 +1950,7 @@
         "id": 40,
         "title": "PTT terminal outcomes"
       },
-      "pointer": "/panels/18/panels/4/targets/0/expr",
+      "pointer": "/panels/19/panels/4/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -1934,7 +1966,7 @@
         "id": 41,
         "title": "PTT issues by class"
       },
-      "pointer": "/panels/18/panels/5/targets/0/expr",
+      "pointer": "/panels/19/panels/5/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -1950,7 +1982,7 @@
         "id": 42,
         "title": "PTT attempts by client kind"
       },
-      "pointer": "/panels/18/panels/6/targets/0/expr",
+      "pointer": "/panels/19/panels/6/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -1966,7 +1998,7 @@
         "id": 46,
         "title": "Conversation length p10 / p50 / p90 by source"
       },
-      "pointer": "/panels/19/panels/0/targets/0/expr",
+      "pointer": "/panels/20/panels/0/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -1982,7 +2014,7 @@
         "id": 46,
         "title": "Conversation length p10 / p50 / p90 by source"
       },
-      "pointer": "/panels/19/panels/0/targets/1/expr",
+      "pointer": "/panels/20/panels/0/targets/1/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -1998,7 +2030,7 @@
         "id": 46,
         "title": "Conversation length p10 / p50 / p90 by source"
       },
-      "pointer": "/panels/19/panels/0/targets/2/expr",
+      "pointer": "/panels/20/panels/0/targets/2/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2015,7 +2047,7 @@
         "id": 47,
         "title": "Short conversations (< 2 min) by source"
       },
-      "pointer": "/panels/19/panels/1/targets/0/expr",
+      "pointer": "/panels/20/panels/1/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2033,7 +2065,7 @@
         "id": 49,
         "title": "Conversations per day (completed, by source)"
       },
-      "pointer": "/panels/19/panels/3/targets/0/expr",
+      "pointer": "/panels/20/panels/3/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2049,7 +2081,7 @@
         "id": 77,
         "title": "Rolling 1h discard share by service / trigger"
       },
-      "pointer": "/panels/19/panels/4/targets/0/expr",
+      "pointer": "/panels/20/panels/4/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2067,7 +2099,7 @@
         "id": 51,
         "title": "Live transcription transport success"
       },
-      "pointer": "/panels/20/panels/0/targets/0/expr",
+      "pointer": "/panels/21/panels/0/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2085,7 +2117,7 @@
         "id": 52,
         "title": "Conversation finalization settle success"
       },
-      "pointer": "/panels/20/panels/1/targets/0/expr",
+      "pointer": "/panels/21/panels/1/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2103,7 +2135,7 @@
         "id": 53,
         "title": "Mobile chat transport success"
       },
-      "pointer": "/panels/20/panels/2/targets/0/expr",
+      "pointer": "/panels/21/panels/2/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2121,7 +2153,7 @@
         "id": 54,
         "title": "Desktop chat transport success"
       },
-      "pointer": "/panels/20/panels/3/targets/0/expr",
+      "pointer": "/panels/21/panels/3/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2139,7 +2171,7 @@
         "id": 55,
         "title": "Desktop proactivity success (success + failure)"
       },
-      "pointer": "/panels/20/panels/4/targets/0/expr",
+      "pointer": "/panels/21/panels/4/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2157,7 +2189,7 @@
         "id": 56,
         "title": "Desktop proactivity degraded share"
       },
-      "pointer": "/panels/20/panels/5/targets/0/expr",
+      "pointer": "/panels/21/panels/5/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2175,7 +2207,7 @@
         "id": 57,
         "title": "Conversation finalization accepted"
       },
-      "pointer": "/panels/20/panels/6/targets/0/expr",
+      "pointer": "/panels/21/panels/6/targets/0/expr",
       "scope": "explicit-bridge"
     },
     {
@@ -2193,7 +2225,7 @@
         "id": 58,
         "title": "Client journeys reporting (of 8)"
       },
-      "pointer": "/panels/20/panels/7/targets/0/expr",
+      "pointer": "/panels/21/panels/7/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2211,7 +2243,7 @@
         "id": 59,
         "title": "Capture unknown-kind share"
       },
-      "pointer": "/panels/20/panels/8/targets/0/expr",
+      "pointer": "/panels/21/panels/8/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2227,8 +2259,24 @@
         "id": 60,
         "title": "Memory retrieval \u2014 tool-gated volume"
       },
-      "pointer": "/panels/20/panels/9/targets/0/expr",
+      "pointer": "/panels/21/panels/9/targets/0/expr",
       "scope": "explicit-bridge"
+    },
+    {
+      "expression": "sum by (journey, outcome, reason) (rate(omi_client_journey_terminal_total{outcome=~\"failure|degraded|unknown\",reason!=\"\"}[5m])) or sum by (journey, outcome, reason) (label_replace(rate(omi_client_journey_terminal_total{outcome=~\"failure|degraded|unknown\",reason=\"\"}[5m]), \"reason\", \"legacy_unlabeled\", \"journey\", \".*\"))",
+      "file": "dashboards/general/omi-core-features.json",
+      "issues": [],
+      "metrics": [
+        "omi_client_journey_terminal_total"
+      ],
+      "owner_title": "Omi Core Features",
+      "owner_uid": "omi-core-features",
+      "panel": {
+        "id": 79,
+        "title": "Client journey issues by reason and outcome"
+      },
+      "pointer": "/panels/21/panels/10/targets/0/expr",
+      "scope": "normalized-omi-consumer-source-review"
     },
     {
       "expression": "round(sum(increase(omi_listen_accepted_total{transcription_source=\"omi\"}[$__range])))",
@@ -2245,7 +2293,7 @@
         "id": 62,
         "title": "Pendant sessions accepted"
       },
-      "pointer": "/panels/21/panels/0/targets/0/expr",
+      "pointer": "/panels/22/panels/0/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2264,7 +2312,7 @@
         "id": 63,
         "title": "Pendant first-audio rate"
       },
-      "pointer": "/panels/21/panels/1/targets/0/expr",
+      "pointer": "/panels/22/panels/1/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2280,7 +2328,7 @@
         "id": 64,
         "title": "Live sessions by platform \u2014 pendant vs phone"
       },
-      "pointer": "/panels/21/panels/2/targets/0/expr",
+      "pointer": "/panels/22/panels/2/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2296,7 +2344,7 @@
         "id": 64,
         "title": "Live sessions by platform \u2014 pendant vs phone"
       },
-      "pointer": "/panels/21/panels/2/targets/1/expr",
+      "pointer": "/panels/22/panels/2/targets/1/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2312,7 +2360,7 @@
         "id": 68,
         "title": "Resumed cohort age"
       },
-      "pointer": "/panels/22/panels/2/targets/0/expr",
+      "pointer": "/panels/23/panels/2/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2328,7 +2376,7 @@
         "id": 69,
         "title": "Cohort age now"
       },
-      "pointer": "/panels/22/panels/3/targets/0/expr",
+      "pointer": "/panels/23/panels/3/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2346,7 +2394,7 @@
         "id": 70,
         "title": "Summary vector upsert success %"
       },
-      "pointer": "/panels/23/panels/0/targets/0/expr",
+      "pointer": "/panels/24/panels/0/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -2362,7 +2410,7 @@
         "id": 71,
         "title": "Chat search paths and outcomes"
       },
-      "pointer": "/panels/23/panels/1/targets/0/expr",
+      "pointer": "/panels/24/panels/1/targets/0/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -3175,7 +3223,7 @@
   ],
   "counts": {
     "explicit_bridge": 24,
-    "query_consumers": 209
+    "query_consumers": 212
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"
