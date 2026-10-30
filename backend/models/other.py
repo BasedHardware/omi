@@ -64,6 +64,16 @@ class UploadProfile(BaseModel):
 class CreatePerson(BaseModel):
     name: str = Field(min_length=2, max_length=40)
 
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        stripped = value.strip()
+        if len(stripped) < 2:
+            raise ValueError('Person name must be at least 2 characters')
+        if len(stripped) > 40:
+            raise ValueError('Person name cannot exceed 40 characters')
+        return stripped
+
 
 # Person photo deferred pending product input on storage: no photo/avatar/image
 # field today; GCS people_profiles/ is speech-sample audio only; the app uses
