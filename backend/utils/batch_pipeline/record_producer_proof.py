@@ -85,7 +85,8 @@ def producer_tokens_dead(tokens, proof, *, producers_stopped=False):
         if (
             not isinstance(pod, str)
             or not pod
-            or type(started) not in (int, float)
+            or not isinstance(started, (int, float))
+            or isinstance(started, bool)
             or not math.isfinite(started)
             or not 0 < started <= proof['captured_at']
         ):
