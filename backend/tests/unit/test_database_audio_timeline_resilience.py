@@ -71,7 +71,7 @@ class TestGroupChunksByCoverageResilience:
         ]
         assert len(group_chunks_by_coverage(chunks_with_gap, gap_threshold=bad_threshold)) == 2
 
-    def test_group_chunks_by_coverage_splits_on_corrupt_legacy_timestamps(self):
+    def test_group_chunks_by_coverage_splits_on_corrupt_legacy_timestamps(self, caplog):
         chunks = [
             {'timestamp': 100.0},
             {'timestamp': 'malformed_string'},
@@ -79,8 +79,11 @@ class TestGroupChunksByCoverageResilience:
             {},
             {'timestamp': 105.0},
         ]
-        groups = group_chunks_by_coverage(chunks, gap_threshold=2.0)
+        import logging
+        with caplog.at_level(logging.WARNING):
+            groups = group_chunks_by_coverage(chunks, gap_threshold=2.0)
         assert len(groups) == 5
+        assert any("Malformed timestamp" in rec.message for rec in caplog.records)
 
     def test_group_chunks_by_coverage_handles_non_mapping_elements(self):
         chunks = [

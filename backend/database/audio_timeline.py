@@ -11,8 +11,11 @@ utils/routers layers use.
 
 from __future__ import annotations
 
+import logging
 import math
 from typing import Dict, List, Mapping, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 # 1 ms: filename-rounding tolerance for coverage and continuity checks.
 COVERAGE_TOLERANCE_SECONDS = 0.001
@@ -187,10 +190,19 @@ def group_chunks_by_coverage(
                 curr_ts = float(chunk['timestamp'])
                 prev_ts = float(prev_chunk['timestamp'])
                 if not (math.isfinite(curr_ts) and math.isfinite(prev_ts)):
+                    logger.warning(
+                        "Non-finite timestamp encountered in audio chunks (curr=%r, prev=%r); splitting chunk group",
+                        curr_ts,
+                        prev_ts,
+                    )
                     split = True
                 else:
                     split = curr_ts - prev_ts > gap_threshold_val
-            except (KeyError, TypeError, ValueError):
+            except (KeyError, TypeError, ValueError) as exc:
+                logger.warning(
+                    "Malformed timestamp in audio chunk (%s); splitting chunk group",
+                    exc,
+                )
                 split = True
         if split or not groups:
             groups.append([chunk])
