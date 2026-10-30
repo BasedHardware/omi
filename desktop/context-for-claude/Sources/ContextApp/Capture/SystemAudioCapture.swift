@@ -1,6 +1,7 @@
 import AppKit
 @preconcurrency import AVFoundation
 @preconcurrency import CoreAudio
+import ContextCore
 import Foundation
 
 /// Captures everything the machine plays out of its speakers — the other side of a call —
@@ -352,22 +353,14 @@ final class SystemAudioCapture: AudioSource, @unchecked Sendable {
         let processedFrameLength = Int(outputBuffer.frameLength)
         guard processedFrameLength > 0 else { return }
 
-        var pcm = [Int16]()
-        pcm.reserveCapacity(processedFrameLength)
-        var sumOfSquares: Float = 0
-        for i in 0..<processedFrameLength {
-            let sample = channelData[i]
-            let scaled = max(-32768, min(32767, sample * 32767))
-            pcm.append(Int16(scaled))
-            let normalized = scaled / 32767.0
-            sumOfSquares += normalized * normalized
-        }
-
-        let byteData = pcm.withUnsafeBufferPointer { Data(buffer: $0) }
+        // Keep system audio on the same production encoder as the microphone. The level is
+        // intentionally measured from the encoded bytes so quantisation cannot make the meter and
+        // the PCM sent downstream disagree.
+        let byteData = PCM.int16LE(
+            from: UnsafeBufferPointer(start: channelData, count: processedFrameLength))
 
         if let levelHandler {
-            let rms = sqrt(sumOfSquares / Float(processedFrameLength))
-            let level = min(Float(1.0), max(Float(0.0), rms))
+            let level = min(Float(1.0), max(Float(0.0), PCM.rms(int16LE: byteData)))
             DispatchQueue.main.async { levelHandler(level) }
         }
 

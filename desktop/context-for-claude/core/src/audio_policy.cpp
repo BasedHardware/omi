@@ -30,6 +30,27 @@ extern "C" double ctx_pcm_rms_int16le(const uint8_t *bytes, size_t byte_count) {
     return std::sqrt(sum_of_squares / static_cast<double>(sample_count)) / kInt16FullScale;
 }
 
+extern "C" uint16_t ctx_pcm_peak_int16le(const uint8_t *bytes, size_t byte_count) {
+    const size_t sample_count = byte_count / 2;
+    if (bytes == nullptr || sample_count == 0) {
+        return 0;
+    }
+
+    uint16_t peak = 0;
+    for (size_t index = 0; index < sample_count; ++index) {
+        const size_t offset = index * 2;
+        const uint16_t word = static_cast<uint16_t>(bytes[offset]) |
+                              (static_cast<uint16_t>(bytes[offset + 1]) << 8U);
+        const int32_t sample = word < 0x8000U ? static_cast<int32_t>(word)
+                                              : static_cast<int32_t>(word) - 0x10000;
+        const uint16_t magnitude = static_cast<uint16_t>(sample < 0 ? -sample : sample);
+        if (magnitude > peak) {
+            peak = magnitude;
+        }
+    }
+    return peak;
+}
+
 /* --------------------------------------------------------------------------- encode */
 
 extern "C" size_t ctx_pcm_encode_int16le(const float *samples, size_t sample_count,
