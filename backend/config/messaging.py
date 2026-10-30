@@ -7,6 +7,9 @@ from config.rollout_cohorts import in_rollout_cohort
 from config.refactor_switches import default_off as rollout_default_off
 from urllib.parse import quote
 
+# Every channel a messaging adapter can serve. Each stays off until its policy enables it.
+MESSAGING_CHANNELS = ('telegram', 'imessage', 'whatsapp')
+
 
 def channel_policy(channel):
     """New config is authoritative; malformed policies fail closed. Legacy is unchanged."""
@@ -48,7 +51,7 @@ def channel_policy(channel):
 
 def cohort_enabled(uid, channel=None):
     if channel is None:
-        return any(cohort_enabled(uid, name) for name in ('telegram', 'imessage'))
+        return any(cohort_enabled(uid, name) for name in MESSAGING_CHANNELS)
     policy = channel_policy(channel)
     cohort = policy['cohort']
     return policy['enabled'] and (

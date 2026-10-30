@@ -14939,4 +14939,14 @@ class AppLocalizationsSk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String chatAppsWaitingMessageIn(String app) {
+    return 'Pošlite správu v aplikácii $app. Táto obrazovka sa aktualizuje hneď, ako ju Omi dostane.';
+  }
+
+  @override
+  String chatAppsCodeExpiredMessageIn(String app) {
+    return 'Získajte nový kód a pošlite ho z aplikácie $app.';
+  }
 }

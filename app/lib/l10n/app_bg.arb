@@ -4515,5 +4515,7 @@
     "yearlySwitchUnavailable": "Годишното плащане в момента не е достъпно за вашия план.",
     "yearlySwitchDoneTitle": "Вече плащате годишно",
     "yearlySwitchDoneBody": "Днес са таксувани {amount}. Подновяване на {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} части} one{{count} част} two{{count} части} few{{count} части} many{{count} части} other{{count} части}}"
+    "episodePartsCount": "{count, plural, zero{{count} части} one{{count} част} two{{count} части} few{{count} части} many{{count} части} other{{count} части}}",
+    "chatAppsWaitingMessageIn": "Изпрати съобщението от {app}. Този екран се обновява веднага щом Omi го получи.",
+    "chatAppsCodeExpiredMessageIn": "Вземи нов код и го изпрати от {app}."
 }

@@ -1,4 +1,4 @@
-# Telegram and iMessage adapters (Stage B)
+# Telegram, iMessage and WhatsApp adapters (Stage B)
 
 This adds real providers to the [foundation](messaging-channels.md). The feature,
 provider flags and exact UID cohort remain off/empty by default.
@@ -30,8 +30,46 @@ receipt events cannot re-execute a turn. iMessage replies request `iMessage` ser
 Provider fallback behavior still needs confirmation with the sandbox/account.
 
 `IMessageProvider` keeps Linq-specific parsing, verification and API calls replaceable.
-`OMI_IMESSAGE_PROVIDER=linq` selects the implemented provider. Sendblue is an interface
-extension, not an untested implementation pretending to be supported.
+`OMI_IMESSAGE_PROVIDER=linq` selects Linq and `keiki` selects Keiki. Sendblue is an
+interface extension, not an untested implementation pretending to be supported.
+
+### Keiki (iMessage and WhatsApp, 2026-10-30)
+
+[Keiki](https://onkeiki.com/docs/external-harness.md) owns the line (a Photon-backed
+iMessage number, or our own WhatsApp Cloud API number) and Omi runs the turn. Each channel
+is one Keiki agent with `harness: external`, push mode, its `dispatchUrl` set to
+`/v1/messaging/webhooks/<channel>` and `steering_config.midTurnStrategy: queue`.
+
+- Keiki pushes one signed `keiki.turn` per debounced batch. It becomes one inbox row whose
+  `provider_message_id` is the turn ID, so a re-dispatch dedupes. The contact's
+  conversation ID (E.164, or `wa:` for WhatsApp) is both the user and chat ID.
+- `Keiki-Signature` is an HMAC-SHA256 of `<t>.<raw body>` with the agent signing secret.
+  Requests outside 300 s fail, several `v1` values are accepted during rotation, and an
+  event naming another agent ID is a 401.
+- Replies, typing and tapbacks use the turn-scoped API under a `kts1` credential signed
+  with the same secret, so no turn token is stored. `/messages` is never retried after a
+  5xx: Keiki reports that outcome as unknown. A refused thread falls back to a plain reply
+  with the same idempotency key.
+- The gateway settles the Keiki turn (`/complete`) when its row completes or fails, and
+  after an undo reply. A lease miss leaves the turn open. Held-back, silent, quiet-loop,
+  group and other-service turns settle without a reply. Reactions, cancellations and
+  arrivals are acknowledged and ignored.
+- `queue` steering keeps the inbox FIFO authoritative: a newer message waits at Keiki
+  until the open turn settles, so Keiki channels do not supersede a reply in progress.
+- Files are not sent or read yet: the turn API sends only Keiki sandbox paths. An inbound
+  attachment gets the unsupported-file reply, and `media_out` is empty, so no file tool is
+  offered and the sink refuses files. Deferred replies and Omi-initiated messages are not
+  delivered on Keiki channels; a closed turn refuses them (`409 turn_closed`).
+- A declined turn is settled in the background after the webhook is acknowledged. A failed
+  settle increments `FAILURES{reason="settle_failed"}`; the turn then stays open until
+  Keiki's deadline (ten minutes), blocking that contact's next turn. Expired rows settle
+  their turn as failed. A turn whose reply was delivered but whose row then failed is
+  still settled `failed`; Keiki shows nothing to the contact for that.
+- Line health is Keiki's (fewer than 50 new conversations per line per day, about
+  400–500 active users per line). Omi links one address per channel, so add lines and
+  spread new links before that cap. The link target's `provider` in
+  `OMI_MESSAGING_LINK_TARGETS` and in the app's `mobile-chat-apps` flag payload must be
+  `keiki`, or minted proofs name the wrong audience.
 
 ## Runtime configuration
 
@@ -49,9 +87,15 @@ Production bindings are declared only for Cloud Run `backend`.
 | `LINQ_API_KEY` / `LINQ_WEBHOOK_SECRET` | runtime secrets |
 | `OMI_IMESSAGE_MAX_SEND_RECEIVE_RATIO` | 3; accepted range 1–5 |
 | `OMI_IMESSAGE_CONTACT_CARD` | off; enable only after configuring the Linq contact card |
+| `OMI_WHATSAPP_ENABLED` / `OMI_WHATSAPP_PROVIDER` | off / keiki |
+| `KEIKI_IMESSAGE_AGENT_ID` / `KEIKI_WHATSAPP_AGENT_ID` | the Keiki agent each channel answers for |
+| `KEIKI_IMESSAGE_SIGNING_SECRET` / `KEIKI_WHATSAPP_SIGNING_SECRET` | runtime secrets (`whsec_…` from `POST /developer/agents/:id/harness/signing-secret`) |
+| `KEIKI_API_BASE` | `https://onkeiki.com/api/v1` |
+| `OMI_WHATSAPP_MAX_SEND_RECEIVE_RATIO` | 3; accepted range 1–5 |
 
-The actual registered routes are `/v1/messaging/webhooks/telegram` and
-`/v1/messaging/webhooks/imessage`; setup-guide `/v1/channels/...` paths were placeholders.
+The actual registered routes are `/v1/messaging/webhooks/telegram`,
+`/v1/messaging/webhooks/imessage` and `/v1/messaging/webhooks/whatsapp`; setup-guide
+`/v1/channels/...` paths were placeholders.
 Startup/periodic recovery drains only pending jobs. Failed running jobs remain fenced.
 Handled worker failures, including a finished turn's CancelledError, release the
 lease. In-flight task cancellation and process loss keep the lease for operator

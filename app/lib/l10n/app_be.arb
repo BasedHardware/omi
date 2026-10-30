@@ -11941,5 +11941,7 @@
     "yearlySwitchUnavailable": "Гадавая аплата зараз недаступная для вашага плана.",
     "yearlySwitchDoneTitle": "Цяпер у вас гадавая аплата",
     "yearlySwitchDoneBody": "Сёння спісана {amount}. Падаўжэнне {date}.",
-    "episodePartsCount": "{count, plural, zero{{count} часткі} one{{count} частка} two{{count} часткі} few{{count} часткі} many{{count} частак} other{{count} часткі}}"
+    "episodePartsCount": "{count, plural, zero{{count} часткі} one{{count} частка} two{{count} часткі} few{{count} часткі} many{{count} частак} other{{count} часткі}}",
+    "chatAppsWaitingMessageIn": "Адпраў паведамленне ў праграме {app}. Гэты экран абновіцца, як толькі Omi яго атрымае.",
+    "chatAppsCodeExpiredMessageIn": "Атрымай новы код і адпраў яго з праграмы {app}."
 }
