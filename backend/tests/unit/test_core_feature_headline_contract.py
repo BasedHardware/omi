@@ -17,6 +17,10 @@ def _panels():
     return {panel['id']: panel for panel in walk(dashboard['panels'])}
 
 
+def _row(top, panel_id):
+    return next(p for p in top if p['id'] == panel_id)
+
+
 def test_capture_coverage_is_visible_without_redefining_settled_success():
     panels = _panels()
     headline = panels[2]
@@ -26,8 +30,8 @@ def test_capture_coverage_is_visible_without_redefining_settled_success():
     assert coverage['type'] == 'stat'
     # Coverage stays on the first screen, never inside a collapsed row.
     dashboard = json.loads((MONITORING / 'dashboards/general/omi-core-features.json').read_text())
-    assert coverage in dashboard['panels']
-    assert coverage['gridPos']['y'] < 20
+    top = dashboard['panels']
+    assert top.index(_row(top, 27)) < top.index(coverage) < top.index(_row(top, 89))
     assert all(target['instant'] for target in coverage['targets'])
     count, share = [target['expr'] for target in coverage['targets']]
     assert 'outcome="stale"}[3h]' in count
@@ -93,7 +97,11 @@ def test_first_screen_keeps_outcome_thresholds_and_a_trend_under_each_tile():
         assert spark['interval'] == '1h'
         assert 'noValue' not in spark['fieldConfig']['defaults'], 'noValue turns gaps into a drawn value'
         expr = spark['targets'][0].get('expr')
-        if expr is not None:
+        if expr is None:
+            promql = spark['targets'][0]['promQLQuery']
+            assert '[1h]' in promql['expr'] and '[3h]' not in promql['expr']
+            assert promql['step'] == '1h'
+        else:
             # The window equals the step, so each sample is read once and a wider range cannot overlap.
             assert '[$__interval]' in expr and '[$__range]' not in expr
             assert expr.endswith(' >= 0'), 'hours with no settled traffic must gap, not draw NaN'
@@ -108,3 +116,23 @@ def test_verdict_counts_the_same_expressions_as_the_tiles():
     for tile in (63, 3, 2, 4, 20, 36, 70):
         assert panels[tile]['targets'][0]['expr'] in target['expr']
     assert panels[73]['targets'][0].get('expr') is None  # Recaps live in another datasource and bands.
+
+
+def test_first_screen_is_exactly_the_agreed_panels():
+    panels = _top_level_outcome_tiles()
+    # Panel 5 is the deliberate exception: it is the only no-signal check, because a stopped
+    # reporter and no traffic look the same on an outcome tile.
+    assert {p['id'] for p in panels} == {88, 5, 63, 3, 2, 73, 4, 20, 36, 70, *range(80, 88)}
+
+
+def test_no_panels_overlap_on_the_first_screen_or_inside_any_row():
+    dashboard = json.loads((MONITORING / 'dashboards/general/omi-core-features.json').read_text())
+    groups = [[p for p in dashboard['panels']]] + [p['panels'] for p in dashboard['panels'] if p.get('panels')]
+    for group in groups:
+        occupied = set()
+        for panel in group:
+            g = panel['gridPos']
+            cells = {(x, y) for x in range(g['x'], g['x'] + g['w']) for y in range(g['y'], g['y'] + g['h'])}
+            assert not cells & occupied, panel['title']
+            assert g['x'] + g['w'] <= 24, panel['title']
+            occupied |= cells

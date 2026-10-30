@@ -10,9 +10,9 @@
       "tags": [],
       "targetBlank": true,
       "title": "Omi TV: growth and revenue",
-      "tooltip": "Growth, activation, retention, revenue and cost. Lives in the Omi Business org on this Grafana.",
+      "tooltip": "Growth, activation, retention, revenue and cost, in the admin dashboard.",
       "type": "link",
-      "url": "https://monitor.omi.me/d/omi-tv-v2/omi-tv-c2b7-v3?orgId=2"
+      "url": "https://admin.omi.me/dashboard"
     }
   ],
   "panels": [
@@ -34,7 +34,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "How many of the seven Prometheus outcome tiles below are green (99% or better), amber (95% to 99%) or red (under 95%) over the selected range. A band with no tiles does not appear, and a tile with no traffic is not counted. Daily recaps are excluded: they come from another datasource and keep their own 98%/90% bands.",
+      "description": "How many of the seven Prometheus outcome tiles below are green (99% or better), amber (95% up to, not including, 99%) or red (under 95%) over the selected range. A band with no tiles does not appear, and a tile with no traffic is not counted. Daily recaps are excluded: they come from another datasource and keep their own 98%/90% bands.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -73,7 +73,7 @@
             "properties": [
               {
                 "id": "displayName",
-                "value": "95% to 99%"
+                "value": "95% to <99%"
               },
               {
                 "id": "color",
@@ -725,7 +725,7 @@
         "type": "stackdriver",
         "uid": "beuxmaq8oxhq8e"
       },
-      "description": "Hourly trend of the tile above over the selected time range. The window equals the query step, so each sample is read once. Dashed lines mark the same amber and green thresholds as the tile. Longer history is in the graph rows; Prometheus keeps 10 days.",
+      "description": "Hourly trend of the tile above over the selected time range: generated / (generated + failed) in 1h windows, read from Cloud Monitoring log-based metrics. Empty hours are gaps. Dashed lines mark the same amber and green thresholds as the tile.",
       "fieldConfig": {
         "defaults": {
           "color": {

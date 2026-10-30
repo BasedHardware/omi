@@ -1026,9 +1026,10 @@ Grafana availability independently; it cannot prove query-path or delivery healt
 
 ### Metrics Contract
 
-Core Features trend panels use `[$__interval]` with a 1h minimum interval, so the
-window equals the step and each sample is read once. They follow the time picker;
-a fixed 14-day trend would exceed the 10-day Prometheus retention and cost about
+Core Features Prometheus trend panels use `[$__interval]` with a 1h minimum interval, so
+the window equals the step and each sample is read once. The recap trend reads Cloud
+Monitoring with a fixed `[1h]` window and `step: 1h`. They follow the time picker;
+on Prometheus a fixed 14-day trend would exceed the 10-day Prometheus retention and cost about
 7 to 15 seconds per tile, so longer history needs recording rules first. Do not set
 `noValue` on these panels: Grafana coerces it to a number and draws gaps as that
 value. The 99%+ count covers the seven Prometheus outcomes; daily recaps come from
