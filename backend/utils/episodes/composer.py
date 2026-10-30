@@ -572,3 +572,22 @@ def schedule(uid: str, episode_id: str, *, collaborators: Any = None, throttle: 
         with _inflight_lock:
             _inflight.discard(key)
         return False
+
+
+def after_finalized(uid: str, conversation_id: str, outcome: str, collaborators: Any = None) -> str:
+    """A member finished: once its episode is closed and every member is done, compose it."""
+    schedule_for_conversation(uid, conversation_id, collaborators=collaborators)
+    return outcome
+
+
+def schedule_for_conversation(uid: str, conversation_id: str, *, collaborators: Any = None) -> None:
+    if not episode_composer_enabled():
+        return
+    try:
+        c = collaborators
+        client = getattr(c, 'firestore_client', None)
+        episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=client)
+        if episode and not policy.is_live(episode):
+            schedule(uid, str(episode['id']), collaborators=collaborators)
+    except Exception as error:
+        logger.warning('event=episode_compose_schedule outcome=error exception_type=%s', type(error).__name__)
