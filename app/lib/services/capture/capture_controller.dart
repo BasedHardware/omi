@@ -2022,18 +2022,21 @@ class CaptureController extends ChangeNotifier
       final inTutorial = deviceOnboardingProvider?.isOnboardingActive == true;
       final isAskStep = inTutorial && deviceOnboardingProvider!.currentStep == 1;
       int action = prefs.triplePressAction;
+      String gesturePrefix = 'triple_press_';
       if (buttonState == 1) {
         final keepVoice = isAskStep || _voiceCommandSession != null;
         action = keepVoice ? 3 : prefs.singlePressAction;
+        gesturePrefix = 'single_press_';
       } else if (buttonState == 2) {
         action = prefs.doubleTapAction;
+        gesturePrefix = '';
       }
       if (action != 3) {
         if (action == 4 || _isProcessingButtonEvent) return;
         if (action == 1) {
           _isProcessingButtonEvent = true;
           if (isPaused) {
-            PlatformManager.instance.analytics.omiDoubleTap(feature: 'unmute');
+            PlatformManager.instance.analytics.omiDoubleTap(feature: '${gesturePrefix}unmute');
             resumeDeviceRecording().then((_) {
               _isProcessingButtonEvent = false;
             }).catchError((e) {
@@ -2041,7 +2044,7 @@ class CaptureController extends ChangeNotifier
               _isProcessingButtonEvent = false;
             });
           } else {
-            PlatformManager.instance.analytics.omiDoubleTap(feature: 'mute');
+            PlatformManager.instance.analytics.omiDoubleTap(feature: '${gesturePrefix}mute');
             pauseDeviceRecording().then((_) {
               _isProcessingButtonEvent = false;
             }).catchError((e) {
@@ -2052,16 +2055,16 @@ class CaptureController extends ChangeNotifier
         } else if (action == 2) {
           if (!_starOngoingConversation) {
             markConversationForStarring();
-            PlatformManager.instance.analytics.omiDoubleTap(feature: 'star_conversation');
+            PlatformManager.instance.analytics.omiDoubleTap(feature: '${gesturePrefix}star_conversation');
             HapticFeedback.mediumImpact();
           } else {
             unmarkConversationForStarring();
-            PlatformManager.instance.analytics.omiDoubleTap(feature: 'unstar_conversation');
+            PlatformManager.instance.analytics.omiDoubleTap(feature: '${gesturePrefix}unstar_conversation');
             HapticFeedback.lightImpact();
           }
         } else if (action == 0) {
           if (!_finalizeGate.allowsDoubleTap) return;
-          PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
+          PlatformManager.instance.analytics.omiDoubleTap(feature: '${gesturePrefix}process_conversation');
           HapticFeedback.lightImpact();
           forceProcessingCurrentConversation();
         }
