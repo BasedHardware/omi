@@ -329,6 +329,16 @@ def fair_use_caps_for_plan(plan: Optional[PlanType | str] = None) -> tuple[int, 
     return (FAIR_USE_DAILY_SPEECH_MS, FAIR_USE_3DAY_SPEECH_MS, FAIR_USE_WEEKLY_SPEECH_MS)
 
 
+def fair_use_caps_for_user(uid: str) -> tuple[int, int, int]:
+    """Return the existing plan's fair-use caps without creating a subscription."""
+    try:
+        subscription = users_db.get_existing_user_subscription(uid)
+        return fair_use_caps_for_plan(subscription.plan if subscription is not None else None)
+    except Exception as error:
+        logger.warning('fair_use: subscription lookup failed; using metered hard caps error=%s', type(error).__name__)
+        return fair_use_caps_for_plan()
+
+
 def is_daily_audio_ceiling_exceeded(uid: str, speech_totals: Optional[Dict[str, Any]] = None) -> bool:
     """Hard anti-abuse ceiling on total daily audio, applied to ALL plans.
 
@@ -668,13 +678,11 @@ def get_hard_restriction_status(uid: str) -> tuple[bool, int | None]:
 
     restrict_until = state.get('restrict_until')
 
-    # Check if speech is over hard cap
+    # In restrict stage, enforce the user's active plan caps as hard caps.
     speech = get_rolling_speech_ms(uid)
-    # In restrict mode, enforce the soft caps as hard caps
+    daily_cap, three_day_cap, weekly_cap = fair_use_caps_for_user(uid)
     restricted: bool = bool(
-        speech['daily_ms'] > FAIR_USE_DAILY_SPEECH_MS
-        or speech['three_day_ms'] > FAIR_USE_3DAY_SPEECH_MS
-        or speech['weekly_ms'] > FAIR_USE_WEEKLY_SPEECH_MS
+        speech['daily_ms'] > daily_cap or speech['three_day_ms'] > three_day_cap or speech['weekly_ms'] > weekly_cap
     )
     return restricted, _retry_after_seconds_from_restrict_until(restrict_until) if restricted else None
 

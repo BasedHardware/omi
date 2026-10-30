@@ -98,6 +98,19 @@ def test_non_overlap_and_touching_boundary_create_normal_sync(start):
     assert store.rows[('users', 'u', 'conversations', 'live')] == original[('users', 'u', 'conversations', 'live')]
 
 
+def test_live_wall_envelope_cannot_authorize_nonoverlapping_recorded_speech():
+    live = live_row('in_progress')
+    live['finished_at'] = live['started_at'] + timedelta(seconds=600)
+    store = seeded(live)
+    original = deepcopy(live)
+    incoming = dict(chunk('wal', 1100), data_protection_level='standard')
+
+    row, created, _ = assign(store, incoming)
+
+    assert created and row['id'] == 'wal'
+    assert store.rows[('users', 'u', 'conversations', 'live')] == original
+
+
 @pytest.mark.parametrize('start', [995, 1005])
 @pytest.mark.parametrize('timeline', [None, {'version': 2}])
 @pytest.mark.parametrize('explicit_target', [False, True])
@@ -245,7 +258,12 @@ def test_kill_switch_restores_old_assignment(monkeypatch):
 
 def test_maximum_overlap_wins_without_merging_live_identities():
     first = live_row()
-    longer = dict(live_row(), id='longer', finished_at=first['finished_at'] + timedelta(seconds=10))
+    longer = dict(
+        live_row(),
+        id='longer',
+        finished_at=first['finished_at'] + timedelta(seconds=10),
+        transcript_segments=[dict(first['transcript_segments'][0], end=19.5)],
+    )
     assert choose_live_overlap([first, longer], chunk('wal', 1005)) == 'longer'
 
 
@@ -302,7 +320,8 @@ def test_discovery_excludes_other_partitions_and_off_lifecycle_rows():
     assert not discoverable_live_overlap(dict(stub, deleted=True), chunk('wal', 1002))
     assert not discoverable_live_overlap(dict(stub, status='processing'), chunk('wal', 1002))
     assert not discoverable_live_overlap(dict(stub, client_device_id='other'), chunk('wal', 1002))
-    assert not discoverable_live_overlap(dict(stub, finished_at=stub['started_at']), chunk('wal', 1002))
+    # An obsolete processing end cannot erase placed recording evidence.
+    assert discoverable_live_overlap(dict(stub, finished_at=stub['started_at']), chunk('wal', 1002))
 
 
 @pytest.mark.parametrize('fleet,lineage', [('off', 'on'), ('on', 'on'), ('off', 'off')])

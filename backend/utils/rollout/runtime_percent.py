@@ -3,9 +3,10 @@
 
 One process-wide cache entry with a 30s TTL. Reads run on the rollout executor, never on the
 event loop, with a 1s timeout and SDK retries off. On a read error or a malformed document the
-last-known-good value is served indefinitely (source="lkg"); a cold start with nothing loaded
-serves each caller's env_default (source="env_default"). A value is never raised above LKG on
-error. The bucket functions in config/ are untouched; only the percent source moves here.
+last-known-good value is served indefinitely (source="lkg"). A cold start serves zero while
+its first read is pending; after a confirmed read error or missing config, it may use the
+caller's env_default. A value is never raised above LKG on error. The bucket functions in
+config/ are untouched; only the percent source moves here.
 """
 
 from __future__ import annotations
@@ -36,14 +37,14 @@ LEGACY_SYNC_MODES = store.LEGACY_SYNC_MODES
 TTL_SECONDS = 30.0
 COLD_READ_WAIT_SECONDS = 1.25
 LKG_ALERT_SECONDS = 300.0
-SOURCES = ('firestore', 'lkg', 'env_default')
+SOURCES = ('firestore', 'lkg', 'env_default', 'pending')
 
 LegacySyncMode = Literal['on', 'draining', 'dark']
 logger = logging.getLogger(__name__)
 
 RUNTIME_PERCENT_SOURCE = Gauge(
     'omi_runtime_percent_source',
-    'Current source of runtime percents (1 for the active source): ramp, lkg, or env_default.',
+    'Current source of runtime percents (1 for the active source): firestore, lkg, env_default, or pending.',
     ['source'],
 )
 RUNTIME_PERCENT_ERROR_SECONDS = Gauge(
@@ -65,7 +66,7 @@ class RampSnapshot:
     percents: Mapping[str, float]
     legacy_sync: LegacySyncMode
     locked_by: str | None
-    source: Literal['firestore', 'lkg', 'env_default']
+    source: Literal['firestore', 'lkg', 'env_default', 'pending']
     env: str | None = None
     updated_at: str | None = None
     updated_by: str | None = None
@@ -181,6 +182,7 @@ class _RampCache:
     def snapshot_now(self) -> RampSnapshot:
         with self.lock:
             loaded, error_since = self.loaded, self.error_since
+            pending = self.inflight is not None
         error_seconds = 0.0 if error_since is None else max(0.0, time.monotonic() - error_since)
         if loaded is None:
             return RampSnapshot(
@@ -188,10 +190,10 @@ class _RampCache:
                 percents=MappingProxyType({}),
                 legacy_sync='on',
                 locked_by=None,
-                source='env_default',
+                source='env_default' if error_since is not None or not pending else 'pending',
                 error_seconds=error_seconds,
             )
-        source: Literal['firestore', 'lkg', 'env_default']
+        source: Literal['firestore', 'lkg', 'env_default', 'pending']
         if error_since is not None:
             source = 'lkg'
         elif loaded.env_doc is None:
@@ -250,7 +252,10 @@ def runtime_percent(name: str, *, env_default: float) -> float:
     if name not in RAMP_NAMES:
         return env_default
     try:
-        value = ramp_snapshot().percents.get(name)
+        snapshot = ramp_snapshot()
+        if snapshot.source == 'pending':
+            return 0.0
+        value = snapshot.percents.get(name)
     except Exception:
         logger.warning('event=runtime_percent_read outcome=snapshot_failed served=env_default')
         return env_default

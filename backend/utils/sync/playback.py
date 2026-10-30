@@ -26,6 +26,7 @@ from utils.other.storage import (
     get_merged_audio_signed_url,
     get_or_create_merged_audio,
     get_playback_artifact_signed_url,
+    get_playback_failure_retry_epoch,
     is_playback_unavailable,
     list_audio_chunks,
 )
@@ -230,8 +231,11 @@ def _conversation_audio_urls_entry(
                 "captured_duration": stamp.get('captured_duration'),
                 "spans": stamp.get('spans', []),
             }
+    retry_epoch = None
     if get_conversation_playback_unavailable_fingerprint(uid, conversation_id) == fingerprint:
-        return {"status": "unavailable", "signed_url": None, "spans": []}
+        retry_epoch = get_playback_failure_retry_epoch(uid, conversation_id, fingerprint=fingerprint)
+        if retry_epoch is None:
+            return {"status": "unavailable", "signed_url": None, "spans": []}
     epoch = (conversation or {}).get('playback_eager_epoch') or (stamped if immutable else None)
     enqueue_conversation_artifact_build(
         uid,
@@ -239,6 +243,7 @@ def _conversation_audio_urls_entry(
         fingerprint,
         caller='sync_urls',
         **({'playback_epoch': epoch} if epoch else {}),
+        **({'recovery_epoch': retry_epoch} if retry_epoch else {}),
     )
     return {"status": "pending", "signed_url": None, "spans": []}
 
@@ -279,14 +284,17 @@ def _get_audio_urls_via_artifacts(
                 }
             )
         elif is_playback_unavailable(uid, conversation_id, audio_file_id):
+            retry_epoch = get_playback_failure_retry_epoch(uid, conversation_id, audio_file_id)
             result.append(
                 {
                     "id": audio_file_id,
-                    "status": "unavailable",
+                    "status": "pending" if retry_epoch else "unavailable",
                     "signed_url": None,
                     "duration": af.get('duration', 0),
                 }
             )
+            if retry_epoch:
+                to_enqueue.append({**af, '_playback_retry_epoch': retry_epoch})
         else:
             result.append(
                 {
@@ -421,6 +429,11 @@ def _get_artifact_download_payload(
     if legacy_data is not None:
         return legacy_data, "audio/wav", "wav"
 
+    if is_playback_unavailable(uid, conversation_id, audio_file_id):
+        retry_epoch = get_playback_failure_retry_epoch(uid, conversation_id, audio_file_id)
+        if retry_epoch is None:
+            raise HTTPException(status_code=404, detail="Audio is unavailable")
+        audio_file = {**audio_file, '_playback_retry_epoch': retry_epoch}
     enqueue_conversation_audio_merge(
         uid,
         conversation_id,
@@ -569,6 +582,7 @@ def _merge_playback_sources(
         fill_gaps=True,
         sample_rate=AUDIO_SAMPLE_RATE,
         listed_chunks=selected,
+        strict_sources=True,
     )
 
 

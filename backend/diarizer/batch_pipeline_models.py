@@ -30,6 +30,7 @@ from config.batch_pipeline_empty_asr import safety_net_enabled
 from diarizer.batch_pipeline import (
     PipelineWorker,
     SAMPLE_RATE,
+    bounded_window_words,
     crop_model_vad_spans,
     padded_retry_fits,
     padded_retry_seconds,
@@ -130,8 +131,8 @@ class ParakeetWords:
             # Only the real capture owns words. Synthetic padding can never
             # establish speech; intersect edge-straddling clocks with capture.
             if 0 <= (start + end) / 2 < duration:
-                result.append({**word, 'timestamp': [max(0, start), min(duration, end)]})
-        return validate_words(result, duration)
+                result.append({**word, 'timestamp': [start, end]})
+        return bounded_window_words(result, duration)
 
 
 class PyannoteDiarizer:

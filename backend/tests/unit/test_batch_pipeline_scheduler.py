@@ -1,13 +1,16 @@
 """State-machine tests over an atomic snapshot store, not a Firestore emulator."""
 
 from copy import deepcopy
-from threading import RLock
+from threading import Event, RLock, Thread, current_thread
+from unittest.mock import Mock
 
 import pytest
 
 from config.batch_pipeline import admit_or_legacy, enabled_for, priority_for, scheduler_control_key
+from database.batch_pipeline_shadow import pool_busy
+from tests.unit.fixtures.batch_shadow_metadata_query import metadata_client
 from utils.batch_pipeline.scheduler import owner_key
-from utils.batch_pipeline.contracts import Priority, WorkItem, WorkResult
+from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.scheduler import Scheduler, LEASE_SECONDS
 
@@ -94,13 +97,21 @@ class MemoryStore:
         ]
         return min(jobs) if jobs else None
 
-    def control_candidate(self, priority, pool, now):
+    def acquire_pull_claim(self, shard, token, now, ttl):
+        with self.lock:
+            if self.rows.get(('pull_claims', shard), {}).get('expires_at', 0) > now:
+                return False
+            self.rows['pull_claims', shard] = {'token': token, 'expires_at': now + ttl}
+            return True
+
+    def control_candidate(self, priority, pool, now, *, worker_id='', exclude=()):
         from utils.batch_pipeline.control import field
 
         candidates = [
             (v[field(priority, 'service')], v[field(priority, pool + '_available_at')], key)
             for (table, key), v in self.rows.items()
             if table == 'control'
+            and key not in exclude
             and v.get(field(priority, 'active'))
             and v[field(priority, pool + '_available_at')] <= now
         ]
@@ -216,6 +227,56 @@ def test_lease_expiry_backoff_and_stale_result_fencing():
     assert not queue.complete(WorkResult('a', 'gs://results/changed'), second.token, 999)
 
 
+@pytest.mark.parametrize('mode', ['off', 'shadow'])
+def test_due_retry_at_attempt_cap_can_still_be_dispatched(mode, monkeypatch):
+    # Shadow idle admission must follow this actual scheduler behavior, rather
+    # than treating an attempt count as an authoritative terminal state.
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', mode)
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('at-cap'), 0)
+    lease = queue.pull(0)[0]
+    job = store.rows['jobs', 'at-cap']
+    job['attempt'] = job['policy_parts']['scheduler']['max_attempts']
+    cap = job['attempt']
+    assert queue.recover(LEASE_SECONDS + 1) == 1
+    retry = store.rows['jobs', 'at-cap']
+    assert retry['state'] == 'retry' and retry['attempt'] == cap
+    due = retry['available_at']
+    assert queue.recover(due) == 1
+    next_lease = queue.pull(due)[0]
+    assert next_lease.attempt == cap + 1
+    assert next_lease.token != lease.token
+
+
+def test_allowance_repark_is_idle_until_scheduler_takes_a_live_lease():
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('held-shadow-probe'), 0)
+    lease = queue.pull(0)[0]
+    assert queue.defer(
+        'held-shadow-probe',
+        lease.token,
+        1,
+        retry_after=3600,
+        held_reason='allowance_exhausted',
+        admission_refused=True,
+    )
+
+    def busy_at(now):
+        rows = [row for (table, key), row in store.rows.items() if table == 'jobs']
+        return pool_busy(metadata_client(rows), 'batch_pipeline_dev', now=now)
+
+    due = store.rows['jobs', 'held-shadow-probe']['available_at']
+    assert not busy_at(due)
+    assert queue.recover(due) == 1
+    assert store.rows['jobs', 'held-shadow-probe']['state'] == 'ready'
+    assert not busy_at(due)
+    next_lease = queue.pull(due)[0]
+    assert next_lease.token != lease.token
+    assert busy_at(due)  # Live leases retain priority during re-evaluation/dispatch.
+
+
 def test_failures_stop_at_default_ceiling_without_fabricating_result():
     store = MemoryStore()
     queue = Scheduler(store)
@@ -235,11 +296,68 @@ def test_failures_stop_at_default_ceiling_without_fabricating_result():
     assert job['state'] == 'quarantined' and not job['merge_pending']
     assert job['quarantine_reason'] == 'worker_failed' and job['recovery_state'] == 'held'
     assert 'retry_started_at' not in job and 'result' not in job
+    assert job['audio_uri'] == 'gs://synthetic/a'  # retained source for fenced operator recovery
     assert queue.recover(99999) == 0 and queue.pull(99999) == []
     assert not queue.redrive_dead('a', 99999)
     assert not queue.complete(WorkResult('a', 'gs://results/stale'), lease.token, 99999)
     assert OrderedMerge(store).commit_next('heavy', 99999) is None
     assert ('results', 'a') not in store.rows
+
+
+def test_contention_backoff_returns_prior_leases_and_suppresses_hot_repull(monkeypatch):
+    from database.firestore_transaction_retry import FirestoreContentionExhausted
+    from utils.batch_pipeline import scheduler as scheduler_module
+
+    now = [100.0]
+    monkeypatch.setattr(scheduler_module, 'monotonic', lambda: now[0])
+    monkeypatch.setattr(scheduler_module.random, 'random', lambda: 0.0)
+    queue = Scheduler(MemoryStore())
+    lease = LeasedWork(item('leased'), 'synthetic-token', 1, 120.0)
+    pull_one = Mock(side_effect=[lease, FirestoreContentionExhausted('bounded'), None])
+    monkeypatch.setattr(queue, '_pull_one', pull_one)
+
+    assert queue.pull(0, 2) == [lease]
+    assert queue._contention_backoff_until == 100.5
+    assert queue.pull(1) == []
+    assert pull_one.call_count == 2
+    now[0] = 100.5
+    assert queue.pull(1) == []
+    assert pull_one.call_count == 3
+    assert queue._contention_failures == 0
+
+
+def test_overlapping_pull_cannot_clear_a_newer_contention_backoff(monkeypatch):
+    from database.firestore_transaction_retry import FirestoreContentionExhausted
+    from utils.batch_pipeline import scheduler as scheduler_module
+
+    now = [100.0]
+    monkeypatch.setattr(scheduler_module, 'monotonic', lambda: now[0])
+    monkeypatch.setattr(scheduler_module.random, 'random', lambda: 0.0)
+    queue = Scheduler(MemoryStore())
+    entered = Event()
+    finish = Event()
+
+    def pull_one(*_args, **_kwargs):
+        if current_thread().name == 'overlapping-pull':
+            entered.set()
+            assert finish.wait(timeout=5)
+            return None
+        raise FirestoreContentionExhausted('bounded')
+
+    monkeypatch.setattr(queue, '_pull_one', pull_one)
+    overlapping_pull = Thread(name='overlapping-pull', target=lambda: queue.pull(0))
+    overlapping_pull.start()
+    assert entered.wait(timeout=5)
+
+    assert queue.pull(1) == []
+    cooldown = queue._contention_backoff_until
+    assert cooldown == 100.5
+
+    finish.set()
+    overlapping_pull.join(timeout=5)
+    assert not overlapping_pull.is_alive()
+    assert queue._contention_backoff_until == cooldown
+    assert queue.pull(2) == []
 
 
 def test_out_of_order_completion_and_idempotent_ordered_commit():

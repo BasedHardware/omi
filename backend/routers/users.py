@@ -20,13 +20,16 @@ from database import (
     notifications as notification_db,
     daily_summaries as daily_summaries_db,
     llm_usage as llm_usage_db,
+    people as people_db,
     users as users_db,
 )
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from database._client import get_customer_firestore_client
 from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
 from services.users.data_export import iter_user_data_export, iter_user_data_export_streaming
 from services.users.data_export_response import DataExportStreamingResponse
-from services.users.account_deletion import run_deletion_wipe_with_lease, start_account_deletion
+from services.users.account_deletion import run_deletion_wipe_with_lease
+from routers.account_deletion import router as account_deletion_router
 from database.app_review_config import should_hide_subscription_ui
 from database.webhook_health import record_dev_webhook_success
 from database.conversation_scan import conversation_scan_budget, people_stats_scan
@@ -177,6 +180,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+router.include_router(account_deletion_router)
 
 
 class MigrationRequest(BaseModel):
@@ -305,23 +309,6 @@ def get_user_profile_endpoint(uid: str = Depends(auth.get_current_user_uid)):
         raise HTTPException(status_code=410, detail="User not found")
     profile.setdefault('uid', uid)
     return profile
-
-
-class DeleteAccountRequest(BaseModel):
-    reason: Optional[str] = None
-    reason_details: Optional[str] = None
-
-
-@router.delete('/v1/users/delete-account', tags=['v1'], response_model=UserStatusResponse)
-def delete_account(
-    request: DeleteAccountRequest = DeleteAccountRequest(),
-    uid: str = Depends(auth.get_current_user_uid),
-):
-    try:
-        return start_account_deletion(uid, reason=request.reason, reason_details=request.reason_details)
-    except Exception as e:
-        logger.info(f'delete_account {sanitize(str(e))}')
-        raise HTTPException(status_code=500, detail='Could not delete account. Please try again.')
 
 
 # response_model omitted: include_in_schema=False Cloud Tasks handler; JSONResponse
@@ -633,15 +620,14 @@ def get_or_create_person(data: CreatePerson, uid: str = Depends(auth.get_current
     if existing_person:
         return existing_person
 
-    # Create new person
+    # Create new person unless a concurrent or retried request with this name just did
     person_data = {
         'id': str(uuid.uuid4()),
         'name': data.name,
         'created_at': datetime.now(timezone.utc),
         'updated_at': datetime.now(timezone.utc),
     }
-    result = create_person(uid, person_data)
-    return result
+    return people_db.get_or_create_person_by_name(uid, person_data)
 
 
 @router.get('/v1/users/people/{person_id}', tags=['v1'], response_model=Person)
@@ -2322,6 +2308,14 @@ def get_shared_daily_summary(summary_id: str):
     uid = get_daily_summary_uid(summary_id)
     if not uid:
         raise HTTPException(status_code=404, detail='Daily summary not found')
+
+    try:
+        if account_deletion_blocks_user_work(uid):
+            raise HTTPException(status_code=404, detail='Daily summary not found')
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail='Daily summary unavailable') from exc
 
     summary = daily_summaries_db.get_daily_summary(uid, summary_id)
     if not summary or summary.get('visibility') != 'shared':

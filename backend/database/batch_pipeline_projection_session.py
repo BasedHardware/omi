@@ -282,6 +282,13 @@ class ProjectionSession:
                 raise ProjectionBlocked('earlier projection part must persist first')
         if self._privacy_replay_transaction is transaction:
             return
+        if self.entry.get('projection_redriven_at'):
+            # A released held unit re-enters projection behind the watermark:
+            # its hold already advanced the chain past it, so the erased-
+            # predecessor fence must not block the one sanctioned out-of-order
+            # re-assignment.
+            self.erased_predecessors = []
+            return
         from database.batch_pipeline_privacy import erased_predecessors
 
         erased = erased_predecessors(
@@ -428,8 +435,16 @@ class ProjectionSession:
                     **completed_checkpoint_fields(self.entry, quarantined=quarantined),
                 },
             )
-        if not privacy_replay:
+        # A released held unit re-enters projection behind the watermark;
+        # re-advancing the chain onto it would stall on replaying terminal rows.
+        if not privacy_replay and not self.entry.get('projection_redriven_at'):
             transaction.update(self.owner_ref, {'projection_watermark': self.segment_id})
+        if held and not privacy_replay:
+            # A quarantined receipt is replay-fenced: nothing automatic will
+            # change this unit again. Hold the job in the same transaction so
+            # the held-partial scan and a reviewed redrive (for example after a
+            # discarded record is restored) own it; audio and result stay.
+            transaction.update(self.store.ref('jobs', self.segment_id), {'recovery_state': 'held'})
         for reference in self.erased_predecessors:
             transaction.update(
                 reference,

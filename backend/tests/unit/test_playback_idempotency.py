@@ -180,6 +180,141 @@ def test_timeline_origin_change_invalidates_immutable_playback(monkeypatch):
     enqueue.assert_called_once()
 
 
+@pytest.mark.parametrize('reason', ['merge_failed', 'chunks_missing', 'empty_audio', 'source_changed'])
+@pytest.mark.parametrize('conversation', [False, True])
+def test_only_old_failed_merges_get_one_generation_scoped_retry(monkeypatch, reason, conversation):
+    from datetime import datetime, timezone
+    from utils.other import storage
+
+    monkeypatch.delenv('PLAYBACK_MANIFEST_RECOVERY_ENABLED', raising=False)
+    blob = Mock(generation=123, updated=datetime.fromtimestamp(1000, timezone.utc))
+    blob.download_as_bytes.return_value = (f'fp:{reason}' if conversation else reason).encode()
+    monkeypatch.setattr(storage, '_playback_unavailable_blob', lambda *_: blob)
+    monkeypatch.setattr(storage, '_conversation_playback_unavailable_blob', lambda *_: blob)
+    clock = [1899]
+    monkeypatch.setattr(storage.time, 'time', lambda: clock[0])
+    args = ('u', 'c') if conversation else ('u', 'c', 'file')
+    kwargs = {'fingerprint': 'fp'} if conversation else {}
+    assert storage.get_playback_failure_retry_epoch(*args, **kwargs) is None
+    blob.download_as_bytes.assert_not_called()
+    clock[0] = 1900
+    token = storage.get_playback_failure_retry_epoch(*args, **kwargs)
+    assert token == ('mf123' if reason == 'merge_failed' else None)
+    blob.download_as_bytes.assert_called_once_with(if_generation_match=123)
+    monkeypatch.setenv('PLAYBACK_MANIFEST_RECOVERY_ENABLED', 'false')
+    blob.reload.reset_mock()
+    assert storage.get_playback_failure_retry_epoch(*args, **kwargs) is None
+    blob.reload.assert_not_called()
+
+
+@pytest.mark.parametrize('failure', [NotFound('expired'), PreconditionFailed('marker replaced')])
+def test_failure_marker_races_never_open_a_retry(monkeypatch, failure):
+    from datetime import datetime, timezone
+    from utils.other import storage
+
+    blob = Mock(generation=123, updated=datetime.fromtimestamp(1000, timezone.utc))
+    monkeypatch.setattr(storage, '_playback_unavailable_blob', lambda *_: blob)
+    monkeypatch.setattr(storage.time, 'time', lambda: 1900)
+    blob.download_as_bytes.side_effect = failure
+    assert storage.get_playback_failure_retry_epoch('u', 'c', 'file') is None
+
+
+@pytest.mark.parametrize('on_demand', [False, True])
+def test_230_failed_files_reenqueue_once_per_marker_even_across_hour_boundary(monkeypatch, on_demand):
+    from utils.other import storage
+    from utils.sync import playback
+    from utils import cloud_tasks
+
+    monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', str(on_demand).lower())
+    files = [dict(id=f'file-{i}', chunk_timestamps=[1000.0 + i * 100], duration=1) for i in range(230)]
+    fp = storage.compute_audio_files_fingerprint(files, **({'origin': None} if on_demand else {}))
+    monkeypatch.setattr(playback, 'get_playback_artifact_signed_url', lambda *_: None)
+    monkeypatch.setattr(playback, 'get_merged_audio_signed_url', lambda *_: None)
+    monkeypatch.setattr(playback, 'is_playback_unavailable', lambda *_: True)
+    monkeypatch.setattr(playback, 'get_conversation_playback_unavailable_fingerprint', lambda *_: fp)
+    monkeypatch.setattr(playback, 'get_playback_failure_retry_epoch', lambda *a, **kw: 'mf123')
+    monkeypatch.setattr(playback, 'enqueue_conversation_audio_merge', storage.enqueue_conversation_audio_merge)
+    monkeypatch.setattr(playback, 'enqueue_conversation_artifact_build', storage.enqueue_conversation_artifact_build)
+    tasks = {}
+
+    def enqueue(payload):
+        tasks.setdefault(cloud_tasks._audio_merge_task_id(payload), payload)
+
+    monkeypatch.setattr(storage, 'enqueue_audio_merge_job', enqueue)
+    clock = [3599]
+    monkeypatch.setattr(storage.time, 'time', lambda: clock[0])
+    first = playback._get_audio_urls_via_artifacts('u', 'c', files)
+    assert len(tasks) == 231  # 230 immutable part tasks + one conversation task.
+    assert all(af['status'] == 'pending' for af in first['audio_files'])
+    assert first['conversation_audio']['status'] == 'pending'
+    assert all(name.endswith('-rmf123') for name in tasks)
+    assert all('_playback_retry_epoch' not in af for af in files)
+    clock[0] = 3601
+    playback._get_audio_urls_via_artifacts('u', 'c', files)
+    assert len(tasks) == 231
+
+
+def test_download_access_uses_failure_generation_and_returns_to_polling(monkeypatch):
+    from utils.sync import playback
+
+    monkeypatch.setattr(playback, 'download_playback_artifact', lambda *_: None)
+    monkeypatch.setattr(playback, 'get_merged_audio_signed_url', lambda *_: None)
+    monkeypatch.setattr(playback, 'is_playback_unavailable', lambda *_: True)
+    monkeypatch.setattr(playback, 'get_playback_failure_retry_epoch', lambda *_: 'mf123')
+    enqueue = Mock()
+    monkeypatch.setattr(playback, 'enqueue_conversation_audio_merge', enqueue)
+    af = dict(id='file', chunk_timestamps=[1000])
+    assert playback._get_artifact_download_payload('u', 'c', 'file', af) is None
+    enqueue.assert_called_once_with('u', 'c', [{**af, '_playback_retry_epoch': 'mf123'}], caller='sync_download')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('schema', [1, 2])
+@pytest.mark.parametrize('when', ['before', 'during'])
+async def test_changed_source_is_terminal_without_publishing_or_burning_attempts(monkeypatch, route_app, schema, when):
+    from copy import deepcopy
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    from utils.other import storage
+    from utils.other.playback_identity import source_fingerprint
+
+    _, sync = route_app
+    monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', 'false')
+    source = [dict(path='chunks/u/c/1000.000.bin', timestamp=1000.0, generation='7', size=32)]
+    files = [dict(id='file', chunk_timestamps=[1000.0], source_fingerprint=source_fingerprint(source))]
+    row = dict(started_at=1000.0, audio_files=files)
+    payload = dict(schema_version=schema, uid='u', conversation_id='c')
+    if schema == 1:
+        payload.update(audio_file_id='file', timestamps=[1000.0], source_fingerprint=files[0]['source_fingerprint'])
+    else:
+        payload['fingerprint'] = storage.compute_audio_files_fingerprint(files)
+    changed = deepcopy(source)
+    changed[0]['generation'] = 'replacement'
+    listing = Mock(side_effect=[source, changed] if when == 'during' else [changed])
+    monkeypatch.setattr(sync.sync_playback, 'list_audio_chunks', listing)
+    download = Mock(return_value=b'\0' * 32)
+    monkeypatch.setattr(sync.sync_playback, 'download_audio_chunks_and_merge', download)
+    monkeypatch.setattr(sync, 'try_acquire_job_run_lock', lambda *_: 'token')
+    monkeypatch.setattr(sync, 'release_job_run_lock', lambda *_: None)
+    monkeypatch.setattr(sync, 'should_skip_background_account_mutation', lambda *_: False)
+    monkeypatch.setattr(sync.conversations_db, 'get_conversation', lambda *_: row)
+    monkeypatch.setattr(sync, 'get_playback_artifact_signed_url', lambda *_: None)
+    monkeypatch.setattr(sync.playback_build, 'get_conversation_playback_manifest', lambda *_: None)
+    file_upload, conversation_upload = Mock(), Mock()
+    monkeypatch.setattr(sync, 'upload_playback_artifact', file_upload)
+    monkeypatch.setattr(sync.playback_build, 'upload_conversation_playback_artifact', conversation_upload)
+    file_marker, conversation_marker = Mock(), Mock()
+    monkeypatch.setattr(sync, 'mark_playback_unavailable', file_marker)
+    monkeypatch.setattr(sync, 'mark_conversation_playback_unavailable', conversation_marker)
+    result = await sync.run_audio_merge_job(SimpleNamespace(json=AsyncMock(return_value=payload)), 0)
+    assert result.status_code == 200 and b'source_manifest_changed' in result.body
+    (file_marker if schema == 1 else conversation_marker).assert_called_once()
+    assert (file_marker if schema == 1 else conversation_marker).call_args.args[-1] == 'source_changed'
+    assert download.call_count == (1 if when == 'during' else 0)
+    file_upload.assert_not_called()
+    conversation_upload.assert_not_called()
+
+
 def test_playback_write_metric_survives_sync_export_filter():
     import re
     from pathlib import Path

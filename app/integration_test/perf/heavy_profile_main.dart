@@ -26,7 +26,10 @@ import 'package:omi/pages/action_items/action_items_page.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
+import 'package:omi/pages/conversations/on_the_way_page.dart';
+import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
+import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -45,6 +48,7 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/providers/speaker_tag_prompts_provider.dart';
 import 'package:omi/providers/people_provider.dart';
@@ -60,6 +64,7 @@ import 'package:path_provider/path_provider.dart';
 import 'heavy_fixture.dart';
 import 'heavy_fixture_server.dart';
 import 'heavy_frame_collector.dart';
+import 'heavy_live_preview.dart';
 import 'production_shell.dart';
 
 /// Profile-mode heavy-account perf harness (David 2026-10-25: "test perf more
@@ -74,6 +79,9 @@ import 'production_shell.dart';
 /// API call stays on the in-process loopback fixture. Frame numbers are
 /// comparable across builds on the same physical device only. Simulator debug
 /// is explicitly marked as scenario qualification, never profile acceptance.
+/// Windows in receipt order; perf_sim_report.py's SCENARIOS must match.
+const heavyScenarioCount = 9;
+
 void main() {
   final binding = HeavyProfileBinding();
   registerHeavyProcessExit(testsComplete: () => binding.allTestsPassed.isCompleted);
@@ -163,7 +171,13 @@ void main() {
     final entry = _HeavyHomeShell(conversationsProvider: conversations, walService: walService);
 
     const timelineEnabled = bool.fromEnvironment('PERF_HEAVY_TIMELINE');
-    if (timelineEnabled) await binding.enableTimeline(streams: const ['Dart', 'GC']);
+    if (timelineEnabled) {
+      // Attribution only (never a baseline): name each widget build in the trace so a slow first
+      // build (e.g. the first Tasks switch) points at the widget, not just at BUILD.
+      debugProfileBuildsEnabled = true;
+      debugProfileBuildsEnabledUserWidgets = true;
+      await binding.enableTimeline(streams: const ['Dart', 'GC']);
+    }
     await (() async {
       // 4. Cold start: shell mount → Home request → empty server page → cache
       //    decode of the full seeded history → grouped list rendered → settled.
@@ -177,9 +191,9 @@ void main() {
       await walService.syncs.phone.walReady;
       await globalNavigatorKey.currentContext!.read<SyncProvider>().initialized;
       await _awaitCondition(
-          () => globalNavigatorKey.currentContext!.read<SyncProvider>().allWals.length == heavyWalCount,
-          timeout: const Duration(seconds: 15));
-      expect(globalNavigatorKey.currentContext!.read<SyncProvider>().allWals.length, heavyWalCount,
+          () => globalNavigatorKey.currentContext!.read<SyncProvider>().allWals.length == heavyIndexWalCount,
+          timeout: const Duration(seconds: 60));
+      expect(globalNavigatorKey.currentContext!.read<SyncProvider>().allWals.length, heavyIndexWalCount,
           reason: 'Home must observe the real heavy WAL inventory');
       final settled = await _awaitCondition(
           () => conversations.conversations.length >= heavyConversationCount && !conversations.isLoadingConversations,
@@ -261,9 +275,118 @@ void main() {
       }
       results['wal_sync_bg_fg'] = await collector.end();
       await sync;
+
+      // 9. Home with the live episode row while an on-device preview revises its newest line
+      //    several times a second over a ~1,000-segment session (LivePreviewCoverage on every
+      //    preview update and clock tick). Same Home list and history, live overlay on top.
+      final live = await HeavyLiveSession.start(walService);
+      addTearDown(live.dispose);
+      Widget withLive(Widget child) => MultiProvider(providers: [
+            ChangeNotifierProvider<EpisodeProvider>.value(value: live.episodes),
+            ChangeNotifierProvider<CaptureProvider>.value(value: live.capture),
+          ], child: child);
+      collector.begin('home_live_preview');
+      live.startUpdates();
+      mark('home_live_preview.push');
+      globalNavigatorKey.currentState!.push(MaterialPageRoute<void>(
+          builder: (_) => withLive(Scaffold(
+              backgroundColor: Colors.black,
+              body: ConversationsPage(
+                  requestInitialLoad: false, loadRecaps: () async => (items: <DailySummary>[], ok: true))))));
+      await _idle(const Duration(seconds: 2));
+      final liveHome = find.descendant(
+          of: find.byType(ConversationsPage).last, matching: find.byKey(const Key('home_live_episode_preview')));
+      expect(liveHome, findsOneWidget, reason: 'Home must show the live row with preview words');
+      mark('home_live_preview.watch');
+      await _idle(const Duration(seconds: 5));
+      final liveList = await _verticalScrollable(tester, find.byType(ConversationsPage).last);
+      for (var i = 0; i < 6; i++) {
+        mark('home_live_preview.fling.$i');
+        await tester.fling(liveList, Offset(0, i < 3 ? -600 : 600), 2500);
+        await _settleScrolled();
+        await _idle(const Duration(milliseconds: 500));
+      }
+      globalNavigatorKey.currentState!.pop();
+      mark('home_live_preview.pop');
+      await _idle(const Duration(seconds: 1));
+      results['home_live_preview'] = {...await collector.end(), 'preview_updates': live.updates};
+      debugPrint('HEAVY_STAGE home_live_preview complete');
+
+      // 10. The live episode page over the same session: summary, then the live transcript
+      //     (finals plus the uncovered preview tail) scrolled while words keep arriving.
+      collector.begin('live_episode_page');
+      final updatesBefore = live.updates;
+      mark('live_episode_page.push');
+      globalNavigatorKey.currentState!.push(MaterialPageRoute<void>(
+          builder: (_) => withLive(const LiveEpisodePage(
+              topConversationId: heavyLiveConversationId, initialTab: LiveEpisodeTab.transcript))));
+      await _idle(const Duration(seconds: 2));
+      expect(find.byKey(const Key('live_episode_page')), findsOneWidget,
+          reason: 'the live episode page must show the episode layout');
+      final liveTranscript = await _verticalScrollable(tester, find.byType(LiveEpisodePage));
+      for (var i = 0; i < 6; i++) {
+        mark('live_episode_page.fling.$i');
+        await tester.fling(liveTranscript, Offset(0, i < 3 ? 600 : -600), 2500);
+        await _settleScrolled();
+        await _idle(const Duration(milliseconds: 400));
+      }
+      globalNavigatorKey.currentState!.pop();
+      mark('live_episode_page.pop');
+      await _idle(const Duration(seconds: 1));
+      live.stopUpdates();
+      results['live_episode_page'] = {...await collector.end(), 'preview_updates': live.updates - updatesBefore};
+      debugPrint('HEAVY_STAGE live_episode_page complete');
+
+      // 11. Device Settings (Catching up over the 6.5k-WAL backlog) and On the Way (day-grouped
+      //     backlog), each opened and scrolled.
+      final device = HeavyConnectedDevice();
+      addTearDown(device.dispose);
+      collector.begin('device_settings_on_the_way');
+      mark('device_settings.push');
+      globalNavigatorKey.currentState!.push(MaterialPageRoute<void>(
+          builder: (_) => ChangeNotifierProvider<DeviceProvider>.value(value: device, child: const DeviceSettings())));
+      await _idle(const Duration(seconds: 2));
+      final deviceList = await _verticalScrollable(tester, find.byType(DeviceSettings));
+      for (var i = 0; i < 4; i++) {
+        mark('device_settings.fling.$i');
+        await tester.fling(deviceList, Offset(0, i < 2 ? -600 : 600), 2500);
+        await _settleScrolled();
+      }
+      globalNavigatorKey.currentState!.pop();
+      mark('device_settings.pop');
+      await _idle(const Duration(seconds: 1));
+      mark('on_the_way.push');
+      globalNavigatorKey.currentState!.push(MaterialPageRoute<void>(builder: (_) => const OnTheWayPage()));
+      await _idle(const Duration(seconds: 2));
+      expect(find.byKey(const Key('on_the_way_days')), findsOneWidget,
+          reason: 'On the Way must group the pending backlog by day');
+      final onTheWayList = await _verticalScrollable(tester, find.byType(OnTheWayPage));
+      for (var i = 0; i < 6; i++) {
+        mark('on_the_way.fling.$i');
+        await tester.fling(onTheWayList, Offset(0, i < 3 ? -600 : 600), 2500);
+        await _settleScrolled();
+      }
+      globalNavigatorKey.currentState!.pop();
+      mark('on_the_way.pop');
+      await _idle(const Duration(seconds: 1));
+      results['device_settings_on_the_way'] = await collector.end();
+      debugPrint('HEAVY_STAGE device_settings_on_the_way complete');
+
+      // 12. Home left alone while sync refreshes the inventory, as every sync phase end and upload
+      //    callback does. No input and little to draw: what this window measures is main-isolate
+      //    stalls (the field watchdog's 'idle' lag), which frame timings cannot see.
+      collector.begin('home_idle_sync_refresh');
+      final syncForIdle = globalNavigatorKey.currentContext!.read<SyncProvider>();
+      for (var i = 0; i < 5; i++) {
+        mark('home_idle_sync_refresh.refresh.$i');
+        await syncForIdle.refreshWals();
+        await _idle(const Duration(seconds: 3));
+      }
+      results['home_idle_sync_refresh'] = await collector.end();
+      debugPrint('HEAVY_STAGE home_idle_sync_refresh complete');
     })();
 
-    // 9. Receipt: engine frame statistics per scenario.
+    // 13. Receipt: engine frame statistics per scenario.
     final receipt = <String, Object?>{
       'schema': 'omi-mobile-perf-sim/v2',
       'frame_policy': 'framework-requested/v1',
@@ -283,14 +406,17 @@ void main() {
         'conversations': heavyConversationCount,
         'detail_segments': heavyDetailSegments,
         'wals': heavyWalCount,
+        if (heavySyncedWalCount > 0) 'synced_wals': heavySyncedWalCount,
         'wal_files': walFileCount,
         'people': 40,
         'task_items': 50,
+        'live_final_segments': heavyLiveFinalSegments,
+        'live_preview_interval_ms': heavyLivePreviewInterval.inMilliseconds,
       },
       'fixture_requests': fixture.countsByKind,
       'operation_marks': operationMarks,
       'scenarios': results,
-      'complete': results.length == 5,
+      'complete': results.length == heavyScenarioCount,
     };
     binding.reportData = {...?binding.reportData, 'heavy_profile': receipt};
 

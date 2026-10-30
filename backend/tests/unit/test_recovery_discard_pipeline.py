@@ -37,6 +37,10 @@ async def _inline(_executor, function, *args, **kwargs):
 @pytest.fixture
 def pipeline(monkeypatch):
     store = StrictFirestore()
+    occasion = SimpleNamespace(reason=None)
+    # Explicitly isolated unless a test supplies an episode. StrictFirestore is
+    # not a query engine; never let this fixture reach real credentials.
+    monkeypatch.setattr(pc, 'occasion_retention', lambda *a: occasion.reason)
     # Keep the fixture's reference ownership and read-before-write enforcement.
     # This boundary also needs Firestore's merge=True document-set semantics.
     original_set = StrictFirestoreTransaction.set
@@ -94,7 +98,7 @@ def pipeline(monkeypatch):
     for name in ('extract_memories', 'trigger_external_integrations', 'smart_merge_step'):
         monkeypatch.setattr(finalizer, name, MagicMock(side_effect=AssertionError('derived effect escaped')))
 
-    return SimpleNamespace(store=store, writes=writes, paid_notes=paid_notes, decisions=decisions)
+    return SimpleNamespace(store=store, writes=writes, paid_notes=paid_notes, decisions=decisions, occasion=occasion)
 
 
 def _seed(pipeline, *, level='enhanced', transcript=None, **overrides):
@@ -510,3 +514,19 @@ def test_recovery_does_not_regenerate_admitted_audio(pipeline, monkeypatch, trig
     assert result.status.value == 'completed'
     effects[0]()
     assert factory.call_count == expected_calls
+
+
+@pytest.mark.asyncio
+async def test_episode_member_recovery_retains_filler_without_paid_discard(pipeline):
+    pipeline.occasion.reason = 'occasion_member'
+    blob = _seed(
+        pipeline, transcript=[{'text': 'hmm', 'start': 0, 'end': 1, 'speaker': 'SPEAKER_00', 'is_user': False}]
+    )
+    response, counters = await _run_and_verify(pipeline)
+    row = pipeline.store.rows[CONVERSATION_PATH]
+    assert response == {'status': 'done'}
+    assert not row['discarded']
+    assert row['transcript_segments'] == blob
+    assert counters['verified'] == 1
+    assert all(not decision.discard for decision in pipeline.decisions)
+    pipeline.paid_notes.assert_not_called()

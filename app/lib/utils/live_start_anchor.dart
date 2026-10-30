@@ -1,7 +1,7 @@
 import 'package:omi/backend/schema/episode.dart';
 
-/// The start a live running length counts from. Never moves later while the same live stretch
-/// lasts, and never falls back to a transcript offset (which resets with every conversation).
+/// The start a live running length counts from. While an episode is live, its own start owns the
+/// timer. Without an episode, capture time is the fallback and survives short server gaps.
 class LiveStartAnchor {
   DateTime? _start;
   String? _episodeId;
@@ -37,6 +37,17 @@ class LiveStartAnchor {
     required bool streaming,
     required DateTime now,
   }) {
+    final authoritative = episode?.timerStartedAt;
+    if (authoritative != null) {
+      // A current server episode replaces any cached capture or Wrap Up
+      // anchor, including one retained since yesterday. Re-read on every poll
+      // because late recorded speech can correct this same episode's start.
+      _episodeId = episode!.id;
+      _restartedAt = null;
+      _start = authoritative;
+      _captureFloor = authoritative;
+      return authoritative;
+    }
     if (captureId != null && captureId != _captureId) {
       if (_captureId != null) {
         _start = null;
@@ -58,36 +69,33 @@ class LiveStartAnchor {
       _start = restartedAt;
       return _start;
     }
-    final floor = _captureFloor;
-    if (floor != null && captureStart != null && captureStart.isBefore(floor)) captureStart = floor;
-    if (captureStart != null && !captureStart.isAfter(now)) {
-      if (!_hasCaptureStart || _start == null || captureStart.isBefore(_start!)) _start = captureStart;
-      _hasCaptureStart = true;
-    }
     if (episode != null) {
+      // Episodes can span several capture conversations. Their server-owned start is the live
+      // row's elapsed-time authority, including after a hard-cap rotation. Keep an explicit
+      // Wrap Up restart when it has already been adopted for this episode.
       if (_episodeId != episode.id) {
-        // Only use server time until capture supplies its own start. A late
-        // WAL/first transcript may move server started_at, so it cannot own
-        // this timer. Reconnects and rotations keep the earlier local anchor.
         _episodeId = episode.id;
-        if (!_hasCaptureStart && !episode.startedAt.isAfter(now)) {
-          if (_start == null || episode.startedAt.isBefore(_start!)) _start = episode.startedAt;
-        } else if (captureStart != null && !captureStart.isAfter(now)) {
-          _start = _start == null || captureStart.isBefore(_start!) ? captureStart : _start;
+        _start = episode.startedAt;
+        if (_captureFloor == null || episode.startedAt.isAfter(_captureFloor!)) {
+          _captureFloor = episode.startedAt;
         }
       }
       return _start;
     }
     if (_episodeId != null) {
-      // The server episode disappeared. This is now capture duration, not a new episode.
-      // Count from the known capture start; with the lease lapsed during the quiet that
-      // closed it, keep the old start
-      // rather than reading 0s.
+      // A cap rotation briefly has no live row. Keep the old anchor through that gap; the
+      // successor's server-owned start replaces it only after that row is visible.
       _episodeId = null;
-      if (captureStart != null && !captureStart.isAfter(now)) {
-        if (_start == null || captureStart.isBefore(_start!)) _start = captureStart;
+      if (streaming && _start != null) {
+        _captureFloor = _start;
         return _start;
       }
+    }
+    final floor = _captureFloor;
+    if (floor != null && captureStart != null && captureStart.isBefore(floor)) captureStart = floor;
+    if (captureStart != null && !captureStart.isAfter(now)) {
+      if (!_hasCaptureStart || _start == null || captureStart.isBefore(_start!)) _start = captureStart;
+      _hasCaptureStart = true;
     }
     if (!streaming) {
       _start = null;

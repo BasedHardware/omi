@@ -139,6 +139,9 @@ def router():
     cloud_tasks = _pkg("utils.cloud_tasks")
     cloud_tasks.is_listen_finalization_dispatch_enabled = MagicMock(return_value=False)
 
+    deletion_marker = ModuleType("database.account_deletion_marker")
+    deletion_marker.account_deletion_blocks_user_work = lambda _uid: False
+
     fakes = {
         # top-level third-party
         "ulid": _pkg("ulid"),
@@ -147,6 +150,7 @@ def router():
         # database (parent package faked; _client is the rich stub)
         "database": _pkg("database"),
         "database._client": client_mod,
+        "database.account_deletion_marker": deletion_marker,
         "database.legal_holds": _pkg("database.legal_holds"),
         "database.conversations": _pkg("database.conversations"),
         "database.conversation_scan": _pkg("database.conversation_scan"),

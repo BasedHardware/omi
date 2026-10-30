@@ -146,6 +146,41 @@ def test_conversation_create_process_finalize_lifecycle(client, auth_headers, mo
     assert kg_calls == []
 
 
+def test_transactional_create_exposes_recorded_span_and_preexisting_episode_membership(
+    client, auth_headers, fake_firestore
+):
+    from database import conversations
+    from models.conversation import Conversation
+    from models.structured import Structured
+
+    started = datetime(2026, 10, 29, 12, tzinfo=timezone.utc)
+    cid = 'recorded-membership-create'
+    fake_firestore.collection('users').document('123').collection('episode_links').document(cid).set(
+        {'episode_id': 'recorded-episode'}
+    )
+    payload = Conversation(
+        id=cid,
+        created_at=started,
+        started_at=started,
+        finished_at=started.replace(second=2),
+        structured=Structured(title='Recorded creation'),
+        source='omi',
+        transcript_segments=[
+            TranscriptSegment(id='new', text='Recorded speech.', start=0, end=2, speaker='SPEAKER_00', is_user=True)
+        ],
+    ).model_dump()
+
+    assert conversations.create_conversation_if_absent_with_lifecycle('123', payload)
+    response = client.get(f'/v1/conversations/{cid}', headers=auth_headers)
+    assert response.status_code == 200, response.text
+    saved = response.json()
+    assert saved['episode_id'] == 'recorded-episode'
+    assert datetime.fromisoformat(saved['recorded_start'].replace('Z', '+00:00')) == started
+    assert datetime.fromisoformat(saved['recorded_end'].replace('Z', '+00:00')) == started.replace(second=2)
+    assert saved['arrival_at'] is not None and saved['clock'] is not None
+    assert not conversations.create_conversation_if_absent_with_lifecycle('123', payload)
+
+
 def test_reprocess_route_persists_deterministic_processing_result(client, auth_headers, monkeypatch):
     kg_calls = _patch_process_conversation_boundaries(monkeypatch)
     conv_id = "deterministic-processing-001"

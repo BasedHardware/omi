@@ -11,6 +11,8 @@ INSTRUCTIONS = (
     'Two independent verifiers decide what may apply; you cannot authorize writes. Questions cost scarce user '
     'attention: value 1–2 will never be offered. finish when there is no worthwhile work or a budget ends. '
     'Leave short notes on where a future pass should look; do not claim staged work has been applied.'
+    ' If a tool errors, returns unhelpful data, or a missing tool or field blocks useful work, call '
+    'report_defect once with generic steps (never owner text, names, ids or refs), then continue.'
     ' Historical required_intake_candidates are hidden submissions awaiting admission. For each, compare '
     'all supplied semantic and lexical dedupe_refs with the entire submission. Propose resolve_required_memory '
     'with before equal to the full submission and after empty. Set other only when an existing memory '

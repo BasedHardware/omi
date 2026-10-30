@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 from pathlib import Path
 import sys
 from types import SimpleNamespace
@@ -721,7 +722,7 @@ def test_read_only_commands_are_limited_to_queries() -> None:
 
 def test_candidate_read_only_commands_describe_each_expected_revision() -> None:
     expectation = _expectation()
-    commands = verifier.build_read_only_commands(expectation, include_candidate_revisions=True)
+    commands = verifier.build_read_only_commands(expectation, include_revision_documents=True)
 
     verifier.assert_commands_are_read_only(commands)
     assert commands['cloud_run_revision/backend'][:5] == [
@@ -969,6 +970,300 @@ def test_retry_derives_a_new_vector_and_accepts_only_the_converged_attempt() -> 
     assert verifier.evaluate(retry, _documents(retry)) == []
 
 
+def _lagging_serving_documents(
+    expectation: verifier.DeploymentExpectation, service: str = 'backend-integration'
+) -> dict:
+    """The false-rollback shape from gcp_backend.yml runs 40788118426 / 40795861405:
+    the expected revision is Ready and serves 100% of traffic, but the
+    service-level latestReadyRevisionName aggregate still names the previous
+    revision minutes after the promotion."""
+    documents = _documents(expectation)
+    documents[f'cloud_run/{service}']['status']['latestReadyRevisionName'] = f'{service}-previous'
+    return documents
+
+
+def _run_main(monkeypatch: pytest.MonkeyPatch, expectation, snapshots, tmp_path: Path, extra_argv=()) -> tuple:
+    """Run main() against successive collect_documents snapshots.
+
+    The first collection (the full command set) sees snapshots[0]; every later
+    collection (a poll refresh) sees the next snapshot, holding on the last.
+    """
+    calls: list[set[str]] = []
+    index = {'next': 0}
+
+    def fake_collect(commands):
+        calls.append(set(commands))
+        snapshot = snapshots[min(index['next'], len(snapshots) - 1)]
+        index['next'] += 1
+        return {key: snapshot[key] for key in commands}
+
+    monkeypatch.setattr(verifier, 'collect_documents', fake_collect)
+    evidence_path = tmp_path / 'evidence.json'
+    argv = [
+        'verify_backend_release_vector.py',
+        '--commit-sha',
+        expectation.commit_sha,
+        '--deploy-run-id',
+        expectation.deploy_run_id,
+        '--deploy-run-attempt',
+        expectation.deploy_run_attempt,
+        '--project',
+        expectation.project,
+        '--region',
+        expectation.region,
+        '--environment',
+        expectation.environment,
+        '--evidence-path',
+        str(evidence_path),
+        *extra_argv,
+    ]
+    monkeypatch.setattr(sys, 'argv', argv)
+    rc = verifier.main()
+    report = json.loads(evidence_path.read_text(encoding='utf-8'))
+    return rc, report, calls
+
+
+def test_serving_evaluation_reports_only_the_pointer_error_when_the_revision_is_ready() -> None:
+    expectation = _expectation()
+
+    errors = verifier.evaluate(expectation, _lagging_serving_documents(expectation))
+
+    assert errors == ['cloud_run/backend-integration: latest ready revision is not backend-integration-abcdef1-12345-1']
+
+
+def test_serving_evaluation_fails_a_pointer_mismatch_on_a_not_ready_revision() -> None:
+    expectation = _expectation()
+    documents = _lagging_serving_documents(expectation)
+    documents['cloud_run_revision/backend-integration']['status']['conditions'] = [
+        {'type': 'Ready', 'status': 'False', 'reason': 'ContainerHealthy'}
+    ]
+
+    errors = verifier.evaluate(expectation, documents)
+
+    assert 'cloud_run/backend-integration: latest ready revision is not backend-integration-abcdef1-12345-1' in errors
+    assert 'cloud_run/backend-integration: expected revision is not Ready' in errors
+
+
+def test_partition_latest_ready_lag_separates_pointer_lag_from_other_errors() -> None:
+    expectation = _expectation()
+    lag = 'cloud_run/backend-integration: latest ready revision is not backend-integration-abcdef1-12345-1'
+    other = 'cloud_run/backend: expected revision does not receive 100% traffic'
+
+    assert verifier.partition_latest_ready_lag(expectation, [lag]) == (['backend-integration'], [])
+    assert verifier.partition_latest_ready_lag(expectation, [lag, other]) == (['backend-integration'], [other])
+    assert verifier.partition_latest_ready_lag(expectation, [other]) == ([], [other])
+
+
+def test_collect_documents_fails_closed_when_a_query_stalls(monkeypatch) -> None:
+    # A stalled gcloud during the latest-ready poll must surface as a clean
+    # RuntimeError (exit 1), never an unbounded subprocess holding the deploy.
+    def stalled_run(command, **kwargs):
+        assert kwargs.get('timeout') == verifier.QUERY_TIMEOUT_SECONDS, 'queries must carry a subprocess timeout'
+        raise subprocess.TimeoutExpired(cmd=command, timeout=kwargs['timeout'])
+
+    monkeypatch.setattr(
+        verifier,
+        'subprocess',
+        SimpleNamespace(run=stalled_run, TimeoutExpired=subprocess.TimeoutExpired),
+    )
+
+    with pytest.raises(RuntimeError, match='cloud_run/backend query timed out'):
+        verifier.collect_documents({'cloud_run/backend': ['gcloud', 'run', 'services', 'describe', 'backend']})
+
+
+def test_latest_ready_poll_refreshes_only_lagging_services_until_convergence() -> None:
+    expectation = _expectation()
+    converged = _documents(expectation)
+    refreshes: list[set[str]] = []
+
+    def collector(commands):
+        refreshes.append(set(commands))
+        return {key: converged[key] for key in commands}
+
+    outcome = verifier.poll_latest_ready_convergence(
+        expectation,
+        _lagging_serving_documents(expectation),
+        ['backend-integration'],
+        wait_seconds=5,
+        interval_seconds=0.01,
+        collector=collector,
+    )
+
+    assert outcome.converged
+    assert not outcome.timed_out
+    assert refreshes == [{'cloud_run/backend-integration', 'cloud_run_revision/backend-integration'}]
+    assert verifier.evaluate(expectation, outcome.documents) == []
+
+
+def test_latest_ready_poll_times_out_when_the_pointer_never_converges() -> None:
+    expectation = _expectation()
+
+    outcome = verifier.poll_latest_ready_convergence(
+        expectation,
+        _lagging_serving_documents(expectation),
+        ['backend-integration'],
+        wait_seconds=0.05,
+        interval_seconds=0.01,
+        collector=lambda _commands: {},
+    )
+
+    assert not outcome.converged
+    assert outcome.timed_out
+
+
+def test_latest_ready_poll_stops_when_another_mismatch_appears_mid_poll() -> None:
+    expectation = _expectation()
+    broken = _lagging_serving_documents(expectation)
+    broken['cloud_run/backend-integration']['status']['traffic'] = [
+        {'revisionName': 'backend-integration-previous', 'percent': 100}
+    ]
+
+    outcome = verifier.poll_latest_ready_convergence(
+        expectation,
+        _lagging_serving_documents(expectation),
+        ['backend-integration'],
+        wait_seconds=5,
+        interval_seconds=0.01,
+        collector=lambda _commands: {key: broken[key] for key in _commands},
+    )
+
+    assert not outcome.converged
+    assert not outcome.timed_out
+    errors = verifier.evaluate(expectation, outcome.documents)
+    assert 'cloud_run/backend-integration: expected revision does not receive 100% traffic' in errors
+
+
+def test_serving_verify_polls_a_lagging_pointer_and_passes_when_it_converges(tmp_path, monkeypatch) -> None:
+    expectation = _expectation()
+
+    rc, report, calls = _run_main(
+        monkeypatch,
+        expectation,
+        [_lagging_serving_documents(expectation), _documents(expectation)],
+        tmp_path,
+        ['--latest-ready-wait-seconds', '5', '--latest-ready-poll-interval-seconds', '0.01'],
+    )
+
+    assert rc == 0
+    assert report['result'] == 'pass'
+    assert report['errors'] == []
+    assert len(calls) == 2
+    assert calls[1] == {'cloud_run/backend-integration', 'cloud_run_revision/backend-integration'}
+    poll_report = report['latest_ready_lag_poll']
+    elapsed = poll_report.pop('elapsed_seconds')
+    assert poll_report == {
+        'services': ['backend-integration'],
+        'wait_seconds': 5.0,
+        'poll_interval_seconds': 0.01,
+        'converged': True,
+        'timed_out': False,
+    }
+    assert 0 <= elapsed < 5
+
+
+def test_serving_verify_fails_fast_when_the_lagging_revision_is_not_ready(tmp_path, monkeypatch) -> None:
+    expectation = _expectation()
+    lagging = _lagging_serving_documents(expectation)
+    lagging['cloud_run_revision/backend-integration']['status']['conditions'] = [
+        {'type': 'Ready', 'status': 'False', 'reason': 'ContainerHealthy'}
+    ]
+
+    rc, report, calls = _run_main(
+        monkeypatch,
+        expectation,
+        [lagging],
+        tmp_path,
+        ['--latest-ready-wait-seconds', '5', '--latest-ready-poll-interval-seconds', '0.01'],
+    )
+
+    assert rc == 1
+    assert len(calls) == 1, 'a not-Ready revision must fail before any polling'
+    assert (
+        'cloud_run/backend-integration: latest ready revision is not backend-integration-abcdef1-12345-1'
+        in report['errors']
+    )
+    assert 'cloud_run/backend-integration: expected revision is not Ready' in report['errors']
+    assert 'latest_ready_lag_poll' not in report
+
+
+def test_serving_verify_fails_fast_when_traffic_is_not_on_the_expected_revision(tmp_path, monkeypatch) -> None:
+    expectation = _expectation()
+    lagging = _lagging_serving_documents(expectation)
+    lagging['cloud_run/backend-integration']['status']['traffic'] = [
+        {'revisionName': 'backend-integration-previous', 'percent': 100}
+    ]
+
+    rc, report, calls = _run_main(
+        monkeypatch,
+        expectation,
+        [lagging],
+        tmp_path,
+        ['--latest-ready-wait-seconds', '5', '--latest-ready-poll-interval-seconds', '0.01'],
+    )
+
+    assert rc == 1
+    assert len(calls) == 1, 'a traffic mismatch must fail before any polling'
+    assert 'cloud_run/backend-integration: expected revision does not receive 100% traffic' in report['errors']
+    assert 'latest_ready_lag_poll' not in report
+
+
+def test_serving_verify_fails_with_a_clear_error_when_the_pointer_never_converges(tmp_path, monkeypatch) -> None:
+    expectation = _expectation()
+
+    rc, report, calls = _run_main(
+        monkeypatch,
+        expectation,
+        [_lagging_serving_documents(expectation)],
+        tmp_path,
+        ['--latest-ready-wait-seconds', '0.05', '--latest-ready-poll-interval-seconds', '0.01'],
+    )
+
+    assert rc == 1
+    assert len(calls) >= 2, 'the bounded window must have polled before failing'
+    assert report['latest_ready_lag_poll']['timed_out'] is True
+    assert report['latest_ready_lag_poll']['converged'] is False
+    assert any('after waiting 0.05s' in error for error in report['errors']), report['errors']
+    assert any('latestReadyRevisionName pointer did not converge' in error for error in report['errors'])
+    assert any(
+        'cloud_run/backend-integration: latest ready revision is not backend-integration-abcdef1-12345-1' in error
+        for error in report['errors']
+    )
+
+
+def test_serving_verify_can_disable_the_latest_ready_wait(tmp_path, monkeypatch) -> None:
+    expectation = _expectation()
+
+    rc, report, calls = _run_main(
+        monkeypatch,
+        expectation,
+        [_lagging_serving_documents(expectation)],
+        tmp_path,
+        ['--latest-ready-wait-seconds', '0'],
+    )
+
+    assert rc == 1
+    assert len(calls) == 1
+    assert 'latest_ready_lag_poll' not in report
+
+
+def test_candidate_verification_never_polls_the_latest_ready_pointer(tmp_path, monkeypatch) -> None:
+    expectation = _expectation()
+    documents = _documents(expectation)
+    for service in expectation.revisions:
+        documents[f'cloud_run/{service}']['status'].update(
+            {
+                'latestReadyRevisionName': f'{service}-old',
+                'traffic': [{'revisionName': f'{service}-old', 'percent': 100}],
+            }
+        )
+
+    rc, report, calls = _run_main(monkeypatch, expectation, [documents], tmp_path, ['--candidate'])
+
+    assert rc == 0
+    assert len(calls) == 1
+    assert 'latest_ready_lag_poll' not in report
+
+
 def test_main_passes_errors_into_evidence_so_a_successful_check_writes_evidence(tmp_path) -> None:
     """Regression for the missing positional ``errors`` argument.
 
@@ -1046,7 +1341,7 @@ def test_candidate_cloud_run_only_verification_does_not_require_listener_mutatio
         documents[f'cloud_run/{service}']['status']['traffic'] = [{'revisionName': f'{service}-old', 'percent': 100}]
     cloud_run_only = {key: value for key, value in documents.items() if key.startswith('cloud_run')}
 
-    commands = verifier.build_read_only_commands(expectation, include_listener=False, include_candidate_revisions=True)
+    commands = verifier.build_read_only_commands(expectation, include_listener=False, include_revision_documents=True)
     errors = verifier.evaluate(
         expectation,
         cloud_run_only,

@@ -6,6 +6,7 @@ from contextlib import nullcontext
 from datetime import datetime, timezone
 import hashlib
 import json
+import logging
 from pathlib import Path
 import struct
 import threading
@@ -40,6 +41,7 @@ from utils.pusher_protocol import (
     extend_bounded,
 )
 import routers.pusher as pusher
+from database import record_audio as record_audio_db
 
 
 class Blob:
@@ -96,6 +98,9 @@ class Bucket:
 @pytest.fixture
 def remote(monkeypatch):
     bucket = Bucket()
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', MagicMock(return_value=False))
+    monkeypatch.setattr(record_audio_db, 'mark_record_upload_failed', MagicMock(return_value=True))
+    monkeypatch.setattr(record_audio_db, 'set_record_upload_pending', MagicMock(return_value=True))
     monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'true')
     monkeypatch.setattr(storage, '_get_storage_client', lambda: SimpleNamespace(bucket=lambda name: bucket))
     monkeypatch.setattr(storage, 'private_cloud_sync_bucket', bucket.name)
@@ -1069,7 +1074,15 @@ def test_persisted_fingerprinted_audio_file_survives_precise_source_aliases(remo
     accepted = b'\x09\x00' * 16000
     _legacy_chunk(remote, 1000.00025, accepted, is_batch=is_batch)
     invalidate_pack_index(remote, 'owner', 'conversation')
-    old_file = pusher.conversations_db.create_audio_files_from_chunks('owner', 'conversation')[0].model_dump()
+    # Explicitly construct the historical filename-clock stamp. New identity
+    # listings stay on the sample clock even before any raw fragment exists.
+    legacy_sources = [
+        {**chunk, 'timestamp': chunk.get('legacy_timestamp', chunk['timestamp'])}
+        for chunk in storage.list_audio_chunks('owner', 'conversation', source_identity=True)
+    ]
+    old_file = pusher.conversations_db._finalize_audio_file_group(
+        'owner', 'conversation', legacy_sources, []
+    ).model_dump()
     assert old_file['chunk_timestamps'] == [1000] and old_file['source_fingerprint']
     count = round((1000.00025 - raw_start) * 16000)
     prefix = b'\x01\x00' * count
@@ -1293,7 +1306,7 @@ async def test_transient_projection_failure_requeues_and_then_lands(remote, monk
     failures = _projection_harness(remote, monkeypatch, MagicMock(side_effect=flaky_upload))
     audio_files_calls = MagicMock(return_value=[])
     monkeypatch.setattr(pusher.conversations_db, 'create_audio_files_from_chunks', audio_files_calls)
-    monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', MagicMock())
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', MagicMock())
     sock = Socket(_audio_frames('conversation', payloads))
     monkeypatch.setattr(sock, 'receive_bytes', await _hold_socket_open(sock, release))
     task = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
@@ -1321,7 +1334,7 @@ async def test_conflict_projection_failure_never_retries_and_withholds_close(rem
 
     failures = _projection_harness(remote, monkeypatch, MagicMock(side_effect=conflict_upload))
     seal = MagicMock()
-    monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', seal)
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', seal)
     payloads = [struct.pack('<160h', *[n] * 160) for n in range(5)]
     sock = Socket(_audio_frames('conversation', payloads))
     # v2 keeps one span per receipt, so every projected window stays
@@ -1342,7 +1355,7 @@ async def test_conflict_projection_failure_never_retries_and_withholds_close(rem
 
 
 @pytest.mark.asyncio
-async def test_transient_projection_failure_drops_after_the_retry_budget(remote, monkeypatch):
+async def test_transient_projection_failure_drops_after_the_retry_budget(remote, monkeypatch, caplog):
     pcm = struct.pack('<160h', *range(160))
     attempts = {'upload': 0}
     release = asyncio.Event()
@@ -1353,7 +1366,7 @@ async def test_transient_projection_failure_drops_after_the_retry_budget(remote,
 
     failures = _projection_harness(remote, monkeypatch, MagicMock(side_effect=always_unavailable))
     seal = MagicMock()
-    monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', seal)
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', seal)
     frames = [struct.pack('<I', 103) + b'conversation', struct.pack('<Id', 101, 1000) + pcm]
     sock = Socket(frames)
     real_receive = sock.receive_bytes
@@ -1368,20 +1381,198 @@ async def test_transient_projection_failure_drops_after_the_retry_budget(remote,
         return await real_receive()
 
     monkeypatch.setattr(sock, 'receive_bytes', hold_socket_open)
-    task = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
-    try:
-        for _ in range(4000):  # <= ~20 s at the 5 ms poll cadence
-            if attempts['upload'] >= 1 + pusher.PROJECTION_RETRY_BUDGET:
-                break
-            await asyncio.sleep(0.005)
-        assert (
-            attempts['upload'] == 1 + pusher.PROJECTION_RETRY_BUDGET
-        ), 'the budget must requeue exactly PROJECTION_RETRY_BUDGET times while the session is live'
-    finally:
-        release.set()
-    await task
+    with caplog.at_level(logging.WARNING, logger='routers.pusher'):
+        task = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
+        try:
+            for _ in range(4000):  # <= ~20 s at the 5 ms poll cadence
+                if attempts['upload'] >= 1 + pusher.PROJECTION_RETRY_BUDGET:
+                    break
+                await asyncio.sleep(0.005)
+            assert (
+                attempts['upload'] == 1 + pusher.PROJECTION_RETRY_BUDGET
+            ), 'the budget must requeue exactly PROJECTION_RETRY_BUDGET times while the session is live'
+        finally:
+            release.set()
+        await task
     assert failures == [('projection', 'transient')], 'exactly one drop after the bounded budget'
     assert seal.call_count == 0, 'an exhausted projection still withholds the record close'
+    assert [read_pcm('owner', receipt) for receipt in _sent_receipts(sock)] == [pcm]
+    class_lines = [
+        record.getMessage()
+        for record in caplog.records
+        if record.getMessage().startswith('Durable audio projection failure class:')
+    ]
+    assert class_lines == ['Durable audio projection failure class: OSError raised by always_unavailable'] * (
+        1 + pusher.PROJECTION_RETRY_BUDGET
+    ), 'every failed attempt logs the exception class name and the innermost raising frame, never the message'
+    assert not any(
+        'projection unavailable' in record.getMessage() for record in caplog.records
+    ), 'the exception message must never reach the projection failure logs'
+
+
+def _firestore_client_with_conversation(exists):
+    conversation_doc = SimpleNamespace(get=lambda: SimpleNamespace(exists=exists))
+    conversations_col = SimpleNamespace(document=lambda conversation_id: conversation_doc)
+    user_doc = SimpleNamespace(collection=lambda name: conversations_col)
+    users_col = SimpleNamespace(document=lambda uid: user_doc)
+    return SimpleNamespace(collection=lambda name: users_col)
+
+
+@pytest.mark.asyncio
+async def test_notfound_on_tombstoned_conversation_drops_refs_without_custody_failure(remote, monkeypatch, caplog):
+    """A purge (user delete, merge, empty-recording cleanup) removes the
+    conversation's audio prefix while its receipts still sit in the durable
+    queue. A tombstoned owner's NotFound is a gone-owner no-op: the refs drop
+    once, with no retry churn, no custody failure, and no failed_recordings
+    entry poisoning the session's fail-closed budget."""
+    pcm = struct.pack('<160h', *range(160))
+    attempts = {'read': 0}
+    tombstoned = {'now': False}
+    release = asyncio.Event()
+
+    def purged_read(uid, receipt):
+        # The tombstone lands between the custody commit and the projection
+        # flush: flipping here keeps the write gate (which refuses custody for
+        # already-tombstoned conversations) out of the scenario.
+        attempts['read'] += 1
+        tombstoned['now'] = True
+        raise NotFound('pinned generation missing')
+
+    failures = _projection_harness(remote, monkeypatch, MagicMock(return_value=[]))
+    monkeypatch.setattr(pusher, 'read_pcm', purged_read)
+    monkeypatch.setattr(pusher.conversation_tombstones, 'is_deleted', lambda uid, conv_id: tombstoned['now'])
+    failure_marker = record_audio_db.mark_record_upload_failed  # the fixture's MagicMock
+    sock = Socket([struct.pack('<I', 103) + b'conversation', struct.pack('<Id', 101, 1000) + pcm])
+    real_receive = sock.receive_bytes
+
+    async def hold_socket_open():
+        if not sock.frames:
+            await release.wait()
+            raise WebSocketDisconnect(1000)
+        return await real_receive()
+
+    monkeypatch.setattr(sock, 'receive_bytes', hold_socket_open)
+    with caplog.at_level(logging.INFO, logger='routers.pusher'):
+        task = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
+        try:
+            for _ in range(4000):  # <= ~20 s at the 5 ms poll cadence
+                if attempts['read'] and any(
+                    record.getMessage() == 'Durable audio projection skipped; conversation gone'
+                    for record in caplog.records
+                ):
+                    break
+                await asyncio.sleep(0.005)
+            assert attempts['read'] == 1, 'a gone owner must drop its purged refs, never requeue them'
+        finally:
+            release.set()
+        await task
+    assert failures == [], 'a gone owner records no custody failure'
+    assert failure_marker.call_count == 0, 'no fail_recording: deleted conversations never reach failed_recordings'
+    assert [read_pcm('owner', receipt) for receipt in _sent_receipts(sock)] == [pcm]
+
+
+@pytest.mark.asyncio
+async def test_notfound_on_hard_deleted_conversation_doc_drops_refs(remote, monkeypatch, caplog):
+    """A hard-deleted row without a tombstone is still a gone owner: the
+    conversation doc's absence alone justifies the projection skip."""
+    pcm = struct.pack('<160h', *range(160))
+    attempts = {'read': 0}
+    release = asyncio.Event()
+
+    def purged_read(uid, receipt):
+        attempts['read'] += 1
+        raise NotFound('pinned generation missing')
+
+    failures = _projection_harness(remote, monkeypatch, MagicMock(return_value=[]))
+    monkeypatch.setattr(pusher, 'read_pcm', purged_read)
+    # The remote fixture already pins conversation_tombstones.is_deleted to False.
+    monkeypatch.setattr(pusher, 'get_firestore_client', lambda: _firestore_client_with_conversation(False))
+    failure_marker = record_audio_db.mark_record_upload_failed
+    sock = Socket([struct.pack('<I', 103) + b'conversation', struct.pack('<Id', 101, 1000) + pcm])
+    real_receive = sock.receive_bytes
+
+    async def hold_socket_open():
+        if not sock.frames:
+            await release.wait()
+            raise WebSocketDisconnect(1000)
+        return await real_receive()
+
+    monkeypatch.setattr(sock, 'receive_bytes', hold_socket_open)
+    with caplog.at_level(logging.INFO, logger='routers.pusher'):
+        task = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
+        try:
+            for _ in range(4000):
+                if attempts['read'] and any(
+                    record.getMessage() == 'Durable audio projection skipped; conversation gone'
+                    for record in caplog.records
+                ):
+                    break
+                await asyncio.sleep(0.005)
+            assert attempts['read'] == 1, 'a missing conversation doc drops the refs on the first NotFound'
+        finally:
+            release.set()
+        await task
+    assert failures == []
+    assert failure_marker.call_count == 0
+    assert [read_pcm('owner', receipt) for receipt in _sent_receipts(sock)] == [pcm]
+
+
+@pytest.mark.asyncio
+async def test_notfound_on_live_conversation_keeps_transient_retry_and_terminal_paths(remote, monkeypatch, caplog):
+    """A live conversation that 404s is never hidden as a gone owner: the
+    deletion-intent read says live, so the projection keeps today's bounded
+    retry passes and terminal drop, and the class line attributes the
+    innermost raising frame without the exception message."""
+    pcm = struct.pack('<160h', *range(160))
+    attempts = {'read': 0}
+    release = asyncio.Event()
+
+    def purged_read(uid, receipt):
+        attempts['read'] += 1
+        raise NotFound('pinned generation missing')
+
+    failures = _projection_harness(remote, monkeypatch, MagicMock(return_value=[]))
+    monkeypatch.setattr(pusher, 'read_pcm', purged_read)
+    # The remote fixture already pins conversation_tombstones.is_deleted to False.
+    monkeypatch.setattr(pusher, 'get_firestore_client', lambda: _firestore_client_with_conversation(True))
+    seal = MagicMock()
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', seal)
+    sock = Socket([struct.pack('<I', 103) + b'conversation', struct.pack('<Id', 101, 1000) + pcm])
+    real_receive = sock.receive_bytes
+
+    async def hold_socket_open():
+        if not sock.frames:
+            await release.wait()
+            raise WebSocketDisconnect(1000)
+        return await real_receive()
+
+    monkeypatch.setattr(sock, 'receive_bytes', hold_socket_open)
+    with caplog.at_level(logging.WARNING, logger='routers.pusher'):
+        task = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
+        try:
+            for _ in range(4000):
+                if attempts['read'] >= 1 + pusher.PROJECTION_RETRY_BUDGET:
+                    break
+                await asyncio.sleep(0.005)
+            assert (
+                attempts['read'] == 1 + pusher.PROJECTION_RETRY_BUDGET
+            ), 'a live conversation keeps the bounded transient retries'
+        finally:
+            release.set()
+        await task
+    assert failures == [('projection', 'transient')], 'the terminal path after the budget is unchanged'
+    assert seal.call_count == 0, 'an exhausted projection still withholds the record close'
+    class_lines = [
+        record.getMessage()
+        for record in caplog.records
+        if record.getMessage().startswith('Durable audio projection failure class:')
+    ]
+    assert class_lines == ['Durable audio projection failure class: NotFound raised by purged_read'] * (
+        1 + pusher.PROJECTION_RETRY_BUDGET
+    ), 'the class line names the innermost raising frame'
+    assert not any(
+        'pinned generation missing' in record.getMessage() for record in caplog.records
+    ), 'the exception message must never reach the projection failure logs'
     assert [read_pcm('owner', receipt) for receipt in _sent_receipts(sock)] == [pcm]
 
 
@@ -1418,7 +1609,7 @@ async def test_wrapped_probe_valueerror_is_transient_and_retries(remote, monkeyp
 
     failures = _projection_harness(remote, monkeypatch, MagicMock(side_effect=probe_error_then_success))
     monkeypatch.setattr(pusher.conversations_db, 'create_audio_files_from_chunks', MagicMock(return_value=[]))
-    monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', MagicMock())
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', MagicMock())
     sock = Socket(_audio_frames('conversation', payloads))
     monkeypatch.setattr(sock, 'receive_bytes', await _hold_socket_open(sock, release))
     task = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
@@ -1454,7 +1645,7 @@ async def test_projection_retry_budget_resets_after_a_dropped_batch(remote, monk
         return []
 
     failures = _projection_harness(remote, monkeypatch, MagicMock(side_effect=fail_five_then_succeed))
-    monkeypatch.setattr(pusher.conversations_db, 'seal_record_audio', MagicMock())
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', MagicMock())
     frames = [struct.pack('<I', 103) + b'conversation', struct.pack('<Id', 101, 1000) + pcm]
     sock = Socket(frames)
     real_receive = sock.receive_bytes

@@ -15,7 +15,7 @@ extension _WalJobCompletion on LocalWalSyncImpl {
     // audio remains visible as unavailable. Neither is a successful sync.
     // Iterate a snapshot: a recording admitted during a file check must not
     // break the pass, and each row is re-read after the check before it moves.
-    final orphans = _wals.where((w) => _stillUploadedUnder(w, null)).toList();
+    final orphans = _indexInventory.uploaded.where((w) => _stillUploadedUnder(w, null)).toList();
     for (final w in orphans) {
       final exists = await _localFileExists(w);
       if (!_isCurrent(generation)) return resp;
@@ -38,8 +38,8 @@ extension _WalJobCompletion on LocalWalSyncImpl {
     }
 
     final byJob = <String, List<Wal>>{};
-    for (final w in _wals) {
-      if (w.status == WalStatus.uploaded && w.jobId != null && w.jobId!.isNotEmpty) {
+    for (final w in _indexInventory.uploaded) {
+      if (_activeWals.containsIdentity(w) && w.jobId != null && w.jobId!.isNotEmpty) {
         byJob.putIfAbsent(w.jobId!, () => []).add(w);
       }
     }

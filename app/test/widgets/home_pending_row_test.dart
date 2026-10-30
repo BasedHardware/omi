@@ -1,3 +1,4 @@
+import 'package:omi/services/wals/wal_derived_sync_views.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,6 +17,7 @@ import 'package:omi/pages/conversations/on_the_way_page.dart';
 import 'package:omi/pages/conversations/sync_pending_work.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart' show NoConversationsHero;
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
+import 'package:omi/pages/home/widgets/home_daily_recaps_setting.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -32,7 +34,7 @@ import '../support/typed_conversation_screen.dart';
 /// conversations stay visible in Today as one calm row, with the detail one
 /// tap away and the Offline Sync page one tap beyond that.
 
-class _FakeSync extends ChangeNotifier implements SyncProvider {
+class _FakeSync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvider {
   _FakeSync({this.wals = const [], this.syncing = false, this.fetching = false, this.fetchingWithUploadPhase = false});
 
   final List<Wal> wals;
@@ -365,14 +367,16 @@ void main() {
       expect(find.text('1 recording · 10m'), findsOneWidget);
     });
 
-    test('the catching-up check is answered once per WAL list, not per progress tick', () {
+    test('the catching-up check reuses its view until a WAL actually changes', () {
       final wals = [_wal('long', 40, WalStatus.miss)];
       final sync = _FakeSync(wals: wals);
       expect(SyncPendingWork.isLargeBacklog(sync), isTrue);
-      // Same list, same answer, even though nothing re-scans it.
+      final totals = sync.derivedWals.pendingSecondsByDay;
+      expect(identical(sync.derivedWals.pendingSecondsByDay, totals), isTrue);
+      // A real mutation invalidates the contribution even with stable membership.
       wals.first.seconds = 60;
-      expect(SyncPendingWork.isLargeBacklog(sync), isTrue);
-      // A new list, as SyncProvider publishes on any status change, is read afresh.
+      expect(SyncPendingWork.isLargeBacklog(sync), isFalse);
+      // A newly published inventory produces the same updated answer.
       expect(SyncPendingWork.isLargeBacklog(_FakeSync(wals: [...wals])), isFalse);
     });
 
@@ -579,6 +583,9 @@ void main() {
       final screen = await tester.runAsync(
         () => buildTypedConversationScreen(provider, sync: sync, loadRecaps: recaps),
       );
+      // Daily Recaps on Home is opt-in; these cases check where the row sits when it is on.
+      HomeDailyRecapsSetting.enabled = true;
+      addTearDown(() => HomeDailyRecapsSetting.enabled = false);
       await tester.pumpWidget(screen!);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));

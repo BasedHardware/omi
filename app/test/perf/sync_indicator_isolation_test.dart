@@ -35,6 +35,8 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   @override
   bool get isConnected => true;
   @override
+  bool get isSyncStalled => false; // The watchdog's stall (#15501) is not under test here.
+  @override
   bool get isConnecting => false;
   @override
   int get batteryLevel => 75;
@@ -97,6 +99,12 @@ class _Sync extends ChangeNotifier implements SyncProvider {
   bool get isSyncing => active;
   @override
   List<Wal> get allWals {
+    inventoryReads++;
+    return wals;
+  }
+
+  @override
+  List<Wal> get pendingWorkWals {
     inventoryReads++;
     return wals;
   }

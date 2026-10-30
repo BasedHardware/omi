@@ -60,6 +60,12 @@ _UNIT_TEST_ROOTS = (
     BACKEND_DIR / 'tests' / 'routers',
 )
 _FAST_UNIT_ALLOWLIST = BACKEND_DIR / 'tests' / 'fast_unit_duration_allowlist.txt'
+_ACCOUNT_DELETION_AUTHORITY_TESTS = {
+    'tests/unit/test_account_deletion_auth_fence.py',
+    'tests/unit/test_conversation_quiet_finalization.py',
+    'tests/unit/test_firestore_read_site_attribution.py',
+    'tests/unit/test_fsr_s4_caches.py',
+}
 
 
 def _env_enabled(name, default='1'):
@@ -87,6 +93,39 @@ def _read_duration_allowlist():
         if entry:
             entries.add(entry.removeprefix('backend/'))
     return entries
+
+
+def _stub_unrelated_account_deletion_reads(item):
+    """Keep unrelated unit tests hermetic while worker fences default to active users.
+
+    The production predicate intentionally fails closed when its data-plane marker
+    cannot be read. Most tests exercise unrelated worker behavior with fake UIDs,
+    so they must not accidentally reach Firestore. Fence and marker-reader tests use
+    explicit status fakes and are left untouched.
+    """
+    test_file = _backend_relative(item.path)
+    if not _is_unit_test_path(item.path) or test_file in _ACCOUNT_DELETION_AUTHORITY_TESTS:
+        return []
+
+    originals = []
+    seen = set()
+    for module in tuple(sys.modules.values()):
+        namespace = getattr(module, '__dict__', None)
+        if namespace is None:
+            continue
+        predicate = namespace.get('account_deletion_blocks_user_work')
+        if getattr(predicate, '__module__', None) != 'database.account_deletion_marker':
+            continue
+        function_globals = getattr(predicate, '__globals__', None)
+        if function_globals is None or id(function_globals) in seen:
+            continue
+        status_reader = function_globals.get('get_user_deletion_wipe_status')
+        if not callable(status_reader):
+            continue
+        seen.add(id(function_globals))
+        originals.append((function_globals, status_reader))
+        function_globals['get_user_deletion_wipe_status'] = lambda _uid, **_kwargs: None
+    return originals
 
 
 def pytest_sessionstart(session):
@@ -138,8 +177,13 @@ def pytest_runtest_call(item):
     runs charge once to the first test — is not misattributed as a per-test regression. The
     advisory timing summary still reports wall-clock for visibility.
     """
+    originals = _stub_unrelated_account_deletion_reads(item)
     start = time.process_time()
-    yield
+    try:
+        yield
+    finally:
+        for function_globals, status_reader in originals:
+            function_globals['get_user_deletion_wipe_status'] = status_reader
     if _is_unit_test_path(item.path):
         _test_item_cpu[item.nodeid] += time.process_time() - start
 

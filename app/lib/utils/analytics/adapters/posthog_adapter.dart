@@ -7,6 +7,7 @@ import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/utils/analytics/analytics_adapter.dart';
+import 'package:omi/utils/analytics/session_replay.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
 class PostHogAnalyticsAdapter
@@ -105,6 +106,7 @@ class PostHogAnalyticsAdapter
     config.debug = debug;
     config.sendFeatureFlagEvents = false;
     config.preloadFeatureFlags = false;
+    SessionReplay.configure(config);
     await Posthog().setup(config);
     _initialized = true;
   }

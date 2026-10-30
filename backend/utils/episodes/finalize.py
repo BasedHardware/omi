@@ -86,6 +86,23 @@ def close_now(uid: str, conversation_id: str, trigger: ProcessingTrigger, source
         return 'error'
 
 
+def schedule_group_attachments(uid: str, conversation_ids: list[str]) -> None:
+    """Schedule the canonical member once through the existing finalizer worker."""
+    if not episodes_enabled_for(uid) or not client_gate.client_seen_cached(uid):
+        return
+    try:
+        from database import conversations as conversations_db
+
+        for cid in dict.fromkeys(conversation_ids):
+            row = conversations_db.get_conversation_raw_snapshot(uid, cid, field_paths=['capture_group'])
+            if row is not None:
+                primary = (row.get('capture_group') or {}).get('primary_id') or cid
+                schedule_after_finalization(uid, primary, ProcessingTrigger.CAPTURE_GROUP)
+                return
+    except Exception as error:
+        logger.warning('event=episode_group_attach outcome=error exception_type=%s', type(error).__name__)
+
+
 def schedule_after_finalization(uid: str, conversation_id: str, trigger: ProcessingTrigger) -> None:
     """Run on the episode pool; saturation queues admission with bounded producer backpressure."""
     if not episodes_enabled_for(uid):

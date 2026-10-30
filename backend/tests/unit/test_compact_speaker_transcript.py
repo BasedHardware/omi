@@ -69,6 +69,7 @@ def _seg(segment_id: str, text: str, *, speaker: str = 'SPEAKER_00', is_user: bo
         text=text,
         speaker=speaker,
         is_user=is_user,
+        speaker_match_source='conversation_voice' if is_user else None,
         person_id=person_id,
         start=0.0,
         end=2.0,

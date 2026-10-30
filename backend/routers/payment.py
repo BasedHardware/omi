@@ -68,6 +68,7 @@ from database.users import (
     get_user_profile,
 )
 from utils import stripe as stripe_utils
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from utils.apps import find_app_subscription, paid_app, set_user_app_sub_customer_id
 from utils.other import endpoints as auth
 from fastapi.responses import HTMLResponse
@@ -82,12 +83,31 @@ from utils.overage import (
 )
 from utils.executors import db_executor, stripe_executor, run_blocking
 from utils.log_sanitizer import sanitize
+from utils import yearly_switch
 import os
 import logging
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+async def _deletion_webhook_blocks_entitlement(uid: str, subscription_id: str | None) -> bool:
+    """Keep late Stripe deliveries from reopening a fenced account."""
+    try:
+        blocked = await run_blocking(db_executor, account_deletion_blocks_user_work, uid)
+    except Exception as error:
+        logger.error('Stripe webhook deletion authority unavailable: %s', type(error).__name__)
+        raise HTTPException(503, 'Account deletion status is temporarily unavailable') from error
+    if not blocked:
+        return False
+    if subscription_id:
+        try:
+            await run_blocking(stripe_executor, stripe_utils.cancel_subscription_for_account_deletion, subscription_id)
+        except Exception as error:
+            logger.error('Stripe webhook could not cancel a deletion-fenced subscription: %s', type(error).__name__)
+            raise HTTPException(503, 'Subscription cancellation must be retried') from error
+    return True
 
 
 def _stripe_client_error_detail(e: stripe.error.StripeError, fallback: str) -> str:
@@ -113,6 +133,10 @@ class CreateCheckoutRequest(BaseModel):
 class UpgradeSubscriptionRequest(BaseModel):
     price_id: str = Field(..., min_length=1, max_length=255)
     promotion_code: Optional[str] = None
+    # Omi Pro monthly to yearly, charged now: only the previewed amount at its proration_date (utils/yearly_switch.py).
+    switch_now: bool = False
+    proration_date: Optional[int] = None
+    expected_amount_due: Optional[int] = None
 
 
 class PaymentMutationResponse(BaseModel):
@@ -895,6 +919,12 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         if change_error:
             raise HTTPException(status_code=400, detail=change_error)
 
+        # The yearly switch offer's rules: no trial (#23298), past_due, scheduled change or discount.
+        refusal = request.switch_now and yearly_switch.upgrade_refusal(stripe_sub, request)
+        if refusal:
+            logger.info(f"Yearly switch refused for user {uid}: {refusal}")
+            raise HTTPException(status_code=409, detail="Switching to yearly is not available for this subscription.")
+
         # Validate and resolve promotion code if provided
         resolved_promo_id = None
         if request.promotion_code:
@@ -908,8 +938,8 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         # re-schedule. Release it first so the user can switch plans again.
         _release_attached_schedules(stripe_sub)
 
-        # Cross-plan change (e.g. Unlimited→Architect): immediate swap with proration
-        if current_plan != target_plan:
+        # Cross-plan change (e.g. Unlimited→Architect), or the yearly switch: immediate swap with proration
+        if current_plan != target_plan or request.switch_now:
             modify_params = {
                 'items': [{'id': current_item_id, 'price': request.price_id}],
                 'proration_behavior': 'always_invoice',
@@ -918,6 +948,9 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
             }
             if resolved_promo_id:
                 modify_params['discounts'] = [{'promotion_code': resolved_promo_id}]
+            if request.switch_now:
+                modify_params['metadata']['omi_yearly_switch'] = 'in_app'
+                modify_params.update(yearly_switch.charge_params(stripe_sub['id'], request.proration_date))
 
             updated_sub = stripe.Subscription.modify(stripe_sub['id'], **modify_params)
             updated_sub_dict = updated_sub.to_dict()
@@ -1138,6 +1171,9 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                 raise HTTPException(status_code=400, detail="Invalid client")
             uid = uid[4:]
 
+            if await _deletion_webhook_blocks_entitlement(uid, session.get('subscription')):
+                return {"status": "success", "message": "Account deletion is in progress."}
+
             current_period_end = None
             if session.get("subscription"):
                 subscription_id = session["subscription"]
@@ -1163,6 +1199,9 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                 # It should not happen, ref id might be missing but never the metadata
                 logger.error(f"[WEBHOOK ERROR] No uid found in checkout session {session.get('id')}")
                 return {"status": "error", "message": "No user identifier found"}
+
+            if await _deletion_webhook_blocks_entitlement(uid, session.get('subscription')):
+                return {"status": "success", "message": "Account deletion is in progress."}
 
             logger.info(
                 f"Processing subscription for user {uid} (from {'client_reference_id' if client_reference_id else 'metadata'})"
@@ -1294,6 +1333,8 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                 uid = user['uid']
 
         if uid:
+            if await _deletion_webhook_blocks_entitlement(uid, subscription_obj.get('id')):
+                return {"status": "success", "message": "Account deletion is in progress."}
             now = int(time.time())
             new_subscription = _build_subscription_from_stripe_object(
                 subscription_obj, grant_cancel_grace=True, now=now
@@ -1471,6 +1512,8 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
         uid = schedule_obj.get('metadata', {}).get('uid')
 
         if uid:
+            if await _deletion_webhook_blocks_entitlement(uid, schedule_obj.get('subscription')):
+                return {"status": "success", "message": "Account deletion is in progress."}
             if schedule_obj.get('status') == 'completed':
                 try:
                     if schedule_obj.get('subscription'):
@@ -1564,8 +1607,12 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                 app_id = metadata.get('app_id')
                 uid = metadata.get('uid')
                 if app_id and uid:
+                    if await _deletion_webhook_blocks_entitlement(uid, subscription_id):
+                        return {"status": "success", "message": "Account deletion is in progress."}
                     await run_blocking(db_executor, paid_app, app_id, uid, subscription.get('current_period_end'))
                     logger.info(f"Paid app entitlement renewed for user {uid}. App: {app_id}")
+            except HTTPException:
+                raise
             except Exception as e:
                 logger.error(f"Error renewing paid app entitlement for subscription {subscription_id}: {e}")
 

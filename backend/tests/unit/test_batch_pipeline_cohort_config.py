@@ -45,12 +45,45 @@ def hosts(config):
     }
 
 
-def test_shadow_controls_ship_off_and_capped_on_every_cloud_run_host(manifest):
-    for config in manifest.values():
+def test_shadow_controls_match_the_batch_ladder_and_stay_prod_only(manifest, recovery_base_hosts):
+    # 2026-10-29 ladder ruling (David ~11Z): shadow 25 -> live 5 -> 25 -> 100, shadow stays on
+    # through the live rungs. Prod pins 25 in the manifest because the 11:13Z Cloud Run deploy
+    # reset the hand-applied values — manifest-pinned keys survive deploys, ops env does not.
+    # The paid recovery cap stays at the shared 200 base (lead ruling 12:15Z).
+    expected = {'dev': ('0', '200'), 'prod': ('25', '200')}
+    for stage, config in manifest.items():
         for service in SERVICES:
             env = config['cloud_run']['services'][service]['env']
-            assert env['BATCH_PIPELINE_SHADOW_PERCENT']['value'] == '0'
-            assert env['BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR']['value'] == '200'
+            percent, recovery_cap = expected[stage]
+            assert env['BATCH_PIPELINE_SHADOW_PERCENT']['value'] == percent
+            assert env['BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR']['value'] == recovery_cap
+    # The pin is a prod-overlay override only: the shared base (dev, GKE charts, jobs, desktop)
+    # keeps shadow off and the paid recovery cap at its 200 default.
+    for service in SERVICES:
+        env = recovery_base_hosts[service]['env']
+        assert env['BATCH_PIPELINE_SHADOW_PERCENT']['value'] == '0'
+        assert env['BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR']['value'] == '200'
+
+
+def test_shadow_rung_matches_the_worker_charts_that_offer_its_capacity(manifest):
+    # Staging composes the prod overlay, so every worker release that offers shadow
+    # capacity must carry the same rung the manifest selects, or shadow work is
+    # recorded but never processed (review r1). The prod chart also mirrors the
+    # paid recovery cap (lead ruling 12:15Z); dev keeps the 0/200 chart defaults.
+    chart = ROOT / 'charts/batch-pipeline-worker'
+    defaults = yaml.load((chart / 'values.yaml').read_text(), Loader=yaml.CSafeLoader)
+    prod_env = hosts(manifest['prod'])['backend-sync']
+    percent = prod_env['BATCH_PIPELINE_SHADOW_PERCENT']['value']
+    cap = prod_env['BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR']['value']
+    for values_name in (
+        'prod_omi_batch-pipeline-worker_values.yaml',
+        'staging_omi_batch-pipeline-worker_values.yaml',
+    ):
+        values = yaml.load((chart / values_name).read_text(), Loader=yaml.CSafeLoader)
+        worker = {**defaults['worker'], **values['worker']}
+        assert str(worker['shadowPercent']) == percent, values_name
+        assert str(worker['shadowPaidRecoveryPerHour']) == cap, values_name
+        assert worker['shadowRecoveryApiUrl'], f'{values_name}: shadow work needs a recovery URL'
 
 
 def test_shadow_recovery_role_accepts_its_rendered_gpu_worker_identity(manifest):
@@ -70,7 +103,7 @@ def test_batch_pipeline_admission_is_configured_without_uid_allowlists(manifest,
     for stage, config in manifest.items():
         for env in hosts(config).values():
             assert env['BATCH_PIPELINE_ENABLED']['value'] in ('true', 'false')
-            assert env['BATCH_PIPELINE_PERCENT']['value'] == '0'
+            assert 'BATCH_PIPELINE_PERCENT' not in env
             if stage == 'prod':
                 assert 'BATCH_PIPELINE_UID_ALLOWLIST' not in env
                 assert env['BATCH_PIPELINE_ENABLED']['value'] == 'true'
@@ -84,6 +117,7 @@ def test_batch_pipeline_admission_is_configured_without_uid_allowlists(manifest,
                 assert env.get('BATCH_PIPELINE_UID_ALLOWLIST', {}).get('value', '') == ''
                 assert env['BATCH_PIPELINE_API_URL']['value'] == ''
     assert listen_chart_envs[0].get('BATCH_PIPELINE_UID_ALLOWLIST', '') == ''
+    assert all('BATCH_PIPELINE_PERCENT' not in env for env in listen_chart_envs)
     assert 'BATCH_PIPELINE_UID_ALLOWLIST' not in listen_chart_envs[1]
     assert listen_chart_envs[1]['BATCH_PIPELINE_ENABLED'] == 'true'
     prod_hosts = hosts(manifest['prod'])

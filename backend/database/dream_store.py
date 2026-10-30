@@ -18,8 +18,8 @@ from config.dream_agent import (
     Caps,
     canary_eligible,
     canary_uid,
+    backed_off_hunt_interval,
     eligible,
-    hunt_interval,
     may_be_eligible,
     mode,
     DRAIN_TIMEOUT_SECONDS,
@@ -218,8 +218,16 @@ def acquire(
     now=None,
     firestore_client=None,
     reclaim_sink: dict[str, Any] | None = None,
+    denial_sink: dict[str, Any] | None = None,
+    skip_idle=False,
 ):
-    """Return admission and publish count-only reclaim details after commit, even on denial."""
+    """Return admission and publish count-only reclaim details after commit, even on denial.
+
+    ``denial_sink['reason']`` names why a scheduled owner was not admitted.
+    ``skip_idle`` (the idle-skip lever) denies a scheduled hunt with no dirty
+    work and parks the owner: the due row is deleted, and the next product
+    write re-enqueues it through ``mark_dirty``.
+    """
     database = client(firestore_client)
     now = now or datetime.now(timezone.utc)
     now = now.astimezone(timezone.utc)
@@ -228,8 +236,11 @@ def acquire(
     spend = spend_ref(database, uid, day)
     owner = database.collection('users').document(uid)
     run_id = str(uuid4())
+    denial_reason = None
 
     def admit(tx, data, budget, user):
+        nonlocal denial_reason
+        denial_reason = None
         passes = int(data.get('passes', 0)) if data.get('day') == day else 0
         manual_runs = int(data.get('manual_runs', 0)) if data.get('day') == day else 0
         if trigger == 'manual' and data.get('lease'):
@@ -237,15 +248,27 @@ def acquire(
         if trigger == 'manual' and manual_runs >= caps.manual_runs:
             raise AdmissionDenied('dream_manual_limit')
         last_pass = data.get('last_attempt_at') or data.get('last_pass_at') or EPOCH
-        interval = hunt_interval(data.get('size_bucket'))
+        from database.dream_scheduler import owner_hunt_interval
+
+        interval = owner_hunt_interval(uid, data)
         hunt_due = not canary and (not isinstance(last_pass, datetime) or now - last_pass >= interval)
+        # Hunt-backoff shadow: this hunt would have waited for the backed-off interval.
+        backed_off = backed_off_hunt_interval(data.get('size_bucket'), data.get('dry_hunts'))
+        backoff_would_defer = bool(
+            hunt_due and isinstance(last_pass, datetime) and now - last_pass < backed_off and interval < backed_off
+        )
         has_dirty = dirty_count(uid, transaction=tx, firestore_client=database) > 0
         tomorrow = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
         if trigger != 'manual' and passes >= caps.passes:
+            denial_reason = 'daily_pass_cap'
             return None, {'next_due_at': tomorrow}
         if data.get('lease'):
+            denial_reason = 'run_in_progress'
             started = data['lease'].get('started_at') or now
             return None, {'next_due_at': started + timedelta(seconds=1741)}
+        if skip_idle and not canary and trigger != 'manual' and not has_dirty:
+            denial_reason = 'idle_no_material'
+            return None, {'park': True}
         if (
             mode() == 'off'
             or (not canary and os.getenv('REVIEW_SURFACE_MODE', 'off') != 'on')
@@ -260,9 +283,22 @@ def acquire(
         ):
             if trigger == 'manual':
                 raise AdmissionDenied('dream_budget_unavailable')
+            denial_reason = (
+                'disabled'
+                if mode() == 'off'
+                else (
+                    'review_surface_off'
+                    if not canary and os.getenv('REVIEW_SURFACE_MODE', 'off') != 'on'
+                    else (
+                        'ineligible'
+                        if not (canary_eligible(uid, user) if canary else eligible(uid, user))
+                        else 'not_due' if not has_dirty and not hunt_due else 'budget'
+                    )
+                )
+            )
             from database.dream_scheduler import due_time
 
-            return None, {'next_due_at': max(now + timedelta(minutes=5), due_time(data, now))}
+            return None, {'next_due_at': max(now + timedelta(minutes=5), due_time(data, now, uid))}
         lease = {
             'run_id': run_id,
             'day': day,
@@ -277,6 +313,8 @@ def acquire(
             'daily_cap': caps.daily_usd,
             'passes_per_day': caps.passes,
             'hunt': not has_dirty,
+            'dry_hunts': _dry_hunts(data),
+            'backoff_would_defer': backoff_would_defer and not has_dirty,
             'canary': canary,
             'mode': 'shadow' if canary else mode(),
             'size_bucket': data.get('size_bucket', 'light'),
@@ -337,6 +375,7 @@ def acquire(
         except AdmissionDenied as exc:
             # A denial must not roll back reclamation (including manual caps).
             lease, patch, denial = None, {}, exc.reason
+        park = bool(patch.pop('park', False))
         # All reads, including admission's dirty count, precede settlement writes.
         if old_spend is not None and isinstance(started, datetime):
             usage = _abandoned_usage(abandoned)
@@ -379,7 +418,9 @@ def acquire(
             tx.set(spend, {**budget, 'reserved_usd': float(budget.get('reserved_usd', 0))})
         elif reclaimed or patch:
             tx.set(state, {**data, **patch})
-        if patch.get('next_due_at'):
+        if park:
+            tx.delete(database.collection('dream_due').document(uid))
+        elif patch.get('next_due_at'):
             tx.set(database.collection('dream_due').document(uid), {'due_at': patch['next_due_at']})
         return lease, reclaimed, denial
 
@@ -388,15 +429,47 @@ def acquire(
     )
     if reclaimed and reclaim_sink is not None:
         reclaim_sink.update(age_s=reclaimed[0], size_bucket=reclaimed[1])
+    if denial_sink is not None and lease is None:
+        denial_sink['reason'] = denial or denial_reason or 'unknown'
     if denial:
         raise AdmissionDenied(denial)
     return lease
+
+
+def park_if_idle(uid, *, firestore_client=None):
+    """Idle-skip lever: drop the due row when no dirty work is queued; True when parked.
+
+    The state read is the conflict fence: every mark_dirty batch writes the
+    state doc (score increment), so a concurrent write aborts and retries this
+    transaction; an aggregation count alone carries no document identity.
+    A positive score also keeps the owner queued, matching discovery's rule.
+    """
+    database = client(firestore_client)
+
+    @firestore.transactional
+    def park(tx):
+        state = state_ref(database, uid).get(transaction=tx).to_dict() or {}
+        if state.get('score', 0) or dirty_count(uid, transaction=tx, firestore_client=database) > 0:
+            return False
+        tx.delete(database.collection('dream_due').document(uid))
+        return True
+
+    return firestore_transaction_retry.run_with_transaction_contention_retry(
+        database.transaction, park, operation_name='dream_park_idle'
+    )
 
 
 def assert_lease(uid, run_id, *, firestore_client=None):
     data = state_ref(client(firestore_client), uid).get().to_dict() or {}
     if (data.get('lease') or {}).get('run_id') != run_id:
         raise RuntimeError('dream_lease_lost')
+
+
+def _dry_hunts(data):
+    try:
+        return max(0, int(data.get('dry_hunts', 0) or 0))
+    except (TypeError, ValueError):
+        return 0
 
 
 def finish(
@@ -416,6 +489,7 @@ def finish(
     cleanup_cursor=None,
     now=None,
     firestore_client=None,
+    park_when_idle=False,
 ):
     database = client(firestore_client)
     state = state_ref(database, uid)
@@ -623,6 +697,16 @@ def finish(
                 },
             )
         patch['size_bucket'] = report.get('size_bucket', data.get('size_bucket', 'light'))
+        if success:
+            # Payoff ordering reads the last pass's applied count; no extra write.
+            patch['last_yield'] = sum(
+                1 for row in report.get('outcomes') or [] if isinstance(row, dict) and row.get('status') == 'applied'
+            )
+            # Hunt backoff: consecutive hunts that applied nothing; any yield resets the streak.
+            if patch['last_yield']:
+                patch['dry_hunts'] = 0
+            elif lease.get('hunt') and not lease.get('canary') and lease.get('trigger') == 'schedule':
+                patch['dry_hunts'] = min(16, _dry_hunts(data) + 1)
         if poisoned:
             patch['poisoned'] = int(data.get('poisoned', 0)) + len(poisoned)
         for ref in sorted(deferred if release else ())[:8]:
@@ -643,14 +727,18 @@ def finish(
         tx.update(state, patch)
         from database.dream_scheduler import due_time
 
-        next_due = due_time({**data, **patch}, now)
+        next_due = due_time({**data, **patch}, now, uid)
         if data.get('day') == now.date().isoformat() and data.get('passes', 0) >= current_lease.get(
             'passes_per_day', 2
         ):
             next_due = deferred_until
         if not release:
             next_due = now + timedelta(seconds=1740)
-        tx.set(database.collection('dream_due').document(uid), {'due_at': next_due})
+        if park_when_idle and release and queued_after == 0 and patch['score'] == 0:
+            # Idle-skip lever: nothing left to do, so wait for mark_dirty instead of a timed hunt.
+            tx.delete(database.collection('dream_due').document(uid))
+        else:
+            tx.set(database.collection('dream_due').document(uid), {'due_at': next_due})
         return settled
 
     report.update(complete(database.transaction()))

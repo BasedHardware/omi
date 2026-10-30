@@ -535,6 +535,7 @@ def submit_android(
     extra_codes: Sequence[str] = (),
     base_release: dict[str, object] | None = None,
     release_name: str | None = None,
+    retained_releases: Sequence[dict[str, object]] = (),
 ) -> None:
     """Write one production release for the given code(s).
 
@@ -551,6 +552,12 @@ def submit_android(
     the derived single-locale notes are used only when it carries none.
     release_name overrides the written name (defaults to the bare version);
     the daily train uses it to stamp a gate receipt into the name.
+    retained_releases are other server-returned releases that must stay on the
+    track unchanged: Play's tracks.update replaces the whole releases list,
+    so the completed base release under a staged rollout must be carried
+    explicitly or it leaves the track. Only completed or draft releases may be
+    retained (one staged release per PUT), and their version codes must not
+    overlap the written release's.
     """
     if status not in PLAY_RELEASE_STATUSES:
         raise PromotionError("Play release status must be completed, draft, inProgress or halted")
@@ -563,6 +570,11 @@ def submit_android(
     codes = [build_number, *extra_codes]
     if len(set(codes)) != len(codes):
         raise PromotionError("Play release version codes must be unique")
+    for retained in retained_releases:
+        if not isinstance(retained, dict) or retained.get("status") not in ("completed", "draft"):
+            raise PromotionError("retained Play releases must be server-returned completed or draft releases")
+        if set(codes) & set(release_codes(retained)):
+            raise PromotionError("Play release version codes must be unique across written and retained releases")
     existing_notes = base_release.get("releaseNotes") if isinstance(base_release, dict) else None
     preserved_notes = existing_notes if isinstance(existing_notes, list) and existing_notes else None
     release: dict[str, object] = dict(base_release) if isinstance(base_release, dict) else {}
@@ -587,7 +599,7 @@ def submit_android(
             packageName=PACKAGE_NAME,
             editId=edit_id,
             track="production",
-            body={"track": "production", "releases": [release]},
+            body={"track": "production", "releases": [release, *(dict(retained) for retained in retained_releases)]},
         ).execute()
         # changesNotSentForReview follows CHANGES_NOT_SENT_FOR_REVIEW: while
         # Play refuses automated review submission, every committed edit is

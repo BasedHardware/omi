@@ -8,6 +8,7 @@ subcollections, where filters, batch operations, get_all, etc.
 
 from copy import copy, deepcopy
 from datetime import datetime, timezone
+from functools import partial
 from typing import Optional
 
 from fake_firestore import MockFirestore
@@ -21,6 +22,7 @@ from fake_firestore.document import (
     set_by_path,
 )
 from fake_firestore.query import FakeQuery
+from fake_firestore.transaction import FakeTransaction
 
 # Module-level singleton — set by conftest.py before backend imports.
 _mock_store: Optional[MockFirestore] = None
@@ -168,6 +170,15 @@ def get_mock_firestore() -> MockFirestore:
     return _mock_store
 
 
+def _patch_transaction_create():
+    """Stage real create semantics; fake-firestore's implementation is a no-op."""
+
+    def _create(self, reference, document_data):
+        self._add_write_op(partial(reference.create, deepcopy(document_data)))
+
+    FakeTransaction.create = _create
+
+
 def setup_fake_firestore() -> MockFirestore:
     """Create and register the global MockFirestore singleton."""
     global _mock_store
@@ -175,6 +186,7 @@ def setup_fake_firestore() -> MockFirestore:
     _patch_delete_field_missing_key_noop()
     _patch_document_delete_missing_doc_noop()
     _patch_document_id_query_ordering()
+    _patch_transaction_create()
     _mock_store = MockFirestore()
     return _mock_store
 

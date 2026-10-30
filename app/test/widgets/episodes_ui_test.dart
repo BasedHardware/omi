@@ -522,10 +522,10 @@ void main() {
       final list = find.descendant(of: find.byType(TranscriptWidget), matching: find.byType(Scrollable)).first;
       final scroll = tester.state<ScrollableState>(list).position;
       final delegate = tester
-          .widget<ListView>(
-            find.descendant(of: find.byType(TranscriptWidget), matching: find.byType(ListView)).first,
+          .widget<SliverList>(
+            find.descendant(of: find.byType(TranscriptWidget), matching: find.byType(SliverList)).first,
           )
-          .childrenDelegate as SliverChildBuilderDelegate;
+          .delegate as SliverChildBuilderDelegate;
       // A server deletion/rollover changes the provider's mutable list before
       // the parent supplies the next frame. The old lazy delegate still exists.
       capture.segments.removeRange(2, capture.segments.length);

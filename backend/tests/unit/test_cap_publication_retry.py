@@ -771,7 +771,7 @@ def _enable_redrive(monkeypatch, snaps: list) -> None:
             'backlog_items': 0,
         },
     )
-    monkeypatch.setattr(cap_hold_redrive.store, 'discover', lambda kind: snaps if kind == 'staging' else [])
+    monkeypatch.setattr(cap_hold_redrive.store, 'discover', lambda kind, **_: snaps if kind == 'staging' else [])
 
 
 def _hold_snap(identity: str):

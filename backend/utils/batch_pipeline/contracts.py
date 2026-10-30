@@ -14,6 +14,12 @@ from utils.observability.reasons import WorkerValidationReason, WorkOutcome, rea
 
 MAX_PROJECTION_PARTS = 128
 
+# The worker's fetch_decode check admits decoded audio up to 0.1s longer than
+# the admitted capture, and its span edges ride that decoded sample clock, so
+# an EOF span may end past ``duration`` by the same metadata tolerance
+# ``validate_measured_vad`` accepts (one extra 16 kHz sample for rounding).
+VAD_EOF_OVERRUN_SECONDS = 0.1 + 1 / 16000
+
 
 def projection_speech_spans(payload: dict, duration: float) -> list[dict[str, float]]:
     """Encrypted result contract: original sample-rounded, unpadded VAD union.
@@ -22,11 +28,15 @@ def projection_speech_spans(payload: dict, duration: float) -> list[dict[str, fl
     ``worker_vad_word_spans`` only positions a bound worker VAD measure at word
     clocks; its total is that acoustic measure, never the ASR duration.
     Parts/receipts stay embedded in the original result document for erasure.
+    An EOF span that overruns ``duration`` within the decode tolerance is
+    clamped to it; ``speech_seconds`` counts the decoded-clock union, so the
+    accounting check compares the pre-clamp total.
     """
     raw = payload.get('speech_spans')
     if not isinstance(raw, list) or not raw:
         raise ValueError('original VAD speech_spans required')
     spans = []
+    union = 0.0
     previous_end = -1.0
     for span in raw:
         if not isinstance(span, dict):
@@ -41,14 +51,19 @@ def projection_speech_spans(payload: dict, duration: float) -> list[dict[str, fl
             raise ValueError('numeric VAD span required')
         if not math.isfinite(start) or not math.isfinite(end):
             raise ValueError('finite VAD span required')
-        if not 0 <= start < end <= duration or start < previous_end:
+        if not 0 <= start < end or start < previous_end:
             raise ValueError('ordered nonoverlapping VAD spans required')
+        union += end - start
+        if end > duration:
+            if end - duration > VAD_EOF_OVERRUN_SECONDS or start >= duration:
+                raise ValueError('ordered nonoverlapping VAD spans required')
+            end = duration
         spans.append({'start': float(start), 'end': float(end)})
         previous_end = end
     speech = payload.get('speech_seconds')
     if not isinstance(speech, (int, float)) or isinstance(speech, bool) or not math.isfinite(speech):
         raise ValueError('validated speech_seconds required')
-    if abs(sum(span['end'] - span['start'] for span in spans) - speech) > 1 / 16000 + 1e-9:
+    if abs(union - speech) > 1 / 16000 + 1e-9:
         raise ValueError('VAD union disagrees with speech accounting')
     return spans
 
