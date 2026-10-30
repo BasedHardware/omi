@@ -8,7 +8,6 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 
@@ -25,6 +24,7 @@ import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/notification_channel_strings.dart';
+import 'package:omi/services/auth_service.dart';
 
 /// Firebase Cloud Messaging enabled notification service
 /// Supports iOS, Android, macOS, web, and Linux with full FCM functionality
@@ -139,7 +139,7 @@ class _FCMNotificationService implements NotificationInterface {
   Future<void> saveFcmToken(String? token) async {
     if (token == null) return;
     String timeZone = await getTimeZone();
-    if (FirebaseAuth.instance.currentUser != null && token.isNotEmpty) {
+    if (AuthService.instance.currentUser != null && token.isNotEmpty) {
       await saveFcmTokenServer(token: token, timeZone: timeZone);
 
       try {

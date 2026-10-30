@@ -73,7 +73,7 @@ class AuthenticationProvider extends BaseProvider {
   Future<ApiResult<AccountDeletionStatus>>? _deletionStatus;
 
   Future<ApiResult<AccountDeletionStatus>> checkAccountDeletion({bool refresh = false}) {
-    final uid = _auth.currentUser?.uid;
+    final uid = AuthService.instance.currentUser?.uid;
     if (refresh || uid != _deletionStatusUid || _deletionStatus == null) {
       _deletionStatusUid = uid;
       _deletionStatus = _readDeletionStatusForOwner(uid);
@@ -92,7 +92,7 @@ class AuthenticationProvider extends BaseProvider {
         onboardingCompleted: prefs.onboardingCompleted,
       ),
     );
-    if (_auth.currentUser?.uid != uid) return const ApiFailure(ApiProblem(ApiProblemKind.authTerminal));
+    if (AuthService.instance.currentUser?.uid != uid) return const ApiFailure(ApiProblem(ApiProblemKind.authTerminal));
     if (result case ApiSuccess<AccountDeletionStatus>(:final data)) {
       final pending = prefs.getStringList(_pendingDeletionUidsKey).toSet();
       final changed = data.pendingDeletion ? pending.add(uid) : pending.remove(uid);
@@ -180,10 +180,10 @@ class AuthenticationProvider extends BaseProvider {
   }
 
   bool isSignedIn() {
-    return !_requiresReauthentication && _auth.currentUser != null && !_auth.currentUser!.isAnonymous;
+    return !_requiresReauthentication && AuthService.instance.isSignedIn();
   }
 
-  bool get _hasFirebaseUser => _auth.currentUser != null && !_auth.currentUser!.isAnonymous;
+  bool get _hasFirebaseUser => AuthService.instance.isSignedIn();
 
   @override
   void dispose() {
@@ -336,7 +336,7 @@ class AuthenticationProvider extends BaseProvider {
         PlatformManager.instance.analytics.accountCreated(authProvider: authProvider);
       }
       final deletion = await checkAccountDeletion(refresh: true);
-      if (_auth.currentUser?.uid != newUid) return;
+      if (AuthService.instance.currentUser?.uid != newUid) return;
       if (deletion case ApiSuccess<AccountDeletionStatus>(data: final status) when !status.pendingDeletion) {
         NotificationService.instance.saveNotificationToken();
         try {
