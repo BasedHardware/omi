@@ -112,7 +112,7 @@ def test_non_cascade_delete_purges_prompt_evidence_after_intent_without_purging_
         'delete_owner_prompt_embedding_cache': purge,
         'delete_conversation_screen_frames': MagicMock(),
         'delete_conversation_and_frame_evidence': hard_delete,
-        'delete_privacy_conversation_audio': audio,
+        '_erase_conversation_audio_best_effort': audio,
         'delete_vector': MagicMock(),
         'delete_transcript_chunk_vectors': MagicMock(),
         'record_product_event': MagicMock(),
@@ -157,7 +157,7 @@ def test_user_delete_records_intent_before_retraction_and_cleanup(store, failure
         'delete_conversation_screen_frames': cleanup,
         'delete_conversation_and_frame_evidence': hard_delete,
         'action_items_db': MagicMock(get_action_items_by_conversation=MagicMock(return_value=[])),
-        'delete_privacy_conversation_audio': MagicMock(),
+        '_erase_conversation_audio_best_effort': MagicMock(),
         'delete_owner_prompt_embedding_cache': MagicMock(),
         'delete_vector': MagicMock(),
         'delete_transcript_chunk_vectors': MagicMock(),
@@ -172,7 +172,7 @@ def test_user_delete_records_intent_before_retraction_and_cleanup(store, failure
         tasks = MagicMock()
         assert delete('c', tasks, True, None, 'u') is None
         tasks.add_task.assert_called_once_with(
-            namespace['delete_privacy_conversation_audio'], 'u', 'c', source_ids=['donor']
+            namespace['_erase_conversation_audio_best_effort'], 'u', 'c', source_ids=['donor']
         )
         assert 'users/u/conversations/c' not in store.rows
     assert tombstones.is_deleted('u', 'c')

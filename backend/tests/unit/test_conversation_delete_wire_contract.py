@@ -64,7 +64,7 @@ def _delete_client(monkeypatch) -> TestClient:
         'delete_owner_prompt_embedding_cache',
         'delete_conversation_screen_frames',
         'delete_conversation_and_frame_evidence',
-        'delete_privacy_conversation_audio',
+        '_erase_conversation_audio_best_effort',
         'delete_vector',
         'delete_transcript_chunk_vectors',
         'delete_action_item_vectors_batch',

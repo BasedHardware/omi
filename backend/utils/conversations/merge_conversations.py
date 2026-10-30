@@ -879,6 +879,9 @@ def _delete_conversation_and_related_data(
             delete_conversation_audio_files(uid, conversation_id)
     except Exception as e:
         if merged_into:
+            # The durable ancestry replays a ``merged_into`` cleanup, so the
+            # raise is the retry — deferring here would double-erase linked
+            # originals the target sweep also walks.
             raise
         if lifecycle_service._is_residual_audio_sweep(e):
             # The purge verifier's residue verdict on a rollback sweep: the
@@ -887,6 +890,14 @@ def _delete_conversation_and_related_data(
             # the empty-generation boundary arms instead of a leak. The rest
             # of the cleanup still runs.
             lifecycle_service._defer_or_keep_residual_sweep(uid, conversation_id)
+        elif lifecycle_service._is_storage_blip(e):
+            # A momentary GCS fault (429/5xx, the SDK's drained-retry
+            # envelope, a transport reset) on the same post-commit sweep. The
+            # rolled-back source is terminal — no serving path revisits these
+            # prefixes — so the old plain ``logger.error`` arm orphaned the
+            # bytes forever; the shared deferral re-attacks them within a
+            # bounded budget instead, and the rest of the cleanup still runs.
+            lifecycle_service._defer_sweep_behind_storage_blip(uid, conversation_id)
         else:
             logger.error(f"Error deleting audio files for {conversation_id}: {e}")
 
@@ -945,6 +956,14 @@ def _cleanup_merged_target_after_failure(uid: str, merged_conversation_id: str) 
             # empty-generation boundary arms — not a log-and-leak. The rest
             # of the cleanup still runs.
             lifecycle_service._defer_or_keep_residual_sweep(uid, merged_conversation_id)
+        elif lifecycle_service._is_storage_blip(e):
+            # A momentary GCS fault on the same post-commit sweep. The failed
+            # merged target is terminal — no serving path revisits these
+            # prefixes — so the old plain ``logger.error`` arm orphaned the
+            # target's audio forever; the shared deferral re-attacks them
+            # within a bounded budget instead, and the rest of the cleanup
+            # still runs.
+            lifecycle_service._defer_sweep_behind_storage_blip(uid, merged_conversation_id)
         else:
             logger.error(f"Error deleting merged conversation audio for {merged_conversation_id}: {e}")
     try:

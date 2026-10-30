@@ -984,6 +984,39 @@ def _is_storage_blip(error: BaseException) -> bool:
     return False
 
 
+def _defer_sweep_behind_storage_blip(
+    uid: str,
+    conversation_id: str,
+    *,
+    start_thread: Callable[..., Any] = threading.Thread,
+    sleep: Callable[[float], None] = time.sleep,
+) -> bool:
+    """Defer one post-commit audio sweep behind a momentary storage fault.
+
+    The shared arm of every post-commit sweep (the empty-generation
+    reclamation, both merge-cleanup sweeps, the privacy erasure): the
+    authoritative outcome has already committed when the sweep runs, so a blip
+    the GCS SDK itself replays must not reclassify it as a failure — the sweep
+    announces one bounded deferral and re-arms itself on a detached daemon
+    thread with the same budget everywhere. A start failure (thread factory
+    exhausted) propagates: every caller already sits inside its own
+    classification boundary, which owns how a non-deferrable failure reports.
+    """
+    logger.warning(
+        'Unreferenced audio sweep deferred behind a storage blip uid=%s conversation_id=%s',
+        uid,
+        conversation_id,
+    )
+    return bool(
+        _schedule_sweep_retry(
+            delete_conversation_audio_files,
+            (uid, conversation_id),
+            start_thread=start_thread,
+            sleep=sleep,
+        )
+    )
+
+
 # The deferral owns its convergence: a sweep deferred behind a blip re-attacks
 # its own prefixes after a short pause instead of waiting for a reclamation
 # that, for a terminal (already-deleted) empty generation, never comes — the
@@ -1205,12 +1238,9 @@ def _discard_unreferenced_audio(
             # successful, exactly like the residual arm above — a bounded
             # deferral with an owner, not a traceback and an
             # ``omi_fallback_total`` exhausted event on every failing attempt.
-            logger.warning(
-                'Unreferenced audio sweep deferred behind a storage blip uid=%s conversation_id=%s',
-                uid,
-                conversation_id,
-            )
-            _schedule_sweep_retry(delete_conversation_audio_files, (uid, conversation_id))
+            # The shared helper owns the announcement and the re-attack, the
+            # same arm every post-commit sweep boundary sheds through.
+            _defer_sweep_behind_storage_blip(uid, conversation_id)
             return
         # The row is already gone, so there is nothing left to keep consistent
         # with; a failed sweep just leaves the orphan this call meant to reclaim.

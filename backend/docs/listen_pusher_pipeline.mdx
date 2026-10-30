@@ -841,6 +841,39 @@ deferral is what keeps that flood out of the failed-write classification
 ramping 185 → 269 per 30-minute window across 268 distinct uids in three
 hours, zero conversation repeats — the race, not a poisoned prefix).
 
+The blip arm is a shared boundary, not a private one: every sweep that runs
+after its authoritative outcome committed sheds the same retryable set
+through `_defer_sweep_behind_storage_blip` — one sensor-stable warning
+(`Unreferenced audio sweep deferred behind a storage blip`, WARNING, no
+traceback, no degradation event) and one re-armed sweep on the same detached
+`unreferenced-audio-sweep-retry` daemon thread (two passes, five seconds
+apart). The empty-generation reclamation is the boundary's original owner;
+the same arm now covers the rest of the post-commit family:
+
+- Both merge-cleanup sweeps (`_delete_conversation_and_related_data`'s
+  non-`merged_into` arm and `_cleanup_merged_target_after_failure`) defer
+  blips like the residue they already deferred. A rolled-back merge source
+  or a failed merged target is terminal — no serving path revisits its
+  prefixes — so the previous plain `logger.error` arm orphaned the audio
+  forever on one momentary 429/503; the deferral re-attacks it instead, and
+  the rest of the cleanup still runs. A `merged_into` sweep keeps raising:
+  the durable ancestry replays that cleanup, and a deferral there would
+  double-erase linked originals the target sweep also walks.
+- The privacy erasure (`DELETE /v1/conversations` audio cascade) wraps its
+  background-task sweep in `_erase_conversation_audio_best_effort`: the
+  endpoint answers before the sweep runs, so a blip used to leave the user's
+  audio unerased and silent behind a pod-log traceback. The wrapper defers
+  blips and residue through the same arms (a deduped erasure that lost the
+  race to arm the residue retry stays swallowed) and re-raises permanent
+  refusals and unknown failures — operator-visible storage-policy problems,
+  never the client's, with the 200 already sent.
+
+Permanent refusals (4xx policy, permission, bad request) and non-transport
+unknown failures keep each boundary's loud arm (failed-write traceback and
+degradation event for the empty generation, failed-cleanup ERROR for the
+merge sites, propagation out of the background task for the privacy path)
+and never re-arm.
+
 When the private-cloud flush writes `audio_files` onto a conversation that a
 mid-session delete removes between the flush's existence read and its commit,
 `update_conversation` reports the owner as gone (returns `False`) instead of

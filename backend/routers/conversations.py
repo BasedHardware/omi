@@ -22,7 +22,10 @@ from database.vector_db import (
     delete_transcript_chunk_vectors,
 )
 import database.vector_db as vector_db
-from utils.other.storage import delete_privacy_conversation_audio, delete_owner_prompt_embedding_cache
+from utils.other.storage import (
+    _erase_conversation_audio_best_effort,
+    delete_owner_prompt_embedding_cache,
+)
 from utils.screen_frames.store import delete_conversation_screen_frames
 from models.calendar_context import CalendarMeetingContext
 from models.client_processing import PROJECTION_FAMILY_FIELDS, ClientProcessing
@@ -1355,7 +1358,12 @@ def delete_conversation(
             if os.getenv('BUCKET_CANONICAL_AUDIO')
             else []
         )
-        background_tasks.add_task(delete_privacy_conversation_audio, uid, conversation_id, source_ids=source_ids)
+        # The rows are gone when this runs and the response is already sent, so
+        # the erasure is post-commit best-effort: the wrapper sheds momentary
+        # storage faults through the same bounded deferral every post-commit
+        # sweep uses (a blip used to leave the audio unerased and silent) and
+        # keeps permanent refusals loud where an operator can see them.
+        background_tasks.add_task(_erase_conversation_audio_best_effort, uid, conversation_id, source_ids=source_ids)
 
     # Screen frames (meeting-note screenshots) are primary conversation
     # content, not cascade-only derived data, so this runs unconditionally

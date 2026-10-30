@@ -2548,6 +2548,42 @@ def _archive_pusher_capture(chunks, uid, conversation_id, protection_level, samp
         record_fallback(component='pusher', from_mode='none', to_mode='none', reason='other', outcome='degraded')
 
 
+def _erase_conversation_audio_best_effort(
+    uid: str,
+    conversation_id: str,
+    *,
+    source_ids: List[str] | None = None,
+) -> None:
+    """Run the privacy erasure sweep with the post-commit classification.
+
+    The privacy endpoint answers before this sweep runs, so its committed
+    outcome cannot be reopened: a momentary storage fault used to leave the
+    user's audio unerased and silent, with only a background-task traceback in
+    the pod logs. The full erasure (canonical purge for linked donors, then the
+    owner-prefix sweep) now sheds the GCS SDK's own retryable set (429/5xx, the
+    drained-retry envelope, transport resets) through the same bounded deferral
+    every post-commit sweep uses — the audio is actually reclaimed — and routes
+    the purge verifier's residual signal (a same-key late upload the re-attack
+    converges on) to the residue deferral, so a deduped sweep that lost the
+    race to arm the retry stays swallowed rather than raising. Permanent
+    refusals (4xx policy, permission) and unknown failures propagate: they are
+    operator-visible storage-policy problems, never the client's, and the
+    response has already been sent.
+    """
+    from utils.conversations import lifecycle as lifecycle_service
+
+    try:
+        delete_privacy_conversation_audio(uid, conversation_id, source_ids=source_ids)
+    except Exception as error:
+        if lifecycle_service._is_storage_blip(error):
+            lifecycle_service._defer_sweep_behind_storage_blip(uid, conversation_id)
+            return
+        if lifecycle_service._is_residual_audio_sweep(error):
+            lifecycle_service._defer_or_keep_residual_sweep(uid, conversation_id)
+            return
+        raise
+
+
 def delete_privacy_conversation_audio(uid: str, conversation_id: str, *, source_ids: List[str] | None = None) -> None:
     """Only the explicit privacy endpoint may erase canonical conversation bytes."""
     if os.getenv('BUCKET_CANONICAL_AUDIO'):
