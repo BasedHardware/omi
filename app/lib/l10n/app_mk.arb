@@ -11941,6 +11941,7 @@
     "yearlySwitchUnavailable": "Годишното плаќање моментално не е достапно за вашиот план.",
     "yearlySwitchDoneTitle": "Сега плаќате годишно",
     "yearlySwitchDoneBody": "Денес се наплатени {amount}. Обновување на {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} дела} one{{count} дел} two{{count} дела} few{{count} дела} many{{count} дела} other{{count} дела}}",
     "consentShortMessage": "Omi користи вештачка интелигенција за да ги претвори вашите разговори во белешки. Можете да ги избришете во секое време.",
     "consentAiProviders": "Се обработува со {providers}."
 }

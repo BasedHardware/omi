@@ -4515,6 +4515,7 @@
     "yearlySwitchUnavailable": "Roční platba teď pro váš plán není dostupná.",
     "yearlySwitchDoneTitle": "Teď platíte ročně",
     "yearlySwitchDoneBody": "Dnes účtováno {amount}. Obnovení {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} částí} one{{count} část} two{{count} částí} few{{count} části} many{{count} částí} other{{count} částí}}",
     "consentShortMessage": "Omi pomocí AI mění vaše konverzace v poznámky. Kdykoli je můžete smazat.",
     "consentAiProviders": "Zpracovává {providers}."
 }

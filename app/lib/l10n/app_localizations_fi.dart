@@ -14936,6 +14936,21 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count osaa',
+      many: '$count osaa',
+      few: '$count osaa',
+      two: '$count osaa',
+      one: '$count osa',
+      zero: '$count osaa',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get consentShortMessage =>
       'Omi tekee keskusteluistasi muistiinpanoja tekoälyn avulla. Voit poistaa ne milloin tahansa.';
 

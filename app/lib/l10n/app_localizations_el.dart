@@ -15031,6 +15031,21 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count μέρη',
+      many: '$count μέρη',
+      few: '$count μέρη',
+      two: '$count μέρη',
+      one: '$count μέρος',
+      zero: '$count μέρη',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get consentShortMessage =>
       'Το Omi χρησιμοποιεί AI για να μετατρέπει τις συνομιλίες σου σε σημειώσεις. Μπορείς να τις διαγράψεις οποιαδήποτε στιγμή.';
 

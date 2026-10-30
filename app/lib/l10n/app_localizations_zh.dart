@@ -14700,6 +14700,21 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个部分',
+      many: '$count 个部分',
+      few: '$count 个部分',
+      two: '$count 个部分',
+      one: '$count 个部分',
+      zero: '$count 个部分',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get consentShortMessage => 'Omi 用 AI 把你的对话整理成笔记。你可以随时删除。';
 
   @override

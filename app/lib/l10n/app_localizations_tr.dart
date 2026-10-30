@@ -14945,6 +14945,21 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count bölüm',
+      many: '$count bölüm',
+      few: '$count bölüm',
+      two: '$count bölüm',
+      one: '$count bölüm',
+      zero: '$count bölüm',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get consentShortMessage =>
       'Omi, konuşmalarını yapay zekâ ile notlara dönüştürür. İstediğin zaman silebilirsin.';
 

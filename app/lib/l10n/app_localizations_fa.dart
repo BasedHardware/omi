@@ -14927,6 +14927,21 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count بخش',
+      many: '$count بخش',
+      few: '$count بخش',
+      two: '$count بخش',
+      one: '$count بخش',
+      zero: '$count بخش',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get consentShortMessage =>
       'Omi با هوش مصنوعی گفتگوهای شما را به یادداشت تبدیل می‌کند. هر زمان بخواهید می‌توانید آن‌ها را حذف کنید.';
 

@@ -11941,6 +11941,7 @@
     "yearlySwitchUnavailable": "ప్రస్తుతం మీ ప్లాన్‌కు వార్షిక బిల్లింగ్ అందుబాటులో లేదు.",
     "yearlySwitchDoneTitle": "మీరు ఇప్పుడు వార్షిక ప్లాన్‌లో ఉన్నారు",
     "yearlySwitchDoneBody": "ఈరోజు {amount} వసూలు చేశాం. పునరుద్ధరణ {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} భాగాలు} one{{count} భాగాలు} two{{count} భాగాలు} few{{count} భాగాలు} many{{count} భాగాలు} other{{count} భాగాలు}}",
     "consentShortMessage": "Omi AI సహాయంతో మీ సంభాషణలను నోట్స్‌గా మారుస్తుంది. వాటిని ఎప్పుడైనా తొలగించవచ్చు.",
     "consentAiProviders": "{providers} ద్వారా ప్రాసెస్ చేయబడుతుంది."
 }

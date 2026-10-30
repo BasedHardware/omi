@@ -14954,6 +14954,21 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count dalių',
+      many: '$count dalies',
+      few: '$count dalys',
+      two: '$count dalių',
+      one: '$count dalis',
+      zero: '$count dalių',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get consentShortMessage =>
       'Omi naudoja DI, kad jūsų pokalbius paverstų užrašais. Juos galite ištrinti bet kada.';
 

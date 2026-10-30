@@ -14968,6 +14968,21 @@ class AppLocalizationsHr extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count dijelova',
+      many: '$count dijelova',
+      few: '$count dijela',
+      two: '$count dijelova',
+      one: '$count dio',
+      zero: '$count dijelova',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get consentShortMessage =>
       'Omi koristi AI kako bi vaše razgovore pretvorio u bilješke. Možete ih izbrisati bilo kada.';
 

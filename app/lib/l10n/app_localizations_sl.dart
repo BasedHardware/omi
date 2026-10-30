@@ -14960,6 +14960,21 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count delov',
+      many: '$count delov',
+      few: '$count deli',
+      two: '$count dela',
+      one: '$count del',
+      zero: '$count delov',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get consentShortMessage =>
       'Omi z umetno inteligenco spremeni vaše pogovore v zapiske. Kadar koli jih lahko izbrišete.';
 

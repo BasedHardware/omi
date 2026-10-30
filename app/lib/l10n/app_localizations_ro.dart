@@ -14995,6 +14995,21 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count de părți',
+      many: '$count de părți',
+      few: '$count părți',
+      two: '$count de părți',
+      one: '$count parte',
+      zero: '$count de părți',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get consentShortMessage =>
       'Omi folosește AI pentru a transforma conversațiile tale în notițe. Le poți șterge oricând.';
 

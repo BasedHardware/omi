@@ -4611,6 +4611,7 @@
     "yearlySwitchUnavailable": "Az éves fizetés jelenleg nem érhető el az Ön csomagjához.",
     "yearlySwitchDoneTitle": "Mostantól évente fizet",
     "yearlySwitchDoneBody": "Ma terhelve: {amount}. Megújul: {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} rész} one{{count} rész} two{{count} rész} few{{count} rész} many{{count} rész} other{{count} rész}}",
     "consentShortMessage": "Az Omi mesterséges intelligenciával jegyzetekké alakítja a beszélgetéseidet. Bármikor törölheted őket.",
     "consentAiProviders": "Feldolgozás: {providers}."
 }

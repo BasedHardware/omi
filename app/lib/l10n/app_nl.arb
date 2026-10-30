@@ -4515,6 +4515,7 @@
     "yearlySwitchUnavailable": "Jaarlijks betalen is nu niet beschikbaar voor je abonnement.",
     "yearlySwitchDoneTitle": "Je betaalt nu jaarlijks",
     "yearlySwitchDoneBody": "Vandaag {amount} afgeschreven. Verlengt op {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} delen} one{{count} deel} two{{count} delen} few{{count} delen} many{{count} delen} other{{count} delen}}",
     "consentShortMessage": "Omi maakt met AI notities van je gesprekken. Je kunt ze altijd verwijderen.",
     "consentAiProviders": "Verwerkt met {providers}."
 }

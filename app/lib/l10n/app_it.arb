@@ -4515,6 +4515,7 @@
     "yearlySwitchUnavailable": "La fatturazione annuale non è disponibile per il tuo piano in questo momento.",
     "yearlySwitchDoneTitle": "Ora sei sull'annuale",
     "yearlySwitchDoneBody": "Addebitati {amount} oggi. Rinnovo il {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} parti} one{{count} parte} two{{count} parti} few{{count} parti} many{{count} parti} other{{count} parti}}",
     "consentShortMessage": "Omi usa l'IA per trasformare le tue conversazioni in note. Puoi eliminarle quando vuoi.",
     "consentAiProviders": "Elaborato con {providers}."
 }

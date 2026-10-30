@@ -4515,6 +4515,7 @@
     "yearlySwitchUnavailable": "ตอนนี้แพ็กเกจของคุณยังจ่ายรายปีไม่ได้",
     "yearlySwitchDoneTitle": "ตอนนี้คุณจ่ายแบบรายปีแล้ว",
     "yearlySwitchDoneBody": "เรียกเก็บ {amount} วันนี้ ต่ออายุ {date}",
+    "episodePartsCount": "{count, plural, zero{{count} ส่วน} one{{count} ส่วน} two{{count} ส่วน} few{{count} ส่วน} many{{count} ส่วน} other{{count} ส่วน}}",
     "consentShortMessage": "Omi ใช้ AI เปลี่ยนบทสนทนาของคุณเป็นโน้ต คุณลบได้ทุกเมื่อ",
     "consentAiProviders": "ประมวลผลด้วย {providers}"
 }

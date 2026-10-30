@@ -14936,6 +14936,21 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count deler',
+      many: '$count deler',
+      few: '$count deler',
+      two: '$count deler',
+      one: '$count del',
+      zero: '$count deler',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get consentShortMessage =>
       'Omi bruker KI til å gjøre samtalene dine om til notater. Du kan slette dem når som helst.';
 

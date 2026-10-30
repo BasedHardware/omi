@@ -14981,6 +14981,21 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ಭಾಗಗಳು',
+      many: '$count ಭಾಗಗಳು',
+      few: '$count ಭಾಗಗಳು',
+      two: '$count ಭಾಗಗಳು',
+      one: '$count ಭಾಗಗಳು',
+      zero: '$count ಭಾಗಗಳು',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get consentShortMessage => 'Omi AI ಬಳಸಿ ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳನ್ನು ಟಿಪ್ಪಣಿಗಳಾಗಿ ಮಾಡುತ್ತದೆ. ಯಾವಾಗ ಬೇಕಾದರೂ ಅಳಿಸಬಹುದು.';
 
   @override

@@ -258,3 +258,9 @@ def test_completed_boundary_finalizes_salience(stack, processing, monkeypatch, m
     result = processing._get_conversation_obj('synthetic-account', note, capture, relevance_discarded=False)
     assert result.structured.salience == ('highlight' if output_kind == 'notes' else 'background')
     assert result.discarded is False
+
+
+@pytest.fixture(autouse=True)
+def _isolated_relevance_policy(monkeypatch):
+    # This legacy model/input fixture has no episode or neighbor database.
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')

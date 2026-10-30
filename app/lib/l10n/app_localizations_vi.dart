@@ -14934,6 +14934,21 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count phần',
+      many: '$count phần',
+      few: '$count phần',
+      two: '$count phần',
+      one: '$count phần',
+      zero: '$count phần',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get consentShortMessage =>
       'Omi dùng AI để biến các cuộc trò chuyện của bạn thành ghi chú. Bạn có thể xóa chúng bất cứ lúc nào.';
 

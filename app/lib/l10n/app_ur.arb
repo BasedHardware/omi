@@ -11941,6 +11941,7 @@
     "yearlySwitchUnavailable": "اس وقت آپ کے پلان کے لیے سالانہ بلنگ دستیاب نہیں ہے۔",
     "yearlySwitchDoneTitle": "اب آپ سالانہ پلان پر ہیں",
     "yearlySwitchDoneBody": "آج {amount} وصول کیے گئے۔ تجدید {date} کو۔",
+    "episodePartsCount": "{count, plural, zero{{count} حصے} one{{count} حصے} two{{count} حصے} few{{count} حصے} many{{count} حصے} other{{count} حصے}}",
     "consentShortMessage": "Omi AI کی مدد سے آپ کی گفتگو کو نوٹس میں بدلتا ہے۔ آپ انہیں کسی بھی وقت حذف کر سکتے ہیں۔",
     "consentAiProviders": "{providers} کے ذریعے پروسیس کیا جاتا ہے۔"
 }

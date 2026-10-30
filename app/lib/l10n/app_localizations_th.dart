@@ -14859,6 +14859,21 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ส่วน',
+      many: '$count ส่วน',
+      few: '$count ส่วน',
+      two: '$count ส่วน',
+      one: '$count ส่วน',
+      zero: '$count ส่วน',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get consentShortMessage => 'Omi ใช้ AI เปลี่ยนบทสนทนาของคุณเป็นโน้ต คุณลบได้ทุกเมื่อ';
 
   @override

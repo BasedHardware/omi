@@ -37,7 +37,7 @@ async def occasion_attach_target(controller) -> Optional[str]:
         existing,
         source=normalize_listen_source(controller.host.request.source),
         device_id=controller.host.client_device_context.client_device_id,
-        now=controller.clock(),
+        arrival_at=controller.clock(),
         timeout=controller.host.conversation_creation_timeout,
     ):
         return None

@@ -15007,6 +15007,21 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count parts',
+      many: '$count parts',
+      few: '$count parts',
+      two: '$count parts',
+      one: '$count part',
+      zero: '$count parts',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get consentShortMessage =>
       'Omi fa servir la IA per convertir les teves converses en notes. Les pots esborrar quan vulguis.';
 

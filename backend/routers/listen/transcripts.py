@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, cast
 from fastapi.websockets import WebSocketDisconnect
 
 from config.translation import resolve_ondemand_config
+from config.recorded_time import late_audio_intake_enabled
 from routers.listen.capture_merges import snapshot_proofs, acknowledge_proofs
 from models.capture_window_proof import CaptureWindowProof
 from config.live_capture import capture_window_reason
@@ -44,6 +45,8 @@ from utils.app_integrations import trigger_realtime_integrations
 from utils.audio_timeline import UNPLACED_SEGMENT_OFFSET
 from utils.episodes import live as episode_live
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.recorded_time import is_late, recorded_span
+from utils.sync.late_audio import ingest_late_transcript
 from utils.metrics import (
     OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL,
     OMI_LIVE_AUDIO_CAPTURE_WINDOWS_TOTAL,
@@ -459,6 +462,26 @@ class TranscriptProcessor:
         audio_timeline: Optional[Dict[str, Any]] = None,
         update_finished_at: bool = True,
     ) -> Optional[tuple[Conversation, List[TranscriptSegment], List[str]]]:
+        origin = started_at or getattr(conversation, 'started_at', None)
+        fresh_segments = [segment.model_dump() for segment in segments]
+        if late_audio_intake_enabled() and not photos and is_late(recorded_span(origin, fresh_segments), finished_at):
+            # A socket is transport, not proof that this speech is happening
+            # now. Keep its historical words out of live lifecycle/episodes.
+            snapshot = conversation.model_dump()
+            snapshot['started_at'] = origin
+            snapshot['data_protection_level'] = self.cache.protection_level
+            assigned = await self.host.persistence.call(
+                ingest_late_transcript, self.host.request.uid, snapshot, fresh_segments
+            )
+            if getattr(self.host.state, 'capture_timeline_v2', False):
+                self._v2_committed_ids.update(str(segment.id) for segment in segments)
+            saved = deserialize_conversation(assigned)
+            late_ids = getattr(self, '_late_conversation_ids', set())
+            if len(late_ids) >= 256:
+                late_ids.pop()
+            late_ids.add(saved.id)
+            self._late_conversation_ids = late_ids
+            return saved, saved.transcript_segments, []
         updated: List[TranscriptSegment] = []
         removed: List[str] = []
         if segments:
@@ -823,6 +846,10 @@ class TranscriptProcessor:
         Shared by the legacy loop and the v2 batch path so the two persistence
         modes never drift in what a delivered segment triggers downstream.
         """
+        if conversation.id in getattr(self, '_late_conversation_ids', ()):
+            # Intake scheduled recorded-time recovery. Historical speech must
+            # not appear as fresh words in the current client capture either.
+            return
         client_segments = [segment.model_dump() for segment in updated]
         delivered = await self._deliver_segments(client_segments)
         if delivered and client_segments:
@@ -1169,6 +1196,8 @@ class TranscriptProcessor:
             if not transcript_segments:
                 continue
             await self._deliver_live_updates(conversation, updated, removed, transcript_segments, conversation.id)
+            if conversation.id in getattr(self, '_late_conversation_ids', ()):
+                continue
             await self._speaker_detection(
                 updated,
                 self.host.state.first_audio_byte_timestamp - offset,
@@ -1439,6 +1468,8 @@ class TranscriptProcessor:
                 continue
             if is_current:
                 await self._deliver_live_updates(conversation, updated, removed, new_segments, owner)
+            if conversation.id in getattr(self, '_late_conversation_ids', ()):
+                continue
             await self._speaker_detection(
                 updated,
                 started_ts,

@@ -14926,6 +14926,21 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count častí',
+      many: '$count častí',
+      few: '$count časti',
+      two: '$count častí',
+      one: '$count časť',
+      zero: '$count častí',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get consentShortMessage => 'Omi pomocou AI mení vaše konverzácie na poznámky. Kedykoľvek ich môžete vymazať.';
 
   @override

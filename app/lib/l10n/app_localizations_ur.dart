@@ -14944,6 +14944,21 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count حصے',
+      many: '$count حصے',
+      few: '$count حصے',
+      two: '$count حصے',
+      one: '$count حصے',
+      zero: '$count حصے',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get consentShortMessage =>
       'Omi AI کی مدد سے آپ کی گفتگو کو نوٹس میں بدلتا ہے۔ آپ انہیں کسی بھی وقت حذف کر سکتے ہیں۔';
 

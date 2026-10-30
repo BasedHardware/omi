@@ -14925,6 +14925,21 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count osa',
+      many: '$count osa',
+      few: '$count osa',
+      two: '$count osa',
+      one: '$count osa',
+      zero: '$count osa',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get consentShortMessage =>
       'Omi muudab tehisintellekti abil sinu vestlused märkmeteks. Saad need igal ajal kustutada.';
 

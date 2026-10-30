@@ -14969,6 +14969,21 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count bahagian',
+      many: '$count bahagian',
+      few: '$count bahagian',
+      two: '$count bahagian',
+      one: '$count bahagian',
+      zero: '$count bahagian',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get consentShortMessage =>
       'Omi menggunakan AI untuk menukar perbualan anda kepada nota. Anda boleh memadamkannya bila-bila masa.';
 

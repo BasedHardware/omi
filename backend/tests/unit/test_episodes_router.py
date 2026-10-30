@@ -37,6 +37,18 @@ def client(monkeypatch):
     # The capability marker is Redis; test_episodes_client_gate covers it.
     monkeypatch.setattr(router_module.client_gate, 'note_client_seen', lambda uid: False)
     monkeypatch.setattr(router_module.service, 'last_closed_episode', lambda uid, fresh=False: None)
+    monkeypatch.setattr(
+        router_module.home_read,
+        '_read_members',
+        lambda uid, rows, **kwargs: {
+            'c1': {
+                'structured': {'title': 'Member'},
+                'started_at': T0,
+                'discarded': False,
+                'status': 'completed',
+            }
+        },
+    )
     app = FastAPI()
     app.include_router(router_module.router)
     app.dependency_overrides[auth.get_current_user_uid] = lambda: 'uid-1'
@@ -127,3 +139,51 @@ def test_live_response_sends_every_wire_field_despite_exclude_unset(client, monk
     assert set(EpisodeProvisionalItem.model_fields) - set(body['episode']['provisional_items'][0]) == set()
     # The one intentional omission is the additive recap when there is none.
     assert 'last_closed_episode' not in body
+
+
+def test_list_uses_admission_gate_and_returns_paginated_projection(client, monkeypatch):
+    _, http = client
+    calls = []
+    monkeypatch.setattr(
+        router_module.home_read,
+        'list_episode_window',
+        lambda uid, start, end, **kw: (calls.append((uid, start, end, kw)) or [EPISODE], 'next-id'),
+    )
+    response = http.get('/v1/episodes', params={'from': T0.isoformat(), 'to': T0.isoformat(), 'limit': 1})
+    assert response.status_code == 200
+    body = response.json()
+    assert body['enabled'] is True and body['next_cursor'] == 'next-id'
+    assert body['episodes'][0]['members'][0]['id'] == 'c1'
+    assert 'applied' not in body['episodes'][0]
+    assert calls[0][0] == 'uid-1' and calls[0][3] == {'limit': 1, 'cursor': None}
+    calls.clear()
+    monkeypatch.setenv(config.EPISODES_ENABLED_ENV, 'off')
+    assert http.get('/v1/episodes', params={'from': T0.isoformat(), 'to': T0.isoformat()}).json()['enabled'] is False
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    'params',
+    [
+        {'from': '2026-10-30T00:00:00', 'to': '2026-10-31T00:00:00Z'},
+        {'from': '2026-10-31T00:00:00Z', 'to': '2026-10-30T00:00:00Z'},
+        {'from': T0.isoformat(), 'to': T0.isoformat(), 'cursor': '../other'},
+        {'from': T0.isoformat(), 'to': T0.isoformat(), 'limit': 101},
+    ],
+)
+def test_list_rejects_invalid_window_and_page_arguments(client, params):
+    _, http = client
+    assert http.get('/v1/episodes', params=params).status_code == 422
+
+
+def test_list_store_channel_never_reads(client, monkeypatch):
+    _, http = client
+    monkeypatch.setattr(router_module.home_read, 'list_episode_window', lambda *a, **kw: pytest.fail('must not read'))
+    assert (
+        http.get(
+            '/v1/episodes',
+            params={'from': T0.isoformat(), 'to': T0.isoformat()},
+            headers={'X-Omi-App-Channel': 'store'},
+        ).json()['enabled']
+        is False
+    )

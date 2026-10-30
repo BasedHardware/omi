@@ -14963,6 +14963,21 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count частини',
+      many: '$count частин',
+      few: '$count частини',
+      two: '$count частини',
+      one: '$count частина',
+      zero: '$count частини',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get consentShortMessage =>
       'Omi за допомогою ШІ перетворює ваші розмови на нотатки. Їх можна видалити будь-коли.';
 

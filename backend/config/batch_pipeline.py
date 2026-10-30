@@ -131,6 +131,12 @@ def live_record_admission_enabled() -> bool:
     return resolve_batch_policy('').live_admission_enabled
 
 
+def require_record_protocol_ready() -> None:
+    """One-time producer protocol cutover; never expires a pending obligation."""
+    if os.getenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', 'false').strip().lower() != 'true':
+        raise ValueError('record protocol cutover barrier closed')
+
+
 def live_record_enabled_for(owner_id: str) -> bool:
     from config.policy import resolve_batch_policy
 

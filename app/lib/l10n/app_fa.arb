@@ -11941,6 +11941,7 @@
     "yearlySwitchUnavailable": "پرداخت سالانه اکنون برای طرح شما در دسترس نیست.",
     "yearlySwitchDoneTitle": "اکنون سالانه پرداخت می‌کنید",
     "yearlySwitchDoneBody": "امروز {amount} کسر شد. تمدید در {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} بخش} one{{count} بخش} two{{count} بخش} few{{count} بخش} many{{count} بخش} other{{count} بخش}}",
     "consentShortMessage": "Omi با هوش مصنوعی گفتگوهای شما را به یادداشت تبدیل می‌کند. هر زمان بخواهید می‌توانید آن‌ها را حذف کنید.",
     "consentAiProviders": "پردازش با {providers}."
 }

@@ -49,6 +49,7 @@ class _Conversation:
 
 @pytest.fixture
 def harness(monkeypatch):
+    monkeypatch.setenv('CONVERSATION_MERGE_BEFORE_PROCESSING', 'false')
     calls = []
     row = {'id': 'n', 'status': 'completed', 'source': 'omi', 'discarded': False, **_BOUND}
     monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')

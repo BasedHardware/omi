@@ -4515,6 +4515,7 @@
     "yearlySwitchUnavailable": "現在、お使いのプランでは年払いをご利用いただけません。",
     "yearlySwitchDoneTitle": "年払いに切り替わりました",
     "yearlySwitchDoneBody": "本日{amount}を請求しました。次回更新は{date}です。",
+    "episodePartsCount": "{count, plural, zero{{count} パート} one{{count} パート} two{{count} パート} few{{count} パート} many{{count} パート} other{{count} パート}}",
     "consentShortMessage": "OmiはAIで会話をメモにまとめます。メモはいつでも削除できます。",
     "consentAiProviders": "{providers} で処理されます。"
 }

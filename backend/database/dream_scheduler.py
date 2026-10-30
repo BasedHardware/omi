@@ -197,7 +197,11 @@ def _backlog_owed(uid):
 
 # Payoff ordering (lever B2). Owners overdue this long run first in due order, so
 # reordering can delay an owner by at most this much beyond today's queue.
-PAYOFF_AGING = timedelta(hours=6)
+# Longer than the backlog cycle (about 6 days at 10-29 throughput): a 6 h bound
+# aged every row in a 3,900-owner backlog, so ordering stayed FIFO.
+PAYOFF_AGING = timedelta(days=7)
+# Heavy owners made 582 of 596 applied edits in the 10-29 shadow day.
+PAYOFF_HEAVY_BONUS = 20
 PAYOFF_RANKED = 200
 
 
@@ -224,8 +228,10 @@ def payoff_order(rows, now, *, firestore_client=None):
         if now - due >= PAYOFF_AGING:
             return (0, 0.0, due)
         state = states.get(uid, {})
-        payoff = min(50, max(0, int(state.get('score', 0) or 0))) + 5 * min(
-            10, max(0, int(state.get('last_yield', 0) or 0))
+        payoff = (
+            min(50, max(0, int(state.get('score', 0) or 0)))
+            + 5 * min(10, max(0, int(state.get('last_yield', 0) or 0)))
+            + (PAYOFF_HEAVY_BONUS if state.get('size_bucket') == 'heavy' else 0)
         )
         return (1, -float(payoff), due)
 

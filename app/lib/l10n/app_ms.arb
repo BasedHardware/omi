@@ -4515,6 +4515,7 @@
     "yearlySwitchUnavailable": "Pengebilan tahunan tidak tersedia untuk pelan anda sekarang.",
     "yearlySwitchDoneTitle": "Anda kini membayar tahunan",
     "yearlySwitchDoneBody": "{amount} dicaj hari ini. Diperbaharui pada {date}.",
+    "episodePartsCount": "{count, plural, zero{{count} bahagian} one{{count} bahagian} two{{count} bahagian} few{{count} bahagian} many{{count} bahagian} other{{count} bahagian}}",
     "consentShortMessage": "Omi menggunakan AI untuk menukar perbualan anda kepada nota. Anda boleh memadamkannya bila-bila masa.",
     "consentAiProviders": "Diproses dengan {providers}."
 }

@@ -14991,6 +14991,21 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
+  String episodePartsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rész',
+      many: '$count rész',
+      few: '$count rész',
+      two: '$count rész',
+      one: '$count rész',
+      zero: '$count rész',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get consentShortMessage =>
       'Az Omi mesterséges intelligenciával jegyzetekké alakítja a beszélgetéseidet. Bármikor törölheted őket.';
 

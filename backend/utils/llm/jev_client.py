@@ -16,6 +16,7 @@ answer" and keep their existing safe default. Nothing here raises.
 
 from __future__ import annotations
 from utils.generated_compute import current_generated_compute_allowed
+from utils.sync.repeat_work_metrics import record_llm_call
 
 import logging
 import math
@@ -116,10 +117,15 @@ def ask_jev(
             try:
                 raw = _post_once(body, lane=lane, timeout_seconds=timeout_seconds)
             except _AttemptFailed as exc:
+                record_llm_call('failed', f'jev_{lane}', direct=True)
                 outcome = exc.outcome
                 if exc.retryable and attempt < attempts:
                     continue
                 return None
+            except Exception:
+                record_llm_call('failed', f'jev_{lane}', direct=True)
+                raise
+            record_llm_call('completed', f'jev_{lane}', direct=True)
             answers = _validated_answers(raw, questions, expected_model=expected_model)
             if answers is None:
                 outcome = 'malformed'
