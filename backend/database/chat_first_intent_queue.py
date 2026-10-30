@@ -5,7 +5,8 @@ Kept out of ``chat_first_intents.py`` so that 1,500-line file does not grow.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Iterable, List, Sequence, TypeVar
+from collections.abc import Sequence
+from typing import Any, Callable, Iterable, List, TypeVar
 
 from database.durable_queue import ProcessOutcome, drain_isolated, ready_sort_key
 

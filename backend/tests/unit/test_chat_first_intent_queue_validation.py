@@ -24,6 +24,10 @@ def test_sort_ready_intents_rejects_non_sequence_intents():
     with pytest.raises(TypeError, match="intents must be a sequence"):
         sort_ready_intents(12345, priority_of=lambda x: 1)  # type: ignore[arg-type]
 
+    # Generators are iterables but not sequences; must raise TypeError
+    with pytest.raises(TypeError, match="intents must be a sequence"):
+        sort_ready_intents((x for x in [1, 2, 3]), priority_of=lambda x: 1)  # type: ignore[arg-type]
+
 
 def test_drain_intent_batch_rejects_non_callable_process_one():
     """drain_intent_batch must fail fast with TypeError if process_one is not callable."""
