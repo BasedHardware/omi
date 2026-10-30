@@ -9,6 +9,10 @@ def entries():
     namespaces = ['batch_pipeline_prod', 'batch_pipeline_dev']
     return (
         DriverEntry(
+            'utils.batch_pipeline.record_seal_sweeper.discover_pending',
+            domains={'namespace': namespaces},
+        ),
+        DriverEntry(
             'database.batch_pipeline_store.ready_for_capacity',
             domains={'namespace': namespaces, 'priority': [0, 1, 2]},
             neutrals={'now': (1.0, 'availability cutoff only')},

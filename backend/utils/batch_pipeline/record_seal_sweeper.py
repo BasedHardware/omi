@@ -37,12 +37,12 @@ def read_pusher_pod_proof():
     return parse_pusher_pod_proof(payload, captured_at)
 
 
-def discover_pending(store):
+def discover_pending(client, namespace):
     """Reuse the drainer's state/available_at index, with a hard read bound."""
     from google.cloud.firestore_v1 import FieldFilter
 
     query = (
-        store.client.collection(f'{store.namespace}_jobs')
+        client.collection(f'{namespace}_jobs')
         .where(filter=FieldFilter('state', '==', 'record_pending'))
         .order_by('available_at')
         .limit(DISCOVERY_LIMIT)
@@ -81,7 +81,7 @@ def sweep(
             raise ValueError('invalid sweep mode')
         proof = inventory()
         _fresh(proof)
-        job_ids = discover(store)
+        job_ids = discover(store.client, store.namespace)
         if (
             not isinstance(job_ids, list)
             or len(job_ids) > DISCOVERY_LIMIT

@@ -30,7 +30,7 @@ def proof(monkeypatch):
 
 def run(source, proof):
     store, _, artifacts = source
-    return sweeper.sweep(store, object(), artifacts, inventory=lambda: proof, discover=lambda _: ['pending'])
+    return sweeper.sweep(store, object(), artifacts, inventory=lambda: proof, discover=lambda *_: ['pending'])
 
 
 @pytest.mark.parametrize(
@@ -124,13 +124,13 @@ def test_discovery_and_seal_caps_are_hard(proof, monkeypatch):
     job = {'state': 'record_pending', 'owner_id': 'synthetic', 'conversation_id': 'record'}
     row = {'record_upload_sessions': {'token': {'pod': 'old', 'process_started_at': 900}}}
     tx = SimpleNamespace(get=lambda table, _: job if table == 'jobs' else row)
-    store = SimpleNamespace(run=lambda body: body(tx))
+    store = SimpleNamespace(run=lambda body: body(tx), client=object(), namespace='batch_pipeline_prod')
     plan = Mock(return_value={'entries': [], 'plan_sha256': 'digest'})
     apply = Mock(return_value={'sealed': 64})
     monkeypatch.setattr(repair, 'plan_seals', plan)
     monkeypatch.setattr(repair, 'apply_seals', apply)
     report = sweeper.sweep(
-        store, object(), object(), inventory=proof, discover=lambda _: [f'job-{n}' for n in range(128)]
+        store, object(), object(), inventory=proof, discover=lambda *_: [f'job-{n}' for n in range(128)]
     )
     assert report['discovered'] == report['backlog'] == 128
     assert report['discovery_saturated'] is True
@@ -138,7 +138,7 @@ def test_discovery_and_seal_caps_are_hard(proof, monkeypatch):
     assert len(plan.call_args.args[1]) == 64
     assert plan.call_args.kwargs['producer_proof']['resource_version'] == '1'
     report = sweeper.sweep(
-        store, object(), object(), inventory=proof, discover=lambda _: [f'job-{n}' for n in range(129)]
+        store, object(), object(), inventory=proof, discover=lambda *_: [f'job-{n}' for n in range(129)]
     )
     assert report['outcome'] == 'error'
     assert plan.call_count == apply.call_count == 1
@@ -151,7 +151,7 @@ def test_discovery_query_is_bounded_and_uses_existing_index():
     store = SimpleNamespace(
         client=SimpleNamespace(collection=Mock(return_value=query)), namespace='batch_pipeline_prod'
     )
-    assert sweeper.discover_pending(store) == ['pending']
+    assert sweeper.discover_pending(store.client, store.namespace) == ['pending']
     store.client.collection.assert_called_once_with('batch_pipeline_prod_jobs')
     query.limit.assert_called_once_with(128)
     query.order_by.assert_called_once_with('available_at')
@@ -204,7 +204,9 @@ def test_plan_mode_runs_full_proof_without_writes(source, proof, monkeypatch):
     source[1].rows[PATH]['record_upload_sessions'] = {'token': {'pod': 'old', 'process_started_at': 900}}
     apply = Mock()
     monkeypatch.setattr(repair, 'apply_seals', apply)
-    report = sweeper.sweep(source[0], object(), source[2], inventory=proof, discover=lambda _: ['pending'], mode='plan')
+    report = sweeper.sweep(
+        source[0], object(), source[2], inventory=proof, discover=lambda *_: ['pending'], mode='plan'
+    )
     assert report['outcome'] == 'ok' and report['mode'] == 'plan'
     assert report['dispositions'] == {'eligible': 1}
     apply.assert_not_called()
