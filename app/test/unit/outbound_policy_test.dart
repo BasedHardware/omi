@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -371,12 +373,51 @@ void main() {
     });
     setUp(messaging.clear);
 
-    test('a token refresh is not uploaded against a backend that is not Omi\'s', () async {
-      OutboundPolicy.debugThirdPartyServicesAllowed = false;
+    group('a token refresh', () {
+      // The upload path starts by reading the device timezone, so a call here means the refreshed
+      // token was on its way to the backend and Intercom.
+      final timezoneLookups = <String>[];
 
-      await createNotificationService().saveFcmToken('refreshed');
+      setUp(() {
+        timezoneLookups.clear();
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+          const MethodChannel('flutter_timezone'),
+          (call) async {
+            timezoneLookups.add(call.method);
+            return 'Europe/Berlin';
+          },
+        );
+      });
+      tearDown(() {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+          const MethodChannel('flutter_timezone'),
+          null,
+        );
+      });
 
-      expect(messaging, isEmpty);
+      test('stops before the upload against a backend that is not Omi\'s', () async {
+        OutboundPolicy.debugThirdPartyServicesAllowed = false;
+
+        await createNotificationService().saveFcmToken('refreshed');
+
+        expect(timezoneLookups, isEmpty);
+      });
+
+      test("goes on to the upload against Omi's backend", () async {
+        // Past the timezone lookup the upload needs FirebaseAuth, which this host test lacks; its
+        // errors, including a late one from the plugin's listener, are contained here.
+        final done = Completer<void>();
+        runZonedGuarded(() async {
+          try {
+            await createNotificationService().saveFcmToken('refreshed');
+          } finally {
+            done.complete();
+          }
+        }, (_, __) {});
+        await done.future;
+
+        expect(timezoneLookups, ['getLocalTimezone']);
+      });
     });
 
     test('no push token is requested against a backend that is not Omi\'s', () async {
