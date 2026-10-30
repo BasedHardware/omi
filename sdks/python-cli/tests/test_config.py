@@ -950,3 +950,32 @@ def test_config_set_rejects_empty_or_whitespace_local_token(config_path: Path, c
     assert "Invalid value for 'local_token'" in result.output
     config = cfg.load()
     assert config.get_profile("default").local_token is None
+
+
+@pytest.mark.parametrize("blank", ["", "   ", "\t"])
+def test_profile_use_rejects_blank_name(config_path: Path, cli_runner, blank: str) -> None:
+    result = cli_runner.invoke(app, ["config", "profile", "use", blank])
+    assert result.exit_code == 1
+    assert blank not in cfg.load().profiles
+
+
+def test_profile_use_strips_surrounding_whitespace(config_path: Path, cli_runner) -> None:
+    result = cli_runner.invoke(app, ["config", "profile", "use", "  work  "])
+    assert result.exit_code == 0, result.output
+    assert cfg.load().active_profile == "work"
+    assert "work" in cfg.load().profiles
+    assert "  work  " not in cfg.load().profiles
+
+
+@pytest.mark.parametrize("blank", ["", "   "])
+def test_profile_delete_rejects_blank_name(config_path: Path, cli_runner, blank: str) -> None:
+    result = cli_runner.invoke(app, ["config", "profile", "delete", blank, "--yes"])
+    assert result.exit_code == 1
+
+
+def test_profile_delete_strips_surrounding_whitespace(config_path: Path, cli_runner) -> None:
+    use_result = cli_runner.invoke(app, ["config", "profile", "use", "work"])
+    assert use_result.exit_code == 0, use_result.output
+    delete_result = cli_runner.invoke(app, ["config", "profile", "delete", "  work  ", "--yes"])
+    assert delete_result.exit_code == 0, delete_result.output
+    assert "work" not in cfg.load().profiles
