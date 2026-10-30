@@ -587,6 +587,7 @@ and an explicit empty literal renders as `''`.
 | `PUBLIC_SHARED_CONVERSATION_CHAT_MODE` | Enable chat on public shared conversations | backend | env | closed | declared (gke/backend-listen); gateway (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill) | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | gateway (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill); off (backend-listen (chart), gke/backend-listen) | — | keep | keep | — | dazheng |
 | `RATE_LIMIT_SHADOW_MODE` | Shadow backend rate limits | backend | env | closed | — | — | — | — | keep | keep | — | unowned |
 | `RECORD_BARRIER_INLINE_FINISH` | Default on; finish pusher record custody inline after durable tail and existing projection drain, bounded to 20 seconds | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
+| `RECORD_SEAL_SWEEPER_ENABLED` | Default on; bounded in-cluster proof and repair of dead record producers | backend | env | open | — | — | — | — | keep | keep | — | two-lane lead |
 | `SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED` | Fallback to keyword search for screen activity | backend | env | open | — | — | — | — | keep | keep | — | unowned |
 | `SCREEN_TASK_STOP` | Stop screen-task gate and flagged extraction admission; default false; clients poll every 30 seconds with a 55-second lease | backend | env | inverted | — | — | — | — | keep | keep | — | dazheng |
 | `SERVER_BATCH_ONLY_ENABLED` | Default on; consented supported-language platform sessions reserve durable batch ownership and open no managed live STT | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -707,6 +708,7 @@ and an explicit empty literal renders as `''`.
 | `PARAKEET_INFERENCE_MODE` | Choose Parakeet transcription inference backend | backend | env | closed | — | nemo (parakeet (chart)) | nemo (parakeet (chart)) | — | keep | keep | — | unowned |
 | `PARAKEET_USE_V2` | Select Parakeet prerecorded v2 pipeline | backend | env | open | — | — | — | — | keep | keep | — | unowned |
 | `RECORDING_SESSION_MODE` | Select recording session migration mode | backend | env | closed | — | — | — | — | keep | keep | — | unowned |
+| `RECORD_SEAL_SWEEPER_MODE` | plan or apply; default apply, plan performs proofs without writes | backend | env | closed | — | — | — | — | keep | keep | — | two-lane lead |
 | `REPEAT_WORK_LLM_VERSION` | Explicit model/prompt deployment version for exact-input reuse; bump with gateway model or schema config trains | backend | env | closed | {value: '2026-10-16-v1', category: rollout} | 2026-10-16-v1 (backend-listen (chart), pusher (chart)); {value: '2026-10-16-v1', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | 2026-10-16-v1 (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, pusher (chart)); {value: '2026-10-16-v1', category: rollout} (gke/backend-listen, gke/pusher) | — | keep | keep | — | dazheng |
 | `SCREEN_TASK_JEV_AUDIT_RATE` | Screen gate reject audit fraction, default 0.01 | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `SCREEN_TASK_JEV_THRESHOLD` | Screen gate threshold, default 0.5 | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -1095,6 +1097,8 @@ their code default (`fail` tells you which way a missing value resolves).
 - `RATE_LIMIT_SHADOW_MODE` — Shadow backend rate limits (fail: closed)
 - `RECORDING_SESSION_MODE` — Select recording session migration mode (fail: closed)
 - `RECORD_BARRIER_INLINE_FINISH` — Default on; finish pusher record custody inline after durable tail and existing projection drain, bounded to 20 seconds (fail: open)
+- `RECORD_SEAL_SWEEPER_ENABLED` — Default on; bounded in-cluster proof and repair of dead record producers (fail: open)
+- `RECORD_SEAL_SWEEPER_MODE` — plan or apply; default apply, plan performs proofs without writes (fail: closed)
 - `SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED` — Fallback to keyword search for screen activity (fail: open)
 - `SCREEN_TASK_JEV_AUDIT_RATE` — Screen gate reject audit fraction, default 0.01 (fail: open)
 - `SCREEN_TASK_JEV_THRESHOLD` — Screen gate threshold, default 0.5 (fail: open)

@@ -15,6 +15,9 @@ def render(*arguments, namespace='synthetic'):
     helm = shutil.which('helm')
     if helm is None:
         pytest.skip('Helm unavailable; render check runs on the packaging host')
+    # Production sweeps require their real namespace even in offline templates.
+    if namespace == 'synthetic' and any('prod_omi_' in arg for arg in arguments):
+        namespace = 'prod-omi-backend'
     return subprocess.run(
         [helm, 'template', 'synthetic-worker', str(CHART), '--namespace', namespace, *arguments],
         capture_output=True,
