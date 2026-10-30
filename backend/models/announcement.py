@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, List, Mapping, Optional, TypeVar, cast
 
-from pydantic import BaseModel, ValidationError, field_validator
+from pydantic import BaseModel, ValidationError, field_validator, model_validator
 
 
 def _ensure_utc(value: Optional[datetime]) -> Optional[datetime]:
@@ -73,6 +73,12 @@ class Display(BaseModel):
     @classmethod
     def _normalize_display_datetimes(cls, v: Optional[datetime]) -> Optional[datetime]:
         return _ensure_utc(v)
+
+    @model_validator(mode="after")
+    def validate_bounds(self):
+        if self.start_at is not None and self.expires_at is not None and self.start_at > self.expires_at:
+            raise ValueError("display start_at must not exceed expires_at")
+        return self
 
     def to_dict(self) -> dict[str, Any]:
         return {
