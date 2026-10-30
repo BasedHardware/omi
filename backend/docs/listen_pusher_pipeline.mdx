@@ -2468,6 +2468,33 @@ heartbeat and speaker-sample request follow the same identity rule as the
 flush and receive paths) and never tears down the freshly installed
 connection.
 
+The same lifecycle rule now covers the pusher side of the cut. Two changes,
+one root cause: sessions used to sit idle until uvicorn's graceful-shutdown
+budget (`--timeout-graceful-shutdown 60`, inside the chart's
+`terminationGracePeriodSeconds: 120`) expired and hard-cancelled them as
+ASGI tracebacks (`Exception in ASGI application` ending in
+`CancelledError: Task cancelled, timeout graceful shutdown exceeded`, plus a
+logged `Error closing WebSocket` attempt on the transport shutdown had
+already failed — pusher 2026-10-29: 176 such lines, all in deploy hours;
+backend-listen zero, its teardown fits the budget). First, every accepted
+session now registers a drain waiter with `ReadinessGate`; when the preStop
+hook flips the gate, the session gets `PUSHER_DRAIN_WIND_DOWN_SECONDS` (25s)
+to finish its queue timers and in-flight uploads, then ends with a real
+1001 Going Away close frame — journey outcome `success`, not a fault — about
+a minute before the platform cut would have hit. Second, the hard-cancel
+path is kept as a classified backstop: a `CancelledError` observed while
+DRAINING (or within `PUSHER_TEARDOWN_CANCEL_GRACE_SECONDS`, 30s, of the
+flip, so a restart that bypassed the drain hook still classifies) is
+absorbed at the handler boundary as one INFO line with journey outcome
+`cancelled` and close code 1006 (the interrupted-session meaning; 1001 would
+reclassify the cut as a completed session). A cancel observed while serving
+has no platform owner and still propagates as the 1006 fault, non-cancel
+teardown faults (ordinary exceptions) keep the loud `1011` path, and a
+wind-down watcher that dies before the drain flip reports as the crash it is
+rather than ending the session benignly
+(`FC-lifecycle-close-classified-by-transport-phase`).
+
+
 ## 4. Speaker ID Lifecycle (2-Session Flow)
 
 A manually taught voice is available after a usable embedding is stored and

@@ -13,8 +13,10 @@ connectionDraining and reconnect through backend-listen. Never treat drain as
 sub-second or zero-session-impact.
 """
 
+import asyncio
 import threading
 import time
+import weakref
 
 _STATE_SERVING = 'SERVING'
 _STATE_DRAINING = 'DRAINING'
@@ -34,6 +36,12 @@ class _ReadinessGate:
         self._lock = threading.Lock()
         self._state = _STATE_SERVING
         self._drain_started_monotonic: float | None = None
+        # In-process waiters that want to observe the SERVING -> DRAINING flip
+        # (the per-session wind-down watcher in routers/pusher.py). WeakSet:
+        # a session that ends — and forgets to unsubscribe because its owner
+        # task was hard-cancelled — must not pin its Event forever, and a
+        # dead waiter must never break begin_drain.
+        self._drain_listeners: 'weakref.WeakSet[asyncio.Event]' = weakref.WeakSet()
 
     def is_serving(self) -> bool:
         with self._lock:
@@ -44,16 +52,48 @@ class _ReadinessGate:
 
         Idempotent: a no-op (not an error) when already draining, so the preStop
         drain hook and the lifespan shutdown path can both call it. Records
-        ``drain_started_monotonic`` exactly once.
+        ``drain_started_monotonic`` exactly once. Wake listeners outside the
+        lock; ``Event.set`` is synchronous, so this is safe from any thread
+        that is not concurrently mutating the waiter's loop — in production
+        both the preStop HTTP handler and the lifespan shutdown run on the
+        serving loop.
         """
         with self._lock:
             if self._state == _STATE_DRAINING:
                 return
             self._state = _STATE_DRAINING
             self._drain_started_monotonic = time.monotonic()
+            listeners = list(self._drain_listeners)
         # Emit the gauge flip outside the lock. prometheus_client is internally
         # thread-safe; the lazy import keeps this module dependency-free at import.
         self._export_drain_gauges()
+        for event in listeners:
+            event.set()
+
+    def drain_wait_event(self) -> asyncio.Event:
+        """Return an Event that is set when the gate flips to DRAINING.
+
+        The event is returned pre-set when the gate is already draining, so a
+        late subscriber observes the flip instead of waiting forever. The
+        caller owns unsubscription via :meth:`remove_drain_wait_event`; a
+        dropped reference also stops participating (WeakSet), so a
+        hard-cancelled owner can never leak a permanent waiter.
+        """
+
+        event = asyncio.Event()
+        with self._lock:
+            already_draining = self._state == _STATE_DRAINING
+            if not already_draining:
+                self._drain_listeners.add(event)
+        if already_draining:
+            event.set()
+        return event
+
+    def remove_drain_wait_event(self, event: asyncio.Event) -> None:
+        """Unsubscribe a :meth:`drain_wait_event` waiter (idempotent)."""
+
+        with self._lock:
+            self._drain_listeners.discard(event)
 
     def drain_age_seconds(self) -> float | None:
         """Seconds since drain began (monotonic), or ``None`` while still serving."""
@@ -67,6 +107,7 @@ class _ReadinessGate:
         with self._lock:
             self._state = _STATE_SERVING
             self._drain_started_monotonic = None
+            self._drain_listeners.clear()
         self._export_serving_gauges()
 
     @staticmethod

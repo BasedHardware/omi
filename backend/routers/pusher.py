@@ -123,6 +123,75 @@ WS_RECEIVE_TIMEOUT = 300.0  # seconds
 # blocking cleanup indefinitely.
 BG_DRAIN_TIMEOUT = 30.0  # seconds
 
+# Pod-teardown classification window. Uvicorn's graceful-shutdown budget
+# (--timeout-graceful-shutdown 60, inside the chart's
+# terminationGracePeriodSeconds 120) hard-cancels every still-draining
+# connection task when it expires, and the cancel surfaces wherever the
+# handler happens to be awaiting. A cancel observed after ReadinessGate
+# flipped to DRAINING is that platform churn — the same expected teardown the
+# LB's connection-draining already represents to the client — so it stays
+# inside this window-classified boundary instead of escaping the ASGI app as
+# an application traceback. Window (not a bare is-draining check) so a cancel
+# observed within seconds of the flip still classifies as teardown even if a
+# manual restart bypassed the drain hook.
+PUSHER_TEARDOWN_CANCEL_GRACE_SECONDS = 30.0
+
+# When the pod drain begins (preStop hook), in-flight sessions get this long
+# to wind down on their own — flush queues, land in-flight uploads — before
+# the watcher closes them with 1001 Going Away. Sized to stay inside
+# uvicorn's graceful budget with room for the bg-drain tail, so an orderly
+# close almost always precedes the hard-cancel path: sessions end with a
+# real close frame ~a minute earlier than the platform cut, and the
+# teardown-cancel boundary becomes the backstop rather than the mechanism.
+PUSHER_DRAIN_WIND_DOWN_SECONDS = 25.0
+
+
+def _teardown_cancel_observed() -> bool:
+    """True when a CancelledError is pod teardown, not an application fault.
+
+    Uvicorn's graceful-shutdown budget hard-cancels connection tasks that are
+    still draining when it expires; the cancel then surfaces at whatever await
+    the handler is parked on. While the process is draining (or was, within
+    ``PUSHER_TEARDOWN_CANCEL_GRACE_SECONDS``), that cancel is expected
+    platform churn — the client side already treats it as replayable transport
+    churn — so it classifies as teardown. While serving, a cancel has no
+    platform owner in this handler (supervise/drain only cancel tasks they
+    then await, and a serving process is not being torn down), so it stays a
+    fault.
+    """
+
+    if ReadinessGate.is_serving():
+        return False
+    drain_age = ReadinessGate.drain_age_seconds()
+    if drain_age is None:
+        return True
+    return drain_age <= PUSHER_TEARDOWN_CANCEL_GRACE_SECONDS
+
+
+async def _close_websocket_best_effort(websocket: WebSocket, code: int, uid: str) -> None:
+    """Send the terminal close frame, best-effort.
+
+    A close fault must never reclassify the session outcome or escape the
+    ASGI app: non-cancel errors are logged and absorbed (prior behavior), and
+    a cancel surfacing on the terminal send — uvicorn's hard cancel arriving
+    while the close frame is in flight — is absorbed only inside the teardown
+    window, where uvicorn's own shutdown already failed the transport and no
+    close frame can be delivered. While serving, a cancel during the close
+    has no platform owner and propagates.
+    """
+
+    if websocket.client_state != WebSocketState.CONNECTED:
+        return
+    try:
+        await websocket.close(code=code)
+    except asyncio.CancelledError:
+        if _teardown_cancel_observed():
+            logger.info('Terminal close skipped: transport already lost to pod teardown uid=%s', uid)
+            return
+        raise
+    except Exception as e:
+        logger.error(f"Error closing WebSocket: {e}")
+
 
 async def _dispatch_transcript_item(
     uid: str, segments: List[Dict[str, Any]], memory_id: Optional[str], client_kind: ClientKind = 'unknown'
@@ -193,6 +262,13 @@ async def _websocket_util_trigger(
     shutdown_event = asyncio.Event()
     websocket_close_code = 1000
     application_failed = False
+    # Set by the wind-down watcher when the pod drain ends this session
+    # itself; guards the close-code and crash classification below.
+    drain_winddown_triggered = False
+    # Fires when ReadinessGate flips SERVING -> DRAINING (the preStop hook).
+    # The watcher turns that flip into an orderly close instead of letting
+    # sessions linger until uvicorn's hard cancel.
+    drain_started_event = ReadinessGate.drain_wait_event()
 
     try:
         # audio bytes
@@ -206,6 +282,14 @@ async def _websocket_util_trigger(
             else None
         )
     except asyncio.CancelledError:
+        if _teardown_cancel_observed():
+            # Same pod-teardown boundary as the supervised section: a cancel
+            # during session admission (the profile reads above) during drain
+            # is platform churn, absorbed before it can escape the ASGI app.
+            logger.info('WebSocket session admission cancelled by pod teardown uid=%s', uid)
+            journey_attempt.finish('cancelled')
+            await _close_websocket_best_effort(websocket, 1006, uid)
+            return
         journey_attempt.finish('cancelled')
         raise
     except Exception:
@@ -596,6 +680,30 @@ async def _websocket_util_trigger(
                     logger.error(f"Error processing audio bytes: {e} {uid}")
                 finally:
                     audio_budget.release(len(item['data']))
+
+    async def wind_down_on_pod_drain() -> None:
+        """End this session when the pod starts draining.
+
+        The session is accepted while serving; if the pod is told to drain
+        (preStop hook or lifespan shutdown), waiting sessions would otherwise
+        sit idle until uvicorn's graceful-shutdown budget expires and its hard
+        cancel tears them down as ASGI tracebacks. Instead: give the session a
+        short wind-down window (queues drain on their usual timers, in-flight
+        uploads land), then close the socket with 1001 Going Away — the same
+        code new connections are rejected with during drain. A session that
+        starts while the gate is already draining cannot happen (admission
+        rejects those); a pre-set event just winds down immediately, which
+        stays correct.
+        """
+
+        nonlocal websocket_close_code
+        nonlocal drain_winddown_triggered
+
+        await drain_started_event.wait()
+        logger.info('Pod drain began; winding down WebSocket session uid=%s', uid)
+        await asyncio.sleep(PUSHER_DRAIN_WIND_DOWN_SECONDS)
+        drain_winddown_triggered = True
+        websocket_close_code = 1001
 
     async def receive_tasks() -> None:
         nonlocal websocket_active
@@ -993,9 +1101,11 @@ async def _websocket_util_trigger(
             audio_bytes_event.set()
 
     bg_main_tasks: List[asyncio.Task[Any]] = []
+    wind_down_task: Optional[asyncio.Task[Any]] = None
     try:
         PUSHER_ACTIVE_WS_CONNECTIONS.inc()
         receive_task = create_named_task(receive_tasks(), name=f"ws:{uid}:receive")
+        wind_down_task = create_named_task(wind_down_on_pod_drain(), name=f"ws:{uid}:drain_winddown")
         bg_main_tasks = [
             create_named_task(process_speaker_sample_queue(), name=f"ws:{uid}:speaker_samples"),
             create_named_task(process_private_cloud_queue(), name=f"ws:{uid}:private_cloud"),
@@ -1005,14 +1115,21 @@ async def _websocket_util_trigger(
 
         exit_result = await supervise_tasks(
             receive_task=receive_task,
-            bg_tasks=bg_main_tasks,
+            bg_tasks=[*bg_main_tasks, wind_down_task],
             finite_tasks=None,
             label="pusher",
         )
         logger.info(f"Supervisor exited: reason={exit_result.reason} task={exit_result.task_name} {uid}")
-        if exit_result.reason in {'crash', 'lifetime_done'}:
+        if exit_result.task_name == wind_down_task.get_name() and drain_winddown_triggered:
+            # The drain wind-down ended the session: close code already 1001
+            # (Going Away, the same code draining pods reject new sessions
+            # with); not an application fault and not a client disconnect.
+            websocket_active = False
+        elif exit_result.reason in {'crash', 'lifetime_done'}:
             # A background worker dying or unexpectedly returning ends an accepted
             # session abnormally even though the socket itself has no close frame.
+            # (A wind-down watcher that died before the drain flip lands here
+            # too: a broken watcher must not downgrade a session to benign.)
             websocket_close_code = 1011
             application_failed = True
 
@@ -1033,6 +1150,23 @@ async def _websocket_util_trigger(
         await drain_tasks(bg_main_tasks, timeout=BG_DRAIN_TIMEOUT, label="pusher_bg", cancel=False)
 
     except asyncio.CancelledError:
+        # Pod teardown hard-cancel (uvicorn graceful-shutdown expiry): a cancel
+        # the platform owns. Absorb it here — one INFO line, journey outcome
+        # 'cancelled' (close code stays 1006, so the terminal SLI keeps its
+        # interrupted-session meaning; 1001 would reclassify the cut as a
+        # completed session) — instead of letting it escape the app where
+        # uvicorn logs a full ERROR traceback per drained connection and
+        # attempts a terminal close on a transport shutdown already failed.
+        # A cancel observed while the process is still serving has no platform
+        # owner in this handler and stays a fault (1006 re-raise).
+        if _teardown_cancel_observed():
+            websocket_close_code = 1006
+            logger.info(
+                'WebSocket session ended by pod teardown cancel (drain window %.0fs) uid=%s',
+                PUSHER_TEARDOWN_CANCEL_GRACE_SECONDS,
+                uid,
+            )
+            return
         websocket_close_code = 1006
         raise
     except Exception as e:
@@ -1043,18 +1177,17 @@ async def _websocket_util_trigger(
         shutdown_event.set()
         websocket_active = False
 
-        all_to_cancel = [t for t in bg_main_tasks if not t.done()]
+        all_to_cancel = [t for t in [*bg_main_tasks, wind_down_task] if t is not None and not t.done()]
         await drain_tasks(all_to_cancel, timeout=5.0, label="pusher_cleanup", cancel=True)
 
         PUSHER_ACTIVE_WS_CONNECTIONS.dec()
 
         journey_attempt.finish(pusher_session_outcome(websocket_close_code, application_failed=application_failed))
 
-        if websocket.client_state == WebSocketState.CONNECTED:
-            try:
-                await websocket.close(code=websocket_close_code)
-            except Exception as e:
-                logger.error(f"Error closing WebSocket: {e}")
+        if not drain_winddown_triggered:
+            ReadinessGate.remove_drain_wait_event(drain_started_event)
+
+        await _close_websocket_best_effort(websocket, websocket_close_code, uid)
 
 
 @router.websocket("/v1/trigger/listen")
