@@ -34,6 +34,8 @@
 * [`conversations_markdown.pt.md`](conversations_markdown.pt.md) — exportar conversas do Omi para Markdown (Portuguese recipe).
 * [`conversations_csv.md`](conversations_csv.md) — convert a conversation-list
   JSON export to CSV for spreadsheets.
+* [`conversations_jsonl.md`](conversations_jsonl.md) — convert conversation
+  exports to line-delimited JSON (JSONL) for vector DBs and LLM fine-tuning.
 * [`conversations_csv.es.md`](conversations_csv.es.md) — convertir una
   exportación de conversaciones a CSV en español.
 * [`conversations_digest.md`](conversations_digest.md) — summarise conversation-list
