@@ -25,6 +25,42 @@ Episode episode({bool live = false, List<ServerConversation> members = const []}
     );
 
 void main() {
+  for (final live in [false, true]) {
+    test('processing owns one episode slot with live=$live, even before retained metadata arrives', () {
+      final a = conversation('a');
+      final b = conversation('b');
+      final e = episode(live: live);
+      final rows =
+          buildHomeRows([conversation('later', hours: 4), a], [e], enabled: true, processingConversations: [a, b]);
+      expect(rows.map((r) => r.conversation.id), ['later', 'episode:e']);
+      expect(rows.last.isProcessing, isTrue);
+      expect(rows.last.startedAt, e.startedAt);
+      expect(rows.last.episodeConversationIds, {'a', 'b'});
+      expect(buildHomeRows([], [e], enabled: true, processingConversations: [b]).single.isProcessing, isTrue);
+    });
+  }
+  test('deleted pending member cannot hold a retained episode in processing', () {
+    final a = conversation('a');
+    final b = conversation('b');
+    final rows = buildHomeRows(
+        [a],
+        [
+          episode(members: [a, b])
+        ],
+        enabled: true,
+        deletedIds: {'b'},
+        processingConversations: [b]);
+    expect(rows.single.conversation, same(a));
+    expect(rows.single.isProcessing, isFalse);
+  });
+  test('episodes off leaves processing outside the episode projection', () {
+    final a = conversation('a');
+    final rows = buildHomeRows([a], [episode()], enabled: false, processingConversations: [conversation('b')]);
+    expect(rows.single.conversation, same(a));
+    expect(rows.single.isProcessing, isFalse);
+    expect(rows.single.episodeConversationIds, isEmpty);
+  });
+
   test('multiple retained members become one episode row, without mutation', () {
     final a = conversation('a');
     final b = conversation('b', hours: 2);
