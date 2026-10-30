@@ -3,6 +3,7 @@
 from copy import deepcopy
 import importlib.util
 import json
+import logging
 from pathlib import Path
 import signal
 import time
@@ -141,6 +142,26 @@ def test_phase_logs_are_content_free_and_keep_one_final_summary(source, proof, m
     )
 
 
+def test_emitting_aggregate_never_enables_concurrent_dependency_diagnostics(monkeypatch, capsys):
+    path = Path(__file__).resolve().parents[2] / 'scripts/record_seal_sweep.py'
+    spec = importlib.util.spec_from_file_location('sweep_logging_window', path)
+    cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cli)
+    logger = logging.getLogger('record-seal-sweeper')
+    original = logger.handle
+
+    def concurrent(record):
+        logging.getLogger('synthetic-sdk').error('private-owner/private-job user@example.invalid')
+        original(record)
+
+    monkeypatch.setattr(logger, 'handle', concurrent)
+    cli.emit_progress({'event': 'record_seal_sweep_phase', 'phase': 'inventory', 'elapsed_ms': 0})
+    assert logging.root.manager.disable == logging.CRITICAL
+    captured = capsys.readouterr()
+    assert len(captured.out.splitlines()) == 1 and captured.err == ''
+    assert 'private-owner' not in captured.out and 'example.invalid' not in captured.out
+
+
 def test_plain_reads_use_no_transactions_and_bound_each_rpc():
     ref = Mock()
     ref.get.return_value.to_dict.return_value = {'state': 'record_pending'}
@@ -155,7 +176,9 @@ def test_plain_reads_use_no_transactions_and_bound_each_rpc():
     client.transaction.assert_not_called()
 
 
-def test_runtime_composition_uses_plain_reads_and_only_transacts_the_seal(source, proof, monkeypatch):
+def test_runtime_composition_uses_plain_reads_and_keeps_the_seal_transaction(source, proof, monkeypatch):
+    # Artifact authorization is the shared mocked fixture; measure the two
+    # classification/planning passes and the unchanged seal transaction here.
     eligible(source)
     original = StrictFirestoreDocument.get
     plain_reads = []

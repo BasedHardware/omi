@@ -21,14 +21,18 @@ except Exception:
     record_seal_sweeper = None
 
 
+def emit(payload, level):
+    # Send only our aggregate record through the configured JSON handler.
+    # Never open a global logging window for concurrent SDK diagnostics.
+    logger = logging.getLogger('record-seal-sweeper')
+    record = logger.makeRecord(
+        logger.name, level, '', 0, json.dumps(payload, sort_keys=True, allow_nan=False), (), None
+    )
+    logger.handle(record)
+
+
 def emit_progress(payload):
-    # Keep all dependency logging suppressed. Only our allowlisted aggregate
-    # payload bypasses the global disable switch; restore it even on log errors.
-    logging.disable(logging.NOTSET)
-    try:
-        logging.getLogger('record-seal-sweeper').info(json.dumps(payload, sort_keys=True, allow_nan=False))
-    finally:
-        logging.disable(logging.CRITICAL)
+    emit(payload, logging.INFO)
 
 
 def main():
@@ -40,11 +44,8 @@ def main():
             report = record_seal_sweeper.run(progress=emit_progress)
     except Exception:
         pass
-    logging.disable(logging.NOTSET)
     failed = report['outcome'] not in {'ok', 'disabled'}
-    logging.getLogger('record-seal-sweeper').log(
-        logging.ERROR if failed else logging.INFO, json.dumps(report, sort_keys=True, allow_nan=False)
-    )
+    emit(report, logging.ERROR if failed else logging.INFO)
     return 1 if failed else 0
 
 
