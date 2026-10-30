@@ -1,0 +1,59 @@
+[
+  {
+    "name": "omi_record_seal_repair_rows",
+    "description": "Singleton row outcomes; disposition is a closed runtime allowlist, never provider text.",
+    "filter": "resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"prod-omi-backend\" AND resource.labels.container_name=\"repair\" AND jsonPayload.event=\"record_seal_repair_row\"",
+    "metricDescriptor": {
+      "metricKind": "DELTA",
+      "valueType": "INT64",
+      "unit": "1",
+      "labels": [
+        {
+          "key": "disposition",
+          "valueType": "STRING",
+          "description": "Closed repair outcome."
+        }
+      ]
+    },
+    "valueExtractor": "EXTRACT(jsonPayload.count)",
+    "labelExtractors": {
+      "disposition": "EXTRACT(jsonPayload.disposition)"
+    }
+  },
+  {
+    "name": "omi_record_seal_repair_seal_age_seconds",
+    "description": "Observed age in seconds, not a complete backlog census.",
+    "filter": "resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"prod-omi-backend\" AND resource.labels.container_name=\"repair\" AND jsonPayload.event=\"record_seal_repair_row\" AND (jsonPayload.disposition=\"sealed\" OR jsonPayload.disposition=\"sealed_registered\")",
+    "metricDescriptor": {
+      "metricKind": "DELTA",
+      "valueType": "DISTRIBUTION",
+      "unit": "s"
+    },
+    "valueExtractor": "EXTRACT(jsonPayload.seal_age_seconds)",
+    "bucketOptions": {
+      "exponentialBuckets": {
+        "numFiniteBuckets": 32,
+        "growthFactor": 2,
+        "scale": 1
+      }
+    }
+  },
+  {
+    "name": "omi_record_seal_repair_oldest_unsealed_seconds",
+    "description": "Observed age in seconds, not a complete backlog census.",
+    "filter": "resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"prod-omi-backend\" AND resource.labels.container_name=\"repair\" AND jsonPayload.event=\"record_seal_repair\" AND jsonPayload.outcome=\"ok\"",
+    "metricDescriptor": {
+      "metricKind": "DELTA",
+      "valueType": "DISTRIBUTION",
+      "unit": "s"
+    },
+    "valueExtractor": "EXTRACT(jsonPayload.oldest_unsealed_seconds)",
+    "bucketOptions": {
+      "exponentialBuckets": {
+        "numFiniteBuckets": 32,
+        "growthFactor": 2,
+        "scale": 1
+      }
+    }
+  }
+]

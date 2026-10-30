@@ -1,0 +1,294 @@
+"""Independent repair coordinator; private row inputs, aggregate outputs only.
+
+Each row uses a disposable process. A stuck SDK/native call cannot consume a
+slot indefinitely or share cloud clients with another row. No private state is
+persisted and no planner/apply semantics are reimplemented here.
+"""
+
+from collections import Counter, deque
+from contextlib import contextmanager
+from datetime import datetime
+import json
+import logging
+import os
+from pathlib import Path
+import subprocess
+import sys
+import time
+
+from config import record_seal_repair as config
+
+MAX_ROWS = 1024
+MAX_SCAN = 10000
+DISPOSITIONS = frozenset(
+    {
+        'eligible',
+        'sealed',
+        'sealed_registered',
+        'already_registered',
+        'already_closed',
+        'not_pending',
+        'not_batch_owned',
+        'upload_failed',
+        'upload_pending',
+        'not_completed',
+        'privacy_refused',
+        'proof_refused',
+        'read_error',
+        'write_error',
+        'state_changed',
+        'unavailable',
+        'budget_exhausted',
+        'error',
+        'unknown',
+        'deferred',
+        'disabled',
+    }
+)
+
+
+@contextmanager
+def silent_dependencies():
+    """Also suppress native SDK output; never store provider errors or inputs."""
+    logging.disable(logging.CRITICAL)
+    sys.stdout.flush()
+    sys.stderr.flush()
+    saved = [os.dup(1), os.dup(2)]
+    try:
+        with open(os.devnull, 'wb') as sink:
+            os.dup2(sink.fileno(), 1)
+            os.dup2(sink.fileno(), 2)
+        yield
+    finally:
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os.dup2(saved[0], 1)
+        os.dup2(saved[1], 2)
+        for fd in saved:
+            os.close(fd)
+
+
+def repair_one(store, storage, artifacts, path, *, flags, inventory, budget, mode='apply'):
+    """Fresh proof for every row, singleton canonical plan and same-digest apply."""
+    from utils.batch_pipeline import record_seal_nojob as nojob, record_seal_repair as repair
+    from utils.batch_pipeline.live import record_identity
+    from utils.batch_pipeline.record_seal_sweeper import _fresh
+
+    budget.check()
+    proof = inventory()
+    _fresh(proof)  # Required even for token-free rows.
+    uid, cid = nojob.conversation_path(path)
+    _, job_id = record_identity(uid, cid)
+    job = store.run(lambda tx: tx.get('jobs', job_id))
+    budget.check()
+    if job:
+        plan = repair.plan_seals(store, [job_id], storage, artifacts, producer_proof=proof, check_budget=budget.check)
+        apply = repair.apply_seals
+    else:
+        plan = nojob.plan_backfill(store, [path], storage, artifacts, server_flags=flags, producer_proof=proof)
+        apply = nojob.apply_backfill
+    budget.check()
+    entries = plan.get('entries', [])
+    if len(entries) != 1:
+        return 'unknown'
+    disposition = entries[0].get('disposition')
+    if disposition != 'eligible' or mode == 'plan':
+        return disposition if disposition in DISPOSITIONS else 'unknown'
+    _fresh(proof)  # Tail downloads can exhaust the five-minute inventory window.
+    budget.check()
+    result = apply(store, plan, plan['plan_sha256'])
+    if sum(result.values()) != 1 or len(result) != 1:
+        return 'unknown'
+    disposition = next(iter(result))
+    return disposition if disposition in DISPOSITIONS else 'unknown'
+
+
+def discover(client, *, budget, max_rows=MAX_ROWS, max_scan=MAX_SCAN):
+    """Page past closed rows; globally oldest finished capture first.
+
+    Both owners use the canonical record identity. Sync rows without a job are
+    refused by the existing no-job planner (which only registers batch_live).
+    Projection excludes transcript/content. Bounds are reported, never treated
+    as an empty-backlog proof.
+    """
+    from google.cloud.firestore_v1 import FieldFilter
+
+    rows, scanned, cursor = [], 0, None
+    while scanned < max_scan and len(rows) < max_rows:
+        budget.check()
+        query = (
+            client.collection_group('conversations')
+            .where(filter=FieldFilter('record_lane_owner', 'in', ['batch_live_v1', 'batch_sync_v1']))
+            .where(filter=FieldFilter('status', '==', 'completed'))
+            .order_by('finished_at')
+            .order_by('__name__')
+            .select(('finished_at', 'record_audio_closed'))
+            .limit(min(128, max_scan - scanned))
+        )
+        if cursor is not None:
+            query = query.start_after(cursor)
+        page = list(query.stream(timeout=budget.timeout(), retry=None))
+        budget.check()
+        if not page:
+            break
+        for doc in page:
+            scanned += 1
+            data = doc.to_dict() or {}
+            finished = data.get('finished_at')
+            if not data.get('record_audio_closed') and isinstance(finished, datetime) and finished.tzinfo is not None:
+                rows.append((doc.reference.path, max(0, int(time.time() - finished.timestamp()))))
+                if len(rows) == max_rows:
+                    break
+        cursor = page[-1]
+        if len(page) < 128:
+            break
+    return rows, scanned >= max_scan or len(rows) >= max_rows
+
+
+def launch_row(path, seconds, mode):
+    script = Path(__file__).resolve().parents[2] / 'scripts/record_seal_repair_job.py'
+    process = subprocess.Popen(
+        [sys.executable, str(script), '--row'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
+    )
+    payload = json.dumps({'path': path, 'seconds': seconds, 'mode': mode}).encode()
+    process.stdin.write(payload)
+    process.stdin.close()
+    return process
+
+
+def stop(process):
+    if process.poll() is None:
+        process.kill()
+    process.wait()
+    process.stdout.close()
+
+
+def coordinate(
+    rows,
+    *,
+    workers,
+    row_seconds,
+    run_seconds,
+    mode,
+    launch=launch_row,
+    clock=time.monotonic,
+    pause=time.sleep,
+    progress=lambda _: None
+):
+    """Bound total concurrency and wall time; reap every child, including on failure."""
+    pending, active, counts = deque(rows), [], Counter()
+    started = clock()
+    deadline = started + run_seconds
+    max_age, sealed_age = 0, 0
+    try:
+        while pending or active:
+            now = clock()
+            if now >= deadline:
+                counts['deferred'] += len(pending)
+                pending.clear()
+            while pending and len(active) < workers and now < deadline:
+                path, age = pending.popleft()
+                max_age = max(max_age, age)
+                seconds = min(row_seconds, deadline - now)
+                try:
+                    process = launch(path, seconds, mode)
+                    active.append((process, now + seconds, age))
+                except Exception:
+                    counts['error'] += 1
+            for process, expires, age in active[:]:
+                disposition = None
+                if process.poll() is not None:
+                    try:
+                        payload = process.stdout.read(1025)
+                        result = json.loads(payload) if len(payload) <= 1024 else {}
+                        disposition = result.get('disposition')
+                    except Exception:
+                        disposition = 'error'
+                    if process.returncode != 0 or disposition not in DISPOSITIONS:
+                        disposition = 'error'
+                elif clock() >= expires:
+                    disposition = 'budget_exhausted'
+                if disposition:
+                    stop(process)
+                    active.remove((process, expires, age))
+                    counts[disposition] += 1
+                    age += max(0, int(clock() - started))
+                    sealed = disposition in {'sealed', 'sealed_registered'}
+                    if sealed:
+                        sealed_age = max(sealed_age, age)
+                    progress(
+                        {
+                            'event': 'record_seal_repair_row',
+                            'count': 1,
+                            'disposition': disposition,
+                            'seal_age_seconds': age if sealed else 0,
+                        }
+                    )
+            if active:
+                pause(0.05)
+    finally:
+        for process, _, _ in active:
+            stop(process)
+    return {
+        'dispositions': dict(sorted(counts.items())),
+        'rows': sum(counts.values()),
+        'oldest_unsealed_seconds': max_age,
+        'oldest_seal_age_seconds': sealed_age,
+    }
+
+
+def row_main(payload):
+    from utils.batch_pipeline.record_seal_budget import BudgetExhausted, SweepBudget
+
+    result = 'error'
+    try:
+        if not config.enabled():
+            return {'disposition': 'disabled'}
+        config.require_runtime()
+        if not 0 < payload['seconds'] <= 270 or payload['mode'] not in {'plan', 'apply'}:
+            raise ValueError('invalid row controls')
+        with silent_dependencies():
+            from database.batch_pipeline_store import FirestoreStore
+            from utils.batch_pipeline.artifact_policy import artifacts_for
+            from utils.batch_pipeline.record_seal_sweeper import read_pusher_pod_proof
+            from utils.other.local_storage import create_storage_client
+
+            budget = SweepBudget(payload['seconds'])
+            with budget.interrupt_io():
+                store = FirestoreStore('batch_pipeline_prod')
+                result = repair_one(
+                    store,
+                    create_storage_client(),
+                    artifacts_for(store),
+                    payload['path'],
+                    flags=config.server_flags(),
+                    inventory=read_pusher_pod_proof,
+                    budget=budget,
+                    mode=payload['mode'],
+                )
+    except BudgetExhausted:
+        result = 'budget_exhausted'
+    except Exception:
+        pass
+    return {'disposition': result}
+
+
+def run(*, progress=lambda _: None):
+    if not config.enabled():
+        return {'event': 'record_seal_repair', 'outcome': 'disabled'}
+    workers, row_seconds, run_seconds, mode = config.settings()
+    config.require_runtime()
+    with silent_dependencies():
+        from database._client import get_firestore_client
+        from utils.batch_pipeline.record_seal_budget import SweepBudget
+        from utils.batch_pipeline.record_seal_sweeper import read_pusher_pod_proof, _fresh
+
+        config.server_flags()  # No cloud access if the explicit policy map is absent.
+        _fresh(read_pusher_pod_proof())
+        budget = SweepBudget(60)
+        with budget.interrupt_io():
+            rows, saturated = discover(get_firestore_client(), budget=budget)
+    report = coordinate(
+        rows, workers=workers, row_seconds=row_seconds, run_seconds=run_seconds, mode=mode, progress=progress
+    )
+    return {'event': 'record_seal_repair', 'outcome': 'ok', 'mode': mode, 'discovery_saturated': saturated, **report}

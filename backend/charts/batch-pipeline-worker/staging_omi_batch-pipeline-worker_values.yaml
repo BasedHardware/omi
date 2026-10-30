@@ -48,3 +48,5 @@ worker:
   correctnessMetricsEnabled: true
 recordSealSweeper:
   enabled: false
+recordSealRepair:
+  enabled: false
