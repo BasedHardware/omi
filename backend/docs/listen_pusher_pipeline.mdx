@@ -6399,9 +6399,12 @@ conversation. This is a durability barrier, not an upload-grace timer.
 
 One-time stuck-job repair: `backend/scripts/repair_record_audio_seals.py
 --ids-file PRIVATE_JSON` takes 1..128 exact pending job IDs, with no discovery scan.
-Default dry-run requires `ro-prod`; output is only counts, closed dispositions and
-`plan_sha256`. A separately authorized operator may use `prod-operator` with
-`--apply --approve-plan-sha256 DIGEST`. The fresh plan must match the approved
+Default dry-run accepts `ro-prod` or `prod-operator`; use `prod-operator` when
+retained-audio object reads require it. Output is only counts, closed dispositions
+and `plan_sha256`. Apply requires a separately authorized operator using
+`prod-operator` with `--apply --approve-plan-sha256 DIGEST`; `ro-prod` cannot apply.
+The tool refuses Firestore emulator use for either operation.
+The fresh plan must match the approved
 digest, including source generation/digest proofs and conversation/job state.
 The tool requires `record_pending`, a completed batch-owned retained conversation,
 no failed upload marker, no live/unknown producer, and generation-pinned retained
