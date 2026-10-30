@@ -2121,22 +2121,6 @@ def claim_record_lane_owner(uid: str, conversation_id: str, owner: str, expected
     return result.update_time
 
 
-def seal_record_audio(uid: str, conversation_id: str) -> bool:
-    """Pusher's upload barrier: blind metadata update, never recreates a row."""
-    ref = (
-        get_firestore_client()
-        .collection('users')
-        .document(uid)
-        .collection(conversations_collection)
-        .document(conversation_id)
-    )
-    try:
-        ref.update({'record_audio_closed': True})
-    except NotFound:
-        return False
-    return True
-
-
 def refresh_conversation_after_chat_edit(uid: str, conversation_id: str) -> None:
     """Reconcile derived conversation views after an edit or inverse commits."""
     invalidate_people_stats_cache(uid)

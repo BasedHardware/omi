@@ -5,6 +5,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 from config.policy import BatchUnitPolicy, resolve_batch_policy
+from config.batch_pipeline import require_record_protocol_ready
+from config.record_audio import require_record_audio_barrier
 from database.batch_pipeline_store import Store
 from database.batch_pipeline_staging import artifact_id
 from database.sync_ledger import LEDGER_RETENTION_DAYS, is_valid_completed_sync_content_result
@@ -31,6 +33,7 @@ def admit(
     policy: BatchUnitPolicy | None = None,
     enqueue: Callable[..., bool] | None = None,
     adopt: Callable[[dict], bool] | None = None,
+    record_barrier: dict | None = None,
 ) -> dict:
     """Admit one content upload atomically.
 
@@ -85,6 +88,9 @@ def admit(
             row = tx.get('conversations', key)
             if not row or row.get('deleted') or row.get('uses_custom_stt'):
                 raise ValueError('registered record target unavailable')
+            if binding.native_record:
+                require_record_protocol_ready()
+                require_record_audio_barrier(row, expected=record_barrier)
             expected = 'batch_live_v1' if reserved_recording else 'batch_sync_v1'
             if row.get('record_lane_owner') not in {None, expected}:
                 raise ValueError('record owner is immutable')
