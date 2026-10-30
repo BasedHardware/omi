@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import ssl
 import time
+from typing import TypedDict
 from urllib.request import Request, urlopen
 
 from utils.batch_pipeline.record_producer_proof import NAMESPACE, parse_pusher_pod_proof, producer_tokens_dead
@@ -16,6 +17,19 @@ SEAL_LIMIT = 64
 POD_LIST_PATH = f'/api/v1/namespaces/{NAMESPACE}/pods?labelSelector=app.kubernetes.io%2Fname%3Dpusher'
 SERVICE_ACCOUNT_PATH = Path('/var/run/secrets/kubernetes.io/serviceaccount')
 MAX_INVENTORY_BYTES = 8 * 1024 * 1024
+
+
+class SweepReport(TypedDict):
+    event: str
+    outcome: str
+    mode: str
+    discovered: int
+    backlog: int
+    oldest_unsealed_seconds: int
+    oldest_unsealed_over_four_hours: bool
+    bare_token_skips: int
+    discovery_saturated: bool
+    dispositions: dict[str, int]
 
 
 def read_pusher_pod_proof():
@@ -59,12 +73,12 @@ def _fresh(proof):
 
 
 def sweep(
-    store, storage_client, artifacts, *, inventory=read_pusher_pod_proof, discover=discover_pending, mode='apply'
-):
+    store, storage_client, artifacts, *, inventory=read_pusher_pod_proof, discover=discover_pending, mode: str = 'apply'
+) -> SweepReport:
     """Fail closed before writes on any discovery, inventory or planning IO error."""
     from utils.batch_pipeline.record_seal_repair import plan_seals, apply_seals
 
-    report = {
+    report: SweepReport = {
         'event': 'record_seal_sweep',
         'outcome': 'error',
         'mode': mode,
