@@ -1,5 +1,7 @@
 """Short-recording compute policy, persisted minimum admission and creation effects."""
 
+import sys
+
 from concurrent.futures import Future
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -11,6 +13,8 @@ from models.structured import Structured
 from utils.llm import notes_short_clip
 from utils.llm.notes_refactor_metrics import RESULTS
 from utils.conversations.minimum_derived import is_server_minimum
+from utils.conversations import demand_processing
+from utils.sync import reprocess
 from tests.unit.test_process_conversation_free_tier_branch import (
     pc,
     _omi_create,
@@ -206,8 +210,8 @@ def test_summary_app_boundary_skips_only_minimum_rows(pc, monkeypatch, minimum):
 @pytest.mark.parametrize('deferred', [False, True])
 @pytest.mark.parametrize('lazy', [False, True])
 def test_minimum_creation_preserves_webhook_and_audio_without_llm_derived_work(pc, monkeypatch, deferred, lazy):
-    from utils.conversations import demand_processing
-    from utils.sync import reprocess
+    assert sys.modules['utils.conversations.demand_processing'] is demand_processing
+    assert sys.modules['utils.sync.reprocess'] is reprocess
 
     monkeypatch.setattr(demand_processing, 'lazy_enrichment_enabled', lambda _uid: lazy)
     mark_effects = MagicMock(side_effect=AssertionError('minimum queued lazy enrichment'))

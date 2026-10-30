@@ -6,14 +6,17 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from fakes.firestore import read_action_items, read_conversation, seed_conversation
+from database import conversations
+from models.conversation import Conversation, CreateConversation
+from utils.conversations.factory import deserialize_conversation
+import utils.conversations.notes_task_context as notes_task_context_module
+import utils.conversations.process_conversation as process_module
 from models.structured import ActionItem, Structured
 from models.transcript_segment import TranscriptSegment
 from utils.llm.memories import CanonicalL1MemoryCandidate
 
 
 def _patch_process_conversation_boundaries(monkeypatch):
-    import utils.conversations.notes_task_context as notes_task_context_module
-    import utils.conversations.process_conversation as process_module
 
     # Universal canonical intake is deployment-fenced; this hermetic lifecycle
     # test explicitly opts its local process into the enabled read/write mode.
@@ -99,9 +102,6 @@ async def _async_none(*args, **kwargs):
 def test_conversation_create_process_finalize_lifecycle(client, auth_headers, monkeypatch):
     kg_calls = _patch_process_conversation_boundaries(monkeypatch)
 
-    import utils.conversations.process_conversation as process_module
-    from models.conversation import CreateConversation
-
     started_at = datetime(2025, 1, 15, 12, 0, tzinfo=timezone.utc)
     create_conversation = CreateConversation(
         started_at=started_at,
@@ -156,9 +156,6 @@ def test_conversation_create_process_finalize_lifecycle(client, auth_headers, mo
 def test_short_recording_minimum_survives_api_readback_without_paid_intelligence(
     client, auth_headers, monkeypatch, existing_debt
 ):
-    import utils.conversations.process_conversation as process_module
-    from models.conversation import Conversation, CreateConversation
-    from utils.conversations.factory import deserialize_conversation
 
     app_boundary = process_module.trigger_conversation_apps
     _patch_process_conversation_boundaries(monkeypatch)
@@ -237,7 +234,6 @@ def test_short_recording_minimum_survives_api_readback_without_paid_intelligence
 
 
 def test_user_renamed_short_row_still_reaches_notes_on_reprocess(client, auth_headers, monkeypatch):
-    import utils.conversations.process_conversation as process_module
 
     _patch_process_conversation_boundaries(monkeypatch)
     notes = Mock(wraps=process_module.get_conversation_notes)
@@ -272,9 +268,6 @@ def test_user_renamed_short_row_still_reaches_notes_on_reprocess(client, auth_he
 def test_transactional_create_exposes_recorded_span_and_preexisting_episode_membership(
     client, auth_headers, fake_firestore
 ):
-    from database import conversations
-    from models.conversation import Conversation
-    from models.structured import Structured
 
     started = datetime(2026, 10, 29, 12, tzinfo=timezone.utc)
     cid = 'recorded-membership-create'
