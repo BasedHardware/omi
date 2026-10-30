@@ -21,9 +21,9 @@ _spec.loader.exec_module(main)
 
 _REAL_ASYNC_CLIENT = httpx.AsyncClient
 _ROUTES = (
-    ("get_front_page", {"limit": 2}, "Hacker News request failed:"),
-    ("search_stories", {"query": "python"}, "Hacker News search failed:"),
-    ("get_discussion", {"item_id": 8863}, "Hacker News discussion request failed:"),
+    ("get_front_page", {"limit": 2}, "Hacker News request failed"),
+    ("search_stories", {"query": "python"}, "Hacker News search failed"),
+    ("get_discussion", {"item_id": 8863}, "Hacker News discussion request failed"),
 )
 
 
@@ -176,7 +176,7 @@ class HTTPContractTests(unittest.IsolatedAsyncioTestCase):
                 body = await self.post(route, json=payload)
                 self.assertIsNone(body["result"])
                 self.assertTrue(body["error"].startswith(prefix), body)
-                self.assertIn("fixture timeout", body["error"])
+                self.assertNotIn("fixture timeout", body["error"])
                 self.assertEqual(len(self.requests), 1)
 
     async def test_empty_search_uses_json_query_and_default_sort(self):
